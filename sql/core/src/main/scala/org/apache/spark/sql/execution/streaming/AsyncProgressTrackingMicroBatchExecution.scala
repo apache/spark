@@ -86,7 +86,7 @@ class AsyncProgressTrackingMicroBatchExecution(
   /**
    * Manages the metadata from this checkpoint location.
    */
-  override protected lazy val checkpointMetadata =
+  protected val asyncCheckpointMetadata =
     new AsyncStreamingQueryCheckpointMetadata(
       sparkSessionForStream,
       resolvedCheckpointRoot,
@@ -95,9 +95,9 @@ class AsyncProgressTrackingMicroBatchExecution(
       triggerClock
     )
 
-  override lazy val offsetLog: AsyncOffsetSeqLog = checkpointMetadata.offsetLog
+  override val offsetLog: AsyncOffsetSeqLog = asyncCheckpointMetadata.offsetLog
 
-  override lazy val commitLog: AsyncCommitLog = checkpointMetadata.commitLog
+  override val commitLog: AsyncCommitLog = asyncCheckpointMetadata.commitLog
 
   // perform quick validation to fail faster
   validateAndGetTrigger()

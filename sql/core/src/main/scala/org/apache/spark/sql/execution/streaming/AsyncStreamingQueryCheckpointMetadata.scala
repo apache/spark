@@ -46,11 +46,10 @@ class AsyncStreamingQueryCheckpointMetadata(
     clock = triggerClock
   )
 
-  override lazy val commitLog =
-    new AsyncCommitLog(
-      sparkSession,
-      checkpointFile(StreamingCheckpointConstants.DIR_NAME_COMMITS),
-      asyncWritesExecutorService
-    )
+  override lazy val commitLog = new AsyncCommitLog(
+    sparkSession,
+    checkpointFile(StreamingCheckpointConstants.DIR_NAME_COMMITS),
+    asyncWritesExecutorService
+  )
 
 }

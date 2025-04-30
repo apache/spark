@@ -47,7 +47,7 @@ class StreamingQueryCheckpointMetadata(sparkSession: SparkSession, resolvedCheck
     new CommitLog(sparkSession, checkpointFile(StreamingCheckpointConstants.DIR_NAME_COMMITS))
 
   /** Metadata associated with the whole query */
-  lazy val streamMetadata: StreamMetadata = {
+  final lazy val streamMetadata: StreamMetadata = {
     val metadataPath = new Path(checkpointFile(StreamingCheckpointConstants.DIR_NAME_METADATA))
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
     StreamMetadata.read(metadataPath, hadoopConf).getOrElse {
@@ -58,7 +58,7 @@ class StreamingQueryCheckpointMetadata(sparkSession: SparkSession, resolvedCheck
   }
 
   /** Returns the path of a file with `name` in the checkpoint directory. */
-  protected def checkpointFile(name: String): String =
+  final protected def checkpointFile(name: String): String =
     new Path(new Path(resolvedCheckpointRoot), name).toString
 
 }

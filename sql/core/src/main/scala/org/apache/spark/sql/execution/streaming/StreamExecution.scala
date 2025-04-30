@@ -157,7 +157,7 @@ abstract class StreamExecution(
   /**
    * Manages the metadata from this checkpoint location.
    */
-  protected lazy val checkpointMetadata =
+  protected val checkpointMetadata =
     new StreamingQueryCheckpointMetadata(sparkSessionForStream, resolvedCheckpointRoot)
 
   /**
@@ -228,14 +228,14 @@ abstract class StreamExecution(
    * processing is done.  Thus, the Nth record in this log indicated data that is currently being
    * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
    */
-  lazy val offsetLog: OffsetSeqLog = checkpointMetadata.offsetLog
+  val offsetLog: OffsetSeqLog = checkpointMetadata.offsetLog
 
   /**
    * A log that records the batch ids that have completed. This is used to check if a batch was
    * fully processed, and its output was committed to the sink, hence no need to process it again.
    * This is used (for instance) during restart, to help identify which batch to run next.
    */
-  lazy val commitLog: CommitLog = checkpointMetadata.commitLog
+  val commitLog: CommitLog = checkpointMetadata.commitLog
 
   /** Whether all fields of the query have been initialized */
   private def isInitialized: Boolean = state.get != INITIALIZING
