@@ -66,7 +66,6 @@ private[connect] class SparkConnectAnalyzeHandler(
 
     def getDataFrameWithoutExecuting(rel: LogicalPlan): DataFrame = {
       val qe = session.sessionState.executePlan(rel, CommandExecutionMode.SKIP)
-      if (!qe.isLazyAnalysis) qe.assertAnalyzed()
       new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
     }
 
