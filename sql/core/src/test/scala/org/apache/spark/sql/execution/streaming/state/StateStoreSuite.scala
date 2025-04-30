@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.io.File
+import java.io.{File, IOException}
 import java.net.URI
 import java.util
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
+import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.json4s.DefaultFormats
@@ -36,9 +38,12 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorSuite.withCoordinatorRef
+import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
@@ -121,7 +126,7 @@ private object FakeStateStoreProviderWithMaintenanceError {
 class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   with BeforeAndAfter {
   import StateStoreTestsHelper._
-//  import StateStoreCoordinatorSuite._
+  import StateStoreCoordinatorSuite._
 
   before {
     StateStore.stop()
@@ -132,7 +137,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     StateStore.stop()
     require(!StateStore.isMaintenanceRunning)
   }
-/*
+
   test("retaining only two latest versions when MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 2") {
     tryWithProviderResource(
       newStoreProvider(minDeltasForSnapshot = 10, numOfVersToRetainInMemory = 2)) { provider =>
@@ -347,9 +352,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       assert(tempFiles.isEmpty)
     }
   }
- */
 
-  test("corrupted file handling") {
+  test("empty or missing file handling") {
     tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
       minDeltasForSnapshot = 5)) { provider =>
 
@@ -365,26 +369,25 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       // Corrupt snapshot file and verify that it throws error
       assert(getData(provider, snapshotVersion,
         useColumnFamilies = false) === Set(("a", 0) -> snapshotVersion))
-      corruptFile(provider, snapshotVersion, isSnapshot = true)
+      emptyFile(provider, snapshotVersion, isSnapshot = true)
       var e = intercept[SparkException] {
         getData(provider, snapshotVersion, useColumnFamilies = false)
       }
-      logWarning(s"hello ${e.getCause}")
       checkError(
         e,
-        condition = "CANNOT_LOAD_STATE_STORE.KEY_ROW_FORMAT_VALIDATION_FAILURE",
+        condition = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
         parameters = Map.empty
       )
 
       // Corrupt delta file and verify that it throws error
       assert(getData(provider, snapshotVersion - 1) === Set(("a", 0) -> (snapshotVersion - 1)))
-      corruptFile(provider, snapshotVersion - 1, isSnapshot = false)
+      emptyFile(provider, snapshotVersion - 1, isSnapshot = false)
       e = intercept[SparkException] {
         getData(provider, snapshotVersion - 1)
       }
       checkError(
         e,
-        condition = "CANNOT_LOAD_STATE_STORE.KEY_ROW_FORMAT_VALIDATION_FAILURE",
+        condition = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
         parameters = Map.empty
       )
 
@@ -403,7 +406,30 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       )
     }
   }
-/*
+
+  test("SPARK-51291: corrupted file handling") {
+    tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
+      minDeltasForSnapshot = 5)) { provider =>
+
+      for (i <- 1 to 6) {
+        val store = provider.getStore(i - 1)
+        put(store, "a", 0, i)
+        store.commit()
+        provider.doMaintenance() // do cleanup
+      }
+      val snapshotVersion = (0 to 10).find( version =>
+        fileExists(provider, version, isSnapshot = true)).getOrElse(fail("snapshot file not found"))
+
+      // Corrupt delta file and verify that it throws error
+      assert(getData(provider, snapshotVersion - 1) === Set(("a", 0) -> (snapshotVersion - 1)))
+      corruptFile(provider, 1, isSnapshot = false)
+      val e = intercept[SparkException] {
+        getData(provider, snapshotVersion - 1)
+      }
+      assert(e.getCondition == "CANNOT_LOAD_STATE_STORE.KEY_ROW_FORMAT_VALIDATION_FAILURE")
+    }
+  }
+
   test("reports memory usage on current version") {
     def getSizeOfStateForCurrentVersion(metrics: StateStoreMetrics): Long = {
       val metricPair = metrics.customMetrics.find(_._1.name == "stateOnCurrentVersionSizeBytes")
@@ -944,7 +970,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         expectedCacheMissCount = 2)
     }
   }
-*/
+
   override def newStoreProvider(): HDFSBackedStateStoreProvider = {
     newStoreProvider(opId = Random.nextInt(), partition = 0)
   }
@@ -1065,7 +1091,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     assert(originValueMap === expectedData)
   }
 
-  def corruptFile(
+  def emptyFile(
       provider: HDFSBackedStateStoreProvider,
       version: Long,
       isSnapshot: Boolean): Unit = {
@@ -1075,6 +1101,26 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val filePath = new File(basePath.toString, fileName)
     filePath.delete()
     filePath.createNewFile()
+  }
+
+  def corruptFile(
+      provider: HDFSBackedStateStoreProvider,
+      version: Long,
+      isSnapshot: Boolean): Unit = {
+    val method = PrivateMethod[Path](Symbol("baseDir"))
+    val basePath = provider invokePrivate method()
+    val fileName = if (isSnapshot) s"$version.snapshot" else s"$version.delta"
+    val path = new Path(basePath.toString, fileName)
+    val byteArray = new Array[Byte](60)
+    provider.decompressStream(provider.fm.open(path)).readFully(byteArray)
+
+    byteArray(4) = -1 // Flip a byte to -1 to corrupt the file
+
+    val outputStream = provider.compressStream(provider.fm.createAtomic(
+      path,
+      overwriteIfPossible = true))
+    outputStream.write(byteArray)
+    outputStream.close()
   }
 }
 
