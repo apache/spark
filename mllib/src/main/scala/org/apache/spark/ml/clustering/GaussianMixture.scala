@@ -224,9 +224,9 @@ class GaussianMixtureModel private[ml] (
 @Since("2.0.0")
 object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
   private[ml] case class Data(
-    weights: Array[Double],
-    mus: Array[OldVector],
-    sigmas: Array[OldMatrix]
+      weights: Array[Double],
+      mus: Array[OldVector],
+      sigmas: Array[OldMatrix]
   )
 
   @Since("2.0.0")
