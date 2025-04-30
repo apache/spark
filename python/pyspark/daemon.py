@@ -144,10 +144,22 @@ def manager():
     reuse = os.environ.get("SPARK_REUSE_WORKER")
 
     # Initialization complete
+    rlist = [0, listen_sock.fileno()]
+    poller = None
     try:
+        if os.name == "posix":
+            # On posix systems use poll to avoid problems with file descriptor numbers above 1024.
+            poller = select.poll()
+            for fd in rlist:
+                poller.register(fd, select.POLLIN)
+
         while True:
             try:
-                ready_fds = select.select([0, listen_sock], [], [], 1)[0]
+                if poller is not None:
+                    ready_fds = [fd for fd, event in poller.poll(1)]
+                else:
+                    # If poll is not available, use select.
+                    ready_fds = select.select(rlist, [], [], 1)[0]
             except select.error as ex:
                 if ex[0] == EINTR:
                     continue
@@ -165,7 +177,7 @@ def manager():
                 except OSError:
                     pass  # process already died
 
-            if listen_sock in ready_fds:
+            if listen_sock.fileno() in ready_fds:
                 try:
                     sock, _ = listen_sock.accept()
                 except OSError as e:
@@ -238,6 +250,10 @@ def manager():
                     sock.close()
 
     finally:
+        if poller is not None:
+            for fd in rlist:
+                poller.unregister(fd)
+
         shutdown(1)
 
 
