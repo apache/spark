@@ -488,6 +488,7 @@ private[sql] class RocksDBStateStoreProvider
         existingStore match {
           case Some(stateStore: RocksDBStateStore) =>
             // Reuse existing store for getWriteStore case
+            StateStoreThreadLocalTracker.setUsedForWriteStore(true)
             stateStore
           case Some(_) =>
             throw new IllegalArgumentException("Existing store must be a RocksDBStateStore")

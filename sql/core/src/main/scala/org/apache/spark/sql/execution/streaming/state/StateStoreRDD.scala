@@ -37,8 +37,11 @@ object StateStoreThreadLocalTracker {
   def setStore(store: ReadStateStore): Unit = readStore.set(store)
 
   def getStore: Option[ReadStateStore] = {
-    usedForWriteStore.set(true)
     Option(readStore.get())
+  }
+
+  def setUsedForWriteStore(used: Boolean): Unit = {
+    usedForWriteStore.set(used)
   }
 
   def isUsedForWriteStore: Boolean = usedForWriteStore.get()
