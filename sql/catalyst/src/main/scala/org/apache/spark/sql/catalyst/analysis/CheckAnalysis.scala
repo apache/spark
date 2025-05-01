@@ -1022,6 +1022,17 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       }
     }
 
+    def checkExistsDefaultDeterministic(colsToAdd: Seq[QualifiedColType]): Unit = {
+      colsToAdd.foreach { col =>
+        col.default.foreach { d =>
+          if (!d.deterministic) {
+            throw QueryCompilationErrors.defaultValueNotConstantError(
+              "ALTER TABLE", col.colName, d.originalSQL)
+            }
+        }
+      }
+    }
+
     alter match {
       case AddColumns(table: ResolvedTable, colsToAdd) =>
         colsToAdd.foreach { colToAdd =>
@@ -1029,6 +1040,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         }
         checkColumnNameDuplication(colsToAdd)
         checkNoCollationsInMapKeys(colsToAdd)
+        checkExistsDefaultDeterministic(colsToAdd)
 
       case ReplaceColumns(_: ResolvedTable, colsToAdd) =>
         checkColumnNameDuplication(colsToAdd)

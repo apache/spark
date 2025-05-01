@@ -122,7 +122,6 @@ object SerdeInfo {
   }
 }
 
-
 /**
  * Column data as parsed by ALTER TABLE ... (ADD|REPLACE) COLUMNS.
  */
