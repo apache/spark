@@ -523,6 +523,8 @@ private[sql] class RocksDBStateStoreProvider
     assert(version == readStore.version,
       s"Can only upgrade readStore to writeStore with the same version," +
         s" readStoreVersion: ${readStore.version}, writeStoreVersion: ${version}")
+    assert(this.stateStoreId == readStore.id, "Can only upgrade readStore to writeStore with" +
+      " the same stateStoreId")
     loadStateStore(version, uniqueId, readOnly = false, existingStore = Some(readStore))
   }
 
