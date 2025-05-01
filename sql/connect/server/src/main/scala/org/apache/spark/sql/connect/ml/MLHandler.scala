@@ -25,6 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.util.{MLWritable, Summary}
+import org.apache.spark.ml.tree.TreeConfig
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.ml.Serializer.deserializeMethodArguments
@@ -116,6 +117,14 @@ private[connect] object MLHandler extends Logging {
       mlCommand: proto.MlCommand): proto.MlCommandResult = {
 
     val mlCache = sessionHolder.mlCache
+    val maxModelSize = sessionHolder.mlCache.getModelCacheMaxSize
+
+    // Note: Tree training stops early when the growing tree model exceeds
+    //  `TreeConfig.trainingEarlyStopModelSizeThresholdInBytes`, to ensure the final
+    // model size is lower than `maxModelSize`, set early-stop threshold to
+    // half of `maxModelSize`, because in each tree training iteration, the tree
+    // size will grow up to 2 times size.
+    TreeConfig.trainingEarlyStopModelSizeThresholdInBytes = maxModelSize / 2
 
     mlCommand.getCommandCase match {
       case proto.MlCommand.CommandCase.FIT =>
@@ -126,6 +135,16 @@ private[connect] object MLHandler extends Logging {
         val dataset = MLUtils.parseRelationProto(fitCmd.getDataset, sessionHolder)
         val estimator =
           MLUtils.getEstimator(sessionHolder, estimatorProto, Some(fitCmd.getParams))
+        try {
+          if (estimator.estimateModelSize(dataset) > maxModelSize) {
+            throw new RuntimeException(
+              f"The estimated model size exceeds $maxModelSize bytes limit. " +
+                "Please tune the estimator params to reduce the model size."
+            )
+          }
+        } catch {
+          case UnsupportedOperationException => ()
+        }
         val model = estimator.fit(dataset).asInstanceOf[Model[_]]
         val id = mlCache.register(model)
         proto.MlCommandResult

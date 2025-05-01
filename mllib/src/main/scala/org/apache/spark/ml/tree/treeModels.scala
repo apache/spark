@@ -577,3 +577,7 @@ private[ml] object EnsembleModelReadWrite {
     }
   }
 }
+
+private[spark] object TreeConfig {
+  private[spark] var trainingEarlyStopModelSizeThresholdInBytes: Long = 0L
+}

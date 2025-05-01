@@ -353,4 +353,20 @@ object Connect {
       .internal()
       .timeConf(TimeUnit.MINUTES)
       .createWithDefault(15)
+
+  val CONNECT_SESSION_CONNECT_MODEL_MAX_SIZE =
+    buildConf("spark.connect.session.connectML.model.maxSize")
+      .doc("Maximum size of the SparkML model. The size is in bytes.")
+      .version("4.1.0")
+      .internal()
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(1024 * 1024 * 1024)
+
+  val CONNECT_SESSION_CONNECT_MODEL_CACHE_MAX_SIZE =
+    buildConf("spark.connect.session.connectML.modelCache.maxSize")
+      .doc("Maximum size of the model cache. The size is in bytes.")
+      .version("4.1.0")
+      .internal()
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(10 * 1024 * 1024 * 1024)
 }

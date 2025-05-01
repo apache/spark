@@ -283,8 +283,8 @@ private[spark] object RandomForest extends Logging with Serializable {
       seed: Long,
       instr: Option[Instrumentation],
       prune: Boolean = true, // exposed for testing only, real trees are always pruned
-      parentUID: Option[String] = None,
-      earlyStopModelSizeThresholdInBytes: Long = 0): Array[DecisionTreeModel] = {
+      parentUID: Option[String] = None): Array[DecisionTreeModel] = {
+    val earlyStopModelSizeThresholdInBytes = TreeConfig.trainingEarlyStopModelSizeThresholdInBytes
     val timer = new TimeTracker()
 
     timer.start("build metadata")

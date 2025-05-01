@@ -291,9 +291,9 @@ private[spark] object GradientBoostedTrees extends Logging {
       validate: Boolean,
       seed: Long,
       featureSubsetStrategy: String,
-      instr: Option[Instrumentation] = None,
-      earlyStopModelSizeThresholdInBytes: Long = 0):
+      instr: Option[Instrumentation] = None):
         (Array[DecisionTreeRegressionModel], Array[Double]) = {
+    val earlyStopModelSizeThresholdInBytes = TreeConfig.trainingEarlyStopModelSizeThresholdInBytes
     val timer = new TimeTracker()
     timer.start("total")
     timer.start("init")

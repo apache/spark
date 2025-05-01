@@ -61,6 +61,14 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
 
   private[ml] val totalSizeBytes: AtomicLong = new AtomicLong(0)
 
+  private[ml] val totalModelCacheSizeBytes: AtomicLong = new AtomicLong(0)
+  private[spark] def getModelCacheMaxSize: Long = {
+    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_MODEL_CACHE_MAX_SIZE)
+  }
+  private[spark] def getModelMaxSize: Long = {
+    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_MODEL_MAX_SIZE)
+  }
+
   private def estimateObjectSize(obj: Object): Long = {
     obj match {
       case model: Model[_] =>
@@ -82,6 +90,22 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     val objectId = UUID.randomUUID().toString
     val sizeBytes = estimateObjectSize(obj)
     totalSizeBytes.addAndGet(sizeBytes)
+
+    if (totalModelCacheSizeBytes.get() + sizeBytes > getModelCacheMaxSize) {
+      throw new RuntimeException(
+        f"The model cache size in current session exceeds $getModelCacheMaxSize bytes. " +
+         "Please delete existing cached model by executing 'del model' in python client " +
+         "before calling `estimator.fit`."
+      )
+    }
+    if (sizeBytes > getModelMaxSize) {
+      throw new RuntimeException(
+        f"The estimated model size exceeds $getModelMaxSize bytes limit. " +
+         "Please tune the estimator params to reduce the model size."
+      )
+    }
+
+    totalModelCacheSizeBytes.addAndGet(sizeBytes)
     cachedModel.put(objectId, CacheItem(obj, sizeBytes))
     objectId
   }
@@ -108,6 +132,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
    */
   def remove(refId: String): Boolean = {
     val removed = cachedModel.remove(refId)
+    totalModelCacheSizeBytes.addAndGet(-removed.sizeBytes)
     // remove returns null if the key is not present
     removed != null
   }
