@@ -135,6 +135,9 @@ class MLSuite extends MLHelper {
   // Estimator/Model works
   test("LogisticRegression works") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    sessionHolder.session.conf.set(
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED.key,
+      "false")
 
     // estimator read/write
     val ret = readWrite(sessionHolder, getLogisticRegression, getMaxIter)
@@ -259,6 +262,9 @@ class MLSuite extends MLHelper {
 
   test("Exception: cannot retrieve object") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    sessionHolder.session.conf.set(
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED.key,
+      "false")
     val modelId = trainLogisticRegressionModel(sessionHolder)
 
     // Fetch summary attribute
@@ -383,6 +389,10 @@ class MLSuite extends MLHelper {
 
   test("MLCache offloading works") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    sessionHolder.session.conf.set(
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED.key,
+      "true")
+
     val memorySizeBytes = 1024 * 16
     sessionHolder.session.conf.set(
       Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_MAX_IN_MEMORY_SIZE.key,
