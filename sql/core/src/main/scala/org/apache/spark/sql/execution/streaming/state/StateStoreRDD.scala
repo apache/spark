@@ -155,12 +155,16 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStoreThreadLocalTracker.getStore match {
       case Some(readStateStore: ReadStateStore) =>
-        StateStore.getWriteStore(readStateStore, storeProviderId,
+        val writeStore = StateStore.getWriteStore(readStateStore, storeProviderId,
           keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
           uniqueId.map(_.apply(partition.index).head),
           stateSchemaBroadcast,
           useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
           useMultipleValuesPerKey)
+        if (writeStore.equals(readStateStore)) {
+          StateStoreThreadLocalTracker.setUsedForWriteStore(true)
+        }
+        writeStore
       case None =>
         StateStore.get(
           storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
