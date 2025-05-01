@@ -1554,8 +1554,13 @@ private[spark] class DAGScheduler(
       case sms: ShuffleMapStage if stage.isIndeterminate && !sms.isAvailable =>
         // already executed atleast once
         if (sms.getNextAttemptId > 0) {
-          val allStageDependentJobsAborted = abortIndeterminateStageChildren(sms)._1
-          if (allStageDependentJobsAborted) {
+          val stagesToRollback = collectSucceedingStages(sms)
+          rollBackStages(stagesToRollback)
+          // stages which cannot be rolled back were aborted which leads to removing the
+          // the dependant job(s) from the active jobs set
+          val numActiveJobsWithStageAfterRollback =
+            activeJobs.count(job => stagesToRollback.contains(job.finalStage))
+          if (numActiveJobsWithStageAfterRollback == 0) {
             logInfo("All jobs depending on this indeterminate stage (" + stage + ") were " +
               "aborted so this stage is not needed anymore.")
             return
@@ -2138,7 +2143,8 @@ private[spark] class DAGScheduler(
               // guaranteed to be determinate, so the input data of the reducers will not change
               // even if the map tasks are re-tried.
               if (mapStage.isIndeterminate) {
-                val rollingBackStages = abortIndeterminateStageChildren(mapStage)._2
+                val stagesToRollback = collectSucceedingStages(mapStage)
+                val rollingBackStages = rollBackStages(stagesToRollback)
                 logInfo(log"The shuffle map stage ${MDC(SHUFFLE_ID, mapStage)} with indeterminate output was failed, " +
                   log"we will roll back and rerun below stages which include itself and all its " +
                   log"indeterminate child stages: ${MDC(STAGES, rollingBackStages)}")
@@ -2302,15 +2308,7 @@ private[spark] class DAGScheduler(
     }
   }
 
-  /**
-   * @param mapStage The indeterminate stage being recomputed
-   * @return (All jobs with map stage have been aborted, stages which will need to be rolled back)
-   */
-  private def abortIndeterminateStageChildren(mapStage: ShuffleMapStage):
-      (Boolean, HashSet[Stage]) = {
-
-    assert(mapStage.isIndeterminate)
-
+  private def collectSucceedingStages(mapStage: ShuffleMapStage): HashSet[Stage] = {
     // TODO: perhaps materialize this if we are going to compute it often enough ?
     // It's a little tricky to find all the succeeding stages of `mapStage`, because
     // each stage only know its parents not children. Here we traverse the stages from
@@ -2318,17 +2316,26 @@ private[spark] class DAGScheduler(
     // in the stage chains that connect to the `mapStage`. To speed up the stage
     // traversing, we collect the stages to rollback first. If a stage needs to
     // rollback, all its succeeding stages need to rollback to.
-    val stagesToRollback = HashSet[Stage](mapStage)
+    val succeedingStages = HashSet[Stage](mapStage)
 
-    def collectStagesToRollback(stageChain: List[Stage]): Unit = {
-      if (stagesToRollback.contains(stageChain.head)) {
-        stageChain.drop(1).foreach(s => stagesToRollback += s)
+    def collectSucceedingStagesInternal(stageChain: List[Stage]): Unit = {
+      if (succeedingStages.contains(stageChain.head)) {
+        stageChain.drop(1).foreach(s => succeedingStages += s)
       } else {
         stageChain.head.parents.foreach { s =>
-          collectStagesToRollback(s :: stageChain)
+          collectSucceedingStagesInternal(s :: stageChain)
         }
       }
     }
+    activeJobs.foreach(job => collectSucceedingStagesInternal(job.finalStage :: Nil))
+    succeedingStages
+  }
+
+  /**
+   * @param stagesToRollback stages to roll back
+   * @return Shuffle map stages which need and can be rolled back
+   */
+  private def rollBackStages(stagesToRollback: HashSet[Stage]): HashSet[Stage] = {
 
     def generateErrorMessage(stage: Stage): String = {
       "A shuffle map stage with indeterminate output was failed and retried. " +
@@ -2337,10 +2344,8 @@ private[spark] class DAGScheduler(
         "checkpointing the RDD before repartition and try again."
     }
 
-    activeJobs.foreach(job => collectStagesToRollback(job.finalStage :: Nil))
-
     // The stages will be rolled back after checking
-    val rollingBackStages = HashSet[Stage](mapStage)
+    val rollingBackStages = HashSet[Stage]()
     stagesToRollback.foreach {
       case mapStage: ShuffleMapStage =>
         val numMissingPartitions = mapStage.findMissingPartitions().length
@@ -2367,10 +2372,7 @@ private[spark] class DAGScheduler(
       case _ =>
     }
 
-    val numActiveJobsWithStageAfterRollback =
-      activeJobs.count(job => stagesToRollback.contains(job.finalStage))
-
-    (numActiveJobsWithStageAfterRollback == 0, rollingBackStages)
+    rollingBackStages
   }
 
   /**
