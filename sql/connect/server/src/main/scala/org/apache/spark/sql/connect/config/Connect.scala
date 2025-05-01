@@ -336,10 +336,11 @@ object Connect {
 
   val CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_MAX_IN_MEMORY_SIZE =
     buildConf("spark.connect.session.connectML.mlCache.offloading.maxInMemorySize")
-      .doc("In-memory maximum size of the MLCache per session. The cache will offload the least " +
-        "recently used models to Spark driver local disk if the size exceeds this limit. " +
-        "The size is in bytes. This configuration only works when " +
-        "'spark.connect.session.connectML.mlCache.offloading.enabled' is 'true'.")
+      .doc(
+        "In-memory maximum size of the MLCache per session. The cache will offload the least " +
+          "recently used models to Spark driver local disk if the size exceeds this limit. " +
+          "The size is in bytes. This configuration only works when " +
+          "'spark.connect.session.connectML.mlCache.offloading.enabled' is 'true'.")
       .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)
@@ -350,9 +351,9 @@ object Connect {
     buildConf("spark.connect.session.connectML.mlCache.offloading.timeout")
       .doc(
         "Timeout of model offloading in MLCache. Models will be offloaded to Spark driver local " +
-        "disk if they are not used for this amount of time. The timeout is in minutes. " +
-        "This configuration only works when " +
-        "'spark.connect.session.connectML.mlCache.offloading.enabled' is 'true'.")
+          "disk if they are not used for this amount of time. The timeout is in minutes. " +
+          "This configuration only works when " +
+          "'spark.connect.session.connectML.mlCache.offloading.enabled' is 'true'.")
       .version("4.1.0")
       .internal()
       .timeConf(TimeUnit.MINUTES)

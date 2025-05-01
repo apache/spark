@@ -423,7 +423,8 @@ private[ml] object MLUtils {
         val loader = clazz.getMethod("read").invoke(null).asInstanceOf[MLReader[T]]
         loader.loadFromLocal(path)
       } else {
-        clazz.getMethod("load", classOf[String])
+        clazz
+          .getMethod("load", classOf[String])
           .invoke(null, path)
       }
       loaded.asInstanceOf[T]
