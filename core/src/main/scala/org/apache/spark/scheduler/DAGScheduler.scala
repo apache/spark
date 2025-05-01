@@ -2338,7 +2338,6 @@ private[spark] class DAGScheduler(
     }
 
     activeJobs.foreach(job => collectStagesToRollback(job.finalStage :: Nil))
-    val numJobsWithStage = activeJobs.count(job => stagesToRollback.contains(job.finalStage))
 
     // The stages will be rolled back after checking
     val rollingBackStages = HashSet[Stage](mapStage)
