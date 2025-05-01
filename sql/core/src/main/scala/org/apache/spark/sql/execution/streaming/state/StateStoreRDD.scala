@@ -32,21 +32,36 @@ import org.apache.spark.util.SerializableConfiguration
  * This allows a ReadStateStore to be reused by a subsequent StateStore operation.
  */
 object StateStoreThreadLocalTracker {
-  private val readStore: ThreadLocal[ReadStateStore] = new ThreadLocal[ReadStateStore]
-  private val usedForWriteStore: ThreadLocal[Boolean] = new ThreadLocal[Boolean]
-  def setStore(store: ReadStateStore): Unit = readStore.set(store)
+  /** Case class to hold both the store and its usage state */
+  case class StoreInfo(store: ReadStateStore, usedForWriteStore: Boolean = false)
+
+  private val storeInfo: ThreadLocal[StoreInfo] = new ThreadLocal[StoreInfo]
+
+  def setStore(store: ReadStateStore): Unit = {
+    Option(storeInfo.get()) match {
+      case Some(info) => storeInfo.set(info.copy(store = store))
+      case None => storeInfo.set(StoreInfo(store))
+    }
+  }
 
   def getStore: Option[ReadStateStore] = {
-    Option(readStore.get())
+    Option(storeInfo.get()).map(_.store)
   }
 
   def setUsedForWriteStore(used: Boolean): Unit = {
-    usedForWriteStore.set(used)
+    Option(storeInfo.get()) match {
+      case Some(info) => storeInfo.set(info.copy(usedForWriteStore = used))
+      case None => // If there's no store set, we don't need to track usage
+    }
   }
 
-  def isUsedForWriteStore: Boolean = usedForWriteStore.get()
+  def isUsedForWriteStore: Boolean = {
+    Option(storeInfo.get()).exists(_.usedForWriteStore)
+  }
 
-  def clearStore(): Unit = readStore.remove()
+  def clearStore(): Unit = {
+    storeInfo.remove()
+  }
 }
 
 abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
