@@ -228,7 +228,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
-  test("SPARK-51823: ReadStateStore reuse and upgrade to WriteStore") {
+  test("SPARK-51955: ReadStateStore reuse and upgrade to WriteStore") {
     withSparkSession(SparkSession.builder()
       .config(sparkConf)
       .config(SQLConf.STATE_STORE_PROVIDER_CLASS.key, classOf[RocksDBStateStoreProvider].getName)
@@ -271,18 +271,19 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
           Some(castToImpl(spark).streams.stateStoreCoordinator)
         ) { (readStore, iter) =>
           // Read values and store them for later verification
-          val readValues = iter.map { case (s, i) =>
+          val inputItems = iter.toSeq // Materialize the input data
+
+          val readValues = inputItems.map { case (s, i) =>
             val key = dataToKeyRow(s, i)
             val value = Option(readStore.get(key)).map(valueRowToData)
             ((s, i), value)
-          }.toSeq
+          }
 
           // Also capture all state store entries
           val allValues = readStore.iterator().map(rowPairToDataPair).toSeq
 
-          // Pass along both to the next stage - this keeps them in the same partition
-          // Also pass through the original items
-          Iterator((readValues, allValues, iter.toSeq))
+          // Return everything as a single tuple - only create one element in the iterator
+          Iterator((readValues, allValues, inputItems))
         }
         // Second pass: use StateStore to write updates (should reuse the read store)
         .mapPartitionsWithStateStore(
@@ -299,7 +300,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
             // Get all existing values from the write store to verify reuse
             val storeValues = writeStore.iterator().map(rowPairToDataPair).toSeq
 
-            // Update values for a and c from the original items we passed through
+            // Update values for a and c from the original items
             originalItems.filter(p => p._1 == "a" || p._1 == "c").foreach { case (s, i) =>
               val key = dataToKeyRow(s, i)
               val oldValue = Option(writeStore.get(key)).map(valueRowToData).getOrElse(0)
@@ -309,16 +310,15 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
             writeStore.commit()
 
             // Return all collected information for verification
-            Iterator((readValues, allStoreValues, storeValues,
-              usedForWriteStore))
+            Iterator((readValues, allStoreValues, storeValues, usedForWriteStore))
           } else {
             Iterator.empty
           }
         }
 
       // Collect the results
-      val (readValues, initialStoreState,
-        writeStoreValues, storeWasReused) = chainedResults.collect().head
+      val (readValues, initialStoreState, writeStoreValues,
+        storeWasReused) = chainedResults.collect().head
 
       // Verify read results
       assert(readValues.toSet === Set(
