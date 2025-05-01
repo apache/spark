@@ -74,9 +74,10 @@ package object state {
           StateStoreThreadLocalTracker.clearStore()
         })
         ctxt.addTaskFailureListener(new TaskFailureListener {
-          override def onTaskFailure(context: TaskContext, error: Throwable): Unit =
+          override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
             store.abort()
             StateStoreThreadLocalTracker.clearStore()
+          }
         })
         cleanedF(store, iter)
       }

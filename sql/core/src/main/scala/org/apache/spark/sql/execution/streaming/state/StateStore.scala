@@ -863,6 +863,9 @@ class UnsafeRowPair(var key: UnsafeRow = null, var value: UnsafeRow = null) {
   }
 }
 
+// Trait on whether we can upgrade a given ReadStore to a WriteStore for Streaming
+// Aggregations
+trait UpgradeableReadStore
 
 /**
  * Companion object to [[StateStore]] that provides helper methods to create and retrieve stores

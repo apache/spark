@@ -43,7 +43,7 @@ private[sql] class RocksDBStateStoreProvider
   with SupportsFineGrainedReplay {
   import RocksDBStateStoreProvider._
 
-  class RocksDBStateStore(lastVersion: Long) extends StateStore {
+  class RocksDBStateStore(lastVersion: Long) extends StateStore with UpgradeableReadStore {
     /** Trait and classes representing the internal state of the store */
     trait STATE
     case object UPDATING extends STATE
@@ -486,10 +486,13 @@ private[sql] class RocksDBStateStoreProvider
 
         // Return appropriate store instance
         existingStore match {
-          case Some(stateStore: RocksDBStateStore) =>
-            stateStore
-          case Some(_) =>
-            throw new IllegalArgumentException("Existing store must be a RocksDBStateStore")
+          // We need to match like this as opposed to case Some(ss: RocksDBStateStore)
+          // because of how the tests create the class in StateStoreRDDSuite
+          case Some(stateStore: ReadStateStore) if stateStore.isInstanceOf[RocksDBStateStore] =>
+            stateStore.asInstanceOf[StateStore]
+          case Some(other) =>
+            throw new IllegalArgumentException(s"Existing store must be a RocksDBStateStore," +
+              s" store is actually ${other.getClass.getSimpleName}")
           case None =>
             // Create new store instance for getStore/getReadStore cases
             new RocksDBStateStore(version)
@@ -510,6 +513,7 @@ private[sql] class RocksDBStateStoreProvider
       case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
     }
   }
+
   override def getStore(version: Long, uniqueId: Option[String] = None): StateStore = {
     loadStateStore(version, uniqueId, readOnly = false)
   }
