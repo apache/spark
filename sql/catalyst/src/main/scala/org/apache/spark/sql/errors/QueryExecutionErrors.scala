@@ -2622,6 +2622,23 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def checkpointFileChecksumVerificationFailed(
+      file: Path,
+      expectedSize: Long,
+      expectedChecksum: String,
+      computedSize: Long,
+      computedChecksum: String): Throwable = {
+    new SparkException(
+      errorClass = "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED",
+      messageParameters = Map(
+        "fileName" -> file.toString,
+        "expectedSize" -> expectedSize.toString,
+        "expectedChecksum" -> expectedChecksum,
+        "computedSize" -> computedSize.toString,
+        "computedChecksum" -> computedChecksum),
+      cause = null)
+  }
+
   def cannotReadCheckpoint(expectedVersion: String, actualVersion: String): Throwable = {
     new SparkException (
       errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_CHECKPOINT",
