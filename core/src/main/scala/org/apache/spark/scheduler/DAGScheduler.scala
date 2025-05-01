@@ -1561,8 +1561,8 @@ private[spark] class DAGScheduler(
           val numActiveJobsWithStageAfterRollback =
             activeJobs.count(job => stagesToRollback.contains(job.finalStage))
           if (numActiveJobsWithStageAfterRollback == 0) {
-            logInfo("All jobs depending on this indeterminate stage (" + stage + ") were " +
-              "aborted so this stage is not needed anymore.")
+            logInfo(log"All jobs depending on the indeterminate stage " +
+              log"(${MDC(STAGE_ID, stage.id)}) were aborted so this stage is not needed anymore.")
             return
           }
         }
