@@ -60,6 +60,18 @@ abstract class InMemoryBaseTable(
     val numRowsPerSplit: Int = Int.MaxValue)
   extends Table with SupportsRead with SupportsWrite with SupportsMetadataColumns {
 
+  protected var currentTableVersion: Int = 0
+
+  override def currentVersion(): String = currentTableVersion.toString
+
+  def setCurrentVersion(version: String): Unit = {
+    currentTableVersion = version.toInt
+  }
+
+  def increaseCurrentVersion(): Unit = {
+    currentTableVersion += 1
+  }
+
   protected object PartitionKeyColumn extends MetadataColumn {
     override def name: String = "_partition"
     override def dataType: DataType = StringType

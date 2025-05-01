@@ -55,6 +55,7 @@ class InMemoryTable(
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     dataMap --= InMemoryTable
       .filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted).toImmutableArraySeq, filters)
+    increaseCurrentVersion()
   }
 
   override def withData(data: Array[BufferedRows]): InMemoryTable = {
@@ -85,7 +86,7 @@ class InMemoryTable(
           row.getInt(0) == InMemoryTable.uncommittableValue()))) {
         throw new IllegalArgumentException(s"Test only mock write failure")
       }
-
+      increaseCurrentVersion()
       this
     }
   }

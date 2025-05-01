@@ -150,6 +150,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
+    table.increaseCurrentVersion()
+    val currentVersion = table.currentVersion()
     val newTable = new InMemoryTable(
       name = table.name,
       schema = schema,
@@ -157,7 +159,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       properties = properties,
       constraints = constraints)
       .withData(table.data)
-
+    newTable.setCurrentVersion(currentVersion)
     tables.put(ident, newTable)
 
     newTable
@@ -171,7 +173,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     }
 
     Option(tables.remove(oldIdent)) match {
-      case Some(table) =>
+      case Some(table: InMemoryBaseTable) =>
+        table.increaseCurrentVersion()
         tables.put(newIdent, table)
       case _ =>
         throw new NoSuchTableException(oldIdent.asMultipartIdentifier)
