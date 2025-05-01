@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{CheckInvariant, Expression}
+import org.apache.spark.sql.catalyst.expressions.{CheckInvariant, Expression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, V2WriteCommand, Validate}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
@@ -35,21 +35,27 @@ class ResolveTableConstraint(val catalogManager: CatalogManager) extends Rule[Lo
         !v2Write.query.isInstanceOf[Validate] && v2Write.outputResolved =>
       v2Write.table match {
         case r: DataSourceV2Relation
-          if r.table.constraints() != null && r.table.constraints().nonEmpty =>
-          val checks = r.table.constraints().collect {
+          if r.table.constraints != null && r.table.constraints.nonEmpty =>
+          // Check constraint is the only enforced constraint for DSV2 tables.
+          val checks = r.table.constraints.collect {
             case c: Check => c
           }
           val checkInvariants = checks.map { c =>
-            val parsed =
-              catalogManager.v1SessionCatalog.parser.parseExpression(c.predicateSql())
+            val unresolvedExpr = buildCatalystExpression(c)
             val columnExtractors = mutable.Map[String, Expression]()
-            buildColumnExtractors(parsed, columnExtractors)
-            CheckInvariant(parsed, columnExtractors.toSeq, c.name(), c.predicateSql())
+            buildColumnExtractors(unresolvedExpr, columnExtractors)
+            CheckInvariant(unresolvedExpr, columnExtractors.toSeq, c.name(), c.predicateSql())
           }.toSeq
           v2Write.withNewQuery(Validate(checkInvariants, v2Write.query))
         case _ =>
           v2Write
       }
+  }
+
+  private def buildCatalystExpression(c: Check): Expression = {
+    Option(c.predicate())
+      .flatMap(V2ExpressionUtils.toCatalyst)
+      .getOrElse(catalogManager.v1SessionCatalog.parser.parseExpression(c.predicateSql()))
   }
 
   private def buildColumnExtractors(
@@ -62,7 +68,6 @@ class ResolveTableConstraint(val catalogManager: CatalogManager) extends Rule[Lo
         columnExtractors(u.sql) = u
       case u: UnresolvedAttribute =>
         columnExtractors(u.name) = u
-
       case other =>
         other.children.foreach(buildColumnExtractors(_, columnExtractors))
     }
