@@ -447,7 +447,7 @@ class LinearSVCModel private[classification] (
 
 @Since("2.2.0")
 object LinearSVCModel extends MLReadable[LinearSVCModel] {
-  private case class Data(coefficients: Vector, intercept: Double)
+  private[ml] case class Data(coefficients: Vector, intercept: Double)
 
   @Since("2.2.0")
   override def read: MLReader[LinearSVCModel] = new LinearSVCReader

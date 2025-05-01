@@ -402,7 +402,7 @@ class TargetEncoderModel private[ml] (
 
 @Since("4.0.0")
 object TargetEncoderModel extends MLReadable[TargetEncoderModel] {
-  private case class Data(
+  private[ml] case class Data(
     index: Int, categories: Array[Double],
     counts: Array[Double], stats: Array[Double])
 

@@ -4737,6 +4737,14 @@ object SQLConf {
     .intConf
     .createWithDefault(1000000)
 
+  val CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION =
+    buildConf("spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation")
+      .doc("Maximum number of rows that the anchor in a recursive CTE can return for it to be" +
+        "converted to a localRelation.")
+      .version("4.1.0")
+      .intConf
+      .createWithDefault(100)
+
   val LEGACY_INLINE_CTE_IN_COMMANDS = buildConf("spark.sql.legacy.inlineCTEInCommands")
     .internal()
     .doc("If true, always inline the CTE relations for the queries in commands. This is the " +

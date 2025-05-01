@@ -170,7 +170,7 @@ final class ChiSqSelectorModel private[ml] (
 
 @Since("1.6.0")
 object ChiSqSelectorModel extends MLReadable[ChiSqSelectorModel] {
-  private case class Data(selectedFeatures: Seq[Int])
+  private[ml] case class Data(selectedFeatures: Seq[Int])
 
   class ChiSqSelectorModelWriter(instance: ChiSqSelectorModel) extends MLWriter {
 

@@ -755,6 +755,14 @@
     ],
     "sqlState" : "KD009"
   },
+  "CONFLICTING_PARTITION_COLUMN_NAME_WITH_RESERVED" : {
+    "message" : [
+      "Partition column name '<partitionColumnName>' conflicts with reserved column name.",
+      "The schema of <tableName> is Hive-incompatible, Spark automatically generates a reserved column '<partitionColumnName>' to store the table in a specific way.",
+      "Please use a different name for the partition column."
+    ],
+    "sqlState" : "KD009"
+  },
   "CONNECT" : {
     "message" : [
       "Generic Spark Connect error."
@@ -4094,6 +4102,12 @@
       "Field(s) <nonExistFields> do(es) not exist. Available fields: <fieldNames>"
     ],
     "sqlState" : "HV091"
+  },
+  "NON_DETERMINISTIC_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` is non-deterministic. Check constraints must only contain deterministic expressions."
+    ],
+    "sqlState" : "42621"
   },
   "NON_FOLDABLE_ARGUMENT" : {
     "message" : [

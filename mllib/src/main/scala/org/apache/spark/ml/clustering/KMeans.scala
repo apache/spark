@@ -213,7 +213,7 @@ class KMeansModel private[ml] (
 }
 
 /** Helper class for storing model data */
-private case class ClusterData(clusterIdx: Int, clusterCenter: Vector)
+private[ml] case class ClusterData(clusterIdx: Int, clusterCenter: Vector)
 
 
 /** A writer for KMeans that handles the "internal" (or default) format */
@@ -265,7 +265,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
    * We store all cluster centers in a single row and use this class to store model data by
    * Spark 1.6 and earlier. A model can be loaded from such older data for backward compatibility.
    */
-  private case class OldData(clusterCenters: Array[OldVector])
+  private[ml] case class OldData(clusterCenters: Array[OldVector])
 
   private class KMeansModelReader extends MLReader[KMeansModel] {
 

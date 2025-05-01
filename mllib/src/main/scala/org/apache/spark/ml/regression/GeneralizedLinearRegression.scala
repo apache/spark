@@ -1143,7 +1143,7 @@ class GeneralizedLinearRegressionModel private[ml] (
 
 @Since("2.0.0")
 object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegressionModel] {
-  private case class Data(intercept: Double, coefficients: Vector)
+  private[ml] case class Data(intercept: Double, coefficients: Vector)
 
   @Since("2.0.0")
   override def read: MLReader[GeneralizedLinearRegressionModel] =

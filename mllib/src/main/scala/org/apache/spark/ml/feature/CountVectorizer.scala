@@ -368,7 +368,7 @@ class CountVectorizerModel(
 
 @Since("1.6.0")
 object CountVectorizerModel extends MLReadable[CountVectorizerModel] {
-  private case class Data(vocabulary: Seq[String])
+  private[ml] case class Data(vocabulary: Seq[String])
 
   private[CountVectorizerModel]
   class CountVectorizerModelWriter(instance: CountVectorizerModel) extends MLWriter {

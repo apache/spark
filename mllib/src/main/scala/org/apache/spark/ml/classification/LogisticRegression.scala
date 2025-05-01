@@ -1318,7 +1318,7 @@ class LogisticRegressionModel private[spark] (
 
 @Since("1.6.0")
 object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
-  private case class Data(
+  private[ml] case class Data(
     numClasses: Int,
     numFeatures: Int,
     interceptVector: Vector,

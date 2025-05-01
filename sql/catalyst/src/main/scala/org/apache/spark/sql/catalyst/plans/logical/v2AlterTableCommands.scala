@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ResolvedFieldName, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ResolvedFieldName, ResolvedTable, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
 import org.apache.spark.sql.catalyst.expressions.{Expression, TableConstraint, Unevaluable}
@@ -295,7 +295,16 @@ case class AlterTableCollation(
 case class AddConstraint(
     table: LogicalPlan,
     tableConstraint: TableConstraint) extends AlterTableCommand {
-  override def changes: Seq[TableChange] = Seq.empty
+  override def changes: Seq[TableChange] = {
+    val constraint = tableConstraint.toV2Constraint
+    val validatedTableVersion = table match {
+      case t: ResolvedTable if constraint.enforced() =>
+        t.table.currentVersion()
+      case _ =>
+        null
+    }
+    Seq(TableChange.addConstraint(constraint, validatedTableVersion))
+  }
 
   protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
 }
@@ -308,7 +317,8 @@ case class DropConstraint(
     name: String,
     ifExists: Boolean,
     cascade: Boolean) extends AlterTableCommand {
-  override def changes: Seq[TableChange] = Seq.empty
+  override def changes: Seq[TableChange] =
+    Seq(TableChange.dropConstraint(name, ifExists, cascade))
 
   protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
 }

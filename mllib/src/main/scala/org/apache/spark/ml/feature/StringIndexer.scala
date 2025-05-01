@@ -28,7 +28,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset}
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.{get => fget, printf => fprintf, _}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.VersionUtils.majorMinorVersion
@@ -469,7 +469,7 @@ class StringIndexerModel (
 
 @Since("1.6.0")
 object StringIndexerModel extends MLReadable[StringIndexerModel] {
-  private case class Data(labelsArray: Seq[Seq[String]])
+  private[ml] case class Data(labelsArray: Seq[Seq[String]])
 
   private[StringIndexerModel]
   class StringIndexModelWriter(instance: StringIndexerModel) extends MLWriter {
@@ -586,17 +586,11 @@ class IndexToString @Since("2.2.0") (@Since("1.5.0") override val uid: String)
     } else {
       $(labels)
     }
-    val indexer = udf { index: Double =>
-      val idx = index.toInt
-      if (0 <= idx && idx < values.length) {
-        values(idx)
-      } else {
-        throw new SparkException(s"Unseen index: $index ??")
-      }
-    }
-    val outputColName = $(outputCol)
-    dataset.select(col("*"),
-      indexer(dataset($(inputCol)).cast(DoubleType)).as(outputColName))
+
+    val idxCol = col($(inputCol)).cast(IntegerType)
+    val valCol = when(lit(0) <= idxCol && idxCol < lit(values.length), fget(lit(values), idxCol))
+      .otherwise(raise_error(fprintf(lit("Unseen index: %s ??"), idxCol.cast(StringType))))
+    dataset.withColumn($(outputCol), valCol)
   }
 
   @Since("1.5.0")
