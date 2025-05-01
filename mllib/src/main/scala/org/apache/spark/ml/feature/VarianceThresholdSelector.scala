@@ -176,7 +176,7 @@ class VarianceThresholdSelectorModel private[ml](
 
 @Since("3.1.0")
 object VarianceThresholdSelectorModel extends MLReadable[VarianceThresholdSelectorModel] {
-  private case class Data(selectedFeatures: Seq[Int])
+  private[ml] case class Data(selectedFeatures: Seq[Int])
 
   @Since("3.1.0")
   override def read: MLReader[VarianceThresholdSelectorModel] =

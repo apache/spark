@@ -195,7 +195,7 @@ class IDFModel private[ml] (
 
 @Since("1.6.0")
 object IDFModel extends MLReadable[IDFModel] {
-  private case class Data(idf: Vector, docFreq: Array[Long], numDocs: Long)
+  private[ml] case class Data(idf: Vector, docFreq: Array[Long], numDocs: Long)
 
   private[IDFModel] class IDFModelWriter(instance: IDFModel) extends MLWriter {
 
