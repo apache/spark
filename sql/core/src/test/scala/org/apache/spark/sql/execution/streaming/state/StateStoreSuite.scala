@@ -425,14 +425,14 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       // Corrupt delta file and verify that it throws error
       val method = PrivateMethod[Path](Symbol("baseDir"))
       val basePath = provider invokePrivate method()
+      // corrupt 1.delta since we only validate the first file
       val path = new Path(basePath.toString, "1.delta")
       val byteArray = new Array[Byte](60)
       provider.decompressStream(provider.fm.open(path)).readFully(byteArray)
       byteArray(4) = -1 // Flip byte to -1 to corrupt the file and
                         // trigger key row fmt validation error
       val outputStream = provider.compressStream(provider.fm.createAtomic(
-        path,
-        overwriteIfPossible = true))
+        path, overwriteIfPossible = true))
       outputStream.write(byteArray)
       outputStream.close()
 
