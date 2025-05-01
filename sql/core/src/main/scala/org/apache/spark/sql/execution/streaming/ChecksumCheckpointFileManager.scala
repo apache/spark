@@ -328,7 +328,9 @@ class ChecksumFSDataInputStream(
    * */
   def closeWithoutChecksumVerification(): Unit = {
     if (!closed) {
-      logWarning(log"Closing file ${MDC(PATH, path)} without checksum verification")
+      // Ideally this should be warning, but if a file is doing this frequently
+      // it will cause unnecessary noise in the logs. This can be changed later.
+      logDebug(log"Closing file ${MDC(PATH, path)} without checksum verification")
       closeInternal()
     }
   }
