@@ -453,8 +453,11 @@ private[ml] object MLUtils {
       path: String,
       loadFromLocal: Boolean = false): Transformer = {
     loadOperator(
-      sessionHolder, className, path, classOf[Transformer], loadFromLocal = loadFromLocal
-    )
+      sessionHolder,
+      className,
+      path,
+      classOf[Transformer],
+      loadFromLocal = loadFromLocal)
   }
 
   /**
