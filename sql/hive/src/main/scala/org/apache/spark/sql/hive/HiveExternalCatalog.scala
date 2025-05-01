@@ -321,6 +321,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // bucket specification to empty. Note that partition columns are retained, so that we can
     // call partition-related Hive API later.
     def newSparkSQLSpecificMetastoreTable(): CatalogTable = {
+      if (table.partitionColumnNames.contains(EMPTY_DATA_SCHEMA.head.name)) {
+        // TODO: SPARK-51957: Fix partition column and EMTPY_DATA_SCHEMA naming conflict
+        // This is a valid use case, but for historical reason,s we don't allow it as the 'col' name
+        // is taken by the empty schema. We should allow this in the future if we find a proper
+        // way.
+        throw new AnalysisException(
+          errorClass = "CONFLICTING_PARTITION_COLUMN_NAME_WITH_RESERVED",
+          messageParameters = Map(
+            "tableName" -> table.qualifiedName,
+            "partitionColumnName" -> EMPTY_DATA_SCHEMA.head.name))
+      }
       table.copy(
         // Hive only allows directory paths as location URIs while Spark SQL data source tables
         // also allow file paths. For non-hive-compatible format, we should not set location URI

@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 import org.apache.spark.util.random.RandomSampler
@@ -801,11 +802,13 @@ case class InsertIntoDir(
  * @param isTempView A flag to indicate whether the view is temporary or not.
  * @param child The logical plan of a view operator. If the view description is available, it should
  *              be a logical plan parsed from the `CatalogTable.viewText`.
+ * @param options The configuration used when reading data.
  */
 case class View(
     desc: CatalogTable,
     isTempView: Boolean,
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty) extends UnaryNode {
   require(!isTempViewStoringAnalyzedPlan || child.resolved)
 
   override def output: Seq[Attribute] = child.output

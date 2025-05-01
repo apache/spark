@@ -27,7 +27,11 @@ This operator has support for an umbrella of features such as object-oriented st
 
 # Language Support
 
-`TransformWithState` is available in Scala, Java and Python. Note that in Python, the operator name is called `transformWithStateInPandas` similar to other operators interacting with the Pandas interface in Apache Spark.
+`TransformWithState` is available in Scala, Java and Python.
+
+Note that in Python, there are two operators named `transformWithStateInPandas` which works with Pandas interface, and `transformWithState` which works with Row interface.
+
+Based on popularity of Pandas and its rich set of API with vectorization, `transformWithStateInPandas` may be the preferred API for most users. The `transformWithState` API is more suitable to handle high key cardinality use case, since the cost of conversion is considerably high for Pandas API. If users aren't familiar with Pandas, Row type API might be easier to learn.
 
 # Components of a TransformWithState Query
 
@@ -118,9 +122,11 @@ Here is an example of a StatefulProcessor that implements a downtime detector. E
 
 When a timer expires, the application emits the elapsed time since the last observed event for the key. It then sets a new timer to emit an update 10 seconds later.
 
+NOTE: `python_Pandas` tab guides the implementation of StatefulProcessor for `transformWithStateInPandas`, and `python_Row` tab guides the implementation of StatefulProcessor for `transformWithState`.
+
 <div class="codetabs">
 
-<div data-lang="python"  markdown="1">
+<div data-lang="python_Pandas"  markdown="1">
 
 {% highlight python %}
 
@@ -169,6 +175,58 @@ class DownTimeDetector(StatefulProcessor):
 
         # Yield an empty DataFrame
         yield pd.DataFrame()
+
+    def close(self) -> None:
+        # No cleanup needed
+        pass
+
+{% endhighlight %}
+
+</div>
+
+<div data-lang="python_Row"  markdown="1">
+
+{% highlight python %}
+
+class DownTimeDetector(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        # Define schema for the state value (timestamp)
+        state_schema = StructType([StructField("value", TimestampType(), True)])
+        self.handle = handle
+        # Initialize state to store the last seen timestamp for each key
+        self.last_seen = handle.getValueState("last_seen", state_schema)
+
+    def handleExpiredTimer(self, key, timerValues, expiredTimerInfo) -> Iterator[Row]:
+        latest_from_existing = self.last_seen.get()
+        # Calculate downtime duration
+        downtime_duration = timerValues.getCurrentProcessingTimeInMs() - int(latest_from_existing.timestamp() * 1000)
+        # Register a new timer for 10 seconds in the future
+        self.handle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 10000)
+        # Yield a DataFrame with the key and downtime duration
+        yield Row(id=key[0], timeValues=str(downtime_duration))
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
+        # Find the maximum timestamp
+        max_timestamp = max(map(lambda x: x.timestamp, rows))
+
+        # Get the latest timestamp from existing state or use epoch start if not exists
+        if self.last_seen.exists():
+            latest_from_existing = self.last_seen.get()
+        else:
+            latest_from_existing = datetime.fromtimestamp(0)
+
+        # If new data is more recent than existing state
+        if latest_from_existing < max_timestamp:
+            # Delete all existing timers
+            for timer in self.handle.listTimers():
+                self.handle.deleteTimer(timer)
+            # Update the last seen timestamp
+            self.last_seen.update((max_timestamp,))
+
+        # Register a new timer for 5 seconds in the future
+        self.handle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 5000)
+
+        return iter([])
 
     def close(self) -> None:
         # No cleanup needed
@@ -252,12 +310,28 @@ class DowntimeDetector(duration: Duration) extends
 Now that we have defined the `StatefulProcessor`, we can use it in a streaming query. The following code snippets show how to use the `StatefulProcessor` in a streaming query in Python and Scala.
 
 <div class="codetabs">
-<div data-lang="python"  markdown="1">
+<div data-lang="python_Pandas"  markdown="1">
 
 {% highlight python %}
 
 q = (df.groupBy("key")
   .transformWithStateInPandas(
+    statefulProcessor=DownTimeDetector(),
+    outputStructType=output_schema,
+    outputMode="Update",
+    timeMode="None",
+  )
+  .writeStream...
+
+{% endhighlight %}
+</div>
+
+<div data-lang="python_Row"  markdown="1">
+
+{% highlight python %}
+
+q = (df.groupBy("key")
+  .transformWithState(
     statefulProcessor=DownTimeDetector(),
     outputStructType=output_schema,
     outputMode="Update",

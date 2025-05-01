@@ -339,7 +339,9 @@ object SparkExecuteStatementOperation {
     case LongType => TTypeId.BIGINT_TYPE
     case FloatType => TTypeId.FLOAT_TYPE
     case DoubleType => TTypeId.DOUBLE_TYPE
-    case StringType => TTypeId.STRING_TYPE
+    case _: CharType => TTypeId.CHAR_TYPE
+    case _: VarcharType => TTypeId.VARCHAR_TYPE
+    case _: StringType => TTypeId.STRING_TYPE
     case _: DecimalType => TTypeId.DECIMAL_TYPE
     case DateType => TTypeId.DATE_TYPE
     // TODO: Shall use TIMESTAMPLOCALTZ_TYPE, keep AS-IS now for
@@ -353,8 +355,6 @@ object SparkExecuteStatementOperation {
     case _: ArrayType => TTypeId.ARRAY_TYPE
     case _: MapType => TTypeId.MAP_TYPE
     case _: StructType => TTypeId.STRUCT_TYPE
-    case _: CharType => TTypeId.CHAR_TYPE
-    case _: VarcharType => TTypeId.VARCHAR_TYPE
     case other =>
       throw new IllegalArgumentException(s"Unrecognized type name: ${other.catalogString}")
   }

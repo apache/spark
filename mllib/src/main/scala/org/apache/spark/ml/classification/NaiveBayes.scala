@@ -598,6 +598,7 @@ class NaiveBayesModel private[ml] (
 
 @Since("1.6.0")
 object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
+  private[ml] case class Data(pi: Vector, theta: Matrix, sigma: Matrix)
 
   @Since("1.6.0")
   override def read: MLReader[NaiveBayesModel] = new NaiveBayesModelReader
@@ -608,8 +609,6 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
   /** [[MLWriter]] instance for [[NaiveBayesModel]] */
   private[NaiveBayesModel] class NaiveBayesModelWriter(instance: NaiveBayesModel) extends MLWriter {
     import NaiveBayes._
-
-    private case class Data(pi: Vector, theta: Matrix, sigma: Matrix)
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
@@ -624,7 +623,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       }
 
       val data = Data(instance.pi, instance.theta, instance.sigma)
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -639,21 +638,17 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-      val vecConverted = MLUtils.convertVectorColumnsToML(data, "pi")
-
       val model = if (major < 3) {
+        val data = sparkSession.read.parquet(dataPath)
+        val vecConverted = MLUtils.convertVectorColumnsToML(data, "pi")
         val Row(pi: Vector, theta: Matrix) =
           MLUtils.convertMatrixColumnsToML(vecConverted, "theta")
             .select("pi", "theta")
             .head()
         new NaiveBayesModel(metadata.uid, pi, theta, Matrices.zeros(0, 0))
       } else {
-        val Row(pi: Vector, theta: Matrix, sigma: Matrix) =
-          MLUtils.convertMatrixColumnsToML(vecConverted, "theta", "sigma")
-            .select("pi", "theta", "sigma")
-            .head()
-        new NaiveBayesModel(metadata.uid, pi, theta, sigma)
+        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+        new NaiveBayesModel(metadata.uid, data.pi, data.theta, data.sigma)
       }
 
       metadata.getAndSetParams(model)

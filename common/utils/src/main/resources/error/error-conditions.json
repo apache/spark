@@ -755,6 +755,14 @@
     ],
     "sqlState" : "KD009"
   },
+  "CONFLICTING_PARTITION_COLUMN_NAME_WITH_RESERVED" : {
+    "message" : [
+      "Partition column name '<partitionColumnName>' conflicts with reserved column name.",
+      "The schema of <tableName> is Hive-incompatible, Spark automatically generates a reserved column '<partitionColumnName>' to store the table in a specific way.",
+      "Please use a different name for the partition column."
+    ],
+    "sqlState" : "KD009"
+  },
   "CONNECT" : {
     "message" : [
       "Generic Spark Connect error."
@@ -2374,9 +2382,24 @@
       "The value '<confValue>' in the config \"<confName>\" is invalid."
     ],
     "subClass" : {
+      "OUT_OF_RANGE_OF_OPTIONS" : {
+        "message" : [
+          "It should be one of '<confOptions>'."
+        ]
+      },
+      "REQUIREMENT" : {
+        "message" : [
+          "<confRequirement>"
+        ]
+      },
       "TIME_ZONE" : {
         "message" : [
           "Cannot resolve the given timezone."
+        ]
+      },
+      "TYPE_MISMATCH" : {
+        "message" : [
+          "It should be a/an '<confType>' value."
         ]
       }
     },
@@ -4080,6 +4103,12 @@
     ],
     "sqlState" : "HV091"
   },
+  "NON_DETERMINISTIC_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` is non-deterministic. Check constraints must only contain deterministic expressions."
+    ],
+    "sqlState" : "42621"
+  },
   "NON_FOLDABLE_ARGUMENT" : {
     "message" : [
       "The function <funcName> requires the parameter <paramName> to be a foldable expression of the type <paramType>, but the actual argument is a non-foldable."
@@ -5242,6 +5271,12 @@
       "Please make the schema nullable. Current schema: <schema>"
     ],
     "sqlState" : "XXKST"
+  },
+  "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR" : {
+    "message" : [
+      "An error occurred in the user-defined function <function> of the StatefulProcessor. Reason: <reason>."
+    ],
+    "sqlState" : "39000"
   },
   "TRANSPOSE_EXCEED_ROW_LIMIT" : {
     "message" : [
