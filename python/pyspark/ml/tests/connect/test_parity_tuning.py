@@ -26,7 +26,6 @@ class TuningParityTests(TuningTestsMixin, ReusedConnectTestCase):
 
 
 class TuningParityWithMLCacheOffloadingEnabledTests(TuningTestsMixin, ReusedConnectTestCase):
-
     @classmethod
     def conf(cls):
         conf = super().conf()
