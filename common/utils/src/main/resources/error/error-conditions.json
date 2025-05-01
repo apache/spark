@@ -326,13 +326,7 @@
       },
       "KEY_ROW_FORMAT_VALIDATION_FAILURE" : {
         "message" : [
-          "The streaming query failed to validate written state for key row for stateStore=<stateStoreID>.",
-          "The following reasons may cause this:",
-          "1. An old Spark version wrote the checkpoint that is incompatible with the current one",
-          "2. Corrupt checkpoint files",
-          "3. The query changed in an incompatible way between restarts",
-          "For the first case, use a new checkpoint directory or use the original Spark version",
-          "to process the streaming state. Retrieved error_message=<errorMsg>"
+          "<msg>"
         ]
       },
       "ROCKSDB_STORE_PROVIDER_OUT_OF_MEMORY" : {
@@ -368,13 +362,7 @@
       },
       "VALUE_ROW_FORMAT_VALIDATION_FAILURE" : {
         "message" : [
-          "The streaming query failed to validate written state for value row for stateStore=<stateStoreID>.",
-          "The following reasons may cause this:",
-          "1. An old Spark version wrote the checkpoint that is incompatible with the current one",
-          "2. Corrupt checkpoint files",
-          "3. The query changed in an incompatible way between restarts",
-          "For the first case, use a new checkpoint directory or use the original Spark version",
-          "to process the streaming state. Retrieved error_message=<errorMsg>"
+          "<msg>"
         ]
       }
     },

@@ -420,9 +420,22 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       val snapshotVersion = (0 to 10).find( version =>
         fileExists(provider, version, isSnapshot = true)).getOrElse(fail("snapshot file not found"))
 
-      // Corrupt delta file and verify that it throws error
       assert(getData(provider, snapshotVersion - 1) === Set(("a", 0) -> (snapshotVersion - 1)))
-      corruptFile(provider, 1, isSnapshot = false)
+
+      // Corrupt delta file and verify that it throws error
+      val method = PrivateMethod[Path](Symbol("baseDir"))
+      val basePath = provider invokePrivate method()
+      val path = new Path(basePath.toString, "1.delta")
+      val byteArray = new Array[Byte](60)
+      provider.decompressStream(provider.fm.open(path)).readFully(byteArray)
+      byteArray(4) = -1 // Flip byte to -1 to corrupt the file and
+                        // trigger key row fmt validation error
+      val outputStream = provider.compressStream(provider.fm.createAtomic(
+        path,
+        overwriteIfPossible = true))
+      outputStream.write(byteArray)
+      outputStream.close()
+
       val e = intercept[SparkException] {
         getData(provider, snapshotVersion - 1)
       }
@@ -1101,26 +1114,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val filePath = new File(basePath.toString, fileName)
     filePath.delete()
     filePath.createNewFile()
-  }
-
-  def corruptFile(
-      provider: HDFSBackedStateStoreProvider,
-      version: Long,
-      isSnapshot: Boolean): Unit = {
-    val method = PrivateMethod[Path](Symbol("baseDir"))
-    val basePath = provider invokePrivate method()
-    val fileName = if (isSnapshot) s"$version.snapshot" else s"$version.delta"
-    val path = new Path(basePath.toString, fileName)
-    val byteArray = new Array[Byte](60)
-    provider.decompressStream(provider.fm.open(path)).readFully(byteArray)
-
-    byteArray(4) = -1 // Flip a byte to -1 to corrupt the file
-
-    val outputStream = provider.compressStream(provider.fm.createAtomic(
-      path,
-      overwriteIfPossible = true))
-    outputStream.write(byteArray)
-    outputStream.close()
   }
 }
 

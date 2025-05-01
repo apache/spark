@@ -460,7 +460,7 @@ class StateStoreKeyRowFormatValidationFailure(errorMsg: String, stateStoreID: St
     override def convertToCannotLoadStoreError(): SparkException = {
       new SparkException(
         errorClass = "CANNOT_LOAD_STATE_STORE.KEY_ROW_FORMAT_VALIDATION_FAILURE",
-        messageParameters = Map("errorMsg" -> errorMsg, "stateStoreID" -> stateStoreID),
+        messageParameters = Map("msg" -> this.getMessage),
         cause = null)
     }
   }
@@ -473,7 +473,7 @@ class StateStoreValueRowFormatValidationFailure(errorMsg: String, stateStoreID: 
     override def convertToCannotLoadStoreError(): SparkException = {
       new SparkException(
         errorClass = "CANNOT_LOAD_STATE_STORE.VALUE_ROW_FORMAT_VALIDATION_FAILURE",
-        messageParameters = Map("errorMsg" -> errorMsg, "stateStoreID" -> stateStoreID),
+        messageParameters = Map("msg" -> this.getMessage),
         cause = null)
     }
   }
