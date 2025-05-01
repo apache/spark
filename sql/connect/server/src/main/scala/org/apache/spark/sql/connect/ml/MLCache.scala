@@ -114,7 +114,9 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
         throw new RuntimeException(
           "SparkML 'model.summary' and 'model.evaluate' APIs are not supported' when " +
             "Spark Connect session ML cache offloading is enabled. You can use APIs in " +
-            "'pyspark.ml.evaluation' instead.")
+            "'pyspark.ml.evaluation' instead, or you can set Spark config " +
+            "'spark.connect.session.connectML.mlCache.offloading.enabled' to 'false' to " +
+            "disable Spark Connect session ML cache offloading.")
       }
       cachedSummary.put(objectId, obj.asInstanceOf[Summary])
     } else if (obj.isInstanceOf[Model[_]]) {

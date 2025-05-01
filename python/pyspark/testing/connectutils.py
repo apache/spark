@@ -159,7 +159,7 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
         # tests' environment variables
         conf.set("spark.connect.authenticate.token", "deadbeef")
         # Disable ml cache offloading,
-        # offloading hasn't support APIs like model.summary / model.evaluate
+        # offloading hasn't supported APIs like model.summary / model.evaluate
         conf.set("spark.connect.session.connectML.mlCache.offloading.enabled", "false")
         return conf
 
