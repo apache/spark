@@ -46,11 +46,12 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   private[ml] val totalSizeBytes: AtomicLong = new AtomicLong(0)
 
   val offloadedModelsDir: Path = {
-    Paths.get(
+    val path = Paths.get(
       System.getProperty("java.io.tmpdir"),
       "spark_connect_model_cache",
       sessionHolder.sessionId
     )
+    Files.createDirectories(path)
   }
   private def getOffloadingEnabled: Boolean = {
     sessionHolder.session.conf.get(
@@ -153,7 +154,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       helper
     } else {
       var obj: Object = Option(cachedModel.get(refId)).map(_.obj).getOrElse(
-        () => cachedSummary.get(refId)
+        cachedSummary.get(refId)
       )
       if (obj == null && getOffloadingEnabled) {
         val loadPath = offloadedModelsDir.resolve(refId)

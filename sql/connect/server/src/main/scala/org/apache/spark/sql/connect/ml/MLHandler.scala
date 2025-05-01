@@ -43,7 +43,7 @@ private class AttributeHelper(
     val sessionHolder: SessionHolder,
     val objRef: String,
     val methods: Array[Method]) {
-  protected lazy val instance = {
+  protected def instance(): Object = {
     val obj = sessionHolder.mlCache.get(objRef)
     if (obj == null) {
       throw MLCacheInvalidException(s"object $objRef")
@@ -53,7 +53,7 @@ private class AttributeHelper(
   // Get the attribute by reflection
   def getAttribute: Any = {
     assert(methods.length >= 1)
-    methods.foldLeft(instance) { (obj, m) =>
+    methods.foldLeft(instance()) { (obj, m) =>
       if (m.argValues.isEmpty) {
         MLUtils.invokeMethodAllowed(obj, m.name)
       } else {
@@ -72,7 +72,7 @@ private class ModelAttributeHelper(
 
   def transform(relation: proto.MlRelation.Transform): DataFrame = {
     // Create a copied model to avoid concurrently modify model params.
-    val model = instance.asInstanceOf[Model[_]]
+    val model = instance().asInstanceOf[Model[_]]
     val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
     MLUtils.setInstanceParams(copiedModel, relation.getParams)
     val inputDF = MLUtils.parseRelationProto(relation.getInput, sessionHolder)
