@@ -535,7 +535,7 @@ Filter Pushdown in Python Data Sources
 
 Filter pushdown is an optimization technique that allows data sources to handle filters natively, reducing the amount of data that needs to be transferred and processed by Spark.
 
-The filter pushdown API is introduced in Spark 4.1, enabling DataSourceReader to selectively push down filters from the query to the source.
+The filter pushdown API enables DataSourceReader to selectively push down filters from the query to the source.
 
 You must turn on the configuration ``spark.sql.python.filterPushdown.enabled`` to enable filter pushdown.
 
@@ -554,32 +554,93 @@ To enable filter pushdown in your Python Data Source, implement the ``pushFilter
 
 .. code-block:: python
 
-    from pyspark.sql.datasource import EqualTo, Filter, GreaterThan, LessThan
+    import math
+    from typing import Iterable, List
+    from pyspark.sql.datasource import (
+        DataSource,
+        DataSourceReader,
+        EqualTo,
+        Filter,
+        GreaterThan,
+        LessThan,
+        GreaterThanOrEqual,
+        LessThanOrEqual,
+    )
 
-    def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+
+    class PrimesDataSource(DataSource):
         """
-        Parameters
-        ----------
-        filters : list of Filter objects
-            The AND of the filters that Spark would like to push down
-
-        Returns
-        -------
-        iterable of Filter objects
-            Filters that could not be pushed down and still need to be 
-            evaluated by Spark
+        A data source that enumerates prime numbers.
         """
-        # Process the filters and determine which ones can be handled by the data source
-        pushed = []
-        for filter in filters:
-            if isinstance(filter, (EqualTo, GreaterThan, LessThan)):
-                pushed.append(filter)
-            # Check for other supported filter types...
-            else:
-                yield filter  # Let Spark handle unsupported filters
 
-        # Store the pushed filters for use in partitions() and read() methods
-        self.pushed_filters = pushed
+        @classmethod
+        def name(cls):
+            return "primes"
+
+        def schema(self):
+            return "p int"
+
+        def reader(self, schema: str):
+            return PrimesDataSourceReader(schema, self.options)
+
+
+    class PrimesDataSourceReader(DataSourceReader):
+        def __init__(self, schema, options):
+            self.schema: str = schema
+            self.options = options
+            self.lower_bound = 2
+            self.upper_bound = math.inf
+
+        def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+            """
+            Parameters
+            ----------
+            filters : list of Filter objects
+                The AND of the filters that Spark would like to push down
+
+            Returns
+            -------
+            iterable of Filter objects
+                Filters that could not be pushed down and still need to be
+                evaluated by Spark
+            """
+            for filter in filters:
+                print(f"Got filter: {filter}")
+                if isinstance(filter, EqualTo):
+                    self.lower_bound = max(self.lower_bound, filter.value)
+                    self.upper_bound = min(self.upper_bound, filter.value)
+                elif isinstance(filter, GreaterThan):
+                    self.lower_bound = max(self.lower_bound, filter.value + 1)
+                elif isinstance(filter, LessThan):
+                    self.upper_bound = min(self.upper_bound, filter.value - 1)
+                elif isinstance(filter, GreaterThanOrEqual):
+                    self.lower_bound = max(self.lower_bound, filter.value)
+                elif isinstance(filter, LessThanOrEqual):
+                    self.upper_bound = min(self.upper_bound, filter.value)
+                else:
+                    yield filter  # Let Spark handle unsupported filters
+
+        def read(self, partition):
+            # Use the pushed filters to filter data during read
+            num = self.lower_bound
+            while num <= self.upper_bound:
+                if self._is_prime(num):
+                    yield [num]
+                num += 1
+
+        @staticmethod
+        def _is_prime(n: int) -> bool:
+            """Check if a number is prime."""
+            if n < 2:
+                return False
+            for i in range(2, int(n**0.5) + 1):
+                if n % i == 0:
+                    return False
+            return True
+
+    # Register the data source
+    spark.dataSource.register(PrimesDataSource)
+    spark.read.format("primes").load().filter("2000 <= p and p < 2050").show()
 
 **Notes**
 
