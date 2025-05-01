@@ -52,7 +52,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       sessionHolder.sessionId)
     Files.createDirectories(path)
   }
-  private def getOffloadingEnabled: Boolean = {
+  private[spark] def getOffloadingEnabled: Boolean = {
     sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED)
   }
 
@@ -99,6 +99,17 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     }
   }
 
+  private[spark] def checkSummaryAvail(): Unit = {
+    if (getOffloadingEnabled) {
+      throw new RuntimeException(
+        "SparkML 'model.summary' and 'model.evaluate' APIs are not supported' when " +
+          "Spark Connect session ML cache offloading is enabled. You can use APIs in " +
+          "'pyspark.ml.evaluation' instead, or you can set Spark config " +
+          "'spark.connect.session.connectML.mlCache.offloading.enabled' to 'false' to " +
+          "disable Spark Connect session ML cache offloading.")
+    }
+  }
+
   /**
    * Cache an object into a map of MLCache, and return its key
    * @param obj
@@ -110,14 +121,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     val objectId = UUID.randomUUID().toString
 
     if (obj.isInstanceOf[Summary]) {
-      if (getOffloadingEnabled) {
-        throw new RuntimeException(
-          "SparkML 'model.summary' and 'model.evaluate' APIs are not supported' when " +
-            "Spark Connect session ML cache offloading is enabled. You can use APIs in " +
-            "'pyspark.ml.evaluation' instead, or you can set Spark config " +
-            "'spark.connect.session.connectML.mlCache.offloading.enabled' to 'false' to " +
-            "disable Spark Connect session ML cache offloading.")
-      }
+      checkSummaryAvail()
       cachedSummary.put(objectId, obj.asInstanceOf[Summary])
     } else if (obj.isInstanceOf[Model[_]]) {
       val sizeBytes = if (getOffloadingEnabled) {

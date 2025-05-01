@@ -54,6 +54,9 @@ private class AttributeHelper(
   def getAttribute: Any = {
     assert(methods.length >= 1)
     methods.foldLeft(instance()) { (obj, m) =>
+      if (obj.isInstanceOf[Summary]) {
+        sessionHolder.mlCache.checkSummaryAvail()
+      }
       if (m.argValues.isEmpty) {
         MLUtils.invokeMethodAllowed(obj, m.name)
       } else {
