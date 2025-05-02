@@ -21,7 +21,7 @@ import java.io.File
 import java.util.Locale
 import java.util.Set
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
 
 import scala.collection.{mutable, Map}
@@ -1160,20 +1160,18 @@ class RocksDB(
    * Drop uncommitted changes, and roll back to previous version.
    */
   def rollback(): Unit = {
-    try {
-      numKeysOnWritingVersion = numKeysOnLoadedVersion
-      numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
-      loadedVersion = -1L
-      lastCommitBasedStateStoreCkptId = None
-      lastCommittedStateStoreCkptId = None
-      loadedStateStoreCkptId = None
-      sessionStateStoreCkptId = None
-      lineageManager.clear()
-      changelogWriter.foreach(_.abort())
-      // Make sure changelogWriter gets recreated next time.
-      changelogWriter = None
-      logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
-    }
+    numKeysOnWritingVersion = numKeysOnLoadedVersion
+    numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
+    loadedVersion = -1L
+    lastCommitBasedStateStoreCkptId = None
+    lastCommittedStateStoreCkptId = None
+    loadedStateStoreCkptId = None
+    sessionStateStoreCkptId = None
+    lineageManager.clear()
+    changelogWriter.foreach(_.abort())
+    // Make sure changelogWriter gets recreated next time.
+    changelogWriter = None
+    logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
   }
 
   def doMaintenance(): Unit = {
