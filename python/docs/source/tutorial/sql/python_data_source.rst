@@ -588,8 +588,8 @@ To enable filter pushdown in your Python Data Source, implement the ``pushFilter
         def __init__(self, schema, options):
             self.schema: str = schema
             self.options = options
-            self.lower_bound = 2
-            self.upper_bound = math.inf
+            self.min = 2
+            self.max = math.inf
 
         def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
             """
@@ -604,26 +604,27 @@ To enable filter pushdown in your Python Data Source, implement the ``pushFilter
                 Filters that could not be pushed down and still need to be
                 evaluated by Spark
             """
-            for filter in filters:
-                print(f"Got filter: {filter}")
-                if isinstance(filter, EqualTo):
-                    self.lower_bound = max(self.lower_bound, filter.value)
-                    self.upper_bound = min(self.upper_bound, filter.value)
-                elif isinstance(filter, GreaterThan):
-                    self.lower_bound = max(self.lower_bound, filter.value + 1)
-                elif isinstance(filter, LessThan):
-                    self.upper_bound = min(self.upper_bound, filter.value - 1)
-                elif isinstance(filter, GreaterThanOrEqual):
-                    self.lower_bound = max(self.lower_bound, filter.value)
-                elif isinstance(filter, LessThanOrEqual):
-                    self.upper_bound = min(self.upper_bound, filter.value)
+            for f in filters:
+                print(f"Got filter: {f}")
+                # Handle constraints on the range of numbers
+                if isinstance(f, EqualTo):
+                    self.min = max(self.min, f.value)
+                    self.max = min(self.max, f.value)
+                elif isinstance(f, GreaterThan):
+                    self.min = max(self.min, f.value + 1)
+                elif isinstance(f, LessThan):
+                    self.max = min(self.max, f.value - 1)
+                elif isinstance(f, GreaterThanOrEqual):
+                    self.min = max(self.min, f.value)
+                elif isinstance(f, LessThanOrEqual):
+                    self.max = min(self.max, f.value)
                 else:
-                    yield filter  # Let Spark handle unsupported filters
+                    yield f  # Let Spark handle unsupported filters
 
         def read(self, partition):
             # Use the pushed filters to filter data during read
-            num = self.lower_bound
-            while num <= self.upper_bound:
+            num = self.min
+            while num <= self.max:
                 if self._is_prime(num):
                     yield [num]
                 num += 1
