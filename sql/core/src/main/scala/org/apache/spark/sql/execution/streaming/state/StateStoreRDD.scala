@@ -176,10 +176,8 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
           stateSchemaBroadcast,
           useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
           useMultipleValuesPerKey)
-        readStateStore match {
-          case _: UpgradeableReadStore =>
-            StateStoreThreadLocalTracker.setUsedForWriteStore(true)
-          case _ =>
+        if (writeStore.equals(readStateStore)) {
+          StateStoreThreadLocalTracker.setUsedForWriteStore(true)
         }
         writeStore
       case None =>
