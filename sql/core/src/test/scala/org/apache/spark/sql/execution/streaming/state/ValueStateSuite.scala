@@ -88,6 +88,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
         ),
         matchPVals = true
       )
+      store.abort()
     }
   }
 
@@ -115,6 +116,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       testState.clear()
       assert(!testState.exists())
       assert(testState.get() === null)
+      store.commit()
     }
   }
 
@@ -160,6 +162,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       testState2.clear()
       assert(!testState2.exists())
       assert(testState2.get() === null)
+      store.commit()
     }
   }
 
@@ -181,6 +184,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
         ),
         matchPVals = false
       )
+      store.abort()
     }
   }
 
@@ -226,6 +230,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       testState.clear()
       assert(!testState.exists())
       assert(testState.get() === null)
+      store.commit()
     }
   }
 
@@ -252,6 +257,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       testState.clear()
       assert(!testState.exists())
       assert(testState.get() === null)
+      store.commit()
     }
   }
 
@@ -278,6 +284,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       testState.clear()
       assert(!testState.exists())
       assert(testState.get() === null)
+      store.commit()
     }
   }
 
@@ -304,6 +311,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       testState.clear()
       assert(!testState.exists())
       assert(testState.get() === null)
+      store.commit()
     }
   }
 
@@ -359,6 +367,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       nextBatchTestState.clear()
       assert(!nextBatchTestState.exists())
       assert(nextBatchTestState.get() === null)
+      store.commit()
     }
   }
 
@@ -386,6 +395,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
           matchPVals = true
         )
       }
+      store.abort()
     }
   }
 
@@ -413,6 +423,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       assert(ttlValue.get._2 === ttlExpirationMs)
       val ttlStateValueIterator = testState.getValueInTTLState()
       assert(ttlStateValueIterator.isDefined)
+      store.commit()
     }
   }
 }
@@ -427,7 +438,6 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
   before {
     StateStore.stop()
     require(!StateStore.isMaintenanceRunning)
-    spark.streams.stateStoreCoordinator // initialize the lazy coordinator
   }
 
   after {

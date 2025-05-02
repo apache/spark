@@ -70,6 +70,7 @@ class MapStateSuite extends StateVariableSuiteBase {
       testState.clear()
       assert(!testState.exists())
       assert(testState.iterator().hasNext === false)
+      store.commit()
     }
   }
 
@@ -110,6 +111,7 @@ class MapStateSuite extends StateVariableSuiteBase {
       assert(!testState2.exists())
       assert(testState1.iterator().hasNext === false)
       assert(testState2.iterator().hasNext === false)
+      store.commit()
     }
   }
 
@@ -170,6 +172,7 @@ class MapStateSuite extends StateVariableSuiteBase {
       assert(!mapTestState1.exists())
       assert(mapTestState2.exists())
       assert(mapTestState2.iterator().toList === List(("k2", 4)))
+      store.commit()
     }
   }
 
@@ -228,6 +231,7 @@ class MapStateSuite extends StateVariableSuiteBase {
       nextBatchTestState.clear()
       assert(!nextBatchTestState.exists())
       assert(nextBatchTestState.getValue("k1") === null)
+      store.commit()
     }
   }
 
@@ -256,6 +260,7 @@ class MapStateSuite extends StateVariableSuiteBase {
           matchPVals = true
         )
       }
+      store.abort()
     }
   }
 
@@ -286,6 +291,7 @@ class MapStateSuite extends StateVariableSuiteBase {
       assert(ttlValue.get._2 === ttlExpirationMs)
       val ttlStateValueIterator = testState.getKeyValuesInTTLState().map(_._2)
       assert(ttlStateValueIterator.hasNext)
+      store.commit()
     }
   }
 }

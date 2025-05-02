@@ -61,6 +61,8 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
   override def id: StateStoreId = innerStore.id
   override def version: Long = innerStore.version
 
+  override def getReadStamp: Long = innerStore.getReadStamp
+
   override def get(
       key: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow = {
@@ -137,8 +139,6 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
     ret
   }
   override def hasCommitted: Boolean = innerStore.hasCommitted
-
-  override def release(): Unit = {}
 }
 
 class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
@@ -176,10 +176,38 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
     val innerStateStore = innerProvider.getStore(version, stateStoreCkptId)
     CkptIdCollectingStateStoreWrapper(innerStateStore)
   }
-
   override def getReadStore(version: Long, uniqueId: Option[String] = None): ReadStateStore = {
     new WrappedReadStateStore(
       CkptIdCollectingStateStoreWrapper(innerProvider.getReadStore(version, uniqueId)))
+  }
+
+  override def getWriteStore(
+      readStore: ReadStateStore,
+      version: Long,
+      uniqueId: Option[String] = None): StateStore = {
+
+    // Handle the case where we're given a WrappedReadStateStore
+    readStore match {
+      case wrappedStore: WrappedReadStateStore =>
+        // Unwrap to get our wrapper
+        wrappedStore.store match {
+          case wrapper: CkptIdCollectingStateStoreWrapper =>
+            // Get the inner store from our wrapper
+            val innerReadStore = wrapper.innerStore
+            // Call the inner provider's getWriteStore with the inner store
+            val innerWriteStore = innerProvider.getWriteStore(innerReadStore, version, uniqueId)
+            // Wrap the result
+            CkptIdCollectingStateStoreWrapper(innerWriteStore)
+          case other =>
+            throw new IllegalArgumentException(
+              "Expected CkptIdCollectingStateStoreWrapper but got " + other.getClass.getName)
+        }
+
+      case other =>
+        throw new IllegalArgumentException(
+          "Expected WrappedReadStateStore but got " +
+            other.getClass.getName)
+    }
   }
 
   override def doMaintenance(): Unit = innerProvider.doMaintenance()

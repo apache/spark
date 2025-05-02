@@ -204,7 +204,7 @@ class StatePartitionReader(
   }
 
   override def close(): Unit = {
-    store.abort()
+    store.release()
     super.close()
   }
 }
