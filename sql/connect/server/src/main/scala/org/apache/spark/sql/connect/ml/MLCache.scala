@@ -94,15 +94,13 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     if (totalModelCacheSizeBytes.get() + sizeBytes > getModelCacheMaxSize) {
       throw new RuntimeException(
         f"The model cache size in current session exceeds $getModelCacheMaxSize bytes. " +
-         "Please delete existing cached model by executing 'del model' in python client " +
-         "before fitting new model or loading new model."
-      )
+          "Please delete existing cached model by executing 'del model' in python client " +
+          "before fitting new model or loading new model.")
     }
     if (sizeBytes > getModelMaxSize) {
       throw new RuntimeException(
         f"The fitted or loaded model size exceeds $getModelMaxSize bytes. " +
-          f"Please fit or load a model smaller than $getModelMaxSize bytes."
-      )
+          f"Please fit or load a model smaller than $getModelMaxSize bytes.")
     }
 
     totalModelCacheSizeBytes.addAndGet(sizeBytes)

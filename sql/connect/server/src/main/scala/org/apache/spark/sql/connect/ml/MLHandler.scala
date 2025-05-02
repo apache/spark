@@ -24,8 +24,8 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.param.{ParamMap, Params}
-import org.apache.spark.ml.util.{MLWritable, Summary}
 import org.apache.spark.ml.tree.TreeConfig
+import org.apache.spark.ml.util.{MLWritable, Summary}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.ml.Serializer.deserializeMethodArguments
@@ -139,11 +139,10 @@ private[connect] object MLHandler extends Logging {
           if (estimator.estimateModelSize(dataset) > maxModelSize) {
             throw new RuntimeException(
               f"The estimated model size exceeds $maxModelSize bytes limit. " +
-                "Please tune the estimator params to reduce the model size."
-            )
+                "Please tune the estimator params to reduce the model size.")
           }
         } catch {
-          case UnsupportedOperationException => ()
+          case _: UnsupportedOperationException => ()
         }
         val model = estimator.fit(dataset).asInstanceOf[Model[_]]
         val id = mlCache.register(model)
