@@ -134,7 +134,7 @@ private[connect] object MLHandler extends Logging {
           MLUtils.getEstimator(sessionHolder, estimatorProto, Some(fitCmd.getParams))
         if (offloadingEnabled) {
           if (estimator.getClass.getName == "org.apache.spark.ml.fpm.FPGrowth") {
-            throw new UnsupportedOperationException(
+            throw MlUnsupportedException(
               "FPGrowth algorithm is not supported " +
                 "if Spark Connect model cache offloading is enabled.")
           }
@@ -143,7 +143,7 @@ private[connect] object MLHandler extends Logging {
               .asInstanceOf[org.apache.spark.ml.clustering.LDA]
               .getOptimizer
               .toLowerCase() == "em") {
-            throw new UnsupportedOperationException(
+            throw MlUnsupportedException(
               "LDA algorithm with 'em' optimizer is not supported " +
                 "if Spark Connect model cache offloading is enabled.")
           }
