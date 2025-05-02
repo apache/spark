@@ -56,6 +56,7 @@ class ListStateSuite extends StateVariableSuiteBase {
         sqlState = Some("42601"),
         parameters = Map("stateName" -> "listState")
       )
+      store.abort()
     }
   }
 
@@ -96,6 +97,7 @@ class ListStateSuite extends StateVariableSuiteBase {
       testState.clear()
       assert(!testState.exists())
       assert(testState.get().toSeq === Seq.empty[Long])
+      store.commit()
     }
   }
 
@@ -280,6 +282,7 @@ class ListStateSuite extends StateVariableSuiteBase {
       assert(!testState2.exists())
       assert(testState1.exists())
       assert(testState2.get().toSeq === Seq.empty[Long])
+      store.commit()
     }
   }
 
@@ -311,6 +314,7 @@ class ListStateSuite extends StateVariableSuiteBase {
       assert(listState2.exists())
       assert(!valueState.exists())
       assert(listState1.get().toSeq === Seq.empty[Long])
+      store.commit()
     }
   }
 
@@ -366,6 +370,7 @@ class ListStateSuite extends StateVariableSuiteBase {
       nextBatchTestState.clear()
       assert(!nextBatchTestState.exists())
       assert(nextBatchTestState.get().isEmpty)
+      store.commit()
     }
   }
 
@@ -393,6 +398,7 @@ class ListStateSuite extends StateVariableSuiteBase {
           matchPVals = true
         )
       }
+      store.abort()
     }
   }
 
@@ -421,6 +427,7 @@ class ListStateSuite extends StateVariableSuiteBase {
       assert(ttlValues.forall(_._2 === ttlExpirationMs))
       val ttlStateValue = testState.getValueInTTLState()
       assert(ttlStateValue.isDefined)
+      store.commit()
     }
   }
 }

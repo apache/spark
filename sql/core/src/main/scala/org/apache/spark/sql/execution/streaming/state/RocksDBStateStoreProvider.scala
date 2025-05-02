@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
@@ -43,13 +43,37 @@ private[sql] class RocksDBStateStoreProvider
   with SupportsFineGrainedReplay {
   import RocksDBStateStoreProvider._
 
-  class RocksDBStateStore(lastVersion: Long) extends StateStore {
+  /**
+   * Implementation of a state store that uses RocksDB as the backing data store.
+   *
+   * This store implements a state machine with the following states:
+   * - UPDATING: The store is being updated and has not yet been committed or aborted
+   * - COMMITTED: Updates have been successfully committed
+   * - ABORTED: Updates have been aborted
+   *
+   * Operations are validated against the current state to ensure proper usage:
+   * - Get/put/remove/iterator operations are only allowed in UPDATING state
+   * - Commit is only allowed in UPDATING state
+   * - Abort is allowed in UPDATING or ABORTED state
+   * - Metrics retrieval is only allowed in COMMITTED or ABORTED state
+   *
+   * Each store instance is assigned a unique stamp when created, which is used to
+   * verify that operations are performed by the owning thread and to prevent
+   * concurrent modifications to the same store.
+   */
+  class RocksDBStateStore(lastVersion: Long, stamp: Long) extends StateStore {
     /** Trait and classes representing the internal state of the store */
     trait STATE
     case object UPDATING extends STATE
     case object COMMITTED extends STATE
     case object ABORTED extends STATE
     case object RELEASED extends STATE
+
+    private sealed trait TRANSITION
+    private case object UPDATE extends TRANSITION
+    private case object ABORT extends TRANSITION
+    private case object COMMIT extends TRANSITION
+    private case object METRICS extends TRANSITION
 
     @volatile private var state: STATE = UPDATING
     @volatile private var isValidated = false
@@ -58,6 +82,82 @@ private[sql] class RocksDBStateStoreProvider
 
     override def version: Long = lastVersion
 
+    /**
+     * Validates the expected state, throws exception if state is not as expected.
+     * Returns the current state
+     *
+     * @param possibleStates Expected possible states
+     */
+    private def validateState(possibleStates: List[STATE]): STATE = {
+      if (!possibleStates.contains(state)) {
+        throw StateStoreErrors.stateStoreOperationOutOfOrder(
+          s"Expected possible states $possibleStates but found $state")
+      }
+      state
+    }
+
+    /**
+     * Throws error if transition is illegal.
+     * MUST be called for every StateStore method.
+     *
+     * @param transition The transition type of the operation.
+     */
+    private def validateAndTransitionState(transition: TRANSITION): Unit = {
+      val newState = transition match {
+        case UPDATE =>
+          stateMachine.verifyStamp(stamp)
+          state match {
+            case UPDATING => UPDATING
+            case COMMITTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
+              s"Cannot update after committed")
+            case ABORTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
+              "Cannot update after aborted")
+          }
+        case ABORT =>
+          state match {
+            case UPDATING =>
+              stateMachine.verifyStamp(stamp)
+              ABORTED
+            case COMMITTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
+              "Cannot abort after committed")
+            case ABORTED => ABORTED
+          }
+        case COMMIT =>
+          state match {
+            case UPDATING =>
+              stateMachine.verifyStamp(stamp)
+              COMMITTED
+            case COMMITTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
+              "Cannot commit after committed")
+            case ABORTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
+              "Cannot commit after aborted")
+          }
+        case METRICS =>
+          state match {
+            case UPDATING => throw StateStoreErrors.stateStoreOperationOutOfOrder(
+              "Cannot get metrics in UPDATING state")
+            case COMMITTED => COMMITTED
+            case ABORTED => ABORTED
+          }
+      }
+      state = newState
+    }
+
+    // Add a listener for task threads to abort when the task completes and hasn't released
+    Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] {
+      _ =>
+        try {
+          if (state == UPDATING) {
+            abort()
+          }
+        } catch {
+          case NonFatal(e) =>
+            logWarning("Failed to abort state store", e)
+        } finally {
+          stateMachine.releaseStore(stamp, throwEx = false)
+        }
+    })
+
     override def createColFamilyIfAbsent(
         colFamilyName: String,
         keySchema: StructType,
@@ -65,6 +165,7 @@ private[sql] class RocksDBStateStoreProvider
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Unit = {
+      validateAndTransitionState(UPDATE)
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       val cfId = rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
       val dataEncoderCacheKey = StateRowEncoderCacheKey(
@@ -106,6 +207,7 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
+      validateAndTransitionState(UPDATE)
       verify(key != null, "Key cannot be null")
       verifyColFamilyOperations("get", colFamilyName)
 
@@ -132,6 +234,7 @@ private[sql] class RocksDBStateStoreProvider
      * values per key.
      */
     override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
+      validateAndTransitionState(UPDATE)
       verify(key != null, "Key cannot be null")
       verifyColFamilyOperations("valuesIterator", colFamilyName)
 
@@ -148,6 +251,7 @@ private[sql] class RocksDBStateStoreProvider
 
     override def merge(key: UnsafeRow, value: UnsafeRow,
         colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+      validateAndTransitionState(UPDATE)
       verify(state == UPDATING, "Cannot merge after already committed or aborted")
       verifyColFamilyOperations("merge", colFamilyName)
 
@@ -163,6 +267,7 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
+      validateAndTransitionState(UPDATE)
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       verify(key != null, "Key cannot be null")
       require(value != null, "Cannot put a null value")
@@ -173,6 +278,7 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
+      validateAndTransitionState(UPDATE)
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       verify(key != null, "Key cannot be null")
       verifyColFamilyOperations("remove", colFamilyName)
@@ -182,6 +288,7 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
+      validateAndTransitionState(UPDATE)
       // Note this verify function only verify on the colFamilyName being valid,
       // we are actually doing prefix when useColumnFamilies,
       // but pass "iterator" to throw correct error message
@@ -216,6 +323,8 @@ private[sql] class RocksDBStateStoreProvider
 
     override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
       Iterator[UnsafeRowPair] = {
+      validateAndTransitionState(UPDATE)
+
       verifyColFamilyOperations("prefixScan", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
@@ -232,12 +341,17 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     var checkpointInfo: Option[StateStoreCheckpointInfo] = None
+    private var storedMetrics: Option[RocksDBMetrics] = None
+
     override def commit(): Long = synchronized {
+      validateState(List(UPDATING))
       try {
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
         val (newVersion, newCheckpointInfo) = rocksDB.commit()
         checkpointInfo = Some(newCheckpointInfo)
-        state = COMMITTED
+        storedMetrics = rocksDB.metricsOpt
+        validateAndTransitionState(COMMIT)
+        stateMachine.releaseStore(stamp)
         logInfo(log"Committed ${MDC(VERSION_NUM, newVersion)} " +
           log"for ${MDC(STATE_STORE_ID, id)}")
         newVersion
@@ -248,14 +362,17 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def abort(): Unit = {
-      verify(state == UPDATING || state == ABORTED, "Cannot abort after already committed")
-      logInfo(log"Aborting ${MDC(VERSION_NUM, version + 1)} " +
-        log"for ${MDC(STATE_STORE_ID, id)}")
-      rocksDB.rollback()
-      state = ABORTED
+      if (validateState(List(UPDATING, ABORTED)) != ABORTED) {
+        logInfo(log"Aborting ${MDC(VERSION_NUM, version + 1)} " +
+          log"for ${MDC(STATE_STORE_ID, id)}")
+        rocksDB.rollback()
+        validateAndTransitionState(ABORT)
+        stateMachine.releaseStore(stamp)
+      }
     }
 
     override def metrics: StateStoreMetrics = {
+      validateAndTransitionState(METRICS)
       val rocksDBMetricsOpt = rocksDB.metricsOpt
 
       if (rocksDBMetricsOpt.isDefined) {
@@ -338,6 +455,7 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
+      validateAndTransitionState(METRICS)
       checkpointInfo match {
         case Some(info) => info
         case None => throw StateStoreErrors.stateStoreOperationOutOfOrder(
@@ -357,6 +475,8 @@ private[sql] class RocksDBStateStoreProvider
 
     /** Remove column family if exists */
     override def removeColFamilyIfExists(colFamilyName: String): Boolean = {
+      validateAndTransitionState(UPDATE)
+
       verifyColFamilyCreationOrDeletion("remove_col_family", colFamilyName)
       verify(useColumnFamilies, "Column families are not supported in this store")
 
@@ -459,6 +579,10 @@ private[sql] class RocksDBStateStoreProvider
 
   override def stateStoreId: StateStoreId = stateStoreId_
 
+
+  private lazy val stateMachine: RocksDBStateStoreProviderStateMachine =
+    new RocksDBStateStoreProviderStateMachine(stateStoreId, RocksDBConf(storeConf))
+
   /**
    * Creates and returns a state store with the specified parameters.
    *
@@ -495,7 +619,8 @@ private[sql] class RocksDBStateStoreProvider
               s" store is actually ${other.getClass.getSimpleName}")
           case None =>
             // Create new store instance for getStore/getReadStore cases
-            new RocksDBStateStore(version)
+            val stamp = stateMachine.acquireStore()
+            new RocksDBStateStore(version, stamp)
         }
       } catch {
         case e: Throwable =>
@@ -536,6 +661,8 @@ private[sql] class RocksDBStateStoreProvider
 
   override def doMaintenance(): Unit = {
     try {
+      stateMachine.maintenanceStore()
+
       rocksDB.doMaintenance()
     } catch {
       // SPARK-46547 - Swallow non-fatal exception in maintenance task to avoid deadlock between
@@ -547,6 +674,7 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def close(): Unit = {
+    stateMachine.closeStore()
     rocksDB.close()
   }
 
@@ -627,8 +755,9 @@ private[sql] class RocksDBStateStoreProvider
       if (endVersion < snapshotVersion) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(endVersion)
       }
+      val stamp = stateMachine.acquireStore()
       rocksDB.loadFromSnapshot(snapshotVersion, endVersion)
-      new RocksDBStateStore(endVersion)
+      new RocksDBStateStore(endVersion, stamp)
     }
     catch {
       case e: OutOfMemoryError =>
