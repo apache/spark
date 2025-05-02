@@ -46,11 +46,6 @@ import org.apache.spark.util.{NextIterator, Utils}
 sealed abstract class RocksDBOpType(name: String) {
   override def toString: String = name
 }
-case object LoadStore extends RocksDBOpType("load_store")
-case object RollbackStore extends RocksDBOpType("rollback_store")
-case object CloseStore extends RocksDBOpType("close_store")
-case object ReportStoreMetrics extends RocksDBOpType("report_store_metrics")
-case object StoreTaskCompletionListener extends RocksDBOpType("store_task_completion_listener")
 
 /**
  * Class representing a RocksDB instance that checkpoints version of data to DFS.
@@ -573,7 +568,6 @@ class RocksDB(
       stateStoreCkptId: Option[String] = None,
       readOnly: Boolean = false): RocksDB = {
     assert(version >= 0)
-    acquire(LoadStore)
     recordedMetrics = None
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)} with stateStoreCkptId: ${
       MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}")
@@ -598,7 +592,6 @@ class RocksDB(
    */
   def loadFromSnapshot(snapshotVersion: Long, endVersion: Long): RocksDB = {
     assert(snapshotVersion >= 0 && endVersion >= snapshotVersion)
-    acquire(LoadStore)
     recordedMetrics = None
     logInfo(
       log"Loading snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
@@ -1002,11 +995,7 @@ class RocksDB(
     }
   }
 
-  def release(): Unit = {
-    if (db != null) {
-      release(LoadStore)
-    }
-  }
+  def release(): Unit = {}
 
   /**
    * Commit all the updates made as a version to DFS. The steps it needs to do to commits are:
@@ -1088,10 +1077,6 @@ class RocksDB(
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded version
         throw t
-    } finally {
-      // reset resources as either 1) we already pushed the changes and it has been committed or
-      // 2) commit has failed and the current version is "invalidated".
-      release(LoadStore)
     }
   }
 
@@ -1175,7 +1160,6 @@ class RocksDB(
    * Drop uncommitted changes, and roll back to previous version.
    */
   def rollback(): Unit = {
-    acquire(RollbackStore)
     try {
       numKeysOnWritingVersion = numKeysOnLoadedVersion
       numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
@@ -1189,8 +1173,6 @@ class RocksDB(
       // Make sure changelogWriter gets recreated next time.
       changelogWriter = None
       logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
-    } finally {
-      release(RollbackStore)
     }
   }
 
@@ -1223,7 +1205,6 @@ class RocksDB(
   /** Release all resources */
   def close(): Unit = {
     // Acquire DB instance lock and release at the end to allow for synchronized access
-    acquire(CloseStore)
     try {
       closeDB()
 
@@ -1245,8 +1226,6 @@ class RocksDB(
     } catch {
       case e: Exception =>
         logWarning("Error closing RocksDB", e)
-    } finally {
-      release(CloseStore)
     }
   }
 
@@ -1342,92 +1321,13 @@ class RocksDB(
    */
   def metricsOpt: Option[RocksDBMetrics] = {
     var rocksDBMetricsOpt: Option[RocksDBMetrics] = None
-    acquire(ReportStoreMetrics)
     try {
       rocksDBMetricsOpt = recordedMetrics
     } catch {
       case ex: Exception =>
         logInfo(log"Failed to acquire metrics with exception=${MDC(LogKeys.ERROR, ex)}")
-    } finally {
-      release(ReportStoreMetrics)
     }
     rocksDBMetricsOpt
-  }
-
-  /**
-   * Function to acquire RocksDB instance lock that allows for synchronized access to the state
-   * store instance
-   *
-   * @param opType - operation type requesting the lock
-   */
-  private def acquire(opType: RocksDBOpType): Unit = {
-    val newAcquiredThreadInfo = AcquiredThreadInfo()
-    val waitStartTime = System.nanoTime()
-    def timeWaitedMs = {
-      val elapsedNanos = System.nanoTime() - waitStartTime
-      TimeUnit.MILLISECONDS.convert(elapsedNanos, TimeUnit.NANOSECONDS)
-    }
-    def isAcquiredByDifferentThread = acquiredThreadInfo != null &&
-      acquiredThreadInfo.threadRef.get.isDefined &&
-      newAcquiredThreadInfo.threadRef.get.get.getId != acquiredThreadInfo.threadRef.get.get.getId
-
-    if (isAcquiredByDifferentThread) {
-      val stackTraceOutput = acquiredThreadInfo.threadRef.get.get.getStackTrace.mkString("\n")
-      throw QueryExecutionErrors.unreleasedThreadError(loggingId, opType.toString,
-        newAcquiredThreadInfo.toString(), acquiredThreadInfo.toString(), timeWaitedMs,
-        stackTraceOutput)
-    } else {
-      acquiredThreadInfo = newAcquiredThreadInfo
-      // Add a listener to always release the lock when the task (if active) completes
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] {
-        _ => this.release(StoreTaskCompletionListener, Some(newAcquiredThreadInfo))
-      })
-      logInfo(log"RocksDB instance was acquired by " +
-        log"ownerThread=${MDC(LogKeys.THREAD, acquiredThreadInfo)} " +
-        log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
-    }
-  }
-
-  /**
-   * Function to release RocksDB instance lock that allows for synchronized access to the state
-   * store instance. Optionally provide a thread to check against, and release only if provided
-   * thread is the one that acquired the lock.
-   *
-   * @param opType - operation type releasing the lock
-   * @param releaseForThreadOpt - optional thread to check against acquired thread
-   */
-  private def release(
-      opType: RocksDBOpType,
-      releaseForThreadOpt: Option[AcquiredThreadInfo] = None): Unit = {
-    if (acquiredThreadInfo != null) {
-      val release = releaseForThreadOpt match {
-        case Some(releaseForThread) if releaseForThread.threadRef.get.isEmpty =>
-          logInfo(log"Thread reference is empty when attempting to release for " +
-            log"opType=${MDC(LogKeys.OP_TYPE, opType.toString)}, ignoring release. " +
-            log"Lock is held by ownerThread=${MDC(LogKeys.THREAD, acquiredThreadInfo)}")
-          false
-        // NOTE: we compare the entire acquiredThreadInfo object to ensure that we are
-        // releasing not only for the right thread but the right task as well. This is
-        // inconsistent with the logic for acquire which uses only the thread ID, consider
-        // updating this in future.
-        case Some(releaseForThread) if acquiredThreadInfo != releaseForThread =>
-          logInfo(log"Thread info for " +
-            log"releaseThread=${MDC(LogKeys.THREAD, releaseForThreadOpt.get)} " +
-            log"does not match the acquired thread when attempting to " +
-            log"release for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}, ignoring release. " +
-            log"Lock is held by ownerThread=${MDC(LogKeys.THREAD, acquiredThreadInfo)}")
-          false
-        case _ => true
-      }
-
-      if (release) {
-        logInfo(log"RocksDB instance was released by " +
-          log"releaseThread=${MDC(LogKeys.THREAD, AcquiredThreadInfo())} " +
-          log"with ownerThread=${MDC(LogKeys.THREAD, acquiredThreadInfo)} " +
-          log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
-        acquiredThreadInfo = null
-      }
-    }
   }
 
   private def getDBProperty(property: String): Long = db.getProperty(property).toLong
