@@ -2625,17 +2625,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def checkpointFileChecksumVerificationFailed(
       file: Path,
       expectedSize: Long,
-      expectedChecksum: String,
+      expectedChecksum: Int,
       computedSize: Long,
-      computedChecksum: String): Throwable = {
+      computedChecksum: Int): Throwable = {
     new SparkException(
       errorClass = "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED",
       messageParameters = Map(
         "fileName" -> file.toString,
         "expectedSize" -> expectedSize.toString,
-        "expectedChecksum" -> expectedChecksum,
+        "expectedChecksum" -> expectedChecksum.toString,
         "computedSize" -> computedSize.toString,
-        "computedChecksum" -> computedChecksum),
+        "computedChecksum" -> computedChecksum.toString),
       cause = null)
   }
 

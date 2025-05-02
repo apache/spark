@@ -59,9 +59,8 @@ object ChecksumFileCreatorInfo {
  * Holds the checksum value and additional information */
 case class Checksum(
     algorithm: String,
-    // Making this a string to be agnostic of algorithm used and be easily readable.
-    // We can change this to byte array later if we start using algos with large values.
-    value: String,
+    // We can make this a byte array later to be agnostic of algorithm used.
+    value: Int,
     mainFileSize: Long,
     timestampMs: Long,
     creator: ChecksumFileCreatorInfo) {
@@ -392,14 +391,14 @@ class ChecksumFSDataInputStream(
       verified = true
 
       // Compare file size too, in case of collision
-      if (expectedChecksum.value.toInt != computedChecksumValue ||
+      if (expectedChecksum.value != computedChecksumValue ||
         expectedChecksum.mainFileSize != computedFileSize) {
         throw QueryExecutionErrors.checkpointFileChecksumVerificationFailed(
           path,
           expectedSize = expectedChecksum.mainFileSize,
           expectedChecksum.value,
           computedSize = computedFileSize,
-          computedChecksumValue.toString)
+          computedChecksumValue)
       }
     }
   }
@@ -496,7 +495,7 @@ class ChecksumCancellableFSDataOutputStream(
       val checksumFuture = Future {
         val json = Checksum(
           algorithm = "CRC32C",
-          value = chkValue.toString,
+          value = chkValue,
           mainFileSize = mainFileSize,
           timestampMs = System.currentTimeMillis(),
           creator = creator).json()
