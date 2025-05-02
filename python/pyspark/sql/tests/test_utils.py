@@ -952,7 +952,6 @@ class UtilsTestsMixin:
     @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_error_pandas_pyspark_df(self):
         import pandas as pd
-
         import pyspark.pandas as ps
 
         df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
@@ -2126,7 +2125,6 @@ class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
 
 if __name__ == "__main__":
     import unittest
-
     from pyspark.sql.tests.test_utils import *  # noqa: F401
 
     try:

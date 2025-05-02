@@ -598,7 +598,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import pandas
-
     import pyspark.pandas
 
 
@@ -2186,7 +2185,6 @@ def assertReferentialIntegrity(
 
 def _test() -> None:
     import doctest
-
     import pyspark.testing.utils
     from pyspark.sql import SparkSession
 
