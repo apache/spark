@@ -1395,7 +1395,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     // two state stores
     tryWithProviderResource(newStoreProvider(storeId, colFamiliesEnabled)) { provider1 =>
       val restoreStore = provider1.getReadStore(1)
-      val saveStore = provider1.getWriteStore(restoreStore, 1)
+      val saveStore = provider1.upgradeReadStoreToWriteStore(restoreStore, 1)
 
       put(saveStore, key1, key2, get(restoreStore, key1, key2).get + 1)
       saveStore.commit()
@@ -1582,7 +1582,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           assert(rowPairsToDataSet(store0reloaded.iterator()) === Set.empty)
 
           // Verify that you can remove the store and still reload and use it
-          StateStore.unload(storeId)
+          StateStore.removeFromLoadedProvidersAndClose(storeId)
           assert(!StateStore.isLoaded(storeId))
 
           val store1reloaded = StateStore.get(

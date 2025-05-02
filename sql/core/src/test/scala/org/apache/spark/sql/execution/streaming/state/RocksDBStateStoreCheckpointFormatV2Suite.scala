@@ -61,8 +61,6 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
   override def id: StateStoreId = innerStore.id
   override def version: Long = innerStore.version
 
-  override def getReadStamp: Long = innerStore.getReadStamp
-
   override def get(
       key: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow = {
@@ -139,6 +137,8 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
     ret
   }
   override def hasCommitted: Boolean = innerStore.hasCommitted
+
+  override def release(): Unit = innerStore.release()
 }
 
 class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
@@ -181,7 +181,8 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
       CkptIdCollectingStateStoreWrapper(innerProvider.getReadStore(version, uniqueId)))
   }
 
-  override def getWriteStore(
+
+  override def upgradeReadStoreToWriteStore(
       readStore: ReadStateStore,
       version: Long,
       uniqueId: Option[String] = None): StateStore = {
@@ -195,7 +196,8 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
             // Get the inner store from our wrapper
             val innerReadStore = wrapper.innerStore
             // Call the inner provider's getWriteStore with the inner store
-            val innerWriteStore = innerProvider.getWriteStore(innerReadStore, version, uniqueId)
+            val innerWriteStore = innerProvider.upgradeReadStoreToWriteStore(
+              innerReadStore, version, uniqueId)
             // Wrap the result
             CkptIdCollectingStateStoreWrapper(innerWriteStore)
           case other =>
