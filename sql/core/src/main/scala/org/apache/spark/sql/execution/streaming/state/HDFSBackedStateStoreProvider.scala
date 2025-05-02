@@ -114,6 +114,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     case object UPDATING extends STATE
     case object COMMITTED extends STATE
     case object ABORTED extends STATE
+    case object RELEASED extends STATE
 
     private val newVersion = version + 1
     @volatile private var state: STATE = UPDATING
@@ -196,7 +197,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         log"for ${MDC(LogKeys.STATE_STORE_PROVIDER, this)}")
     }
 
-    override def release(): Unit = {}
+    override def release(): Unit = {
+      state = RELEASED
+    }
 
     /**
      * Get an iterator of all the store data.
