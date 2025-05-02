@@ -358,11 +358,15 @@ For library that are used inside a method, it must be imported inside the method
 
 Mutating State
 ~~~~~~~~~~~~~~
-Some methods such as DataSourceReader.read() and DataSourceReader.partitions() must be stateless. Changes to the object state made in these methods are not guaranteed to be visible or invisible to future invocations.
+The following methods should not mutate internal state. Changes to the object state made in these methods are not guaranteed to be visible or invisible to future operations.
 
-Other methods such as DataSource.schema() and DataSourceStreamReader.latestOffset() can be stateful. Changes to the object state made in these methods are visible to future invocations.
+- DataSourceReader.partitions()
+- DataSourceReader.read()
+- DataSourceStreamReader.read()
+- SimpleDataSourceStreamReader.readBetweenOffsets()
+- All writer methods
 
-Refer to the documentation of each method for more details.
+All other methods such as DataSource.schema() and DataSourceStreamReader.latestOffset() can be stateful. Changes to the object state made in these methods are visible to future invocations.
 
 Using a Python Data Source
 --------------------------
