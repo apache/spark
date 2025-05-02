@@ -641,7 +641,8 @@ package object config {
         "shuffle blocks. Rejecting remote shuffle blocks means that an executor will not receive " +
         "any shuffle migrations, and if there are no other executors available for migration " +
         "then shuffle blocks will be lost unless " +
-        s"${STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH.key} is configured.")
+        s"${STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH.key} is configured. " +
+        s"Set to 0 to migrate to fallback storage only.")
       .version("3.2.0")
       .bytesConf(ByteUnit.BYTE)
       .createOptional
