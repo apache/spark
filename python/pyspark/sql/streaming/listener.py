@@ -16,7 +16,7 @@
 #
 import uuid
 import json
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
 from abc import ABC, abstractmethod
 
 from pyspark.sql import Row
@@ -178,29 +178,44 @@ class QueryStartedEvent:
     """
 
     def __init__(
-        self, id: uuid.UUID, runId: uuid.UUID, name: Optional[str], timestamp: str
+        self,
+        id: uuid.UUID,
+        runId: uuid.UUID,
+        name: Optional[str],
+        timestamp: str,
+        jobTags: Set[str] = set(),
     ) -> None:
         self._id: uuid.UUID = id
         self._runId: uuid.UUID = runId
         self._name: Optional[str] = name
         self._timestamp: str = timestamp
+        self._jobTags: Set[str] = jobTags
 
     @classmethod
     def fromJObject(cls, jevent: "JavaObject") -> "QueryStartedEvent":
+        jobTags = set()
+        javaIterator = jevent.jobTags().iterator()
+        while javaIterator.hasNext():
+            jobTags.add(javaIterator.next().toString())
+
         return cls(
             id=uuid.UUID(jevent.id().toString()),
             runId=uuid.UUID(jevent.runId().toString()),
             name=jevent.name(),
             timestamp=jevent.timestamp(),
+            jobTags=jobTags,
         )
 
     @classmethod
     def fromJson(cls, j: Dict[str, Any]) -> "QueryStartedEvent":
+        # Json4s will convert jobTags to a list, so we need to convert it back to a set.
+        jobTags = j["jobTags"] if "jobTags" in j else []
         return cls(
             id=uuid.UUID(j["id"]),
             runId=uuid.UUID(j["runId"]),
             name=j["name"],
             timestamp=j["timestamp"],
+            jobTags=set(jobTags),
         )
 
     @property
@@ -232,6 +247,13 @@ class QueryStartedEvent:
         The timestamp to start a query.
         """
         return self._timestamp
+
+    @property
+    def jobTags(self) -> Set[str]:
+        """
+        The job tags of the query.
+        """
+        return self._jobTags
 
 
 class QueryProgressEvent:

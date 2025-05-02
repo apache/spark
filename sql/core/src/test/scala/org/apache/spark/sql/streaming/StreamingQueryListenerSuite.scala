@@ -365,6 +365,32 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("QueryStartedEvent has the right jobTags set") {
+    val session = spark.newSession()
+    val collector = new EventCollectorV2
+    val jobTag1 = "test-jobTag1"
+    val jobTag2 = "test-jobTag2"
+
+    def runQuery(session: SparkSession): Unit = {
+      collector.reset()
+      session.sparkContext.addJobTag(jobTag1)
+      session.sparkContext.addJobTag(jobTag2)
+      val mem = MemoryStream[Int](implicitly[Encoder[Int]], session.sqlContext)
+      testStream(mem.toDS())(
+        AddData(mem, 1, 2, 3),
+        CheckAnswer(1, 2, 3)
+      )
+      session.sparkContext.listenerBus.waitUntilEmpty()
+      session.sparkContext.clearJobTags()
+    }
+
+    withListenerAdded(collector, session) {
+      runQuery(session)
+      assert(collector.startEvent !== null)
+      assert(collector.startEvent.jobTags === Set(jobTag1, jobTag2))
+    }
+  }
+
   test("listener only posts events from queries started in the related sessions") {
     val session1 = spark.newSession()
     val session2 = spark.newSession()

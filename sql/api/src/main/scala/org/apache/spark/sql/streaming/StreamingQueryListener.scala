@@ -157,7 +157,7 @@ object StreamingQueryListener extends Serializable {
    * @param timestamp
    *   The timestamp to start a query.
    * @param jobTags
-   *   The job tags that has been assigned to all the jobs started by this thread
+   *   The job tags that have been assigned to all the jobs started by this thread
    * @since 2.1.0
    */
   @Evolving
