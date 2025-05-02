@@ -424,7 +424,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     Ordering[Long].reverse)
   private lazy val baseDir = stateStoreId.storeCheckpointLocation()
   // Visible to spark pkg for testing.
-  private[spark] lazy val fm = CheckpointFileManager.create(baseDir, hadoopConf)
+  private[state] lazy val fm = CheckpointFileManager.create(baseDir, hadoopConf)
   private lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
 
   private val loadedMapCacheHitCount: LongAdder = new LongAdder
@@ -918,14 +918,14 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   }
 
   // Visible to spark pkg for testing.
-  private[spark] def compressStream(outputStream: DataOutputStream): DataOutputStream = {
+  private[state] def compressStream(outputStream: DataOutputStream): DataOutputStream = {
     val compressed = CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec)
       .compressedOutputStream(outputStream)
     new DataOutputStream(compressed)
   }
 
   // Visible to spark pkg for testing.
-  private[spark] def decompressStream(inputStream: DataInputStream): DataInputStream = {
+  private[state] def decompressStream(inputStream: DataInputStream): DataInputStream = {
     val compressed = CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec)
       .compressedInputStream(inputStream)
     new DataInputStream(compressed)
