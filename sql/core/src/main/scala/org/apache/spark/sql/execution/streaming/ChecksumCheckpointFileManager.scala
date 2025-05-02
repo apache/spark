@@ -59,7 +59,8 @@ object ChecksumFileCreatorInfo {
  * Holds the checksum value and additional information */
 case class Checksum(
     algorithm: String,
-    // Making this a string to be agnostic of algorithm used
+    // Making this a string to be agnostic of algorithm used and be easily readable.
+    // We can change this to byte array later if we start using algos with large values.
     value: String,
     mainFileSize: Long,
     timestampMs: Long,

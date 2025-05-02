@@ -1255,7 +1255,6 @@ class RocksDB(
       silentDeleteRecursively(localRootDir, "closing RocksDB")
       // Clear internal maps to reset the state
       clearColFamilyMaps()
-
       fileManager.close()
     } catch {
       case e: Exception =>

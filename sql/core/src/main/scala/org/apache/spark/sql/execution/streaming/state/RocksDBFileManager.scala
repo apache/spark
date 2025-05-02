@@ -363,8 +363,8 @@ class RocksDBFileManager(
     } else {
       // Delete all non-immutable files in local dir, and unzip new ones from DFS commit file
       listRocksDBFiles(localDir)._2.foreach(_.delete())
-      // TODO: We are using fs here to read the file, checksum verification wouldn't happen
-      //  for the file if enabled, since it is not using fm to open it.
+      // TODO(SPARK-51988): We are using fs here to read the file, checksum verification
+      //  wouldn't happen for the file if enabled, since it is not using fm to open it.
       Utils.unzipFilesFromFile(fs, dfsBatchZipFile(version, checkpointUniqueId), localDir)
 
       // Copy the necessary immutable files

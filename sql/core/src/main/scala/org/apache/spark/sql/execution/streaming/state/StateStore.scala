@@ -696,17 +696,26 @@ object StateStoreProvider extends Logging {
       oldChecksumFiles
     }
 
+    val failedFiles = mutable.ListBuffer[Path]()
     val (_, dur) = Utils.timeTakenMs {
       orphanChecksumFiles.foreach { f =>
-        fm.delete(f.path)
+        try {
+          fm.delete(f.path)
+        } catch {
+          case NonFatal(e) =>
+            failedFiles += f.path
+            logWarning(log"Failed to delete orphan checksum file " +
+              log"${MDC(LogKeys.FILE_NAME, f.path)}", e)
+        }
       }
     }
 
     if (orphanChecksumFiles.nonEmpty) {
       logInfo(log"Deleted orphan checksum files older than version " +
         log"${MDC(LogKeys.FILE_VERSION, minVersionToRetain)} " +
-        log"(timeTakenMs = ${MDC(LogKeys.DURATION, dur)}): " +
-        log"${MDC(LogKeys.FILE_NAME, orphanChecksumFiles.mkString(", "))}")
+        log"(timeTakenMs = ${MDC(LogKeys.DURATION, dur)}) - " +
+        log"Orphan files: ${MDC(LogKeys.FILE_NAME, orphanChecksumFiles.mkString(", "))}" +
+        log"Failed to Delete: ${MDC(LogKeys.FILE_NAME, failedFiles.mkString(", "))}")
     }
   }
 
