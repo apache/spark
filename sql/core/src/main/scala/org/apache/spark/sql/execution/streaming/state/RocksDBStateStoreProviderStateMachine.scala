@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import javax.annotation.concurrent.GuardedBy
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{LogKeys, Logging, MDC}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
@@ -146,6 +146,9 @@ class RocksDBStateStoreProviderStateMachine(
     if (newState == ACQUIRED) {
       acquiredThreadInfo = AcquiredThreadInfo()
     }
+    logInfo(log"Transitioned state from ${MDC(LogKeys.STATE_STORE_STATE, oldState)} " +
+      log"to ${MDC(LogKeys.STATE_STORE_STATE, newState)} " +
+      log"for StateStoreId ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)}")
     (oldState, newState)
   }
 
