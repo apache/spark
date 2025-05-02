@@ -645,24 +645,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case Sort(orders, _, _, _) =>
             orders.foreach { order =>
-              if (!RowOrdering.isOrderable(order.dataType)) {
-                order.failAnalysis(
-                  errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
-                  messageParameters = Map("exprType" -> toSQLType(order.dataType)))
-              }
+              TypeUtils.tryThrowNotOrderableExpression(order)
             }
 
           case Window(_, partitionSpec, _, _, _) =>
             // Both `partitionSpec` and `orderSpec` must be orderable. We only need an extra check
             // for `partitionSpec` here because `orderSpec` has the type check itself.
             partitionSpec.foreach { p =>
-              if (!RowOrdering.isOrderable(p.dataType)) {
-                p.failAnalysis(
-                  errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
-                  messageParameters = Map(
-                    "expr" -> toSQLExpr(p),
-                    "exprType" -> toSQLType(p.dataType)))
-              }
+              TypeUtils.tryThrowNotOrderableExpression(p)
             }
 
           case GlobalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
@@ -1046,6 +1036,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)
+
+      case AddConstraint(_: ResolvedTable, check: CheckConstraint) if !check.deterministic =>
+        check.child.failAnalysis(
+          errorClass = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
+          messageParameters = Map("checkCondition" -> check.condition)
+        )
 
       case AlterColumns(table: ResolvedTable, specs) =>
         val groupedColumns = specs.groupBy(_.column.name)

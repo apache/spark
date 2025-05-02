@@ -43,7 +43,6 @@ import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedL
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.MatrixImplicits._
 import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{monotonically_increasing_id, udf}
@@ -642,27 +641,27 @@ class LocalLDAModel private[ml] (
   }
 }
 
-
 @Since("1.6.0")
 object LocalLDAModel extends MLReadable[LocalLDAModel] {
+  private[ml] case class LocalModelData(
+    vocabSize: Int,
+    topicsMatrix: Matrix,
+    docConcentration: Vector,
+    topicConcentration: Double,
+    gammaShape: Double)
 
   private[LocalLDAModel]
   class LocalLDAModelWriter(instance: LocalLDAModel) extends MLWriter {
 
-    private case class Data(
-        vocabSize: Int,
-        topicsMatrix: Matrix,
-        docConcentration: Vector,
-        topicConcentration: Double,
-        gammaShape: Double)
-
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val oldModel = instance.oldLocalModel
-      val data = Data(instance.vocabSize, oldModel.topicsMatrix, oldModel.docConcentration,
-        oldModel.topicConcentration, oldModel.gammaShape)
+      val data = LocalModelData(
+        instance.vocabSize, oldModel.topicsMatrix, oldModel.docConcentration,
+        oldModel.topicConcentration, oldModel.gammaShape
+      )
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[LocalModelData](dataPath, data, sparkSession)
     }
   }
 
@@ -673,16 +672,15 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
     override def load(path: String): LocalLDAModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-      val vectorConverted = MLUtils.convertVectorColumnsToML(data, "docConcentration")
-      val matrixConverted = MLUtils.convertMatrixColumnsToML(vectorConverted, "topicsMatrix")
-      val Row(vocabSize: Int, topicsMatrix: Matrix, docConcentration: Vector,
-          topicConcentration: Double, gammaShape: Double) =
-        matrixConverted.select("vocabSize", "topicsMatrix", "docConcentration",
-          "topicConcentration", "gammaShape").head()
-      val oldModel = new OldLocalLDAModel(topicsMatrix, docConcentration, topicConcentration,
-        gammaShape)
-      val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sparkSession)
+
+      val data = ReadWriteUtils.loadObject[LocalModelData](dataPath, sparkSession)
+      val oldModel = new OldLocalLDAModel(
+        data.topicsMatrix,
+        data.docConcentration,
+        data.topicConcentration,
+        data.gammaShape
+      )
+      val model = new LocalLDAModel(metadata.uid, data.vocabSize, oldModel, sparkSession)
       LDAParams.getAndSetParams(model, metadata)
       model
     }
@@ -820,6 +818,11 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
   class DistributedWriter(instance: DistributedLDAModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "DistributedLDAModel does not support saving to local filesystem path."
+        )
+      }
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val modelPath = new Path(path, "oldModel").toString
       instance.oldDistributedModel.save(sc, modelPath)
@@ -831,6 +834,11 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
     private val className = classOf[DistributedLDAModel].getName
 
     override def load(path: String): DistributedLDAModel = {
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "DistributedLDAModel does not support loading from local filesystem path."
+        )
+      }
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val modelPath = new Path(path, "oldModel").toString
       val oldModel = OldDistributedLDAModel.load(sc, modelPath)

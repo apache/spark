@@ -497,6 +497,7 @@ class AFTSurvivalRegressionModel private[ml] (
 
 @Since("1.6.0")
 object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel] {
+  private[ml] case class Data(coefficients: Vector, intercept: Double, scale: Double)
 
   @Since("1.6.0")
   override def read: MLReader[AFTSurvivalRegressionModel] = new AFTSurvivalRegressionModelReader
@@ -509,15 +510,13 @@ object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel]
       instance: AFTSurvivalRegressionModel
     ) extends MLWriter with Logging {
 
-    private case class Data(coefficients: Vector, intercept: Double, scale: Double)
-
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       // Save model data: coefficients, intercept, scale
       val data = Data(instance.coefficients, instance.intercept, instance.scale)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -530,12 +529,10 @@ object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel]
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-      val Row(coefficients: Vector, intercept: Double, scale: Double) =
-        MLUtils.convertVectorColumnsToML(data, "coefficients")
-          .select("coefficients", "intercept", "scale")
-          .head()
-      val model = new AFTSurvivalRegressionModel(metadata.uid, coefficients, intercept, scale)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val model = new AFTSurvivalRegressionModel(
+        metadata.uid, data.coefficients, data.intercept, data.scale
+      )
 
       metadata.getAndSetParams(model)
       model

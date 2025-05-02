@@ -2306,7 +2306,12 @@ class RandomForestClassificationModel(
     def trees(self) -> List[DecisionTreeClassificationModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         if is_remote():
-            return [DecisionTreeClassificationModel(m) for m in self._call_java("trees").split(",")]
+            from pyspark.ml.util import RemoteModelRef
+
+            return [
+                DecisionTreeClassificationModel(RemoteModelRef(m))
+                for m in self._call_java("trees").split(",")
+            ]
         return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
 
     @property
@@ -2805,7 +2810,12 @@ class GBTClassificationModel(
     def trees(self) -> List[DecisionTreeRegressionModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         if is_remote():
-            return [DecisionTreeRegressionModel(m) for m in self._call_java("trees").split(",")]
+            from pyspark.ml.util import RemoteModelRef
+
+            return [
+                DecisionTreeRegressionModel(RemoteModelRef(m))
+                for m in self._call_java("trees").split(",")
+            ]
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
     def evaluateEachIteration(self, dataset: DataFrame) -> List[float]:

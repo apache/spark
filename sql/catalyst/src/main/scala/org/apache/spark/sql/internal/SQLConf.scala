@@ -2487,6 +2487,18 @@ object SQLConf {
       .stringConf
       .createWithDefault(CompressionCodec.LZ4)
 
+  val STATE_STORE_UNLOAD_ON_COMMIT =
+    buildConf("spark.sql.streaming.stateStore.unloadOnCommit")
+      .internal()
+      .doc("When true, Spark will synchronously run maintenance and then close each StateStore " +
+        "instance on task completion. This removes the overhead of keeping every StateStore " +
+        "loaded indefinitely, at the cost of having to reload each StateStore every batch. " +
+        "Stateful applications that are failing due to resource exhaustion or that use " +
+        "dynamic allocation may benefit from enabling this.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val CHECKPOINT_RENAMEDFILE_CHECK_ENABLED =
     buildConf("spark.sql.streaming.checkpoint.renamedFileCheck.enabled")
       .doc("When true, Spark will validate if renamed checkpoint file exists.")
@@ -3531,6 +3543,25 @@ object SQLConf {
       .version("4.1.0")
       .internal()
       .intConf
+      .createWithDefault(-1)
+
+  val ARROW_EXECUTION_MAX_BYTES_PER_OUTPUT_BATCH =
+    buildConf("spark.sql.execution.arrow.maxBytesPerOutputBatch")
+      .doc("When using Apache Arrow, limit the maximum bytes that can be output " +
+        "in a single ArrowRecordBatch to the downstream operator. If set to zero or negative " +
+        "there is no limit. Note that the complete ArrowRecordBatch is actually created but " +
+        "the number of bytes is limited when sending it to the downstream operator. This is " +
+        "used to avoid large batches being sent to the downstream operator including " +
+        "the columnar-based operator implemented by third-party libraries. Spark will try to " +
+        "create batches with the size equal or less than this value. Normally it should not " +
+        "happen, but if in extreme case that even one record is still larger than this value, " +
+        "Spark will create a batch with one record.")
+      .version("4.1.0")
+      .internal()
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(x => x <= Int.MaxValue,
+        errorMsg = "The value of " +
+          "spark.sql.execution.arrow.maxBytesPerOutputBatch should be less than INT_MAX.")
       .createWithDefault(-1)
 
   val ARROW_EXECUTION_MAX_BYTES_PER_BATCH =
@@ -4705,6 +4736,14 @@ object SQLConf {
     .version("4.1.0")
     .intConf
     .createWithDefault(1000000)
+
+  val CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION =
+    buildConf("spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation")
+      .doc("Maximum number of rows that the anchor in a recursive CTE can return for it to be" +
+        "converted to a localRelation.")
+      .version("4.1.0")
+      .intConf
+      .createWithDefault(100)
 
   val LEGACY_INLINE_CTE_IN_COMMANDS = buildConf("spark.sql.legacy.inlineCTEInCommands")
     .internal()
@@ -6108,6 +6147,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def maxBatchesToRetainInMemory: Int = getConf(MAX_BATCHES_TO_RETAIN_IN_MEMORY)
 
+  def stateStoreUnloadOnCommit: Boolean = getConf(STATE_STORE_UNLOAD_ON_COMMIT)
+
   def streamingMaintenanceInterval: Long = getConf(STREAMING_MAINTENANCE_INTERVAL)
 
   def stateStoreCompressionCodec: String = getConf(STATE_STORE_COMPRESSION_CODEC)
@@ -6532,6 +6573,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
   def arrowMaxRecordsPerOutputBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_OUTPUT_BATCH)
+
+  def arrowMaxBytesPerOutputBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_OUTPUT_BATCH)
 
   def arrowMaxBytesPerBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_BATCH)
 

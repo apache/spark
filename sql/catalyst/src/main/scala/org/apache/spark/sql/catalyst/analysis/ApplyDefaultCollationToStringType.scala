@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterTableCommand, AlterViewAs, ColumnDefinition, CreateTable, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterTableCommand, AlterViewAs, ColumnDefinition, CreateTable, CreateTempView, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.types.{DataType, StringType}
@@ -52,6 +52,11 @@ object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
       case createView: CreateView =>
         createView.collation
 
+      // Temporary views are created via CreateViewCommand, which we can't import here.
+      // Instead, we use the CreateTempView trait to access the collation.
+      case createTempView: CreateTempView =>
+        createTempView.collation
+
       case replaceTable: ReplaceTable =>
         replaceTable.tableSpec.collation
 
@@ -83,7 +88,8 @@ object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
   private def isCreateOrAlterPlan(plan: LogicalPlan): Boolean = plan match {
     // For CREATE TABLE, only v2 CREATE TABLE command is supported.
     // Also, table DEFAULT COLLATION cannot be specified through CREATE TABLE AS SELECT command.
-    case _: V2CreateTablePlan | _: ReplaceTable | _: CreateView | _: AlterViewAs => true
+    case _: V2CreateTablePlan | _: ReplaceTable | _: CreateView | _: AlterViewAs |
+         _: CreateTempView => true
     case _ => false
   }
 
