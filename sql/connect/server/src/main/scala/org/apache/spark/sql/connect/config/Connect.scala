@@ -360,7 +360,7 @@ object Connect {
       .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(1024 * 1024 * 1024)
+      .createWithDefaultString("1g")
 
   val CONNECT_SESSION_CONNECT_MODEL_CACHE_MAX_SIZE =
     buildConf("spark.connect.session.connectML.modelCache.maxSize")
@@ -368,5 +368,5 @@ object Connect {
       .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(10 * 1024 * 1024 * 1024)
+      .createWithDefaultString("10g")
 }

@@ -69,6 +69,20 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_MODEL_MAX_SIZE)
   }
 
+  def checkModelSize(estimatedModelSize: Long): Unit = {
+    if (totalModelCacheSizeBytes.get() + estimatedModelSize > getModelCacheMaxSize) {
+      throw new RuntimeException(
+        f"The model cache size in current session exceeds $getModelCacheMaxSize bytes. " +
+          "Please delete existing cached model by executing 'del model' in python client " +
+          "before fitting new model or loading new model.")
+    }
+    if (estimatedModelSize > getModelMaxSize) {
+      throw new RuntimeException(
+        f"The fitted or loaded model size exceeds $getModelMaxSize bytes. " +
+          f"Please fit or load a model smaller than $getModelMaxSize bytes.")
+    }
+  }
+
   private def estimateObjectSize(obj: Object): Long = {
     obj match {
       case model: Model[_] =>
@@ -89,20 +103,9 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   def register(obj: Object): String = {
     val objectId = UUID.randomUUID().toString
     val sizeBytes = estimateObjectSize(obj)
+    checkModelSize(sizeBytes)
+
     totalSizeBytes.addAndGet(sizeBytes)
-
-    if (totalModelCacheSizeBytes.get() + sizeBytes > getModelCacheMaxSize) {
-      throw new RuntimeException(
-        f"The model cache size in current session exceeds $getModelCacheMaxSize bytes. " +
-          "Please delete existing cached model by executing 'del model' in python client " +
-          "before fitting new model or loading new model.")
-    }
-    if (sizeBytes > getModelMaxSize) {
-      throw new RuntimeException(
-        f"The fitted or loaded model size exceeds $getModelMaxSize bytes. " +
-          f"Please fit or load a model smaller than $getModelMaxSize bytes.")
-    }
-
     totalModelCacheSizeBytes.addAndGet(sizeBytes)
     cachedModel.put(objectId, CacheItem(obj, sizeBytes))
     objectId

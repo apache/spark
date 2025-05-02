@@ -135,15 +135,14 @@ private[connect] object MLHandler extends Logging {
         val dataset = MLUtils.parseRelationProto(fitCmd.getDataset, sessionHolder)
         val estimator =
           MLUtils.getEstimator(sessionHolder, estimatorProto, Some(fitCmd.getParams))
+
         try {
-          if (estimator.estimateModelSize(dataset) > maxModelSize) {
-            throw new RuntimeException(
-              f"The estimated model size exceeds $maxModelSize bytes limit. " +
-                "Please tune the estimator params to reduce the model size.")
-          }
+          val estimatedModelSize = estimator.estimateModelSize(dataset)
+          mlCache.checkModelSize(estimatedModelSize)
         } catch {
           case _: UnsupportedOperationException => ()
         }
+
         val model = estimator.fit(dataset).asInstanceOf[Model[_]]
         val id = mlCache.register(model)
         proto.MlCommandResult
