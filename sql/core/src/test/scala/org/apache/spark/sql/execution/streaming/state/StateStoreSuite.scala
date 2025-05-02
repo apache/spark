@@ -118,8 +118,13 @@ object SignalingStateStoreProvider extends Logging {
   var taskSubmittedMaintenance: Boolean = false
   var closeThreadName: String = ""
 
-  // For coordination between threads - blocks maintenance until signaled
-  val continueSignal = new CountDownLatch(1)
+  // Added for queue testing
+  var providerWasQueued: Boolean = false
+
+  // For coordination between threads
+  var continueSignal = new CountDownLatch(1)
+  val maintenanceStartedLatch = new CountDownLatch(1)
+  val taskAttemptCompletedLatch = new CountDownLatch(1)
 
   /**
    * Resets all test state between test runs
@@ -131,10 +136,7 @@ object SignalingStateStoreProvider extends Logging {
 
     // Reset the latch to ensure maintenance will block again
     try {
-      continueSignal.countDown() // Clear any existing signal
-      val field = classOf[CountDownLatch].getDeclaredField("count")
-      field.setAccessible(true)
-      field.set(continueSignal, 1L)
+      continueSignal = new CountDownLatch(1)
     } catch {
       case e: Exception =>
         logError(s"Error resetting latch: ${e.getMessage}")
@@ -1843,6 +1845,122 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
     val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
     assert(encoderSpec == deserializedEncoderSpec)
+  }
+
+  test("SPARK-51596: submitMaintenanceWorkForProvider from task thread adds" +
+    " to queue when timeout occurs") {
+    // Reset tracking variables for a clean test
+    SignalingStateStoreProvider.reset()
+
+    val sqlConf = getDefaultSQLConf(
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
+      SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get
+    )
+
+    // Critical: Set a very short timeout to ensure awaitProcessThisPartition fails quickly
+    sqlConf.setConf(SQLConf.STATE_STORE_MAINTENANCE_PROCESSING_TIMEOUT, 1L) // 1 second
+
+    // Maintenance interval large enough that we control timing manually
+    sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 30000L)
+
+    // Use our test provider
+    sqlConf.setConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS,
+      classOf[SignalingStateStoreProvider].getName
+    )
+
+    val conf = new SparkConf().setMaster("local").setAppName("test")
+
+    withSpark(SparkContext.getOrCreate(conf)) { sc =>
+      withCoordinatorRef(sc) { _ =>
+        val rootLocation = s"${Utils.createTempDir().getAbsolutePath}/spark-51596-timeout-queue"
+        val providerId = StateStoreProviderId(StateStoreId(rootLocation, 0, 0), UUID.randomUUID)
+
+        // Load the provider to start the maintenance system
+        StateStore.get(
+          providerId,
+          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          0, None, None, useColumnFamilies = false,
+          new StateStoreConf(sqlConf), new Configuration()
+        )
+
+        // Access the queue via reflection for verification
+        val queueField = PrivateMethod[ConcurrentLinkedQueue[
+          (StateStoreProviderId, StateStoreProvider)]](
+          Symbol("unloadedProvidersToClose"))
+        val queue = StateStore invokePrivate queueField()
+        assert(queue.isEmpty, "Queue should start empty")
+
+        // Manually trigger maintenance which will block
+        val maintenanceMethod = PrivateMethod[Unit](Symbol("doMaintenance"))
+        StateStore invokePrivate maintenanceMethod()
+
+        // Wait for maintenance to start
+        eventually(timeout(5.seconds)) {
+          assert(SignalingStateStoreProvider.maintenanceStarted)
+          assert(StateStore.isLoaded(providerId))
+        }
+
+        // Now get access to the provider to simulate a task thread
+        val loadedProvidersField = PrivateMethod[
+          mutable.HashMap[StateStoreProviderId, StateStoreProvider]](
+          Symbol("loadedProviders"))
+        val loadedProviders = StateStore invokePrivate loadedProvidersField()
+        val provider = loadedProviders.synchronized { loadedProviders.get(providerId).get }
+        val maintenancePartitionsField = PrivateMethod[
+          mutable.HashSet[StateStoreProviderId]](
+          Symbol("maintenancePartitions"))
+        val maintenancePartitions = StateStore invokePrivate maintenancePartitionsField()
+
+        // Create a task thread that will attempt to submit maintenance
+        val taskThread = new Thread(() => {
+          try {
+            // Call submitMaintenanceWorkForProvider directly since that's what we're testing
+            val submitMaintenanceMethod = PrivateMethod[Unit](
+              Symbol("submitMaintenanceWorkForProvider"))
+            StateStore invokePrivate submitMaintenanceMethod(
+              providerId, provider, new StateStoreConf(sqlConf),
+              MaintenanceTaskType.FromTaskThread)
+
+            SignalingStateStoreProvider.taskSubmittedMaintenance = true
+            SignalingStateStoreProvider.taskAttemptCompletedLatch.countDown()
+          } catch {
+            case e: Exception =>
+              logError(s"Error in task thread: ${e.getMessage}", e)
+          }
+        })
+
+        // Start the task thread - it should timeout and add provider to queue
+        taskThread.start()
+
+        // Wait for task attempt to complete
+        assert(SignalingStateStoreProvider
+          .taskAttemptCompletedLatch.await(10, TimeUnit.SECONDS),
+          "Task thread didn't complete")
+
+        // Critical verification: After timeout, the provider should be in the queue
+        eventually(timeout(5.seconds)) {
+          assert(queue.size() == 1, "Provider should be queued after timeout")
+        }
+        val (queuedId, _) = queue.peek()
+        assert(queuedId == providerId, "Queued provider has wrong ID")
+
+        // Now allow the first maintenance to complete
+        SignalingStateStoreProvider.continueSignal.countDown()
+
+        eventually(timeout(5.seconds)) {
+          assert(maintenancePartitions.isEmpty,
+            "Maintenance partitions should be removed from")
+        }
+        // Manually trigger another maintenance to process the queue
+        StateStore invokePrivate maintenanceMethod()
+
+        // Verify the queue eventually gets processed
+        eventually(timeout(5.seconds)) {
+          assert(queue.isEmpty, "Queue should be emptied after maintenance")
+        }
+      }
+    }
   }
 
   test("SPARK-51596: queued maintenance tasks get processed when lock is available") {
