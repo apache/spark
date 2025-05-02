@@ -1203,7 +1203,7 @@ object StateStore extends Logging {
         submitMaintenanceWorkForProvider(
           providerId, provider, storeConf, MaintenanceTaskType.FromUnloadedProvidersQueue)
       } else {
-        providersToRequeue += (providerId, provider)
+        providersToRequeue += ((providerId, provider))
       }
     }
 
