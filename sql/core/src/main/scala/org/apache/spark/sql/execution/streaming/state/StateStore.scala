@@ -117,6 +117,21 @@ trait ReadStateStore {
    * The method name is to respect backward compatibility on [[StateStore]].
    */
   def abort(): Unit
+
+  /**
+   * Releases resources associated with this read-only state store.
+   *
+   * This method should be called when the store is no longer needed but has completed
+   * successfully (i.e., no errors occurred during reading). It performs any necessary
+   * cleanup operations without invalidating or rolling back the data that was read.
+   *
+   * In contrast to `abort()`, which is called on error paths to cancel operations,
+   * `release()` is the proper method to call in success scenarios when a read-only
+   * store is no longer needed.
+   *
+   * This method is idempotent and safe to call multiple times.
+   */
+  def release(): Unit
 }
 
 /**
@@ -233,6 +248,8 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
     Iterator[UnsafeRowPair] = store.iterator(colFamilyName)
 
   override def abort(): Unit = store.abort()
+
+  override def release(): Unit = {}
 
   override def prefixScan(prefixKey: UnsafeRow,
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair] =
@@ -566,6 +583,29 @@ trait StateStoreProvider {
       stateStoreCkptId: Option[String] = None): StateStore
 
   /**
+   * Creates a writable store from an existing read-only store for the specified version.
+   *
+   * This method enables an important optimization pattern for stateful operations where
+   * the same state store needs to be accessed for both reading and writing within a task.
+   * Instead of opening two separate state store instances (which can cause contention issues),
+   * this method converts an existing read-only store to a writable store that can commit changes.
+   *
+   * This approach is particularly beneficial when:
+   * - A stateful operation needs to first read the existing state, then update it
+   * - The state store has locking mechanisms that prevent concurrent access
+   * - Multiple state store connections would cause unnecessary resource duplication
+   *
+   * @param readStore The existing read-only store instance to convert to a writable store
+   * @param version The version of the state store (must match the read store's version)
+   * @param uniqueId Optional unique identifier for checkpointing
+   * @return A writable StateStore instance that can be used to update and commit changes
+   */
+  def upgradeReadStoreToWriteStore(
+      readStore: ReadStateStore,
+      version: Long,
+      uniqueId: Option[String] = None): StateStore = getStore(version, uniqueId)
+
+  /**
    * Return an instance of [[ReadStateStore]] representing state data of the given version
    * and uniqueID if provided.
    * By default it will return the same instance as getStore(version) but wrapped to prevent
@@ -823,7 +863,6 @@ class UnsafeRowPair(var key: UnsafeRow = null, var value: UnsafeRow = null) {
   }
 }
 
-
 /**
  * Companion object to [[StateStore]] that provides helper methods to create and retrieve stores
  * by their unique ids. In addition, when a SparkContext is active (i.e. SparkEnv.get is not null),
@@ -948,6 +987,29 @@ object StateStore extends Logging {
       keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
       stateSchemaBroadcast)
     storeProvider.getReadStore(version, stateStoreCkptId)
+  }
+
+  def getWriteStore(
+      readStore: ReadStateStore,
+      storeProviderId: StateStoreProviderId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      version: Long,
+      stateStoreCkptId: Option[String],
+      stateSchemaBroadcast: Option[StateSchemaBroadcast],
+      useColumnFamilies: Boolean,
+      storeConf: StateStoreConf,
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean = false): StateStore = {
+    hadoopConf.set(StreamExecution.RUN_ID_KEY, storeProviderId.queryRunId.toString)
+    if (version < 0) {
+      throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
+    }
+    val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
+      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
+      stateSchemaBroadcast)
+    storeProvider.upgradeReadStoreToWriteStore(readStore, version, stateStoreCkptId)
   }
 
   /** Get or create a store associated with the id. */

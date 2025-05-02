@@ -1351,7 +1351,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
       put(saveStore, key1, key2, get(restoreStore, key1, key2).get + 1)
       saveStore.commit()
-      restoreStore.abort()
+      // We don't need to call restoreStore.release() since the Write Store has been committed
     }
 
     // check that state is correct for next batch
@@ -1664,6 +1664,107 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           assert(!StateStore.isLoaded(provider0Id))
           assert(!StateStore.isLoaded(provider1Id))
           assert(StateStore.isLoaded(provider2Id))
+        }
+      }
+    }
+  }
+
+  test("two concurrent StateStores - one for read-only and one for read-write with release()") {
+    val dir = Utils.createTempDir().getAbsolutePath
+    val storeId = StateStoreId(dir, 0L, 1)
+    val storeProviderId = StateStoreProviderId(storeId, UUID.randomUUID)
+    val key1 = "a"
+    val key2 = 0
+    val storeConf = StateStoreConf.empty
+    val hadoopConf = new Configuration()
+
+    quietly {
+      withSpark(SparkContext.getOrCreate(
+        new SparkConf().setMaster("local").setAppName("test"))) { sc =>
+        withCoordinatorRef(sc) { _ =>
+          // Prime state
+          val store = StateStore.get(
+            storeProviderId, keySchema, valueSchema,
+            NoPrefixKeyStateEncoderSpec(keySchema),
+            0, None, None, useColumnFamilies = false, storeConf, hadoopConf)
+
+          put(store, key1, key2, 1)
+          store.commit()
+
+          // Get two state stores - one read-only and one read-write
+          val restoreStore = StateStore.getReadOnly(
+            storeProviderId, keySchema, valueSchema,
+            NoPrefixKeyStateEncoderSpec(keySchema),
+            1, None, None, useColumnFamilies = false, storeConf, hadoopConf)
+
+          val saveStore = StateStore.get(
+            storeProviderId, keySchema, valueSchema,
+            NoPrefixKeyStateEncoderSpec(keySchema),
+            1, None, None, useColumnFamilies = false, storeConf, hadoopConf)
+
+          // Update the write store based on data from read store
+          put(saveStore, key1, key2, get(restoreStore, key1, key2).get + 1)
+          saveStore.commit()
+
+          // Check that state is correct for next batch
+          val finalStore = StateStore.get(
+            storeProviderId, keySchema, valueSchema,
+            NoPrefixKeyStateEncoderSpec(keySchema),
+            2, None, None, useColumnFamilies = false, storeConf, hadoopConf)
+
+          assert(get(finalStore, key1, key2) === Some(2))
+        }
+      }
+    }
+  }
+
+  test("getWriteStore correctly uses existing read store") {
+    val dir = Utils.createTempDir().getAbsolutePath
+    val storeId = StateStoreId(dir, 0L, 1)
+    val storeProviderId = StateStoreProviderId(storeId, UUID.randomUUID)
+    val storeConf = StateStoreConf.empty
+    val hadoopConf = new Configuration()
+
+    quietly {
+      withSpark(SparkContext.getOrCreate(
+        new SparkConf().setMaster("local").setAppName("test"))) { sc =>
+        withCoordinatorRef(sc) { _ =>
+          // Prime state
+          val store = StateStore.get(
+            storeProviderId, keySchema, valueSchema,
+            NoPrefixKeyStateEncoderSpec(keySchema),
+            0, None, None, useColumnFamilies = false, storeConf, hadoopConf)
+
+          put(store, "a", 0, 1)
+          store.commit()
+
+          // Get a read-only store
+          val readStore = StateStore.getReadOnly(
+            storeProviderId, keySchema, valueSchema,
+            NoPrefixKeyStateEncoderSpec(keySchema),
+            1, None, None, useColumnFamilies = false, storeConf, hadoopConf)
+
+          // Convert it to a write store using the new getWriteStore method
+          val writeStore = StateStore.getWriteStore(
+            readStore,
+            storeProviderId, keySchema, valueSchema,
+            NoPrefixKeyStateEncoderSpec(keySchema),
+            1, None, None, useColumnFamilies = false, storeConf, hadoopConf)
+
+          // The write store should still have access to the data
+          assert(get(writeStore, "a", 0) === Some(1))
+
+          // Update and commit with the write store
+          put(writeStore, "a", 0, 2)
+          writeStore.commit()
+
+          // Check that the state was updated correctly
+          val finalStore = StateStore.get(
+            storeProviderId, keySchema, valueSchema,
+            NoPrefixKeyStateEncoderSpec(keySchema),
+            2, None, None, useColumnFamilies = false, storeConf, hadoopConf)
+
+          assert(get(finalStore, "a", 0) === Some(2))
         }
       }
     }
