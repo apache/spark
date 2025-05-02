@@ -58,7 +58,7 @@ object StateStoreEncoding {
 sealed trait MaintenanceTaskType
 
 object MaintenanceTaskType {
-  case object FromMaintenanceQueue extends MaintenanceTaskType
+  case object FromUnloadedProvidersQueue extends MaintenanceTaskType
   case object FromTaskThread extends MaintenanceTaskType
   case object FromLoadedProviders extends MaintenanceTaskType
 }
@@ -1169,8 +1169,8 @@ object StateStore extends Logging {
     // If immediate processing fails, wait with timeout
     var canProcessThisPartition = processThisPartition(id)
     while (!canProcessThisPartition && System.currentTimeMillis() < endTime) {
-      canProcessThisPartition = processThisPartition(id)
       maintenanceThreadPoolLock.wait(timeoutMs)
+      canProcessThisPartition = processThisPartition(id)
     }
     val elapsedTime = System.currentTimeMillis() - startTime
     logInfo(log"Waited for ${MDC(LogKeys.TOTAL_TIME, elapsedTime)} ms to be able to process " +
@@ -1193,12 +1193,15 @@ object StateStore extends Logging {
     // Providers that couldn't be processed now and need to be added back to the queue
     val providersToRequeue = new ArrayBuffer[(StateStoreProviderId, StateStoreProvider)]()
 
+    // unloadedProvidersToClose are StateStoreProviders that have been removed from
+    // loadedProviders, and can now be processed for maintenance. This queue contains
+    // providers for which we weren't able to process for maintenance on the previous iteration
     while (!unloadedProvidersToClose.isEmpty) {
       val (providerId, provider) = unloadedProvidersToClose.poll()
 
       if (processThisPartition(providerId)) {
         submitMaintenanceWorkForProvider(
-          providerId, provider, storeConf, MaintenanceTaskType.FromMaintenanceQueue)
+          providerId, provider, storeConf, MaintenanceTaskType.FromUnloadedProvidersQueue)
       } else {
         providersToRequeue += (providerId, provider)
       }
@@ -1242,15 +1245,18 @@ object StateStore extends Logging {
       val canProcessThisPartition = source match {
         case FromTaskThread =>
           // Provider from task thread needs to wait for lock
+          // We potentially need to wait for ongoing maintenance to finish processing
+          // this partition
           val timeoutMs = storeConf.stateStoreMaintenanceProcessingTimeout * 1000
           val ableToProcessNow = awaitProcessThisPartition(id, timeoutMs)
           if (!ableToProcessNow) {
             // Add to queue for later processing if we can't process now
+            // This will be resubmitted for maintenance later by the background maintenance task
             unloadedProvidersToClose.add((id, provider))
           }
           ableToProcessNow
 
-        case FromMaintenanceQueue =>
+        case FromUnloadedProvidersQueue =>
           // Provider from queue can be processed immediately
           // (we've already removed it from loadedProviders)
           true
@@ -1267,7 +1273,7 @@ object StateStore extends Logging {
           provider.doMaintenance()
           // Handle unloading based on source
           source match {
-            case FromTaskThread | FromMaintenanceQueue =>
+            case FromTaskThread | FromUnloadedProvidersQueue =>
               // Provider already removed from loadedProviders, just close it
               provider.close()
 
@@ -1277,14 +1283,12 @@ object StateStore extends Logging {
                 removeFromLoadedProvidersAndClose(id)
               }
           }
-
-          if (source != FromLoadedProviders) {
-            logInfo(log"Unloaded ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}")
-          }
+          logInfo(log"Unloaded ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}")
         } catch {
           case NonFatal(e) =>
-            logWarning(log"Error ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}, " +
-              log"unloading state store provider", e)
+            logWarning(log"Error doing maintenance on provider:" +
+              log" ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}. " +
+              log"Could not unload state store provider", e)
             // When we get a non-fatal exception, we just unload the provider.
             //
             // By not bubbling the exception to the maintenance task thread or the query execution
@@ -1298,7 +1302,7 @@ object StateStore extends Logging {
             // transient issues on a given provider do not affect any other providers; so, in
             // most cases, this should be a more performant solution.
             source match {
-              case FromTaskThread | FromMaintenanceQueue =>
+              case FromTaskThread | FromUnloadedProvidersQueue =>
                 provider.close()
 
               case FromLoadedProviders =>

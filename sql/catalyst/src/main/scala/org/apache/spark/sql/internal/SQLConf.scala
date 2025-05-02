@@ -2265,7 +2265,7 @@ object SQLConf {
       .internal()
       .doc("Timeout in seconds to wait for maintenance to process this partition.")
       .timeConf(TimeUnit.SECONDS)
-      .createWithDefault(300L)
+      .createWithDefault(30L)
 
   val STATE_SCHEMA_CHECK_ENABLED =
     buildConf("spark.sql.streaming.stateStore.stateSchemaCheck")
