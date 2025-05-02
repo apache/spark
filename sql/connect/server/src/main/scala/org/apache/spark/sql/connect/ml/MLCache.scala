@@ -71,7 +71,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
 
   def checkModelSize(estimatedModelSize: Long): Unit = {
     if (totalModelCacheSizeBytes.get() + estimatedModelSize > getModelCacheMaxSize) {
-      throw new RuntimeException(
+      throw MLModelCacheSizeOverflowException(
         "The model cache size in current session is about to exceed" +
           f"$getModelCacheMaxSize bytes. " +
           "Please delete existing cached model by executing 'del model' in python client " +
@@ -79,7 +79,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
           "Spark config 'spark.connect.session.connectML.model.maxSize'.")
     }
     if (estimatedModelSize > getModelMaxSize) {
-      throw new RuntimeException(
+      throw MLModelSizeOverflowException(
         f"The fitted or loaded model size exceeds $getModelMaxSize bytes. " +
           f"Please fit or load a model smaller than $getModelMaxSize bytes. " +
           f"or increase Spark config 'spark.connect.session.connectML.modelCache.maxSize'.")
@@ -110,6 +110,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
 
     totalSizeBytes.addAndGet(sizeBytes)
     totalModelCacheSizeBytes.addAndGet(sizeBytes)
+
     cachedModel.put(objectId, CacheItem(obj, sizeBytes))
     objectId
   }

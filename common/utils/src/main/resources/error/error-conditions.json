@@ -811,6 +811,16 @@
           "Cannot retrieve <objectName> from the ML cache. It is probably because the entry has been evicted."
         ]
       },
+      "MODEL_SIZE_OVERFLOW_EXCEPTION" : {
+        "message" : [
+          "<message>"
+        ]
+      },
+      "MODEL_CACHE_SIZE_OVERFLOW_EXCEPTION" : {
+        "message" : [
+          "<message>"
+        ]
+      },
       "UNSUPPORTED_EXCEPTION" : {
         "message" : [
           "<message>"

@@ -408,4 +408,21 @@ class MLSuite extends MLHelper {
       assert(sessionHolder.mlCache.totalSizeBytes.get() <= memorySizeBytes)
     }
   }
+
+  test("Model size limit") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_SESSION_CONNECT_MODEL_MAX_SIZE.key, "4000")
+    intercept[MLModelSizeOverflowException] {
+      trainLogisticRegressionModel(sessionHolder)
+    }
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_SESSION_CONNECT_MODEL_MAX_SIZE.key, "8000")
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_SESSION_CONNECT_MODEL_CACHE_MAX_SIZE.key, "10000")
+    trainLogisticRegressionModel(sessionHolder)
+    intercept[MLModelCacheSizeOverflowException] {
+      trainLogisticRegressionModel(sessionHolder)
+    }
+  }
 }
