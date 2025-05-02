@@ -71,6 +71,7 @@ private[sql] class RocksDBStateStoreProvider
 
     private sealed trait TRANSITION
     private case object UPDATE extends TRANSITION
+    private case object RELEASE extends TRANSITION
     private case object ABORT extends TRANSITION
     private case object COMMIT extends TRANSITION
     private case object METRICS extends TRANSITION
@@ -112,6 +113,15 @@ private[sql] class RocksDBStateStoreProvider
               s"Cannot update after committed")
             case ABORTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
               "Cannot update after aborted")
+          }
+        case RELEASE =>
+          stateMachine.verifyStamp(stamp)
+          state match {
+            case UPDATING => RELEASED
+            case COMMITTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
+              s"Cannot release after committed")
+            case ABORTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
+              "Cannot release after aborted")
           }
         case ABORT =>
           state match {
@@ -488,11 +498,12 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def release(): Unit = {
-      if (state != RELEASED) {
+      if (validateState(List(UPDATING, RELEASED)) != RELEASED) {
         logInfo(log"Releasing ${MDC(VERSION_NUM, version + 1)} " +
           log"for ${MDC(STATE_STORE_ID, id)}")
         rocksDB.release()
-        state = RELEASED
+        validateAndTransitionState(RELEASE)
+        stateMachine.releaseStore(stamp)
       } else {
         // Optionally log at DEBUG level that it's already released
         logDebug(log"State store already released")
