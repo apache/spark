@@ -194,24 +194,16 @@ class RocksDB(
 
   // SPARK-46249 - Keep track of recorded metrics per version which can be used for querying later
   // Updates and access to recordedMetrics are protected by the DB instance lock
-  @GuardedBy("acquireLock")
   @volatile private var recordedMetrics: Option[RocksDBMetrics] = None
 
-  @GuardedBy("acquireLock")
   @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
 
-  // This is accessed and updated only between load and commit
-  // which means it is implicitly guarded by acquireLock
-  @GuardedBy("acquireLock")
   private val colFamilyNameToInfoMap = new ConcurrentHashMap[String, ColumnFamilyInfo]()
 
-  @GuardedBy("acquireLock")
   private val colFamilyIdToNameMap = new ConcurrentHashMap[Short, String]()
 
-  @GuardedBy("acquireLock")
   private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(-1)
 
-  @GuardedBy("acquireLock")
   private val shouldForceSnapshot: AtomicBoolean = new AtomicBoolean(false)
 
   private def getColumnFamilyInfo(cfName: String): ColumnFamilyInfo = {
@@ -303,7 +295,6 @@ class RocksDB(
   // This mapping should only be updated using the Task thread - at version load and commit time.
   // If same mapping instance is updated from different threads,
   // it will result in undefined behavior (and most likely incorrect mapping state).
-  @GuardedBy("acquireLock")
   private val rocksDBFileMapping: RocksDBFileMapping = new RocksDBFileMapping()
 
   // We send snapshots that needs to be uploaded by the maintenance thread to this queue
@@ -1370,7 +1361,7 @@ class RocksDB(
    *
    * @param opType - operation type requesting the lock
    */
-  private def acquire(opType: RocksDBOpType): Unit = acquireLock.synchronized {
+  private def acquire(opType: RocksDBOpType): Unit = {
     val newAcquiredThreadInfo = AcquiredThreadInfo()
     val waitStartTime = System.nanoTime()
     def timeWaitedMs = {
@@ -1381,9 +1372,6 @@ class RocksDB(
       acquiredThreadInfo.threadRef.get.isDefined &&
       newAcquiredThreadInfo.threadRef.get.get.getId != acquiredThreadInfo.threadRef.get.get.getId
 
-    while (isAcquiredByDifferentThread && timeWaitedMs < conf.lockAcquireTimeoutMs) {
-      acquireLock.wait(10)
-    }
     if (isAcquiredByDifferentThread) {
       val stackTraceOutput = acquiredThreadInfo.threadRef.get.get.getStackTrace.mkString("\n")
       throw QueryExecutionErrors.unreleasedThreadError(loggingId, opType.toString,
@@ -1411,7 +1399,7 @@ class RocksDB(
    */
   private def release(
       opType: RocksDBOpType,
-      releaseForThreadOpt: Option[AcquiredThreadInfo] = None): Unit = acquireLock.synchronized {
+      releaseForThreadOpt: Option[AcquiredThreadInfo] = None): Unit = {
     if (acquiredThreadInfo != null) {
       val release = releaseForThreadOpt match {
         case Some(releaseForThread) if releaseForThread.threadRef.get.isEmpty =>
@@ -1439,7 +1427,6 @@ class RocksDB(
           log"with ownerThread=${MDC(LogKeys.THREAD, acquiredThreadInfo)} " +
           log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
         acquiredThreadInfo = null
-        acquireLock.notifyAll()
       }
     }
   }
@@ -1467,8 +1454,7 @@ class RocksDB(
     }
   }
 
-  private[state] def getAcquiredThreadInfo(): Option[AcquiredThreadInfo] =
-      acquireLock.synchronized {
+  private[state] def getAcquiredThreadInfo(): Option[AcquiredThreadInfo] = {
     Option(acquiredThreadInfo).map(_.copy())
   }
 
