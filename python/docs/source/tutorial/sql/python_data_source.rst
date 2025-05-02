@@ -643,6 +643,20 @@ To enable filter pushdown in your Python Data Source, implement the ``pushFilter
     spark.dataSource.register(PrimesDataSource)
     spark.read.format("primes").load().filter("2000 <= p and p < 2050").show()
 
+    # Got filter: IsNotNull(attribute=('p',))
+    # Got filter: GreaterThanOrEqual(attribute=('p',), value=2000)
+    # Got filter: LessThan(attribute=('p',), value=2050)
+    # +----+
+    # |   p|
+    # +----+
+    # |2003|
+    # |2011|
+    # |2017|
+    # |2027|
+    # |2029|
+    # |2039|
+    # +----+
+
 **Notes**
 
 pushFilters() is called only if there are filters available to push down.
