@@ -380,10 +380,6 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
-    <repository>
-      <id>staging</id>
-      <url>https://repository.apache.org/content/groups/staging/</url>
-    </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>
