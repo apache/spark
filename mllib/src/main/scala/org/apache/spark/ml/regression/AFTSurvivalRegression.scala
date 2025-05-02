@@ -497,7 +497,7 @@ class AFTSurvivalRegressionModel private[ml] (
 
 @Since("1.6.0")
 object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel] {
-  private case class Data(coefficients: Vector, intercept: Double, scale: Double)
+  private[ml] case class Data(coefficients: Vector, intercept: Double, scale: Double)
 
   @Since("1.6.0")
   override def read: MLReader[AFTSurvivalRegressionModel] = new AFTSurvivalRegressionModelReader

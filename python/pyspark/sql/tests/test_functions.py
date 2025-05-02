@@ -146,7 +146,6 @@ class FunctionsTestsMixin:
             "Column",  # should be imported from pyspark.sql
             "DataType",  # should be imported from pyspark.sql.types
             "NumericType",  # should be imported from pyspark.sql.types
-            "ParentDataFrame",  # internal class
             "PySparkTypeError",  # should be imported from pyspark.errors
             "PySparkValueError",  # should be imported from pyspark.errors
             "StringType",  # should be imported from pyspark.sql.types

@@ -200,7 +200,7 @@ class StandardScalerModel private[ml] (
 
 @Since("1.6.0")
 object StandardScalerModel extends MLReadable[StandardScalerModel] {
-  private case class Data(std: Vector, mean: Vector)
+  private[ml] case class Data(std: Vector, mean: Vector)
 
   private[StandardScalerModel]
   class StandardScalerModelWriter(instance: StandardScalerModel) extends MLWriter {

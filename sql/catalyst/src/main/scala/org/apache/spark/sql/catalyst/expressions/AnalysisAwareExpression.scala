@@ -15,11 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.catalyst.expressions
 
-object StreamingCheckpointConstants {
-  val DIR_NAME_COMMITS = "commits"
-  val DIR_NAME_OFFSETS = "offsets"
-  val DIR_NAME_STATE = "state"
-  val DIR_NAME_METADATA = "metadata"
+/** An expression that must be notified when the analysis phase is finished. */
+trait AnalysisAwareExpression[E <: Expression] {
+  def markAsAnalyzed(): E
 }

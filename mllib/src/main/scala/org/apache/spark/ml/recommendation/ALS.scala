@@ -547,7 +547,7 @@ class ALSModel private[ml] (
   }
 }
 
-private case class FeatureData(id: Int, features: Array[Float])
+private[ml] case class FeatureData(id: Int, features: Array[Float])
 
 @Since("1.6.0")
 object ALSModel extends MLReadable[ALSModel] {

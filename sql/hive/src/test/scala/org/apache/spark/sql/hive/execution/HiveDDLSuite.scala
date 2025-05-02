@@ -3377,4 +3377,19 @@ class HiveDDLSuite
       checkAnswer(sql("SELECT * FROM t1"), Row(0))
     }
   }
+
+  test("create table - partition column duplicates EMPTY_DATA_SCHEMA") {
+    withTable("t") {
+      val e = intercept[AnalysisException] {
+        sql("CREATE TABLE t (col int, b TIMESTAMP_NTZ) USING PARQUET PARTITIONED BY (col)")
+      }
+      checkError(
+        exception = e,
+        condition = "CONFLICTING_PARTITION_COLUMN_NAME_WITH_RESERVED",
+        parameters = Map(
+          "tableName" -> "spark_catalog.default.t",
+          "partitionColumnName" -> "col")
+      )
+    }
+  }
 }

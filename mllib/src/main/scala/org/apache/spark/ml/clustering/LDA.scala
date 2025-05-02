@@ -643,7 +643,7 @@ class LocalLDAModel private[ml] (
 
 @Since("1.6.0")
 object LocalLDAModel extends MLReadable[LocalLDAModel] {
-  private case class LocalModelData(
+  private[ml] case class LocalModelData(
     vocabSize: Int,
     topicsMatrix: Matrix,
     docConcentration: Vector,

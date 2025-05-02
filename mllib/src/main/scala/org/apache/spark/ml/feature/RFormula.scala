@@ -496,7 +496,7 @@ private class ColumnPruner(override val uid: String, val columnsToPrune: Set[Str
 }
 
 private object ColumnPruner extends MLReadable[ColumnPruner] {
-  private case class Data(columnsToPrune: Seq[String])
+  private[ml] case class Data(columnsToPrune: Seq[String])
 
   override def read: MLReader[ColumnPruner] = new ColumnPrunerReader
 
@@ -588,7 +588,7 @@ private class VectorAttributeRewriter(
 }
 
 private object VectorAttributeRewriter extends MLReadable[VectorAttributeRewriter] {
-  private case class Data(vectorCol: String, prefixesToRewrite: Map[String, String])
+  private[ml] case class Data(vectorCol: String, prefixesToRewrite: Map[String, String])
 
   override def read: MLReader[VectorAttributeRewriter] = new VectorAttributeRewriterReader
 
