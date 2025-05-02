@@ -35,18 +35,18 @@ from pyspark.util import PythonEvalType
 @unittest.skipIf(
     not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
 )
-class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
+class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
     @unittest.skip("Unrelated test, and it fails when it runs duplicatedly.")
     def test_broadcast_in_udf(self):
-        super(PythonUDFArrowTests, self).test_broadcast_in_udf()
+        super(ArrowPythonUDFTests, self).test_broadcast_in_udf()
 
     @unittest.skip("Unrelated test, and it fails when it runs duplicatedly.")
     def test_register_java_function(self):
-        super(PythonUDFArrowTests, self).test_register_java_function()
+        super(ArrowPythonUDFTests, self).test_register_java_function()
 
     @unittest.skip("Unrelated test, and it fails when it runs duplicatedly.")
     def test_register_java_udaf(self):
-        super(PythonUDFArrowTests, self).test_register_java_udaf()
+        super(ArrowPythonUDFTests, self).test_register_java_udaf()
 
     def test_complex_input_types(self):
         row = (
@@ -214,11 +214,18 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
         with self.assertRaises(PythonException):
             self.spark.sql("SELECT test_udf(id, a => id * 10) FROM range(2)").show()
 
+    def test_udf_with_udt(self):
+        for fallback in [False, True]:
+            with self.subTest(fallback=fallback), self.sql_conf(
+                {"spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT": fallback}
+            ):
+                super().test_udf_with_udt()
 
-class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):
+
+class ArrowPythonUDFTests(ArrowPythonUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(PythonUDFArrowTests, cls).setUpClass()
+        super(ArrowPythonUDFTests, cls).setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
 
     @classmethod
@@ -226,13 +233,13 @@ class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):
         try:
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
         finally:
-            super(PythonUDFArrowTests, cls).tearDownClass()
+            super(ArrowPythonUDFTests, cls).tearDownClass()
 
 
-class AsyncPythonUDFArrowTests(PythonUDFArrowTests):
+class AsyncArrowPythonUDFTests(ArrowPythonUDFTests):
     @classmethod
     def setUpClass(cls):
-        super(AsyncPythonUDFArrowTests, cls).setUpClass()
+        super(AsyncArrowPythonUDFTests, cls).setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.concurrency.level", "4")
 
     @classmethod
@@ -240,7 +247,7 @@ class AsyncPythonUDFArrowTests(PythonUDFArrowTests):
         try:
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.concurrency.level")
         finally:
-            super(AsyncPythonUDFArrowTests, cls).tearDownClass()
+            super(AsyncArrowPythonUDFTests, cls).tearDownClass()
 
 
 if __name__ == "__main__":

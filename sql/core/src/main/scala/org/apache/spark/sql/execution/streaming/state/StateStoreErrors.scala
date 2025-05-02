@@ -217,6 +217,10 @@ object StateStoreErrors {
     StateStoreFailedToGetChangelogWriter = {
     new StateStoreFailedToGetChangelogWriter(version, e)
   }
+
+  def stateStoreOperationOutOfOrder(errorMsg: String): StateStoreOperationOutOfOrder = {
+    new StateStoreOperationOutOfOrder(errorMsg)
+  }
 }
 
 class StateStoreDuplicateStateVariableDefined(stateVarName: String)
@@ -366,6 +370,16 @@ class TWSSchemaMustBeNullable(
       "columnFamilyName" -> columnFamilyName,
       "schema" -> schema))
 
+private[sql] case class TransformWithStateUserFunctionException(
+    cause: Throwable,
+    functionName: String)
+  extends SparkException(
+    errorClass = "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR",
+    messageParameters = Map(
+      "reason" -> Option(cause.getMessage).getOrElse(""),
+      "function" -> functionName),
+    cause = cause)
+
 class StateStoreInvalidValueSchemaEvolution(
     oldValueSchema: String,
     newValueSchema: String)
@@ -435,3 +449,9 @@ class StateStoreProviderDoesNotSupportFineGrainedReplay(inputClass: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_PROVIDER_DOES_NOT_SUPPORT_FINE_GRAINED_STATE_REPLAY",
     messageParameters = Map("inputClass" -> inputClass))
+
+class StateStoreOperationOutOfOrder(errorMsg: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_OPERATION_OUT_OF_ORDER",
+    messageParameters = Map("errorMsg" -> errorMsg)
+  )

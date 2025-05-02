@@ -31,7 +31,6 @@ import org.apache.spark.network.crypto.AuthServerBootstrap
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.server.{TransportServer, TransportServerBootstrap}
 import org.apache.spark.network.shuffle.ExternalBlockHandler
-import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
@@ -86,11 +85,11 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalBlockHandler = {
     if (sparkConf.get(config.SHUFFLE_SERVICE_DB_ENABLED) && enabled) {
       val shuffleDBName = sparkConf.get(config.SHUFFLE_SERVICE_DB_BACKEND)
-      val dbBackend = DBBackend.byName(shuffleDBName)
-      logInfo(log"Use ${MDC(SHUFFLE_DB_BACKEND_NAME, dbBackend.name())} as the implementation of " +
+      logInfo(
+        log"Use ${MDC(SHUFFLE_DB_BACKEND_NAME, shuffleDBName.name())} as the implementation of " +
         log"${MDC(SHUFFLE_DB_BACKEND_KEY, config.SHUFFLE_SERVICE_DB_BACKEND.key)}")
       new ExternalBlockHandler(conf,
-        findRegisteredExecutorsDBFile(dbBackend.fileName(registeredExecutorsDB)))
+        findRegisteredExecutorsDBFile(shuffleDBName.fileName(registeredExecutorsDB)))
     } else {
       new ExternalBlockHandler(conf, null)
     }

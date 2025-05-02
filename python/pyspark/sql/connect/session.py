@@ -1080,8 +1080,7 @@ class SparkSession:
                 # start the regular PySpark session.
                 if origin_remote is not None:
                     del os.environ["SPARK_REMOTE"]
-                if origin_connect_mode is not None:
-                    del os.environ["SPARK_CONNECT_MODE"]
+                os.environ["SPARK_CONNECT_MODE"] = "0"
 
                 # The regular PySpark session is registered as an active session
                 # so would not be garbage-collected.

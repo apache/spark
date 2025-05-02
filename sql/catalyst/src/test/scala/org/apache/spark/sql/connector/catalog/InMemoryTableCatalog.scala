@@ -26,6 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NonEmptyNamespaceException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
@@ -90,14 +91,20 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   }
 
   override def createTable(
-      ident: Identifier,
-      columns: Array[Column],
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
+    ident: Identifier,
+    columns: Array[Column],
+    partitions: Array[Transform],
+    properties: util.Map[String, String]): Table = {
     createTable(ident, columns, partitions, properties, Distributions.unspecified(),
       Array.empty, None, None)
   }
 
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties(),
+      Distributions.unspecified(), Array.empty, None, None, tableInfo.constraints())
+  }
+
+  // scalastyle:off argcount
   def createTable(
       ident: Identifier,
       columns: Array[Column],
@@ -107,8 +114,10 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       ordering: Array[SortOrder],
       requiredNumPartitions: Option[Int],
       advisoryPartitionSize: Option[Long],
+      constraints: Array[Constraint] = Array.empty,
       distributionStrictlyRequired: Boolean = true,
       numRowsPerSplit: Int = Int.MaxValue): Table = {
+    // scalastyle:on argcount
     val schema = CatalogV2Util.v2ColumnsToStructType(columns)
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
@@ -117,9 +126,9 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
     val tableName = s"$name.${ident.quoted}"
-    val table = new InMemoryTable(tableName, schema, partitions, properties, distribution,
-      ordering, requiredNumPartitions, advisoryPartitionSize, distributionStrictlyRequired,
-      numRowsPerSplit)
+    val table = new InMemoryTable(tableName, schema, partitions, properties, constraints,
+      distribution, ordering, requiredNumPartitions, advisoryPartitionSize,
+      distributionStrictlyRequired, numRowsPerSplit)
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
@@ -134,13 +143,19 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       tableProvider = Some("in-memory"),
       statementType = "ALTER TABLE")
     val finalPartitioning = CatalogV2Util.applyClusterByChanges(table.partitioning, schema, changes)
+    val constraints = CatalogV2Util.collectConstraintChanges(table, changes)
 
     // fail if the last column in the schema was dropped
     if (schema.fields.isEmpty) {
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
-    val newTable = new InMemoryTable(table.name, schema, finalPartitioning, properties)
+    val newTable = new InMemoryTable(
+      name = table.name,
+      schema = schema,
+      partitioning = finalPartitioning,
+      properties = properties,
+      constraints = constraints)
       .withData(table.data)
 
     tables.put(ident, newTable)
@@ -178,6 +193,7 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
   override def capabilities: java.util.Set[TableCatalogCapability] = {
     Set(
       TableCatalogCapability.SUPPORT_COLUMN_DEFAULT_VALUE,
+      TableCatalogCapability.SUPPORT_TABLE_CONSTRAINT,
       TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS,
       TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS
     ).asJava
@@ -188,7 +204,12 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
   procedures.put(Identifier.of(Array("dummy"), "increment"), UnboundIncrement)
 
   protected def allNamespaces: Seq[Seq[String]] = {
-    (tables.keySet.asScala.map(_.namespace.toSeq) ++ namespaces.keySet.asScala).toSeq.distinct
+    (tables.keySet.asScala.map(_.namespace.toSeq)
+      ++ namespaces.keySet.asScala
+      ++ procedures.keySet.asScala
+      .filter(i => !i.namespace.sameElements(Array("dummy")))
+      .map(_.namespace.toSeq)
+      ).toSeq.distinct
   }
 
   override def namespaceExists(namespace: Array[String]): Boolean = {
@@ -270,6 +291,17 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
     val procedure = procedures.get(ident)
     if (procedure == null) throw new RuntimeException("Procedure not found: " + ident)
     procedure
+  }
+
+  override def listProcedures(namespace: Array[String]): Array[Identifier] = {
+    val result =
+      if (namespaceExists(namespace)) {
+        procedures.keySet.asScala
+          .filter(_.namespace.sameElements(namespace))
+      } else {
+        throw new NoSuchNamespaceException(namespace)
+      }
+    result.filter(!_.namespace.sameElements(Array("dummy"))).toArray
   }
 
   object UnboundIncrement extends UnboundProcedure {

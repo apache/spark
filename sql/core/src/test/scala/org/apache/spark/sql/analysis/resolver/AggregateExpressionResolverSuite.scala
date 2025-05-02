@@ -36,16 +36,17 @@ class AggregateExpressionResolverSuite extends QueryTest with SharedSparkSession
     resolver.resolve(query)
   }
 
-  test("Unsupported parent operator") {
+  test("Invalid WHERE condition") {
     val resolver = createResolver()
-    val query = table.limit($"count".function("a".attr))
-    checkErrorMatchPVals(
+    val query = table.where($"count".function("a".attr) > 0)
+    checkError(
       exception = intercept[AnalysisException] {
         resolver.resolve(query)
       },
-      condition = "UNSUPPORTED_EXPR_FOR_OPERATOR",
+      condition = "INVALID_WHERE_CONDITION",
       parameters = Map(
-        "invalidExprSqls" -> """count\(a#\d+\)"""
+        "condition" -> "\"(count(a) > 0)\"",
+        "expressionList" -> "count(a)"
       )
     )
   }

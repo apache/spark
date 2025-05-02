@@ -1468,6 +1468,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     ).foreach { case (time, expectedStr) =>
       checkEvaluation(Cast(Literal(time), StringType), expectedStr)
     }
+
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => Cast(child, StringType), TimeType())
   }
 
   test("cast string to time") {

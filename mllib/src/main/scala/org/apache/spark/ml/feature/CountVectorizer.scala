@@ -368,17 +368,16 @@ class CountVectorizerModel(
 
 @Since("1.6.0")
 object CountVectorizerModel extends MLReadable[CountVectorizerModel] {
+  private[ml] case class Data(vocabulary: Seq[String])
 
   private[CountVectorizerModel]
   class CountVectorizerModelWriter(instance: CountVectorizerModel) extends MLWriter {
-
-    private case class Data(vocabulary: Seq[String])
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.vocabulary.toImmutableArraySeq)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -389,11 +388,8 @@ object CountVectorizerModel extends MLReadable[CountVectorizerModel] {
     override def load(path: String): CountVectorizerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-        .select("vocabulary")
-        .head()
-      val vocabulary = data.getAs[Seq[String]](0).toArray
-      val model = new CountVectorizerModel(metadata.uid, vocabulary)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val model = new CountVectorizerModel(metadata.uid, data.vocabulary.toArray)
       metadata.getAndSetParams(model)
       model
     }

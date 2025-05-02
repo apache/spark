@@ -20,6 +20,7 @@ package org.apache.spark.sql.classic
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog
 import org.apache.spark.sql.catalog.{CatalogMetadata, Column, Database, Function, Table}
@@ -30,13 +31,13 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTable, LocalRelation, LogicalPlan, OptionList, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, UnresolvedTableSpec, View}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTable, LocalRelation, LogicalPlan, OptionList, RecoverPartitions, ShowFunctions, ShowTables, UnresolvedTableSpec, View}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogManager, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, MultipartIdentifierHelper, NamespaceHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.command.ShowTablesCommand
+import org.apache.spark.sql.execution.command.{ShowNamespacesCommand, ShowTablesCommand}
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.connector.V1Function
@@ -105,10 +106,10 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
     listDatabasesInternal(Some(pattern))
 
   private def listDatabasesInternal(patternOpt: Option[String]): Dataset[Database] = {
-    val plan = ShowNamespaces(UnresolvedNamespace(Nil), patternOpt)
+    val plan = ShowNamespacesCommand(UnresolvedNamespace(Nil), patternOpt)
     val qe = sparkSession.sessionState.executePlan(plan)
     val catalog = qe.analyzed.collectFirst {
-      case ShowNamespaces(r: ResolvedNamespace, _, _) => r.catalog
+      case ShowNamespacesCommand(r: ResolvedNamespace, _, _) => r.catalog
     }.get
     val databases = qe.toRdd.collect().map { row =>
       // dbName can either be a quoted identifier (single or multi part) or an unquoted single part
@@ -167,18 +168,25 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
   private[sql] def resolveTable(row: InternalRow, catalogName: String): Option[Table] = {
     val tableName = row.getString(1)
     val namespaceName = row.getString(0)
-    val isTemp = row.getBoolean(2)
+    val isTempView = row.getBoolean(2)
+    val ns = if (isTempView) {
+      if (namespaceName.isEmpty) Nil else Seq(namespaceName)
+    } else {
+      parseIdent(namespaceName)
+    }
+    val nameParts = if (isTempView) {
+      // Temp views do not belong to any catalog. We shouldn't prepend the catalog name here.
+      ns :+ tableName
+    } else {
+      catalogName +: ns :+ tableName
+    }
     try {
-      if (isTemp) {
-        // Temp views do not belong to any catalog. We shouldn't prepend the catalog name here.
-        val ns = if (namespaceName.isEmpty) Nil else Seq(namespaceName)
-        Some(makeTable(ns :+ tableName))
-      } else {
-        val ns = parseIdent(namespaceName)
-        try {
-          Some(makeTable(catalogName +: ns :+ tableName))
-        } catch {
-          case e: AnalysisException if e.getCondition == "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE" =>
+      Some(makeTable(nameParts))
+    } catch {
+      case e: SparkThrowable with Throwable =>
+        Catalog.ListTable.ERROR_HANDLING_RULES.get(e.getCondition) match {
+          case Some(Catalog.ListTable.Skip) => None
+          case Some(Catalog.ListTable.ReturnPartialResults) if !isTempView =>
             Some(new Table(
               name = tableName,
               catalog = catalogName,
@@ -187,10 +195,8 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
               tableType = null,
               isTemporary = false
             ))
+          case _ => throw e
         }
-      }
-    } catch {
-      case e: AnalysisException if e.getCondition == "TABLE_OR_VIEW_NOT_FOUND" => None
     }
   }
 
@@ -688,7 +694,8 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
       comment = { if (description.isEmpty) None else Some(description) },
       collation = None,
       serde = None,
-      external = tableType == CatalogTableType.EXTERNAL)
+      external = tableType == CatalogTableType.EXTERNAL,
+      constraints = Seq.empty)
 
     val plan = CreateTable(
       name = UnresolvedIdentifier(ident),
@@ -957,4 +964,18 @@ private[sql] object Catalog {
   }
 
   private val FUNCTION_EXISTS_COMMAND_NAME = "Catalog.functionExists"
+
+  private object ListTable {
+
+    sealed trait ErrorHandlingAction
+
+    case object Skip extends ErrorHandlingAction
+
+    case object ReturnPartialResults extends ErrorHandlingAction
+
+    val ERROR_HANDLING_RULES: Map[String, ErrorHandlingAction] = Map(
+      "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE" -> ReturnPartialResults,
+      "TABLE_OR_VIEW_NOT_FOUND" -> Skip
+    )
+  }
 }

@@ -55,6 +55,7 @@ from pyspark.ml.util import (
     JavaMLWriter,
     try_remote_write,
     try_remote_read,
+    _cache_spark_dataset,
 )
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
 from pyspark.sql import functions as F
@@ -847,22 +848,23 @@ class CrossValidator(
             subModels = [[None for j in range(numModels)] for i in range(nFolds)]
 
         datasets = self._kFold(dataset)
+
         for i in range(nFolds):
-            validation = datasets[i][1].cache()
-            train = datasets[i][0].cache()
+            validation = datasets[i][1]
+            train = datasets[i][0]
 
-            tasks = map(
-                inheritable_thread_target(dataset.sparkSession),
-                _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam),
-            )
-            for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
-                metrics_all[i][j] = metric
-                if collectSubModelsParam:
-                    assert subModels is not None
-                    subModels[i][j] = subModel
-
-            validation.unpersist()
-            train.unpersist()
+            with _cache_spark_dataset(train) as train, _cache_spark_dataset(
+                validation
+            ) as validation:
+                tasks = map(
+                    inheritable_thread_target(dataset.sparkSession),
+                    _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam),
+                )
+                for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
+                    metrics_all[i][j] = metric
+                    if collectSubModelsParam:
+                        assert subModels is not None
+                        subModels[i][j] = subModel
 
         metrics, std_metrics = CrossValidator._gen_avg_and_std_metrics(metrics_all)
 
@@ -1475,28 +1477,27 @@ class TrainValidationSplit(
         randCol = self.uid + "_rand"
         df = dataset.select("*", F.rand(seed).alias(randCol))
         condition = df[randCol] >= tRatio
-        validation = df.filter(condition).cache()
-        train = df.filter(~condition).cache()
 
-        subModels = None
-        collectSubModelsParam = self.getCollectSubModels()
-        if collectSubModelsParam:
-            subModels = [None for i in range(numModels)]
+        validation = df.filter(condition)
+        train = df.filter(~condition)
 
-        tasks = map(
-            inheritable_thread_target(dataset.sparkSession),
-            _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam),
-        )
-        pool = ThreadPool(processes=min(self.getParallelism(), numModels))
-        metrics = [None] * numModels
-        for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
-            metrics[j] = metric
+        with _cache_spark_dataset(train) as train, _cache_spark_dataset(validation) as validation:
+            subModels = None
+            collectSubModelsParam = self.getCollectSubModels()
             if collectSubModelsParam:
-                assert subModels is not None
-                subModels[j] = subModel
+                subModels = [None for i in range(numModels)]
 
-        train.unpersist()
-        validation.unpersist()
+            tasks = map(
+                inheritable_thread_target(dataset.sparkSession),
+                _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam),
+            )
+            pool = ThreadPool(processes=min(self.getParallelism(), numModels))
+            metrics = [None] * numModels
+            for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
+                metrics[j] = metric
+                if collectSubModelsParam:
+                    assert subModels is not None
+                    subModels[j] = subModel
 
         if eva.isLargerBetter():
             bestIndex = np.argmax(cast(List[float], metrics))

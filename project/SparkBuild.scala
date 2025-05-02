@@ -840,6 +840,8 @@ object SparkConnectClient {
 
     testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated,
 
+    (Test / javaOptions) += "-Darrow.memory.debug.allocator=true",
+
     (assembly / test) := { },
 
     (assembly / logLevel) := Level.Info,
@@ -1588,15 +1590,24 @@ object TestSettings {
     fork := true,
     // Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
     // launched by the tests have access to the correct test-time classpath.
-    (Test / envVars) ++= Map(
-      "SPARK_DIST_CLASSPATH" ->
-        (Test / fullClasspath).value.files.map(_.getAbsolutePath)
-          .mkString(File.pathSeparator).stripSuffix(File.pathSeparator),
-      "SPARK_PREPEND_CLASSES" -> "1",
-      "SPARK_SCALA_VERSION" -> scalaBinaryVersion.value,
-      "SPARK_TESTING" -> "1",
-      "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home")),
-      "SPARK_BEELINE_OPTS" -> "-DmyKey=yourValue"),
+    (Test / envVars) ++= {
+      val baseEnvVars = Map(
+        "SPARK_DIST_CLASSPATH" ->
+          (Test / fullClasspath).value.files.map(_.getAbsolutePath)
+            .mkString(File.pathSeparator).stripSuffix(File.pathSeparator),
+        "SPARK_PREPEND_CLASSES" -> "1",
+        "SPARK_SCALA_VERSION" -> scalaBinaryVersion.value,
+        "SPARK_TESTING" -> "1",
+        "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home")),
+        "SPARK_BEELINE_OPTS" -> "-DmyKey=yourValue"
+      )
+
+      if (sys.props("os.name").contains("Mac OS X")) {
+        baseEnvVars + ("OBJC_DISABLE_INITIALIZE_FORK_SAFETY" -> "YES")
+      } else {
+        baseEnvVars
+      }
+    },
 
     // Copy system properties to forked JVMs so that tests know proxy settings
     (Test / javaOptions) ++= {
@@ -1704,7 +1715,7 @@ object TestSettings {
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),
     (Test / testOptions) += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
-    libraryDependencies += "com.github.sbt.junit" % "jupiter-interface" % "0.13.3" % "test",
+    libraryDependencies += "com.github.sbt.junit" % "jupiter-interface" % "0.14.0" % "test",
     // `parallelExecutionInTest` controls whether test suites belonging to the same SBT project
     // can run in parallel with one another. It does NOT control whether tests execute in parallel
     // within the same JVM (which is controlled by `testForkedParallel`) or whether test cases

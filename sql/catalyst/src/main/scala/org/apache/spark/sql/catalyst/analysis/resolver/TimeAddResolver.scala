@@ -31,8 +31,8 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, TimeAdd}
 class TimeAddResolver(
     expressionResolver: ExpressionResolver,
     timezoneAwareExpressionResolver: TimezoneAwareExpressionResolver)
-  extends TreeNodeResolver[TimeAdd, Expression]
-  with ResolvesExpressionChildren {
+    extends TreeNodeResolver[TimeAdd, Expression]
+    with ResolvesExpressionChildren {
 
   private val typeCoercionTransformations: Seq[Expression => Expression] =
     if (conf.ansiEnabled) {
@@ -44,8 +44,8 @@ class TimeAddResolver(
     new TypeCoercionResolver(timezoneAwareExpressionResolver, typeCoercionTransformations)
 
   override def resolve(unresolvedTimeAdd: TimeAdd): Expression = {
-    val timeAddWithResolvedChildren: TimeAdd =
-      withResolvedChildren(unresolvedTimeAdd, expressionResolver.resolve)
+    val timeAddWithResolvedChildren =
+      withResolvedChildren(unresolvedTimeAdd, expressionResolver.resolve _)
     val timeAddWithTypeCoercion: Expression = typeCoercionResolver
       .resolve(timeAddWithResolvedChildren)
     timezoneAwareExpressionResolver.withResolvedTimezone(

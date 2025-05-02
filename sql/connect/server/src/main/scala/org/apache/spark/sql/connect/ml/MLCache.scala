@@ -18,26 +18,58 @@ package org.apache.spark.sql.connect.ml
 
 import java.util.UUID
 import java.util.concurrent.{ConcurrentMap, TimeUnit}
+import java.util.concurrent.atomic.AtomicLong
 
-import com.google.common.cache.CacheBuilder
+import scala.collection.mutable
+
+import com.google.common.cache.{CacheBuilder, RemovalNotification}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.Model
 import org.apache.spark.ml.util.ConnectHelper
+import org.apache.spark.sql.connect.config.Connect
+import org.apache.spark.sql.connect.service.SessionHolder
 
 /**
  * MLCache is for caching ML objects, typically for models and summaries evaluated by a model.
  */
-private[connect] class MLCache extends Logging {
+private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   private val helper = new ConnectHelper()
   private val helperID = "______ML_CONNECT_HELPER______"
 
-  private val cachedModel: ConcurrentMap[String, Object] = CacheBuilder
+  private def getMaxCacheSizeKB: Long = {
+    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MAX_SIZE) / 1024
+  }
+
+  private def getTimeoutMinute: Long = {
+    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_TIMEOUT)
+  }
+
+  private[ml] case class CacheItem(obj: Object, sizeBytes: Long)
+  private[ml] val cachedModel: ConcurrentMap[String, CacheItem] = CacheBuilder
     .newBuilder()
     .softValues()
-    .maximumSize(MLCache.MAX_CACHED_ITEMS)
-    .expireAfterAccess(MLCache.CACHE_TIMEOUT_MINUTE, TimeUnit.MINUTES)
-    .build[String, Object]()
+    .maximumWeight(getMaxCacheSizeKB)
+    .expireAfterAccess(getTimeoutMinute, TimeUnit.MINUTES)
+    .weigher((key: String, value: CacheItem) => {
+      Math.ceil(value.sizeBytes.toDouble / 1024).toInt
+    })
+    .removalListener((removed: RemovalNotification[String, CacheItem]) =>
+      totalSizeBytes.addAndGet(-removed.getValue.sizeBytes))
+    .build[String, CacheItem]()
     .asMap()
+
+  private[ml] val totalSizeBytes: AtomicLong = new AtomicLong(0)
+
+  private def estimateObjectSize(obj: Object): Long = {
+    obj match {
+      case model: Model[_] =>
+        model.asInstanceOf[Model[_]].estimatedSize
+      case _ =>
+        // There can only be Models in the cache, so we should never reach here.
+        1
+    }
+  }
 
   /**
    * Cache an object into a map of MLCache, and return its key
@@ -48,7 +80,9 @@ private[connect] class MLCache extends Logging {
    */
   def register(obj: Object): String = {
     val objectId = UUID.randomUUID().toString
-    cachedModel.put(objectId, obj)
+    val sizeBytes = estimateObjectSize(obj)
+    totalSizeBytes.addAndGet(sizeBytes)
+    cachedModel.put(objectId, CacheItem(obj, sizeBytes))
     objectId
   }
 
@@ -63,7 +97,7 @@ private[connect] class MLCache extends Logging {
     if (refId == helperID) {
       helper
     } else {
-      cachedModel.get(refId)
+      Option(cachedModel.get(refId)).map(_.obj).orNull
     }
   }
 
@@ -72,22 +106,26 @@ private[connect] class MLCache extends Logging {
    * @param refId
    *   the key used to look up the corresponding object
    */
-  def remove(refId: String): Unit = {
-    cachedModel.remove(refId)
+  def remove(refId: String): Boolean = {
+    val removed = cachedModel.remove(refId)
+    // remove returns null if the key is not present
+    removed != null
   }
 
   /**
    * Clear all the caches
    */
-  def clear(): Unit = {
+  def clear(): Int = {
+    val size = cachedModel.size()
     cachedModel.clear()
+    size
   }
-}
 
-private[connect] object MLCache {
-  // The maximum number of distinct items in the cache.
-  private val MAX_CACHED_ITEMS = 100
-
-  // The maximum time for an item to stay in the cache.
-  private val CACHE_TIMEOUT_MINUTE = 60
+  def getInfo(): Array[String] = {
+    val info = mutable.ArrayBuilder.make[String]
+    cachedModel.forEach { case (key, value) =>
+      info += s"id: $key, obj: ${value.obj.getClass}, size: ${value.sizeBytes}"
+    }
+    info.result()
+  }
 }

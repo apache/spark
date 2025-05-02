@@ -29,7 +29,7 @@ from pyspark.sql.streaming.map_state_client import (
     MapStateKeyValuePairIterator,
 )
 from pyspark.sql.streaming.value_state_client import ValueStateClient
-from pyspark.sql.types import StructType
+from pyspark.sql.types import StructType, Row
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
@@ -359,6 +359,14 @@ class StatefulProcessor(ABC):
     Class that represents the arbitrary stateful logic that needs to be provided by the user to
     perform stateful manipulations on keyed streams.
 
+    NOTE: Type of input data and return are different by which method is called, such as:
+
+    `transformWithStateInPandas` - :class:`pandas.DataFrame`
+    `transformWithState` - :class:`pyspark.sql.Row`
+
+    and the implementation of this class must follow the described type assignment, which implies
+    an implementation has to be bound to a method.
+
     .. versionadded:: 4.0.0
     """
 
@@ -380,25 +388,29 @@ class StatefulProcessor(ABC):
     def handleInputRows(
         self,
         key: Any,
-        rows: Iterator["PandasDataFrameLike"],
+        rows: Union[Iterator["PandasDataFrameLike"], Iterator[Row]],
         timerValues: TimerValues,
-    ) -> Iterator["PandasDataFrameLike"]:
+    ) -> Union[Iterator["PandasDataFrameLike"], Iterator[Row]]:
         """
         Function that will allow users to interact with input data rows along with the grouping key.
-        It should take parameters (key, Iterator[`pandas.DataFrame`]) and return another
-        Iterator[`pandas.DataFrame`]. For each group, all columns are passed together as
-        `pandas.DataFrame` to the function, and the returned `pandas.DataFrame` across all
-        invocations are combined as a :class:`DataFrame`. Note that the function should not make a
-        guess of the number of elements in the iterator. To process all data, the `handleInputRows`
-        function needs to iterate all elements and process them. On the other hand, the
-        `handleInputRows` function is not strictly required to iterate through all elements in the
-        iterator if it intends to read a part of data.
+
+        Type of input data and return are different by which method is called, such as:
+
+        For `transformWithStateInPandas`, it should take parameters
+        (key, Iterator[`pandas.DataFrame`]) and return another Iterator[`pandas.DataFrame`].
+        For `transformWithState`, it should take parameters (key, Iterator[`pyspark.sql.Row`])
+        and return another Iterator[`pyspark.sql.Row`].
+
+        Note that the function should not make a guess of the number of elements in the iterator.
+        To process all data, the `handleInputRows` function needs to iterate all elements and
+        process them. On the other hand, the `handleInputRows` function is not strictly required
+        to iterate through all elements in the iterator if it intends to read a part of data.
 
         Parameters
         ----------
         key : Any
             grouping key.
-        rows : iterable of :class:`pandas.DataFrame`
+        rows : iterable of :class:`pandas.DataFrame` or iterable of :class:`pyspark.sql.Row`
             iterator of input rows associated with grouping key
         timerValues: TimerValues
                      Timer value for the current batch that process the input rows.
@@ -408,11 +420,16 @@ class StatefulProcessor(ABC):
 
     def handleExpiredTimer(
         self, key: Any, timerValues: TimerValues, expiredTimerInfo: ExpiredTimerInfo
-    ) -> Iterator["PandasDataFrameLike"]:
+    ) -> Union[Iterator["PandasDataFrameLike"], Iterator[Row]]:
         """
         Optional to implement. Will act return an empty iterator if not defined.
         Function that will be invoked when a timer is fired for a given key. Users can choose to
         evict state, register new timers and optionally provide output rows.
+
+        Type of return is different by which method is called, such as:
+
+        For `transformWithStateInPandas`, it should return Iterator[`pandas.DataFrame`].
+        For `transformWithState`, it should return Iterator[`pyspark.sql.Row`].
 
         Parameters
         ----------
@@ -426,7 +443,6 @@ class StatefulProcessor(ABC):
         """
         return iter([])
 
-    @abstractmethod
     def close(self) -> None:
         """
         Function called as the last method that allows for users to perform any cleanup or teardown
@@ -435,18 +451,23 @@ class StatefulProcessor(ABC):
         ...
 
     def handleInitialState(
-        self, key: Any, initialState: "PandasDataFrameLike", timerValues: TimerValues
+        self, key: Any, initialState: Union["PandasDataFrameLike", Row], timerValues: TimerValues
     ) -> None:
         """
         Optional to implement. Will act as no-op if not defined or no initial state input.
-         Function that will be invoked only in the first batch for users to process initial states.
+        Function that will be invoked only in the first batch for users to process initial states.
+
+        Type of initial state is different by which method is called, such as:
+
+        For `transformWithStateInPandas`, it should take `pandas.DataFrame`.
+        For `transformWithState`, it should take `pyspark.sql.Row`.
 
         Parameters
         ----------
         key : Any
             grouping key.
-        initialState: :class:`pandas.DataFrame`
-                      One dataframe in the initial state associated with the key.
+        initialState: :class:`pandas.DataFrame` or :class:`pyspark.sql.Row`
+                      One dataframe/row in the initial state associated with the key.
         timerValues: TimerValues
                      Timer value for the current batch that process the input rows.
                      Users can get the processing or event time timestamp from TimerValues.

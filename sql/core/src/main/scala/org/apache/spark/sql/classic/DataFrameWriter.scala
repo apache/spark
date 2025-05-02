@@ -213,7 +213,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
                 comment = extraOptions.get(TableCatalog.PROP_COMMENT),
                 collation = extraOptions.get(TableCatalog.PROP_COLLATION),
                 serde = None,
-                external = false)
+                external = false,
+                constraints = Seq.empty)
               runCommand(df.sparkSession) {
                 CreateTableAsSelect(
                   UnresolvedIdentifier(
@@ -478,7 +479,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           comment = extraOptions.get(TableCatalog.PROP_COMMENT),
           collation = extraOptions.get(TableCatalog.PROP_COLLATION),
           serde = None,
-          external = false)
+          external = false,
+          constraints = Seq.empty)
         ReplaceTableAsSelect(
           UnresolvedIdentifier(nameParts),
           partitioningAsV2,
@@ -499,7 +501,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           comment = extraOptions.get(TableCatalog.PROP_COMMENT),
           collation = extraOptions.get(TableCatalog.PROP_COLLATION),
           serde = None,
-          external = false)
+          external = false,
+          constraints = Seq.empty)
 
         CreateTableAsSelect(
           UnresolvedIdentifier(nameParts),

@@ -457,6 +457,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
       case (name, expr) =>
         val metadata = expr match {
           case ne: NamedExpression => ne.metadata
+          case gsf: GetStructField => gsf.metadata
           case _ => Metadata.empty
         }
         StructField(name.toString, expr.dataType, expr.nullable, metadata)

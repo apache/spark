@@ -433,62 +433,35 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
       val file = new File(dir, "file.json")
       Files.write(file.toPath, "0".getBytes(StandardCharsets.UTF_8))
 
-      // Ensure that we get an error when setting the singleVariantColumn JSON option while also
-      // specifying a schema.
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.read.format("json").option("singleVariantColumn", "var").schema("var variant")
-        },
-        condition = "INVALID_SINGLE_VARIANT_COLUMN",
-        parameters = Map.empty
-      )
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.read.format("json").option("singleVariantColumn", "another_name")
-            .schema("var variant").json(file.getAbsolutePath).collect()
-        },
-        condition = "INVALID_SINGLE_VARIANT_COLUMN",
-        parameters = Map.empty
-      )
-    }
-  }
+      // These are valid.
+      for ((schema, options) <- Seq(
+        ("var variant", Map()),
+        ("var variant, _corrupt_record string", Map()),
+        ("_corrupt_record string, var variant", Map()),
+        ("c string, var variant", Map("columnNameOfCorruptRecord" -> "c"))
+      )) {
+        spark.read.options(Map("singleVariantColumn" -> "var") ++ options)
+          .schema(schema).json(file.getAbsolutePath).collect()
+      }
 
-  test("json scan") {
-    val content = Seq(
-      "true",
-      """{"a": [], "b": null}""",
-      """{"a": 1}""",
-      "[1, 2, 3]"
-    ).mkString("\n").getBytes(StandardCharsets.UTF_8)
-
-    withTempDir { dir =>
-      val file = new File(dir, "file.json")
-      Files.write(file.toPath, content)
-
-      checkAnswer(
-        spark.read.format("json").option("singleVariantColumn", "var")
-          .load(file.getAbsolutePath)
-          .selectExpr("to_json(var)"),
-        Seq(Row("true"), Row("""{"a":[],"b":null}"""), Row("""{"a":1}"""), Row("[1,2,3]"))
-      )
-
-      checkAnswer(
-        spark.read.format("json").schema("a variant, b variant")
-          .load(file.getAbsolutePath).selectExpr("to_json(a)", "to_json(b)"),
-        Seq(Row(null, null), Row("[]", "null"), Row("1", null), Row(null, null))
-      )
-    }
-
-    // Test scan with partitions.
-    withTempDir { dir =>
-      new File(dir, "a=1/b=2/").mkdirs()
-      Files.write(new File(dir, "a=1/b=2/file.json").toPath, content)
-      checkAnswer(
-        spark.read.format("json").option("singleVariantColumn", "var")
-          .load(dir.getAbsolutePath).selectExpr("a", "b", "to_json(var)"),
-        Seq(Row(1, 2, "true"), Row(1, 2, """{"a":[],"b":null}"""), Row(1, 2, """{"a":1}"""),
-          Row(1, 2, "[1,2,3]"))
-      )
+      // These are invalid.
+      for ((schema, options) <- Seq(
+        ("a variant", Map()),
+        ("var int", Map()),
+        ("var variant, c string", Map()),
+        ("var variant, _corrupt_record int", Map()),
+        ("var variant, _corrupt_record string", Map("columnNameOfCorruptRecord" -> "c")),
+        ("var variant, var string", Map("columnNameOfCorruptRecord" -> "var"))
+      )) {
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.read.options(Map("singleVariantColumn" -> "var") ++ options)
+              .schema(schema).json(file.getAbsolutePath).collect()
+          },
+          condition = "INVALID_SINGLE_VARIANT_COLUMN",
+          parameters = Map("schema" -> s"\"${StructType.fromDDL(schema).sql}\"")
+        )
+      }
     }
   }
 

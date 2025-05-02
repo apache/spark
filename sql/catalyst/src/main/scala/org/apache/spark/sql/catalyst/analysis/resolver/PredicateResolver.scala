@@ -43,17 +43,17 @@ class PredicateResolver(
   with ResolvesExpressionChildren {
 
   private val typeCoercionTransformations: Seq[Expression => Expression] =
-    if (conf.ansiEnabled) {
-      PredicateResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
-    } else {
-      PredicateResolver.TYPE_COERCION_TRANSFORMATIONS
-    }
+  if (conf.ansiEnabled) {
+    PredicateResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
+  } else {
+    PredicateResolver.TYPE_COERCION_TRANSFORMATIONS
+  }
   private val typeCoercionResolver: TypeCoercionResolver =
     new TypeCoercionResolver(timezoneAwareExpressionResolver, typeCoercionTransformations)
 
   override def resolve(unresolvedPredicate: Predicate): Expression = {
     val predicateWithResolvedChildren =
-      withResolvedChildren(unresolvedPredicate, expressionResolver.resolve)
+      withResolvedChildren(unresolvedPredicate, expressionResolver.resolve _)
     val predicateWithTypeCoercion = typeCoercionResolver.resolve(predicateWithResolvedChildren)
     val predicateWithCharTypePadding = {
       ApplyCharTypePaddingHelper.singleNodePaddingForStringComparison(

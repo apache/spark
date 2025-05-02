@@ -409,4 +409,22 @@ class DefaultCollationTestSuiteV2 extends DefaultCollationTestSuite with Datasou
       checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c2"), Seq(Row(0)))
     }
   }
+
+  test("CREATE OR REPLACE TABLE with DEFAULT COLLATION") {
+    withTable(testTable) {
+      sql(
+        s"""CREATE OR REPLACE TABLE $testTable
+           | (c1 STRING, c2 STRING COLLATE UTF8_LCASE)
+           | DEFAULT COLLATION sr_ai
+           |""".stripMargin)
+      // scalastyle:off
+      sql(s"INSERT INTO $testTable VALUES ('Ć', 'a'), ('Č', 'A'), ('C', 'b')")
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c1 = 'Ć'"), Row(3))
+      // scalastyle:on
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c2 = 'a'"), Row(2))
+      val prefix = "SYSTEM.BUILTIN"
+      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $testTable"), Row(s"$prefix.sr_AI"))
+      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $testTable"), Row(s"$prefix.UTF8_LCASE"))
+    }
+  }
 }

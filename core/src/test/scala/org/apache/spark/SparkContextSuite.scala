@@ -244,10 +244,11 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test("add and list jar files") {
-    val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    val testJar = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    assume(testJar != null)
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-      sc.addJar(jarPath.toString)
+      sc.addJar(testJar.toString)
       assert(sc.listJars().count(_.contains("TestUDTF.jar")) == 1)
     } finally {
       sc.stop()
@@ -396,13 +397,15 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     schedulingMode <- Seq("local-mode", "non-local-mode");
     method <- Seq("addJar", "addFile")
   ) {
-    val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar").toString
     val master = schedulingMode match {
       case "local-mode" => "local"
       case "non-local-mode" => "local-cluster[1,1,1024]"
     }
     test(s"$method can be called twice with same file in $schedulingMode (SPARK-16787)") {
+      val testJar = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+      assume(testJar != null)
       sc = new SparkContext(master, "test")
+      val jarPath = testJar.toString
       method match {
         case "addJar" =>
           sc.addJar(jarPath)

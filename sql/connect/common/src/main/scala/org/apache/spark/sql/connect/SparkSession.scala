@@ -49,10 +49,11 @@ import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.toLiteral
+import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.internal.{SessionState, SharedState, SqlApiConf}
+import org.apache.spark.sql.internal.{SessionState, SharedState, SqlApiConf, SubqueryExpression}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -420,8 +421,8 @@ class SparkSession private[sql] (
   @DeveloperApi
   def newDataset[T](encoder: AgnosticEncoder[T], cols: Seq[Column])(
       f: proto.Relation.Builder => Unit): Dataset[T] = {
-    val references = cols.flatMap(_.node.collect { case n: SubqueryExpressionNode =>
-      n.relation
+    val references: Seq[proto.Relation] = cols.flatMap(_.node.collect {
+      case n: SubqueryExpression => n.ds.plan.getRoot
     })
 
     val builder = proto.Relation.newBuilder()
@@ -757,13 +758,14 @@ object SparkSession extends SparkSessionCompanion with Logging {
         }
       }
 
+    lazy val serverId = UUID.randomUUID().toString
+
     server.synchronized {
       if (server.isEmpty &&
         (remoteString.exists(_.startsWith("local")) ||
           (remoteString.isDefined && isAPIModeConnect)) &&
         maybeConnectStartScript.exists(Files.exists(_))) {
         val token = java.util.UUID.randomUUID().toString()
-        val serverId = UUID.randomUUID().toString
         server = Some {
           val args =
             Seq(
@@ -778,7 +780,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
           val pb = new ProcessBuilder(args: _*)
           // So don't exclude spark-sql jar in classpath
           pb.environment().remove(SparkConnectClient.SPARK_REMOTE)
-          pb.environment().remove("SPARK_CONNECT_MODE")
+          pb.environment().put("SPARK_CONNECT_MODE", "0")
           pb.environment().put("SPARK_IDENT_STRING", serverId)
           pb.environment().put("HOSTNAME", "local")
           pb.environment().put("SPARK_CONNECT_AUTHENTICATE_TOKEN", token)
@@ -789,6 +791,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
         Option(System.getenv("SPARK_LOG_DIR"))
           .orElse(Option(System.getenv("SPARK_HOME")).map(p => Paths.get(p, "logs").toString))
           .foreach { p =>
+            Files.createDirectories(Paths.get(p))
             val logFile = Paths
               .get(
                 p,
@@ -812,8 +815,9 @@ object SparkSession extends SparkSessionCompanion with Logging {
         Runtime.getRuntime.addShutdownHook(new Thread() {
           override def run(): Unit = server.synchronized {
             if (server.isDefined) {
-              new ProcessBuilder(maybeConnectStopScript.get.toString)
-                .start()
+              val builder = new ProcessBuilder(maybeConnectStopScript.get.toString)
+              builder.environment().put("SPARK_IDENT_STRING", serverId)
+              builder.start()
             }
           }
         })

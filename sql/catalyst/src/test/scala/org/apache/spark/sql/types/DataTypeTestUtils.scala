@@ -101,7 +101,7 @@ object DataTypeTestUtils {
     TimestampNTZType,
     DateType,
     StringType,
-    BinaryType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes
+    BinaryType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes ++ timeTypes
 
   /**
    * All the types that we can use in a property check
@@ -117,7 +117,7 @@ object DataTypeTestUtils {
     DateType,
     StringType,
     TimestampType,
-    TimestampNTZType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes
+    TimestampNTZType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes ++ timeTypes
 
   /**
    * Instances of [[ArrayType]] for all [[AtomicType]]s. Arrays of these types may contain null.

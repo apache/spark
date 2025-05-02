@@ -87,14 +87,14 @@ class SparkOptimizer(
       ColumnPruning,
       LimitPushDown,
       PushPredicateThroughNonJoin,
-      PushProjectionThroughLimit,
+      PushProjectionThroughLimitAndOffset,
       RemoveNoopOperators),
     Batch("Infer window group limit", Once,
       InferWindowGroupLimit,
       LimitPushDown,
       LimitPushDownThroughWindow,
-      EliminateLimits,
-      ConstantFolding),
+      ConstantFolding,
+      EliminateLimits),
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*),
     Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)))
 

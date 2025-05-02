@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, GreaterThan, LessThan, Literal, Or, Rand}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -169,7 +170,7 @@ abstract class CTEInlineSuiteBase
         }.head.length == 2,
         "With-CTE should contain 2 CTE defs after analysis.")
       assert(
-        df.queryExecution.optimizedPlan.collect {
+        df.queryExecution.optimizedPlan.collectFirst {
           case r: RepartitionOperation => r
         }.isEmpty,
         "CTEs with one reference should all be inlined after optimization.")
@@ -254,7 +255,7 @@ abstract class CTEInlineSuiteBase
         }.head.length == 2,
         "With-CTE should contain 2 CTE defs after analysis.")
       assert(
-        df.queryExecution.optimizedPlan.collect {
+        df.queryExecution.optimizedPlan.collectFirst {
           case r: RepartitionOperation => r
         }.isEmpty,
         "Deterministic CTEs should all be inlined after optimization.")
@@ -833,6 +834,17 @@ abstract class CTEInlineSuiteBase
         )
       }
     }
+  }
+
+  test("SPARK-51625: command in CTE relations should trigger inline") {
+    val plan = UnresolvedWith(
+      child = UnresolvedRelation(Seq("t")),
+      cteRelations = Seq("t" -> SubqueryAlias("t", ShowTables(CurrentNamespace, pattern = None)))
+    )
+    assert(!spark.sessionState.analyzer.execute(plan).exists {
+      case _: WithCTE => true
+      case _ => false
+    })
   }
 }
 

@@ -134,19 +134,23 @@ object Cast extends QueryErrorsBase {
     // to convert data of these types to Variant Objects.
     case (_, VariantType) => variant.VariantGet.checkDataType(from, allowStructsAndMaps = false)
 
+    // non-null variants can generate nulls even in ANSI mode
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
-      canAnsiCast(fromType, toType) && resolvableNullability(fn, tn)
+      canAnsiCast(fromType, toType) && resolvableNullability(fn || (fromType == VariantType), tn)
 
+    // non-null variants can generate nulls even in ANSI mode
     case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
       canAnsiCast(fromKey, toKey) && canAnsiCast(fromValue, toValue) &&
-        resolvableNullability(fn, tn)
+        resolvableNullability(fn || (fromValue == VariantType), tn)
 
+    // non-null variants can generate nulls even in ANSI mode
     case (StructType(fromFields), StructType(toFields)) =>
       fromFields.length == toFields.length &&
         fromFields.zip(toFields).forall {
           case (fromField, toField) =>
             canAnsiCast(fromField.dataType, toField.dataType) &&
-              resolvableNullability(fromField.nullable, toField.nullable)
+              resolvableNullability(fromField.nullable || (fromField.dataType == VariantType),
+                toField.nullable)
         }
 
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true

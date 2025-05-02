@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 4.0 to 4.1
+
+- Since Spark 4.1, `mapInPandas` and `mapInArrow` enforces strict validation of the result against the schema. The column names must exactly match and types must match with compatible nullability. To restore the previous behavior, set `spark.sql.execution.arrow.pyspark.validateSchema.enabled` to `false`.
+
 ## Upgrading from Spark SQL 3.5 to 4.0
 
 - Since Spark 4.0, `spark.sql.ansi.enabled` is on by default. To restore the previous behavior, set `spark.sql.ansi.enabled` to `false` or `SPARK_ANSI_SQL_MODE` to `false`.
@@ -64,6 +68,7 @@ license: |
 - Since Spark 4.0, Views allow control over how they react to underlying query changes. By default views tolerate column type changes in the query and compensate with casts. To disable this feature set `spark.sql.legacy.viewSchemaBindingMode` to `false`. This also removes the clause from `DESCRIBE EXTENDED` and `SHOW CREATE TABLE`.
 - Since Spark 4.0, The Storage-Partitioned Join feature flag `spark.sql.sources.v2.bucketing.pushPartValues.enabled` is set to `true`. To restore the previous behavior, set `spark.sql.sources.v2.bucketing.pushPartValues.enabled` to `false`.
 - Since Spark 4.0, the `sentences` function uses `Locale(language)` instead of `Locale.US` when `language` parameter is not `NULL` and `country` parameter is `NULL`.
+- Since Spark 4.0, reading from a file source table will correctly respect query options, e.g. delimiters. Previously, the first query plan was cached and subsequent option changes ignored. To restore the previous behavior, set `spark.sql.legacy.readFileSourceTableCacheIgnoreOptions` to `true`.
 
 ## Upgrading from Spark SQL 3.5.3 to 3.5.4
 
