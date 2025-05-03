@@ -655,6 +655,18 @@ class DataSourceReader(ABC):
         >>> def read(self, partition: InputPartition):
         ...     yield Row(partition=partition.value, value=0)
         ...     yield Row(partition=partition.value, value=1)
+
+        Yields PyArrow RecordBatches:
+
+        >>> def read(self, partition: InputPartition):
+        ...     import pyarrow as pa
+        ...     data = {
+        ...         "partition": [partition.value] * 2,
+        ...         "value": [0, 1]
+        ...     }
+        ...     table = pa.Table.from_pydict(data)
+        ...     for batch in table.to_batches():
+        ...         yield batch
         """
         ...
 
@@ -986,6 +998,19 @@ class DataSourceArrowWriter(DataSourceWriter):
         -------
         :class:`WriterCommitMessage`
             a serializable commit message
+
+        Examples
+        --------
+        >>> from dataclasses import dataclass
+        >>> @dataclass
+        ... class MyCommitMessage(WriterCommitMessage):
+        ...     num_rows: int
+        ...
+        >>> def write(self, iterator: Iterator["RecordBatch"]) -> "WriterCommitMessage":
+        ...     total_rows = 0
+        ...     for batch in iterator:
+        ...         total_rows += len(batch)
+        ...     return MyCommitMessage(num_rows=total_rows)
         """
         ...
 

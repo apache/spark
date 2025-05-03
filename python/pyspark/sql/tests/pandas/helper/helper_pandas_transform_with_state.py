@@ -139,6 +139,14 @@ class ListStateProcessorFactory(StatefulProcessorFactory):
         return RowListStateProcessor()
 
 
+class ListStateLargeListProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return PandasListStateLargeListProcessor()
+
+    def row(self):
+        return RowListStateLargeListProcessor()
+
+
 class ListStateLargeTTLProcessorFactory(StatefulProcessorFactory):
     def pandas(self):
         return PandasListStateLargeTTLProcessor()
@@ -922,6 +930,129 @@ class RowListStateProcessor(StatefulProcessor):
         pass
 
 
+class PandasListStateLargeListProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        list_state_schema = StructType([StructField("value", IntegerType(), True)])
+        value_state_schema = StructType([StructField("size", IntegerType(), True)])
+        self.list_state = handle.getListState("listState", list_state_schema)
+        self.list_size_state = handle.getValueState("listSizeState", value_state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        elements_iter = self.list_state.get()
+        elements = list(elements_iter)
+
+        # Use the magic number 100 to test with both inline proto case and Arrow case.
+        # TODO(SPARK-51907): Let's update this to be either flexible or more reasonable default
+        #  value backed by various benchmarks.
+        # Put 90 elements per batch:
+        # 1st batch: read 0 element, and write 90 elements, read back 90 elements
+        #   (both use inline proto)
+        # 2nd batch: read 90 elements, and write 90 elements, read back 180 elements
+        #   (read uses both inline proto and Arrow, write uses Arrow)
+
+        if len(elements) == 0:
+            # should be the first batch
+            assert self.list_size_state.get() is None
+            new_elements = [(i,) for i in range(90)]
+            if key == ("0",):
+                self.list_state.put(new_elements)
+            else:
+                self.list_state.appendList(new_elements)
+            self.list_size_state.update((len(new_elements),))
+        else:
+            # check the elements
+            list_size = self.list_size_state.get()
+            assert list_size is not None
+            list_size = list_size[0]
+            assert list_size == len(
+                elements
+            ), f"list_size ({list_size}) != len(elements) ({len(elements)})"
+
+            expected_elements_in_state = [(i,) for i in range(list_size)]
+            assert elements == expected_elements_in_state
+
+            if key == ("0",):
+                # Use the operation `put`
+                new_elements = [(i,) for i in range(list_size + 90)]
+                self.list_state.put(new_elements)
+                final_size = len(new_elements)
+                self.list_size_state.update((final_size,))
+            else:
+                # Use the operation `appendList`
+                new_elements = [(i,) for i in range(list_size, list_size + 90)]
+                self.list_state.appendList(new_elements)
+                final_size = len(new_elements) + list_size
+                self.list_size_state.update((final_size,))
+
+        prev_elements = ",".join(map(lambda x: str(x[0]), elements))
+        updated_elements = ",".join(map(lambda x: str(x[0]), self.list_state.get()))
+
+        yield pd.DataFrame(
+            {"id": key, "prevElements": prev_elements, "updatedElements": updated_elements}
+        )
+
+
+class RowListStateLargeListProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        list_state_schema = StructType([StructField("value", IntegerType(), True)])
+        value_state_schema = StructType([StructField("size", IntegerType(), True)])
+        self.list_state = handle.getListState("listState", list_state_schema)
+        self.list_size_state = handle.getValueState("listSizeState", value_state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
+        elements_iter = self.list_state.get()
+
+        elements = list(elements_iter)
+
+        # Use the magic number 100 to test with both inline proto case and Arrow case.
+        # TODO(SPARK-51907): Let's update this to be either flexible or more reasonable default
+        #  value backed by various benchmarks.
+        # Put 90 elements per batch:
+        # 1st batch: read 0 element, and write 90 elements, read back 90 elements
+        #   (both use inline proto)
+        # 2nd batch: read 90 elements, and write 90 elements, read back 180 elements
+        #   (read uses both inline proto and Arrow, write uses Arrow)
+
+        if len(elements) == 0:
+            # should be the first batch
+            assert self.list_size_state.get() is None
+            new_elements = [(i,) for i in range(90)]
+            if key == ("0",):
+                self.list_state.put(new_elements)
+            else:
+                self.list_state.appendList(new_elements)
+            self.list_size_state.update((len(new_elements),))
+        else:
+            # check the elements
+            list_size = self.list_size_state.get()
+            assert list_size is not None
+            list_size = list_size[0]
+            assert list_size == len(
+                elements
+            ), f"list_size ({list_size}) != len(elements) ({len(elements)})"
+
+            expected_elements_in_state = [(i,) for i in range(list_size)]
+            assert elements == expected_elements_in_state
+
+            if key == ("0",):
+                # Use the operation `put`
+                new_elements = [(i,) for i in range(list_size + 90)]
+                self.list_state.put(new_elements)
+                final_size = len(new_elements)
+                self.list_size_state.update((final_size,))
+            else:
+                # Use the operation `appendList`
+                new_elements = [(i,) for i in range(list_size, list_size + 90)]
+                self.list_state.appendList(new_elements)
+                final_size = len(new_elements) + list_size
+                self.list_size_state.update((final_size,))
+
+        prev_elements = ",".join(map(lambda x: str(x[0]), elements))
+        updated_elements = ",".join(map(lambda x: str(x[0]), self.list_state.get()))
+
+        yield Row(id=key[0], prevElements=prev_elements, updatedElements=updated_elements)
+
+
 class PandasListStateLargeTTLProcessor(PandasListStateProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("temperature", IntegerType(), True)])
@@ -972,6 +1103,9 @@ class PandasMapStateProcessor(StatefulProcessor):
         assert next(map_iter)[1] == (value2,)
         self.map_state.removeKey(key1)
         assert not self.map_state.containsKey(key1)
+        assert self.map_state.exists()
+        self.map_state.clear()
+        assert not self.map_state.exists()
         yield pd.DataFrame({"id": key, "countAsString": str(count)})
 
     def close(self) -> None:
@@ -1010,6 +1144,9 @@ class RowMapStateProcessor(StatefulProcessor):
         assert next(map_iter)[1] == (value2,)
         self.map_state.removeKey(key1)
         assert not self.map_state.containsKey(key1)
+        assert self.map_state.exists()
+        self.map_state.clear()
+        assert not self.map_state.exists()
         yield Row(id=key[0], countAsString=str(count))
 
     def close(self) -> None:
@@ -1022,7 +1159,8 @@ class PandasMapStateLargeTTLProcessor(PandasMapStateProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         key_schema = StructType([StructField("name", StringType(), True)])
         value_schema = StructType([StructField("count", IntegerType(), True)])
-        self.map_state = handle.getMapState("mapState", key_schema, value_schema, 30000)
+        # Use a large timeout as long as 1 year
+        self.map_state = handle.getMapState("mapState", key_schema, value_schema, 31536000000)
         self.list_state = handle.getListState("listState", key_schema)
 
 
@@ -1032,7 +1170,8 @@ class RowMapStateLargeTTLProcessor(RowMapStateProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         key_schema = StructType([StructField("name", StringType(), True)])
         value_schema = StructType([StructField("count", IntegerType(), True)])
-        self.map_state = handle.getMapState("mapState", key_schema, value_schema, 30000)
+        # Use a large timeout as long as 1 year
+        self.map_state = handle.getMapState("mapState", key_schema, value_schema, 31536000000)
         self.list_state = handle.getListState("listState", key_schema)
 
 

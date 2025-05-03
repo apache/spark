@@ -84,7 +84,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
 
     val cteDefs = ArrayBuffer.empty[CTERelationDef]
     val (substituted, firstSubstituted) =
-      LegacyBehaviorPolicy.withName(conf.getConf(LEGACY_CTE_PRECEDENCE_POLICY)) match {
+      conf.getConf(LEGACY_CTE_PRECEDENCE_POLICY) match {
         case LegacyBehaviorPolicy.EXCEPTION =>
           assertNoNameConflictsInCTE(plan)
           traverseAndSubstituteCTE(plan, forceInline, Seq.empty, cteDefs, None)

@@ -397,6 +397,12 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
 
             @functools.wraps(ff)
             def inner(*args: Any, **kwargs: Any) -> Any:
+                # Propagates the active remote spark session to the current thread.
+                from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+
+                RemoteSparkSession._set_default_and_active_session(
+                    session  # type: ignore[arg-type]
+                )
                 # Set thread locals in child thread.
                 for attr, value in session_client_thread_local_attrs:
                     setattr(
@@ -635,8 +641,8 @@ class PythonEvalType:
     SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF: "PandasGroupedMapUDFTransformWithStateInitStateType" = (  # noqa: E501
         212
     )
-    SQL_TRANSFORM_WITH_STATE_UDF: "GroupedMapUDFTransformWithStateType" = 213
-    SQL_TRANSFORM_WITH_STATE_INIT_STATE_UDF: "GroupedMapUDFTransformWithStateInitStateType" = (  # noqa: E501
+    SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF: "GroupedMapUDFTransformWithStateType" = 213
+    SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF: "GroupedMapUDFTransformWithStateInitStateType" = (  # noqa: E501
         214
     )
     SQL_TABLE_UDF: "SQLTableUDFType" = 300

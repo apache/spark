@@ -30,7 +30,6 @@ from pyspark.sql.types import (
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedMixedTestCase, should_test_connect
-from pyspark.errors.exceptions.connect import AnalysisException, SparkConnectException
 
 if should_test_connect:
     from pyspark.sql.connect.column import Column
@@ -38,6 +37,7 @@ if should_test_connect:
     from pyspark.sql.window import Window as SW
     from pyspark.sql.connect import functions as CF
     from pyspark.sql.connect.window import Window as CW
+    from pyspark.errors.exceptions.connect import AnalysisException, SparkConnectException
 
 
 @unittest.skipIf(is_remote_only(), "Requires JVM access")

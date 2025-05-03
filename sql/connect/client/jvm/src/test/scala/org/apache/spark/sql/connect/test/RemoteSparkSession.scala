@@ -222,10 +222,15 @@ trait RemoteSparkSession
   }
 
   override def afterAll(): Unit = {
+    def isArrowAllocatorIssue(message: String): Boolean = {
+      Option(message).exists(m =>
+        m.contains("closed with outstanding") ||
+          m.contains("Memory leaked"))
+    }
     try {
       if (spark != null) spark.stop()
     } catch {
-      case e: IllegalStateException if Option(e.getMessage).exists(_.contains("Memory leaked")) =>
+      case e: IllegalStateException if isArrowAllocatorIssue(e.getMessage) =>
         throw e
       case e: Throwable => debug(e)
     }

@@ -57,6 +57,7 @@ from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
     TTLStatefulProcessorFactory,
     InvalidSimpleStatefulProcessorFactory,
     ListStateProcessorFactory,
+    ListStateLargeListProcessorFactory,
     ListStateLargeTTLProcessorFactory,
     MapStateProcessorFactory,
     MapStateLargeTTLProcessorFactory,
@@ -301,6 +302,79 @@ class TransformWithStateTestsMixin:
         self._test_transform_with_state_basic(
             ListStateProcessorFactory(), check_results, True, "processingTime"
         )
+
+    def test_transform_with_state_list_state_large_list(self):
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                expected_prev_elements = ""
+                expected_updated_elements = ",".join(map(lambda x: str(x), range(90)))
+            else:
+                # batch_id == 1:
+                expected_prev_elements = ",".join(map(lambda x: str(x), range(90)))
+                expected_updated_elements = ",".join(map(lambda x: str(x), range(180)))
+
+            assert set(batch_df.sort("id").collect()) == {
+                Row(
+                    id="0",
+                    prevElements=expected_prev_elements,
+                    updatedElements=expected_updated_elements,
+                ),
+                Row(
+                    id="1",
+                    prevElements=expected_prev_elements,
+                    updatedElements=expected_updated_elements,
+                ),
+            }
+
+        input_path = tempfile.mkdtemp()
+        checkpoint_path = tempfile.mkdtemp()
+
+        self._prepare_test_resource1(input_path)
+        time.sleep(2)
+        self._prepare_test_resource2(input_path)
+
+        df = self._build_test_df(input_path)
+
+        for q in self.spark.streams.active:
+            q.stop()
+        self.assertTrue(df.isStreaming)
+
+        output_schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("prevElements", StringType(), True),
+                StructField("updatedElements", StringType(), True),
+            ]
+        )
+
+        stateful_processor = self.get_processor(ListStateLargeListProcessorFactory())
+        if self.use_pandas():
+            tws_df = df.groupBy("id").transformWithStateInPandas(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="none",
+            )
+        else:
+            tws_df = df.groupBy("id").transformWithState(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="none",
+            )
+
+        q = (
+            tws_df.writeStream.queryName("this_query")
+            .option("checkpointLocation", checkpoint_path)
+            .foreachBatch(check_results)
+            .outputMode("update")
+            .start()
+        )
+        self.assertEqual(q.name, "this_query")
+        self.assertTrue(q.isActive)
+        q.processAllAvailable()
+        q.awaitTermination(10)
+        self.assertTrue(q.exception() is None)
 
     # test list state with ttl has the same behavior as list state when state doesn't expire.
     def test_transform_with_state_list_state_large_ttl(self):

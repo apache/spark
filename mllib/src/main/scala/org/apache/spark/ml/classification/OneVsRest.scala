@@ -277,6 +277,11 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
     OneVsRestParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit = {
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "OneVsRestModel does not support saving to local filesystem path."
+        )
+      }
       val extraJson = ("labelMetadata" -> instance.labelMetadata.json) ~
         ("numClasses" -> instance.models.length)
       OneVsRestParams.saveImpl(path, instance, sparkSession, Some(extraJson))
@@ -293,6 +298,11 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
     private val className = classOf[OneVsRestModel].getName
 
     override def load(path: String): OneVsRestModel = {
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "OneVsRestModel does not support loading from local filesystem path."
+        )
+      }
       implicit val format = DefaultFormats
       val (metadata, classifier) = OneVsRestParams.loadImpl(path, sparkSession, className)
       val labelMetadata = Metadata.fromJson((metadata.metadata \ "labelMetadata").extract[String])

@@ -840,6 +840,8 @@ object SparkConnectClient {
 
     testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated,
 
+    (Test / javaOptions) += "-Darrow.memory.debug.allocator=true",
+
     (assembly / test) := { },
 
     (assembly / logLevel) := Level.Info,
@@ -1713,7 +1715,7 @@ object TestSettings {
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),
     (Test / testOptions) += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
-    libraryDependencies += "com.github.sbt.junit" % "jupiter-interface" % "0.13.3" % "test",
+    libraryDependencies += "com.github.sbt.junit" % "jupiter-interface" % "0.14.0" % "test",
     // `parallelExecutionInTest` controls whether test suites belonging to the same SBT project
     // can run in parallel with one another. It does NOT control whether tests execute in parallel
     // within the same JVM (which is controlled by `testForkedParallel`) or whether test cases

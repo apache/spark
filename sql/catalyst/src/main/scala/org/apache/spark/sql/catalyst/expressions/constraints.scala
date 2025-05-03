@@ -18,11 +18,17 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.UUID
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
+import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.types.DataType
 
-trait TableConstraint {
+trait TableConstraint extends Expression with Unevaluable {
+  /** Convert to a data source v2 constraint */
+  def toV2Constraint: Constraint
 
   /** Returns the user-provided name of the constraint */
   def userProvidedName: String
@@ -92,6 +98,10 @@ trait TableConstraint {
       )
     }
   }
+
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+
+  override def dataType: DataType = throw new UnresolvedException("dataType")
 }
 
 case class ConstraintCharacteristic(enforced: Option[Boolean], rely: Option[Boolean])
@@ -108,9 +118,24 @@ case class CheckConstraint(
     override val tableName: String = null,
     override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
   extends UnaryExpression
-  with Unevaluable
   with TableConstraint {
 // scalastyle:on line.size.limit
+
+  def toV2Constraint: Constraint = {
+    val predicate = new V2ExpressionBuilder(child, true).buildPredicate().orNull
+    val enforced = userProvidedCharacteristic.enforced.getOrElse(true)
+    val rely = userProvidedCharacteristic.rely.getOrElse(false)
+    // TODO(SPARK-51903): Change the status to VALIDATED when we support validation on ALTER TABLE
+    val validateStatus = Constraint.ValidationStatus.UNVALIDATED
+    Constraint
+      .check(name)
+      .predicateSql(condition)
+      .predicate(predicate)
+      .rely(rely)
+      .enforced(enforced)
+      .validationStatus(validateStatus)
+      .build()
+  }
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
@@ -120,8 +145,6 @@ case class CheckConstraint(
   }
 
   override def sql: String = s"CONSTRAINT $userProvidedName CHECK ($condition)"
-
-  override def dataType: DataType = StringType
 
   override def withUserProvidedName(name: String): TableConstraint = copy(userProvidedName = name)
 
@@ -137,8 +160,19 @@ case class PrimaryKeyConstraint(
     override val userProvidedName: String = null,
     override val tableName: String = null,
     override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
-  extends TableConstraint {
+  extends LeafExpression with TableConstraint {
 // scalastyle:on line.size.limit
+
+  override def toV2Constraint: Constraint = {
+    val enforced = userProvidedCharacteristic.enforced.getOrElse(false)
+    val rely = userProvidedCharacteristic.rely.getOrElse(false)
+    Constraint
+      .primaryKey(name, columns.map(FieldReference.column).toArray)
+      .rely(rely)
+      .enforced(enforced)
+      .validationStatus(Constraint.ValidationStatus.UNVALIDATED)
+      .build()
+  }
 
   override protected def generateName(tableName: String): String = s"${tableName}_pk"
 
@@ -158,8 +192,19 @@ case class UniqueConstraint(
     override val userProvidedName: String = null,
     override val tableName: String = null,
     override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
-    extends TableConstraint {
+  extends LeafExpression with TableConstraint {
 // scalastyle:on line.size.limit
+
+  override def toV2Constraint: Constraint = {
+    val enforced = userProvidedCharacteristic.enforced.getOrElse(false)
+    val rely = userProvidedCharacteristic.rely.getOrElse(false)
+    Constraint
+      .unique(name, columns.map(FieldReference.column).toArray)
+      .rely(rely)
+      .enforced(enforced)
+      .validationStatus(Constraint.ValidationStatus.UNVALIDATED)
+      .build()
+  }
 
   override protected def generateName(tableName: String): String = {
     s"${tableName}_uniq_$randomSuffix"
@@ -183,8 +228,24 @@ case class ForeignKeyConstraint(
     override val userProvidedName: String = null,
     override val tableName: String = null,
     override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
-  extends TableConstraint {
+  extends LeafExpression with TableConstraint {
 // scalastyle:on line.size.limit
+
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  override def toV2Constraint: Constraint = {
+    val enforced = userProvidedCharacteristic.enforced.getOrElse(false)
+    val rely = userProvidedCharacteristic.rely.getOrElse(false)
+    Constraint
+      .foreignKey(name,
+        childColumns.map(FieldReference.column).toArray,
+        parentTableId.asIdentifier,
+        parentColumns.map(FieldReference.column).toArray)
+      .rely(rely)
+      .enforced(enforced)
+      .validationStatus(Constraint.ValidationStatus.UNVALIDATED)
+      .build()
+  }
 
   override protected def generateName(tableName: String): String =
     s"${tableName}_${parentTableId.last}_fk_$randomSuffix"

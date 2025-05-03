@@ -262,10 +262,10 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
       .setListStateGet(ListStateGet.newBuilder().setIteratorId(iteratorId).build()).build()
     stateServer.handleListStateRequest(message)
     verify(listState, times(0)).get()
-    // 1 for row, 1 for end of the data, 1 for proto response
-    verify(outputStream, times(3)).writeInt(any)
-    // 1 for sending an actual row, 1 for sending proto message
-    verify(outputStream, times(2)).write(any[Array[Byte]])
+    // 1 for proto response
+    verify(outputStream).writeInt(any)
+    // 1 for sending proto message
+    verify(outputStream).write(any[Array[Byte]])
   }
 
   test("list state get - iterator in map with multiple batches") {
@@ -282,20 +282,20 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     // First call should send 2 records.
     stateServer.handleListStateRequest(message)
     verify(listState, times(0)).get()
-    // maxRecordsPerBatch times for rows, 1 for end of the data, 1 for proto response
-    verify(outputStream, times(maxRecordsPerBatch + 2)).writeInt(any)
-    // maxRecordsPerBatch times for rows, 1 for sending proto message
-    verify(outputStream, times(maxRecordsPerBatch + 1)).write(any[Array[Byte]])
+    // 1 for proto response
+    verify(outputStream).writeInt(any)
+    // 1 for proto message
+    verify(outputStream).write(any[Array[Byte]])
     // Second call should send the remaining 2 records.
     stateServer.handleListStateRequest(message)
     verify(listState, times(0)).get()
     // Since Mockito's verify counts the total number of calls, the expected number of writeInt
     // and write should be accumulated from the prior count; the number of calls are the same
     // with prior one.
-    // maxRecordsPerBatch times for rows, 1 for end of the data, 1 for proto response
-    verify(outputStream, times(maxRecordsPerBatch * 2 + 4)).writeInt(any)
-    // maxRecordsPerBatch times for rows, 1 for sending proto message
-    verify(outputStream, times(maxRecordsPerBatch * 2 + 2)).write(any[Array[Byte]])
+    // 1 for proto response
+    verify(outputStream, times(2)).writeInt(any)
+    // 1 for sending proto message
+    verify(outputStream, times(2)).write(any[Array[Byte]])
   }
 
   test("list state get - iterator not in map") {
@@ -314,17 +314,26 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
 
     // Verify that only maxRecordsPerBatch (2) rows are written to the output stream while still
     // having 1 row left in the iterator.
-    // maxRecordsPerBatch (2) for rows, 1 for end of the data, 1 for proto response
-    verify(outputStream, times(maxRecordsPerBatch + 2)).writeInt(any)
-    // 2 for rows, 1 for proto message
-    verify(outputStream, times(maxRecordsPerBatch + 1)).write(any[Array[Byte]])
+    // 1 for proto response
+    verify(outputStream, times(1)).writeInt(any)
+    // 1 for proto message
+    verify(outputStream, times(1)).write(any[Array[Byte]])
   }
 
-  test("list state put") {
+  test("list state put - inlined data") {
     val message = ListStateCall.newBuilder().setStateName(stateName)
-      .setListStatePut(ListStatePut.newBuilder().build()).build()
+      .setListStatePut(ListStatePut.newBuilder().setFetchWithArrow(false).build()).build()
     stateServer.handleListStateRequest(message)
-    verify(transformWithStateInPySparkDeserializer).readListElements(any, any)
+    // Verify that the data is not read from Arrow stream. It is inlined.
+    verify(transformWithStateInPySparkDeserializer, times(0)).readArrowBatches(any)
+    verify(listState).put(any)
+  }
+
+  test("list state put - data via Arrow batch") {
+    val message = ListStateCall.newBuilder().setStateName(stateName)
+      .setListStatePut(ListStatePut.newBuilder().setFetchWithArrow(true).build()).build()
+    stateServer.handleListStateRequest(message)
+    verify(transformWithStateInPySparkDeserializer).readArrowBatches(any)
     verify(listState).put(any)
   }
 
@@ -336,11 +345,20 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     verify(listState).appendValue(any[Row])
   }
 
-  test("list state append list") {
+  test("list state append list - inlined data") {
     val message = ListStateCall.newBuilder().setStateName(stateName)
-      .setAppendList(AppendList.newBuilder().build()).build()
+      .setAppendList(AppendList.newBuilder().setFetchWithArrow(false).build()).build()
     stateServer.handleListStateRequest(message)
-    verify(transformWithStateInPySparkDeserializer).readListElements(any, any)
+    // Verify that the data is not read from Arrow stream. It is inlined.
+    verify(transformWithStateInPySparkDeserializer, times(0)).readArrowBatches(any)
+    verify(listState).appendList(any)
+  }
+
+  test("list state append list - data via Arrow batch") {
+    val message = ListStateCall.newBuilder().setStateName(stateName)
+      .setAppendList(AppendList.newBuilder().setFetchWithArrow(true).build()).build()
+    stateServer.handleListStateRequest(message)
+    verify(transformWithStateInPySparkDeserializer).readArrowBatches(any)
     verify(listState).appendList(any)
   }
 

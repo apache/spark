@@ -185,6 +185,7 @@ should use for your streaming applications and pipelines.
 
     Overview <self>
     getting_started/index
+    tutorial/index
     user_guide/index
     reference/index
     development/index

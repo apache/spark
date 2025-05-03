@@ -661,7 +661,11 @@ class SparkConnectPlanner(
 
           case PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF |
               PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF =>
-            transformTransformWithStateInPandas(pythonUdf, group, rel)
+            transformTransformWithStateInPySpark(pythonUdf, group, rel, usePandas = true)
+
+          case PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF |
+              PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF =>
+            transformTransformWithStateInPySpark(pythonUdf, group, rel, usePandas = false)
 
           case _ =>
             throw InvalidPlanInput(
@@ -1102,10 +1106,11 @@ class SparkConnectPlanner(
       .logicalPlan
   }
 
-  private def transformTransformWithStateInPandas(
+  private def transformTransformWithStateInPySpark(
       pythonUdf: PythonUDF,
       groupedDs: RelationalGroupedDataset,
-      rel: proto.GroupMap): LogicalPlan = {
+      rel: proto.GroupMap,
+      usePandas: Boolean): LogicalPlan = {
     val twsInfo = rel.getTransformWithStateInfo
     val outputSchema: StructType = {
       transformDataType(twsInfo.getOutputSchema) match {
@@ -1131,25 +1136,52 @@ class SparkConnectPlanner(
         .builder(groupedDs.df.logicalPlan.output)
         .asInstanceOf[PythonUDF]
 
-      groupedDs
-        .transformWithStateInPandas(
-          Column(resolvedPythonUDF),
-          outputSchema,
-          rel.getOutputMode,
-          twsInfo.getTimeMode,
-          initialStateDs,
-          twsInfo.getEventTimeColumnName)
-        .logicalPlan
+      if (usePandas) {
+        groupedDs
+          .transformWithStateInPandas(
+            Column(resolvedPythonUDF),
+            outputSchema,
+            rel.getOutputMode,
+            twsInfo.getTimeMode,
+            initialStateDs,
+            twsInfo.getEventTimeColumnName)
+          .logicalPlan
+      } else {
+        // use Row
+        groupedDs
+          .transformWithStateInPySpark(
+            Column(resolvedPythonUDF),
+            outputSchema,
+            rel.getOutputMode,
+            twsInfo.getTimeMode,
+            initialStateDs,
+            twsInfo.getEventTimeColumnName)
+          .logicalPlan
+      }
+
     } else {
-      groupedDs
-        .transformWithStateInPandas(
-          Column(pythonUdf),
-          outputSchema,
-          rel.getOutputMode,
-          twsInfo.getTimeMode,
-          null,
-          twsInfo.getEventTimeColumnName)
-        .logicalPlan
+      if (usePandas) {
+        groupedDs
+          .transformWithStateInPandas(
+            Column(pythonUdf),
+            outputSchema,
+            rel.getOutputMode,
+            twsInfo.getTimeMode,
+            null,
+            twsInfo.getEventTimeColumnName)
+          .logicalPlan
+      } else {
+        // use Row
+        groupedDs
+          .transformWithStateInPySpark(
+            Column(pythonUdf),
+            outputSchema,
+            rel.getOutputMode,
+            twsInfo.getTimeMode,
+            null,
+            twsInfo.getEventTimeColumnName)
+          .logicalPlan
+      }
     }
   }
 
@@ -4108,7 +4140,8 @@ class SparkConnectPlanner(
    */
   private def replaceIntegerLiteralWithOrdinal(groupingExpression: Expression) =
     groupingExpression match {
-      case Literal(value: Int, IntegerType) => UnresolvedOrdinal(value)
+      case literal @ Literal(value: Int, IntegerType) =>
+        CurrentOrigin.withOrigin(literal.origin) { UnresolvedOrdinal(value) }
       case other => other
     }
 

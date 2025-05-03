@@ -22,6 +22,7 @@ import java.nio.channels.{Channels, ServerSocketChannel}
 import java.time.Duration
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
 import org.apache.arrow.vector.VectorSchemaRoot
@@ -38,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleImplBase, StatefulProcessorHandleState, StateVariableType}
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateResponseWithStringTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, UtilsRequest, ValueStateCall}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithListGet
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{BinaryType, LongType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
@@ -481,7 +483,17 @@ class TransformWithStateInPySparkStateServer(
           sendResponse(2, s"state $stateName doesn't exist")
         }
       case ListStateCall.MethodCase.LISTSTATEPUT =>
-        val rows = deserializer.readListElements(inputStream, listStateInfo)
+        val rows = if (message.getListStatePut.getFetchWithArrow) {
+          deserializer.readArrowBatches(inputStream)
+        } else {
+          val elements = message.getListStatePut.getValueList.asScala
+          elements.map { e =>
+            PythonSQLUtils.toJVMRow(
+              e.toByteArray,
+              listStateInfo.schema,
+              listStateInfo.deserializer)
+          }
+        }
         listStateInfo.listState.put(rows.toArray)
         sendResponse(0)
       case ListStateCall.MethodCase.LISTSTATEGET =>
@@ -494,8 +506,7 @@ class TransformWithStateInPySparkStateServer(
         if (!iteratorOption.get.hasNext) {
           sendResponse(2, s"List state $stateName doesn't contain any value.")
         } else {
-          sendResponse(0)
-          sendIteratorForListState(iteratorOption.get)
+          sendResponseWithListGet(0, iter = iteratorOption.get)
         }
       case ListStateCall.MethodCase.APPENDVALUE =>
         val byteArray = message.getAppendValue.getValue.toByteArray
@@ -504,7 +515,17 @@ class TransformWithStateInPySparkStateServer(
         listStateInfo.listState.appendValue(newRow)
         sendResponse(0)
       case ListStateCall.MethodCase.APPENDLIST =>
-        val rows = deserializer.readListElements(inputStream, listStateInfo)
+        val rows = if (message.getAppendList.getFetchWithArrow) {
+          deserializer.readArrowBatches(inputStream)
+        } else {
+          val elements = message.getAppendList.getValueList.asScala
+          elements.map { e =>
+            PythonSQLUtils.toJVMRow(
+              e.toByteArray,
+              listStateInfo.schema,
+              listStateInfo.deserializer)
+          }
+        }
         listStateInfo.listState.appendList(rows.toArray)
         sendResponse(0)
       case ListStateCall.MethodCase.CLEAR =>
@@ -650,6 +671,9 @@ class TransformWithStateInPySparkStateServer(
           mapStateInfo.keyDeserializer)
         mapStateInfo.mapState.removeKey(keyRow)
         sendResponse(0)
+      case MapStateCall.MethodCase.CLEAR =>
+        mapStateInfo.mapState.clear()
+        sendResponse(0)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }
@@ -659,7 +683,7 @@ class TransformWithStateInPySparkStateServer(
       stateName: String,
       schemaString: String,
       stateType: StateVariableType.StateVariableType,
-      ttlDurationMs: Option[Int],
+      ttlDurationMs: Option[Long],
       mapStateValueSchemaString: String = null): Unit = {
     val schema = StructType.fromString(schemaString)
     val expressionEncoder = ExpressionEncoder(schema).resolveAndBind()
@@ -761,6 +785,46 @@ class TransformWithStateInPySparkStateServer(
         responseMessageBuilder.setErrorMessage(errorMessage)
       }
       responseMessageBuilder.setValue(stringVal)
+      val responseMessage = responseMessageBuilder.build()
+      val responseMessageBytes = responseMessage.toByteArray
+      val byteLength = responseMessageBytes.length
+      outputStream.writeInt(byteLength)
+      outputStream.write(responseMessageBytes)
+    }
+
+    def sendResponseWithListGet(
+        status: Int,
+        errorMessage: String = null,
+        iter: Iterator[Row] = null): Unit = {
+      val responseMessageBuilder = StateResponseWithListGet.newBuilder()
+        .setStatusCode(status)
+      if (status != 0 && errorMessage != null) {
+        responseMessageBuilder.setErrorMessage(errorMessage)
+      }
+
+      if (status == 0) {
+        // Only write a single batch in each GET request. Stops writing row if rowCount reaches
+        // the arrowTransformWithStateInPySparkMaxRecordsPerBatch limit. This is to handle a case
+        // when there are multiple state variables, user tries to access a different state variable
+        // while the current state variable is not exhausted yet.
+        var rowCount = 0
+        while (iter.hasNext && rowCount < arrowTransformWithStateInPySparkMaxRecordsPerBatch) {
+          val data = iter.next()
+
+          // Serialize the value row as a byte array
+          val valueBytes = PythonSQLUtils.toPyRow(data)
+
+          responseMessageBuilder.addValue(ByteString.copyFrom(valueBytes))
+
+          rowCount += 1
+        }
+
+        assert(rowCount > 0, s"rowCount should be greater than 0 when status code is 0, " +
+          s"iter.hasNext ${iter.hasNext}")
+
+        responseMessageBuilder.setRequireNextFetch(iter.hasNext)
+      }
+
       val responseMessage = responseMessageBuilder.build()
       val responseMessageBytes = responseMessage.toByteArray
       val byteLength = responseMessageBytes.length

@@ -52,6 +52,7 @@ case class ReplaceTableExec(
       .withColumns(columns)
       .withPartitions(partitioning.toArray)
       .withProperties(tableProperties.asJava)
+      .withConstraints(tableSpec.constraints.toArray)
       .build()
     catalog.createTable(ident, tableInfo)
     Seq.empty

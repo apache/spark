@@ -1981,9 +1981,10 @@ class SparkConnectClient(object):
         self.thread_local.ml_caches.add(cache_id)
 
     def remove_ml_cache(self, cache_id: str) -> None:
+        deleted = self._delete_ml_cache([cache_id])
+        # TODO: Fix the code: change thread-local `ml_caches` to global `ml_caches`.
         if hasattr(self.thread_local, "ml_caches"):
             if cache_id in self.thread_local.ml_caches:
-                deleted = self._delete_ml_cache([cache_id])
                 for obj_id in deleted:
                     self.thread_local.ml_caches.remove(obj_id)
 

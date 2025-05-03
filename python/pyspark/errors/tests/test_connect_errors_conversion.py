@@ -19,13 +19,15 @@
 import unittest
 
 from pyspark.testing import should_test_connect, connect_requirement_message
-from pyspark.errors.exceptions.connect import (
-    convert_exception,
-    EXCEPTION_CLASS_MAPPING,
-    SparkConnectGrpcException,
-    PythonException,
-    AnalysisException,
-)
+
+if should_test_connect:
+    from pyspark.errors.exceptions.connect import (
+        convert_exception,
+        EXCEPTION_CLASS_MAPPING,
+        SparkConnectGrpcException,
+        PythonException,
+        AnalysisException,
+    )
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

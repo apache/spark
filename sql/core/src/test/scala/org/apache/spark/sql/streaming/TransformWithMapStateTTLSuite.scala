@@ -28,14 +28,13 @@ import org.apache.spark.sql.streaming.util.StreamManualClock
 class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
   extends StatefulProcessor[String, InputEvent, OutputEvent] {
 
-  @transient private var _mapState: MapStateImplWithTTL[String, Int] = _
+  @transient private var _mapState: MapState[String, Int] = _
 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _mapState = getHandle
       .getMapState("mapState", Encoders.STRING, Encoders.scalaInt, ttlConfig)
-      .asInstanceOf[MapStateImplWithTTL[String, Int]]
   }
 
   override def handleInputRows(
@@ -45,7 +44,7 @@ class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
     var results = List[OutputEvent]()
 
     for (row <- inputRows) {
-      val resultIter = processRow(row, _mapState)
+      val resultIter = processRow(row, _mapState.asInstanceOf[MapStateImplWithTTL[String, Int]])
       resultIter.foreach { r =>
         results = r :: results
       }
@@ -107,14 +106,14 @@ case class MapOutputEvent(
 class MapStateTTLProcessor(ttlConfig: TTLConfig)
   extends StatefulProcessor[String, MapInputEvent, MapOutputEvent] {
 
-  @transient private var _mapState: MapStateImplWithTTL[String, Int] = _
+  @transient private var _mapState: MapState[String, Int] = _
 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _mapState = getHandle
       .getMapState("mapState", Encoders.STRING, Encoders.scalaInt, ttlConfig)
-      .asInstanceOf[MapStateImplWithTTL[String, Int]]
+
   }
 
   override def handleInputRows(
@@ -124,7 +123,7 @@ class MapStateTTLProcessor(ttlConfig: TTLConfig)
     var results = List[MapOutputEvent]()
 
     for (row <- inputRows) {
-      val resultIter = processRow(row, _mapState)
+      val resultIter = processRow(row, _mapState.asInstanceOf[MapStateImplWithTTL[String, Int]])
       resultIter.foreach { r =>
         results = r :: results
       }

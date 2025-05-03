@@ -50,9 +50,7 @@ private[spark] object UIWorkloadGenerator {
     val conf = new SparkConf().setMaster(args(0)).setAppName("Spark UI tester")
 
     val schedulingMode = SchedulingMode.withName(args(1))
-    if (schedulingMode == SchedulingMode.FAIR) {
-      conf.set(SCHEDULER_MODE, "FAIR")
-    }
+    conf.set(SCHEDULER_MODE, schedulingMode)
     val nJobSet = args(2).toInt
     val sc = new SparkContext(conf)
 
