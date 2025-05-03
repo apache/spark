@@ -2348,8 +2348,7 @@ private[spark] class DAGScheduler(
     val rollingBackStages = HashSet[Stage]()
     stagesToRollback.foreach {
       case mapStage: ShuffleMapStage =>
-        val numMissingPartitions = mapStage.findMissingPartitions().length
-        if (numMissingPartitions < mapStage.numTasks) {
+        if (mapStage.numAvailableOutputs > 0) {
           if (sc.conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
             val reason = "A shuffle map stage with indeterminate output was failed " +
               "and retried. However, Spark can only do this while using the new " +
