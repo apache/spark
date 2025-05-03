@@ -337,6 +337,7 @@
       -Dio.netty.allocator.type=pooled
       -Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE
       --enable-native-access=ALL-UNNAMED
+      -Dmvn.executable=${maven.multiModuleProjectDirectory}/build/mvn
     </extraJavaTestArgs>
     <mariadb.java.client.version>2.7.12</mariadb.java.client.version>
     <mysql.connector.version>9.2.0</mysql.connector.version>
@@ -2680,6 +2681,12 @@
         <groupId>javax.servlet</groupId>
         <artifactId>javax.servlet-api</artifactId>
         <version>${javaxservlet.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.maven.shared</groupId>
+        <artifactId>maven-invoker</artifactId>
+        <version>3.3.0</version>
+        <scope>test</scope>
       </dependency>
     </dependencies>
   </dependencyManagement>

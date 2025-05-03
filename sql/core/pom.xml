@@ -294,6 +294,10 @@
       <groupId>org.apache.arrow</groupId>
       <artifactId>arrow-compression</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.apache.maven.shared</groupId>
+      <artifactId>maven-invoker</artifactId>
+    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
