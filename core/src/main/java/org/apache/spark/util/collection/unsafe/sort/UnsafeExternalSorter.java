@@ -493,13 +493,13 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     assert(inMemSorter != null);
     if (inMemSorter.numRecords() >= numElementsForSpillThreshold) {
       logger.info("Spilling data because number of spilledRecords ({}) crossed the threshold {}",
-        MDC.of(LogKeys.NUM_ELEMENTS_SPILL_RECORDS$.MODULE$,inMemSorter.numRecords()),
+        MDC.of(LogKeys.NUM_ELEMENTS_SPILL_RECORDS$.MODULE$, inMemSorter.numRecords()),
         MDC.of(LogKeys.NUM_ELEMENTS_SPILL_THRESHOLD$.MODULE$, numElementsForSpillThreshold));
       spill();
     } else if (inMemRecordsSize >= recordsSizeForSpillThreshold) {
-      logger.info("Spilling data because size of spilledRecords ({}) crossed the threshold {}",
-        MDC.of(LogKeys.NUM_ELEMENTS_SPILL_RECORDS$.MODULE$,inMemSorter.numRecords()),
-        MDC.of(LogKeys.NUM_ELEMENTS_SPILL_THRESHOLD$.MODULE$, recordsSizeForSpillThreshold));
+      logger.info("Spilling data because size of spilledRecords ({}) crossed the size threshold {}",
+        MDC.of(LogKeys.SPILL_RECORDS_SIZE$.MODULE$, inMemRecordsSize),
+        MDC.of(LogKeys.SPILL_RECORDS_SIZE_THRESHOLD$.MODULE$, recordsSizeForSpillThreshold));
       spill();
     }
 

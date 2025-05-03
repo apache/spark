@@ -769,6 +769,8 @@ private[spark] object LogKeys {
   case object SPARK_REPO_URL extends LogKey
   case object SPARK_REVISION extends LogKey
   case object SPARK_VERSION extends LogKey
+  case object SPILL_RECORDS_SIZE extends LogKey
+  case object SPILL_RECORDS_SIZE_THRESHOLD extends LogKey
   case object SPILL_TIMES extends LogKey
   case object SQL_TEXT extends LogKey
   case object SRC_PATH extends LogKey
