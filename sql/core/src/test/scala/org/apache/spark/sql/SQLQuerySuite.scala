@@ -4963,14 +4963,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     )
   }
 
-  test("SPARK-51016: Non-deterministic functions should set map stages indeterminate") {
+  test("SPARK-51016: Non-deterministic expressions should set map stages indeterminate") {
     Seq(true, false).foreach { aqeEnabled =>
       withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
         val df = sql(
           """
-            |SELECT count(DISTINCT r)
+            |SELECT sum(id)
             |FROM (
-            |  SELECT rand() AS r FROM range(1000)
+            |  SELECT sum(id) AS id
+            |  FROM (
+            |    SELECT id, rand() AS r FROM range(1000)
+            |  )
+            |  GROUP BY r
             |)
             |""".stripMargin)
         df.collect()
@@ -4983,6 +4987,93 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           "the second map stage should be deterministic")
         assert(!ShuffleExchangeExec.isDeterministicStage(mapStagePlans(1)),
           "the first map stage should be non-deterministic")
+      }
+    }
+  }
+
+  test("SPARK-51016: Non-deterministic expressions should set map stages indeterminate 2") {
+    Seq(true, false).foreach { aqeEnabled =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+        withTempView("v") {
+          sql(
+            """
+              |SELECT id, sum(r) AS r
+              |FROM (
+              |  SELECT /*+ REPARTITION(10) */ id, int(rand() * 1000) AS r FROM range(1000)
+              |)
+              |GROUP BY id
+              |""".stripMargin).createTempView("v")
+          val df = sql(
+            """
+              |SELECT /*+ MERGEJOIN(t1) */ *
+              |FROM (
+              |  SELECT sum(r) AS r
+              |  FROM (
+              |    SELECT sum(r) AS r
+              |    FROM v
+              |    GROUP BY id + 1
+              |  )
+              |) AS t1 JOIN (
+              |  SELECT sum(r) AS r
+              |  FROM (
+              |    SELECT sum(r) AS r
+              |    FROM v
+              |    GROUP BY id + 2
+              |  )
+              |) AS t2 ON t1.r = t2.r
+              |""".stripMargin)
+          df.collect()
+
+          // The above example might seem a bit complex and artificial. However, the point is to
+          // define a join whose both legs refer to the same source exchange and then compute the
+          // same sum of random values 2 different ways, so in the end the join should produce one
+          // final row.
+          // The plan doesn't contain any exchange partitioning whose lineage contains the
+          // non-deterministic `rand()` expression, but still requires the output level of the
+          // common stage to be INDETERMINATE to avoid correctness issues when there is a fetch
+          // failure from the stage during the computation of one of the legs. If there is a fetch
+          // failure, then stages of both legs need to be recomputed to get a matching sum.
+
+          // scalastyle:off
+          // == Physical Plan ==
+          // *(11) SortMergeJoin [r#332L], [r#334L], Inner
+          // :- *(5) Sort [r#332L ASC NULLS FIRST], false, 0
+          // :  +- *(5) Filter isnotnull(r#332L)
+          // :     +- *(5) HashAggregate(keys=[], functions=[sum(r#331L)], output=[r#332L])
+          // :        +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=830]
+          // :           +- *(4) HashAggregate(keys=[], functions=[partial_sum(r#331L)], output=[sum#345L])
+          // :              +- *(4) HashAggregate(keys=[_groupingexpression#342L], functions=[sum(r#328L)], output=[r#331L])
+          // :                 +- Exchange hashpartitioning(_groupingexpression#342L, 5), ENSURE_REQUIREMENTS, [plan_id=825]
+          // :                    +- *(3) HashAggregate(keys=[_groupingexpression#342L], functions=[partial_sum(r#328L)], output=[_groupingexpression#342L, sum#347L])
+          // :                       +- *(3) HashAggregate(keys=[id#329L], functions=[sum(r#327)], output=[r#328L, _groupingexpression#342L])
+          // :                          +- Exchange hashpartitioning(id#329L, 5), ENSURE_REQUIREMENTS, [plan_id=820]
+          // :                             +- *(2) HashAggregate(keys=[id#329L], functions=[partial_sum(r#327)], output=[id#329L, sum#349L])
+          // :                                +- Exchange RoundRobinPartitioning(10), REPARTITION_BY_NUM, [plan_id=816]
+          // :                                   +- *(1) Project [id#329L, cast((rand(5523384316250202108) * 1000.0) as int) AS r#327]
+          // :                                      +- *(1) Range (0, 1000, step=1, splits=2)
+          // +- *(10) Sort [r#334L ASC NULLS FIRST], false, 0
+          //    +- *(10) Filter isnotnull(r#334L)
+          //       +- *(10) HashAggregate(keys=[], functions=[sum(r#333L)], output=[r#334L])
+          //          +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=921]
+          //             +- *(9) HashAggregate(keys=[], functions=[partial_sum(r#333L)], output=[sum#351L])
+          //                +- *(9) HashAggregate(keys=[_groupingexpression#343L], functions=[sum(r#337L)], output=[r#333L])
+          //                   +- Exchange hashpartitioning(_groupingexpression#343L, 5), ENSURE_REQUIREMENTS, [plan_id=908]
+          //                      +- *(8) HashAggregate(keys=[_groupingexpression#343L], functions=[partial_sum(r#337L)], output=[_groupingexpression#343L, sum#353L])
+          //                         +- *(8) HashAggregate(keys=[id#335L], functions=[sum(r#336)], output=[r#337L, _groupingexpression#343L])
+          //                            +- ReusedExchange [id#335L, sum#355L], Exchange hashpartitioning(id#329L, 5), ENSURE_REQUIREMENTS, [plan_id=820]
+          // scalastyle:on
+
+          val finalPlan = df.queryExecution.executedPlan
+          val mapStagePlans = collect(finalPlan) {
+            case p: Exchange => p.child
+          }
+          assert(mapStagePlans.size == 6, "there should 6 map stages in the plan")
+          Seq(0, 1, 2, 4, 5).foreach(i =>
+            assert(ShuffleExchangeExec.isDeterministicStage(mapStagePlans(i)),
+              s"the ${i}th map stage should be deterministic"))
+          assert(!ShuffleExchangeExec.isDeterministicStage(mapStagePlans(3)),
+            "the 3rd map stage should be non-deterministic")
+        }
       }
     }
   }
