@@ -274,11 +274,11 @@ compute.max_rows                1000                    'compute.max_rows' sets 
                                                         is unset, the operation is executed by PySpark.
                                                         Default is 1000.
 compute.shortcut_limit          1000                    'compute.shortcut_limit' sets the limit for a
-                                                        shortcut. It computes specified number of rows and
-                                                        use its schema. When the dataframe length is larger
-                                                        than this limit, pandas-on-Spark uses PySpark to
-                                                        compute.
-compute.ops_on_diff_frames      False                   This determines whether or not to operate between two
+                                                        shortcut. It computes the specified number of rows
+                                                        and uses its schema. When the dataframe length is
+                                                        larger than this limit, pandas-on-Spark uses PySpark
+                                                        to compute.
+compute.ops_on_diff_frames      True                    This determines whether or not to operate between two
                                                         different dataframes. For example, 'combine_frames'
                                                         function internally performs a join operation which
                                                         can be expensive in general. So, if
@@ -325,8 +325,9 @@ plotting.max_rows               1000                    'plotting.max_rows' sets
                                                         used for plotting. Default is 1000.
 plotting.sample_ratio           None                    'plotting.sample_ratio' sets the proportion of data
                                                         that will be plotted for sample-based plots such as
-                                                        `plot.line` and `plot.area`. This option defaults to
-                                                        'plotting.max_rows' option.
+                                                        `plot.line` and `plot.area`. If not set, it is
+                                                        derived from 'plotting.max_rows', by calculating the
+                                                        ratio of 'plotting.max_rows' to the total data size.
 plotting.backend                'plotly'                Backend to use for plotting. Default is plotly.
                                                         Supports any package that has a top-level `.plot`
                                                         method. Known options are: [matplotlib, plotly].
