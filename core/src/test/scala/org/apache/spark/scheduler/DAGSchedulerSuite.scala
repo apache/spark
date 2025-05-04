@@ -3218,17 +3218,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(resultStage.latestInfo.failureReason.get.
       contains("A shuffle map stage with indeterminate output was failed and retried. " +
         "However, Spark cannot rollback the ResultStage"))
-
-
-    // assert(scheduler.runningStages.size === 2)
-    // assert(scheduler.runningStages.forall(_.isInstanceOf[ShuffleMapStage]))
-
-    // completeShuffleMapStageSuccessfully(0, 1, 2, Seq("hostA", "hostB"))
-    // completeShuffleMapStageSuccessfully(1, 1, 2, Seq("hostA", "hostB"))
-    // assert(scheduler.runningStages.size === 0)
-    // assert(resultStage.latestInfo.failureReason.isDefined)
-    // assert(resultStage.latestInfo.failureReason.get === "Job aborted due to stage failure: " +
-    //   "Re-submit of a partially completed indeterminate result stage is not supported")
+    assert(scheduler.activeJobs.isEmpty, "Aborting the stage aborts the job as well.")
   }
 
   private def constructIndeterminateStageFetchFailed(): (Int, Int) = {
