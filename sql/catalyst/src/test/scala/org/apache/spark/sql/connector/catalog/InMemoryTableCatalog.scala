@@ -160,6 +160,11 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       constraints = constraints)
       .withData(table.data)
     newTable.setCurrentVersion(currentVersion)
+    changes.foreach {
+      case a: TableChange.AddConstraint =>
+        newTable.setValidatedVersion(a.validatedTableVersion())
+      case _ =>
+    }
     tables.put(ident, newTable)
 
     newTable

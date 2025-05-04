@@ -43,7 +43,7 @@ class InMemoryTable(
     advisoryPartitionSize: Option[Long] = None,
     isDistributionStrictlyRequired: Boolean = true,
     override val numRowsPerSplit: Int = Int.MaxValue)
-  extends InMemoryBaseTable(name, schema, partitioning, properties, distribution,
+  extends InMemoryBaseTable(name, schema, partitioning, properties, constraints, distribution,
     ordering, numPartitions, advisoryPartitionSize, isDistributionStrictlyRequired,
     numRowsPerSplit) with SupportsDelete {
 
