@@ -133,7 +133,7 @@ private[connect] object MLHandler extends Logging {
     mlCommand.getCommandCase match {
       case proto.MlCommand.CommandCase.FIT =>
         val offloadingEnabled = sessionHolder.session.conf.get(
-          Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED)
+          Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED)
         val fitCmd = mlCommand.getFit
         val estimatorProto = fitCmd.getEstimator
         assert(estimatorProto.getType == proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR)

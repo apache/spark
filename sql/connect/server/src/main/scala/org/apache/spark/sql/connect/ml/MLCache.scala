@@ -53,16 +53,16 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     Files.createDirectories(path)
   }
   private[spark] def getOffloadingEnabled: Boolean = {
-    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED)
+    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED)
   }
 
   private def getMaxInMemoryCacheSizeKB: Long = {
     sessionHolder.session.conf.get(
-      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_MAX_IN_MEMORY_SIZE) / 1024
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE) / 1024
   }
 
   private def getOffloadingTimeoutMinute: Long = {
-    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_TIMEOUT)
+    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_OFFLOADING_TIMEOUT)
   }
 
   private[ml] case class CacheItem(obj: Object, sizeBytes: Long)
@@ -91,10 +91,12 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
 
   private[ml] val totalModelCacheSizeBytes: AtomicLong = new AtomicLong(0)
   private[spark] def getModelCacheMaxSize: Long = {
-    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_MODEL_CACHE_MAX_SIZE)
+    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_SIZE)
   }
   private[spark] def getModelMaxSize: Long = {
-    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_MODEL_MAX_SIZE)
+    sessionHolder.session.conf.get(
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE
+    )
   }
 
   def checkModelSize(estimatedModelSize: Long): Unit = {
@@ -104,13 +106,13 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
           f"$getModelCacheMaxSize bytes. " +
           "Please delete existing cached model by executing 'del model' in python client " +
           "before fitting new model or loading new model, or increase " +
-          "Spark config 'spark.connect.session.connectML.model.maxSize'.")
+          "Spark config 'spark.connect.session.connectML.mlCache.memoryControl.maxModelSize'.")
     }
     if (estimatedModelSize > getModelMaxSize) {
       throw MLModelSizeOverflowException(
         f"The fitted or loaded model size exceeds $getModelMaxSize bytes. " +
           f"Please fit or load a model smaller than $getModelMaxSize bytes. " +
-          f"or increase Spark config 'spark.connect.session.connectML.modelCache.maxSize'.")
+          f"or increase Spark config 'spark.connect.session.connectML.mlCache.memoryControl.maxSize'.")
     }
   }
 
@@ -130,7 +132,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
         "SparkML 'model.summary' and 'model.evaluate' APIs are not supported' when " +
           "Spark Connect session ML cache offloading is enabled. You can use APIs in " +
           "'pyspark.ml.evaluation' instead, or you can set Spark config " +
-          "'spark.connect.session.connectML.mlCache.offloading.enabled' to 'false' to " +
+          "'spark.connect.session.connectML.mlCache.memoryControl.enabled' to 'false' to " +
           "disable Spark Connect session ML cache offloading.")
     }
   }

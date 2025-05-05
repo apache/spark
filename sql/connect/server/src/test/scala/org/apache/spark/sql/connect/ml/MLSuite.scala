@@ -136,7 +136,7 @@ class MLSuite extends MLHelper {
   test("LogisticRegression works") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     sessionHolder.session.conf
-      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED.key, "false")
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE.key, "false")
 
     // estimator read/write
     val ret = readWrite(sessionHolder, getLogisticRegression, getMaxIter)
