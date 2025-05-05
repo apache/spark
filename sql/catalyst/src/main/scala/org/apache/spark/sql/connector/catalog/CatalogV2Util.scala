@@ -22,12 +22,12 @@ import java.util.{Collections, Locale}
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CurrentUserContext
 import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Literal, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
@@ -598,8 +598,26 @@ private[sql] object CatalogV2Util {
       //       data unchanged and let the data reader to return "exist default" for missing
       //       columns.
       val existingDefault = Literal(default.getValue.value(), default.getValue.dataType()).sql
-      f.withExistenceDefaultValue(existingDefault).withCurrentDefaultValue(default.getSql)
+      f.withExistenceDefaultValue(existingDefault).withCurrentDefaultValue(toSql(defaultValue))
     }.getOrElse(f)
+  }
+
+  private def toSql(defaultValue: DefaultValue): String = {
+    if (defaultValue.getExpression != null) {
+      V2ExpressionUtils.toCatalyst(defaultValue.getExpression) match {
+        case Some(catalystExpr) =>
+          catalystExpr.sql
+        case None if defaultValue.getSql != null =>
+          defaultValue.getSql
+        case _ =>
+          throw SparkException.internalError(
+            s"""Can't generate SQL for $defaultValue. The connector expression couldn't
+               |be converted to Catalyst and there is no provided SQL representation.
+               |""".stripMargin)
+      }
+    } else {
+      defaultValue.getSql
+    }
   }
 
   /**
