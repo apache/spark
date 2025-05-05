@@ -265,7 +265,10 @@ case class ForeignKeyConstraint(
 }
 
 /**
- * An expression that validates a specific invariant on a column before writing into a table.
+ * An expression that validates a check constraint on a column.
+ * If the evaluation result is false, it throws a [[SparkRuntimeException]] indicating constraint
+ * violation. Otherwise, it returns true to indicate that the constraint is satisfied, even if the
+ * expression is null.
  *
  * @param child The fully resolved expression to be evaluated to check the constraint.
  * @param columnExtractors Extractors for each referenced column. Used to generate readable errors.
@@ -306,7 +309,7 @@ case class CheckInvariant(
   /**
    * Generate the code to extract values for the columns referenced in a violated CHECK constraint.
    * We build parallel lists of full column names and their extracted values in the row which
-   * violates the constraint, to be passed to the [[InvariantViolationException]] constructor
+   * violates the constraint, to be passed to the constraint violation error
    * in [[generateExpressionValidationCode()]].
    *
    * Note that this code is a bit expensive, so it shouldn't be run until we already
