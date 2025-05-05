@@ -840,25 +840,34 @@ class ScalarPandasUDFTestsMixin:
         # This makes sure that not every struct with <metadata, value> fields is treated as Variant
         scalar_f = pandas_udf(
             lambda u: pd.DataFrame(
-                {"value": u.apply(lambda i: bytes([12, i])),
-                "metadata": u.apply(lambda i: bytes([1, 0, i]))}
+                {
+                    "value": u.apply(lambda i: bytes([12, i])),
+                    "metadata": u.apply(lambda i: bytes([1, 0, i])),
+                }
             ),
-            StructType([
-                StructField("value", BinaryType(), True),
-                StructField("metadata", BinaryType(), True)
-            ]),
+            StructType(
+                [
+                    StructField("value", BinaryType(), True),
+                    StructField("metadata", BinaryType(), True),
+                ]
+            ),
         )
         iter_f = pandas_udf(
             lambda it: map(
                 lambda u: pd.DataFrame(
-                    {"value": u.apply(lambda i: bytes([12, i])),
-                    "metadata": u.apply(lambda i: bytes([1, 0, i]))}),
+                    {
+                        "value": u.apply(lambda i: bytes([12, i])),
+                        "metadata": u.apply(lambda i: bytes([1, 0, i])),
+                    }
+                ),
                 it,
             ),
-            StructType([
-                StructField("value", BinaryType(), True),
-                StructField("metadata", BinaryType(), True)
-            ]),
+            StructType(
+                [
+                    StructField("value", BinaryType(), True),
+                    StructField("metadata", BinaryType(), True),
+                ]
+            ),
             PandasUDFType.SCALAR_ITER,
         )
 
