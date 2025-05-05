@@ -1664,16 +1664,3 @@ case class Call(
   override protected def withNewChildInternal(newChild: LogicalPlan): Call =
     copy(procedure = newChild)
 }
-
-case class Validate(
-    conditions: Seq[CheckInvariant],
-    child: LogicalPlan) extends UnaryNode {
-
-  assert(conditions.nonEmpty, "Validate must have at least one condition")
-
-  override def output: Seq[Attribute] = child.output
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = {
-    copy(child = newChild)
-  }
-}

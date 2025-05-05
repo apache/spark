@@ -30,12 +30,12 @@ class ConstraintExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         | - a : $value
         | SQLSTATE: 23001""".stripMargin
 
-  test("CheckInvariant: returns null if column 'a' > 0") {
-    checkEvaluation(expr, null, InternalRow(1))
+  test("CheckInvariant: returns true if column 'a' > 0") {
+    checkEvaluation(expr, true, InternalRow(1))
   }
 
-  test("CheckInvariant: return null if column 'a' is null") {
-    checkEvaluation(expr, null, InternalRow(null))
+  test("CheckInvariant: return true if column 'a' is null") {
+    checkEvaluation(expr, true, InternalRow(null))
   }
 
   test("CheckInvariant: throws exception if column 'a' <= 0") {

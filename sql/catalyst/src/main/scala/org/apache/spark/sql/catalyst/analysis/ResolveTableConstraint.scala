@@ -18,8 +18,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{CheckInvariant, Expression, V2ExpressionUtils}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, V2WriteCommand, Validate}
+import org.apache.spark.sql.catalyst.expressions.{And, CheckInvariant, Expression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, V2WriteCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -32,7 +32,7 @@ class ResolveTableConstraint(val catalogManager: CatalogManager) extends Rule[Lo
     _.containsPattern(COMMAND), ruleId) {
     case v2Write: V2WriteCommand
       if v2Write.table.resolved && v2Write.query.resolved &&
-        !v2Write.query.isInstanceOf[Validate] && v2Write.outputResolved =>
+        !containsCheckInvariant(v2Write.query) && v2Write.outputResolved =>
       v2Write.table match {
         case r: DataSourceV2Relation
           if r.table.constraints != null && r.table.constraints.nonEmpty =>
@@ -45,11 +45,22 @@ class ResolveTableConstraint(val catalogManager: CatalogManager) extends Rule[Lo
             val columnExtractors = mutable.Map[String, Expression]()
             buildColumnExtractors(unresolvedExpr, columnExtractors)
             CheckInvariant(unresolvedExpr, columnExtractors.toSeq, c.name(), c.predicateSql())
-          }.toSeq
-          v2Write.withNewQuery(Validate(checkInvariants, v2Write.query))
+          }
+          // Combine the check invariants into a single expression using conjunctive AND.
+          val condition = checkInvariants.reduce(And)
+          v2Write.withNewQuery(Filter(condition, v2Write.query))
         case _ =>
           v2Write
       }
+  }
+
+  private def containsCheckInvariant(plan: LogicalPlan): Boolean = {
+    plan match {
+      case Filter(condition, _) =>
+        condition.exists(_.isInstanceOf[CheckInvariant])
+
+      case _ => false
+    }
   }
 
   private def buildCatalystExpression(c: Check): Expression = {

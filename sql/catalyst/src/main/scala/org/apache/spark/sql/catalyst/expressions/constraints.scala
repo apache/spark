@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.UUID
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.expressions.codegen.{Block, CodegenContext, ExprCode, JavaCode, TrueLiteral}
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
+import org.apache.spark.sql.catalyst.expressions.codegen.{Block, CodegenContext, ExprCode, FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{DataType, NullType}
+import org.apache.spark.sql.types.{BooleanType, DataType}
 
 trait TableConstraint extends Expression with Unevaluable {
   /** Convert to a data source v2 constraint */
@@ -265,7 +265,7 @@ case class ForeignKeyConstraint(
 }
 
 /**
- * An expression that validates a specific invariant on a column, before writing into table.
+ * An expression that validates a specific invariant on a column before writing into a table.
  *
  * @param child The fully resolved expression to be evaluated to check the constraint.
  * @param columnExtractors Extractors for each referenced column. Used to generate readable errors.
@@ -280,9 +280,17 @@ case class CheckInvariant(
   extends Expression with NonSQLExpression {
 
   override def children: Seq[Expression] = child +: columnExtractors.map(_._2)
-  override def dataType: DataType = NullType
-  override def foldable: Boolean = false
-  override def nullable: Boolean = true
+  override def dataType: DataType = BooleanType
+  override def nullable: Boolean = false
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (child.dataType != BooleanType) {
+      TypeCheckResult.TypeCheckFailure(
+        s"CHECK constraint must evaluate to a boolean expression, but got ${child.dataType}")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
 
   override def eval(input: InternalRow): Any = {
     val result = child.eval(input)
@@ -292,7 +300,7 @@ case class CheckInvariant(
       }.toMap
       throw QueryExecutionErrors.checkViolation(constraintName, predicateSql, values)
     }
-    null
+    true
   }
 
   /**
@@ -343,7 +351,7 @@ case class CheckInvariant(
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val code = generateExpressionValidationCode(ctx)
-    ev.copy(code = code, isNull = TrueLiteral, value = JavaCode.literal("null", NullType))
+    ev.copy(code = code, isNull = FalseLiteral, value = TrueLiteral)
   }
 
   override protected def withNewChildrenInternal(
