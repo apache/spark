@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import scala.reflect.ClassTag
 
 import org.apache.spark.TaskContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
@@ -27,7 +28,7 @@ import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.TaskFailureListener
 
-package object state {
+package object state extends Logging {
 
   implicit class StateStoreOps[T: ClassTag](dataRDD: RDD[T]) {
 
@@ -71,12 +72,10 @@ package object state {
         val ctxt = TaskContext.get()
         ctxt.addTaskCompletionListener[Unit](_ => {
           if (!store.hasCommitted) store.abort()
-          StateStoreThreadLocalTracker.clearStore()
         })
         ctxt.addTaskFailureListener(new TaskFailureListener {
           override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
             store.abort()
-            StateStoreThreadLocalTracker.clearStore()
           }
         })
         cleanedF(store, iter)
@@ -122,15 +121,16 @@ package object state {
         ctxt.addTaskCompletionListener[Unit](_ => {
           if (!StateStoreThreadLocalTracker.isUsedForWriteStore) {
             store.release()
-            StateStoreThreadLocalTracker.clearStore()
           }
+          StateStoreThreadLocalTracker.clearStore()
         })
         ctxt.addTaskFailureListener(new TaskFailureListener {
-          override def onTaskFailure(context: TaskContext, error: Throwable): Unit =
+          override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
             if (!StateStoreThreadLocalTracker.isUsedForWriteStore) {
               store.abort()
-              StateStoreThreadLocalTracker.clearStore()
             }
+            StateStoreThreadLocalTracker.clearStore()
+          }
         })
         cleanedF(store, iter)
       }

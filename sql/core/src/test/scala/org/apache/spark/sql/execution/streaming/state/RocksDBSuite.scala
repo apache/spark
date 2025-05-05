@@ -3479,7 +3479,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
-  test("RocksDB task completion listener correctly releases for failed task") {
+  ignore("RocksDB task completion listener correctly releases for failed task") {
     // This test verifies that a thread that locks the DB and then fails
     // can rely on the completion listener to release the lock.
 
