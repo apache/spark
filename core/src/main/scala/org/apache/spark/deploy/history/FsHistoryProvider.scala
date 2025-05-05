@@ -52,7 +52,7 @@ import org.apache.spark.status._
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.util.{CallerContext, Clock, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.kvstore._
 
@@ -396,6 +396,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   override def start(): Unit = {
+    new CallerContext("HISTORY").setCurrentContext()
     initThread = initialize()
   }
 

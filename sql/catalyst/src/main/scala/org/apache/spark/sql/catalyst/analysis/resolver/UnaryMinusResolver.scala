@@ -39,8 +39,8 @@ class UnaryMinusResolver(
     new TypeCoercionResolver(timezoneAwareExpressionResolver, typeCoercionTransformations)
 
   override def resolve(unresolvedUnaryMinus: UnaryMinus): Expression = {
-    val unaryMinusWithResolvedChildren: UnaryMinus =
-      withResolvedChildren(unresolvedUnaryMinus, expressionResolver.resolve)
+    val unaryMinusWithResolvedChildren =
+      withResolvedChildren(unresolvedUnaryMinus, expressionResolver.resolve _)
     typeCoercionResolver.resolve(unaryMinusWithResolvedChildren)
   }
 }

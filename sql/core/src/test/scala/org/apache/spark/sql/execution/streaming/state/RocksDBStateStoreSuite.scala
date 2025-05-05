@@ -52,6 +52,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   before {
     StateStore.stop()
     require(!StateStore.isMaintenanceRunning)
+    spark.streams.stateStoreCoordinator // initialize the lazy coordinator
   }
 
   after {
@@ -77,6 +78,20 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       // Verify the version encoded in first byte of the key and value byte arrays
       assert(Platform.getByte(kv.key, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
       assert(Platform.getByte(kv.value, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
+
+      // The test verifies that the actual key-value pair (kv) matches these expected byte patterns
+      // exactly using sameElements, which ensures the serialization format remains consistent and
+      // backward compatible. This is particularly important for state storage where the format
+      // needs to be stable across Spark versions.
+      val (expectedKey, expectedValue) = if (conf.stateStoreEncodingFormat == "avro") {
+        (Array(0, 0, 0, 2, 2, 97, 2, 0), Array(0, 0, 0, 2, 2))
+      } else {
+        (Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 24, 0, 0,
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 97, 0, 0, 0, 0, 0, 0, 0),
+          Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0))
+      }
+      assert(kv.key.sameElements(expectedKey))
+      assert(kv.value.sameElements(expectedValue))
     }
   }
 
@@ -646,7 +661,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       initialValueSchema,
       Some(testProvider),
-      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Create test data
@@ -669,7 +684,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       evolvedValueSchema,
       Some(testProvider),
-      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Decode with evolved schema
@@ -720,7 +735,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       initialValueSchema,
       Some(testProvider),
-      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Create test data with null value
@@ -747,7 +762,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       evolvedValueSchema,
       Some(testProvider),
-      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Decode original value with evolved schema
@@ -801,7 +816,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       initialValueSchema,
       Some(testProvider),
-      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     val proj = UnsafeProjection.create(initialValueSchema)
@@ -819,7 +834,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       evolvedValueSchema,
       Some(testProvider),
-      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     val decoded = encoder2.decodeValue(encoded)
@@ -866,7 +881,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       initialValueSchema,
       Some(testProvider),
-      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     val proj = UnsafeProjection.create(initialValueSchema)
@@ -884,7 +899,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       evolvedValueSchema,
       Some(testProvider),
-      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     val decoded = encoder2.decodeValue(encoded)
@@ -935,7 +950,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       initialValueSchema,
       Some(testProvider),
-      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Create test data
@@ -958,7 +973,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       evolvedValueSchema,
       Some(testProvider),
-      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Decode with evolved schema
@@ -1015,7 +1030,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       initialValueSchema,
       Some(testProvider),
-      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Create and encode data with initial schema (IntegerType)
@@ -1035,7 +1050,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       evolvedValueSchema,
       Some(testProvider),
-      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Should successfully decode IntegerType as LongType
@@ -1082,7 +1097,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       initialValueSchema,
       Some(testProvider),
-      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Create and encode data with initial order
@@ -1102,7 +1117,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       evolvedValueSchema,
       Some(testProvider),
-      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Should decode with correct field values despite reordering
@@ -1153,7 +1168,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       initialValueSchema,
       Some(testProvider),
-      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Create and encode data with initial schema (LongType)
@@ -1173,7 +1188,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       evolvedValueSchema,
       Some(testProvider),
-      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Attempting to decode Long as Int should fail
@@ -1834,7 +1849,6 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       store = provider.getRocksDBStateStore(2)
       store.createColFamilyIfAbsent(colFamily3, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
-      assert(store.getColumnFamilyId(colFamily3) == 3)
       store.removeColFamilyIfExists(colFamily1)
       store.removeColFamilyIfExists(colFamily3)
       store.commit()
@@ -1843,15 +1857,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       // this should return the old id, because we didn't remove this colFamily for version 1
       store.createColFamilyIfAbsent(colFamily1, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
-      assert(store.getColumnFamilyId(colFamily1) == 1)
 
       store = provider.getRocksDBStateStore(3)
       store.createColFamilyIfAbsent(colFamily4, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
-      assert(store.getColumnFamilyId(colFamily4) == 4)
       store.createColFamilyIfAbsent(colFamily5, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
-      assert(store.getColumnFamilyId(colFamily5) == 5)
     }
   }
 
@@ -1897,6 +1908,66 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
           store.commit()
         }
+    }
+  }
+
+  testWithColumnFamiliesAndEncodingTypes(s"numInternalKeys metrics",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    tryWithProviderResource(
+      newStoreProvider(useColumnFamilies = colFamiliesEnabled)) { provider =>
+      if (colFamiliesEnabled) {
+        val store = provider.getStore(0)
+
+        // create non-internal col family and add data
+        val cfName = "testColFamily"
+        store.createColFamilyIfAbsent(cfName, keySchema, valueSchema,
+          NoPrefixKeyStateEncoderSpec(keySchema))
+        put(store, "a", 0, 1, cfName)
+        put(store, "b", 0, 2, cfName)
+        put(store, "c", 0, 3, cfName)
+        put(store, "d", 0, 4, cfName)
+        put(store, "e", 0, 5, cfName)
+
+        // create internal col family and add data
+        val internalCfName = "$testIndex"
+        store.createColFamilyIfAbsent(internalCfName, keySchema, valueSchema,
+          NoPrefixKeyStateEncoderSpec(keySchema), isInternal = true)
+        put(store, "a", 0, 1, internalCfName)
+        put(store, "m", 0, 2, internalCfName)
+        put(store, "n", 0, 3, internalCfName)
+        put(store, "b", 0, 4, internalCfName)
+
+        assert(store.commit() === 1)
+        // Commit and verify that the metrics are correct for internal and non-internal col families
+        assert(store.metrics.numKeys === 5)
+        val metricPair = store
+          .metrics.customMetrics.find(_._1.name == "rocksdbNumInternalColFamiliesKeys")
+        assert(metricPair.isDefined && metricPair.get._2 === 4)
+        assert(rowPairsToDataSet(store.iterator(cfName)) ===
+          Set(("a", 0) -> 1, ("b", 0) -> 2, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
+        assert(rowPairsToDataSet(store.iterator(internalCfName)) ===
+          Set(("a", 0) -> 1, ("m", 0) -> 2, ("n", 0) -> 3, ("b", 0) -> 4))
+
+        // Reload the store and remove some keys
+        val reloadedProvider = newStoreProvider(store.id, colFamiliesEnabled)
+        val reloadedStore = reloadedProvider.getStore(1)
+        reloadedStore.createColFamilyIfAbsent(cfName, keySchema, valueSchema,
+          NoPrefixKeyStateEncoderSpec(keySchema))
+        reloadedStore.createColFamilyIfAbsent(internalCfName, keySchema, valueSchema,
+          NoPrefixKeyStateEncoderSpec(keySchema), isInternal = true)
+        remove(reloadedStore, _._1 == "b", cfName)
+        remove(reloadedStore, _._1 == "m", internalCfName)
+        assert(reloadedStore.commit() === 2)
+        // Commit and verify that the metrics are correct for internal and non-internal col families
+        assert(reloadedStore.metrics.numKeys === 4)
+        val metricPairUpdated = reloadedStore
+          .metrics.customMetrics.find(_._1.name == "rocksdbNumInternalColFamiliesKeys")
+        assert(metricPairUpdated.isDefined && metricPairUpdated.get._2 === 3)
+        assert(rowPairsToDataSet(reloadedStore.iterator(cfName)) ===
+          Set(("a", 0) -> 1, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
+        assert(rowPairsToDataSet(reloadedStore.iterator(internalCfName)) ===
+          Set(("a", 0) -> 1, ("n", 0) -> 3, ("b", 0) -> 4))
+      }
     }
   }
 

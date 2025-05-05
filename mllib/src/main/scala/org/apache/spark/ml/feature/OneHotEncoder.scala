@@ -234,7 +234,8 @@ class OneHotEncoderModel private[ml] (
 
   import OneHotEncoderModel._
 
-  private[ml] def this() = this(Identifiable.randomUID("oneHotEncoder)"), Array.emptyIntArray)
+  // For ml connect only
+  private[ml] def this() = this("", Array.emptyIntArray)
 
   // Returns the category size for each index with `dropLast` and `handleInvalid`
   // taken into account.
@@ -400,17 +401,16 @@ class OneHotEncoderModel private[ml] (
 
 @Since("3.0.0")
 object OneHotEncoderModel extends MLReadable[OneHotEncoderModel] {
+  private[ml] case class Data(categorySizes: Array[Int])
 
   private[OneHotEncoderModel]
   class OneHotEncoderModelWriter(instance: OneHotEncoderModel) extends MLWriter {
-
-    private case class Data(categorySizes: Array[Int])
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.categorySizes)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -421,11 +421,8 @@ object OneHotEncoderModel extends MLReadable[OneHotEncoderModel] {
     override def load(path: String): OneHotEncoderModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-        .select("categorySizes")
-        .head()
-      val categorySizes = data.getAs[Seq[Int]](0).toArray
-      val model = new OneHotEncoderModel(metadata.uid, categorySizes)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val model = new OneHotEncoderModel(metadata.uid, data.categorySizes)
       metadata.getAndSetParams(model)
       model
     }

@@ -54,6 +54,15 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("endLabel" -> toSQLId(endLabel)))
   }
 
+  def labelNameForbidden(origin: Origin, label: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "LABEL_NAME_FORBIDDEN",
+      cause = null,
+      messageParameters = Map("label" -> toSQLId(label))
+    )
+  }
+
   def variableDeclarationNotAllowedInScope(
       origin: Origin,
       varName: Seq[String]): Throwable = {

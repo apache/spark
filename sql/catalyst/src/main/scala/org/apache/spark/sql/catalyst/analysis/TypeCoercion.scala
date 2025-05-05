@@ -90,7 +90,7 @@ object TypeCoercion extends TypeCoercionBase {
         val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
         Some(numericPrecedence(index))
 
-      case (d1: DatetimeType, d2: DatetimeType) => Some(findWiderDateTimeType(d1, d2))
+      case (d1: DatetimeType, d2: DatetimeType) => findWiderDateTimeType(d1, d2)
 
       case (t1: DayTimeIntervalType, t2: DayTimeIntervalType) =>
         Some(DayTimeIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))

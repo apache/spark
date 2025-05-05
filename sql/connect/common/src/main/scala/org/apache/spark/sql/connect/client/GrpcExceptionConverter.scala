@@ -192,7 +192,6 @@ private[client] object GrpcExceptionConverter {
       new ParseException(
         None,
         Origin(),
-        Origin(),
         errorClass = params.errorClass.orNull,
         messageParameters = params.messageParameters,
         queryContext = params.queryContext)),

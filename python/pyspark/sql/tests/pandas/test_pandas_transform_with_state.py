@@ -15,18 +15,18 @@
 # limitations under the License.
 #
 
+from abc import abstractmethod
+
 import json
 import os
 import time
 import tempfile
-from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
-from typing import Iterator
+from pyspark.sql.streaming import StatefulProcessor
 
 import unittest
 from typing import cast
 
 from pyspark import SparkConf
-from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.functions import array_sort, col, explode, split
 from pyspark.sql.types import (
     StringType,
@@ -35,9 +35,6 @@ from pyspark.sql.types import (
     Row,
     IntegerType,
     TimestampType,
-    LongType,
-    BooleanType,
-    FloatType,
 )
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
@@ -48,26 +45,44 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
 )
 
-if have_pandas:
-    import pandas as pd
-
-
-@unittest.skipIf(
-    not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
+    SimpleStatefulProcessorWithInitialStateFactory,
+    StatefulProcessorWithInitialStateTimersFactory,
+    StatefulProcessorWithListStateInitialStateFactory,
+    EventTimeStatefulProcessorFactory,
+    ProcTimeStatefulProcessorFactory,
+    SimpleStatefulProcessorFactory,
+    StatefulProcessorChainingOpsFactory,
+    SimpleTTLStatefulProcessorFactory,
+    TTLStatefulProcessorFactory,
+    InvalidSimpleStatefulProcessorFactory,
+    ListStateProcessorFactory,
+    ListStateLargeListProcessorFactory,
+    ListStateLargeTTLProcessorFactory,
+    MapStateProcessorFactory,
+    MapStateLargeTTLProcessorFactory,
+    BasicProcessorFactory,
+    BasicProcessorNotNullableFactory,
+    AddFieldsProcessorFactory,
+    RemoveFieldsProcessorFactory,
+    ReorderedFieldsProcessorFactory,
+    UpcastProcessorFactory,
+    MinEventTimeStatefulProcessorFactory,
 )
-class TransformWithStateInPandasTestsMixin:
+
+
+class TransformWithStateTestsMixin:
     @classmethod
-    def conf(cls):
-        cfg = SparkConf()
-        cfg.set("spark.sql.shuffle.partitions", "5")
-        cfg.set(
-            "spark.sql.streaming.stateStore.providerClass",
-            "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
-        )
-        cfg.set("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch", "2")
-        cfg.set("spark.sql.session.timeZone", "UTC")
-        return cfg
+    @abstractmethod
+    def use_pandas(cls) -> bool:
+        ...
+
+    @classmethod
+    def get_processor(cls, stateful_processor_factory) -> StatefulProcessor:
+        if cls.use_pandas():
+            return stateful_processor_factory.pandas()
+        else:
+            return stateful_processor_factory.row()
 
     def _prepare_input_data(self, input_path, col1, col2):
         with open(input_path, "w") as fw:
@@ -115,9 +130,9 @@ class TransformWithStateInPandasTestsMixin:
         )
         return df_final
 
-    def _test_transform_with_state_in_pandas_basic(
+    def _test_transform_with_state_basic(
         self,
-        stateful_processor,
+        stateful_processor_factory,
         check_results,
         single_batch=False,
         timeMode="None",
@@ -145,16 +160,26 @@ class TransformWithStateInPandasTestsMixin:
             ]
         )
 
-        q = (
-            df.groupBy("id")
-            .transformWithStateInPandas(
+        stateful_processor = self.get_processor(stateful_processor_factory)
+        if self.use_pandas():
+            tws_df = df.groupBy("id").transformWithStateInPandas(
                 statefulProcessor=stateful_processor,
                 outputStructType=output_schema,
                 outputMode="Update",
                 timeMode=timeMode,
                 initialState=initial_state,
             )
-            .writeStream.queryName("this_query")
+        else:
+            tws_df = df.groupBy("id").transformWithState(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode=timeMode,
+                initialState=initial_state,
+            )
+
+        q = (
+            tws_df.writeStream.queryName("this_query")
             .option("checkpointLocation", checkpoint_path)
             .foreachBatch(check_results)
             .outputMode("update")
@@ -167,7 +192,7 @@ class TransformWithStateInPandasTestsMixin:
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
-    def test_transform_with_state_in_pandas_basic(self):
+    def test_transform_with_state_basic(self):
         def check_results(batch_df, batch_id):
             if batch_id == 0:
                 assert set(batch_df.sort("id").collect()) == {
@@ -180,20 +205,20 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="1", countAsString="2"),
                 }
 
-        self._test_transform_with_state_in_pandas_basic(SimpleStatefulProcessor(), check_results)
+        self._test_transform_with_state_basic(SimpleStatefulProcessorFactory(), check_results)
 
-    def test_transform_with_state_in_pandas_non_exist_value_state(self):
+    def test_transform_with_state_non_exist_value_state(self):
         def check_results(batch_df, _):
             assert set(batch_df.sort("id").collect()) == {
                 Row(id="0", countAsString="0"),
                 Row(id="1", countAsString="0"),
             }
 
-        self._test_transform_with_state_in_pandas_basic(
-            InvalidSimpleStatefulProcessor(), check_results, True
+        self._test_transform_with_state_basic(
+            InvalidSimpleStatefulProcessorFactory(), check_results, True
         )
 
-    def test_transform_with_state_in_pandas_query_restarts(self):
+    def test_transform_with_state_query_restarts(self):
         root_path = tempfile.mkdtemp()
         input_path = root_path + "/input"
         os.makedirs(input_path, exist_ok=True)
@@ -215,15 +240,24 @@ class TransformWithStateInPandasTestsMixin:
             ]
         )
 
-        base_query = (
-            df.groupBy("id")
-            .transformWithStateInPandas(
-                statefulProcessor=SimpleStatefulProcessor(),
+        stateful_processor = self.get_processor(SimpleStatefulProcessorFactory())
+        if self.use_pandas():
+            tws_df = df.groupBy("id").transformWithStateInPandas(
+                statefulProcessor=stateful_processor,
                 outputStructType=output_schema,
                 outputMode="Update",
                 timeMode="None",
             )
-            .writeStream.queryName("this_query")
+        else:
+            tws_df = df.groupBy("id").transformWithState(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="None",
+            )
+
+        base_query = (
+            tws_df.writeStream.queryName("this_query")
             .format("parquet")
             .outputMode("append")
             .option("checkpointLocation", checkpoint_path)
@@ -258,54 +292,121 @@ class TransformWithStateInPandasTestsMixin:
             Row(id="1", countAsString="2"),
         }
 
-    def test_transform_with_state_in_pandas_list_state(self):
+    def test_transform_with_state_list_state(self):
         def check_results(batch_df, _):
             assert set(batch_df.sort("id").collect()) == {
                 Row(id="0", countAsString="2"),
                 Row(id="1", countAsString="2"),
             }
 
-        self._test_transform_with_state_in_pandas_basic(ListStateProcessor(), check_results, True)
-
-    # test list state with ttl has the same behavior as list state when state doesn't expire.
-    def test_transform_with_state_in_pandas_list_state_large_ttl(self):
-        def check_results(batch_df, batch_id):
-            if batch_id == 0:
-                assert set(batch_df.sort("id").collect()) == {
-                    Row(id="0", countAsString="2"),
-                    Row(id="1", countAsString="2"),
-                }
-            else:
-                for q in self.spark.streams.active:
-                    q.stop()
-
-        self._test_transform_with_state_in_pandas_basic(
-            ListStateLargeTTLProcessor(), check_results, True, "processingTime"
+        self._test_transform_with_state_basic(
+            ListStateProcessorFactory(), check_results, True, "processingTime"
         )
 
-    def test_transform_with_state_in_pandas_map_state(self):
+    def test_transform_with_state_list_state_large_list(self):
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                expected_prev_elements = ""
+                expected_updated_elements = ",".join(map(lambda x: str(x), range(90)))
+            else:
+                # batch_id == 1:
+                expected_prev_elements = ",".join(map(lambda x: str(x), range(90)))
+                expected_updated_elements = ",".join(map(lambda x: str(x), range(180)))
+
+            assert set(batch_df.sort("id").collect()) == {
+                Row(
+                    id="0",
+                    prevElements=expected_prev_elements,
+                    updatedElements=expected_updated_elements,
+                ),
+                Row(
+                    id="1",
+                    prevElements=expected_prev_elements,
+                    updatedElements=expected_updated_elements,
+                ),
+            }
+
+        input_path = tempfile.mkdtemp()
+        checkpoint_path = tempfile.mkdtemp()
+
+        self._prepare_test_resource1(input_path)
+        time.sleep(2)
+        self._prepare_test_resource2(input_path)
+
+        df = self._build_test_df(input_path)
+
+        for q in self.spark.streams.active:
+            q.stop()
+        self.assertTrue(df.isStreaming)
+
+        output_schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("prevElements", StringType(), True),
+                StructField("updatedElements", StringType(), True),
+            ]
+        )
+
+        stateful_processor = self.get_processor(ListStateLargeListProcessorFactory())
+        if self.use_pandas():
+            tws_df = df.groupBy("id").transformWithStateInPandas(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="none",
+            )
+        else:
+            tws_df = df.groupBy("id").transformWithState(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="none",
+            )
+
+        q = (
+            tws_df.writeStream.queryName("this_query")
+            .option("checkpointLocation", checkpoint_path)
+            .foreachBatch(check_results)
+            .outputMode("update")
+            .start()
+        )
+        self.assertEqual(q.name, "this_query")
+        self.assertTrue(q.isActive)
+        q.processAllAvailable()
+        q.awaitTermination(10)
+        self.assertTrue(q.exception() is None)
+
+    # test list state with ttl has the same behavior as list state when state doesn't expire.
+    def test_transform_with_state_list_state_large_ttl(self):
+        def check_results(batch_df, batch_id):
+            assert set(batch_df.sort("id").collect()) == {
+                Row(id="0", countAsString="2"),
+                Row(id="1", countAsString="2"),
+            }
+
+        self._test_transform_with_state_basic(
+            ListStateLargeTTLProcessorFactory(), check_results, True, "processingTime"
+        )
+
+    def test_transform_with_state_map_state(self):
         def check_results(batch_df, _):
             assert set(batch_df.sort("id").collect()) == {
                 Row(id="0", countAsString="2"),
                 Row(id="1", countAsString="2"),
             }
 
-        self._test_transform_with_state_in_pandas_basic(MapStateProcessor(), check_results, True)
+        self._test_transform_with_state_basic(MapStateProcessorFactory(), check_results, True)
 
     # test map state with ttl has the same behavior as map state when state doesn't expire.
-    def test_transform_with_state_in_pandas_map_state_large_ttl(self):
+    def test_transform_with_state_map_state_large_ttl(self):
         def check_results(batch_df, batch_id):
-            if batch_id == 0:
-                assert set(batch_df.sort("id").collect()) == {
-                    Row(id="0", countAsString="2"),
-                    Row(id="1", countAsString="2"),
-                }
-            else:
-                for q in self.spark.streams.active:
-                    q.stop()
+            assert set(batch_df.sort("id").collect()) == {
+                Row(id="0", countAsString="2"),
+                Row(id="1", countAsString="2"),
+            }
 
-        self._test_transform_with_state_in_pandas_basic(
-            MapStateLargeTTLProcessor(), check_results, True, "processingTime"
+        self._test_transform_with_state_basic(
+            MapStateLargeTTLProcessorFactory(), check_results, True, "processingTime"
         )
 
     # test value state with ttl has the same behavior as value state when
@@ -317,17 +418,14 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="0", countAsString="2"),
                     Row(id="1", countAsString="2"),
                 }
-            elif batch_id == 1:
+            else:
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", countAsString="3"),
                     Row(id="1", countAsString="2"),
                 }
-            else:
-                for q in self.spark.streams.active:
-                    q.stop()
 
-        self._test_transform_with_state_in_pandas_basic(
-            SimpleTTLStatefulProcessor(), check_results, False, "processingTime"
+        self._test_transform_with_state_basic(
+            SimpleTTLStatefulProcessorFactory(), check_results, False, "processingTime"
         )
 
     # TODO SPARK-50908 holistic fix for TTL suite
@@ -362,7 +460,7 @@ class TransformWithStateInPandasTestsMixin:
                         Row(id="ttl-map-state-count-1", count=2),
                     ],
                 )
-            elif batch_id == 2:
+            else:
                 # ttl-count-0 expire and restart from count 0.
                 # The TTL for value state ttl_count_state gets reset in batch 1 because of the
                 # update operation and ttl-count-1 keeps the state.
@@ -383,9 +481,7 @@ class TransformWithStateInPandasTestsMixin:
                         Row(id="ttl-map-state-count-1", count=3),
                     ],
                 )
-            else:
-                for q in self.spark.streams.active:
-                    q.stop()
+
             if batch_id == 0 or batch_id == 1:
                 time.sleep(4)
 
@@ -405,18 +501,23 @@ class TransformWithStateInPandasTestsMixin:
                 ]
             )
 
-            q = (
-                df.groupBy("id")
-                .transformWithStateInPandas(
-                    statefulProcessor=TTLStatefulProcessor(),
+            stateful_processor = self.get_processor(TTLStatefulProcessorFactory())
+            if self.use_pandas():
+                tws_df = df.groupBy("id").transformWithStateInPandas(
+                    statefulProcessor=stateful_processor,
                     outputStructType=output_schema,
                     outputMode="Update",
                     timeMode="processingTime",
                 )
-                .writeStream.foreachBatch(check_results)
-                .outputMode("update")
-                .start()
-            )
+            else:
+                tws_df = df.groupBy("id").transformWithState(
+                    statefulProcessor=stateful_processor,
+                    outputStructType=output_schema,
+                    outputMode="Update",
+                    timeMode="processingTime",
+                )
+
+            q = tws_df.writeStream.foreachBatch(check_results).outputMode("update").start()
             self.assertTrue(q.isActive)
             q.processAllAvailable()
             q.stop()
@@ -425,7 +526,7 @@ class TransformWithStateInPandasTestsMixin:
         finally:
             input_dir.cleanup()
 
-    def _test_transform_with_state_in_pandas_proc_timer(self, stateful_processor, check_results):
+    def _test_transform_with_state_proc_timer(self, stateful_processor_factory, check_results):
         input_path = tempfile.mkdtemp()
         self._prepare_test_resource3(input_path)
         time.sleep(2)
@@ -448,15 +549,24 @@ class TransformWithStateInPandasTestsMixin:
         )
 
         query_name = "processing_time_test_query"
-        q = (
-            df.groupBy("id")
-            .transformWithStateInPandas(
+        stateful_processor = self.get_processor(stateful_processor_factory)
+        if self.use_pandas():
+            tws_df = df.groupBy("id").transformWithStateInPandas(
                 statefulProcessor=stateful_processor,
                 outputStructType=output_schema,
                 outputMode="Update",
                 timeMode="processingtime",
             )
-            .writeStream.queryName(query_name)
+        else:
+            tws_df = df.groupBy("id").transformWithState(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="processingtime",
+            )
+
+        q = (
+            tws_df.writeStream.queryName(query_name)
             .foreachBatch(check_results)
             .outputMode("update")
             .start()
@@ -468,24 +578,24 @@ class TransformWithStateInPandasTestsMixin:
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
-    def test_transform_with_state_in_pandas_proc_timer(self):
-        # helper function to check expired timestamp is smaller than current processing time
-        def check_timestamp(batch_df):
-            expired_df = (
-                batch_df.filter(batch_df["countAsString"] == "-1")
-                .select("id", "timeValues")
-                .withColumnRenamed("timeValues", "expiredTimestamp")
-            )
-            count_df = (
-                batch_df.filter(batch_df["countAsString"] != "-1")
-                .select("id", "timeValues")
-                .withColumnRenamed("timeValues", "countStateTimestamp")
-            )
-            joined_df = expired_df.join(count_df, on="id")
-            for row in joined_df.collect():
-                assert row["expiredTimestamp"] < row["countStateTimestamp"]
-
+    def test_transform_with_state_proc_timer(self):
         def check_results(batch_df, batch_id):
+            # helper function to check expired timestamp is smaller than current processing time
+            def check_timestamp(batch_df):
+                expired_df = (
+                    batch_df.filter(batch_df["countAsString"] == "-1")
+                    .select("id", "timeValues")
+                    .withColumnRenamed("timeValues", "expiredTimestamp")
+                )
+                count_df = (
+                    batch_df.filter(batch_df["countAsString"] != "-1")
+                    .select("id", "timeValues")
+                    .withColumnRenamed("timeValues", "countStateTimestamp")
+                )
+                joined_df = expired_df.join(count_df, on="id")
+                for row in joined_df.collect():
+                    assert row["expiredTimestamp"] < row["countStateTimestamp"]
+
             if batch_id == 0:
                 assert set(batch_df.sort("id").select("id", "countAsString").collect()) == {
                     Row(id="0", countAsString="1"),
@@ -499,34 +609,22 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="0", countAsString="-1"),
                     Row(id="1", countAsString="3"),
                 }
-                self.first_expired_timestamp = batch_df.filter(
-                    batch_df["countAsString"] == -1
-                ).first()["timeValues"]
                 check_timestamp(batch_df)
 
-            elif batch_id == 2:
+            else:
                 assert set(batch_df.sort("id").select("id", "countAsString").collect()) == {
                     Row(id="0", countAsString="3"),
                     Row(id="0", countAsString="-1"),
                     Row(id="1", countAsString="5"),
                 }
-                # The expired timestamp in current batch is larger than expiry timestamp in batch 1
-                # because this is a new timer registered in batch1 and
-                # different from the one registered in batch 0
-                current_batch_expired_timestamp = batch_df.filter(
-                    batch_df["countAsString"] == -1
-                ).first()["timeValues"]
-                assert current_batch_expired_timestamp > self.first_expired_timestamp
 
-            else:
-                for q in self.spark.streams.active:
-                    q.stop()
-
-        self._test_transform_with_state_in_pandas_proc_timer(
-            ProcTimeStatefulProcessor(), check_results
+        self._test_transform_with_state_proc_timer(
+            ProcTimeStatefulProcessorFactory(), check_results
         )
 
-    def _test_transform_with_state_in_pandas_event_time(self, stateful_processor, check_results):
+    def _test_transform_with_state_event_time(
+        self, stateful_processor_factory, check_results, time_mode="eventtime"
+    ):
         import pyspark.sql.functions as f
 
         input_path = tempfile.mkdtemp()
@@ -541,6 +639,7 @@ class TransformWithStateInPandasTestsMixin:
 
         def prepare_batch3(input_path):
             with open(input_path + "/text-test2.txt", "w") as fw:
+                fw.write("a, 2\n")
                 fw.write("a, 11\n")
                 fw.write("a, 13\n")
                 fw.write("a, 15\n")
@@ -565,15 +664,24 @@ class TransformWithStateInPandasTestsMixin:
         )
 
         query_name = "event_time_test_query"
-        q = (
-            df.groupBy("id")
-            .transformWithStateInPandas(
+        stateful_processor = self.get_processor(stateful_processor_factory)
+        if self.use_pandas():
+            tws_df = df.groupBy("id").transformWithStateInPandas(
                 statefulProcessor=stateful_processor,
                 outputStructType=output_schema,
                 outputMode="Update",
-                timeMode="eventtime",
+                timeMode=time_mode,
             )
-            .writeStream.queryName(query_name)
+        else:
+            tws_df = df.groupBy("id").transformWithState(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode=time_mode,
+            )
+
+        q = (
+            tws_df.writeStream.queryName(query_name)
             .foreachBatch(check_results)
             .outputMode("update")
             .start()
@@ -585,7 +693,7 @@ class TransformWithStateInPandasTestsMixin:
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
-    def test_transform_with_state_in_pandas_event_time(self):
+    def test_transform_with_state_event_time(self):
         def check_results(batch_df, batch_id):
             if batch_id == 0:
                 # watermark for late event = 0
@@ -603,7 +711,7 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="a", timestamp="4"),
                     Row(id="a-expired", timestamp="10000"),
                 }
-            elif batch_id == 2:
+            else:
                 # watermark for late event = 10
                 # watermark for eviction = 10 (unchanged as 4 < 10)
                 # timer is registered with expiration time = 10, hence expired at the same batch
@@ -611,17 +719,43 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="a", timestamp="15"),
                     Row(id="a-expired", timestamp="10000"),
                 }
-            else:
-                for q in self.spark.streams.active:
-                    q.stop()
 
-        self._test_transform_with_state_in_pandas_event_time(
-            EventTimeStatefulProcessor(), check_results
+        self._test_transform_with_state_event_time(
+            EventTimeStatefulProcessorFactory(), check_results
         )
 
-    def _test_transform_with_state_init_state_in_pandas(
+    def test_transform_with_state_with_wmark_and_non_event_time(self):
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                # watermark for late event = 0 and min event = 20
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="a", timestamp="20"),
+                }
+            elif batch_id == 1:
+                # watermark for late event = 0 and min event = 4
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="a", timestamp="4"),
+                }
+            elif batch_id == 2:
+                # watermark for late event = 10 and min event = 2 with no filtering
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="a", timestamp="2"),
+                }
+            else:
+                for q in batch_df.sparkSession.streams.active:
+                    q.stop()
+
+        self._test_transform_with_state_event_time(
+            MinEventTimeStatefulProcessorFactory(), check_results, "None"
+        )
+
+        self._test_transform_with_state_event_time(
+            MinEventTimeStatefulProcessorFactory(), check_results, "ProcessingTime"
+        )
+
+    def _test_transform_with_state_init_state(
         self,
-        stateful_processor,
+        stateful_processor_factory,
         check_results,
         time_mode="None",
         checkpoint_path=None,
@@ -640,27 +774,32 @@ class TransformWithStateInPandasTestsMixin:
         df = self._build_test_df(input_path)
         self.assertTrue(df.isStreaming)
 
-        output_schema = StructType(
-            [
-                StructField("id", StringType(), True),
-                StructField("value", StringType(), True),
-            ]
-        )
+        output_schema = "id string, value string"
 
         if initial_state is None:
             data = [("0", 789), ("3", 987)]
             initial_state = self.spark.createDataFrame(data, "id string, initVal int").groupBy("id")
 
-        q = (
-            df.groupBy("id")
-            .transformWithStateInPandas(
+        stateful_processor = self.get_processor(stateful_processor_factory)
+        if self.use_pandas():
+            tws_df = df.groupBy("id").transformWithStateInPandas(
                 statefulProcessor=stateful_processor,
                 outputStructType=output_schema,
                 outputMode="Update",
                 timeMode=time_mode,
                 initialState=initial_state,
             )
-            .writeStream.queryName("this_query")
+        else:
+            tws_df = df.groupBy("id").transformWithState(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode=time_mode,
+                initialState=initial_state,
+            )
+
+        q = (
+            tws_df.writeStream.queryName("this_query")
             .option("checkpointLocation", checkpoint_path)
             .foreachBatch(check_results)
             .outputMode("update")
@@ -673,7 +812,7 @@ class TransformWithStateInPandasTestsMixin:
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
-    def test_transform_with_state_init_state_in_pandas(self):
+    def test_transform_with_state_init_state(self):
         def check_results(batch_df, batch_id):
             if batch_id == 0:
                 # for key 0, initial state was processed and it was only processed once;
@@ -692,12 +831,12 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="3", value=str(987 + 12)),
                 }
 
-        self._test_transform_with_state_init_state_in_pandas(
-            SimpleStatefulProcessorWithInitialState(), check_results
+        self._test_transform_with_state_init_state(
+            SimpleStatefulProcessorWithInitialStateFactory(), check_results
         )
 
     def _test_transform_with_state_non_contiguous_grouping_cols(
-        self, stateful_processor, check_results, initial_state=None
+        self, stateful_processor_factory, check_results, initial_state=None
     ):
         input_path = tempfile.mkdtemp()
         self._prepare_input_data_with_3_cols(
@@ -718,16 +857,26 @@ class TransformWithStateInPandasTestsMixin:
             ]
         )
 
-        q = (
-            df.groupBy("id1", "id2")
-            .transformWithStateInPandas(
+        stateful_processor = self.get_processor(stateful_processor_factory)
+        if self.use_pandas():
+            tws_df = df.groupBy("id1", "id2").transformWithStateInPandas(
                 statefulProcessor=stateful_processor,
                 outputStructType=output_schema,
                 outputMode="Update",
                 timeMode="None",
                 initialState=initial_state,
             )
-            .writeStream.queryName("this_query")
+        else:
+            tws_df = df.groupBy("id1", "id2").transformWithState(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="None",
+                initialState=initial_state,
+            )
+
+        q = (
+            tws_df.writeStream.queryName("this_query")
             .foreachBatch(check_results)
             .outputMode("update")
             .start()
@@ -741,30 +890,22 @@ class TransformWithStateInPandasTestsMixin:
 
     def test_transform_with_state_non_contiguous_grouping_cols(self):
         def check_results(batch_df, batch_id):
-            if batch_id == 0:
-                assert set(batch_df.collect()) == {
-                    Row(id1="0", id2="1", value=str(123 + 46)),
-                    Row(id1="1", id2="2", value=str(146 + 346)),
-                }
-            else:
-                for q in self.spark.streams.active:
-                    q.stop()
+            assert set(batch_df.collect()) == {
+                Row(id1="0", id2="1", value=str(123 + 46)),
+                Row(id1="1", id2="2", value=str(146 + 346)),
+            }
 
         self._test_transform_with_state_non_contiguous_grouping_cols(
-            SimpleStatefulProcessorWithInitialState(), check_results
+            SimpleStatefulProcessorWithInitialStateFactory(), check_results
         )
 
     def test_transform_with_state_non_contiguous_grouping_cols_with_init_state(self):
         def check_results(batch_df, batch_id):
-            if batch_id == 0:
-                # initial state for key (0, 1) is processed
-                assert set(batch_df.collect()) == {
-                    Row(id1="0", id2="1", value=str(789 + 123 + 46)),
-                    Row(id1="1", id2="2", value=str(146 + 346)),
-                }
-            else:
-                for q in self.spark.streams.active:
-                    q.stop()
+            # initial state for key (0, 1) is processed
+            assert set(batch_df.collect()) == {
+                Row(id1="0", id2="1", value=str(789 + 123 + 46)),
+                Row(id1="1", id2="2", value=str(146 + 346)),
+            }
 
         # grouping key of initial state is also not starting from the beginning of attributes
         data = [(789, "0", "1"), (987, "3", "2")]
@@ -773,11 +914,15 @@ class TransformWithStateInPandasTestsMixin:
         ).groupBy("id1", "id2")
 
         self._test_transform_with_state_non_contiguous_grouping_cols(
-            SimpleStatefulProcessorWithInitialState(), check_results, initial_state
+            SimpleStatefulProcessorWithInitialStateFactory(), check_results, initial_state
         )
 
-    def _test_transform_with_state_in_pandas_chaining_ops(
-        self, stateful_processor, check_results, timeMode="None", grouping_cols=["outputTimestamp"]
+    def _test_transform_with_state_chaining_ops(
+        self,
+        stateful_processor_factory,
+        check_results,
+        timeMode="None",
+        grouping_cols=["outputTimestamp"],
     ):
         import pyspark.sql.functions as f
 
@@ -804,16 +949,26 @@ class TransformWithStateInPandasTestsMixin:
             ]
         )
 
-        q = (
-            df.groupBy("id")
-            .transformWithStateInPandas(
+        stateful_processor = self.get_processor(stateful_processor_factory)
+        if self.use_pandas():
+            tws_df = df.groupBy("id").transformWithStateInPandas(
                 statefulProcessor=stateful_processor,
                 outputStructType=output_schema,
                 outputMode="Append",
                 timeMode=timeMode,
                 eventTimeColumnName="outputTimestamp",
             )
-            .groupBy(grouping_cols)
+        else:
+            tws_df = df.groupBy("id").transformWithState(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Append",
+                timeMode=timeMode,
+                eventTimeColumnName="outputTimestamp",
+            )
+
+        q = (
+            tws_df.groupBy(grouping_cols)
             .count()
             .writeStream.queryName("chaining_ops_query")
             .foreachBatch(check_results)
@@ -826,7 +981,7 @@ class TransformWithStateInPandasTestsMixin:
         q.processAllAvailable()
         q.awaitTermination(10)
 
-    def test_transform_with_state_in_pandas_chaining_ops(self):
+    def test_transform_with_state_chaining_ops(self):
         def check_results(batch_df, batch_id):
             import datetime
 
@@ -851,11 +1006,14 @@ class TransformWithStateInPandasTestsMixin:
                     Row(outputTimestamp=datetime.datetime(1970, 1, 1, 0, 0, 15), count=1),
                 }
 
-        self._test_transform_with_state_in_pandas_chaining_ops(
-            StatefulProcessorChainingOps(), check_results, "eventTime"
+        self._test_transform_with_state_chaining_ops(
+            StatefulProcessorChainingOpsFactory(), check_results, "eventTime"
         )
-        self._test_transform_with_state_in_pandas_chaining_ops(
-            StatefulProcessorChainingOps(), check_results, "eventTime", ["outputTimestamp", "id"]
+        self._test_transform_with_state_chaining_ops(
+            StatefulProcessorChainingOpsFactory(),
+            check_results,
+            "eventTime",
+            ["outputTimestamp", "id"],
         )
 
     def test_transform_with_state_init_state_with_timers(self):
@@ -875,22 +1033,19 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="0", value=str(789 + 123 + 46)),
                     Row(id="1", value=str(146 + 346)),
                 }
-            elif batch_id == 1:
+            else:
                 # handleInitialState is only processed in the first batch,
                 # no more timer is registered so no more expired timers
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", value=str(789 + 123 + 46 + 67)),
                     Row(id="3", value=str(987 + 12)),
                 }
-            else:
-                for q in self.spark.streams.active:
-                    q.stop()
 
-        self._test_transform_with_state_init_state_in_pandas(
-            StatefulProcessorWithInitialStateTimers(), check_results, "processingTime"
+        self._test_transform_with_state_init_state(
+            StatefulProcessorWithInitialStateTimersFactory(), check_results, "processingTime"
         )
 
-    def test_transform_with_state_in_pandas_batch_query(self):
+    def test_transform_with_state_batch_query(self):
         data = [("0", 123), ("0", 46), ("1", 146), ("1", 346)]
         df = self.spark.createDataFrame(data, "id string, temperature int")
 
@@ -900,18 +1055,28 @@ class TransformWithStateInPandasTestsMixin:
                 StructField("countAsString", StringType(), True),
             ]
         )
-        batch_result = df.groupBy("id").transformWithStateInPandas(
-            statefulProcessor=MapStateProcessor(),
-            outputStructType=output_schema,
-            outputMode="Update",
-            timeMode="None",
-        )
+        stateful_processor = self.get_processor(MapStateProcessorFactory())
+        if self.use_pandas():
+            batch_result = df.groupBy("id").transformWithStateInPandas(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="None",
+            )
+        else:
+            batch_result = df.groupBy("id").transformWithState(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="None",
+            )
+
         assert set(batch_result.sort("id").collect()) == {
             Row(id="0", countAsString="2"),
             Row(id="1", countAsString="2"),
         }
 
-    def test_transform_with_state_in_pandas_batch_query_initial_state(self):
+    def test_transform_with_state_batch_query_initial_state(self):
         data = [("0", 123), ("0", 46), ("1", 146), ("1", 346)]
         df = self.spark.createDataFrame(data, "id string, temperature int")
 
@@ -926,13 +1091,25 @@ class TransformWithStateInPandasTestsMixin:
                 StructField("value", StringType(), True),
             ]
         )
-        batch_result = df.groupBy("id").transformWithStateInPandas(
-            statefulProcessor=SimpleStatefulProcessorWithInitialState(),
-            outputStructType=output_schema,
-            outputMode="Update",
-            timeMode="None",
-            initialState=initial_state,
-        )
+
+        stateful_processor = self.get_processor(SimpleStatefulProcessorWithInitialStateFactory())
+        if self.use_pandas():
+            batch_result = df.groupBy("id").transformWithStateInPandas(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="None",
+                initialState=initial_state,
+            )
+        else:
+            batch_result = df.groupBy("id").transformWithState(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="None",
+                initialState=initial_state,
+            )
+
         assert set(batch_result.sort("id").collect()) == {
             Row(id="0", value=str(789 + 123 + 46)),
             Row(id="1", value=str(146 + 346)),
@@ -944,7 +1121,25 @@ class TransformWithStateInPandasTestsMixin:
         "COVERAGE_PROCESS_START" in os.environ, "Flaky with coverage enabled, skipping for now."
     )
     def test_transform_with_map_state_metadata(self):
+        self._test_transform_with_map_state_metadata(None)
+
+    def test_transform_with_map_state_metadata_with_init_state(self):
+        # run the same test suite again but with no-op initial state
+        # TWS with initial state is using a different python runner
+        init_data = [("0", 789), ("3", 987)]
+        initial_state = self.spark.createDataFrame(init_data, "id string, temperature int").groupBy(
+            "id"
+        )
+        self._test_transform_with_map_state_metadata(initial_state)
+
+    def _test_transform_with_map_state_metadata(self, initial_state):
         checkpoint_path = tempfile.mktemp()
+
+        # This has to be outside of FEB to avoid serialization issues.
+        if self.use_pandas():
+            expected_operator_name = "transformWithStateInPandasExec"
+        else:
+            expected_operator_name = "transformWithStateInPySparkExec"
 
         def check_results(batch_df, batch_id):
             if batch_id == 0:
@@ -954,7 +1149,10 @@ class TransformWithStateInPandasTestsMixin:
                 }
             else:
                 # check for state metadata source
-                metadata_df = self.spark.read.format("state-metadata").load(checkpoint_path)
+                metadata_df = batch_df.sparkSession.read.format("state-metadata").load(
+                    checkpoint_path
+                )
+
                 assert set(
                     metadata_df.select(
                         "operatorId",
@@ -967,7 +1165,7 @@ class TransformWithStateInPandasTestsMixin:
                 ) == {
                     Row(
                         operatorId=0,
-                        operatorName="transformWithStateInPandasExec",
+                        operatorName=expected_operator_name,
                         stateStoreName="default",
                         numPartitions=5,
                         minBatchId=0,
@@ -995,7 +1193,7 @@ class TransformWithStateInPandasTestsMixin:
 
                 # check for state data source
                 map_state_df = (
-                    self.spark.read.format("statestore")
+                    batch_df.sparkSession.read.format("statestore")
                     .option("path", checkpoint_path)
                     .option("stateVarName", "mapState")
                     .load()
@@ -1011,7 +1209,7 @@ class TransformWithStateInPandasTestsMixin:
 
                 # check for map state with flatten option
                 map_state_df_non_flatten = (
-                    self.spark.read.format("statestore")
+                    batch_df.sparkSession.read.format("statestore")
                     .option("path", checkpoint_path)
                     .option("stateVarName", "mapState")
                     .option("flattenCollectionTypes", False)
@@ -1039,33 +1237,15 @@ class TransformWithStateInPandasTestsMixin:
                 assert len(set(ttl_df)) == 1
 
                 list_state_df = (
-                    self.spark.read.format("statestore")
+                    batch_df.sparkSession.read.format("statestore")
                     .option("path", checkpoint_path)
                     .option("stateVarName", "listState")
                     .load()
                 )
                 assert list_state_df.isEmpty()
 
-                for q in self.spark.streams.active:
-                    q.stop()
-
-        self._test_transform_with_state_in_pandas_basic(
-            MapStateLargeTTLProcessor(),
-            check_results,
-            True,
-            "processingTime",
-            checkpoint_path=checkpoint_path,
-            initial_state=None,
-        )
-
-        # run the same test suite again but with no-op initial state
-        # TWS with initial state is using a different python runner
-        init_data = [("0", 789), ("3", 987)]
-        initial_state = self.spark.createDataFrame(init_data, "id string, temperature int").groupBy(
-            "id"
-        )
-        self._test_transform_with_state_in_pandas_basic(
-            MapStateLargeTTLProcessor(),
+        self._test_transform_with_state_basic(
+            MapStateLargeTTLProcessorFactory(),
             check_results,
             True,
             "processingTime",
@@ -1085,22 +1265,24 @@ class TransformWithStateInPandasTestsMixin:
                 }
             else:
                 # check for state metadata source
-                metadata_df = self.spark.read.format("state-metadata").load(checkpoint_path)
+                metadata_df = batch_df.sparkSession.read.format("state-metadata").load(
+                    checkpoint_path
+                )
                 operator_properties_json_obj = json.loads(
                     metadata_df.select("operatorProperties").collect()[0][0]
                 )
                 state_var_list = operator_properties_json_obj["stateVariables"]
-                assert len(state_var_list) == 3
+                assert len(state_var_list) == 4
                 for state_var in state_var_list:
-                    if state_var["stateName"] in ["listState1", "listState2"]:
-                        state_var["stateVariableType"] == "ListState"
+                    if state_var["stateName"] in ["listState1", "listState2", "listStateTimestamp"]:
+                        assert state_var["stateVariableType"] == "ListState"
                     else:
                         assert state_var["stateName"] == "$procTimers_keyToTimestamp"
                         assert state_var["stateVariableType"] == "TimerState"
 
                 # check for state data source and flatten option
                 list_state_1_df = (
-                    self.spark.read.format("statestore")
+                    batch_df.sparkSession.read.format("statestore")
                     .option("path", checkpoint_path)
                     .option("stateVarName", "listState1")
                     .option("flattenCollectionTypes", True)
@@ -1123,7 +1305,7 @@ class TransformWithStateInPandasTestsMixin:
                 ]
 
                 list_state_2_df = (
-                    self.spark.read.format("statestore")
+                    batch_df.sparkSession.read.format("statestore")
                     .option("path", checkpoint_path)
                     .option("stateVarName", "listState2")
                     .option("flattenCollectionTypes", False)
@@ -1140,13 +1322,10 @@ class TransformWithStateInPandasTestsMixin:
                     Row(groupingKey="1", valueSortedList=[20, 20, 120, 120, 222]),
                 ]
 
-                for q in self.spark.streams.active:
-                    q.stop()
-
-        self._test_transform_with_state_in_pandas_basic(
-            ListStateProcessor(),
+        self._test_transform_with_state_basic(
+            ListStateProcessorFactory(),
             check_results,
-            True,
+            False,
             "processingTime",
             checkpoint_path=checkpoint_path,
             initial_state=None,
@@ -1170,7 +1349,9 @@ class TransformWithStateInPandasTestsMixin:
                 }
 
                 # check for state metadata source
-                metadata_df = self.spark.read.format("state-metadata").load(checkpoint_path)
+                metadata_df = batch_df.sparkSession.read.format("state-metadata").load(
+                    checkpoint_path
+                )
                 operator_properties_json_obj = json.loads(
                     metadata_df.select("operatorProperties").collect()[0][0]
                 )
@@ -1186,7 +1367,7 @@ class TransformWithStateInPandasTestsMixin:
 
                 # check for state data source and readChangeFeed
                 value_state_df = (
-                    self.spark.read.format("statestore")
+                    batch_df.sparkSession.read.format("statestore")
                     .option("path", checkpoint_path)
                     .option("stateVarName", "numViolations")
                     .option("readChangeFeed", True)
@@ -1210,7 +1391,7 @@ class TransformWithStateInPandasTestsMixin:
                 for partition_id in partition_id_list:
                     # check for state data source and snapshotStartBatchId options
                     state_snapshot_df = (
-                        self.spark.read.format("statestore")
+                        batch_df.sparkSession.read.format("statestore")
                         .option("path", checkpoint_path)
                         .option("stateVarName", "numViolations")
                         .option("snapshotPartitionId", partition_id)
@@ -1230,14 +1411,11 @@ class TransformWithStateInPandasTestsMixin:
                         .collect()
                     )
 
-                for q in self.spark.streams.active:
-                    q.stop()
-
         with self.sql_conf(
             {"spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled": "true"}
         ):
-            self._test_transform_with_state_in_pandas_basic(
-                SimpleStatefulProcessor(),
+            self._test_transform_with_state_basic(
+                SimpleStatefulProcessorFactory(),
                 check_results,
                 False,
                 "processingTime",
@@ -1264,7 +1442,7 @@ class TransformWithStateInPandasTestsMixin:
                 }
                 # verify values in initial state is appended into list state for all keys
                 df = (
-                    self.spark.read.format("statestore")
+                    batch_df.sparkSession.read.format("statestore")
                     .option("path", new_checkpoint_path)
                     .option("stateVarName", "list_state")
                     .load()
@@ -1280,8 +1458,8 @@ class TransformWithStateInPandasTestsMixin:
 
         # run a tws query and read state data source dataframe from its checkpoint
         checkpoint_path = tempfile.mkdtemp()
-        self._test_transform_with_state_in_pandas_basic(
-            ListStateProcessor(), check_results, True, checkpoint_path=checkpoint_path
+        self._test_transform_with_state_basic(
+            ListStateProcessorFactory(), check_results, True, checkpoint_path=checkpoint_path
         )
         list_state_df = (
             self.spark.read.format("statestore")
@@ -1294,8 +1472,8 @@ class TransformWithStateInPandasTestsMixin:
         # run a new tws query and pass state data source dataframe as initial state
         # multiple rows exist in the initial state with the same grouping key
         new_checkpoint_path = tempfile.mkdtemp()
-        self._test_transform_with_state_init_state_in_pandas(
-            StatefulProcessorWithListStateInitialState(),
+        self._test_transform_with_state_init_state(
+            StatefulProcessorWithListStateInitialStateFactory(),
             check_results_for_new_query,
             checkpoint_path=new_checkpoint_path,
             initial_state=init_df,
@@ -1305,13 +1483,12 @@ class TransformWithStateInPandasTestsMixin:
     def test_transform_with_state_with_timers_single_partition(self):
         with self.sql_conf({"spark.sql.shuffle.partitions": "1"}):
             self.test_transform_with_state_init_state_with_timers()
-            self.test_transform_with_state_in_pandas_event_time()
-            self.test_transform_with_state_in_pandas_proc_timer()
+            self.test_transform_with_state_event_time()
+            self.test_transform_with_state_proc_timer()
             self.test_transform_with_state_restart_with_multiple_rows_init_state()
 
-    def _run_evolution_test(
-        self, processor, checkpoint_dir, check_results, df, check_exception=None
-    ):
+    def _run_evolution_test(self, processor_factory, checkpoint_dir, check_results, df):
+        processor = self.get_processor(processor_factory)
         output_schema = StructType(
             [
                 StructField("id", StringType(), True),
@@ -1323,35 +1500,33 @@ class TransformWithStateInPandasTestsMixin:
         for q in self.spark.streams.active:
             q.stop()
 
-        try:
-            q = (
-                df.groupBy("id")
-                .transformWithStateInPandas(
-                    statefulProcessor=processor,
-                    outputStructType=output_schema,
-                    outputMode="Update",
-                    timeMode="None",
-                )
-                .writeStream.queryName("evolution_test")
-                .option("checkpointLocation", checkpoint_dir)
-                .foreachBatch(check_results)
-                .outputMode("update")
-                .start()
+        if self.use_pandas():
+            tws_df = df.groupBy("id").transformWithStateInPandas(
+                statefulProcessor=processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="None",
+            )
+        else:
+            tws_df = df.groupBy("id").transformWithState(
+                statefulProcessor=processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="None",
             )
 
-            self.assertEqual(q.name, "evolution_test")
-            self.assertTrue(q.isActive)
-            q.processAllAvailable()
-            q.awaitTermination(10)
+        q = (
+            tws_df.writeStream.queryName("evolution_test")
+            .option("checkpointLocation", checkpoint_dir)
+            .foreachBatch(check_results)
+            .outputMode("update")
+            .start()
+        )
 
-            if q.exception() is None:
-                assert check_exception is None
-
-        except Exception as e:
-            # If we are expecting an exception, verify it's the right one
-            if check_exception is None:
-                raise  # Re-raise if we weren't expecting an exception
-            self.assertTrue(check_exception(e))
+        self.assertEqual(q.name, "evolution_test")
+        self.assertTrue(q.isActive)
+        q.processAllAvailable()
+        q.awaitTermination(10)
 
     def test_schema_evolution_scenarios(self):
         """Test various schema evolution scenarios"""
@@ -1369,7 +1544,9 @@ class TransformWithStateInPandasTestsMixin:
                     assert result.value["id"] == 0  # First ID from test data
                     assert result.value["name"] == "name-0"
 
-                self._run_evolution_test(BasicProcessor(), checkpoint_dir, check_basic_state, df)
+                self._run_evolution_test(
+                    BasicProcessorFactory(), checkpoint_dir, check_basic_state, df
+                )
 
                 self._prepare_test_resource2(input_path)
 
@@ -1382,7 +1559,9 @@ class TransformWithStateInPandasTestsMixin:
                     assert result.value["active"] is None
                     assert result.value["score"] is None
 
-                self._run_evolution_test(AddFieldsProcessor(), checkpoint_dir, check_add_fields, df)
+                self._run_evolution_test(
+                    AddFieldsProcessorFactory(), checkpoint_dir, check_add_fields, df
+                )
                 self._prepare_test_resource3(input_path)
 
                 # Test 3: Remove fields
@@ -1392,7 +1571,7 @@ class TransformWithStateInPandasTestsMixin:
                     assert result.value["name"] == "name-00"
 
                 self._run_evolution_test(
-                    RemoveFieldsProcessor(), checkpoint_dir, check_remove_fields, df
+                    RemoveFieldsProcessorFactory(), checkpoint_dir, check_remove_fields, df
                 )
                 self._prepare_test_resource4(input_path)
 
@@ -1403,7 +1582,7 @@ class TransformWithStateInPandasTestsMixin:
                     assert result.value["id"] == 0
 
                 self._run_evolution_test(
-                    ReorderedFieldsProcessor(), checkpoint_dir, check_reorder_fields, df
+                    ReorderedFieldsProcessorFactory(), checkpoint_dir, check_reorder_fields, df
                 )
                 self._prepare_test_resource5(input_path)
 
@@ -1413,7 +1592,7 @@ class TransformWithStateInPandasTestsMixin:
                     assert result.value["id"] == 1
                     assert result.value["name"] == "name-0"
 
-                self._run_evolution_test(UpcastProcessor(), checkpoint_dir, check_upcast, df)
+                self._run_evolution_test(UpcastProcessorFactory(), checkpoint_dir, check_upcast, df)
 
     # This test case verifies that an exception is thrown when downcasting, which violates
     # Avro's schema evolution rules
@@ -1430,8 +1609,9 @@ class TransformWithStateInPandasTestsMixin:
                     assert results[0].value["count"] == 100
                     assert results[0].value["active"]
 
-                self._run_evolution_test(AddFieldsProcessor(), checkpoint_dir, check_add_fields, df)
-
+                self._run_evolution_test(
+                    AddFieldsProcessorFactory(), checkpoint_dir, check_add_fields, df
+                )
                 self._prepare_test_resource2(input_path)
 
                 def check_upcast(batch_df, batch_id):
@@ -1439,8 +1619,7 @@ class TransformWithStateInPandasTestsMixin:
                     assert result.value["name"] == "name-0"
 
                 # Long
-                self._run_evolution_test(UpcastProcessor(), checkpoint_dir, check_upcast, df)
-
+                self._run_evolution_test(UpcastProcessorFactory(), checkpoint_dir, check_upcast, df)
                 self._prepare_test_resource3(input_path)
 
                 def check_basic_state(batch_df, batch_id):
@@ -1448,605 +1627,116 @@ class TransformWithStateInPandasTestsMixin:
                     assert result.value["id"] == 0  # First ID from test data
                     assert result.value["name"] == "name-0"
 
-                def check_exception(error):
+                # Int
+                try:
+                    self._run_evolution_test(
+                        BasicProcessorFactory(),
+                        checkpoint_dir,
+                        check_basic_state,
+                        df,
+                    )
+                except Exception as e:
+                    # we are expecting an exception, verify it's the right one
                     from pyspark.errors.exceptions.captured import StreamingQueryException
 
-                    if not isinstance(error, StreamingQueryException):
+                    if not isinstance(e, StreamingQueryException):
                         return False
-
-                    error_msg = str(error)
-                    return (
+                    error_msg = str(e)
+                    assert (
                         "[STREAM_FAILED]" in error_msg
                         and "[STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION]" in error_msg
                         and "Schema evolution is not possible" in error_msg
                     )
 
-                # Int
-                self._run_evolution_test(
-                    BasicProcessor(),
-                    checkpoint_dir,
-                    check_basic_state,
-                    df,
-                    check_exception=check_exception,
-                )
+    def test_not_nullable_fails(self):
+        with self.sql_conf({"spark.sql.streaming.stateStore.encodingFormat": "avro"}):
+            with tempfile.TemporaryDirectory() as checkpoint_dir:
+                input_path = tempfile.mkdtemp()
+                self._prepare_test_resource1(input_path)
+
+                df = self._build_test_df(input_path)
+
+                def check_basic_state(batch_df, batch_id):
+                    result = batch_df.collect()[0]
+                    assert result.value["id"] == 0  # First ID from test data
+                    assert result.value["name"] == "name-0"
+
+                try:
+                    self._run_evolution_test(
+                        BasicProcessorNotNullableFactory(),
+                        checkpoint_dir,
+                        check_basic_state,
+                        df,
+                    )
+                except Exception as e:
+                    # we are expecting an exception, verify it's the right one
+                    from pyspark.errors.exceptions.captured import StreamingQueryException
+
+                    if not isinstance(e, StreamingQueryException):
+                        return False
+                    error_msg = str(e)
+                    assert (
+                        "[TRANSFORM_WITH_STATE_SCHEMA_MUST_BE_NULLABLE]" in error_msg
+                        and "column family state must be nullable" in error_msg
+                    )
 
 
-class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
-    # this dict is the same as input initial state dataframe
-    dict = {("0",): 789, ("3",): 987}
+@unittest.skipIf(
+    not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
+    cast(str, pyarrow_requirement_message or "Not supported in no-GIL mode"),
+)
+class TransformWithStateInPySparkTestsMixin(TransformWithStateTestsMixin):
+    @classmethod
+    def use_pandas(cls) -> bool:
+        return False
 
-    def init(self, handle: StatefulProcessorHandle) -> None:
-        state_schema = StructType([StructField("value", IntegerType(), True)])
-        self.value_state = handle.getValueState("value_state", state_schema)
-        self.handle = handle
-
-    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
-        exists = self.value_state.exists()
-        if exists:
-            value_row = self.value_state.get()
-            existing_value = value_row[0]
-        else:
-            existing_value = 0
-
-        accumulated_value = existing_value
-
-        for pdf in rows:
-            value = pdf["temperature"].astype(int).sum()
-            accumulated_value += value
-
-        self.value_state.update((accumulated_value,))
-
-        if len(key) > 1:
-            yield pd.DataFrame(
-                {"id1": (key[0],), "id2": (key[1],), "value": str(accumulated_value)}
-            )
-        else:
-            yield pd.DataFrame({"id": key, "value": str(accumulated_value)})
-
-    def handleInitialState(self, key, initialState, timerValues) -> None:
-        init_val = initialState.at[0, "initVal"]
-        self.value_state.update((init_val,))
-        if len(key) == 1:
-            assert self.dict[key] == init_val
-
-    def close(self) -> None:
-        pass
-
-
-class StatefulProcessorWithInitialStateTimers(SimpleStatefulProcessorWithInitialState):
-    def handleExpiredTimer(self, key, timerValues, expiredTimerInfo) -> Iterator[pd.DataFrame]:
-        self.handle.deleteTimer(expiredTimerInfo.getExpiryTimeInMs())
-        str_key = f"{str(key[0])}-expired"
-        yield pd.DataFrame({"id": (str_key,), "value": str(expiredTimerInfo.getExpiryTimeInMs())})
-
-    def handleInitialState(self, key, initialState, timerValues) -> None:
-        super().handleInitialState(key, initialState, timerValues)
-        self.handle.registerTimer(timerValues.getCurrentProcessingTimeInMs() - 1)
-
-
-class StatefulProcessorWithListStateInitialState(SimpleStatefulProcessorWithInitialState):
-    def init(self, handle: StatefulProcessorHandle) -> None:
-        super().init(handle)
-        list_ele_schema = StructType([StructField("value", IntegerType(), True)])
-        self.list_state = handle.getListState("list_state", list_ele_schema)
-
-    def handleInitialState(self, key, initialState, timerValues) -> None:
-        for val in initialState["initVal"].tolist():
-            self.list_state.appendValue((val,))
-
-
-# A stateful processor that output the max event time it has seen. Register timer for
-# current watermark. Clear max state if timer expires.
-class EventTimeStatefulProcessor(StatefulProcessor):
-    def init(self, handle: StatefulProcessorHandle) -> None:
-        state_schema = StructType([StructField("value", StringType(), True)])
-        self.handle = handle
-        self.max_state = handle.getValueState("max_state", state_schema)
-
-    def handleExpiredTimer(self, key, timerValues, expiredTimerInfo) -> Iterator[pd.DataFrame]:
-        self.max_state.clear()
-        self.handle.deleteTimer(expiredTimerInfo.getExpiryTimeInMs())
-        str_key = f"{str(key[0])}-expired"
-        yield pd.DataFrame(
-            {"id": (str_key,), "timestamp": str(expiredTimerInfo.getExpiryTimeInMs())}
+    @classmethod
+    def conf(cls):
+        cfg = SparkConf()
+        cfg.set("spark.sql.shuffle.partitions", "5")
+        cfg.set(
+            "spark.sql.streaming.stateStore.providerClass",
+            "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
         )
-
-    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
-        timestamp_list = []
-        for pdf in rows:
-            # int64 will represent timestamp in nanosecond, restore to second
-            timestamp_list.extend((pdf["eventTime"].astype("int64") // 10**9).tolist())
-
-        if self.max_state.exists():
-            cur_max = int(self.max_state.get()[0])
-        else:
-            cur_max = 0
-        max_event_time = str(max(cur_max, max(timestamp_list)))
-
-        self.max_state.update((max_event_time,))
-        self.handle.registerTimer(timerValues.getCurrentWatermarkInMs())
-
-        yield pd.DataFrame({"id": key, "timestamp": max_event_time})
-
-    def close(self) -> None:
-        pass
+        cfg.set("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch", "2")
+        cfg.set("spark.sql.session.timeZone", "UTC")
+        # TODO SPARK-49046 this config is to stop query from FEB sink gracefully
+        cfg.set("spark.sql.streaming.noDataMicroBatches.enabled", "false")
+        return cfg
 
 
-# A stateful processor that output the accumulation of count of input rows; register
-# processing timer and clear the counter if timer expires.
-class ProcTimeStatefulProcessor(StatefulProcessor):
-    def init(self, handle: StatefulProcessorHandle) -> None:
-        state_schema = StructType([StructField("value", StringType(), True)])
-        self.handle = handle
-        self.count_state = handle.getValueState("count_state", state_schema)
+@unittest.skipIf(
+    not have_pandas or not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
+    cast(
+        str,
+        pandas_requirement_message or pyarrow_requirement_message or "Not supported in no-GIL mode",
+    ),
+)
+class TransformWithStateInPandasTestsMixin(TransformWithStateTestsMixin):
+    @classmethod
+    def use_pandas(cls) -> bool:
+        return True
 
-    def handleExpiredTimer(self, key, timerValues, expiredTimerInfo) -> Iterator[pd.DataFrame]:
-        # reset count state each time the timer is expired
-        timer_list_1 = [e for e in self.handle.listTimers()]
-        timer_list_2 = []
-        idx = 0
-        for e in self.handle.listTimers():
-            timer_list_2.append(e)
-            # check multiple iterator on the same grouping key works
-            assert timer_list_2[idx] == timer_list_1[idx]
-            idx += 1
-
-        if len(timer_list_1) > 0:
-            assert len(timer_list_1) == 2
-        self.count_state.clear()
-        self.handle.deleteTimer(expiredTimerInfo.getExpiryTimeInMs())
-        yield pd.DataFrame(
-            {
-                "id": key,
-                "countAsString": str("-1"),
-                "timeValues": str(expiredTimerInfo.getExpiryTimeInMs()),
-            }
+    @classmethod
+    def conf(cls):
+        cfg = SparkConf()
+        cfg.set("spark.sql.shuffle.partitions", "5")
+        cfg.set(
+            "spark.sql.streaming.stateStore.providerClass",
+            "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
         )
-
-    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
-        if not self.count_state.exists():
-            count = 0
-        else:
-            count = int(self.count_state.get()[0])
-
-        if key == ("0",):
-            self.handle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 1)
-
-        rows_count = 0
-        for pdf in rows:
-            pdf_count = len(pdf)
-            rows_count += pdf_count
-
-        count = count + rows_count
-
-        self.count_state.update((str(count),))
-        timestamp = str(timerValues.getCurrentProcessingTimeInMs())
-
-        yield pd.DataFrame({"id": key, "countAsString": str(count), "timeValues": timestamp})
-
-    def close(self) -> None:
-        pass
-
-
-class SimpleStatefulProcessor(StatefulProcessor, unittest.TestCase):
-    dict = {0: {"0": 1, "1": 2}, 1: {"0": 4, "1": 3}}
-    batch_id = 0
-
-    def init(self, handle: StatefulProcessorHandle) -> None:
-        # Test both string type and struct type schemas
-        self.num_violations_state = handle.getValueState("numViolations", "value int")
-        state_schema = StructType([StructField("value", IntegerType(), True)])
-        self.temp_state = handle.getValueState("tempState", state_schema)
-        handle.deleteIfExists("tempState")
-
-    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
-        with self.assertRaisesRegex(PySparkRuntimeError, "Error checking value state exists"):
-            self.temp_state.exists()
-        new_violations = 0
-        count = 0
-        key_str = key[0]
-        exists = self.num_violations_state.exists()
-        if exists:
-            existing_violations_row = self.num_violations_state.get()
-            existing_violations = existing_violations_row[0]
-            assert existing_violations == self.dict[0][key_str]
-            self.batch_id = 1
-        else:
-            existing_violations = 0
-        for pdf in rows:
-            pdf_count = pdf.count()
-            count += pdf_count.get("temperature")
-            violations_pdf = pdf.loc[pdf["temperature"] > 100]
-            new_violations += violations_pdf.count().get("temperature")
-        updated_violations = new_violations + existing_violations
-        assert updated_violations == self.dict[self.batch_id][key_str]
-        self.num_violations_state.update((updated_violations,))
-        yield pd.DataFrame({"id": key, "countAsString": str(count)})
-
-    def close(self) -> None:
-        pass
-
-
-class StatefulProcessorChainingOps(StatefulProcessor):
-    def init(self, handle: StatefulProcessorHandle) -> None:
-        pass
-
-    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
-        for pdf in rows:
-            timestamp_list = pdf["eventTime"].tolist()
-        yield pd.DataFrame({"id": key, "outputTimestamp": timestamp_list[0]})
-
-    def close(self) -> None:
-        pass
-
-
-# A stateful processor that inherit all behavior of SimpleStatefulProcessor except that it use
-# ttl state with a large timeout.
-class SimpleTTLStatefulProcessor(SimpleStatefulProcessor, unittest.TestCase):
-    def init(self, handle: StatefulProcessorHandle) -> None:
-        state_schema = StructType([StructField("value", IntegerType(), True)])
-        self.num_violations_state = handle.getValueState("numViolations", state_schema, 30000)
-        self.temp_state = handle.getValueState("tempState", state_schema)
-        handle.deleteIfExists("tempState")
-
-
-class TTLStatefulProcessor(StatefulProcessor):
-    def init(self, handle: StatefulProcessorHandle) -> None:
-        state_schema = StructType([StructField("value", IntegerType(), True)])
-        user_key_schema = StructType([StructField("id", StringType(), True)])
-        self.ttl_count_state = handle.getValueState("ttl-state", state_schema, 10000)
-        self.count_state = handle.getValueState("state", state_schema)
-        self.ttl_list_state = handle.getListState("ttl-list-state", state_schema, 10000)
-        self.ttl_map_state = handle.getMapState(
-            "ttl-map-state", user_key_schema, state_schema, 10000
-        )
-
-    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
-        count = 0
-        ttl_count = 0
-        ttl_list_state_count = 0
-        ttl_map_state_count = 0
-        id = key[0]
-        if self.count_state.exists():
-            count = self.count_state.get()[0]
-        if self.ttl_count_state.exists():
-            ttl_count = self.ttl_count_state.get()[0]
-        if self.ttl_list_state.exists():
-            iter = self.ttl_list_state.get()
-            for s in iter:
-                ttl_list_state_count += s[0]
-        if self.ttl_map_state.exists():
-            ttl_map_state_count = self.ttl_map_state.getValue(key)[0]
-        for pdf in rows:
-            pdf_count = pdf.count().get("temperature")
-            count += pdf_count
-            ttl_count += pdf_count
-            ttl_list_state_count += pdf_count
-            ttl_map_state_count += pdf_count
-
-        self.count_state.update((count,))
-        # skip updating state for the 2nd batch so that ttl state expire
-        if not (ttl_count == 2 and id == "0"):
-            self.ttl_count_state.update((ttl_count,))
-            self.ttl_list_state.put([(ttl_list_state_count,), (ttl_list_state_count,)])
-            self.ttl_map_state.updateValue(key, (ttl_map_state_count,))
-        yield pd.DataFrame(
-            {
-                "id": [
-                    f"ttl-count-{id}",
-                    f"count-{id}",
-                    f"ttl-list-state-count-{id}",
-                    f"ttl-map-state-count-{id}",
-                ],
-                "count": [ttl_count, count, ttl_list_state_count, ttl_map_state_count],
-            }
-        )
-
-    def close(self) -> None:
-        pass
-
-
-class InvalidSimpleStatefulProcessor(StatefulProcessor):
-    def init(self, handle: StatefulProcessorHandle) -> None:
-        state_schema = StructType([StructField("value", IntegerType(), True)])
-        self.num_violations_state = handle.getValueState("numViolations", state_schema)
-
-    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
-        count = 0
-        exists = self.num_violations_state.exists()
-        assert not exists
-        # try to get a state variable with no value
-        assert self.num_violations_state.get() is None
-        self.num_violations_state.clear()
-        yield pd.DataFrame({"id": key, "countAsString": str(count)})
-
-    def close(self) -> None:
-        pass
-
-
-class ListStateProcessor(StatefulProcessor):
-    # Dict to store the expected results. The key represents the grouping key string, and the value
-    # is a dictionary of pandas dataframe index -> expected temperature value. Since we set
-    # maxRecordsPerBatch to 2, we expect the pandas dataframe dictionary to have 2 entries.
-    dict = {0: 120, 1: 20}
-
-    def init(self, handle: StatefulProcessorHandle) -> None:
-        state_schema = StructType([StructField("temperature", IntegerType(), True)])
-        self.list_state1 = handle.getListState("listState1", state_schema)
-        self.list_state2 = handle.getListState("listState2", state_schema)
-
-    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
-        count = 0
-        for pdf in rows:
-            list_state_rows = [(120,), (20,)]
-            self.list_state1.put(list_state_rows)
-            self.list_state2.put(list_state_rows)
-            self.list_state1.appendValue((111,))
-            self.list_state2.appendValue((222,))
-            self.list_state1.appendList(list_state_rows)
-            self.list_state2.appendList(list_state_rows)
-            pdf_count = pdf.count()
-            count += pdf_count.get("temperature")
-        iter1 = self.list_state1.get()
-        iter2 = self.list_state2.get()
-        # Mixing the iterator to test it we can resume from the correct point
-        assert next(iter1)[0] == self.dict[0]
-        assert next(iter2)[0] == self.dict[0]
-        assert next(iter1)[0] == self.dict[1]
-        assert next(iter2)[0] == self.dict[1]
-        # Get another iterator for list_state1 to test if the 2 iterators (iter1 and iter3) don't
-        # interfere with each other.
-        iter3 = self.list_state1.get()
-        assert next(iter3)[0] == self.dict[0]
-        assert next(iter3)[0] == self.dict[1]
-        # the second arrow batch should contain the appended value 111 for list_state1 and
-        # 222 for list_state2
-        assert next(iter1)[0] == 111
-        assert next(iter2)[0] == 222
-        assert next(iter3)[0] == 111
-        # since we put another 2 rows after 111/222, check them here
-        assert next(iter1)[0] == self.dict[0]
-        assert next(iter2)[0] == self.dict[0]
-        assert next(iter3)[0] == self.dict[0]
-        assert next(iter1)[0] == self.dict[1]
-        assert next(iter2)[0] == self.dict[1]
-        assert next(iter3)[0] == self.dict[1]
-        yield pd.DataFrame({"id": key, "countAsString": str(count)})
-
-    def close(self) -> None:
-        pass
-
-
-class ListStateLargeTTLProcessor(ListStateProcessor):
-    def init(self, handle: StatefulProcessorHandle) -> None:
-        state_schema = StructType([StructField("temperature", IntegerType(), True)])
-        self.list_state1 = handle.getListState("listState1", state_schema, 30000)
-        self.list_state2 = handle.getListState("listState2", state_schema, 30000)
-
-
-class MapStateProcessor(StatefulProcessor):
-    def init(self, handle: StatefulProcessorHandle):
-        # Test string type schemas
-        self.map_state = handle.getMapState("mapState", "name string", "count int")
-
-    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
-        count = 0
-        key1 = ("key1",)
-        key2 = ("key2",)
-        for pdf in rows:
-            pdf_count = pdf.count()
-            count += pdf_count.get("temperature")
-        value1 = count
-        value2 = count
-        if self.map_state.exists():
-            if self.map_state.containsKey(key1):
-                value1 += self.map_state.getValue(key1)[0]
-            if self.map_state.containsKey(key2):
-                value2 += self.map_state.getValue(key2)[0]
-        self.map_state.updateValue(key1, (value1,))
-        self.map_state.updateValue(key2, (value2,))
-        key_iter = self.map_state.keys()
-        assert next(key_iter)[0] == "key1"
-        assert next(key_iter)[0] == "key2"
-        value_iter = self.map_state.values()
-        assert next(value_iter)[0] == value1
-        assert next(value_iter)[0] == value2
-        map_iter = self.map_state.iterator()
-        assert next(map_iter)[0] == key1
-        assert next(map_iter)[1] == (value2,)
-        self.map_state.removeKey(key1)
-        assert not self.map_state.containsKey(key1)
-        yield pd.DataFrame({"id": key, "countAsString": str(count)})
-
-    def close(self) -> None:
-        pass
-
-
-# A stateful processor that inherit all behavior of MapStateProcessor except that it use
-# ttl state with a large timeout.
-class MapStateLargeTTLProcessor(MapStateProcessor):
-    def init(self, handle: StatefulProcessorHandle) -> None:
-        key_schema = StructType([StructField("name", StringType(), True)])
-        value_schema = StructType([StructField("count", IntegerType(), True)])
-        self.map_state = handle.getMapState("mapState", key_schema, value_schema, 30000)
-        self.list_state = handle.getListState("listState", key_schema)
-
-
-class BasicProcessor(StatefulProcessor):
-    # Schema definitions
-    state_schema = StructType(
-        [StructField("id", IntegerType(), True), StructField("name", StringType(), True)]
-    )
-
-    def init(self, handle):
-        self.state = handle.getValueState("state", self.state_schema)
-
-    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
-        for pdf in rows:
-            pass
-        id_val = int(key[0])
-        name = f"name-{id_val}"
-        self.state.update((id_val, name))
-        yield pd.DataFrame({"id": [key[0]], "value": [{"id": id_val, "name": name}]})
-
-    def close(self) -> None:
-        pass
-
-
-class AddFieldsProcessor(StatefulProcessor):
-    state_schema = StructType(
-        [
-            StructField("id", IntegerType(), True),
-            StructField("name", StringType(), True),
-            StructField("count", IntegerType(), True),
-            StructField("active", BooleanType(), True),
-            StructField("score", FloatType(), True),
-        ]
-    )
-
-    def init(self, handle):
-        self.state = handle.getValueState("state", self.state_schema)
-
-    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
-        for pdf in rows:
-            pass
-        id_val = int(key[0])
-        name = f"name-{id_val}"
-
-        if self.state.exists():
-            state_data = self.state.get()
-            state_dict = {
-                "id": state_data[0],
-                "name": state_data[1],
-                "count": state_data[2],
-                "active": state_data[3],
-                "score": state_data[4],
-            }
-        else:
-            state_dict = {
-                "id": id_val,
-                "name": name,
-                "count": 100,
-                "active": True,
-                "score": 99.9,
-            }
-
-        self.state.update(
-            (
-                state_dict["id"],
-                state_dict["name"] + "0",
-                state_dict["count"],
-                state_dict["active"],
-                state_dict["score"],
-            )
-        )
-        yield pd.DataFrame({"id": [key[0]], "value": [state_dict]})
-
-    def close(self) -> None:
-        pass
-
-
-class RemoveFieldsProcessor(StatefulProcessor):
-    # Schema definitions
-    state_schema = StructType(
-        [StructField("id", IntegerType(), True), StructField("name", StringType(), True)]
-    )
-
-    def init(self, handle):
-        self.state = handle.getValueState("state", self.state_schema)
-
-    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
-        for pdf in rows:
-            pass
-        id_val = int(key[0])
-        name = f"name-{id_val}"
-        if self.state.exists():
-            name = self.state.get()[1]
-        self.state.update((id_val, name))
-        yield pd.DataFrame({"id": [key[0]], "value": [{"id": id_val, "name": name}]})
-
-    def close(self) -> None:
-        pass
-
-
-class ReorderedFieldsProcessor(StatefulProcessor):
-    state_schema = StructType(
-        [
-            StructField("name", StringType(), True),
-            StructField("id", IntegerType(), True),
-            StructField("score", FloatType(), True),
-            StructField("count", IntegerType(), True),
-            StructField("active", BooleanType(), True),
-        ]
-    )
-
-    def init(self, handle):
-        self.state = handle.getValueState("state", self.state_schema)
-
-    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
-        for pdf in rows:
-            pass
-        id_val = int(key[0])
-        name = f"name-{id_val}"
-
-        if self.state.exists():
-            state_data = self.state.get()
-            state_dict = {
-                "name": state_data[0],
-                "id": state_data[1],
-                "score": state_data[2],
-                "count": state_data[3],
-                "active": state_data[4],
-            }
-        else:
-            state_dict = {
-                "name": name,
-                "id": id_val,
-                "score": 99.9,
-                "count": 100,
-                "active": True,
-            }
-        self.state.update(
-            (
-                state_dict["name"],
-                state_dict["id"],
-                state_dict["score"],
-                state_dict["count"],
-                state_dict["active"],
-            )
-        )
-        yield pd.DataFrame({"id": [key[0]], "value": [state_dict]})
-
-    def close(self) -> None:
-        pass
-
-
-class UpcastProcessor(StatefulProcessor):
-    state_schema = StructType(
-        [
-            StructField("id", LongType(), True),  # Upcast from Int to Long
-            StructField("name", StringType(), True),
-        ]
-    )
-
-    def init(self, handle):
-        self.state = handle.getValueState("state", self.state_schema)
-
-    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
-        for pdf in rows:
-            pass
-        id_val = int(key[0])
-        name = f"name-{id_val}"
-        if self.state.exists():
-            id_val += self.state.get()[0] + 1
-        self.state.update((id_val, name))
-        yield pd.DataFrame({"id": [key[0]], "value": [{"id": id_val, "name": name}]})
-
-    def close(self) -> None:
-        pass
+        cfg.set("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch", "2")
+        cfg.set("spark.sql.session.timeZone", "UTC")
+        # TODO SPARK-49046 this config is to stop query from FEB sink gracefully
+        cfg.set("spark.sql.streaming.noDataMicroBatches.enabled", "false")
+        return cfg
 
 
 class TransformWithStateInPandasTests(TransformWithStateInPandasTestsMixin, ReusedSQLTestCase):
+    pass
+
+
+class TransformWithStateInPySparkTests(TransformWithStateInPySparkTestsMixin, ReusedSQLTestCase):
     pass
 
 

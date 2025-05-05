@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.classic.Catalog
-import org.apache.spark.sql.connector.FakeV2Provider
+import org.apache.spark.sql.connector.{FakeV2Provider, InMemoryTableSessionCatalog}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.functions._
@@ -269,6 +269,16 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       .collect()
       .map(t => Array(t.catalog, t.namespace.mkString("."), t.name).mkString(".")).toSet ==
       Set("testcat.my_db.my_table2"))
+  }
+
+  test("SPARK-51219: list tables with non-buildin V2 catalog") {
+    withSQLConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key ->
+      classOf[InMemoryTableSessionCatalog].getName) {
+      createTable("my_table")
+      createTempTable("my_temp_table")
+      assert(spark.catalog.listTables().collect().map(_.name).toSet ==
+        Set("my_table", "my_temp_table"))
+    }
   }
 
   test("list tables with database") {

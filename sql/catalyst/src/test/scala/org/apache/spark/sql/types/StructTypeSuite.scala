@@ -22,10 +22,12 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, DefaultValueExpression}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, ResolveDefaultColumnsUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType => DT}
 import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
@@ -33,6 +35,7 @@ import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.StructType.fromDDL
 import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.UTF8String.LongWrapper
 
 class StructTypeSuite extends SparkFunSuite with SQLHelper {
 
@@ -797,5 +800,69 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
 
     assert(
       mapper.readTree(mapWithNestedArray.json) == mapper.readTree(expectedJson))
+  }
+
+  test("SPARK-51208: ColumnDefinition.toV1Column should preserve EXISTS_DEFAULT resolution") {
+
+    def validateConvertedDefaults(
+        colName: String,
+        dataType: DataType,
+        defaultSQL: String,
+        expectedExists: String): Unit = {
+      val existsDefault = ResolveDefaultColumns.analyze(colName, dataType, defaultSQL, "")
+      val col =
+        ColumnDefinition(colName, dataType, true, None,
+          Some(DefaultValueExpression(existsDefault, defaultSQL)))
+
+      val structField = col.toV1Column
+      assert(
+        structField.metadata.getString(
+          ResolveDefaultColumnsUtils.CURRENT_DEFAULT_COLUMN_METADATA_KEY) ==
+          defaultSQL)
+      val existsSQL = structField.metadata.getString(
+          ResolveDefaultColumnsUtils.EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+      assert(existsSQL == expectedExists)
+      assert(Literal.fromSQL(existsSQL).resolved)
+    }
+
+    validateConvertedDefaults("c1", StringType, "current_catalog()", "'spark_catalog'")
+    validateConvertedDefaults("c2", VariantType, "parse_json('1')", "PARSE_JSON('1')")
+    validateConvertedDefaults("c3", VariantType, "parse_json('{\"k\": \"v\"}')",
+      "PARSE_JSON('{\"k\":\"v\"}')")
+    validateConvertedDefaults("c4", VariantType, "parse_json(null)", "CAST(NULL AS VARIANT)")
+    validateConvertedDefaults("c5", IntegerType, "1 + 1", "2")
+  }
+
+  test("SPARK-51119: Add fallback to process unresolved EXISTS_DEFAULT") {
+    val source = StructType(
+      Array(
+        StructField("c0", VariantType, true,
+          new MetadataBuilder()
+            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY,
+              "parse_json(null)")
+            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+              "parse_json(null)")
+            .build()),
+        StructField("c1", StringType, true,
+          new MetadataBuilder()
+            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY,
+              "current_catalog()")
+            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+              "current_catalog()")
+            .build()),
+        StructField("c2", StringType, true,
+          new MetadataBuilder()
+            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY,
+              "CAST(CURRENT_TIMESTAMP AS BIGINT)")
+            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+              "CAST(CURRENT_TIMESTAMP AS BIGINT)")
+            .build())))
+    val res = ResolveDefaultColumns.existenceDefaultValues(source)
+    assert(res(0) == null)
+    assert(res(1) == UTF8String.fromString("spark_catalog"))
+
+    val res2Wrapper = new LongWrapper
+    assert(res(2).asInstanceOf[UTF8String].toLong(res2Wrapper))
+    assert(res2Wrapper.value > 0)
   }
 }

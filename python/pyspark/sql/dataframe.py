@@ -2127,15 +2127,16 @@ class DataFrame:
         Examples
         --------
         >>> from pyspark.sql.functions import col
-        >>> dataset = spark.range(0, 100).select((col("id") % 3).alias("key"))
+        >>> dataset = spark.range(0, 100, 1, 5).select((col("id") % 3).alias("key"))
         >>> sampled = dataset.sampleBy("key", fractions={0: 0.1, 1: 0.2}, seed=0)
         >>> sampled.groupBy("key").count().orderBy("key").show()
         +---+-----+
         |key|count|
         +---+-----+
-        |  0|    3|
-        |  1|    6|
+        |  0|    4|
+        |  1|    9|
         +---+-----+
+
         >>> dataset.sampleBy(col("key"), fractions={2: 1.0}, seed=0).count()
         33
         """
@@ -5935,7 +5936,7 @@ class DataFrame:
 
     @dispatch_df_method
     def toDF(self, *cols: str) -> "DataFrame":
-        """Returns a new :class:`DataFrame` that with new specified column names
+        """Returns a new :class:`DataFrame` with new specified column names
 
         .. versionadded:: 1.6.0
 
@@ -6828,13 +6829,13 @@ class DataFrame:
     @property
     def plot(self) -> "PySparkPlotAccessor":
         """
-        Returns a :class:`PySparkPlotAccessor` for plotting functions.
+        Returns a :class:`plot.core.PySparkPlotAccessor` for plotting functions.
 
         .. versionadded:: 4.0.0
 
         Returns
         -------
-        :class:`PySparkPlotAccessor`
+        :class:`plot.core.PySparkPlotAccessor`
 
         Notes
         -----

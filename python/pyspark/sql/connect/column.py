@@ -44,10 +44,10 @@ from pyspark.sql.connect.expressions import (
     Expression,
     UnresolvedFunction,
     UnresolvedExtractValue,
-    LazyExpression,
     LiteralExpression,
     CaseWhen,
     SortOrder,
+    SubqueryExpression,
     CastExpression,
     WindowExpression,
     WithField,
@@ -459,9 +459,21 @@ class Column(ParentColumn):
         return Column(WindowExpression(windowFunction=self._expr, windowSpec=window))
 
     def outer(self) -> ParentColumn:
-        return Column(LazyExpression(self._expr))
+        return Column(self._expr)
 
     def isin(self, *cols: Any) -> ParentColumn:
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        if len(cols) == 1 and isinstance(cols[0], DataFrame):
+            if isinstance(self._expr, UnresolvedFunction) and self._expr._name == "struct":
+                values = self._expr.children
+            else:
+                values = [self._expr]
+
+            return Column(
+                SubqueryExpression(cols[0]._plan, subquery_type="in", in_subquery_values=values)
+            )
+
         if len(cols) == 1 and isinstance(cols[0], (list, set)):
             _cols = list(cols[0])
         else:

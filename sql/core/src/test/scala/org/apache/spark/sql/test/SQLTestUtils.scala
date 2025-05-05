@@ -424,6 +424,17 @@ private[sql] trait SQLTestUtilsBase
   }
 
   /**
+   * Drops temporary variable `variableName` after calling `f`.
+   */
+  protected def withSessionVariable(variableNames: String*)(f: => Unit): Unit = {
+    Utils.tryWithSafeFinally(f) {
+      variableNames.foreach { name =>
+        spark.sql(s"DROP TEMPORARY VARIABLE IF EXISTS $name")
+      }
+    }
+  }
+
+  /**
    * Activates database `db` before executing `f`, then switches back to `default` database after
    * `f` returns.
    */

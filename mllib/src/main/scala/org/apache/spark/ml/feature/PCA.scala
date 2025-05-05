@@ -128,9 +128,7 @@ class PCAModel private[ml] (
   import PCAModel._
 
   // For ml connect only
-  @Since("4.0.0")
-  private[ml] def this() = this(Identifiable.randomUID("pca"),
-    DenseMatrix.zeros(1, 1), Vectors.empty)
+  private[ml] def this() = this("", Matrices.empty, Vectors.empty)
 
   /** @group setParam */
   @Since("1.5.0")
@@ -183,16 +181,15 @@ class PCAModel private[ml] (
 
 @Since("1.6.0")
 object PCAModel extends MLReadable[PCAModel] {
+  private[ml] case class Data(pc: Matrix, explainedVariance: Vector)
 
   private[PCAModel] class PCAModelWriter(instance: PCAModel) extends MLWriter {
-
-    private case class Data(pc: DenseMatrix, explainedVariance: DenseVector)
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.pc, instance.explainedVariance)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -214,11 +211,8 @@ object PCAModel extends MLReadable[PCAModel] {
 
       val dataPath = new Path(path, "data").toString
       val model = if (majorVersion(metadata.sparkVersion) >= 2) {
-        val Row(pc: DenseMatrix, explainedVariance: DenseVector) =
-          sparkSession.read.parquet(dataPath)
-            .select("pc", "explainedVariance")
-            .head()
-        new PCAModel(metadata.uid, pc, explainedVariance)
+        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+        new PCAModel(metadata.uid, data.pc.toDense, data.explainedVariance.toDense)
       } else {
         // pc field is the old matrix format in Spark <= 1.6
         // explainedVariance field is not present in Spark <= 1.6

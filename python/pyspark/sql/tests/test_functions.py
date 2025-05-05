@@ -18,7 +18,7 @@
 from contextlib import redirect_stdout
 import datetime
 from enum import Enum
-from inspect import getmembers, isfunction
+from inspect import getmembers, isfunction, isclass
 import io
 from itertools import chain
 import math
@@ -65,9 +65,6 @@ class FunctionsTestsMixin:
             "any",  # equivalent to python ~some
             "len",  # equivalent to python ~length
             "udaf",  # used for creating UDAF's which are not supported in PySpark
-            "random",  # namespace conflict with python built-in module
-            "uuid",  # namespace conflict with python built-in module
-            "chr",  # namespace conflict with python built-in function
             "partitioning$",  # partitioning expressions for DSv2
         ]
 
@@ -89,6 +86,75 @@ class FunctionsTestsMixin:
         self.assertEqual(
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"
         )
+
+    def test_wildcard_import(self):
+        all_set = set(F.__all__)
+
+        # {
+        #     "abs",
+        #     "acos",
+        #     "acosh",
+        #     "add_months",
+        #     "aes_decrypt",
+        #     "aes_encrypt",
+        #     ...,
+        # }
+        fn_set = {
+            name
+            for (name, value) in getmembers(F, isfunction)
+            if name[0] != "_" and value.__module__ != "typing"
+        }
+
+        deprecated_fn_list = [
+            "approxCountDistinct",  # deprecated
+            "bitwiseNOT",  # deprecated
+            "countDistinct",  # deprecated
+            "chr",  # name conflict with builtin function
+            "random",  # name conflict with builtin function
+            "shiftLeft",  # deprecated
+            "shiftRight",  # deprecated
+            "shiftRightUnsigned",  # deprecated
+            "sumDistinct",  # deprecated
+            "toDegrees",  # deprecated
+            "toRadians",  # deprecated
+            "uuid",  # name conflict with builtin module
+        ]
+        unregistered_fn_list = [
+            "chr",  # name conflict with builtin function
+            "random",  # name conflict with builtin function
+            "uuid",  # name conflict with builtin module
+        ]
+        expected_fn_all_diff = set(deprecated_fn_list + unregistered_fn_list)
+        self.assertEqual(expected_fn_all_diff, fn_set - all_set)
+
+        # {
+        #     "AnalyzeArgument",
+        #     "AnalyzeResult",
+        #     ...,
+        #     "UserDefinedFunction",
+        #     "UserDefinedTableFunction",
+        # }
+        clz_set = {
+            name
+            for (name, value) in getmembers(F, isclass)
+            if name[0] != "_" and value.__module__ != "typing"
+        }
+
+        expected_clz_all_diff = {
+            "ArrayType",  # should be imported from pyspark.sql.types
+            "ByteType",  # should be imported from pyspark.sql.types
+            "Column",  # should be imported from pyspark.sql
+            "DataType",  # should be imported from pyspark.sql.types
+            "NumericType",  # should be imported from pyspark.sql.types
+            "PySparkTypeError",  # should be imported from pyspark.errors
+            "PySparkValueError",  # should be imported from pyspark.errors
+            "StringType",  # should be imported from pyspark.sql.types
+            "StructType",  # should be imported from pyspark.sql.types
+        }
+        self.assertEqual(expected_clz_all_diff, clz_set - all_set)
+
+        unknonw_set = all_set - (fn_set | clz_set)
+        self.assertEqual(unknonw_set, set())
 
     def test_explode(self):
         d = [
@@ -1496,7 +1562,9 @@ class FunctionsTestsMixin:
         self.assertEqual("""{"b":[{"c":"str2"}]}""", actual["var_lit"])
 
     def test_variant_expressions(self):
-        df = self.spark.createDataFrame([Row(json="""{ "a" : 1 }"""), Row(json="""{ "b" : 2 }""")])
+        df = self.spark.createDataFrame(
+            [Row(json="""{ "a" : 1 }""", path="$.a"), Row(json="""{ "b" : 2 }""", path="$.b")]
+        )
         v = F.parse_json(df.json)
 
         def check(resultDf, expected):
@@ -1509,6 +1577,10 @@ class FunctionsTestsMixin:
         check(df.select(F.variant_get(v, "$.a", "int")), [1, None])
         check(df.select(F.variant_get(v, "$.b", "int")), [None, 2])
         check(df.select(F.variant_get(v, "$.a", "double")), [1.0, None])
+
+        # non-literal variant_get
+        check(df.select(F.variant_get(v, df.path, "int")), [1, 2])
+        check(df.select(F.try_variant_get(v, df.path, "binary")), [None, None])
 
         with self.assertRaises(SparkRuntimeException) as ex:
             df.select(F.variant_get(v, "$.a", "binary")).collect()

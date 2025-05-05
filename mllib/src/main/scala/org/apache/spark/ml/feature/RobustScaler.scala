@@ -25,7 +25,6 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol, HasRelativeError}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
@@ -230,7 +229,8 @@ class RobustScalerModel private[ml] (
 
   import RobustScalerModel._
 
-  private[ml] def this() = this(Identifiable.randomUID("robustScal"), Vectors.empty, Vectors.empty)
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty, Vectors.empty)
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -279,17 +279,16 @@ class RobustScalerModel private[ml] (
 
 @Since("3.0.0")
 object RobustScalerModel extends MLReadable[RobustScalerModel] {
+  private[ml] case class Data(range: Vector, median: Vector)
 
   private[RobustScalerModel]
   class RobustScalerModelWriter(instance: RobustScalerModel) extends MLWriter {
-
-    private case class Data(range: Vector, median: Vector)
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.range, instance.median)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -300,12 +299,8 @@ object RobustScalerModel extends MLReadable[RobustScalerModel] {
     override def load(path: String): RobustScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-      val Row(range: Vector, median: Vector) = MLUtils
-        .convertVectorColumnsToML(data, "range", "median")
-        .select("range", "median")
-        .head()
-      val model = new RobustScalerModel(metadata.uid, range, median)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val model = new RobustScalerModel(metadata.uid, data.range, data.median)
       metadata.getAndSetParams(model)
       model
     }

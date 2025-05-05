@@ -381,9 +381,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       keyStateEncoderSpec,
       valueSchema,
       Some(testProvider),
-      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 0))
-    )
-    new AvroStateEncoder(keyStateEncoderSpec, valueSchema, None, None)
+      StateStore.DEFAULT_COL_FAMILY_NAME)
   }
 
   private def createNoPrefixKeyEncoder(): RocksDBDataEncoder = {
@@ -428,14 +426,15 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
     withClue("Testing prefix scan encoding: ") {
       val prefixKeySpec = PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 2)
       val encoder = new AvroStateEncoder(prefixKeySpec, valueSchema, Some(testProvider),
-        Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 0)))
+        StateStore.DEFAULT_COL_FAMILY_NAME)
 
       // Then encode just the remaining key portion (which should include schema ID)
       val remainingKeyRow = keyProj.apply(InternalRow(null, null, 3.14))
       val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
 
       // Verify schema ID in remaining key bytes
-      val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(encodedRemainingKey)
+      val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(
+        encoder.removeVersionByte(encodedRemainingKey))
       assert(decodedSchemaIdRow.schemaId === 18,
         "Schema ID not preserved in prefix scan remaining key encoding")
     }
@@ -452,7 +451,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
     withClue("Testing range scan encoding: ") {
       val rangeScanSpec = RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals = Seq(0, 1))
       val encoder = new AvroStateEncoder(rangeScanSpec, valueSchema, Some(testProvider),
-        Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 0)))
+        StateStore.DEFAULT_COL_FAMILY_NAME)
 
       // Encode remaining key (non-ordering columns)
       // For range scan, the remaining key schema only contains columns NOT in orderingOrdinals
@@ -464,7 +463,8 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
 
       // Verify schema ID in remaining key bytes
-      val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(encodedRemainingKey)
+      val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(
+        encoder.removeVersionByte(encodedRemainingKey))
       assert(decodedSchemaIdRow.schemaId === 24,
         "Schema ID not preserved in range scan remaining key encoding")
 
@@ -560,14 +560,15 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       val keySpec = NoPrefixKeyStateEncoderSpec(keySchema)
       val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 0, valueSchemaId = 42))
       val avroEncoder = new AvroStateEncoder(keySpec, valueSchema, Some(testProvider),
-        Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 0)))
+        StateStore.DEFAULT_COL_FAMILY_NAME)
       val valueEncoder = new SingleValueStateEncoder(avroEncoder, valueSchema)
 
       // Encode value
       val encodedValue = valueEncoder.encodeValue(value)
 
       // Verify schema ID was included and preserved
-      val decodedSchemaIdRow = avroEncoder.decodeStateSchemaIdRow(encodedValue)
+      val decodedSchemaIdRow = avroEncoder.decodeStateSchemaIdRow(
+        avroEncoder.removeVersionByte(encodedValue))
       assert(decodedSchemaIdRow.schemaId === 42,
         "Schema ID not preserved in single value encoding")
 
@@ -629,7 +630,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
       if (isChangelogCheckpointingEnabled) {
         assert(changelogVersionsPresent(remoteDir) === (1 to 50))
-        assert(snapshotVersionsPresent(remoteDir) === Range.inclusive(5, 50, 5))
+        if (colFamiliesEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1) ++ Range.inclusive(5, 50, 5))
+        } else {
+          assert(snapshotVersionsPresent(remoteDir) === Range.inclusive(5, 50, 5))
+        }
       } else {
         assert(changelogVersionsPresent(remoteDir) === Seq.empty)
         assert(snapshotVersionsPresent(remoteDir) === (1 to 50))
@@ -693,14 +698,25 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db.commit()
           db.doMaintenance()
         }
-        assert(snapshotVersionsPresent(remoteDir) === Seq(2, 3))
+
+        if (colFamiliesEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1, 2, 3))
+        } else {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(2, 3))
+        }
         assert(changelogVersionsPresent(remoteDir) == Seq(1, 2, 3))
 
         for (version <- 3 to 4) {
           db.load(version)
           db.commit()
         }
-        assert(snapshotVersionsPresent(remoteDir) === Seq(2, 3))
+
+        if (colFamiliesEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1, 2, 3))
+        } else {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(2, 3))
+        }
+
         assert(changelogVersionsPresent(remoteDir) == (1 to 5))
         db.doMaintenance()
         // 3 is the latest snapshot <= maxSnapshotVersionPresent - minVersionsToRetain + 1
@@ -783,27 +799,47 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db.commit()
           db.doMaintenance()
         }
-        // Snapshot should not be created because minDeltasForSnapshot = 3
-        assert(snapshotVersionsPresent(remoteDir) === Seq.empty)
+
+        if (colFamiliesEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1))
+        } else {
+          // Snapshot should not be created because minDeltasForSnapshot = 3
+          assert(snapshotVersionsPresent(remoteDir) === Seq.empty)
+        }
+
         assert(changelogVersionsPresent(remoteDir) == Seq(1, 2))
         db.load(2, versionToUniqueId.get(2))
         db.commit()
         db.doMaintenance()
-        assert(snapshotVersionsPresent(remoteDir) === Seq(3))
-        db.load(3, versionToUniqueId.get(3))
+        if (colFamiliesEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1))
+        } else {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(3))
+        }
 
         for (version <- 3 to 7) {
           db.load(version, versionToUniqueId.get(version))
           db.commit()
           db.doMaintenance()
         }
-        assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6))
+
+        if (colFamiliesEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1, 4, 7))
+        } else {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6))
+        }
+
         for (version <- 8 to 17) {
           db.load(version, versionToUniqueId.get(version))
           db.commit()
         }
         db.doMaintenance()
-        assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18))
+
+        if (colFamiliesEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1, 4, 7, 16))
+        } else {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18))
+        }
       }
 
       // pick up from the last snapshot and the next upload will be for version 21
@@ -813,14 +849,24 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.load(18, versionToUniqueId.get(18))
         db.commit()
         db.doMaintenance()
-        assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18))
+
+        if (colFamiliesEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1, 4, 7, 16, 19))
+        } else {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18))
+        }
 
         for (version <- 19 to 20) {
           db.load(version, versionToUniqueId.get(version))
           db.commit()
         }
         db.doMaintenance()
-        assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18, 21))
+
+        if (colFamiliesEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1, 4, 7, 16, 19))
+        } else {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18, 21))
+        }
       }
   }
 
@@ -902,6 +948,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.remove((version - 1).toString)
         db.commit()
       }
+
       assert(snapshotVersionsPresent(remoteDir) === (1 to 30))
       assert(changelogVersionsPresent(remoteDir) === (30 to 60))
       for (version <- 1 to 60) {
@@ -918,6 +965,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
       // Check that snapshots and changelogs get purged correctly.
       db.doMaintenance()
+
       assert(snapshotVersionsPresent(remoteDir) === Seq(30, 60))
       if (enableStateStoreCheckpointIds) {
         // recommit version 60 creates another changelog file with different unique id
@@ -927,9 +975,16 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
 
       // Verify the content of retained versions.
-      for (version <- 30 to 60) {
-        db.load(version, versionToUniqueId.get(version), readOnly = true)
-        assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
+      if (enableStateStoreCheckpointIds && colFamiliesEnabled) {
+        for (version <- 31 to 60) {
+          db.load(version, readOnly = true)
+          assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
+        }
+      } else {
+        for (version <- 30 to 60) {
+          db.load(version, readOnly = true)
+          assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
+        }
       }
     }
   }
@@ -1074,6 +1129,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.load(version, versionToUniqueId.get(version))
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
       }
+
       for (version <- 31 to 60) {
         db.load(version - 1, versionToUniqueId.get(version - 1))
         db.put(version.toString, version.toString)
@@ -1081,7 +1137,17 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.commit()
       }
       assert(changelogVersionsPresent(remoteDir) === (1 to 30))
-      assert(snapshotVersionsPresent(remoteDir) === (31 to 60))
+
+      var result: Seq[Long] = if (colFamiliesEnabled) {
+        Seq(1)
+      } else {
+        Seq.empty
+      }
+
+      (31 to 60).foreach { i =>
+        result = result :+ i
+      }
+      assert(snapshotVersionsPresent(remoteDir) === result)
       for (version <- 1 to 60) {
         db.load(version, versionToUniqueId.get(version), readOnly = true)
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
@@ -1112,6 +1178,95 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     withDB(remoteDir, conf = RocksDBConf().copy(), useColumnFamilies = colFamiliesEnabled) { db =>
       assert(db.rocksDbOptions.compressionType() == CompressionType.LZ4_COMPRESSION)
     }
+  }
+
+  testWithColumnFamilies(
+    "RocksDB: test includesPrefix parameter during changelog replay",
+    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
+
+    // Only test when column families are enabled, as the includesPrefix parameter
+    // is only relevant in that case
+    if (colFamiliesEnabled) {
+      val remoteDir = Utils.createTempDir().toString
+      val conf = dbConf.copy(minDeltasForSnapshot = 3, compactOnCommit = false)
+      new File(remoteDir).delete() // to make sure that the directory gets created
+
+      withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+        // Create a test column family
+        val testCfName = "test_cf"
+        db.createColFamilyIfAbsent(testCfName, isInternal = false)
+
+        // Write initial data
+        db.load(0)
+        db.put("key1", "value1", StateStore.DEFAULT_COL_FAMILY_NAME)
+        db.put("key2", "value2", testCfName)
+        db.commit()
+
+        // Get the encoded keys with column family prefixes
+        val keyWithPrefix1 = getKeyWithPrefix(db, "key1", StateStore.DEFAULT_COL_FAMILY_NAME)
+        val keyWithPrefix2 = getKeyWithPrefix(db, "key2", testCfName)
+
+        // Pretend we're replaying changelog with already-prefixed keys
+        // Throughout this test, we will load version 0 and the latest version
+        // in order to ensure that the changelog files are read from and
+        // replayed
+        db.load(0)
+        db.load(1)
+
+        // Use the includesPrefix=true parameter with keys that already have prefixes
+        db.put(keyWithPrefix1, "updated1", includesPrefix = true)
+        db.put(keyWithPrefix2, "updated2", includesPrefix = true)
+        db.commit()
+
+        // Verify the updates were applied correctly
+        db.load(0)
+        db.load(2)
+        assert(toStr(db.get("key1", StateStore.DEFAULT_COL_FAMILY_NAME)) === "updated1")
+        assert(toStr(db.get("key2", testCfName)) === "updated2")
+
+        // Test remove with includesPrefix
+        db.remove(keyWithPrefix1, includesPrefix = true)
+        db.remove(keyWithPrefix2, includesPrefix = true)
+        db.commit()
+
+        // Verify removals worked
+        db.load(0)
+        db.load(3)
+        assert(db.get("key1", StateStore.DEFAULT_COL_FAMILY_NAME) === null)
+        assert(db.get("key2", testCfName) === null)
+
+        // Add back some data for testing merge operation
+        db.put("merge_key", "base", StateStore.DEFAULT_COL_FAMILY_NAME)
+        db.commit()
+
+        // Get encoded key for merge test
+        val mergeKeyWithPrefix = getKeyWithPrefix(
+          db, "merge_key", StateStore.DEFAULT_COL_FAMILY_NAME)
+
+        // Test merge with includesPrefix
+        db.load(0)
+        db.load(4)
+        db.merge(mergeKeyWithPrefix, "appended", includesPrefix = true)
+        db.commit()
+
+        // Verify merge operation worked
+        db.load(0)
+        db.load(5)
+        assert(toStr(db.get("merge_key", StateStore.DEFAULT_COL_FAMILY_NAME)) === "base,appended")
+      }
+    }
+  }
+
+  // Helper method to get a key with column family prefix
+  private def getKeyWithPrefix(db: RocksDB, key: String, cfName: String): Array[Byte] = {
+    // This uses reflection to call the private encodeStateRowWithPrefix method
+    val encodeMethod = classOf[RocksDB].getDeclaredMethod(
+      "encodeStateRowWithPrefix",
+      classOf[Array[Byte]],
+      classOf[String]
+    )
+    encodeMethod.setAccessible(true)
+    encodeMethod.invoke(db, key.getBytes, cfName).asInstanceOf[Array[Byte]]
   }
 
   testWithStateStoreCheckpointIdsAndColumnFamilies(s"RocksDB: get, put, iterator, commit, load",
@@ -1615,7 +1770,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
       new File(remoteDir).delete() // to make sure that the directory gets created
       withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
-        db.createColFamilyIfAbsent("test")
+        db.createColFamilyIfAbsent("test", isInternal = false)
         db.load(0)
         db.put("a", "1")
         db.put("b", "2")
@@ -1716,7 +1871,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         case true => Some(UUID.randomUUID().toString)
       }
       saveCheckpointFiles(fileManager, cpFiles1, version = 1,
-        numKeys = 101, rocksDBFileMapping, uuid)
+        numKeys = 101, rocksDBFileMapping,
+        numInternalKeys = 0, uuid)
       assert(fileManager.getLatestVersion() === 1)
       assert(numRemoteSSTFiles == 2) // 2 sst files copied
       assert(numRemoteLogFiles == 2)
@@ -1731,7 +1887,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         "archive/00003.log" -> 2000
       )
       saveCheckpointFiles(fileManager_, cpFiles1_, version = 1,
-        numKeys = 101, new RocksDBFileMapping(), uuid)
+        numKeys = 101, new RocksDBFileMapping(),
+        numInternalKeys = 0, uuid)
       assert(fileManager_.getLatestVersion() === 1)
       assert(numRemoteSSTFiles == 4)
       assert(numRemoteLogFiles == 4)
@@ -1751,7 +1908,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         "archive/00005.log" -> 2000
       )
       saveCheckpointFiles(fileManager_, cpFiles2,
-        version = 2, numKeys = 121, new RocksDBFileMapping(), uuid)
+        version = 2, numKeys = 121, new RocksDBFileMapping(),
+        numInternalKeys = 0, uuid)
       fileManager_.deleteOldVersions(1)
       assert(numRemoteSSTFiles <= 4) // delete files recorded in 1.zip
       assert(numRemoteLogFiles <= 5) // delete files recorded in 1.zip and orphan 00001.log
@@ -1766,7 +1924,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         "archive/00007.log" -> 2000
       )
       saveCheckpointFiles(fileManager_, cpFiles3,
-        version = 3, numKeys = 131, new RocksDBFileMapping(), uuid)
+        version = 3, numKeys = 131, new RocksDBFileMapping(),
+        numInternalKeys = 0, uuid)
       assert(fileManager_.getLatestVersion() === 3)
       fileManager_.deleteOldVersions(1)
       assert(numRemoteSSTFiles == 1)
@@ -1812,7 +1971,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
 
       saveCheckpointFiles(
-        fileManager, cpFiles1, version = 1, numKeys = 101, rocksDBFileMapping, uuid)
+        fileManager, cpFiles1, version = 1, numKeys = 101, rocksDBFileMapping,
+        numInternalKeys = 0, uuid)
       fileManager.deleteOldVersions(1)
       // Should not delete orphan files even when they are older than all existing files
       // when there is only 1 version.
@@ -1830,7 +1990,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         "archive/00004.log" -> 2000
       )
       saveCheckpointFiles(
-        fileManager, cpFiles2, version = 2, numKeys = 101, rocksDBFileMapping, uuid)
+        fileManager, cpFiles2, version = 2, numKeys = 101, rocksDBFileMapping,
+        numInternalKeys = 0, uuid)
       assert(numRemoteSSTFiles == 5)
       assert(numRemoteLogFiles == 5)
       fileManager.deleteOldVersions(1)
@@ -1880,7 +2041,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         }
 
         saveCheckpointFiles(
-          fileManager, cpFiles1, version = 1, numKeys = 101, fileMapping, uuid)
+          fileManager, cpFiles1, version = 1, numKeys = 101, fileMapping, numInternalKeys = 0,
+          uuid)
         assert(fileManager.getLatestVersion() === 1)
         assert(numRemoteSSTFiles == 2) // 2 sst files copied
         assert(numRemoteLogFiles == 2) // 2 log files copied
@@ -1918,7 +2080,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         // upload version 1 again, new checkpoint will be created and SST files from
         // previously committed version 1 will not be reused.
         saveCheckpointFiles(fileManager, cpFiles1_,
-          version = 1, numKeys = 1001, fileMapping, uuid)
+          version = 1, numKeys = 1001, fileMapping,
+          numInternalKeys = 0, uuid)
         assert(numRemoteSSTFiles === 5, "shouldn't reuse old version 1 SST files" +
           " while uploading version 1 again") // 2 old + 3 new SST files
         assert(numRemoteLogFiles === 5, "shouldn't reuse old version 1 log files" +
@@ -1938,7 +2101,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           "archive/00004.log" -> 4000
         )
         saveCheckpointFiles(fileManager, cpFiles2,
-          version = 2, numKeys = 1501, fileMapping, uuid)
+          version = 2, numKeys = 1501, fileMapping,
+          numInternalKeys = 0, uuid)
         assert(numRemoteSSTFiles === 6) // 1 new file over earlier 5 files
         assert(numRemoteLogFiles === 6) // 1 new file over earlier 6 files
         loadAndVerifyCheckpointFiles(fileManager, verificationDir,
@@ -1981,7 +2145,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
       intercept[IOException] {
         saveCheckpointFiles(
-          fileManager, cpFiles, version = 1, numKeys = 101, new RocksDBFileMapping(), uuid)
+          fileManager, cpFiles, version = 1, numKeys = 101, new RocksDBFileMapping(),
+          numInternalKeys = 0, uuid)
       }
       assert(CreateAtomicTestManager.cancelCalledInCreateAtomic)
     }
@@ -2115,16 +2280,31 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     // should always include sstFiles and numKeys
     checkJsonRoundtrip(
       RocksDBCheckpointMetadata(Seq.empty, 0L),
-      """{"sstFiles":[],"numKeys":0}"""
+      """{"sstFiles":[],"numKeys":0,"numInternalKeys":0}"""
     )
     // shouldn't include the "logFiles" field in json when it's empty
     checkJsonRoundtrip(
       RocksDBCheckpointMetadata(sstFiles, 12345678901234L),
-      """{"sstFiles":[{"localFileName":"00001.sst","dfsSstFileName":"00001-uuid.sst","sizeBytes":12345678901234}],"numKeys":12345678901234}"""
+      """{"sstFiles":[{"localFileName":"00001.sst","dfsSstFileName":"00001-uuid.sst","sizeBytes":12345678901234}],"numKeys":12345678901234,"numInternalKeys":0}"""
     )
     checkJsonRoundtrip(
       RocksDBCheckpointMetadata(sstFiles, logFiles, 12345678901234L),
-      """{"sstFiles":[{"localFileName":"00001.sst","dfsSstFileName":"00001-uuid.sst","sizeBytes":12345678901234}],"logFiles":[{"localFileName":"00001.log","dfsLogFileName":"00001-uuid.log","sizeBytes":12345678901234}],"numKeys":12345678901234}""")
+      """{"sstFiles":[{"localFileName":"00001.sst","dfsSstFileName":"00001-uuid.sst","sizeBytes":12345678901234}],"logFiles":[{"localFileName":"00001.log","dfsLogFileName":"00001-uuid.log","sizeBytes":12345678901234}],"numKeys":12345678901234,"numInternalKeys":0}""")
+
+    // verify format without including column family type
+    val cfMapping: Option[scala.collection.Map[String, Short]] = Some(Map("cf1" -> 1, "cf2" -> 2))
+    var cfTypeMap: Option[scala.collection.Map[String, Boolean]] = None
+    val maxCfId: Option[Short] = Some(2)
+    checkJsonRoundtrip(
+      RocksDBCheckpointMetadata(Seq.empty, 5L, 0L, cfMapping, cfTypeMap, maxCfId),
+      """{"sstFiles":[],"numKeys":5,"numInternalKeys":0,"columnFamilyMapping":{"cf1":1,"cf2":2},"maxColumnFamilyId":2}""")
+
+    // verify format including column family type and non-zero internal keys
+    cfTypeMap = Some(Map("cf1" -> true, "cf2" -> false))
+    checkJsonRoundtrip(
+      RocksDBCheckpointMetadata(Seq.empty, 3L, 2L, cfMapping, cfTypeMap, maxCfId),
+      """{"sstFiles":[],"numKeys":3,"numInternalKeys":2,"columnFamilyMapping":{"cf1":1,"cf2":2},"columnFamilyTypeMap":{"cf1":true,"cf2":false},"maxColumnFamilyId":2}""")
+
     // scalastyle:on line.size.limit
   }
 
@@ -2460,7 +2640,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.put("a", "5")
         db.put("b", "5")
 
-        curVersion = db.commit()
+        curVersion = db.commit()._1
 
         assert(db.metricsOpt.get.numUncommittedKeys === 2)
         assert(db.metricsOpt.get.numCommittedKeys === 2)
@@ -2476,7 +2656,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.put("b", "7")
         db.put("c", "7")
 
-        curVersion = db.commit()
+        curVersion = db.commit()._1
 
         assert(db.metricsOpt.get.numUncommittedKeys === -1)
         assert(db.metricsOpt.get.numCommittedKeys === -1)
@@ -2492,7 +2672,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.put("c", "8")
         db.put("d", "8")
 
-        curVersion = db.commit()
+        curVersion = db.commit()._1
 
         assert(db.metricsOpt.get.numUncommittedKeys === 4)
         assert(db.metricsOpt.get.numCommittedKeys === 4)
@@ -3031,6 +3211,52 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithChangelogCheckpointingEnabled(
+    "SPARK-51717 - validate that RocksDB file mapping is cleared " +
+      "when we reload version 0 after we have created a snapshot to avoid SST mismatch") {
+    withTempDir { dir =>
+      val conf = dbConf.copy(minDeltasForSnapshot = 2)
+      val hadoopConf = new Configuration()
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir, conf = conf, hadoopConf = hadoopConf) { db =>
+        db.load(0)
+        db.put("a", "1")
+        db.put("b", "1")
+        db.commit()
+
+        db.load(1)
+        db.put("a", "1")
+        db.commit() // we will create a snapshot for v2
+
+        // invalidate the db, so next load will reload from dfs
+        db.rollback()
+
+        // We will replay changelog from 0 -> 2 since the v2 snapshot haven't been uploaded yet.
+        // We had a bug where file mapping is not being cleared when we start from v0 again,
+        // hence files of v2 snapshot were being reused, if v2 snapshot is uploaded
+        // after this load(2) but before v3 snapshot
+        db.load(2)
+        // add a larger row to make sure new sst size is different
+        db.put("b", "1555315569874537247638950872648")
+
+        // now upload v2 snapshot
+        db.doMaintenance()
+
+        // we will create a snapshot for v3. We shouldn't reuse files of v2 snapshot,
+        // given that v3 was not created from v2 snapshot since we replayed changelog from 0 -> 2
+        db.commit()
+
+        db.doMaintenance() // upload v3 snapshot
+
+        // invalidate the db, so next load will reload from dfs
+        db.rollback()
+
+        // loading v3 from dfs should be successful and no SST mismatch error
+        db.load(3)
+      }
+    }
+  }
+
   test("ensure local files deleted on filesystem" +
     " are cleaned from dfs file mapping") {
     def getSSTFiles(dir: File): Set[File] = {
@@ -3290,6 +3516,24 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithChangelogCheckpointingEnabled("SPARK-51922 - Changelog writer v1 with large key" +
+    " does not cause UTFDataFormatException") {
+    val remoteDir = Utils.createTempDir()
+
+    withDB(remoteDir.toString) { db =>
+      db.load(0)
+      val key = new Array[Char](98304).mkString("") // Large key that would trigger UTFException
+      // if handled incorrectly
+      db.put(key, "0")
+      db.commit()
+
+      val changelogReader = db.fileManager.getChangelogReader(1)
+      assert(changelogReader.version === 1)
+      val entries = changelogReader.toSeq
+      assert(entries.size == 1)
+    }
+  }
+
   private def assertAcquiredThreadIsCurrentThread(db: RocksDB): Unit = {
     val threadInfo = db.getAcquiredThreadInfo()
     assert(threadInfo != None,
@@ -3327,7 +3571,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
     }
 
-    override def commit(): Long = {
+    override def commit(): (Long, StateStoreCheckpointInfo) = {
       val ret = super.commit()
       // update versionToUniqueId from lineageManager
       lineageManager.getLineageForCurrVersion().foreach {
@@ -3374,8 +3618,14 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           useColumnFamilies = useColumnFamilies)
       }
       db.load(version, versionToUniqueId.get(version))
+      if (useColumnFamilies) {
+        db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+      }
       func(db)
     } finally {
+      if (useColumnFamilies && db != null) {
+        db.removeColFamilyIfExists(StateStore.DEFAULT_COL_FAMILY_NAME)
+      }
       if (db != null) {
         db.close()
       }
@@ -3395,6 +3645,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       version: Int,
       numKeys: Int,
       fileMapping: RocksDBFileMapping,
+      numInternalKeys: Int = 0,
       checkpointUniqueId: Option[String] = None): Unit = {
     val checkpointDir = Utils.createTempDir().getAbsolutePath // local dir to create checkpoints
     generateFiles(checkpointDir, fileToLengths)
@@ -3404,6 +3655,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       checkpointDir,
       version,
       numKeys,
+      numInternalKeys,
       immutableFileMapping,
       checkpointUniqueId = checkpointUniqueId)
 

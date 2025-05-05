@@ -31,9 +31,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, instantToMicros, localDateTimeToMicros}
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.{instantToMicrosOfDay, truncateTimeMicrosToPrecision}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -114,6 +114,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     val instant = Instant.now()
     val currentTimestampMicros = instantToMicros(instant)
     val currentTime = Literal.create(currentTimestampMicros, TimestampType)
+    val currentTimeOfDayMicros = instantToMicrosOfDay(instant, conf.sessionLocalTimeZone)
     val timezone = Literal.create(conf.sessionLocalTimeZone, StringType)
     val currentDates = collection.mutable.HashMap.empty[ZoneId, Literal]
     val localTimestamps = collection.mutable.HashMap.empty[ZoneId, Literal]
@@ -130,6 +131,10 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
               Literal.create(
                 DateTimeUtils.microsToDays(currentTimestampMicros, cd.zoneId), DateType)
             })
+          case currentTimeType : CurrentTime =>
+            val truncatedTime = truncateTimeMicrosToPrecision(currentTimeOfDayMicros,
+              currentTimeType.precision)
+            Literal.create(truncatedTime, TimeType(currentTimeType.precision))
           case CurrentTimestamp() | Now() => currentTime
           case CurrentTimeZone() => timezone
           case localTimestamp: LocalTimestamp =>
@@ -143,23 +148,23 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
 }
 
 /**
- * Replaces the expression of CurrentDatabase with the current database name.
- * Replaces the expression of CurrentCatalog with the current catalog name.
+ * Replaces the expression of CurrentDatabase, CurrentCatalog, and CurrentUser
+ * with the current values.
  */
 case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    val currentNamespace = catalogManager.currentNamespace.quoted
-    val currentCatalog = catalogManager.currentCatalog.name()
-    val currentUser = CurrentUserContext.getCurrentUser
+    lazy val currentNamespace = catalogManager.currentNamespace.quoted
+    lazy val currentCatalog = catalogManager.currentCatalog.name()
+    lazy val currentUser = CurrentUserContext.getCurrentUser
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
       case CurrentDatabase() =>
-        Literal.create(currentNamespace, SQLConf.get.defaultStringType)
+        Literal.create(currentNamespace, StringType)
       case CurrentCatalog() =>
-        Literal.create(currentCatalog, SQLConf.get.defaultStringType)
+        Literal.create(currentCatalog, StringType)
       case CurrentUser() =>
-        Literal.create(currentUser, SQLConf.get.defaultStringType)
+        Literal.create(currentUser, StringType)
     }
   }
 }

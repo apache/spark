@@ -27,7 +27,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
+import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView, LocalTempView, PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -158,22 +158,6 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitResetQuotedConfiguration(
       ctx: ResetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
     ResetCommand(Some(ctx.configKey().getText))
-  }
-
-  /**
-   * Create a [[SetCommand]] logical plan to set [[SQLConf.DEFAULT_COLLATION]]
-   * Example SQL :
-   * {{{
-   *   SET COLLATION UNICODE;
-   * }}}
-   */
-  override def visitSetCollation(ctx: SetCollationContext): LogicalPlan = withOrigin(ctx) {
-    val collationName = ctx.collationName.getText
-    if (!SQLConf.get.trimCollationEnabled && collationName.toUpperCase().contains("TRIM")) {
-      throw QueryCompilationErrors.trimCollationNotEnabledError()
-    }
-    val key = SQLConf.DEFAULT_COLLATION.key
-    SetCommand(Some(key -> Some(ctx.identifier.getText.toUpperCase(Locale.ROOT))))
   }
 
   /**
@@ -381,7 +365,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         visitCreateTableClauses(ctx.createTableClauses())
       val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(
         throw QueryParsingErrors.createTempTableNotSpecifyProviderError(ctx))
-      val schema = Option(ctx.colDefinitionList()).map(createSchema)
+      val schema = Option(ctx.tableElementList()).map(createSchema)
 
       logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
           "CREATE TEMPORARY VIEW ... USING ... instead")
@@ -703,6 +687,20 @@ class SparkSqlAstBuilder extends AstBuilder {
 
       if (ctx.EXISTS != null && ctx.REPLACE != null) {
         throw QueryParsingErrors.createFuncWithBothIfNotExistsAndReplaceError(ctx)
+      }
+
+      // Reject invalid options
+      for {
+        parameters <- Option(ctx.parameters)
+        colDefinition <- parameters.colDefinition().asScala
+        option <- colDefinition.colDefinitionOption().asScala
+      } {
+        if (option.generationExpression() != null) {
+          throw QueryParsingErrors.createFuncWithGeneratedColumnsError(ctx.parameters)
+        }
+        if (option.columnConstraintDefinition() != null) {
+          throw QueryParsingErrors.createFuncWithConstraintError(ctx.parameters)
+        }
       }
 
       val inputParamText = Option(ctx.parameters).map(source)
@@ -1194,5 +1192,27 @@ class SparkSqlAstBuilder extends AstBuilder {
         DescribeRelation(relation, partitionSpec, isExtended)
       }
     }
+  }
+
+  override def visitShowProcedures(ctx: ShowProceduresContext): LogicalPlan = withOrigin(ctx) {
+    val ns = if (ctx.identifierReference != null) {
+      withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
+    } else {
+      CurrentNamespace
+    }
+    ShowProceduresCommand(ns)
+  }
+
+  override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
+    val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
+    ShowNamespacesCommand(
+      UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
+      Option(ctx.pattern).map(x => string(visitStringLit(x))))
+  }
+
+  override def visitDescribeProcedure(
+      ctx: DescribeProcedureContext): LogicalPlan = withOrigin(ctx) {
+    withIdentClause(ctx.identifierReference(), procIdentifier =>
+      DescribeProcedureCommand(UnresolvedIdentifier(procIdentifier)))
   }
 }

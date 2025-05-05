@@ -31,7 +31,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapabi
 import org.apache.spark.sql.connector.write.{DataWriter, LogicalWriteInfo, PhysicalWriteInfo, SupportsTruncate, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.python.PythonForeachWriter
+import org.apache.spark.sql.execution.python.streaming.PythonForeachWriter
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.types.StructType
 

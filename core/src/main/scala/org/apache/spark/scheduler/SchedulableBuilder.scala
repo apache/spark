@@ -89,7 +89,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext
             log"${MDC(LogKeys.FILE_NAME, DEFAULT_SCHEDULER_FILE)}")
           Some((is, DEFAULT_SCHEDULER_FILE))
         } else {
-          val schedulingMode = SchedulingMode.withName(sc.conf.get(SCHEDULER_MODE))
+          val schedulingMode = sc.conf.get(SCHEDULER_MODE)
           rootPool.addSchedulable(new Pool(
             DEFAULT_POOL_NAME, schedulingMode, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT))
           logInfo(log"Fair scheduler configuration not found, created default pool: " +

@@ -121,7 +121,8 @@ class IDFModel private[ml] (
 
   import IDFModel._
 
-  private[ml] def this() = this(Identifiable.randomUID("idf"), null)
+  // For ml connect only
+  private[ml] def this() = this("", null)
 
   /** @group setParam */
   @Since("1.4.0")
@@ -194,16 +195,15 @@ class IDFModel private[ml] (
 
 @Since("1.6.0")
 object IDFModel extends MLReadable[IDFModel] {
+  private[ml] case class Data(idf: Vector, docFreq: Array[Long], numDocs: Long)
 
   private[IDFModel] class IDFModelWriter(instance: IDFModel) extends MLWriter {
-
-    private case class Data(idf: Vector, docFreq: Array[Long], numDocs: Long)
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.idf, instance.docFreq, instance.numDocs)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -217,10 +217,11 @@ object IDFModel extends MLReadable[IDFModel] {
       val data = sparkSession.read.parquet(dataPath)
 
       val model = if (majorVersion(metadata.sparkVersion) >= 3) {
-        val Row(idf: Vector, df: scala.collection.Seq[_], numDocs: Long) =
-          data.select("idf", "docFreq", "numDocs").head()
-        new IDFModel(metadata.uid, new feature.IDFModel(OldVectors.fromML(idf),
-          df.asInstanceOf[scala.collection.Seq[Long]].toArray, numDocs))
+        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+        new IDFModel(
+          metadata.uid,
+          new feature.IDFModel(OldVectors.fromML(data.idf), data.docFreq, data.numDocs)
+        )
       } else {
         val Row(idf: Vector) = MLUtils.convertVectorColumnsToML(data, "idf")
           .select("idf")

@@ -28,7 +28,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset}
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.{get => fget, printf => fprintf, _}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.VersionUtils.majorMinorVersion
@@ -302,8 +302,7 @@ class StringIndexerModel (
   def this(labelsArray: Array[Array[String]]) = this(Identifiable.randomUID("strIdx"), labelsArray)
 
   // For ml connect only
-  @Since("4.0.0")
-  private[ml] def this() = this(labels = Array.empty)
+  private[ml] def this() = this("", Array.empty[Array[String]])
 
   @deprecated("`labels` is deprecated and will be removed in 3.1.0. Use `labelsArray` " +
     "instead.", "3.0.0")
@@ -470,17 +469,16 @@ class StringIndexerModel (
 
 @Since("1.6.0")
 object StringIndexerModel extends MLReadable[StringIndexerModel] {
+  private[ml] case class Data(labelsArray: Seq[Seq[String]])
 
   private[StringIndexerModel]
   class StringIndexModelWriter(instance: StringIndexerModel) extends MLWriter {
 
-    private case class Data(labelsArray: Array[Array[String]])
-
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
-      val data = Data(instance.labelsArray)
+      val data = Data(instance.labelsArray.map(_.toImmutableArraySeq).toImmutableArraySeq)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -503,11 +501,8 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
         val labels = data.getAs[Seq[String]](0).toArray
         Array(labels)
       } else {
-        // After Spark 3.0.
-        val data = sparkSession.read.parquet(dataPath)
-          .select("labelsArray")
-          .head()
-        data.getSeq[scala.collection.Seq[String]](0).map(_.toArray).toArray
+        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+        data.labelsArray.map(_.toArray).toArray
       }
       val model = new StringIndexerModel(metadata.uid, labelsArray)
       metadata.getAndSetParams(model)
@@ -591,17 +586,11 @@ class IndexToString @Since("2.2.0") (@Since("1.5.0") override val uid: String)
     } else {
       $(labels)
     }
-    val indexer = udf { index: Double =>
-      val idx = index.toInt
-      if (0 <= idx && idx < values.length) {
-        values(idx)
-      } else {
-        throw new SparkException(s"Unseen index: $index ??")
-      }
-    }
-    val outputColName = $(outputCol)
-    dataset.select(col("*"),
-      indexer(dataset($(inputCol)).cast(DoubleType)).as(outputColName))
+
+    val idxCol = col($(inputCol)).cast(IntegerType)
+    val valCol = when(lit(0) <= idxCol && idxCol < lit(values.length), fget(lit(values), idxCol))
+      .otherwise(raise_error(fprintf(lit("Unseen index: %s ??"), idxCol.cast(StringType))))
+    dataset.withColumn($(outputCol), valCol)
   }
 
   @Since("1.5.0")

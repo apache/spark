@@ -392,6 +392,11 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
     ValidatorParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit = {
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "CrossValidatorModel does not support saving to local filesystem path."
+        )
+      }
       val persistSubModelsParam = optionMap.getOrElse("persistsubmodels",
         if (instance.hasSubModels) "true" else "false")
 
@@ -405,7 +410,7 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
         ("persistSubModels" -> persistSubModels)
       ValidatorParams.saveImpl(path, instance, sparkSession, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString
-      instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
+      instance.bestModel.asInstanceOf[MLWritable].write.session(sparkSession).save(bestModelPath)
       if (persistSubModels) {
         require(instance.hasSubModels, "When persisting tuning models, you can only set " +
           "persistSubModels to true if the tuning was done with collectSubModels set to true. " +
@@ -415,7 +420,8 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
           val splitPath = new Path(subModelsPath, s"fold${splitIndex.toString}")
           for (paramIndex <- instance.getEstimatorParamMaps.indices) {
             val modelPath = new Path(splitPath, paramIndex.toString).toString
-            instance.subModels(splitIndex)(paramIndex).asInstanceOf[MLWritable].save(modelPath)
+            instance.subModels(splitIndex)(paramIndex).asInstanceOf[MLWritable]
+              .write.session(sparkSession).save(modelPath)
           }
         }
       }
@@ -428,6 +434,11 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
     private val className = classOf[CrossValidatorModel].getName
 
     override def load(path: String): CrossValidatorModel = {
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "CrossValidatorModel does not support loading from local filesystem path."
+        )
+      }
       implicit val format = DefaultFormats
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =

@@ -83,7 +83,7 @@ from pyspark.ml.feature import (
 )
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.sql import Row
-from pyspark.testing.mlutils import SparkSessionTestCase
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class FeatureTestsMixin:
@@ -891,6 +891,8 @@ class FeatureTestsMixin:
         self.assertEqual(stopWordRemover.getInputCol(), "input")
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, ["panda"])
+        self.assertEqual(type(stopWordRemover.getStopWords()), list)
+        self.assertTrue(isinstance(stopWordRemover.getStopWords()[0], str))
         # Custom
         stopwords = ["panda"]
         stopWordRemover.setStopWords(stopwords)
@@ -1772,7 +1774,7 @@ class FeatureTestsMixin:
             self.assertEqual(str(model), str(model2))
 
 
-class FeatureTests(FeatureTestsMixin, SparkSessionTestCase):
+class FeatureTests(FeatureTestsMixin, ReusedSQLTestCase):
     pass
 
 

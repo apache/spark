@@ -100,7 +100,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       Seq(
         // Operator push down
         PushProjectionThroughUnion,
-        PushProjectionThroughLimit,
+        PushProjectionThroughLimitAndOffset,
         ReorderJoin,
         EliminateOuterJoin,
         PushDownPredicates,
@@ -671,8 +671,10 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         val subQueryAttributes = if (conf.getConf(SQLConf
           .EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES)) {
           // Collect the references for all the subquery expressions in the plan.
-          AttributeSet.fromAttributeSets(plan.expressions.collect {
-            case e: SubqueryExpression => e.references
+          AttributeSet.fromAttributeSets(plan.expressions.flatMap { e =>
+            e.collect {
+              case s: SubqueryExpression => s.references
+            }
           })
         } else {
           AttributeSet.empty
@@ -847,6 +849,13 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // pushdown Limit.
     case LocalLimit(exp, u: Union) =>
       LocalLimit(exp, u.copy(children = u.children.map(maybePushLocalLimit(exp, _))))
+
+    // If limit node is present, we should propagate it down to UnionLoop, so that it is later
+    // propagated to UnionLoopExec.
+    case LocalLimit(IntegerLiteral(limit), p @ Project(_, ul: UnionLoop)) =>
+      p.copy(child = ul.copy(limit = Some(limit)))
+    case LocalLimit(IntegerLiteral(limit), ul: UnionLoop) =>
+      ul.copy(limit = Some(limit))
 
     // Add extra limits below JOIN:
     // 1. For LEFT OUTER and RIGHT OUTER JOIN, we push limits to the left and right sides
@@ -1031,6 +1040,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
       } else {
         p
       }
+
+    // TODO: Pruning `UnionLoop`s needs to take into account both the outer `Project` and the inner
+    //  `UnionLoopRef` nodes.
+    case p @ Project(_, _: UnionLoop) => p
 
     // Prune unnecessary window expressions
     case p @ Project(_, w: Window) if !w.windowOutputSet.subsetOf(p.references) =>
@@ -2129,6 +2142,8 @@ object EliminateLimits extends Rule[LogicalPlan] {
       child
     case GlobalLimit(l, child) if canEliminate(l, child) =>
       child
+    case LocalLimit(l, child) if canEliminate(l, child) =>
+      child
 
     case LocalLimit(IntegerLiteral(0), child) =>
       LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
@@ -2266,6 +2281,9 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
     case Limit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming, stream)) =>
       LocalRelation(output, data.take(limit), isStreaming, stream)
 
+    case LocalLimit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming, stream)) =>
+      LocalRelation(output, data.take(limit), isStreaming, stream)
+
     case Filter(condition, LocalRelation(output, data, isStreaming, stream))
         if !hasUnevaluableExpr(condition) =>
       val predicate = Predicate.create(condition, output)
@@ -2273,7 +2291,7 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
       LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming, stream)
   }
 
-  private def hasUnevaluableExpr(expr: Expression): Boolean = {
+  def hasUnevaluableExpr(expr: Expression): Boolean = {
     expr.exists(e => e.isInstanceOf[Unevaluable] && !e.isInstanceOf[AttributeReference])
   }
 }

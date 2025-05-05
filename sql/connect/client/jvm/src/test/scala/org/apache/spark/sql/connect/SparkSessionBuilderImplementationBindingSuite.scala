@@ -16,8 +16,7 @@
  */
 package org.apache.spark.sql.connect
 
-import org.apache.spark.sql
-import org.apache.spark.sql.SparkSessionBuilder
+import org.apache.spark.{sql, SparkContext}
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
 
 /**
@@ -27,8 +26,11 @@ class SparkSessionBuilderImplementationBindingSuite
     extends ConnectFunSuite
     with sql.SparkSessionBuilderImplementationBindingSuite
     with RemoteSparkSession {
-  override protected def configure(builder: SparkSessionBuilder): builder.type = {
+  override def beforeAll(): Unit = {
     // We need to set this configuration because the port used by the server is random.
-    builder.remote(s"sc://localhost:$serverPort")
+    System.setProperty("spark.remote", s"sc://localhost:$serverPort")
+    super.beforeAll()
   }
+
+  override protected def sparkContext: SparkContext = null
 }

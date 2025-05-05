@@ -722,6 +722,9 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     appStatusSource.foreach(_env.metricsSystem.registerSource(_))
     _plugins.foreach(_.registerMetrics(applicationId))
+
+    new CallerContext("DRIVER", config.get(APP_CALLER_CONTEXT),
+      Some(applicationId), applicationAttemptId).setCurrentContext()
   } catch {
     case NonFatal(e) =>
       logError("Error initializing SparkContext.", e)
@@ -2405,7 +2408,8 @@ class SparkContext(config: SparkConf) extends Logging {
     ResourceProfile.clearDefaultProfile()
     // Unset YARN mode system env variable, to allow switching between cluster types.
     SparkContext.clearActiveContext()
-    logInfo("Successfully stopped SparkContext")
+    logInfo(log"Successfully stopped SparkContext (Uptime: " +
+      log"${MDC(LogKeys.TOTAL_TIME, System.currentTimeMillis() - startTime)} ms)")
   }
 
 
@@ -2876,7 +2880,10 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Default min number of partitions for Hadoop RDDs when not given by user
    * Notice that we use math.min so the "defaultMinPartitions" cannot be higher than 2.
-   * The reasons for this are discussed in https://github.com/mesos/spark/pull/718
+   * For large files, the Hadoop InputFormat library always creates more partitions even though
+   * defaultMinPartitions is 2. For small files, it can be good to process small files quickly.
+   * However, usually when Spark joins a small table with a big one, we'll still spend most of
+   * time on the map part of the big one anyway.
    */
   def defaultMinPartitions: Int = math.min(defaultParallelism, 2)
 

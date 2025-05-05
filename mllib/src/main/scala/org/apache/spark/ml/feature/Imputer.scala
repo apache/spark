@@ -25,7 +25,7 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -203,11 +203,7 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
         s"All the values in ${emptyCols.mkString(",")} are Null, Nan or " +
         s"missingValue(${$(missingValue)})")
     }
-
-    val rows = spark.sparkContext.parallelize(Seq(Row.fromSeq(results.toImmutableArraySeq)))
-    val schema = StructType(inputColumns.map(col => StructField(col, DoubleType, nullable = false)))
-    val surrogateDF = spark.createDataFrame(rows, schema)
-    copyValues(new ImputerModel(uid, surrogateDF).setParent(this))
+    copyValues(new ImputerModel(uid, inputColumns, results).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -241,12 +237,22 @@ object Imputer extends DefaultParamsReadable[Imputer] {
 @Since("2.2.0")
 class ImputerModel private[ml] (
     @Since("2.2.0") override val uid: String,
-    @Since("2.2.0") val surrogateDF: DataFrame)
+    @Since("4.1.0") private[ml] val columnNames: Array[String],
+    @Since("4.1.0") private[ml] val surrogates: Array[Double])
   extends Model[ImputerModel] with ImputerParams with MLWritable {
 
   import ImputerModel._
 
-  private[ml] def this() = this(Identifiable.randomUID("imputer"), null)
+  // For ml connect only
+  private[ml] def this() = this("", Array.empty, Array.emptyDoubleArray)
+
+  @Since("2.2.0")
+  def surrogateDF: DataFrame = {
+    val spark = SparkSession.builder().getOrCreate()
+    val rows = java.util.List.of[Row](Row.fromSeq(surrogates.toImmutableArraySeq))
+    val schema = StructType(columnNames.map(c => StructField(c, DoubleType, nullable = false)))
+    spark.createDataFrame(rows, schema)
+  }
 
   /** @group setParam */
   @Since("3.0.0")
@@ -262,19 +268,12 @@ class ImputerModel private[ml] (
   /** @group setParam */
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
-  @transient private lazy val surrogates = {
-    val row = surrogateDF.head()
-    row.schema.fieldNames.zipWithIndex
-      .map { case (name, index) => (name, row.getDouble(index)) }
-      .toMap
-  }
-
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val (inputColumns, outputColumns) = getInOutCols()
 
     val newCols = inputColumns.map { inputCol =>
-      val surrogate = surrogates(inputCol)
+      val surrogate = surrogates(columnNames.indexOf(inputCol))
       val inputType = SchemaUtils.getSchemaFieldType(dataset.schema, inputCol)
       val ic = col(inputCol).cast(DoubleType)
       when(ic.isNull, surrogate)
@@ -290,7 +289,7 @@ class ImputerModel private[ml] (
   }
 
   override def copy(extra: ParamMap): ImputerModel = {
-    val copied = new ImputerModel(uid, surrogateDF)
+    val copied = new ImputerModel(uid, columnNames, surrogates)
     copyValues(copied, extra).setParent(parent)
   }
 
@@ -314,7 +313,13 @@ object ImputerModel extends MLReadable[ImputerModel] {
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val dataPath = new Path(path, "data").toString
-      instance.surrogateDF.repartition(1).write.parquet(dataPath)
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        ReadWriteUtils.saveObjectToLocal[(Array[String], Array[Double])](
+          dataPath, (instance.columnNames, instance.surrogates)
+        )
+      } else {
+        instance.surrogateDF.repartition(1).write.parquet(dataPath)
+      }
     }
   }
 
@@ -325,8 +330,16 @@ object ImputerModel extends MLReadable[ImputerModel] {
     override def load(path: String): ImputerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val surrogateDF = sparkSession.read.parquet(dataPath)
-      val model = new ImputerModel(metadata.uid, surrogateDF)
+      val model = if (ReadWriteUtils.localSavingModeState.get()) {
+        val data = ReadWriteUtils.loadObjectFromLocal[(Array[String], Array[Double])](dataPath)
+        new ImputerModel(metadata.uid, data._1, data._2)
+      } else {
+        val row = sparkSession.read.parquet(dataPath).head()
+        val (columnNames, surrogates) = row.schema.fieldNames.zipWithIndex
+          .map { case (name, index) => (name, row.getDouble(index)) }
+          .unzip
+        new ImputerModel(metadata.uid, columnNames, surrogates)
+      }
       metadata.getAndSetParams(model)
       model
     }

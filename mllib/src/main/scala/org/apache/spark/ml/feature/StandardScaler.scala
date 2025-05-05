@@ -26,7 +26,6 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -147,7 +146,8 @@ class StandardScalerModel private[ml] (
 
   import StandardScalerModel._
 
-  private[ml] def this() = this(Identifiable.randomUID("stdScal"), Vectors.empty, Vectors.empty)
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty, Vectors.empty)
 
   /** @group setParam */
   @Since("1.2.0")
@@ -200,17 +200,16 @@ class StandardScalerModel private[ml] (
 
 @Since("1.6.0")
 object StandardScalerModel extends MLReadable[StandardScalerModel] {
+  private[ml] case class Data(std: Vector, mean: Vector)
 
   private[StandardScalerModel]
   class StandardScalerModelWriter(instance: StandardScalerModel) extends MLWriter {
-
-    private case class Data(std: Vector, mean: Vector)
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.std, instance.mean)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -221,11 +220,8 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
     override def load(path: String): StandardScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-      val Row(std: Vector, mean: Vector) = MLUtils.convertVectorColumnsToML(data, "std", "mean")
-        .select("std", "mean")
-        .head()
-      val model = new StandardScalerModel(metadata.uid, std, mean)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val model = new StandardScalerModel(metadata.uid, data.std, data.mean)
       metadata.getAndSetParams(model)
       model
     }

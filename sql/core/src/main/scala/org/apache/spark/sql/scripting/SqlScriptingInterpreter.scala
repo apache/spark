@@ -20,10 +20,9 @@ package org.apache.spark.sql.scripting
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CompoundPlanStatement, CreateVariable, DropVariable, ExceptionHandlerType, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LogicalPlan, LoopStatement, RepeatStatement, SingleStatement, WhileStatement}
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, CompoundPlanStatement, ExceptionHandlerType, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LoopStatement, OneRowRelation, Project, RepeatStatement, SearchedCaseStatement, SimpleCaseStatement, SingleStatement, WhileStatement}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.SqlScriptingErrors
 
@@ -57,19 +56,6 @@ case class SqlScriptingInterpreter(session: SparkSession) {
   }
 
   /**
-   * Fetch the name of the Create Variable plan.
-   * @param plan
-   *   Plan to fetch the name from.
-   * @return
-   *   Name of the variable.
-   */
-  private def getDeclareVarNameFromPlan(plan: LogicalPlan): Option[UnresolvedIdentifier] =
-    plan match {
-      case CreateVariable(name: UnresolvedIdentifier, _, _) => Some(name)
-      case _ => None
-    }
-
-  /**
    * Transform [[CompoundBody]] into [[CompoundBodyExec]].
  *
    * @param compoundBody
@@ -85,16 +71,6 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       compoundBody: CompoundBody,
       args: Map[String, Expression],
       context: SqlScriptingExecutionContext): CompoundBodyExec = {
-    // Add drop variables to the end of the body.
-    val variables = compoundBody.collection.flatMap {
-      case st: SingleStatement => getDeclareVarNameFromPlan(st.parsedPlan)
-      case _ => None
-    }
-    val dropVariables = variables
-      .map(varName => DropVariable(varName, ifExists = true))
-      .map(new SingleStatementExec(_, Origin(), args, isInternal = true, context))
-      .reverse
-
     // Map of conditions to their respective handlers.
     val conditionToExceptionHandlerMap: HashMap[String, ExceptionHandlerExec] = HashMap.empty
     // Map of SqlStates to their respective handlers.
@@ -163,7 +139,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       notFoundHandler = notFoundHandler)
 
     val statements = compoundBody.collection
-      .map(st => transformTreeIntoExecutable(st, args, context)) ++ dropVariables match {
+      .map(st => transformTreeIntoExecutable(st, args, context)) match {
       case Nil => Seq(new NoOpStatementExec)
       case s => s
     }
@@ -194,7 +170,6 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       context: SqlScriptingExecutionContext): CompoundStatementExec =
     node match {
       case body: CompoundBody =>
-        // TODO [SPARK-48530]: Current logic doesn't support scoped variables and shadowing.
         transformBodyIntoExec(body, args, context)
 
       case IfElseStatement(conditions, conditionalBodies, elseBody) =>
@@ -212,7 +187,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         new IfElseStatementExec(
           conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
 
-      case CaseStatement(conditions, conditionalBodies, elseBody) =>
+      case SearchedCaseStatement(conditions, conditionalBodies, elseBody) =>
         val conditionsExec = conditions.map(condition =>
           new SingleStatementExec(
             condition.parsedPlan,
@@ -224,8 +199,24 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec])
         val unconditionalBodiesExec = elseBody.map(body =>
           transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec])
-        new CaseStatementExec(
+        new SearchedCaseStatementExec(
           conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
+
+      case SimpleCaseStatement(caseExpr, conditionExpressions, conditionalBodies, elseBody) =>
+        val caseValueStmt = SingleStatement(
+          Project(Seq(Alias(caseExpr, "caseVariable")()), OneRowRelation()))
+        val caseVarExec = new SingleStatementExec(
+          caseValueStmt.parsedPlan,
+          caseExpr.origin,
+          args,
+          isInternal = true,
+          context)
+        val conditionalBodiesExec = conditionalBodies.map(body =>
+          transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec])
+        val elseBodyExec = elseBody.map(body =>
+          transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec])
+        new SimpleCaseStatementExec(
+          caseVarExec, conditionExpressions, conditionalBodiesExec, elseBodyExec, session, context)
 
       case WhileStatement(condition, body, label) =>
         val conditionExec =
@@ -266,7 +257,8 @@ case class SqlScriptingInterpreter(session: SparkSession) {
             context)
         val bodyExec =
           transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec]
-        new ForStatementExec(queryExec, variableNameOpt, bodyExec, label, session, context)
+        new ForStatementExec(
+          queryExec, variableNameOpt, bodyExec.statements, label, session, context)
 
       case leaveStatement: LeaveStatement =>
         new LeaveStatementExec(leaveStatement.label)

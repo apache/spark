@@ -225,6 +225,15 @@ table t
 table t
 |> select y, length(y) + sum(x) as result;
 
+from t
+|> select sum(x);
+
+from t as t_alias
+|> select y, sum(x);
+
+from t as t_alias
+|> select y, sum(x) group by y;
+
 -- EXTEND operators: positive tests.
 ------------------------------------
 

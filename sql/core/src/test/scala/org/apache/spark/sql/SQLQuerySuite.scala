@@ -821,11 +821,11 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       case cp: CartesianProductExec => cp
     }
     assert(cp.isEmpty, "should not use CartesianProduct for null-safe join")
-    val smj = df.queryExecution.sparkPlan.collect {
+    val smj = df.queryExecution.sparkPlan.collectFirst {
       case smj: SortMergeJoinExec => smj
       case j: BroadcastHashJoinExec => j
     }
-    assert(smj.size > 0, "should use SortMergeJoin or BroadcastHashJoin")
+    assert(smj.nonEmpty, "should use SortMergeJoin or BroadcastHashJoin")
     checkAnswer(df, Row(100) :: Nil)
   }
 
@@ -2755,28 +2755,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           start = 0,
           stop = 45)
       )
-
-      withTable("t", "S") {
-        sql("CREATE TABLE t(c struct<f:int>) USING parquet")
-        sql("CREATE TABLE S(C struct<F:int>) USING parquet")
-        checkAnswer(sql("SELECT * FROM t, S WHERE t.c.f = S.C.F"), Seq.empty)
-        val query = "SELECT * FROM t, S WHERE c = C"
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql(query)
-          },
-          condition = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-          sqlState = None,
-          parameters = Map(
-            "sqlExpr" -> "\"(c = C)\"",
-            "left" -> "\"STRUCT<f: INT>\"",
-            "right" -> "\"STRUCT<F: INT>\""),
-          context = ExpectedContext(
-            fragment = "c = C",
-            start = 25,
-            stop = 29
-          ))
-      }
     }
   }
 
@@ -3815,7 +3793,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq(1, "1, 2", null, "version()").foreach { expr =>
         val plan = sql(s"select * from values (1), (2), (3) t(a) distribute by $expr")
           .queryExecution.optimizedPlan
-        val res = plan.collect {
+        val res = plan.collectFirst {
           case r: RepartitionByExpression if r.numPartitions == 1 => true
         }
         assert(res.nonEmpty)
@@ -3827,7 +3805,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "5")) {
       val df = spark.range(1).hint("REPARTITION_BY_RANGE")
       val plan = df.queryExecution.optimizedPlan
-      val res = plan.collect {
+      val res = plan.collectFirst {
         case r: RepartitionByExpression if r.numPartitions == 5 => true
       }
       assert(res.nonEmpty)
@@ -3839,7 +3817,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq(1, "1, 2", null, "version()").foreach { expr =>
         val plan = sql(s"select * from values (1), (2), (3) t(a) distribute by $expr")
           .queryExecution.analyzed
-        val res = plan.collect {
+        val res = plan.collectFirst {
           case r: RepartitionByExpression if r.numPartitions == 2 => true
         }
         assert(res.nonEmpty)
@@ -3885,12 +3863,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-33084: Add jar support Ivy URI in SQL -- jar contains udf class") {
+    val jarPath = Thread.currentThread().getContextClassLoader
+      .getResource("SPARK-33084.jar")
+    assume(jarPath != null)
     val sumFuncClass = "org.apache.spark.examples.sql.Spark33084"
     val functionName = "test_udf"
     withTempDir { dir =>
       System.setProperty("ivy.home", dir.getAbsolutePath)
-      val sourceJar = new File(Thread.currentThread().getContextClassLoader
-        .getResource("SPARK-33084.jar").getFile)
+      val sourceJar = new File(jarPath.getFile)
       val targetCacheJarDir = new File(dir.getAbsolutePath +
         "/local/org.apache.spark/SPARK-33084/1.0/jars/")
       targetCacheJarDir.mkdir()
@@ -4940,6 +4920,47 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     val expectedAnswer = Seq(
       Row(Array(0), Array(0)), Row(Array(1), Array(1)), Row(Array(2), Array(2)))
     checkAnswer(df, expectedAnswer)
+  }
+
+  test("SPARK-51614: Having operator is properly resolved when there's generator in condition") {
+    val df = sql(
+      """select
+        |  explode(packages) as package
+        |from
+        |  values(array('a')) t(packages)
+        |group by all
+        |having package in ('a')""".stripMargin
+    )
+
+    checkAnswer(df, Row("a"))
+  }
+
+  test("SPARK-51901: Disallow generator functions in grouping sets") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select * group by grouping sets (inline(array(struct('col'))))")
+      },
+      condition = "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
+      parameters = Map(
+        "plan" -> "'Aggregate [groupingsets(Vector(0), inline(array(struct(col1, col))))]"
+      )
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select * group by grouping sets (explode(array('col')))")
+      },
+      condition = "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
+      parameters = Map("plan" -> "'Aggregate [groupingsets(Vector(0), explode(array(col)))]")
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select * group by grouping sets (posexplode(array('col')))")
+      },
+      condition = "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
+      parameters = Map("plan" -> "'Aggregate [groupingsets(Vector(0), posexplode(array(col)))]")
+    )
   }
 }
 

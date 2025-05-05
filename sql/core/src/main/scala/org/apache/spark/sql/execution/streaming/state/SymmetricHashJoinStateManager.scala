@@ -58,6 +58,9 @@ import org.apache.spark.util.NextIterator
  *                                  store providers being used in this class. If true, Spark will
  *                                  take care of management for state store providers, e.g. running
  *                                  maintenance task for these providers.
+ * @param joinStoreGenerator    The generator to create state store instances, re-using the same
+ *                              instance when the join implementation uses virtual column families
+ *                              for join version 3.
  *
  * Internally, the key -> multiple values is stored in two [[StateStore]]s.
  * - Store 1 ([[KeyToNumValuesStore]]) maintains mapping between key -> number of values
@@ -78,8 +81,8 @@ import org.apache.spark.util.NextIterator
  *          by overwriting with the value of (key, maxIndex), and removing [(key, maxIndex),
  *          decrement corresponding num values in KeyToNumValuesStore
  */
-class SymmetricHashJoinStateManager(
-    val joinSide: JoinSide,
+abstract class SymmetricHashJoinStateManager(
+    joinSide: JoinSide,
     inputValueAttributes: Seq[Attribute],
     joinKeys: Seq[Expression],
     stateInfo: Option[StatefulOperatorStateInfo],
@@ -91,8 +94,15 @@ class SymmetricHashJoinStateManager(
     stateFormatVersion: Int,
     skippedNullValueCount: Option[SQLMetric] = None,
     useStateStoreCoordinator: Boolean = true,
-    snapshotStartVersion: Option[Long] = None) extends Logging {
+    snapshotStartVersion: Option[Long] = None,
+    joinStoreGenerator: JoinStateManagerStoreGenerator) extends Logging {
   import SymmetricHashJoinStateManager._
+
+  protected val keySchema = StructType(
+    joinKeys.zipWithIndex.map { case (k, i) => StructField(s"field$i", k.dataType, k.nullable) })
+  protected val keyAttributes = toAttributes(keySchema)
+  protected val keyToNumValues = new KeyToNumValuesStore(stateFormatVersion)
+  protected val keyWithIndexToValue = new KeyWithIndexToValueStore(stateFormatVersion)
 
   /*
   =====================================================
@@ -403,53 +413,26 @@ class SymmetricHashJoinStateManager(
   def getInternalRowOfKeyWithIndex(currentKey: UnsafeRow): InternalRow = keyProjection(currentKey)
 
   /** Commit all the changes to all the state stores */
-  def commit(): Unit = {
-    keyToNumValues.commit()
-    keyWithIndexToValue.commit()
-  }
+  def commit(): Unit
 
   /** Abort any changes to the state stores if needed */
-  def abortIfNeeded(): Unit = {
-    keyToNumValues.abortIfNeeded()
-    keyWithIndexToValue.abortIfNeeded()
-  }
+  def abortIfNeeded(): Unit
 
   /**
    * Get state store checkpoint information of the two state stores for this joiner, after
    * they finished data processing.
+   *
+   * For [[SymmetricHashJoinStateManagerV1]], this returns the information of the two stores
+   * used for this joiner.
+   *
+   * For [[SymmetricHashJoinStateManagerV2]], this returns the information of the single store
+   * used for the entire joiner operator. Both fields of JoinerStateStoreCkptInfo will
+   * be identical.
    */
-  def getLatestCheckpointInfo(): JoinerStateStoreCkptInfo = {
-    val keyToNumValuesCkptInfo = keyToNumValues.getLatestCheckpointInfo()
-    val keyWithIndexToValueCkptInfo = keyWithIndexToValue.getLatestCheckpointInfo()
-
-    assert(
-      keyToNumValuesCkptInfo.partitionId == keyWithIndexToValueCkptInfo.partitionId,
-      "two state stores in a stream-stream joiner don't return the same partition ID")
-    assert(
-      keyToNumValuesCkptInfo.batchVersion == keyWithIndexToValueCkptInfo.batchVersion,
-      "two state stores in a stream-stream joiner don't return the same batch version")
-    assert(
-      keyToNumValuesCkptInfo.stateStoreCkptId.isDefined ==
-      keyWithIndexToValueCkptInfo.stateStoreCkptId.isDefined,
-      "two state stores in a stream-stream joiner should both return checkpoint ID or not")
-
-    JoinerStateStoreCkptInfo(keyToNumValuesCkptInfo, keyWithIndexToValueCkptInfo)
-  }
+  def getLatestCheckpointInfo(): JoinerStateStoreCkptInfo
 
   /** Get the combined metrics of all the state stores */
-  def metrics: StateStoreMetrics = {
-    val keyToNumValuesMetrics = keyToNumValues.metrics
-    val keyWithIndexToValueMetrics = keyWithIndexToValue.metrics
-    def newDesc(desc: String): String = s"${joinSide.toString.toUpperCase(Locale.ROOT)}: $desc"
-
-    StateStoreMetrics(
-      keyWithIndexToValueMetrics.numKeys,       // represent each buffered row only once
-      keyToNumValuesMetrics.memoryUsedBytes + keyWithIndexToValueMetrics.memoryUsedBytes,
-      keyWithIndexToValueMetrics.customMetrics.map {
-        case (metric, value) => (metric.withNewDesc(desc = newDesc(metric.desc)), value)
-      }
-    )
-  }
+  def metrics: StateStoreMetrics
 
   /**
    * Update number of values for a key.
@@ -466,17 +449,11 @@ class SymmetricHashJoinStateManager(
   =====================================================
    */
 
-  private val keySchema = StructType(
-    joinKeys.zipWithIndex.map { case (k, i) => StructField(s"field$i", k.dataType, k.nullable) })
-  private val keyAttributes = toAttributes(keySchema)
-  private val keyToNumValues = new KeyToNumValuesStore()
-  private val keyWithIndexToValue = new KeyWithIndexToValueStore(stateFormatVersion)
-
   // Clean up any state store resources if necessary at the end of the task
   Option(TaskContext.get()).foreach { _.addTaskCompletionListener[Unit] { _ => abortIfNeeded() } }
 
   /** Helper trait for invoking common functionalities of a state store. */
-  private abstract class StateStoreHandler(
+  protected abstract class StateStoreHandler(
       stateStoreType: StateStoreType,
       stateStoreCkptId: Option[String]) extends Logging {
     private var stateStoreProvider: StateStoreProvider = _
@@ -508,21 +485,28 @@ class SymmetricHashJoinStateManager(
     }
 
     /** Get the StateStore with the given schema */
-    protected def getStateStore(keySchema: StructType, valueSchema: StructType): StateStore = {
-      val storeProviderId = StateStoreProviderId(
-        stateInfo.get, partitionId, getStateStoreName(joinSide, stateStoreType))
+    protected def getStateStore(
+        keySchema: StructType,
+        valueSchema: StructType,
+        useVirtualColumnFamilies: Boolean): StateStore = {
+      val storeName = if (useVirtualColumnFamilies) {
+        StateStoreId.DEFAULT_STORE_NAME
+      } else {
+        getStateStoreName(joinSide, stateStoreType)
+      }
+      val storeProviderId = StateStoreProviderId(stateInfo.get, partitionId, storeName)
       val store = if (useStateStoreCoordinator) {
         assert(snapshotStartVersion.isEmpty, "Should not use state store coordinator " +
           "when reading state as data source.")
-        StateStore.get(
+        joinStoreGenerator.getStore(
           storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-          stateInfo.get.storeVersion, stateStoreCkptId, None, useColumnFamilies = false,
+          stateInfo.get.storeVersion, stateStoreCkptId, None, useVirtualColumnFamilies,
           storeConf, hadoopConf)
       } else {
         // This class will manage the state store provider by itself.
         stateStoreProvider = StateStoreProvider.createAndInit(
           storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-          useColumnFamilies = false, storeConf, hadoopConf,
+          useColumnFamilies = useVirtualColumnFamilies, storeConf, hadoopConf,
           useMultipleValuesPerKey = false, stateSchemaProvider = None)
         if (snapshotStartVersion.isDefined) {
           if (!stateStoreProvider.isInstanceOf[SupportsFineGrainedReplay]) {
@@ -544,7 +528,7 @@ class SymmetricHashJoinStateManager(
    * Helper class for representing data returned by [[KeyWithIndexToValueStore]].
    * Designed for object reuse.
    */
-  private class KeyAndNumValues(var key: UnsafeRow = null, var numValue: Long = 0) {
+  private[state] class KeyAndNumValues(var key: UnsafeRow = null, var numValue: Long = 0) {
     def withNew(newKey: UnsafeRow, newNumValues: Long): this.type = {
       this.key = newKey
       this.numValue = newNumValues
@@ -554,16 +538,37 @@ class SymmetricHashJoinStateManager(
 
 
   /** A wrapper around a [[StateStore]] that stores [key -> number of values]. */
-  private class KeyToNumValuesStore
+  protected class KeyToNumValuesStore(val stateFormatVersion: Int)
     extends StateStoreHandler(KeyToNumValuesType, keyToNumValuesStateStoreCkptId) {
+
+    private val useVirtualColumnFamilies = stateFormatVersion == 3
     private val longValueSchema = new StructType().add("value", "long")
     private val longToUnsafeRow = UnsafeProjection.create(longValueSchema)
     private val valueRow = longToUnsafeRow(new SpecificInternalRow(longValueSchema))
-    protected val stateStore: StateStore = getStateStore(keySchema, longValueSchema)
+    protected val stateStore: StateStore =
+      getStateStore(keySchema, longValueSchema, useVirtualColumnFamilies)
+
+    // Set up virtual column family name in the store if it is being used
+    private val colFamilyName = if (useVirtualColumnFamilies) {
+      getStateStoreName(joinSide, KeyToNumValuesType)
+    } else {
+      StateStore.DEFAULT_COL_FAMILY_NAME
+    }
+
+    // Create the specific column family in the store for this join side's KeyToNumValuesStore
+    if (useVirtualColumnFamilies) {
+      stateStore.createColFamilyIfAbsent(
+        colFamilyName,
+        keySchema,
+        longValueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema),
+        isInternal = true
+      )
+    }
 
     /** Get the number of values the key has */
     def get(key: UnsafeRow): Long = {
-      val longValueRow = stateStore.get(key)
+      val longValueRow = stateStore.get(key, colFamilyName)
       if (longValueRow != null) longValueRow.getLong(0) else 0L
     }
 
@@ -571,16 +576,16 @@ class SymmetricHashJoinStateManager(
     def put(key: UnsafeRow, numValues: Long): Unit = {
       require(numValues > 0)
       valueRow.setLong(0, numValues)
-      stateStore.put(key, valueRow)
+      stateStore.put(key, valueRow, colFamilyName)
     }
 
     def remove(key: UnsafeRow): Unit = {
-      stateStore.remove(key)
+      stateStore.remove(key, colFamilyName)
     }
 
     def iterator: Iterator[KeyAndNumValues] = {
       val keyAndNumValues = new KeyAndNumValues()
-      stateStore.iterator().map { pair =>
+      stateStore.iterator(colFamilyName).map { pair =>
         keyAndNumValues.withNew(pair.key, pair.value.getLong(0))
       }
     }
@@ -590,7 +595,7 @@ class SymmetricHashJoinStateManager(
    * Helper class for representing data returned by [[KeyWithIndexToValueStore]].
    * Designed for object reuse.
    */
-  private class KeyWithIndexAndValue(
+  private[state] class KeyWithIndexAndValue(
     var key: UnsafeRow = null,
     var valueIndex: Long = -1,
     var value: UnsafeRow = null,
@@ -651,7 +656,7 @@ class SymmetricHashJoinStateManager(
   private object KeyWithIndexToValueRowConverter {
     def create(version: Int): KeyWithIndexToValueRowConverter = version match {
       case 1 => new KeyWithIndexToValueRowConverterFormatV1()
-      case 2 => new KeyWithIndexToValueRowConverterFormatV2()
+      case 2 | 3 => new KeyWithIndexToValueRowConverterFormatV2()
       case _ => throw new IllegalArgumentException("Incorrect state format version! " +
         s"version $version")
     }
@@ -701,9 +706,10 @@ class SymmetricHashJoinStateManager(
    * A wrapper around a [[StateStore]] that stores the mapping; the mapping depends on the
    * state format version - please refer implementations of [[KeyWithIndexToValueRowConverter]].
    */
-  private class KeyWithIndexToValueStore(stateFormatVersion: Int)
+  protected class KeyWithIndexToValueStore(stateFormatVersion: Int)
     extends StateStoreHandler(KeyWithIndexToValueType, keyWithIndexToValueStateStoreCkptId) {
 
+    private val useVirtualColumnFamilies = stateFormatVersion == 3
     private val keyWithIndexExprs = keyAttributes :+ Literal(1L)
     private val keyWithIndexSchema = keySchema.add("index", LongType)
     private val indexOrdinalInKeyWithIndexRow = keyAttributes.size
@@ -718,10 +724,29 @@ class SymmetricHashJoinStateManager(
     private val valueRowConverter = KeyWithIndexToValueRowConverter.create(stateFormatVersion)
 
     protected val stateStore = getStateStore(keyWithIndexSchema,
-      valueRowConverter.valueAttributes.toStructType)
+      valueRowConverter.valueAttributes.toStructType, useVirtualColumnFamilies)
+
+    // Set up virtual column family name in the store if it is being used
+    private val colFamilyName = if (useVirtualColumnFamilies) {
+      getStateStoreName(joinSide, KeyWithIndexToValueType)
+    } else {
+      StateStore.DEFAULT_COL_FAMILY_NAME
+    }
+
+    // Create the specific column family in the store for this join side's KeyWithIndexToValueStore
+    if (useVirtualColumnFamilies) {
+      stateStore.createColFamilyIfAbsent(
+        colFamilyName,
+        keySchema,
+        valueRowConverter.valueAttributes.toStructType,
+        NoPrefixKeyStateEncoderSpec(keySchema)
+      )
+    }
 
     def get(key: UnsafeRow, valueIndex: Long): ValueAndMatchPair = {
-      valueRowConverter.convertValue(stateStore.get(keyWithIndexRow(key, valueIndex)))
+      valueRowConverter.convertValue(
+        stateStore.get(keyWithIndexRow(key, valueIndex), colFamilyName)
+      )
     }
 
     /**
@@ -739,7 +764,8 @@ class SymmetricHashJoinStateManager(
         override protected def getNext(): KeyWithIndexAndValue = {
           while (hasMoreValues) {
             val keyWithIndex = keyWithIndexRow(key, index)
-            val valuePair = valueRowConverter.convertValue(stateStore.get(keyWithIndex))
+            val valuePair =
+              valueRowConverter.convertValue(stateStore.get(keyWithIndex, colFamilyName))
             if (valuePair == null && storeConf.skipNullsForStreamStreamJoins) {
               skippedNullValueCount.foreach(_ += 1L)
               index += 1
@@ -762,7 +788,7 @@ class SymmetricHashJoinStateManager(
     def put(key: UnsafeRow, valueIndex: Long, value: UnsafeRow, matched: Boolean): Unit = {
       val keyWithIndex = keyWithIndexRow(key, valueIndex)
       val valueWithMatched = valueRowConverter.convertToValueRow(value, matched)
-      stateStore.put(keyWithIndex, valueWithMatched)
+      stateStore.put(keyWithIndex, valueWithMatched, colFamilyName)
     }
 
     /**
@@ -770,21 +796,21 @@ class SymmetricHashJoinStateManager(
      * (key, index) and it is upto the caller to deal with it.
      */
     def remove(key: UnsafeRow, valueIndex: Long): Unit = {
-      stateStore.remove(keyWithIndexRow(key, valueIndex))
+      stateStore.remove(keyWithIndexRow(key, valueIndex), colFamilyName)
     }
 
     /** Remove all values (i.e. all the indices) for the given key. */
     def removeAllValues(key: UnsafeRow, numValues: Long): Unit = {
       var index = 0
       while (index < numValues) {
-        stateStore.remove(keyWithIndexRow(key, index))
+        stateStore.remove(keyWithIndexRow(key, index), colFamilyName)
         index += 1
       }
     }
 
     def iterator: Iterator[KeyWithIndexAndValue] = {
       val keyWithIndexAndValue = new KeyWithIndexAndValue()
-      stateStore.iterator().map { pair =>
+      stateStore.iterator(colFamilyName).map { pair =>
         val valuePair = valueRowConverter.convertValue(pair.value)
         keyWithIndexAndValue.withNew(
           keyRowGenerator(pair.key), pair.key.getLong(indexOrdinalInKeyWithIndexRow), valuePair)
@@ -801,9 +827,231 @@ class SymmetricHashJoinStateManager(
   }
 }
 
+/**
+ * Streaming join state manager that uses 4 state stores without virtual column families.
+ * This implementation creates a state stores based on the join side and the type of state store.
+ *
+ * The keyToNumValues store tracks the number of rows for each key, and the keyWithIndexToValue
+ * store contains the actual entries with an additional index column.
+ */
+class SymmetricHashJoinStateManagerV1(
+    joinSide: JoinSide,
+    inputValueAttributes: Seq[Attribute],
+    joinKeys: Seq[Expression],
+    stateInfo: Option[StatefulOperatorStateInfo],
+    storeConf: StateStoreConf,
+    hadoopConf: Configuration,
+    partitionId: Int,
+    keyToNumValuesStateStoreCkptId: Option[String],
+    keyWithIndexToValueStateStoreCkptId: Option[String],
+    stateFormatVersion: Int,
+    skippedNullValueCount: Option[SQLMetric] = None,
+    useStateStoreCoordinator: Boolean = true,
+    snapshotStartVersion: Option[Long] = None,
+    joinStoreGenerator: JoinStateManagerStoreGenerator) extends SymmetricHashJoinStateManager(
+  joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
+  partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
+  stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotStartVersion,
+  joinStoreGenerator) {
+
+  /** Commit all the changes to all the state stores */
+  override def commit(): Unit = {
+    keyToNumValues.commit()
+    keyWithIndexToValue.commit()
+  }
+
+  /** Abort any changes to the state stores if needed */
+  override def abortIfNeeded(): Unit = {
+    keyToNumValues.abortIfNeeded()
+    keyWithIndexToValue.abortIfNeeded()
+  }
+
+  /**
+   * Get state store checkpoint information of the two state stores for this joiner, after
+   * they finished data processing.
+   *
+   * For [[SymmetricHashJoinStateManagerV1]], this returns the information of the two stores
+   * used for this joiner.
+   */
+  override def getLatestCheckpointInfo(): JoinerStateStoreCkptInfo = {
+    val keyToNumValuesCkptInfo = keyToNumValues.getLatestCheckpointInfo()
+    val keyWithIndexToValueCkptInfo = keyWithIndexToValue.getLatestCheckpointInfo()
+
+    assert(
+      keyToNumValuesCkptInfo.partitionId == keyWithIndexToValueCkptInfo.partitionId,
+      "two state stores in a stream-stream joiner don't return the same partition ID")
+    assert(
+      keyToNumValuesCkptInfo.batchVersion == keyWithIndexToValueCkptInfo.batchVersion,
+      "two state stores in a stream-stream joiner don't return the same batch version")
+    assert(
+      keyToNumValuesCkptInfo.stateStoreCkptId.isDefined ==
+        keyWithIndexToValueCkptInfo.stateStoreCkptId.isDefined,
+      "two state stores in a stream-stream joiner should both return checkpoint ID or not")
+
+    JoinerStateStoreCkptInfo(keyToNumValuesCkptInfo, keyWithIndexToValueCkptInfo)
+  }
+
+  override def metrics: StateStoreMetrics = {
+    val keyToNumValuesMetrics = keyToNumValues.metrics
+    val keyWithIndexToValueMetrics = keyWithIndexToValue.metrics
+    def newDesc(desc: String): String = s"${joinSide.toString.toUpperCase(Locale.ROOT)}: $desc"
+
+    StateStoreMetrics(
+      keyWithIndexToValueMetrics.numKeys,       // represent each buffered row only once
+      keyToNumValuesMetrics.memoryUsedBytes + keyWithIndexToValueMetrics.memoryUsedBytes,
+      keyWithIndexToValueMetrics.customMetrics.map {
+        case (metric, value) => (metric.withNewDesc(desc = newDesc(metric.desc)), value)
+      },
+      // We want to collect instance metrics from both state stores
+      keyWithIndexToValueMetrics.instanceMetrics ++ keyToNumValuesMetrics.instanceMetrics
+    )
+  }
+}
+
+/**
+ * Streaming join state manager that uses 1 state store with virtual column families enabled.
+ * Instead of creating a new state store per join side and store type, this manager
+ * uses column families to distinguish data between the original 4 state stores.
+ */
+class SymmetricHashJoinStateManagerV2(
+    joinSide: JoinSide,
+    inputValueAttributes: Seq[Attribute],
+    joinKeys: Seq[Expression],
+    stateInfo: Option[StatefulOperatorStateInfo],
+    storeConf: StateStoreConf,
+    hadoopConf: Configuration,
+    partitionId: Int,
+    keyToNumValuesStateStoreCkptId: Option[String],
+    keyWithIndexToValueStateStoreCkptId: Option[String],
+    stateFormatVersion: Int,
+    skippedNullValueCount: Option[SQLMetric] = None,
+    useStateStoreCoordinator: Boolean = true,
+    snapshotStartVersion: Option[Long] = None,
+    joinStoreGenerator: JoinStateManagerStoreGenerator) extends SymmetricHashJoinStateManager(
+  joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
+  partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
+  stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotStartVersion,
+  joinStoreGenerator) {
+
+  /** Commit all the changes to the state store */
+  override def commit(): Unit = {
+    // Both keyToNumValues and keyWithIndexToValue are using the same state store, so only
+    // one commit is needed.
+    keyToNumValues.commit()
+  }
+
+  /** Abort any changes to the state store if needed */
+  override def abortIfNeeded(): Unit = {
+    keyToNumValues.abortIfNeeded()
+  }
+
+  /**
+   * Get state store checkpoint information of the state store used for this joiner, after
+   * they finished data processing.
+   *
+   * For [[SymmetricHashJoinStateManagerV2]], this returns the information of the single store
+   * used for the entire joiner operator. Both fields of JoinerStateStoreCkptInfo will
+   * be identical.
+   */
+  override def getLatestCheckpointInfo(): JoinerStateStoreCkptInfo = {
+    // Note that both keyToNumValues and keyWithIndexToValue are using the same state store,
+    // so the latest checkpoint info should be the same.
+    // These are returned in a JoinerStateStoreCkptInfo object to remain consistent with
+    // the V1 implementation.
+    val keyToNumValuesCkptInfo = keyToNumValues.getLatestCheckpointInfo()
+    val keyWithIndexToValueCkptInfo = keyWithIndexToValue.getLatestCheckpointInfo()
+
+    assert(keyToNumValuesCkptInfo == keyWithIndexToValueCkptInfo)
+
+    JoinerStateStoreCkptInfo(keyToNumValuesCkptInfo, keyWithIndexToValueCkptInfo)
+  }
+
+  /** Get the state store metrics from the state store manager */
+  override def metrics: StateStoreMetrics = keyToNumValues.metrics
+}
+
+/** Class used to handle state store creation in SymmetricHashJoinStateManager V1 and V2 */
+class JoinStateManagerStoreGenerator() extends Logging {
+
+  // Store internally the store used for the manager if virtual column families are enabled
+  private var _store: Option[StateStore] = None
+
+  /**
+   * Creates the state store used for join operations, or returns the existing instance
+   * if it has been previously created and virtual column families are enabled.
+   */
+  def getStore(
+      storeProviderId: StateStoreProviderId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      version: Long,
+      stateStoreCkptId: Option[String],
+      stateSchemaBroadcast: Option[StateSchemaBroadcast],
+      useColumnFamilies: Boolean,
+      storeConf: StateStoreConf,
+      hadoopConf: Configuration): StateStore = {
+    if (useColumnFamilies) {
+      // Get the store if we haven't created it yet, otherwise use the one we just created
+      if (_store.isEmpty) {
+        _store = Some(
+          StateStore.get(
+            storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, version,
+            stateStoreCkptId, stateSchemaBroadcast, useColumnFamilies = useColumnFamilies,
+            storeConf, hadoopConf
+          )
+        )
+      }
+      _store.get
+    } else {
+      // Do not use the store saved internally, as we need to create the four distinct stores
+      StateStore.get(
+        storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, version,
+        stateStoreCkptId, stateSchemaBroadcast, useColumnFamilies = useColumnFamilies,
+        storeConf, hadoopConf
+      )
+    }
+  }
+}
+
 object SymmetricHashJoinStateManager {
-  val supportedVersions = Seq(1, 2)
+  val supportedVersions = Seq(1, 2, 3)
   val legacyVersion = 1
+
+  // scalastyle:off argcount
+  /** Factory method to determines which version of the join state manager should be created */
+  def apply(
+      joinSide: JoinSide,
+      inputValueAttributes: Seq[Attribute],
+      joinKeys: Seq[Expression],
+      stateInfo: Option[StatefulOperatorStateInfo],
+      storeConf: StateStoreConf,
+      hadoopConf: Configuration,
+      partitionId: Int,
+      keyToNumValuesStateStoreCkptId: Option[String],
+      keyWithIndexToValueStateStoreCkptId: Option[String],
+      stateFormatVersion: Int,
+      skippedNullValueCount: Option[SQLMetric] = None,
+      useStateStoreCoordinator: Boolean = true,
+      snapshotStartVersion: Option[Long] = None,
+      joinStoreGenerator: JoinStateManagerStoreGenerator): SymmetricHashJoinStateManager = {
+    if (stateFormatVersion == 3) {
+      new SymmetricHashJoinStateManagerV2(
+        joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
+        partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
+        stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotStartVersion,
+        joinStoreGenerator
+      )
+    } else {
+      new SymmetricHashJoinStateManagerV1(
+        joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
+        partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
+        stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotStartVersion,
+        joinStoreGenerator
+      )
+    }
+  }
+  // scalastyle:on
 
   def allStateStoreNames(joinSides: JoinSide*): Seq[String] = {
     val allStateStoreTypes: Seq[StateStoreType] = Seq(KeyToNumValuesType, KeyWithIndexToValueType)
@@ -829,7 +1077,7 @@ object SymmetricHashJoinStateManager {
     val keyWithIndexSchema = keySchema.add("index", LongType)
     val valueSchema = if (stateFormatVersion == 1) {
       inputValueAttributes
-    } else if (stateFormatVersion == 2) {
+    } else if (stateFormatVersion == 2 || stateFormatVersion == 3) {
       inputValueAttributes :+ AttributeReference("matched", BooleanType)()
     } else {
       throw new IllegalArgumentException("Incorrect state format version! " +
@@ -839,6 +1087,25 @@ object SymmetricHashJoinStateManager {
       (keyWithIndexSchema, valueSchema.toStructType))
 
     result
+  }
+
+  /** Retrieves the schemas used for join operator state stores that use column families */
+  def getSchemasForStateStoreWithColFamily(
+      joinSide: JoinSide,
+      inputValueAttributes: Seq[Attribute],
+      joinKeys: Seq[Expression],
+      stateFormatVersion: Int): Map[String, StateStoreColFamilySchema] = {
+    // Convert the original schemas for state stores into StateStoreColFamilySchema objects
+    val schemas =
+      getSchemaForStateStores(joinSide, inputValueAttributes, joinKeys, stateFormatVersion)
+
+    schemas.map {
+      case (colFamilyName, (keySchema, valueSchema)) =>
+        colFamilyName -> StateStoreColFamilySchema(
+          colFamilyName, 0, keySchema, 0, valueSchema,
+          Some(NoPrefixKeyStateEncoderSpec(keySchema))
+        )
+    }
   }
 
   /**
@@ -899,33 +1166,40 @@ object SymmetricHashJoinStateManager {
    */
   def getStateStoreCheckpointIds(
       partitionId: Int,
-      stateInfo: StatefulOperatorStateInfo): JoinStateStoreCheckpointId = {
-
-    val stateStoreCkptIds = stateInfo
-      .stateStoreCkptIds
-      .map(_(partitionId))
-      .map(_.map(Option(_)))
-      .getOrElse(Array.fill[Option[String]](4)(None))
-    JoinStateStoreCheckpointId(
-      left = JoinerStateStoreCheckpointId(
-        keyToNumValues = stateStoreCkptIds(0),
-        valueToNumKeys = stateStoreCkptIds(1)),
-      right = JoinerStateStoreCheckpointId(
-        keyToNumValues = stateStoreCkptIds(2),
-        valueToNumKeys = stateStoreCkptIds(3)))
+      stateInfo: StatefulOperatorStateInfo,
+      useColumnFamiliesForJoins: Boolean): JoinStateStoreCheckpointId = {
+    if (useColumnFamiliesForJoins) {
+      val ckpt = stateInfo.stateStoreCkptIds.map(_(partitionId)).map(_.head)
+      JoinStateStoreCheckpointId(
+        left = JoinerStateStoreCheckpointId(keyToNumValues = ckpt, valueToNumKeys = ckpt),
+        right = JoinerStateStoreCheckpointId(keyToNumValues = ckpt, valueToNumKeys = ckpt)
+      )
+    } else {
+      val stateStoreCkptIds = stateInfo.stateStoreCkptIds
+        .map(_(partitionId))
+        .map(_.map(Option(_)))
+        .getOrElse(Array.fill[Option[String]](4)(None))
+      JoinStateStoreCheckpointId(
+        left = JoinerStateStoreCheckpointId(
+          keyToNumValues = stateStoreCkptIds(0),
+          valueToNumKeys = stateStoreCkptIds(1)),
+        right = JoinerStateStoreCheckpointId(
+          keyToNumValues = stateStoreCkptIds(2),
+          valueToNumKeys = stateStoreCkptIds(3)))
+    }
   }
 
-  private sealed trait StateStoreType
+  private[state] sealed trait StateStoreType
 
-  private case object KeyToNumValuesType extends StateStoreType {
+  private[state] case object KeyToNumValuesType extends StateStoreType {
     override def toString(): String = "keyToNumValues"
   }
 
-  private case object KeyWithIndexToValueType extends StateStoreType {
+  private[state] case object KeyWithIndexToValueType extends StateStoreType {
     override def toString(): String = "keyWithIndexToValue"
   }
 
-  private def getStateStoreName(joinSide: JoinSide, storeType: StateStoreType): String = {
+  private[state] def getStateStoreName(joinSide: JoinSide, storeType: StateStoreType): String = {
     s"$joinSide-$storeType"
   }
 

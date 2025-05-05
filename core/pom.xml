@@ -60,6 +60,14 @@
       <artifactId>chill-java</artifactId>
     </dependency>
     <dependency>
+      <groupId>com.esotericsoftware</groupId>
+      <artifactId>kryo-shaded</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.objenesis</groupId>
+      <artifactId>objenesis</artifactId>
+    </dependency>
+    <dependency>
       <groupId>com.github.jnr</groupId>
       <artifactId>jnr-posix</artifactId>
       <scope>test</scope>
@@ -103,10 +111,6 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-common-utils_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>javax.activation</groupId>
-      <artifactId>activation</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.curator</groupId>

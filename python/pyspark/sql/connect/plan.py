@@ -2546,6 +2546,87 @@ class ApplyInPandasWithState(LogicalPlan):
         return self._with_relations(plan, session)
 
 
+class BaseTransformWithStateInPySpark(LogicalPlan):
+    """Base implementation of logical plan object for a TransformWithStateIn(PySpark/Pandas)."""
+
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        grouping_cols: Sequence[Column],
+        function: "UserDefinedFunction",
+        output_schema: Union[DataType, str],
+        output_mode: str,
+        time_mode: str,
+        event_time_col_name: str,
+        cols: List[str],
+        initial_state_plan: Optional["LogicalPlan"],
+        initial_state_grouping_cols: Optional[Sequence[Column]],
+    ):
+        assert isinstance(grouping_cols, list) and all(isinstance(c, Column) for c in grouping_cols)
+        if initial_state_plan is not None:
+            assert isinstance(initial_state_grouping_cols, list) and all(
+                isinstance(c, Column) for c in initial_state_grouping_cols
+            )
+            super().__init__(
+                child, self._collect_references(grouping_cols + initial_state_grouping_cols)
+            )
+        else:
+            super().__init__(child, self._collect_references(grouping_cols))
+        self._grouping_cols = grouping_cols
+        self._output_schema: DataType = (
+            UnparsedDataType(output_schema) if isinstance(output_schema, str) else output_schema
+        )
+        self._output_mode = output_mode
+        self._time_mode = time_mode
+        self._event_time_col_name = event_time_col_name
+        self._function = function._build_common_inline_user_defined_function(*cols)
+        self._initial_state_plan = initial_state_plan
+        self._initial_state_grouping_cols = initial_state_grouping_cols
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.group_map.input.CopyFrom(self._child.plan(session))
+        plan.group_map.grouping_expressions.extend(
+            [c.to_plan(session) for c in self._grouping_cols]
+        )
+        plan.group_map.output_mode = self._output_mode
+
+        # fill in initial state related fields
+        if self._initial_state_plan is not None:
+            plan.group_map.initial_input.CopyFrom(self._initial_state_plan.plan(session))
+            assert self._initial_state_grouping_cols is not None
+            plan.group_map.initial_grouping_expressions.extend(
+                [c.to_plan(session) for c in self._initial_state_grouping_cols]
+            )
+
+        # fill in transformWithStateInPySpark/Pandas related fields
+        tws_info = proto.TransformWithStateInfo()
+        tws_info.time_mode = self._time_mode
+        tws_info.event_time_column_name = self._event_time_col_name
+        tws_info.output_schema.CopyFrom(pyspark_types_to_proto_types(self._output_schema))
+
+        plan.group_map.transform_with_state_info.CopyFrom(tws_info)
+
+        # wrap transformWithStateInPySparkUdf in a function
+        plan.group_map.func.CopyFrom(self._function.to_plan_udf(session))
+
+        return self._with_relations(plan, session)
+
+
+class TransformWithStateInPySpark(BaseTransformWithStateInPySpark):
+    """Logical plan object for a TransformWithStateInPySpark."""
+
+    pass
+
+
+# Retaining this to avoid breaking backward compatibility.
+class TransformWithStateInPandas(BaseTransformWithStateInPySpark):
+    """Logical plan object for a TransformWithStateInPandas."""
+
+    pass
+
+
 class PythonUDTF:
     """Represents a Python user-defined table function."""
 

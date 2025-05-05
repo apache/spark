@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 import java.lang.invoke.{MethodHandles, MethodType}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZonedDateTime, ZoneId, ZoneOffset}
+import java.time.temporal.ChronoField.MICRO_OF_DAY
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit.{MICROSECONDS, NANOSECONDS}
 import java.util.regex.Pattern
@@ -29,7 +30,7 @@ import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, rebaseJulianToGregorianDays, rebaseJulianToGregorianMicros}
 import org.apache.spark.sql.errors.ExecutionErrors
-import org.apache.spark.sql.types.{DateType, TimestampType}
+import org.apache.spark.sql.types.{DateType, TimestampType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SparkClassUtils
 
@@ -133,6 +134,39 @@ trait SparkDateTimeUtils {
   }
 
   /**
+   * Gets the number of microseconds since midnight using the session time zone.
+   */
+  def instantToMicrosOfDay(instant: Instant, timezone: String): Long = {
+    val zoneId = getZoneId(timezone)
+    val localDateTime = LocalDateTime.ofInstant(instant, zoneId)
+    localDateTime.toLocalTime.getLong(MICRO_OF_DAY)
+  }
+
+  /**
+   * Truncates a time value (in microseconds) to the specified fractional precision `p`.
+   *
+   * For example, if `p = 3`, we keep millisecond resolution and discard any digits beyond the
+   * thousand-microsecond place. So a value like `123456` microseconds (12:34:56.123456) becomes
+   * `123000` microseconds (12:34:56.123).
+   *
+   * @param micros
+   *   The original time in microseconds.
+   * @param p
+   *   The fractional second precision (range 0 to 6).
+   * @return
+   *   The truncated microsecond value, preserving only `p` fractional digits.
+   */
+  def truncateTimeMicrosToPrecision(micros: Long, p: Int): Long = {
+    assert(
+      p >= TimeType.MIN_PRECISION && p <= TimeType.MICROS_PRECISION,
+      s"Fractional second precision $p out" +
+        s" of range [${TimeType.MIN_PRECISION}..${TimeType.MICROS_PRECISION}].")
+    val scale = TimeType.MICROS_PRECISION - p
+    val factor = math.pow(10, scale).toLong
+    (micros / factor) * factor
+  }
+
+  /**
    * Converts the timestamp `micros` from one timezone to another.
    *
    * Time-zone rules, such as daylight savings, mean that not every local date-time is valid for
@@ -182,6 +216,19 @@ trait SparkDateTimeUtils {
   def daysToMicros(days: Int, zoneId: ZoneId): Long = {
     val instant = daysToLocalDate(days).atStartOfDay(zoneId).toInstant
     instantToMicros(instant)
+  }
+
+  /**
+   * Converts the local time to the number of microseconds within the day, from 0 to (24 * 60 * 60
+   * * 1000000) - 1.
+   */
+  def localTimeToMicros(localTime: LocalTime): Long = localTime.getLong(MICRO_OF_DAY)
+
+  /**
+   * Converts the number of microseconds within the day to the local time.
+   */
+  def microsToLocalTime(micros: Long): LocalTime = {
+    LocalTime.ofNanoOfDay(Math.multiplyExact(micros, NANOS_PER_MICROS))
   }
 
   /**
@@ -643,6 +690,35 @@ trait SparkDateTimeUtils {
       Some(localDateTimeToMicros(localDateTime))
     } catch {
       case NonFatal(_) => None
+    }
+  }
+
+  /**
+   * Trims and parses a given UTF8 string to a corresponding [[Long]] value which representing the
+   * number of microseconds since the midnight. The result will be independent of time zones.
+   *
+   * The return type is [[Option]] in order to distinguish between 0L and null. Please refer to
+   * `parseTimestampString` for the allowed formats.
+   */
+  def stringToTime(s: UTF8String): Option[Long] = {
+    try {
+      val (segments, zoneIdOpt, justTime) = parseTimestampString(s)
+      // If the input string can't be parsed as a time, or it contains not only
+      // the time part or has time zone information, return None.
+      if (segments.isEmpty || !justTime || zoneIdOpt.isDefined) {
+        return None
+      }
+      val nanoseconds = MICROSECONDS.toNanos(segments(6))
+      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
+      Some(localTimeToMicros(localTime))
+    } catch {
+      case NonFatal(_) => None
+    }
+  }
+
+  def stringToTimeAnsi(s: UTF8String, context: QueryContext = null): Long = {
+    stringToTime(s).getOrElse {
+      throw ExecutionErrors.invalidInputInCastToDatetimeError(s, TimeType(), context)
     }
   }
 

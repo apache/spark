@@ -137,8 +137,8 @@ final class ChiSqSelectorModel private[ml] (
 
   import ChiSqSelectorModel._
 
-  private[ml] def this() = this(
-    Identifiable.randomUID("chiSqSelector"), Array.emptyIntArray)
+  // For ml connect only
+  private[ml] def this() = this("", Array.emptyIntArray)
 
   override protected def isNumericAttribute = false
 
@@ -170,16 +170,15 @@ final class ChiSqSelectorModel private[ml] (
 
 @Since("1.6.0")
 object ChiSqSelectorModel extends MLReadable[ChiSqSelectorModel] {
+  private[ml] case class Data(selectedFeatures: Seq[Int])
 
   class ChiSqSelectorModelWriter(instance: ChiSqSelectorModel) extends MLWriter {
-
-    private case class Data(selectedFeatures: Seq[Int])
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.selectedFeatures.toImmutableArraySeq)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -190,9 +189,8 @@ object ChiSqSelectorModel extends MLReadable[ChiSqSelectorModel] {
     override def load(path: String): ChiSqSelectorModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath).select("selectedFeatures").head()
-      val selectedFeatures = data.getAs[Seq[Int]](0).toArray
-      val model = new ChiSqSelectorModel(metadata.uid, selectedFeatures)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val model = new ChiSqSelectorModel(metadata.uid, data.selectedFeatures.toArray)
       metadata.getAndSetParams(model)
       model
     }

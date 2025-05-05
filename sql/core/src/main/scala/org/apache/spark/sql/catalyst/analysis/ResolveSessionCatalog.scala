@@ -54,11 +54,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case _ if ResolveDefaultStringTypes.needsResolution(plan) =>
-      // if there are still unresolved string types in the plan
-      // we should not try to resolve it
-      plan
-
     case AddColumns(ResolvedV1TableIdentifier(ident), cols) =>
       cols.foreach { c =>
         if (c.name.length > 1) {

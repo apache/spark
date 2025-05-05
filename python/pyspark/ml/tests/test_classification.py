@@ -21,8 +21,9 @@ from shutil import rmtree
 
 import numpy as np
 
+from pyspark.errors import PySparkException
 from pyspark.ml.linalg import Vectors, Matrices
-from pyspark.sql import SparkSession, DataFrame, Row
+from pyspark.sql import DataFrame, Row
 from pyspark.ml.classification import (
     NaiveBayes,
     NaiveBayesModel,
@@ -54,6 +55,7 @@ from pyspark.ml.classification import (
     MultilayerPerceptronClassificationTrainingSummary,
 )
 from pyspark.ml.regression import DecisionTreeRegressionModel
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class ClassificationTestsMixin:
@@ -977,13 +979,13 @@ class ClassificationTestsMixin:
             model2 = MultilayerPerceptronClassificationModel.load(d)
             self.assertEqual(str(model), str(model2))
 
+    def test_invalid_load_location(self):
+        with self.assertRaisesRegex(PySparkException, "Path does not exist"):
+            LogisticRegression.load("invalid_location")
 
-class ClassificationTests(ClassificationTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[4]").getOrCreate()
 
-    def tearDown(self) -> None:
-        self.spark.stop()
+class ClassificationTests(ClassificationTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

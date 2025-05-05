@@ -819,7 +819,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
              |OPTIONS (PATH '$path')
              |AS VALUES (2, 3)
              |""".stripMargin)
-        checkAnswer(sql("SELECT * FROM test"), Seq(Row(0, 1), Row(0, 1), Row(1, 2), Row(2, 3)))
+        checkAnswer(sql("SELECT * FROM test"), Seq(Row(2, 3)))
         // Replace the table without the path options.
         sql(
           s"""

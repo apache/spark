@@ -74,9 +74,7 @@ case class PlanAdaptiveDynamicPruningFilters(
           val aliases = indices.map(idx => Alias(buildKeys(idx), buildKeys(idx).toString)())
           val aggregate = Aggregate(aliases, aliases, buildPlan)
 
-          val session = adaptivePlan.context.session
-          val sparkPlan = QueryExecution.prepareExecutedPlan(
-            session, aggregate, adaptivePlan.context)
+          val sparkPlan = QueryExecution.prepareExecutedPlan(aggregate, adaptivePlan.context)
           assert(sparkPlan.isInstanceOf[AdaptiveSparkPlanExec])
           val newAdaptivePlan = sparkPlan.asInstanceOf[AdaptiveSparkPlanExec]
           val values = SubqueryExec(name, newAdaptivePlan)

@@ -45,7 +45,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.VersionUtils
+import org.apache.spark.util._
 
 /**
  * Params for logistic regression.
@@ -1041,6 +1041,22 @@ class LogisticRegression @Since("1.2.0") (
     (solution, arrayBuilder.result())
   }
 
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    // TODO: get numClasses and numFeatures together from dataset
+    val numClasses = DatasetUtils.getNumClasses(dataset, $(labelCol))
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+
+    var size = this.estimateMatadataSize
+    if (checkMultinomial(numClasses)) {
+      size += Matrices.getDenseSize(numFeatures, numClasses) // coefficientMatrix
+      size += Vectors.getDenseSize(numClasses) // interceptVector
+    } else {
+      size += Matrices.getDenseSize(numFeatures, 1) // coefficientMatrix
+      size += Vectors.getDenseSize(1) // interceptVector
+    }
+    size
+  }
+
   @Since("1.4.0")
   override def copy(extra: ParamMap): LogisticRegression = defaultCopy(extra)
 }
@@ -1077,8 +1093,7 @@ class LogisticRegressionModel private[spark] (
       Vectors.dense(intercept), 2, isMultinomial = false)
 
   // For ml connect only
-  @Since("4.0.0")
-  private[ml] def this() = this(Identifiable.randomUID("logreg"), Vectors.empty, 0)
+  private[ml] def this() = this("", Matrices.empty, Vectors.empty, -1, false)
 
   /**
    * A vector of model coefficients for "binomial" logistic regression. If this model was trained
@@ -1249,6 +1264,17 @@ class LogisticRegressionModel private[spark] (
     }
   }
 
+  private[spark] override def estimatedSize: Long = {
+    var size = this.estimateMatadataSize
+    if (this.coefficientMatrix != null) {
+      size += this.coefficientMatrix.getSizeInBytes
+    }
+    if (this.interceptVector != null) {
+      size += this.interceptVector.getSizeInBytes
+    }
+    size
+  }
+
   @Since("1.4.0")
   override def copy(extra: ParamMap): LogisticRegressionModel = {
     val newModel = copyValues(new LogisticRegressionModel(uid, coefficientMatrix, interceptVector,
@@ -1290,9 +1316,14 @@ class LogisticRegressionModel private[spark] (
   }
 }
 
-
 @Since("1.6.0")
 object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
+  private[ml] case class Data(
+    numClasses: Int,
+    numFeatures: Int,
+    interceptVector: Vector,
+    coefficientMatrix: Matrix,
+    isMultinomial: Boolean)
 
   @Since("1.6.0")
   override def read: MLReader[LogisticRegressionModel] = new LogisticRegressionModelReader
@@ -1305,13 +1336,6 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
   class LogisticRegressionModelWriter(instance: LogisticRegressionModel)
     extends MLWriter with Logging {
 
-    private case class Data(
-        numClasses: Int,
-        numFeatures: Int,
-        interceptVector: Vector,
-        coefficientMatrix: Matrix,
-        isMultinomial: Boolean)
-
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
@@ -1319,7 +1343,7 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
       val data = Data(instance.numClasses, instance.numFeatures, instance.interceptVector,
         instance.coefficientMatrix, instance.isMultinomial)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -1333,9 +1357,9 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.format("parquet").load(dataPath)
 
       val model = if (major < 2 || (major == 2 && minor == 0)) {
+        val data = sparkSession.read.format("parquet").load(dataPath)
         // 2.0 and before
         val Row(numClasses: Int, numFeatures: Int, intercept: Double, coefficients: Vector) =
           MLUtils.convertVectorColumnsToML(data, "coefficients")
@@ -1348,12 +1372,9 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
           interceptVector, numClasses, isMultinomial = false)
       } else {
         // 2.1+
-        val Row(numClasses: Int, numFeatures: Int, interceptVector: Vector,
-        coefficientMatrix: Matrix, isMultinomial: Boolean) = data
-          .select("numClasses", "numFeatures", "interceptVector", "coefficientMatrix",
-            "isMultinomial").head()
-        new LogisticRegressionModel(metadata.uid, coefficientMatrix, interceptVector,
-          numClasses, isMultinomial)
+        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+        new LogisticRegressionModel(metadata.uid, data.coefficientMatrix, data.interceptVector,
+          data.numClasses, data.isMultinomial)
       }
 
       metadata.getAndSetParams(model)

@@ -52,7 +52,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
       "POWER", "SQRT", "FLOOR", "CEIL", "ROUND", "SIN", "SINH", "COS", "COSH", "TAN",
       "TANH", "COT", "ASIN", "ACOS", "ATAN", "ATAN2", "DEGREES", "RADIANS", "SIGN",
       "PI", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE", "TRIM", "MD5", "SHA1", "SHA2",
-      "BIT_LENGTH", "CHAR_LENGTH", "CONCAT")
+      "BIT_LENGTH", "CHAR_LENGTH", "CONCAT", "RPAD", "LPAD")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
@@ -283,22 +283,14 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
     }
 
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
-      if (isSupportedFunction(funcName)) {
-        funcName match {
-          case "MD5" =>
-            "RAWTOHEX(HASH('MD5', " + inputs.mkString(",") + "))"
-          case "SHA1" =>
-            "RAWTOHEX(HASH('SHA-1', " + inputs.mkString(",") + "))"
-          case "SHA2" =>
-            "RAWTOHEX(HASH('SHA-" + inputs(1) + "'," + inputs(0) + "))"
-          case _ => super.visitSQLFunction(funcName, inputs)
-        }
-      } else {
-        throw new SparkUnsupportedOperationException(
-          errorClass = "_LEGACY_ERROR_TEMP_3177",
-          messageParameters = Map(
-            "class" -> this.getClass.getSimpleName,
-            "funcName" -> funcName))
+      funcName match {
+        case "MD5" =>
+          "RAWTOHEX(HASH('MD5', " + inputs.mkString(",") + "))"
+        case "SHA1" =>
+          "RAWTOHEX(HASH('SHA-1', " + inputs.mkString(",") + "))"
+        case "SHA2" =>
+          "RAWTOHEX(HASH('SHA-" + inputs(1) + "'," + inputs(0) + "))"
+        case _ => super.visitSQLFunction(funcName, inputs)
       }
     }
   }

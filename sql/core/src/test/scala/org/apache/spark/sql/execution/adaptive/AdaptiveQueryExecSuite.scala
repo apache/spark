@@ -99,13 +99,10 @@ class AdaptiveQueryExecSuite
     }
     val planAfter = dfAdaptive.queryExecution.executedPlan
     assert(planAfter.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
-    val adaptivePlan = planAfter.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+    val adaptivePlan = stripAQEPlan(planAfter)
 
     spark.sparkContext.listenerBus.waitUntilEmpty()
-    // AQE will post `SparkListenerSQLAdaptiveExecutionUpdate` twice in case of subqueries that
-    // exist out of query stages.
-    val expectedFinalPlanCnt = adaptivePlan.find(_.subqueries.nonEmpty).map(_ => 2).getOrElse(1)
-    assert(finalPlanCnt == expectedFinalPlanCnt)
+    assert(finalPlanCnt == 1)
     spark.sparkContext.removeSparkListener(listener)
 
     val expectedMetrics = findInMemoryTable(planAfter).nonEmpty ||
@@ -1103,7 +1100,7 @@ class AdaptiveQueryExecSuite
       assert(!read.hasSkewedPartition)
       assert(read.hasCoalescedPartition)
       assert(read.metrics.keys.toSeq.sorted == Seq(
-        "numCoalescedPartitions", "numPartitions", "partitionDataSize"))
+        "numCoalescedPartitions", "numEmptyPartitions", "numPartitions", "partitionDataSize"))
       assert(read.metrics("numCoalescedPartitions").value == 1)
       assert(read.metrics("numPartitions").value == read.partitionSpecs.length)
       assert(read.metrics("partitionDataSize").value > 0)
@@ -1130,7 +1127,7 @@ class AdaptiveQueryExecSuite
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.SHUFFLE_PARTITIONS.key -> "100",
         SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "800",
-        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1000") {
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "900") {
         withTempView("skewData1", "skewData2") {
           spark
             .range(0, 1000, 1, 10)
@@ -1246,7 +1243,9 @@ class AdaptiveQueryExecSuite
                   if (enabled) {
                     assert(planInfo.nodeName == "AdaptiveSparkPlan")
                     assert(planInfo.children.size == 1)
-                    assert(planInfo.children.head.nodeName ==
+                    assert(planInfo.children.head.nodeName == "ResultQueryStage")
+                    assert(planInfo.children.head.children.size == 1)
+                    assert(planInfo.children.head.children.head.nodeName ==
                       "Execute InsertIntoHadoopFsRelationCommand")
                   } else {
                     assert(planInfo.nodeName == "Execute InsertIntoHadoopFsRelationCommand")
@@ -3046,6 +3045,34 @@ class AdaptiveQueryExecSuite
     val aggDf2 = emptyDf.agg(sum("id").as("id")).withColumn("name", lit("df2"))
     val unionDF = aggDf1.union(aggDf2)
     checkAnswer(unionDF.select("id").distinct(), Seq(Row(null)))
+  }
+
+  test("Collect twice on the same dataframe with no AQE plan changes") {
+    val df = spark.sql("SELECT * FROM testData join testData2 ON key = a")
+    df.collect()
+    val plan1 = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+    df.collect()
+    val plan2 = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+    assert(plan1.isInstanceOf[ResultQueryStageExec])
+    assert(plan2.isInstanceOf[ResultQueryStageExec])
+    assert(plan1 ne plan2)
+    assert(plan1.asInstanceOf[ResultQueryStageExec].plan
+      .fastEquals(plan2.asInstanceOf[ResultQueryStageExec].plan))
+  }
+
+  test("Two different collect actions on same dataframe") {
+    val df = spark.sql("SELECT * FROM testData join testData2 ON key = a")
+    val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+    val res1 = adaptivePlan.execute().collect()
+    val plan1 = adaptivePlan.executedPlan
+    val res2 = adaptivePlan.executeTake(1)
+    val plan2 = adaptivePlan.executedPlan
+    assert (res1.length != res2.length)
+    assert(plan1.isInstanceOf[ResultQueryStageExec])
+    assert(plan2.isInstanceOf[ResultQueryStageExec])
+    assert(plan1 ne plan2)
+    assert(plan1.asInstanceOf[ResultQueryStageExec].plan
+      .fastEquals(plan2.asInstanceOf[ResultQueryStageExec].plan))
   }
 
   test("SPARK-47247: coalesce differently for BNLJ") {

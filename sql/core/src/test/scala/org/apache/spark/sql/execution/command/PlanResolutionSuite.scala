@@ -141,6 +141,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(t.provider).thenReturn(Some(provider))
     when(t.identifier).thenReturn(
       ident.asTableIdentifier.copy(catalog = Some(SESSION_CATALOG_NAME)))
+    when(t.storage).thenReturn(CatalogStorageFormat.empty)
+    when(t.properties).thenReturn(Map.empty)
+    when(t.comment).thenReturn(None)
+    when(t.collation).thenReturn(None)
     V1Table(t)
   }
 

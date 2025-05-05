@@ -157,6 +157,17 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     }
   }
 
+  private static String getApiMode(Map<String, String> conf) {
+    boolean connectByDefault = "1".equals(System.getenv("SPARK_CONNECT_MODE"));
+    String defaultApiMode = connectByDefault ? "connect" : "classic";
+    String apiMode = conf.get(SparkLauncher.SPARK_API_MODE);
+    if ("classic".equalsIgnoreCase(apiMode) || "connect".equalsIgnoreCase(apiMode)) {
+      return apiMode;
+    } else {
+      return defaultApiMode;
+    }
+  }
+
   @Override
   public List<String> buildCommand(Map<String, String> env)
       throws IOException, IllegalArgumentException {
@@ -170,6 +181,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   List<String> buildSparkSubmitArgs() {
+    return buildSparkSubmitArgs(true);
+  }
+
+  List<String> buildSparkSubmitArgs(boolean includeRemote) {
     List<String> args = new ArrayList<>();
     OptionParser parser = new OptionParser(false);
     final boolean isSpecialCommand;
@@ -196,7 +211,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       args.add(master);
     }
 
-    if (remote != null) {
+    if (includeRemote && remote != null) {
       args.add(parser.REMOTE);
       args.add(remote);
     }
@@ -212,8 +227,12 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     }
 
     for (Map.Entry<String, String> e : conf.entrySet()) {
-      args.add(parser.CONF);
-      args.add(String.format("%s=%s", e.getKey(), e.getValue()));
+      if (includeRemote ||
+           (!e.getKey().equalsIgnoreCase("spark.api.mode") &&
+             !e.getKey().equalsIgnoreCase("spark.remote"))) {
+        args.add(parser.CONF);
+        args.add(String.format("%s=%s", e.getKey(), e.getValue()));
+      }
     }
 
     if (propertiesFile != null) {
@@ -354,7 +373,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     // When launching the pyspark shell, the spark-submit arguments should be stored in the
     // PYSPARK_SUBMIT_ARGS env variable.
     appResource = PYSPARK_SHELL_RESOURCE;
-    constructEnvVarArgs(env, "PYSPARK_SUBMIT_ARGS");
+    // Do not pass remote configurations to Spark Connect server via Py4J.
+    constructEnvVarArgs(env, "PYSPARK_SUBMIT_ARGS", false);
 
     // Will pick up the binary executable in the following order
     // 1. conf spark.pyspark.driver.python
@@ -377,17 +397,17 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     String masterStr = firstNonEmpty(master, conf.getOrDefault(SparkLauncher.SPARK_MASTER, null));
     String deployStr = firstNonEmpty(
       deployMode, conf.getOrDefault(SparkLauncher.DEPLOY_MODE, null));
-    if (!conf.containsKey(SparkLauncher.SPARK_LOCAL_REMOTE) &&
-        remoteStr != null && (masterStr != null || deployStr != null)) {
+    if (remoteStr != null && (masterStr != null || deployStr != null)) {
       throw new IllegalStateException("Remote cannot be specified with master and/or deploy mode.");
     }
+
+    String apiMode = getApiMode(conf);
+    env.put("SPARK_API_MODE", apiMode);
     if (remoteStr != null) {
       env.put("SPARK_REMOTE", remoteStr);
       env.put("SPARK_CONNECT_MODE_ENABLED", "1");
-    } else if (conf.getOrDefault(
-        SparkLauncher.SPARK_API_MODE, "classic").toLowerCase(Locale.ROOT).equals("connect") &&
-        masterStr != null) {
-      env.put("SPARK_REMOTE", masterStr);
+    } else if ("connect".equalsIgnoreCase(apiMode)) {
+      env.put("MASTER", firstNonEmpty(masterStr, "local"));
       env.put("SPARK_CONNECT_MODE_ENABLED", "1");
     }
 
@@ -408,7 +428,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     // When launching the SparkR shell, store the spark-submit arguments in the SPARKR_SUBMIT_ARGS
     // env variable.
     appResource = SPARKR_SHELL_RESOURCE;
-    constructEnvVarArgs(env, "SPARKR_SUBMIT_ARGS");
+    constructEnvVarArgs(env, "SPARKR_SUBMIT_ARGS", true);
 
     // Set shell.R as R_PROFILE_USER to load the SparkR package when the shell comes up.
     String sparkHome = System.getenv("SPARK_HOME");
@@ -423,12 +443,13 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   private void constructEnvVarArgs(
       Map<String, String> env,
-      String submitArgsEnvVariable) throws IOException {
+      String submitArgsEnvVariable,
+      boolean includeRemote) throws IOException {
     mergeEnvPathList(env, getLibPathEnvName(),
       getEffectiveConfig().get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
 
     StringBuilder submitArgs = new StringBuilder();
-    for (String arg : buildSparkSubmitArgs()) {
+    for (String arg : buildSparkSubmitArgs(includeRemote)) {
       if (submitArgs.length() > 0) {
         submitArgs.append(" ");
       }
@@ -528,12 +549,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           checkArgument(value != null, "Missing argument to %s", CONF);
           String[] setConf = value.split("=", 2);
           checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
-          if (setConf[0].equals("spark.remote") ||
-              (setConf[0].equals(SparkLauncher.SPARK_API_MODE) &&
-                setConf[1].toLowerCase(Locale.ROOT).equals("connect"))) {
-            isRemote = true;
-          }
           conf.put(setConf[0], setConf[1]);
+          // If both spark.remote and spark.mater are set, the error will be thrown later when
+          // the application is started.
+          isRemote |= conf.containsKey("spark.remote");
+          isRemote |= "connect".equalsIgnoreCase(getApiMode(conf));
         }
         case CLASS -> {
           // The special classes require some special command line handling, since they allow

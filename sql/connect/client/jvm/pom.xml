@@ -55,6 +55,16 @@
       <artifactId>spark-sketch_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-compiler</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.scala-lang.modules</groupId>
+      <artifactId>scala-xml_${scala.binary.version}</artifactId>
+      <scope>compile</scope>
+    </dependency>
     <!--
       We need to define protobuf here because we need to change the scope of both from
       provided to compile. If we don't do this we can't shade these libraries.
@@ -80,6 +90,15 @@
       <groupId>com.lihaoyi</groupId>
       <artifactId>ammonite_${scala.version}</artifactId>
       <version>${ammonite.version}</version>
+      <exclusions>
+        <!--
+          Exclude fine-grained jline jars and in favor the bundled jline jar pulled by scala-compiler.
+        -->
+        <exclusion>
+          <groupId>org.jline</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
       <scope>provided</scope>
     </dependency>
     <dependency>
@@ -119,12 +138,19 @@
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
+      <plugin>
+        <groupId>org.scalatest</groupId>
+        <artifactId>scalatest-maven-plugin</artifactId>
+        <configuration>
+          <argLine>-ea -Xmx4g -Xss4m -XX:MaxMetaspaceSize=2g -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraJavaTestArgs} -Darrow.memory.debug.allocator=true</argLine>
+        </configuration>
+      </plugin>
       <!-- Shade all Guava / Protobuf / Netty dependencies of this build -->
       <!-- TODO (SPARK-42449): Ensure shading rules are handled correctly in `native-image.properties` and support GraalVM   -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
-        <configuration>
+        <configuration combine.self = "override">
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
           <artifactSet>
@@ -208,7 +234,7 @@
       </plugin>
       <plugin>
         <!--
-          Here we download Spark Connect cleint dependencies for REPL and copy
+          Here we download Spark Connect client dependencies for REPL and copy
           Spark Connect client to target's jars/connect-repl directory (at assembly/pom.xml).
           Those jars will only be loaded when we run Spark Connect shell, see also SPARK-49198
         -->
@@ -224,6 +250,7 @@
             <configuration>
               <outputDirectory>${basedir}/target/connect-repl</outputDirectory>
               <includeScope>provided</includeScope>
+              <excludeArtifactIds>scala-collection-compat_${scala.binary.version},javassist</excludeArtifactIds>
             </configuration>
           </execution>
         </executions>
@@ -238,24 +265,6 @@
             <goals>
               <goal>test-jar</goal>
             </goals>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>build-helper-maven-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>add-sources</id>
-            <phase>generate-sources</phase>
-            <goals>
-              <goal>add-source</goal>
-            </goals>
-            <configuration>
-              <sources>
-                <source>src/main/scala-${scala.binary.version}</source>
-              </sources>
-            </configuration>
           </execution>
         </executions>
       </plugin>

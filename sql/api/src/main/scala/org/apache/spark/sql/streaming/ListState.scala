@@ -24,21 +24,55 @@ import org.apache.spark.annotation.Evolving
  */
 trait ListState[S] extends Serializable {
 
-  /** Whether state exists or not. */
+  /**
+   * Function to check whether state exists for current grouping key or not.
+   *
+   * @return - true if state exists, false otherwise.
+   */
   def exists(): Boolean
 
-  /** Get the state value. An empty iterator is returned if no value exists. */
+  /**
+   * Function to get the list of elements in the state as an iterator. If the state does not exist,
+   * an empty iterator is returned.
+   *
+   * Note that it's always recommended to check whether the state exists or not by calling exists()
+   * before calling get().
+   *
+   * @return - an iterator of elements in the state if it exists, an empty iterator otherwise.
+   */
   def get(): Iterator[S]
 
-  /** Update the value of the list. */
+  /**
+   * Function to update the value of the state with a new list.
+   *
+   * Note that this will replace the existing value with the new value.
+   *
+   * @param newState - new list of elements
+   */
   def put(newState: Array[S]): Unit
 
-  /** Append an entry to the list */
+  /**
+   * Function to append a single entry to the existing state list.
+   *
+   * Note that if this is the first time the state is being appended to, the state will be
+   * initialized to an empty list before appending the new entry.
+   *
+   * @param newState - single list element to be appended
+   */
   def appendValue(newState: S): Unit
 
-  /** Append an entire list to the existing value */
+  /**
+   * Function to append a list of entries to the existing state list.
+   *
+   * Note that if this is the first time the state is being appended to, the state will be
+   * initialized to an empty list before appending the new entries.
+   *
+   * @param newState - list of elements to be appended
+   */
   def appendList(newState: Array[S]): Unit
 
-  /** Removes this state for the given grouping key. */
+  /**
+   * Function to remove the state for the current grouping key.
+   */
   def clear(): Unit
 }

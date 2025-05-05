@@ -412,6 +412,8 @@ object SparkBuild extends PomBuild {
   /* Hive console settings */
   enable(Hive.settings)(hive)
 
+  enable(HiveThriftServer.settings)(hiveThriftServer)
+
   enable(SparkConnectCommon.settings)(connectCommon)
   enable(SparkConnect.settings)(connect)
   enable(SparkConnectClient.settings)(connectClient)
@@ -838,6 +840,8 @@ object SparkConnectClient {
 
     testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated,
 
+    (Test / javaOptions) += "-Darrow.memory.debug.allocator=true",
+
     (assembly / test) := { },
 
     (assembly / logLevel) := Level.Info,
@@ -1003,7 +1007,7 @@ object KubernetesIntegrationTests {
           rDockerFile = ""
         }
         val extraOptions = if (javaImageTag.isDefined) {
-          Seq("-b", s"java_image_tag=$javaImageTag")
+          Seq("-b", s"java_image_tag=${javaImageTag.get}")
         } else {
           Seq("-f", s"$dockerFile")
         }
@@ -1203,11 +1207,20 @@ object Hive {
   )
 }
 
+object HiveThriftServer {
+  lazy val settings = Seq(
+    excludeDependencies ++= Seq(
+      ExclusionRule("org.apache.hive", "hive-llap-common"),
+      ExclusionRule("org.apache.hive", "hive-llap-client"))
+  )
+}
+
 object YARN {
   val genConfigProperties = TaskKey[Unit]("gen-config-properties",
     "Generate config.properties which contains a setting whether Hadoop is provided or not")
   val propFileName = "config.properties"
   val hadoopProvidedProp = "spark.yarn.isHadoopProvided"
+  val buildTestDeps = TaskKey[Unit]("buildTestDeps", "Build needed dependencies for test.")
 
   lazy val settings = Seq(
     Compile / unmanagedResources :=
@@ -1223,7 +1236,14 @@ object YARN {
         (Compile / genConfigProperties).value
         c
       }
-    }).value
+    }).value,
+
+    buildTestDeps := {
+      (LocalProject("assembly") / Compile / Keys.`package`).value
+    },
+    test := ((Test / test) dependsOn (buildTestDeps)).value,
+
+    testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated
   )
 }
 
@@ -1570,15 +1590,24 @@ object TestSettings {
     fork := true,
     // Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
     // launched by the tests have access to the correct test-time classpath.
-    (Test / envVars) ++= Map(
-      "SPARK_DIST_CLASSPATH" ->
-        (Test / fullClasspath).value.files.map(_.getAbsolutePath)
-          .mkString(File.pathSeparator).stripSuffix(File.pathSeparator),
-      "SPARK_PREPEND_CLASSES" -> "1",
-      "SPARK_SCALA_VERSION" -> scalaBinaryVersion.value,
-      "SPARK_TESTING" -> "1",
-      "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home")),
-      "SPARK_BEELINE_OPTS" -> "-DmyKey=yourValue"),
+    (Test / envVars) ++= {
+      val baseEnvVars = Map(
+        "SPARK_DIST_CLASSPATH" ->
+          (Test / fullClasspath).value.files.map(_.getAbsolutePath)
+            .mkString(File.pathSeparator).stripSuffix(File.pathSeparator),
+        "SPARK_PREPEND_CLASSES" -> "1",
+        "SPARK_SCALA_VERSION" -> scalaBinaryVersion.value,
+        "SPARK_TESTING" -> "1",
+        "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home")),
+        "SPARK_BEELINE_OPTS" -> "-DmyKey=yourValue"
+      )
+
+      if (sys.props("os.name").contains("Mac OS X")) {
+        baseEnvVars + ("OBJC_DISABLE_INITIALIZE_FORK_SAFETY" -> "YES")
+      } else {
+        baseEnvVars
+      }
+    },
 
     // Copy system properties to forked JVMs so that tests know proxy settings
     (Test / javaOptions) ++= {
@@ -1601,6 +1630,7 @@ object TestSettings {
     (Test / javaOptions) += "-Dspark.ui.enabled=false",
     (Test / javaOptions) += "-Dspark.ui.showConsoleProgress=false",
     (Test / javaOptions) += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
+    (Test / javaOptions) += "-Dspark.hadoop.hadoop.caller.context.enabled=true",
     (Test / javaOptions) += "-Dhive.conf.validation=false",
     (Test / javaOptions) += "-Dsun.io.serialization.extendedDebugInfo=false",
     (Test / javaOptions) += "-Dderby.system.durability=test",
@@ -1633,7 +1663,8 @@ object TestSettings {
         "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
         "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
         "-Djdk.reflect.useDirectMethodHandle=false",
-        "-Dio.netty.tryReflectionSetAccessible=true").mkString(" ")
+        "-Dio.netty.tryReflectionSetAccessible=true",
+        "--enable-native-access=ALL-UNNAMED").mkString(" ")
       s"-Xmx$heapSize -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"
         .split(" ").toSeq
     },
@@ -1684,7 +1715,7 @@ object TestSettings {
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),
     (Test / testOptions) += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
-    libraryDependencies += "com.github.sbt.junit" % "jupiter-interface" % "0.13.3" % "test",
+    libraryDependencies += "com.github.sbt.junit" % "jupiter-interface" % "0.14.0" % "test",
     // `parallelExecutionInTest` controls whether test suites belonging to the same SBT project
     // can run in parallel with one another. It does NOT control whether tests execute in parallel
     // within the same JVM (which is controlled by `testForkedParallel`) or whether test cases

@@ -21,6 +21,7 @@ import java.util.Locale
 
 import scala.collection.immutable.ListMap
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
@@ -40,7 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoDir, I
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, ResolveDefaultColumns, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, PushableExpression, ResolveDefaultColumns}
 import org.apache.spark.sql.classic.{SparkSession, Strategy}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
@@ -256,20 +257,40 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       QualifiedTableName(table.identifier.catalog.get, table.database, table.identifier.table)
     val catalog = sparkSession.sessionState.catalog
     val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
-    catalog.getCachedPlan(qualifiedTableName, () => {
-      val dataSource =
-        DataSource(
-          sparkSession,
-          // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
-          // inferred at runtime. We should still support it.
-          userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
-          partitionColumns = table.partitionColumnNames,
-          bucketSpec = table.bucketSpec,
-          className = table.provider.get,
-          options = dsOptions,
-          catalogTable = Some(table))
-      LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
-    })
+    val readFileSourceTableCacheIgnoreOptions =
+      SQLConf.get.getConf(SQLConf.READ_FILE_SOURCE_TABLE_CACHE_IGNORE_OPTIONS)
+    catalog.getCachedTable(qualifiedTableName) match {
+      case null =>
+        val dataSource =
+          DataSource(
+            sparkSession,
+            // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
+            // inferred at runtime. We should still support it.
+            userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
+            partitionColumns = table.partitionColumnNames,
+            bucketSpec = table.bucketSpec,
+            className = table.provider.get,
+            options = dsOptions,
+            catalogTable = Some(table))
+        val plan = LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
+        catalog.cacheTable(qualifiedTableName, plan)
+        plan
+
+      // If readFileSourceTableCacheIgnoreOptions is false AND
+      // the cached table relation's options differ from the new options:
+      // 1. Create a new HadoopFsRelation with updated options
+      // 2. Return a new LogicalRelation with the updated HadoopFsRelation
+      // This ensures the relation reflects any changes in data source options.
+      // Otherwise, leave the cached table relation as is
+      case r @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, _, _)
+        if !readFileSourceTableCacheIgnoreOptions &&
+          (new CaseInsensitiveStringMap(fsRelation.options.asJava) !=
+          new CaseInsensitiveStringMap(dsOptions.asJava)) =>
+        val newFsRelation = fsRelation.copy(options = dsOptions)(sparkSession)
+        r.copy(relation = newFsRelation)
+
+      case other => other
+    }
   }
 
   private def getStreamingRelation(
@@ -865,11 +886,4 @@ object PushableColumnAndNestedColumn extends PushableColumnBase {
 
 object PushableColumnWithoutNestedColumn extends PushableColumnBase {
   override val nestedPredicatePushdownEnabled = false
-}
-
-/**
- * Get the expression of DS V2 to represent catalyst expression that can be pushed down.
- */
-object PushableExpression {
-  def unapply(e: Expression): Option[V2Expression] = new V2ExpressionBuilder(e).build()
 }

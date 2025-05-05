@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst.parser
 import java.util
 import java.util.Locale
 
-import scala.collection.mutable.Set
+import scala.collection.immutable
+import scala.collection.mutable
+import scala.util.matching.Regex
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
@@ -58,12 +60,6 @@ object ParserUtils extends SparkParserUtils {
     keyPairs.groupBy(_._1).filter(_._2.size > 1).foreach { case (key, _) =>
       throw QueryParsingErrors.duplicateKeysError(key, ctx)
     }
-  }
-
-  /** Get the code that creates the given node. */
-  def source(ctx: ParserRuleContext): String = {
-    val stream = ctx.getStart.getInputStream
-    stream.getText(Interval.of(ctx.getStart.getStartIndex, ctx.getStop.getStopIndex))
   }
 
   /** Get all the text which comes after the given rule. */
@@ -261,7 +257,7 @@ class SqlScriptingParsingContext {
 
 class SqlScriptingLabelContext {
   /** Set to keep track of labels seen so far */
-  private val seenLabels = Set[String]()
+  private val seenLabels = mutable.Set[String]()
 
   /**
    * Check if the beginLabelCtx and endLabelCtx match.
@@ -337,6 +333,11 @@ class SqlScriptingLabelContext {
       // Do not add the label to the seenLabels set if it is not defined.
       java.util.UUID.randomUUID.toString.toLowerCase(Locale.ROOT)
     }
+    if (SqlScriptingLabelContext.isForbiddenLabelName(labelText)) {
+      withOrigin(beginLabelCtx.get) {
+        throw SqlScriptingErrors.labelNameForbidden(CurrentOrigin.get, labelText)
+      }
+    }
     labelText
   }
 
@@ -348,5 +349,14 @@ class SqlScriptingLabelContext {
     if (isLabelDefined(beginLabelCtx)) {
       seenLabels.remove(beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT))
     }
+  }
+}
+
+object SqlScriptingLabelContext {
+  private val forbiddenLabelNames: immutable.Set[Regex] =
+    immutable.Set("builtin".r, "session".r, "sys.*".r)
+
+  def isForbiddenLabelName(labelName: String): Boolean = {
+    forbiddenLabelNames.exists(_.matches(labelName.toLowerCase(Locale.ROOT)))
   }
 }

@@ -228,11 +228,12 @@ class ClientE2ETestSuite
   }
 
   test("spark deep recursion") {
+    var recursionDepth = if (System.getProperty("os.arch") == "s390x") 400 else 500
     var df = spark.range(1)
-    for (a <- 1 to 500) {
+    for (a <- 1 to recursionDepth) {
       df = df.union(spark.range(a, a + 1))
     }
-    assert(df.collect().length == 501)
+    assert(df.collect().length == recursionDepth + 1)
   }
 
   test("handle unknown exception") {
@@ -1046,6 +1047,9 @@ class ClientE2ETestSuite
     assert(spark.conf.get(entryWithDefault.key) === "12")
     assert(spark.conf.get(entryWithDefault) === 12)
     assert(spark.conf.get(entryWithDefault, 11) === 12)
+
+    assert(spark.conf.contains(entryWithDefault.key))
+    assert(!spark.conf.contains("nope"))
   }
 
   test("SparkVersion") {
@@ -1055,7 +1059,12 @@ class ClientE2ETestSuite
 
   private def checkSameResult[E](expected: scala.collection.Seq[E], dataset: Dataset[E]): Unit = {
     dataset.withResult { result =>
-      assert(expected === result.iterator.toBuffer)
+      val iter = result.iterator
+      try {
+        assert(expected === iter.toBuffer)
+      } finally {
+        iter.close()
+      }
     }
   }
 
@@ -1230,9 +1239,9 @@ class ClientE2ETestSuite
       .filter("id > 5 and id < 9")
 
     df.withResult { result =>
+      // build and verify the destructive iterator
+      val iterator = result.destructiveIterator
       try {
-        // build and verify the destructive iterator
-        val iterator = result.destructiveIterator
         // resultMap Map is empty before traversing the result iterator
         assertResultsMapEmpty(result)
         val buffer = mutable.Set.empty[Long]
@@ -1247,7 +1256,7 @@ class ClientE2ETestSuite
         val expectedResult = Set(6L, 7L, 8L)
         assert(buffer.size === 3 && expectedResult == buffer)
       } finally {
-        result.close()
+        iterator.close()
       }
     }
   }
@@ -1562,12 +1571,12 @@ class ClientE2ETestSuite
     val ob1Metrics = Map("ob1" -> new GenericRowWithSchema(Array(0, 49, 98), ob1Schema))
     val ob2Metrics = Map("ob2" -> new GenericRowWithSchema(Array(-1, 48, 97), ob2Schema))
 
-    val obMetrics = observedDf.collectResult().getObservedMetrics
-    assert(df.collectResult().getObservedMetrics === Map.empty)
-    assert(observedDf.collectResult().getObservedMetrics === ob1Metrics)
+    val obMetrics = observedDf.withResult(_.getObservedMetrics)
+    assert(df.withResult(_.getObservedMetrics) === Map.empty)
+    assert(observedDf.withResult(_.getObservedMetrics) === ob1Metrics)
     assert(obMetrics.map(_._2.schema) === Seq(ob1Schema))
 
-    val obObMetrics = observedObservedDf.collectResult().getObservedMetrics
+    val obObMetrics = observedObservedDf.withResult(_.getObservedMetrics)
     assert(obObMetrics === ob1Metrics ++ ob2Metrics)
     assert(obObMetrics.map(_._2.schema).exists(_.equals(ob1Schema)))
     assert(obObMetrics.map(_._2.schema).exists(_.equals(ob2Schema)))
@@ -1576,7 +1585,7 @@ class ClientE2ETestSuite
   for (collectFunc <- Seq(
       ("collect", (df: DataFrame) => df.collect()),
       ("collectAsList", (df: DataFrame) => df.collectAsList()),
-      ("collectResult", (df: DataFrame) => df.collectResult().length),
+      ("collectResult", (df: DataFrame) => df.withResult(_.length)),
       ("write", (df: DataFrame) => df.write.format("noop").mode("append").save())))
     test(
       "Observation.get is blocked until the query is finished, " +

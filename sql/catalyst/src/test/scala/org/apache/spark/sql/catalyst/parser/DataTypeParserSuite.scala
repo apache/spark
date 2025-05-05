@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
@@ -57,6 +57,9 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   checkDataType("Dec(10, 5)", DecimalType(10, 5))
   checkDataType("deC", DecimalType.USER_DEFAULT)
   checkDataType("DATE", DateType)
+  checkDataType("TimE", TimeType())
+  checkDataType("time(0)", TimeType(0))
+  checkDataType("TIME(6)", TimeType(6))
   checkDataType("timestamp", TimestampType)
   checkDataType("timestamp_ntz", TimestampNTZType)
   checkDataType("timestamp_ltz", TimestampType)
@@ -172,4 +175,19 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   // DataType parser accepts comments.
   checkDataType("Struct<x: INT, y: STRING COMMENT 'test'>",
     (new StructType).add("x", IntegerType).add("y", StringType, true, "test"))
+
+  test("unsupported precision of the time data type") {
+    checkError(
+      exception = intercept[SparkException] {
+        CatalystSqlParser.parseDataType("time(9)")
+      },
+      condition = "UNSUPPORTED_TIME_PRECISION",
+      parameters = Map("precision" -> "9"))
+    checkError(
+      exception = intercept[ParseException] {
+        CatalystSqlParser.parseDataType("time(-1)")
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'('", "hint" -> ""))
+  }
 }

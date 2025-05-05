@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.types.variant.VariantUtil._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
@@ -440,28 +441,6 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // day-time interval to variant
     assert(!resolver.resolveTimeZones(Cast(Cast(Literal(0L), DayTimeIntervalType(0, 0)),
       VariantType)).resolved)
-
-    // Remove test when overriding type ID 19: old variant year-month interval type ID (19) to int
-    checkErrorInExpression[SparkRuntimeException](
-      VariantGet(
-        Literal(new VariantVal(Array(primitiveHeader(19), 0, 0, 0, 0, 0),
-          emptyMetadata)), Literal("$"), IntegerType, failOnError = true
-      ),
-      "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT",
-      Map("id" -> "19")
-    )
-
-    // Remove test when overriding type ID 20: old variant day-time interval type ID (20) to int
-    checkErrorInExpression[SparkRuntimeException](
-      VariantGet(
-        Literal(
-          new VariantVal(Array(primitiveHeader(20), 0, 0, 0, 0, 0, 0, 0, 0, 0),
-            emptyMetadata)
-        ), Literal("$"), IntegerType, failOnError = true
-      ),
-      "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT",
-      Map("id" -> "20")
-    )
   }
 
   test("variant_get path extraction") {
@@ -476,7 +455,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         |"category":"fiction","reader":[{"age":25,"name":"bob"},{"age":26,"name":"jack"}],
         |"price":22.99,"isbn":"0-395-19395-8"}],"bicycle":{"price":19.95,"color":"red"}},
         |"email":"amy@only_for_json_udf_test.net","owner":"amy","zip code":"94025",
-        |"fb:testid":"1234"}
+        |"fb:testid":"1234","":"empty string","?":"Question Mark?", " ":"Whitespace", "\t": "Tab"}
         |""".stripMargin
     testVariantGet(json, "$.store.bicycle", StringType, """{"color":"red","price":19.95}""")
     checkEvaluation(
@@ -490,6 +469,12 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
     testVariantGet(json, "$.store.bicycle.color", StringType, "red")
     testVariantGet(json, "$.store.bicycle.price", DoubleType, 19.95)
+    testVariantGet(json, "$[\"\"]", StringType, "empty string")
+    testVariantGet(json, "$['']", StringType, "empty string")
+    testVariantGet(json, "$[\"?\"]", StringType, "Question Mark?")
+    testVariantGet(json, "$[\" \"]", StringType, "Whitespace")
+    testVariantGet(json, "$[\"\t\"]", StringType, "Tab")
+    testVariantGet(json, "$['?']", StringType, "Question Mark?")
     testVariantGet(
       json,
       "$.store.book",
@@ -699,6 +684,9 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInvalidPath("$1")
     checkInvalidPath("$[-1]")
     checkInvalidPath("""$['"]""")
+
+    checkInvalidPath("$[\"\"\"]")
+    checkInvalidPath("$[\"\\\"\"]")
   }
 
   test("cast from variant") {
@@ -782,10 +770,6 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     checkToJsonFail(Array(primitiveHeader(25)), 25)
-    // Remove these test cases when overriding type IDs 19 and 20.
-    // SPARK-49985: Disable support for interval types in the variant spec.
-    checkToJsonFail(Array(primitiveHeader(19)), 19)
-    checkToJsonFail(Array(primitiveHeader(20)), 20)
 
     def littleEndianLong(value: Long): Array[Byte] =
       BigInt(value).toByteArray.reverse.padTo(8, 0.toByte)
@@ -868,6 +852,19 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "\u0001\u0002\u0003")
     checkCast(Array(primitiveHeader(BINARY), 5, 0, 0, 0, 72, 101, 108, 108, 111), StringType,
       "Hello")
+
+    // UUID
+    checkToJson(Array(primitiveHeader(UUID),
+      0, 17, 34, 51, 68, 85, 102, 119, -120, -103, -86, -69, -52, -35, -18, -1),
+      "\"00112233-4455-6677-8899-aabbccddeeff\"")
+    // Test cast to string. Incidentally, also test construction of UUID via VariantBuilder
+    // interface, since we can't currently do it as a Spark cast.
+    val uuid = java.util.UUID.fromString("01020304-0506-0708-090a-0b0c0d0e0f10")
+    val builder = new VariantBuilder(false)
+    builder.appendUuid(uuid)
+    val bytes = builder.result().getValue
+    checkCast(bytes, StringType,
+      "01020304-0506-0708-090a-0b0c0d0e0f10")
   }
 
   test("SPARK-48150: ParseJson expression nullability") {
@@ -978,11 +975,23 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       )
     }
     checkErrorInSchemaOf(Array(primitiveHeader(25)), 25)
+  }
 
-    // SPARK-49985: Disable support for interval types in the variant spec.
-    // Remove these test cases when overriding type ids 19 and 20
-    checkErrorInSchemaOf(Array(primitiveHeader(19)), 19)
-    checkErrorInSchemaOf(Array(primitiveHeader(20)), 20)
+  test("schema_of_variant - non-spark types") {
+    val emptyMetadata = Array[Byte](VERSION, 0, 0)
+
+    // UUID
+    val uuidVal = Array(primitiveHeader(UUID)) ++ Array.fill(16)(1.toByte)
+    val uuid = Literal(new VariantVal(uuidVal, emptyMetadata))
+    checkEvaluation(SchemaOfVariant(uuid), s"UUID")
+    // Merge with variantNull retains type.
+    val variantNull = Literal(new VariantVal(Array(primitiveHeader(NULL)), emptyMetadata))
+    val array = Cast(CreateArray(Seq(uuid, variantNull)), VariantType)
+    checkEvaluation(SchemaOfVariant(array), s"ARRAY<UUID>")
+    // Merge with another type results in VARIANT.
+    val variantString = Literal(new VariantVal(Array(shortStrHeader(1), 'x'), emptyMetadata))
+    val array2 = Cast(CreateArray(Seq(uuid, variantString)), VariantType)
+    checkEvaluation(SchemaOfVariant(array2), s"ARRAY<VARIANT>")
   }
 
   test("schema_of_variant - schema merge") {

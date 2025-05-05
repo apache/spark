@@ -55,11 +55,10 @@ from pyspark.ml.util import (
     JavaMLWriter,
     try_remote_write,
     try_remote_read,
-    is_remote,
+    _cache_spark_dataset,
 )
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
-from pyspark.sql.functions import col, lit, rand
-from pyspark.sql.types import BooleanType
+from pyspark.sql import functions as F
 from pyspark.sql.dataframe import DataFrame
 
 if TYPE_CHECKING:
@@ -617,7 +616,7 @@ class CrossValidatorModelWriter(MLWriter):
             path, instance, self.sparkSession, extraMetadata=extraMetadata
         )
         bestModelPath = os.path.join(path, "bestModel")
-        cast(MLWritable, instance.bestModel).save(bestModelPath)
+        cast(MLWritable, instance.bestModel).write().session(self.sparkSession).save(bestModelPath)
         if persistSubModels:
             if instance.subModels is None:
                 raise ValueError(_save_with_persist_submodels_no_submodels_found_err)
@@ -626,7 +625,9 @@ class CrossValidatorModelWriter(MLWriter):
                 splitPath = os.path.join(subModelsPath, f"fold{splitIndex}")
                 for paramIndex in range(len(instance.getEstimatorParamMaps())):
                     modelPath = os.path.join(splitPath, f"{paramIndex}")
-                    cast(MLWritable, instance.subModels[splitIndex][paramIndex]).save(modelPath)
+                    cast(MLWritable, instance.subModels[splitIndex][paramIndex]).write().session(
+                        self.sparkSession
+                    ).save(modelPath)
 
 
 class _CrossValidatorParams(_ValidatorParams):
@@ -847,22 +848,23 @@ class CrossValidator(
             subModels = [[None for j in range(numModels)] for i in range(nFolds)]
 
         datasets = self._kFold(dataset)
+
         for i in range(nFolds):
-            validation = datasets[i][1].cache()
-            train = datasets[i][0].cache()
+            validation = datasets[i][1]
+            train = datasets[i][0]
 
-            tasks = map(
-                inheritable_thread_target(dataset.sparkSession),
-                _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam),
-            )
-            for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
-                metrics_all[i][j] = metric
-                if collectSubModelsParam:
-                    assert subModels is not None
-                    subModels[i][j] = subModel
-
-            validation.unpersist()
-            train.unpersist()
+            with _cache_spark_dataset(train) as train, _cache_spark_dataset(
+                validation
+            ) as validation:
+                tasks = map(
+                    inheritable_thread_target(dataset.sparkSession),
+                    _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam),
+                )
+                for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
+                    metrics_all[i][j] = metric
+                    if collectSubModelsParam:
+                        assert subModels is not None
+                        subModels[i][j] = subModel
 
         metrics, std_metrics = CrossValidator._gen_avg_and_std_metrics(metrics_all)
 
@@ -885,7 +887,7 @@ class CrossValidator(
             seed = self.getOrDefault(self.seed)
             h = 1.0 / nFolds
             randCol = self.uid + "_rand"
-            df = dataset.select("*", rand(seed).alias(randCol))
+            df = dataset.select("*", F.rand(seed).alias(randCol))
             for i in range(nFolds):
                 validateLB = i * h
                 validateUB = (i + 1) * h
@@ -895,34 +897,27 @@ class CrossValidator(
                 datasets.append((train, validation))
         else:
             # Use user-specified fold numbers.
-            def checker(foldNum: int) -> bool:
-                if foldNum < 0 or foldNum >= nFolds:
-                    raise ValueError(
-                        "Fold number must be in range [0, %s), but got %s." % (nFolds, foldNum)
-                    )
-                return True
+            checked = dataset.withColumn(
+                foldCol,
+                F.when(
+                    (F.lit(0) <= F.col(foldCol)) & (F.col(foldCol) < F.lit(nFolds)), F.col(foldCol)
+                ).otherwise(
+                    F.raise_error(
+                        F.printf(
+                            F.lit(f"Fold number must be in range [0, {nFolds}), but got %s"),
+                            F.col(foldCol),
+                        )
+                    ),
+                ),
+            )
 
-            if is_remote():
-                from pyspark.sql.connect.udf import UserDefinedFunction
-            else:
-                from pyspark.sql.functions import UserDefinedFunction  # type: ignore[assignment]
-
-            checker_udf = UserDefinedFunction(checker, BooleanType())
             for i in range(nFolds):
-                training = dataset.filter(checker_udf(dataset[foldCol]) & (col(foldCol) != lit(i)))
-                validation = dataset.filter(
-                    checker_udf(dataset[foldCol]) & (col(foldCol) == lit(i))
-                )
-                if is_remote():
-                    if len(training.take(1)) == 0:
-                        raise ValueError("The training data at fold %s is empty." % i)
-                    if len(validation.take(1)) == 0:
-                        raise ValueError("The validation data at fold %s is empty." % i)
-                else:
-                    if training.rdd.getNumPartitions() == 0 or len(training.take(1)) == 0:
-                        raise ValueError("The training data at fold %s is empty." % i)
-                    if validation.rdd.getNumPartitions() == 0 or len(validation.take(1)) == 0:
-                        raise ValueError("The validation data at fold %s is empty." % i)
+                training = checked.filter(F.col(foldCol) != F.lit(i))
+                validation = checked.filter(F.col(foldCol) == F.lit(i))
+                if training.isEmpty():
+                    raise ValueError("The training data at fold %s is empty." % i)
+                if validation.isEmpty():
+                    raise ValueError("The validation data at fold %s is empty." % i)
                 datasets.append((training, validation))
 
         return datasets
@@ -1291,14 +1286,16 @@ class TrainValidationSplitModelWriter(MLWriter):
             path, instance, self.sparkSession, extraMetadata=extraMetadata
         )
         bestModelPath = os.path.join(path, "bestModel")
-        cast(MLWritable, instance.bestModel).save(bestModelPath)
+        cast(MLWritable, instance.bestModel).write().session(self.sparkSession).save(bestModelPath)
         if persistSubModels:
             if instance.subModels is None:
                 raise ValueError(_save_with_persist_submodels_no_submodels_found_err)
             subModelsPath = os.path.join(path, "subModels")
             for paramIndex in range(len(instance.getEstimatorParamMaps())):
                 modelPath = os.path.join(subModelsPath, f"{paramIndex}")
-                cast(MLWritable, instance.subModels[paramIndex]).save(modelPath)
+                cast(MLWritable, instance.subModels[paramIndex]).write().session(
+                    self.sparkSession
+                ).save(modelPath)
 
 
 class _TrainValidationSplitParams(_ValidatorParams):
@@ -1478,30 +1475,29 @@ class TrainValidationSplit(
         tRatio = self.getOrDefault(self.trainRatio)
         seed = self.getOrDefault(self.seed)
         randCol = self.uid + "_rand"
-        df = dataset.select("*", rand(seed).alias(randCol))
+        df = dataset.select("*", F.rand(seed).alias(randCol))
         condition = df[randCol] >= tRatio
-        validation = df.filter(condition).cache()
-        train = df.filter(~condition).cache()
 
-        subModels = None
-        collectSubModelsParam = self.getCollectSubModels()
-        if collectSubModelsParam:
-            subModels = [None for i in range(numModels)]
+        validation = df.filter(condition)
+        train = df.filter(~condition)
 
-        tasks = map(
-            inheritable_thread_target(dataset.sparkSession),
-            _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam),
-        )
-        pool = ThreadPool(processes=min(self.getParallelism(), numModels))
-        metrics = [None] * numModels
-        for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
-            metrics[j] = metric
+        with _cache_spark_dataset(train) as train, _cache_spark_dataset(validation) as validation:
+            subModels = None
+            collectSubModelsParam = self.getCollectSubModels()
             if collectSubModelsParam:
-                assert subModels is not None
-                subModels[j] = subModel
+                subModels = [None for i in range(numModels)]
 
-        train.unpersist()
-        validation.unpersist()
+            tasks = map(
+                inheritable_thread_target(dataset.sparkSession),
+                _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam),
+            )
+            pool = ThreadPool(processes=min(self.getParallelism(), numModels))
+            metrics = [None] * numModels
+            for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
+                metrics[j] = metric
+                if collectSubModelsParam:
+                    assert subModels is not None
+                    subModels[j] = subModel
 
         if eva.isLargerBetter():
             bestIndex = np.argmax(cast(List[float], metrics))

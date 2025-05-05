@@ -93,8 +93,8 @@ class GaussianMixtureModel private[ml] (
   extends Model[GaussianMixtureModel] with GaussianMixtureParams with MLWritable
   with HasTrainingSummary[GaussianMixtureSummary] {
 
-  private[ml] def this() = this(Identifiable.randomUID("gmm"),
-    Array.emptyDoubleArray, Array.empty)
+  // For ml connect only
+  private[ml] def this() = this("", Array.emptyDoubleArray, Array.empty)
 
   @Since("3.0.0")
   lazy val numFeatures: Int = gaussians.head.mean.size
@@ -223,6 +223,11 @@ class GaussianMixtureModel private[ml] (
 
 @Since("2.0.0")
 object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
+  private[ml] case class Data(
+      weights: Array[Double],
+      mus: Array[OldVector],
+      sigmas: Array[OldMatrix]
+  )
 
   @Since("2.0.0")
   override def read: MLReader[GaussianMixtureModel] = new GaussianMixtureModelReader
@@ -234,8 +239,6 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
   private[GaussianMixtureModel] class GaussianMixtureModelWriter(
       instance: GaussianMixtureModel) extends MLWriter {
 
-    private case class Data(weights: Array[Double], mus: Array[OldVector], sigmas: Array[OldMatrix])
-
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
@@ -246,7 +249,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
       val sigmas = gaussians.map(c => OldMatrices.fromML(c.cov))
       val data = Data(weights, mus, sigmas)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -259,16 +262,27 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val row = sparkSession.read.parquet(dataPath).select("weights", "mus", "sigmas").head()
-      val weights = row.getSeq[Double](0).toArray
-      val mus = row.getSeq[OldVector](1).toArray
-      val sigmas = row.getSeq[OldMatrix](2).toArray
-      require(mus.length == sigmas.length, "Length of Mu and Sigma array must match")
-      require(mus.length == weights.length, "Length of weight and Gaussian array must match")
 
-      val gaussians = mus.zip(sigmas)
+      val data = if (ReadWriteUtils.localSavingModeState.get()) {
+        ReadWriteUtils.loadObjectFromLocal(dataPath)
+      } else {
+        val row = sparkSession.read.parquet(dataPath).select("weights", "mus", "sigmas").head()
+        Data(
+          row.getSeq[Double](0).toArray,
+          row.getSeq[OldVector](1).toArray,
+          row.getSeq[OldMatrix](2).toArray
+        )
+      }
+
+      require(data.mus.length == data.sigmas.length, "Length of Mu and Sigma array must match")
+      require(
+        data.mus.length == data.weights.length,
+        "Length of weight and Gaussian array must match"
+      )
+
+      val gaussians = data.mus.zip(data.sigmas)
         .map { case (mu, sigma) => new MultivariateGaussian(mu.asML, sigma.asML) }
-      val model = new GaussianMixtureModel(metadata.uid, weights, gaussians)
+      val model = new GaussianMixtureModel(metadata.uid, data.weights, gaussians)
 
       metadata.getAndSetParams(model)
       model

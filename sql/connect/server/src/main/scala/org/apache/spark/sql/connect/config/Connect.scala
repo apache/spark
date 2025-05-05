@@ -18,6 +18,7 @@ package org.apache.spark.sql.connect.config
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.internal.SQLConf
@@ -28,12 +29,14 @@ object Connect {
 
   val CONNECT_GRPC_BINDING_ADDRESS =
     buildStaticConf("spark.connect.grpc.binding.address")
+      .doc("The address for Spark Connect server to bind.")
       .version("4.0.0")
       .stringConf
       .createOptional
 
   val CONNECT_GRPC_BINDING_PORT =
     buildStaticConf("spark.connect.grpc.binding.port")
+      .doc("The port for Spark Connect server to bind.")
       .version("3.4.0")
       .intConf
       .createWithDefault(ConnectCommon.CONNECT_GRPC_BINDING_PORT)
@@ -310,6 +313,56 @@ object Connect {
         s" When false, the cache is disabled even if '${CONNECT_SESSION_PLAN_CACHE_SIZE.key}' is" +
         " greater than zero. The caching is best-effort and not guaranteed.")
       .version("4.0.0")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
+  val CONNECT_AUTHENTICATE_TOKEN =
+    buildStaticConf("spark.connect.authenticate.token")
+      .doc("A pre-shared token that will be used to authenticate clients. This secret must be" +
+        " passed as a bearer token by for clients to connect.")
+      .version("4.0.0")
+      .internal()
+      .stringConf
+      .createOptional
+
+  val CONNECT_AUTHENTICATE_TOKEN_ENV = "SPARK_CONNECT_AUTHENTICATE_TOKEN"
+
+  def getAuthenticateToken: Option[String] = {
+    SparkEnv.get.conf.get(CONNECT_AUTHENTICATE_TOKEN).orElse {
+      Option(System.getenv.get(CONNECT_AUTHENTICATE_TOKEN_ENV))
+    }
+  }
+
+  val CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_MAX_IN_MEMORY_SIZE =
+    buildConf("spark.connect.session.connectML.mlCache.offloading.maxInMemorySize")
+      .doc(
+        "In-memory maximum size of the MLCache per session. The cache will offload the least " +
+          "recently used models to Spark driver local disk if the size exceeds this limit. " +
+          "The size is in bytes. This configuration only works when " +
+          "'spark.connect.session.connectML.mlCache.offloading.enabled' is 'true'.")
+      .version("4.1.0")
+      .internal()
+      .bytesConf(ByteUnit.BYTE)
+      // By default, 1/3 of total designated memory (the configured -Xmx).
+      .createWithDefault(Runtime.getRuntime.maxMemory() / 3)
+
+  val CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_TIMEOUT =
+    buildConf("spark.connect.session.connectML.mlCache.offloading.timeout")
+      .doc(
+        "Timeout of model offloading in MLCache. Models will be offloaded to Spark driver local " +
+          "disk if they are not used for this amount of time. The timeout is in minutes. " +
+          "This configuration only works when " +
+          "'spark.connect.session.connectML.mlCache.offloading.enabled' is 'true'.")
+      .version("4.1.0")
+      .internal()
+      .timeConf(TimeUnit.MINUTES)
+      .createWithDefault(5)
+
+  val CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED =
+    buildConf("spark.connect.session.connectML.mlCache.offloading.enabled")
+      .doc("Enables ML cache offloading.")
+      .version("4.1.0")
       .internal()
       .booleanConf
       .createWithDefault(true)

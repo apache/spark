@@ -97,7 +97,8 @@ class FunctionResolver(
       if (isCountStarExpansionAllowed(unresolvedFunction)) {
         normalizeCountExpression(unresolvedFunction)
       } else {
-        withResolvedChildren(unresolvedFunction, expressionResolver.resolve)
+        withResolvedChildren(unresolvedFunction, expressionResolver.resolve _)
+          .asInstanceOf[UnresolvedFunction]
       }
 
     var resolvedFunction = functionResolution.resolveFunction(functionWithResolvedChildren)
@@ -116,7 +117,9 @@ class FunctionResolver(
         // Since this [[InheritAnalysisRules]] node is created by
         // [[FunctionResolution.resolveFunction]], we need to re-resolve its replacement
         // expression.
-        expressionResolver.resolveExpressionGenericallyWithTypeCoercion(inheritAnalysisRules)
+        val resolvedInheritAnalysisRules =
+          withResolvedChildren(inheritAnalysisRules, expressionResolver.resolve _)
+        typeCoercionResolver.resolve(resolvedInheritAnalysisRules)
       case aggregateExpression: AggregateExpression =>
         // In case `functionResolution.resolveFunction` produces a `AggregateExpression` we
         // need to apply further resolution which is done in the
@@ -135,7 +138,7 @@ class FunctionResolver(
         typeCoercionResolver.resolve(other)
     }
 
-    timezoneAwareExpressionResolver.withResolvedTimezoneCopyTags(
+    timezoneAwareExpressionResolver.withResolvedTimezone(
       resolvedFunction,
       conf.sessionLocalTimeZone
     )

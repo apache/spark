@@ -215,8 +215,10 @@ com.github.joshelser:dropwizard-metrics-hadoop-metrics2-reporter
 com.google.code.findbugs:jsr305
 com.google.code.gson:gson
 com.google.crypto.tink:tink
+com.google.errorprone:error_prone_annotations
 com.google.flatbuffers:flatbuffers-java
 com.google.guava:guava
+com.google.j2objc:j2objc-annotations
 com.jamesmurty.utils:java-xmlbuilder
 com.ning:compress-lzf
 com.squareup.okhttp3:logging-interceptor
@@ -226,7 +228,7 @@ com.tdunning:json
 com.twitter:chill-java
 com.twitter:chill_2.13
 com.univocity:univocity-parsers
-com.zaxxer.HikariCP
+com.zaxxer:HikariCP
 commons-cli:commons-cli
 commons-codec:commons-codec
 commons-collections:commons-collections
@@ -273,6 +275,7 @@ io.jsonwebtoken:jjwt-jackson
 io.netty:netty-all
 io.netty:netty-buffer
 io.netty:netty-codec
+io.netty:netty-codec-dns
 io.netty:netty-codec-http
 io.netty:netty-codec-http2
 io.netty:netty-codec-socks
@@ -280,6 +283,7 @@ io.netty:netty-common
 io.netty:netty-handler
 io.netty:netty-handler-proxy
 io.netty:netty-resolver
+io.netty:netty-resolver-dns
 io.netty:netty-tcnative-boringssl-static
 io.netty:netty-tcnative-classes
 io.netty:netty-transport
@@ -328,7 +332,6 @@ org.apache.hive:hive-cli
 org.apache.hive:hive-common
 org.apache.hive:hive-exec
 org.apache.hive:hive-jdbc
-org.apache.hive:hive-llap-common
 org.apache.hive:hive-metastore
 org.apache.hive:hive-serde
 org.apache.hive:hive-service-rpc
@@ -384,6 +387,8 @@ org.glassfish.jersey.core:jersey-client
 org.glassfish.jersey.core:jersey-common
 org.glassfish.jersey.core:jersey-server
 org.glassfish.jersey.inject:jersey-hk2
+org.javassist:javassist
+org.jetbrains:annotations
 org.json4s:json4s-ast_2.13
 org.json4s:json4s-core_2.13
 org.json4s:json4s-jackson-core_2.13
@@ -440,6 +445,8 @@ jline:jline
 org.jodd:jodd-core
 pl.edu.icm:JLargeArrays
 
+python/pyspark/errors/exceptions/tblib.py
+
 
 BSD 3-Clause
 ------------
@@ -476,6 +483,7 @@ dev.ludovic.netlib:blas
 dev.ludovic.netlib:arpack
 dev.ludovic.netlib:lapack
 net.razorvine:pickle
+org.bouncycastle:bcprov-jdk18on
 org.checkerframework:checker-qual
 org.typelevel:algebra_2.13:jar
 org.typelevel:cats-kernel_2.13
@@ -501,7 +509,6 @@ core/src/main/resources/org/apache/spark/ui/static/d3.min.js
 
 Common Development and Distribution License (CDDL) 1.0
 ------------------------------------------------------
-javax.activation:activation  http://www.oracle.com/technetwork/java/javase/tech/index-jsp-138795.html
 javax.transaction:transaction-api
 
 
@@ -515,7 +522,9 @@ javax.xml.bind:jaxb-api    https://github.com/javaee/jaxb-v2
 Eclipse Distribution License (EDL) 1.0
 --------------------------------------
 com.sun.istack:istack-commons-runtime
+jakarta.activation:jakarta.activation-api
 jakarta.xml.bind:jakarta.xml.bind-api
+org.glassfish.jaxb:jaxb-core
 org.glassfish.jaxb:jaxb-runtime
 
 Eclipse Public License (EPL) 2.0

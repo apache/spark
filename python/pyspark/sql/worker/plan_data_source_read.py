@@ -32,7 +32,7 @@ from pyspark.serializers import (
     SpecialLengths,
 )
 from pyspark.sql import Row
-from pyspark.sql.connect.conversion import ArrowTableToRowsConversion, LocalDataToArrowConversion
+from pyspark.sql.conversion import ArrowTableToRowsConversion, LocalDataToArrowConversion
 from pyspark.sql.datasource import (
     DataSource,
     DataSourceReader,
@@ -168,6 +168,101 @@ def records_to_arrow_batches(
         yield batch
 
 
+def write_read_func_and_partitions(
+    outfile: IO,
+    *,
+    reader: Union[DataSourceReader, DataSourceStreamReader],
+    data_source: DataSource,
+    schema: StructType,
+    max_arrow_batch_size: int,
+) -> None:
+    is_streaming = isinstance(reader, DataSourceStreamReader)
+
+    # Create input converter.
+    converter = ArrowTableToRowsConversion._create_converter(BinaryType())
+
+    # Create output converter.
+    return_type = schema
+
+    def data_source_read_func(iterator: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
+        partition_bytes = None
+
+        # Get the partition value from the input iterator.
+        for batch in iterator:
+            # There should be only one row/column in the batch.
+            assert batch.num_columns == 1 and batch.num_rows == 1, (
+                "Expected each batch to have exactly 1 column and 1 row, "
+                f"but found {batch.num_columns} columns and {batch.num_rows} rows."
+            )
+            columns = [column.to_pylist() for column in batch.columns]
+            partition_bytes = converter(columns[0][0])
+
+        assert (
+            partition_bytes is not None
+        ), "The input iterator for Python data source read function is empty."
+
+        # Deserialize the partition value.
+        partition = pickleSer.loads(partition_bytes)
+
+        assert partition is None or isinstance(partition, InputPartition), (
+            "Expected the partition value to be of type 'InputPartition', "
+            f"but found '{type(partition).__name__}'."
+        )
+
+        output_iter = reader.read(partition)  # type: ignore[arg-type]
+
+        # Validate the output iterator.
+        if not isinstance(output_iter, Iterator):
+            raise PySparkRuntimeError(
+                errorClass="DATA_SOURCE_INVALID_RETURN_TYPE",
+                messageParameters={
+                    "type": type(output_iter).__name__,
+                    "name": data_source.name(),
+                    "supported_types": "iterator",
+                },
+            )
+
+        return records_to_arrow_batches(output_iter, max_arrow_batch_size, return_type, data_source)
+
+    command = (data_source_read_func, return_type)
+    pickleSer._write_with_length(command, outfile)
+
+    if not is_streaming:
+        # The partitioning of python batch source read is determined before query execution.
+        try:
+            partitions = reader.partitions()  # type: ignore[call-arg]
+            if not isinstance(partitions, list):
+                raise PySparkRuntimeError(
+                    errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                    messageParameters={
+                        "expected": "'partitions' to return a list",
+                        "actual": f"'{type(partitions).__name__}'",
+                    },
+                )
+            if not all(isinstance(p, InputPartition) for p in partitions):
+                partition_types = ", ".join([f"'{type(p).__name__}'" for p in partitions])
+                raise PySparkRuntimeError(
+                    errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                    messageParameters={
+                        "expected": "elements in 'partitions' to be of type 'InputPartition'",
+                        "actual": partition_types,
+                    },
+                )
+            if len(partitions) == 0:
+                partitions = [None]  # type: ignore[list-item]
+        except NotImplementedError:
+            partitions = [None]  # type: ignore[list-item]
+
+        # Return the serialized partition values.
+        write_int(len(partitions), outfile)
+        for partition in partitions:
+            pickleSer._write_with_length(partition, outfile)
+    else:
+        # Send an empty list of partition for stream reader because partitions are planned
+        # in each microbatch during query execution.
+        write_int(0, outfile)
+
+
 def main(infile: IO, outfile: IO) -> None:
     """
     Main method for planning a data source read.
@@ -250,6 +345,7 @@ def main(infile: IO, outfile: IO) -> None:
             "The maximum arrow batch size should be greater than 0, but got "
             f"'{max_arrow_batch_size}'"
         )
+        enable_pushdown = read_bool(infile)
 
         is_streaming = read_bool(infile)
 
@@ -269,92 +365,28 @@ def main(infile: IO, outfile: IO) -> None:
                         "actual": f"'{type(reader).__name__}'",
                     },
                 )
-
-        # Create input converter.
-        converter = ArrowTableToRowsConversion._create_converter(BinaryType())
-
-        # Create output converter.
-        return_type = schema
-
-        def data_source_read_func(iterator: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
-            partition_bytes = None
-
-            # Get the partition value from the input iterator.
-            for batch in iterator:
-                # There should be only one row/column in the batch.
-                assert batch.num_columns == 1 and batch.num_rows == 1, (
-                    "Expected each batch to have exactly 1 column and 1 row, "
-                    f"but found {batch.num_columns} columns and {batch.num_rows} rows."
-                )
-                columns = [column.to_pylist() for column in batch.columns]
-                partition_bytes = converter(columns[0][0])
-
-            assert (
-                partition_bytes is not None
-            ), "The input iterator for Python data source read function is empty."
-
-            # Deserialize the partition value.
-            partition = pickleSer.loads(partition_bytes)
-
-            assert partition is None or isinstance(partition, InputPartition), (
-                "Expected the partition value to be of type 'InputPartition', "
-                f"but found '{type(partition).__name__}'."
+            is_pushdown_implemented = (
+                getattr(reader.pushFilters, "__func__", None) is not DataSourceReader.pushFilters
             )
-
-            output_iter = reader.read(partition)  # type: ignore[arg-type]
-
-            # Validate the output iterator.
-            if not isinstance(output_iter, Iterator):
-                raise PySparkRuntimeError(
-                    errorClass="DATA_SOURCE_INVALID_RETURN_TYPE",
+            if is_pushdown_implemented and not enable_pushdown:
+                # Do not silently ignore pushFilters when pushdown is disabled.
+                # Raise an error to ask the user to enable pushdown.
+                raise PySparkAssertionError(
+                    errorClass="DATA_SOURCE_PUSHDOWN_DISABLED",
                     messageParameters={
-                        "type": type(output_iter).__name__,
-                        "name": data_source.name(),
-                        "supported_types": "iterator",
+                        "type": type(reader).__name__,
+                        "conf": "spark.sql.python.filterPushdown.enabled",
                     },
                 )
 
-            return records_to_arrow_batches(
-                output_iter, max_arrow_batch_size, return_type, data_source
-            )
-
-        command = (data_source_read_func, return_type)
-        pickleSer._write_with_length(command, outfile)
-
-        if not is_streaming:
-            # The partitioning of python batch source read is determined before query execution.
-            try:
-                partitions = reader.partitions()  # type: ignore[call-arg]
-                if not isinstance(partitions, list):
-                    raise PySparkRuntimeError(
-                        errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                        messageParameters={
-                            "expected": "'partitions' to return a list",
-                            "actual": f"'{type(partitions).__name__}'",
-                        },
-                    )
-                if not all(isinstance(p, InputPartition) for p in partitions):
-                    partition_types = ", ".join([f"'{type(p).__name__}'" for p in partitions])
-                    raise PySparkRuntimeError(
-                        errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                        messageParameters={
-                            "expected": "elements in 'partitions' to be of type 'InputPartition'",
-                            "actual": partition_types,
-                        },
-                    )
-                if len(partitions) == 0:
-                    partitions = [None]  # type: ignore[list-item]
-            except NotImplementedError:
-                partitions = [None]  # type: ignore[list-item]
-
-            # Return the serialized partition values.
-            write_int(len(partitions), outfile)
-            for partition in partitions:
-                pickleSer._write_with_length(partition, outfile)
-        else:
-            # Send an empty list of partition for stream reader because partitions are planned
-            # in each microbatch during query execution.
-            write_int(0, outfile)
+        # Send the read function and partitions to the JVM.
+        write_read_func_and_partitions(
+            outfile,
+            reader=reader,
+            data_source=data_source,
+            schema=schema,
+            max_arrow_batch_size=max_arrow_batch_size,
+        )
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
@@ -377,9 +409,11 @@ def main(infile: IO, outfile: IO) -> None:
 
 if __name__ == "__main__":
     # Read information about how to connect back to the JVM from the environment.
-    java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
-    auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
-    (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
+    conn_info = os.environ.get(
+        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
+    )
+    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
+    (sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
     write_int(os.getpid(), sock_file)
     sock_file.flush()
     main(sock_file, sock_file)

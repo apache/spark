@@ -168,6 +168,13 @@ class LinearSVC @Since("2.2.0") (
   @Since("3.1.0")
   def setMaxBlockSizeInMB(value: Double): this.type = set(maxBlockSizeInMB, value)
 
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+    var size = this.estimateMatadataSize
+    size += Vectors.getDenseSize(numFeatures) // coefficients
+    size
+  }
+
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
 
@@ -259,7 +266,7 @@ class LinearSVC @Since("2.2.0") (
       if (featuresStd(i) != 0.0) rawCoefficients(i) / featuresStd(i) else 0.0
     }
     val intercept = if ($(fitIntercept)) rawCoefficients.last else 0.0
-    createModel(dataset, Vectors.dense(coefficientArray), intercept, objectiveHistory)
+    createModel(dataset, Vectors.dense(coefficientArray).compressed, intercept, objectiveHistory)
   }
 
   private def createModel(
@@ -365,7 +372,8 @@ class LinearSVCModel private[classification] (
   extends ClassificationModel[Vector, LinearSVCModel]
   with LinearSVCParams with MLWritable with HasTrainingSummary[LinearSVCTrainingSummary] {
 
-  private[ml] def this() = this(Identifiable.randomUID("linearsvc"), Vectors.empty, 0.0)
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty, Double.NaN)
 
   @Since("2.2.0")
   override val numClasses: Int = 2
@@ -420,6 +428,14 @@ class LinearSVCModel private[classification] (
     copyValues(new LinearSVCModel(uid, coefficients, intercept), extra).setParent(parent)
   }
 
+  private[spark] override def estimatedSize: Long = {
+    var size = this.estimateMatadataSize
+    if (this.coefficients != null) {
+      size += this.coefficients.getSizeInBytes
+    }
+    size
+  }
+
   @Since("2.2.0")
   override def write: MLWriter = new LinearSVCModel.LinearSVCWriter(this)
 
@@ -429,9 +445,9 @@ class LinearSVCModel private[classification] (
   }
 }
 
-
 @Since("2.2.0")
 object LinearSVCModel extends MLReadable[LinearSVCModel] {
+  private[ml] case class Data(coefficients: Vector, intercept: Double)
 
   @Since("2.2.0")
   override def read: MLReader[LinearSVCModel] = new LinearSVCReader
@@ -444,14 +460,12 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
   class LinearSVCWriter(instance: LinearSVCModel)
     extends MLWriter with Logging {
 
-    private case class Data(coefficients: Vector, intercept: Double)
-
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.coefficients, instance.intercept)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -463,10 +477,8 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
     override def load(path: String): LinearSVCModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.format("parquet").load(dataPath)
-      val Row(coefficients: Vector, intercept: Double) =
-        data.select("coefficients", "intercept").head()
-      val model = new LinearSVCModel(metadata.uid, coefficients, intercept)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val model = new LinearSVCModel(metadata.uid, data.coefficients, data.intercept)
       metadata.getAndSetParams(model)
       model
     }

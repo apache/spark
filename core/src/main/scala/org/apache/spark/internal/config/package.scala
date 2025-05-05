@@ -807,10 +807,8 @@ package object config {
       .doc("Specifies a disk-based store used in shuffle service local db. " +
         "ROCKSDB or LEVELDB (deprecated).")
       .version("3.4.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(DBBackend.values.map(_.toString).toSet)
-      .createWithDefault(DBBackend.ROCKSDB.name)
+      .enumConf(classOf[DBBackend])
+      .createWithDefault(DBBackend.ROCKSDB)
 
   private[spark] val SHUFFLE_SERVICE_PORT =
     ConfigBuilder("spark.shuffle.service.port").version("1.2.0").intConf.createWithDefault(7337)
@@ -1973,7 +1971,7 @@ package object config {
   private[spark] val MASTER_REST_SERVER_ENABLED = ConfigBuilder("spark.master.rest.enabled")
     .version("1.3.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   private[spark] val MASTER_REST_SERVER_HOST = ConfigBuilder("spark.master.rest.host")
     .doc("Specifies the host of the Master REST API endpoint")
@@ -2295,9 +2293,8 @@ package object config {
   private[spark] val SCHEDULER_MODE =
     ConfigBuilder("spark.scheduler.mode")
       .version("0.8.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .createWithDefault(SchedulingMode.FIFO.toString)
+      .enumConf(SchedulingMode)
+      .createWithDefault(SchedulingMode.FIFO)
 
   private[spark] val SCHEDULER_REVIVE_INTERVAL =
     ConfigBuilder("spark.scheduler.revive.interval")
@@ -2831,5 +2828,6 @@ package object config {
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))
       .checkValues(Set("connect", "classic"))
-      .createWithDefault("classic")
+      .createWithDefault(
+        if (sys.env.get("SPARK_CONNECT_MODE").contains("1")) "connect" else "classic")
 }

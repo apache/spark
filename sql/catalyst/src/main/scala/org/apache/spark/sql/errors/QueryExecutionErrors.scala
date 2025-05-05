@@ -79,7 +79,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "value" -> toSQLValue(t, from),
         "sourceType" -> toSQLType(from),
-        "targetType" -> toSQLType(to)),
+        "targetType" -> toSQLType(to),
+        "ansiConfig" -> toSQLConf("spark.sql.ansi.enabled")),
       context = Array.empty,
       summary = "")
   }
@@ -123,7 +124,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "expression" -> toSQLValue(s, StringType),
         "sourceType" -> toSQLType(StringType),
-        "targetType" -> toSQLType(BooleanType)),
+        "targetType" -> toSQLType(BooleanType),
+        "ansiConfig" -> toSQLConf("spark.sql.ansi.enabled")),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -137,7 +139,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "expression" -> toSQLValue(s, StringType),
         "sourceType" -> toSQLType(StringType),
-        "targetType" -> toSQLType(to)),
+        "targetType" -> toSQLType(to),
+        "ansiConfig" -> toSQLConf("spark.sql.ansi.enabled")),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -276,14 +279,37 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def timeParseError(input: String, fmt: Option[String], e: Throwable): SparkDateTimeException = {
+    new SparkDateTimeException(
+      errorClass = "CANNOT_PARSE_TIME",
+      messageParameters = Map(
+        "input" -> toSQLValue(input, StringType),
+        "format" -> toSQLValue(
+          fmt.getOrElse("HH:mm:ss.SSSSSS"),
+          StringType)),
+      context = Array.empty,
+      summary = "",
+      cause = Some(e))
+  }
+
   def ansiDateTimeArgumentOutOfRange(e: Exception): SparkDateTimeException = {
     new SparkDateTimeException(
-      errorClass = "DATETIME_FIELD_OUT_OF_BOUNDS",
+      errorClass = "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
       messageParameters = Map(
         "rangeMessage" -> e.getMessage,
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = Array.empty,
-      summary = "")
+      summary = "",
+      cause = Some(e))
+  }
+
+  def ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e: Throwable): SparkDateTimeException = {
+    new SparkDateTimeException(
+      errorClass = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+      messageParameters = Map("rangeMessage" -> e.getMessage),
+      context = Array.empty,
+      summary = "",
+      cause = Some(e))
   }
 
   def invalidIntervalWithMicrosecondsAdditionError(): SparkIllegalArgumentException = {
@@ -842,6 +868,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "expectedType" -> expectedType,
         "actualType" -> actualType),
       cause = e)
+  }
+
+  def arrowDataTypeMismatchError(
+      operation: String,
+      outputTypes: Seq[DataType],
+      actualDataTypes: Seq[DataType]): Throwable = {
+    new SparkException(
+      errorClass = "ARROW_TYPE_MISMATCH",
+      messageParameters = Map(
+        "operation" -> operation,
+        "outputTypes" -> outputTypes.mkString(", "),
+        "actualDataTypes" -> actualDataTypes.mkString(", ")),
+      cause = null)
   }
 
   def cannotReadFilesError(
@@ -2949,5 +2988,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "NULL_DATA_SOURCE_OPTION",
       messageParameters = Map("option" -> option)
     )
+  }
+
+  def notAbsolutePathError(path: Path): SparkException = {
+    SparkException.internalError(s"$path is not absolute path.")
   }
 }

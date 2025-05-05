@@ -173,6 +173,15 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
   @Since("1.5.0")
   override def copy(extra: ParamMap): MultilayerPerceptronClassifier = defaultCopy(extra)
 
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val topology = FeedForwardTopology.multiLayerPerceptron($(layers), softmaxOnTop = true)
+    val expectedWeightSize = topology.layers.map(_.weightSize).sum
+
+    var size = this.estimateMatadataSize
+    size += Vectors.getDenseSize(expectedWeightSize) // weights
+    size
+  }
+
   /**
    * Train a model using the given dataset and parameters.
    * Developers can implement this instead of `fit()` to avoid dealing with schema validation
@@ -283,7 +292,8 @@ class MultilayerPerceptronClassificationModel private[ml] (
   with MultilayerPerceptronParams with Serializable with MLWritable
   with HasTrainingSummary[MultilayerPerceptronClassificationTrainingSummary]{
 
-  private[ml] def this() = this(Identifiable.randomUID("mlpc"), Vectors.empty)
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty)
 
   @Since("1.6.0")
   override lazy val numFeatures: Int = $(layers).head
@@ -327,6 +337,14 @@ class MultilayerPerceptronClassificationModel private[ml] (
     copyValues(copied, extra)
   }
 
+  private[spark] override def estimatedSize: Long = {
+    var size = this.estimateMatadataSize
+    if (this.weights != null) {
+      size += this.weights.getSizeInBytes
+    }
+    size
+  }
+
   @Since("2.0.0")
   override def write: MLWriter =
     new MultilayerPerceptronClassificationModel.MultilayerPerceptronClassificationModelWriter(this)
@@ -350,6 +368,7 @@ class MultilayerPerceptronClassificationModel private[ml] (
 @Since("2.0.0")
 object MultilayerPerceptronClassificationModel
   extends MLReadable[MultilayerPerceptronClassificationModel] {
+  private[ml] case class Data(weights: Vector)
 
   @Since("2.0.0")
   override def read: MLReader[MultilayerPerceptronClassificationModel] =
@@ -363,15 +382,13 @@ object MultilayerPerceptronClassificationModel
   class MultilayerPerceptronClassificationModelWriter(
       instance: MultilayerPerceptronClassificationModel) extends MLWriter {
 
-    private case class Data(weights: Vector)
-
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       // Save model data: weights
       val data = Data(instance.weights)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -386,17 +403,16 @@ object MultilayerPerceptronClassificationModel
       val (majorVersion, _) = majorMinorVersion(metadata.sparkVersion)
 
       val dataPath = new Path(path, "data").toString
-      val df = sparkSession.read.parquet(dataPath)
       val model = if (majorVersion < 3) { // model prior to 3.0.0
+        val df = sparkSession.read.parquet(dataPath)
         val data = df.select("layers", "weights").head()
         val layers = data.getAs[Seq[Int]](0).toArray
         val weights = data.getAs[Vector](1)
         val model = new MultilayerPerceptronClassificationModel(metadata.uid, weights)
         model.set("layers", layers)
       } else {
-        val data = df.select("weights").head()
-        val weights = data.getAs[Vector](0)
-        new MultilayerPerceptronClassificationModel(metadata.uid, weights)
+        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+        new MultilayerPerceptronClassificationModel(metadata.uid, data.weights)
       }
       metadata.getAndSetParams(model)
       model

@@ -349,7 +349,8 @@ class RFormulaModel private[feature](
     private[ml] val pipelineModel: PipelineModel)
   extends Model[RFormulaModel] with RFormulaBase with MLWritable {
 
-  private[ml] def this() = this(Identifiable.randomUID("rFormula"), null, null)
+  // For ml connect only
+  private[ml] def this() = this("", null, null)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -440,8 +441,7 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       // Save model data: resolvedFormula
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(instance.resolvedFormula))
-        .repartition(1).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[ResolvedRFormula](dataPath, instance.resolvedFormula, sparkSession)
       // Save pipeline model
       val pmPath = new Path(path, "pipelineModel").toString
       instance.pipelineModel.save(pmPath)
@@ -457,11 +457,7 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath).select("label", "terms", "hasIntercept").head()
-      val label = data.getString(0)
-      val terms = data.getSeq[scala.collection.Seq[String]](1).map(_.toSeq)
-      val hasIntercept = data.getBoolean(2)
-      val resolvedRFormula = ResolvedRFormula(label, terms, hasIntercept)
+      val resolvedRFormula = ReadWriteUtils.loadObject[ResolvedRFormula](dataPath, sparkSession)
 
       val pmPath = new Path(path, "pipelineModel").toString
       val pipelineModel = PipelineModel.load(pmPath)
@@ -500,6 +496,7 @@ private class ColumnPruner(override val uid: String, val columnsToPrune: Set[Str
 }
 
 private object ColumnPruner extends MLReadable[ColumnPruner] {
+  private[ml] case class Data(columnsToPrune: Seq[String])
 
   override def read: MLReader[ColumnPruner] = new ColumnPrunerReader
 
@@ -508,15 +505,13 @@ private object ColumnPruner extends MLReadable[ColumnPruner] {
   /** [[MLWriter]] instance for [[ColumnPruner]] */
   private[ColumnPruner] class ColumnPrunerWriter(instance: ColumnPruner) extends MLWriter {
 
-    private case class Data(columnsToPrune: Seq[String])
-
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       // Save model data: columnsToPrune
       val data = Data(instance.columnsToPrune.toSeq)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -529,9 +524,8 @@ private object ColumnPruner extends MLReadable[ColumnPruner] {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath).select("columnsToPrune").head()
-      val columnsToPrune = data.getAs[Seq[String]](0).toSet
-      val pruner = new ColumnPruner(metadata.uid, columnsToPrune)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val pruner = new ColumnPruner(metadata.uid, data.columnsToPrune.toSet)
 
       metadata.getAndSetParams(pruner)
       pruner
@@ -594,6 +588,7 @@ private class VectorAttributeRewriter(
 }
 
 private object VectorAttributeRewriter extends MLReadable[VectorAttributeRewriter] {
+  private[ml] case class Data(vectorCol: String, prefixesToRewrite: Map[String, String])
 
   override def read: MLReader[VectorAttributeRewriter] = new VectorAttributeRewriterReader
 
@@ -603,15 +598,13 @@ private object VectorAttributeRewriter extends MLReadable[VectorAttributeRewrite
   private[VectorAttributeRewriter]
   class VectorAttributeRewriterWriter(instance: VectorAttributeRewriter) extends MLWriter {
 
-    private case class Data(vectorCol: String, prefixesToRewrite: Map[String, String])
-
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       // Save model data: vectorCol, prefixesToRewrite
       val data = Data(instance.vectorCol, instance.prefixesToRewrite)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -624,10 +617,10 @@ private object VectorAttributeRewriter extends MLReadable[VectorAttributeRewrite
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath).select("vectorCol", "prefixesToRewrite").head()
-      val vectorCol = data.getString(0)
-      val prefixesToRewrite = data.getAs[Map[String, String]](1)
-      val rewriter = new VectorAttributeRewriter(metadata.uid, vectorCol, prefixesToRewrite)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val rewriter = new VectorAttributeRewriter(
+        metadata.uid, data.vectorCol, data.prefixesToRewrite
+      )
 
       metadata.getAndSetParams(rewriter)
       rewriter

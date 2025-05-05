@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.ml
 
+import java.lang.reflect.InvocationTargetException
 import java.util.{Optional, ServiceLoader}
 import java.util.stream.Collectors
 
@@ -36,7 +37,7 @@ import org.apache.spark.ml.param.Params
 import org.apache.spark.ml.recommendation._
 import org.apache.spark.ml.regression._
 import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
-import org.apache.spark.ml.util.{ConnectHelper, HasTrainingSummary, Identifiable, MLWritable}
+import org.apache.spark.ml.util.{ConnectHelper, HasTrainingSummary, Identifiable, MLReader, MLWritable}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
@@ -409,16 +410,28 @@ private[ml] object MLUtils {
       sessionHolder: SessionHolder,
       className: String,
       path: String,
-      operatorClass: Class[T]): T = {
+      operatorClass: Class[T],
+      loadFromLocal: Boolean = false): T = {
     val name = replaceOperator(sessionHolder, className)
     val operators = loadOperators(operatorClass)
     if (operators.isEmpty || !operators.contains(name)) {
       throw MlUnsupportedException(s"Unsupported read for $name")
     }
-    operators(name)
-      .getMethod("load", classOf[String])
-      .invoke(null, path)
-      .asInstanceOf[T]
+    try {
+      val clazz = operators(name)
+      val loaded = if (loadFromLocal) {
+        val loader = clazz.getMethod("read").invoke(null).asInstanceOf[MLReader[T]]
+        loader.loadFromLocal(path)
+      } else {
+        clazz
+          .getMethod("load", classOf[String])
+          .invoke(null, path)
+      }
+      loaded.asInstanceOf[T]
+    } catch {
+      case e: InvocationTargetException if e.getCause != null =>
+        throw e.getCause
+    }
   }
 
   /**
@@ -437,8 +450,14 @@ private[ml] object MLUtils {
   def loadTransformer(
       sessionHolder: SessionHolder,
       className: String,
-      path: String): Transformer = {
-    loadOperator(sessionHolder, className, path, classOf[Transformer])
+      path: String,
+      loadFromLocal: Boolean = false): Transformer = {
+    loadOperator(
+      sessionHolder,
+      className,
+      path,
+      classOf[Transformer],
+      loadFromLocal = loadFromLocal)
   }
 
   /**
@@ -450,7 +469,16 @@ private[ml] object MLUtils {
 
   // Since we're using reflection way to get the attribute, in order not to
   // leave a security hole, we define an allowed attribute list that can be accessed.
-  // The attributes could be retrieved from the corresponding python class
+  // The attributes could be retrieved from the Connect clients.
+  // Before each invocation, both the object type and method name need to be checked here.
+  // Class inheritance is also considered.
+  // For example, if the object is a subclass of 'ProbabilisticClassificationModel',
+  // methods defined in the superclass ('ClassificationModel', 'PredictionModel' and
+  // 'Identifiable') are also allowed.
+  // So if a 3-rd party model extends 'ProbabilisticClassificationModel', then
+  // 'model.predictRaw' defined in 'ClassificationModel' is allowed to invoke.
+  // If the object is not the expected type or the method is not allowed,
+  // we throw an exception 'MLAttributeNotAllowedException'.
   private lazy val ALLOWED_ATTRIBUTES = Seq(
     (classOf[Identifiable], Set("toString")),
 
@@ -512,7 +540,6 @@ private[ml] object MLUtils {
         "predictLeaf",
         "trees",
         "treeWeights",
-        "javaTreeWeights",
         "getNumTrees",
         "totalNumNodes",
         "toDebugString")),
@@ -612,8 +639,8 @@ private[ml] object MLUtils {
         "isDistributed",
         "logLikelihood",
         "logPerplexity",
-        "describeTopics")),
-    (classOf[LocalLDAModel], Set("vocabSize")),
+        "describeTopics",
+        "vocabSize")),
     (
       classOf[DistributedLDAModel],
       Set("trainingLogLikelihood", "logPrior", "getCheckpointFiles", "toLocal")),
@@ -674,13 +701,18 @@ private[ml] object MLUtils {
       cls.isInstance(obj) && methods.contains(method)
     }
     if (!valid) {
-      throw MLAttributeNotAllowedException(method)
+      throw MLAttributeNotAllowedException(obj.getClass.getName, method)
     }
   }
 
   def invokeMethodAllowed(obj: Object, methodName: String): Object = {
     validate(obj, methodName)
-    invokeMethod(obj, methodName)
+    try {
+      invokeMethod(obj, methodName)
+    } catch {
+      case e: InvocationTargetException if e.getCause != null =>
+        throw e.getCause
+    }
   }
 
   def invokeMethodAllowed(
@@ -689,11 +721,16 @@ private[ml] object MLUtils {
       args: Array[Object],
       parameterTypes: Array[Class[_]]): Object = {
     validate(obj, methodName)
-    invokeMethod(obj, methodName, args, parameterTypes)
+    try {
+      invokeMethod(obj, methodName, args, parameterTypes)
+    } catch {
+      case e: InvocationTargetException if e.getCause != null =>
+        throw e.getCause
+    }
   }
 
   def write(instance: MLWritable, writeProto: proto.MlCommand.Write): Unit = {
-    val writer = if (writeProto.getShouldOverwrite) {
+    val writer = if (writeProto.hasShouldOverwrite && writeProto.getShouldOverwrite) {
       instance.write.overwrite()
     } else {
       instance.write

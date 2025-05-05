@@ -48,6 +48,13 @@ message StateResponseWithStringTypeVal {
   string value = 3;
 }
 
+message StateResponseWithListGet {
+  int32 statusCode = 1;
+  string errorMessage = 2;
+  repeated bytes value = 3;
+  bool requireNextFetch = 4;
+}
+
 message StatefulProcessorCall {
   oneof method {
     SetHandleState setHandleState = 1;
@@ -197,6 +204,8 @@ message ListStateGet {
 }
 
 message ListStatePut {
+  repeated bytes value = 1;
+  bool fetchWithArrow = 2;
 }
 
 message AppendValue {
@@ -204,6 +213,8 @@ message AppendValue {
 }
 
 message AppendList {
+  repeated bytes value = 1;
+  bool fetchWithArrow = 2;
 }
 
 message GetValue {
@@ -249,5 +260,5 @@ message SetHandleState {
 }
 
 message TTLConfig {
-  int32 durationMs = 1;
+  int64 durationMs = 1;
 }
