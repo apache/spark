@@ -1734,9 +1734,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
         store = provider.getStore(0)
 
-        // Task completion listener should unlock
-        taskContext.markTaskCompleted(
-          Some(new SparkException("Task failure injection")))
+        // Task completion listener should abort and throw exception
+        taskContext.markTaskCompleted(None)
       }
 
       val ex = intercept[SparkException] {
