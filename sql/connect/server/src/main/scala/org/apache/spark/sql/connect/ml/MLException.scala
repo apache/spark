@@ -43,7 +43,7 @@ private[spark] case class MLModelSizeOverflowException(message: String)
       messageParameters = Map("message" -> message),
       cause = null)
 
-private[spark] case class MLModelCacheSizeOverflowException(message: String)
+private[spark] case class MLCacheSizeOverflowException(message: String)
   extends SparkException(
       errorClass = "CONNECT_ML.MODEL_CACHE_SIZE_OVERFLOW_EXCEPTION",
       messageParameters = Map("message" -> message),

@@ -397,16 +397,16 @@ class MLSuite extends MLHelper {
     val modelIdList = scala.collection.mutable.ListBuffer[String]()
     modelIdList.append(trainLogisticRegressionModel(sessionHolder))
     assert(sessionHolder.mlCache.cachedModel.size() == 1)
-    assert(sessionHolder.mlCache.totalSizeBytes.get() > 0)
-    val modelSizeBytes = sessionHolder.mlCache.totalSizeBytes.get()
+    assert(sessionHolder.mlCache.totalInMemorySizeBytes.get() > 0)
+    val modelSizeBytes = sessionHolder.mlCache.totalInMemorySizeBytes.get()
     val maxNumModels = memorySizeBytes / modelSizeBytes.toInt
 
     // All models will be kept if the total size is less than the memory limit.
     for (i <- 1 until maxNumModels) {
       modelIdList.append(trainLogisticRegressionModel(sessionHolder))
       assert(sessionHolder.mlCache.cachedModel.size() == i + 1)
-      assert(sessionHolder.mlCache.totalSizeBytes.get() > 0)
-      assert(sessionHolder.mlCache.totalSizeBytes.get() <= memorySizeBytes)
+      assert(sessionHolder.mlCache.totalInMemorySizeBytes.get() > 0)
+      assert(sessionHolder.mlCache.totalInMemorySizeBytes.get() <= memorySizeBytes)
     }
 
     // Old models will be offloaded
@@ -414,8 +414,8 @@ class MLSuite extends MLHelper {
     for (_ <- 0 until 3) {
       modelIdList.append(trainLogisticRegressionModel(sessionHolder))
       assert(sessionHolder.mlCache.cachedModel.size() == maxNumModels)
-      assert(sessionHolder.mlCache.totalSizeBytes.get() > 0)
-      assert(sessionHolder.mlCache.totalSizeBytes.get() <= memorySizeBytes)
+      assert(sessionHolder.mlCache.totalInMemorySizeBytes.get() > 0)
+      assert(sessionHolder.mlCache.totalInMemorySizeBytes.get() <= memorySizeBytes)
     }
 
     // Assert all models can be loaded back from disk after they are offloaded.
@@ -436,7 +436,7 @@ class MLSuite extends MLHelper {
     sessionHolder.session.conf
       .set(Connect.CONNECT_SESSION_CONNECT_MODEL_CACHE_MAX_SIZE.key, "10000")
     trainLogisticRegressionModel(sessionHolder)
-    intercept[MLModelCacheSizeOverflowException] {
+    intercept[MLCacheSizeOverflowException] {
       trainLogisticRegressionModel(sessionHolder)
     }
   }

@@ -121,7 +121,7 @@ private[connect] object MLHandler extends Logging {
       mlCommand: proto.MlCommand): proto.MlCommandResult = {
 
     val mlCache = sessionHolder.mlCache
-    val maxModelSize = sessionHolder.mlCache.getModelCacheMaxSize
+    val maxModelSize = sessionHolder.mlCache.getMLCacheMaxSize
 
     // Note: Tree training stops early when the growing tree model exceeds
     //  `TreeConfig.trainingEarlyStopModelSizeThresholdInBytes`, to ensure the final
