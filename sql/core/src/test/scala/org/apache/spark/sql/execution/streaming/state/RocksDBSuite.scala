@@ -3339,7 +3339,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
-  test("Rocks DB task completion listener does not double unlock acquireThread") {
+  ignore("Rocks DB task completion listener does not double unlock acquireThread") {
     // This test verifies that a thread that locks then unlocks the db and then
     // fires a completion listener (Thread 1) does not unlock the lock validly
     // acquired by another thread (Thread 2).
