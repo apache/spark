@@ -51,6 +51,7 @@ from pyspark.ml.util import (
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaWrapper
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.stat import MultivariateGaussian
+from pyspark.ml.util import RemoteModelRef
 from pyspark.sql import DataFrame
 from pyspark.ml.linalg import Vector, Matrix
 from pyspark.sql.utils import is_remote
@@ -1581,7 +1582,7 @@ class DistributedLDAModel(LDAModel, JavaMLReadable["DistributedLDAModel"], JavaM
 
         .. warning:: This involves collecting a large :py:func:`topicsMatrix` to the driver.
         """
-        model = LocalLDAModel(self._call_java("toLocal"))
+        model = LocalLDAModel(RemoteModelRef(self._call_java("toLocal")))
         if is_remote():
             return model
 
