@@ -31,7 +31,7 @@ import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -112,6 +112,18 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     case object UPDATING extends STATE
     case object COMMITTED extends STATE
     case object ABORTED extends STATE
+
+    Option(TaskContext.get()).foreach { ctxt =>
+      ctxt.addTaskCompletionListener[Unit]( ctx => {
+        if (state == UPDATING) {
+          abort()
+          // Only throw error if the task is not already failed or interrupted
+          if (!ctx.isFailed() && !ctx.isInterrupted()) {
+            throw StateStoreErrors.stateStoreUpdatingAfterTaskCompletion(id)
+          }
+        }
+      })
+    }
 
     private val newVersion = version + 1
     @volatile private var state: STATE = UPDATING

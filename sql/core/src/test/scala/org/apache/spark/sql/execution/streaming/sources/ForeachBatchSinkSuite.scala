@@ -254,6 +254,23 @@ class ForeachBatchSinkSuite extends StreamTest {
     query.awaitTermination()
   }
 
+  test("SPARK-52008: foreachBatch that doesn't consume entire iterator") {
+    val mem = MemoryStream[Int]
+    val ds = mem.toDS().map(_ + 1)
+    mem.addData(1, 2, 3, 4, 5)
+
+    val queryEx = intercept[StreamingQueryException] {
+      val query = ds.writeStream.foreachBatch(
+        (batchDf: Dataset[Int], _: Long) => batchDf.show(2)).start()
+      query.awaitTermination()
+    }
+
+    val errClass = "STATE_STORE_UPDATING_AFTER_TASK_COMPLETION"
+
+    // verify that we classified the exception
+    assert(queryEx.getMessage.contains(errClass))
+  }
+
   // ============== Helper classes and methods =================
 
   private class ForeachBatchTester[T: Encoder](memoryStream: MemoryStream[Int]) {

@@ -223,6 +223,11 @@ object StateStoreErrors {
     new StateStoreOperationOutOfOrder(errorMsg)
   }
 
+  def stateStoreUpdatingAfterTaskCompletion(stateStoreId: StateStoreId):
+    StateStoreUpdatingAfterTaskCompletion = {
+    new StateStoreUpdatingAfterTaskCompletion(stateStoreId.toString)
+  }
+
   def cannotLoadStore(e: Throwable): Throwable = {
     e match {
       case e: SparkException
@@ -487,4 +492,10 @@ class StateStoreOperationOutOfOrder(errorMsg: String)
   extends SparkRuntimeException(
     errorClass = "STATE_STORE_OPERATION_OUT_OF_ORDER",
     messageParameters = Map("errorMsg" -> errorMsg)
+  )
+
+class StateStoreUpdatingAfterTaskCompletion(stateStoreID: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_UPDATING_AFTER_TASK_COMPLETION",
+    messageParameters = Map("stateStoreId" -> stateStoreID)
   )

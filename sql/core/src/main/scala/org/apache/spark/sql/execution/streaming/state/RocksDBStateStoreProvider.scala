@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
@@ -51,6 +51,19 @@ private[sql] class RocksDBStateStoreProvider
     case object ABORTED extends STATE
 
     @volatile private var state: STATE = UPDATING
+
+    Option(TaskContext.get()).foreach { ctxt =>
+      ctxt.addTaskCompletionListener[Unit]( ctx => {
+        if (state == UPDATING) {
+          abort()
+          // Only throw error if the task is not already failed or interrupted
+          if (!ctx.isFailed() && !ctx.isInterrupted()) {
+            throw StateStoreErrors.stateStoreUpdatingAfterTaskCompletion(id)
+          }
+        }
+      })
+    }
+
     @volatile private var isValidated = false
 
     override def id: StateStoreId = RocksDBStateStoreProvider.this.stateStoreId

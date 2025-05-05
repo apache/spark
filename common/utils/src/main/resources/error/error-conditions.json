@@ -4996,6 +4996,13 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_UPDATING_AFTER_TASK_COMPLETION" : {
+    "message" : [
+      "State store id=<stateStoreId> still in updating state after task completed. If using foreachBatch, ",
+      "verify that it consumes the entire dataframe and does not catch and suppress errors during dataframe iteration."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_VALUE_ROW_FORMAT_VALIDATION_FAILURE" : {
     "message" : [
       "The streaming query failed to validate written state for value row for stateStore=<stateStoreID>.",
