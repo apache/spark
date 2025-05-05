@@ -2254,7 +2254,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       assert(get(readStore, "a", 0) === Some(1))
 
       // Get a write store from the read store
-      val writeStore = provider.getWriteStore(readStore, 1)
+      val writeStore = provider.upgradeReadStoreToWriteStore(
+        readStore, 1)
 
       // Verify data access
       assert(get(writeStore, "a", 0) === Some(1))

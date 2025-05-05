@@ -72,6 +72,7 @@ private[sql] class RocksDBStateStoreProvider
     private sealed trait TRANSITION
     private case object UPDATE extends TRANSITION
     private case object ABORT extends TRANSITION
+    private case object RELEASE extends TRANSITION
     private case object COMMIT extends TRANSITION
     private case object METRICS extends TRANSITION
 
@@ -103,6 +104,8 @@ private[sql] class RocksDBStateStoreProvider
           stateMachine.verifyStamp(stamp)
           state match {
             case UPDATING => UPDATING
+            case RELEASED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
+              s"Cannot update after released")
             case COMMITTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
               s"Cannot update after committed")
             case ABORTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
@@ -113,15 +116,30 @@ private[sql] class RocksDBStateStoreProvider
             case UPDATING =>
               stateMachine.verifyStamp(stamp)
               ABORTED
+            case RELEASED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
+              s"Cannot abort after released")
             case COMMITTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
               "Cannot abort after committed")
             case ABORTED => ABORTED
+          }
+        case RELEASE =>
+          state match {
+            case UPDATING =>
+              stateMachine.verifyStamp(stamp)
+              RELEASED
+            case COMMITTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
+              "Cannot release after committed")
+            case ABORTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
+              "Cannot release after aborted")
+            case RELEASED => RELEASED
           }
         case COMMIT =>
           state match {
             case UPDATING =>
               stateMachine.verifyStamp(stamp)
               COMMITTED
+            case RELEASED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
+              s"Cannot commit after released")
             case COMMITTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
               "Cannot commit after committed")
             case ABORTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
@@ -133,6 +151,7 @@ private[sql] class RocksDBStateStoreProvider
               "Cannot get metrics in UPDATING state")
             case COMMITTED => COMMITTED
             case ABORTED => ABORTED
+            case RELEASED => RELEASED
           }
       }
       state = newState
@@ -500,7 +519,8 @@ private[sql] class RocksDBStateStoreProvider
         logInfo(log"Releasing ${MDC(VERSION_NUM, version + 1)} " +
           log"for ${MDC(STATE_STORE_ID, id)}")
         rocksDB.release()
-        state = RELEASED
+        validateAndTransitionState(RELEASE)
+        stateMachine.releaseStore(stamp)
       } else {
         // Optionally log at DEBUG level that it's already released
         logDebug(log"State store already released")
