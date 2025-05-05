@@ -22,7 +22,6 @@ import java.util.UUID
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
-import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
@@ -32,7 +31,7 @@ import org.apache.spark.util.SerializableConfiguration
  * Thread local storage for sharing StateStore instances between RDDs.
  * This allows a ReadStateStore to be reused by a subsequent StateStore operation.
  */
-object StateStoreThreadLocalTracker extends Logging {
+object StateStoreThreadLocalTracker {
   /** Case class to hold both the store and its usage state */
   case class StoreInfo(store: ReadStateStore, usedForWriteStore: Boolean = false)
 
