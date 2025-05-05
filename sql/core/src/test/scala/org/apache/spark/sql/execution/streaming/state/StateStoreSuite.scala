@@ -1472,49 +1472,48 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
-  testWithAllCodec("file checksum can be enabled and disabled for the same checkpoint") {
-    _ =>
-      val storeId = StateStoreId(newDir(), 0L, 1)
-      var version = 0L
+  testWithAllCodec("file checksum can be enabled and disabled for the same checkpoint") { _ =>
+    val storeId = StateStoreId(newDir(), 0L, 1)
+    var version = 0L
 
-      // Commit to store using file checksum
-      withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> true.toString) {
-        tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
-          val store = provider.getStore(version)
-          put(store, "1", 11, 100)
-          put(store, "2", 22, 200)
-          version = store.commit()
-        }
+    // Commit to store using file checksum
+    withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> true.toString) {
+      tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+        val store = provider.getStore(version)
+        put(store, "1", 11, 100)
+        put(store, "2", 22, 200)
+        version = store.commit()
       }
+    }
 
-      // Reload the store and commit without file checksum
-      withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString) {
-        tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
-          assert(version == 1)
-          val store = provider.getStore(version)
-          assert(get(store, "1", 11) === Some(100))
-          assert(get(store, "2", 22) === Some(200))
+    // Reload the store and commit without file checksum
+    withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString) {
+      tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+        assert(version == 1)
+        val store = provider.getStore(version)
+        assert(get(store, "1", 11) === Some(100))
+        assert(get(store, "2", 22) === Some(200))
 
-          put(store, "3", 33, 300)
-          put(store, "4", 44, 400)
-          version = store.commit()
-        }
+        put(store, "3", 33, 300)
+        put(store, "4", 44, 400)
+        version = store.commit()
       }
+    }
 
-      // Reload the store and commit with file checksum
-      withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> true.toString) {
-        tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
-          assert(version == 2)
-          val store = provider.getStore(version)
-          assert(get(store, "1", 11) === Some(100))
-          assert(get(store, "2", 22) === Some(200))
-          assert(get(store, "3", 33) === Some(300))
-          assert(get(store, "4", 44) === Some(400))
+    // Reload the store and commit with file checksum
+    withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> true.toString) {
+      tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+        assert(version == 2)
+        val store = provider.getStore(version)
+        assert(get(store, "1", 11) === Some(100))
+        assert(get(store, "2", 22) === Some(200))
+        assert(get(store, "3", 33) === Some(300))
+        assert(get(store, "4", 44) === Some(400))
 
-          put(store, "5", 55, 500)
-          version = store.commit()
-        }
+        put(store, "5", 55, 500)
+        version = store.commit()
       }
+    }
   }
 
   test("checksum files are also cleaned up during maintenance") {

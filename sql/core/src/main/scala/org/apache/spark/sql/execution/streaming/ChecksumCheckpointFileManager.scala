@@ -236,16 +236,11 @@ class ChecksumCheckpointFileManager(
   }
 
   private def deleteChecksumFile(checksumPath: Path): Unit = {
-    try {
-      underlyingFileMgr.delete(checksumPath)
-      logDebug(log"Deleted checksum file ${MDC(PATH, checksumPath)}")
-    } catch {
-      case _: FileNotFoundException =>
-        // Ignore if file has already been deleted
-        // or the main file was created initially without checksum
-        logWarning(log"Skipping deletion of checksum file ${MDC(PATH, checksumPath)} " +
-          log"since it does not exist.")
-    }
+    // delete call doesn't throw exception if file doesn't exist.
+    // In situation where it has already been deleted
+    // or the main file was created initially without checksum
+    underlyingFileMgr.delete(checksumPath)
+    logDebug(log"Deleted checksum file ${MDC(PATH, checksumPath)}")
   }
 
   override def isLocal: Boolean = underlyingFileMgr.isLocal
@@ -410,7 +405,7 @@ class ChecksumFSDataInputStream(
  * compute the checksum. This is blocking the seekable apis from being used in the underlying stream
  * */
 private class CheckedSequentialInputStream(data: InputStream)
-  // TODO: Make the checksum algo configurable
+  // TODO(SPARK-52009): Make the checksum algo configurable
   extends CheckedInputStream(data, new CRC32C())
     with Seekable
     with PositionedReadable {
@@ -457,7 +452,7 @@ class ChecksumCancellableFSDataOutputStream(
     path: Path,
     private val checksumStream: CancellableFSDataOutputStream,
     private val uploadThreadPool: ExecutionContext)
-  // TODO: make the checksum algo configurable
+  // TODO(SPARK-52009): make the checksum algo configurable
   // CheckedOutputStream creates the checksum value as we write to the stream
   extends CancellableFSDataOutputStream(new CheckedOutputStream(mainStream, new CRC32C()))
     with Logging {
