@@ -27,7 +27,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException, TaskContext}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -154,6 +154,9 @@ private[sql] class RocksDBStateStoreProvider
             case RELEASED => RELEASED
           }
       }
+      logInfo(log"Transitioned state from ${MDC(LogKeys.STATE_STORE_STATE, state)} " +
+        log"to ${MDC(LogKeys.STATE_STORE_STATE, newState)} " +
+        log"for StateStoreId ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)}")
       state = newState
     }
 
