@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.ml
 
+import scala.collection.mutable
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 import org.apache.spark.connect.proto
@@ -155,9 +156,7 @@ private[connect] object MLHandler extends Logging {
                   .setObjRef(proto.ObjectRef.newBuilder().setId(id)))
               .build()
           case a: Array[_] if a.nonEmpty && a.forall(_.isInstanceOf[Model[_]]) =>
-            val ids = a.map { m =>
-              mlCache.register(m.asInstanceOf[Model[_]])
-            }
+            val ids = a.map(m => mlCache.register(m.asInstanceOf[Model[_]]))
             proto.MlCommandResult
               .newBuilder()
               .setOperatorInfo(
@@ -171,16 +170,33 @@ private[connect] object MLHandler extends Logging {
         }
 
       case proto.MlCommand.CommandCase.DELETE =>
-        var result = false
+        val ids = mutable.ArrayBuilder.make[String]
         mlCommand.getDelete.getObjRefsList.asScala.toArray.foreach { objId =>
           if (!objId.getId.contains(".")) {
-            mlCache.remove(objId.getId)
-            result = true
+            if (mlCache.remove(objId.getId)) {
+              ids += objId.getId
+            }
           }
         }
         proto.MlCommandResult
           .newBuilder()
-          .setParam(LiteralValueProtoConverter.toLiteralProto(result))
+          .setOperatorInfo(
+            proto.MlCommandResult.MlOperatorInfo
+              .newBuilder()
+              .setObjRef(proto.ObjectRef.newBuilder().setId(ids.result().mkString(","))))
+          .build()
+
+      case proto.MlCommand.CommandCase.CLEAN_CACHE =>
+        val size = mlCache.clear()
+        proto.MlCommandResult
+          .newBuilder()
+          .setParam(LiteralValueProtoConverter.toLiteralProto(size))
+          .build()
+
+      case proto.MlCommand.CommandCase.GET_CACHE_INFO =>
+        proto.MlCommandResult
+          .newBuilder()
+          .setParam(LiteralValueProtoConverter.toLiteralProto(mlCache.getInfo()))
           .build()
 
       case proto.MlCommand.CommandCase.WRITE =>

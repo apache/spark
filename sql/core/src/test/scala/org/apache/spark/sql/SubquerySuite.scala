@@ -2830,4 +2830,20 @@ class SubquerySuite extends QueryTest
         Row(1, false) :: Row(2, false) :: Row(3, true) :: Nil)
     }
   }
+
+  test("SPARK-51738: IN subquery with struct type") {
+    checkAnswer(
+      sql("SELECT foo IN (SELECT struct(1 a)) FROM (SELECT struct(1 b) foo)"),
+      Row(true)
+    )
+
+    checkAnswer(
+      sql("""
+            |SELECT foo IN (SELECT struct(c, d) FROM r)
+            |FROM (SELECT struct(a, b) foo FROM l)
+            |""".stripMargin),
+      Row(false) :: Row(false) :: Row(false) :: Row(false) :: Row(false)
+        :: Row(true) :: Row(true) :: Row(true) :: Nil
+    )
+  }
 }

@@ -10,6 +10,22 @@ struct<>
 
 
 -- !query
+CREATE OR REPLACE TEMPORARY VIEW v1 AS SELECT 1 AS col1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW v2 AS SELECT 1 AS col1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT a FROM testData ORDER BY a
 -- !query schema
 struct<a:int>
@@ -187,7 +203,73 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT col1 FROM VALUES (1, 2) GROUP BY col1 ORDER BY MAX(col2), RAND()
+-- !query schema
+struct<col1:int>
+-- !query output
+1
+
+
+-- !query
+SELECT 1 AS col1, col1 FROM VALUES (10) ORDER BY col1
+-- !query schema
+struct<col1:int,col1:int>
+-- !query output
+1	10
+
+
+-- !query
+SELECT
+  COUNT(DISTINCT col1)
+FROM
+  v1
+NATURAL JOIN
+  v2
+GROUP BY
+  col1
+ORDER BY
+  col1
+-- !query schema
+struct<count(DISTINCT col1):bigint>
+-- !query output
+1
+
+
+-- !query
+SELECT
+  COUNT(DISTINCT col1)
+FROM
+  v1
+NATURAL JOIN
+  v1
+GROUP BY
+  col1
+ORDER BY
+  col1
+-- !query schema
+struct<count(DISTINCT col1):bigint>
+-- !query output
+1
+
+
+-- !query
 DROP VIEW IF EXISTS testData
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW IF EXISTS v1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW IF EXISTS v2
 -- !query schema
 struct<>
 -- !query output

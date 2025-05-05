@@ -15,39 +15,17 @@
 # limitations under the License.
 #
 
-import os
 import unittest
 
 from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession as PySparkSession
-from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.connectutils import ReusedMixedTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.utils import eventually
 
 
 @unittest.skipIf(is_remote_only(), "Requires JVM access")
-class SparkConnectReattachTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
-    @classmethod
-    def setUpClass(cls):
-        super(SparkConnectReattachTestCase, cls).setUpClass()
-        # Disable the shared namespace so pyspark.sql.functions, etc point the regular
-        # PySpark libraries.
-        os.environ["PYSPARK_NO_NAMESPACE_SHARE"] = "1"
-
-        cls.connect = cls.spark  # Switch Spark Connect session and regular PySpark session.
-        cls.spark = PySparkSession._instantiatedSession
-        assert cls.spark is not None
-
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            # Stopping Spark Connect closes the session in JVM at the server.
-            cls.spark = cls.connect
-            del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
-        finally:
-            super(SparkConnectReattachTestCase, cls).tearDownClass()
-
+class SparkConnectReattachTestCase(ReusedMixedTestCase, PandasOnSparkTestUtils):
     def test_release_sessions(self):
         big_enough_query = "select * from range(1000000)"
         query1 = self.connect.sql(big_enough_query).toLocalIterator()

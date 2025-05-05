@@ -123,9 +123,12 @@ case class AtomicCreateTableAsSelectExec(
       }
       throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
-    val stagedTable = Option(catalog.stageCreate(
-      ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
-      partitioning.toArray, properties.asJava)
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(getV2Columns(query.schema, catalog.useNullableQuerySchema))
+      .withPartitions(partitioning.toArray)
+      .withProperties(properties.asJava)
+      .build()
+    val stagedTable = Option(catalog.stageCreate(ident, tableInfo)
     ).getOrElse(catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
     writeToTable(catalog, stagedTable, writeOptions, ident, query)
   }
@@ -216,12 +219,20 @@ case class AtomicReplaceTableAsSelectExec(
       invalidateCache(catalog, table, ident)
     }
     val staged = if (orCreate) {
-      catalog.stageCreateOrReplace(
-        ident, columns, partitioning.toArray, properties.asJava)
+      val tableInfo = new TableInfo.Builder()
+        .withColumns(columns)
+        .withPartitions(partitioning.toArray)
+        .withProperties(properties.asJava)
+        .build()
+      catalog.stageCreateOrReplace(ident, tableInfo)
     } else if (catalog.tableExists(ident)) {
       try {
-        catalog.stageReplace(
-          ident, columns, partitioning.toArray, properties.asJava)
+        val tableInfo = new TableInfo.Builder()
+          .withColumns(columns)
+          .withPartitions(partitioning.toArray)
+          .withProperties(properties.asJava)
+          .build()
+        catalog.stageReplace(ident, tableInfo)
       } catch {
         case e: NoSuchTableException =>
           throw QueryCompilationErrors.cannotReplaceMissingTableError(ident, Some(e))

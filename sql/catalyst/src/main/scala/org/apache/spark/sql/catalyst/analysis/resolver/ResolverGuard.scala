@@ -426,7 +426,7 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
       Some("hiveCaseSensitiveInferenceMode")
     } else if (conf.getConf(SQLConf.LEGACY_INLINE_CTE_IN_COMMANDS)) {
       Some("legacyInlineCTEInCommands")
-    } else if (LegacyBehaviorPolicy.withName(conf.getConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY)) !=
+    } else if (conf.getConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY) !=
       LegacyBehaviorPolicy.CORRECTED) {
       Some("legacyCTEPrecedencePolicy")
     } else {

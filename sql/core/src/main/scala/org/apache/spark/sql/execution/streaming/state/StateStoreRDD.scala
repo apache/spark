@@ -27,30 +27,6 @@ import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
-/**
- * A trait that provides access to state stores for specific partitions in an RDD.
- *
- * This trait enables the state store optimization pattern for stateful operations
- * where the same partition needs to be accessed for both reading and writing.
- * Implementing classes maintain a mapping between partition IDs and their associated
- * state stores, allowing lookups without creating duplicate connections.
- *
- * The primary use case is enabling the common pattern for stateful operations:
- * 1. A read-only state store is opened to retrieve existing state
- * 2. The same state store is then converted to read-write mode for updates
- * 3. This avoids having two separate open connections to the same state store
- *    which would cause blocking or contention issues
- */
-trait StateStoreRDDProvider {
-  /**
-   * Returns the state store associated with the specified partition, if one exists.
-   *
-   * @param partitionId The ID of the partition whose state store should be retrieved
-   * @return Some(store) if a state store exists for the given partition, None otherwise
-   */
-  def getStateStoreForPartition(partitionId: Int): Option[ReadStateStore]
-}
-
 abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
     dataRDD: RDD[T],
     checkpointLocation: String,
@@ -106,37 +82,19 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     useColumnFamilies: Boolean = false,
     extraOptions: Map[String, String] = Map.empty)
   extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
-    sessionState, storeCoordinator, extraOptions) with StateStoreRDDProvider {
-
-  // Using a ConcurrentHashMap to track state stores by partition ID
-  @transient private lazy val partitionStores =
-    new java.util.concurrent.ConcurrentHashMap[Int, ReadStateStore]()
-
-  override def getStateStoreForPartition(partitionId: Int): Option[ReadStateStore] = {
-    Option(partitionStores.get(partitionId))
-  }
+    sessionState, storeCoordinator, extraOptions) {
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
   override def compute(partition: Partition, ctxt: TaskContext): Iterator[U] = {
     val storeProviderId = getStateProviderId(partition)
-    val partitionId = partition.index
 
     val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStore.getReadOnly(
       storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
-      stateStoreCkptIds.map(_.apply(partitionId).head),
+      stateStoreCkptIds.map(_.apply(partition.index).head),
       stateSchemaBroadcast,
       useColumnFamilies, storeConf, hadoopConfBroadcast.value.value)
-
-    // Store reference for this partition
-    partitionStores.put(partitionId, store)
-
-    // Register a cleanup callback to be executed when the task completes
-    ctxt.addTaskCompletionListener[Unit](_ => {
-      partitionStores.remove(partitionId)
-    })
-
     storeReadFunction(store, inputIter)
   }
 }
@@ -168,78 +126,23 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
-  /**
-   * Recursively searches the RDD lineage to find a StateStoreRDDProvider containing
-   * an already-opened state store for the current partition.
-   *
-   * This method helps implement the read-then-write pattern for stateful operations
-   * without creating contention issues. Instead of opening separate read and write
-   * stores that would block each other (since a state store provider can only handle
-   * one open store at a time), this allows us to:
-   *   1. Find an existing read store in the RDD lineage
-   *   2. Convert it to a write store using getWriteStore()
-   *
-   * This is particularly important for stateful aggregations where StateStoreRestoreExec
-   * first reads previous state and StateStoreSaveExec then updates it.
-   *
-   * The method performs a depth-first search through the RDD dependency graph.
-   *
-   * @param rdd The starting RDD to search from
-   * @return Some(provider) if a StateStoreRDDProvider is found in the lineage, None otherwise
-   */
-  private def findStateStoreProvider(rdd: RDD[_]): Option[StateStoreRDDProvider] = {
-    rdd match {
-      case null => None
-      case provider: StateStoreRDDProvider => Some(provider)
-      case _ if rdd.dependencies.isEmpty => None
-      case _ =>
-        // Search all dependencies
-        rdd.dependencies.view
-          .map(dep => findStateStoreProvider(dep.rdd))
-          .find(_.isDefined)
-          .flatten
-    }
-  }
-
   override def compute(partition: Partition, ctxt: TaskContext): Iterator[U] = {
     val storeProviderId = getStateProviderId(partition)
+
     val inputIter = dataRDD.iterator(partition, ctxt)
+    val store = StateStore.get(
+      storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
+      uniqueId.map(_.apply(partition.index).head),
+      stateSchemaBroadcast,
+      useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
+      useMultipleValuesPerKey)
 
-    // Try to find a state store provider in the RDD lineage
-    val store = findStateStoreProvider(dataRDD).flatMap { provider =>
-      provider.getStateStoreForPartition(partition.index)
-    } match {
-      case Some(readStore) =>
-        // Convert the read store to a writable store
-        StateStore.getWriteStore(
-          readStore,
-          storeProviderId,
-          keySchema,
-          valueSchema,
-          keyStateEncoderSpec,
-          storeVersion,
-          uniqueId.map(_.apply(partition.index).head),
-          stateSchemaBroadcast,
-          useColumnFamilies,
-          storeConf,
-          hadoopConfBroadcast.value.value,
-          useMultipleValuesPerKey)
-
-      case None =>
-        // Fall back to creating a new store
-        StateStore.get(
-          storeProviderId,
-          keySchema,
-          valueSchema,
-          keyStateEncoderSpec,
-          storeVersion,
-          uniqueId.map(_.apply(partition.index).head),
-          stateSchemaBroadcast,
-          useColumnFamilies,
-          storeConf,
-          hadoopConfBroadcast.value.value,
-          useMultipleValuesPerKey)
+    if (storeConf.unloadOnCommit) {
+      ctxt.addTaskCompletionListener[Unit](_ => {
+        StateStore.doMaintenanceAndUnload(storeProviderId)
+      })
     }
+
     storeUpdateFunction(store, inputIter)
   }
 }

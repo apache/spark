@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.{CommandExecutionMode, LocalLimitExec, Que
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec, SortAggregateExec, UpdatingSessionsExec}
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
-import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPandasExec}
+import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
 import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter, StateSchemaBroadcast, StateSchemaMetadata}
 import org.apache.spark.sql.internal.SQLConf
@@ -71,7 +71,8 @@ class IncrementalExecution(
       MutableMap[Long, Array[Array[String]]] = MutableMap[Long, Array[Array[String]]](),
     val stateSchemaMetadatas: MutableMap[Long, StateSchemaBroadcast] =
       MutableMap[Long, StateSchemaBroadcast](),
-    mode: CommandExecutionMode.Value = CommandExecutionMode.ALL)
+    mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
+    val isTerminatingTrigger: Boolean = false)
   extends QueryExecution(sparkSession, logicalPlan, mode = mode) with Logging {
 
   // Modified planner with stateful operations.
@@ -91,7 +92,7 @@ class IncrementalExecution(
       StreamingDeduplicationStrategy ::
       StreamingGlobalLimitStrategy(outputMode) ::
       StreamingTransformWithStateStrategy ::
-      TransformWithStateInPandasStrategy :: Nil
+      TransformWithStateInPySparkStrategy :: Nil
   }
 
   private lazy val hadoopConf = sparkSession.sessionState.newHadoopConf()
@@ -222,9 +223,12 @@ class IncrementalExecution(
       // filepath, and write this path out in the OperatorStateMetadata file
       case statefulOp: StatefulOperator if isFirstBatch =>
         val stateSchemaVersion = statefulOp match {
-          case _: TransformWithStateExec | _: TransformWithStateInPandasExec =>
+          case _: TransformWithStateExec | _: TransformWithStateInPySparkExec =>
             sparkSession.sessionState.conf.
               getConf(SQLConf.STREAMING_TRANSFORM_WITH_STATE_OP_STATE_SCHEMA_VERSION)
+          case _: StreamingSymmetricHashJoinExec =>
+            sparkSession.sessionState.conf.
+              getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
           case _ => STATE_SCHEMA_DEFAULT_VERSION
         }
         val schemaValidationResult = statefulOp.
@@ -278,7 +282,7 @@ class IncrementalExecution(
                 case exec: TransformWithStateExec =>
                   exec.copy(stateInfo = Some(exec.getStateInfo.copy(
                     stateSchemaMetadata = Some(stateSchemaBroadcast))))
-                case exec: TransformWithStateInPandasExec =>
+                case exec: TransformWithStateInPySparkExec =>
                   exec.copy(stateInfo = Some(exec.getStateInfo.copy(
                     stateSchemaMetadata = Some(stateSchemaBroadcast))))
                 // Add other cases if needed for different StateStoreWriter implementations
@@ -372,7 +376,7 @@ class IncrementalExecution(
           hasInitialState = hasInitialState
         )
 
-      case t: TransformWithStateInPandasExec =>
+      case t: TransformWithStateInPySparkExec =>
         val hasInitialState = (currentBatchId == 0L && t.hasInitialState)
         t.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
@@ -474,11 +478,11 @@ class IncrementalExecution(
 
       // UpdateEventTimeColumnExec is used to tag the eventTime column, and validate
       // emitted rows adhere to watermark in the output of transformWithStateInp.
-      // Hence, this node shares the same watermark value as TransformWithStateInPandasExec.
+      // Hence, this node shares the same watermark value as TransformWithStateInPySparkExec.
       // This is the same as above in TransformWithStateExec.
-      // The only difference is TransformWithStateInPandasExec is analysed slightly different
+      // The only difference is TransformWithStateInPySparkExec is analysed slightly different
       // with no SerializeFromObjectExec wrapper.
-      case UpdateEventTimeColumnExec(eventTime, delay, None, t: TransformWithStateInPandasExec)
+      case UpdateEventTimeColumnExec(eventTime, delay, None, t: TransformWithStateInPySparkExec)
         if t.stateInfo.isDefined =>
         val stateInfo = t.stateInfo.get
         val iwLateEvents = inputWatermarkForLateEvents(stateInfo)
@@ -496,7 +500,7 @@ class IncrementalExecution(
           eventTimeWatermarkForEviction = inputWatermarkForEviction(t.stateInfo.get)
         )
 
-      case t: TransformWithStateInPandasExec if t.stateInfo.isDefined =>
+      case t: TransformWithStateInPySparkExec if t.stateInfo.isDefined =>
         t.copy(
           eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(t.stateInfo.get),
           eventTimeWatermarkForEviction = inputWatermarkForEviction(t.stateInfo.get)

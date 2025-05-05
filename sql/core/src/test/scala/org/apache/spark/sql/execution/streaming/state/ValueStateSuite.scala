@@ -438,6 +438,7 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
   before {
     StateStore.stop()
     require(!StateStore.isMaintenanceRunning)
+    spark.streams.stateStoreCoordinator // initialize the lazy coordinator
   }
 
   after {

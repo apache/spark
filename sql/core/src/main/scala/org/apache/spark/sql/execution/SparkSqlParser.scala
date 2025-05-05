@@ -365,7 +365,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         visitCreateTableClauses(ctx.createTableClauses())
       val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(
         throw QueryParsingErrors.createTempTableNotSpecifyProviderError(ctx))
-      val schema = Option(ctx.colDefinitionList()).map(createSchema)
+      val schema = Option(ctx.tableElementList()).map(createSchema)
 
       logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
           "CREATE TEMPORARY VIEW ... USING ... instead")
@@ -687,6 +687,20 @@ class SparkSqlAstBuilder extends AstBuilder {
 
       if (ctx.EXISTS != null && ctx.REPLACE != null) {
         throw QueryParsingErrors.createFuncWithBothIfNotExistsAndReplaceError(ctx)
+      }
+
+      // Reject invalid options
+      for {
+        parameters <- Option(ctx.parameters)
+        colDefinition <- parameters.colDefinition().asScala
+        option <- colDefinition.colDefinitionOption().asScala
+      } {
+        if (option.generationExpression() != null) {
+          throw QueryParsingErrors.createFuncWithGeneratedColumnsError(ctx.parameters)
+        }
+        if (option.columnConstraintDefinition() != null) {
+          throw QueryParsingErrors.createFuncWithConstraintError(ctx.parameters)
+        }
       }
 
       val inputParamText = Option(ctx.parameters).map(source)
@@ -1194,5 +1208,11 @@ class SparkSqlAstBuilder extends AstBuilder {
     ShowNamespacesCommand(
       UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
       Option(ctx.pattern).map(x => string(visitStringLit(x))))
+  }
+
+  override def visitDescribeProcedure(
+      ctx: DescribeProcedureContext): LogicalPlan = withOrigin(ctx) {
+    withIdentClause(ctx.identifierReference(), procIdentifier =>
+      DescribeProcedureCommand(UnresolvedIdentifier(procIdentifier)))
   }
 }

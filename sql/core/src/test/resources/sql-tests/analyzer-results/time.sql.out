@@ -119,3 +119,283 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "try_to_time('11:12:13', 'HH:mm:ss', 'SSSSSS')"
   } ]
 }
+
+
+-- !query
+select make_time(1, 18, 19.87)
+-- !query analysis
+Project [make_time(1, 18, cast(19.87 as decimal(16,6))) AS make_time(1, 18, 19.87)#x]
++- OneRowRelation
+
+
+-- !query
+select make_time(null, 18, 19.87)
+-- !query analysis
+Project [make_time(cast(null as int), 18, cast(19.87 as decimal(16,6))) AS make_time(NULL, 18, 19.87)#x]
++- OneRowRelation
+
+
+-- !query
+select make_time(1, null, 19.87)
+-- !query analysis
+Project [make_time(1, cast(null as int), cast(19.87 as decimal(16,6))) AS make_time(1, NULL, 19.87)#x]
++- OneRowRelation
+
+
+-- !query
+select make_time(1, 18, null)
+-- !query analysis
+Project [make_time(1, 18, cast(null as decimal(16,6))) AS make_time(1, 18, NULL)#x]
++- OneRowRelation
+
+
+-- !query
+select make_time(-1, 18, 19.87)
+-- !query analysis
+Project [make_time(-1, 18, cast(19.87 as decimal(16,6))) AS make_time(-1, 18, 19.87)#x]
++- OneRowRelation
+
+
+-- !query
+select make_time(1, 60, 19.87)
+-- !query analysis
+Project [make_time(1, 60, cast(19.87 as decimal(16,6))) AS make_time(1, 60, 19.87)#x]
++- OneRowRelation
+
+
+-- !query
+select make_time(1, 18, 60.0)
+-- !query analysis
+Project [make_time(1, 18, cast(60.0 as decimal(16,6))) AS make_time(1, 18, 60.0)#x]
++- OneRowRelation
+
+
+-- !query
+select make_time(1, 18, 9999999999.999999)
+-- !query analysis
+Project [make_time(1, 18, 9999999999.999999) AS make_time(1, 18, 9999999999.999999)#x]
++- OneRowRelation
+
+
+-- !query
+select make_time(1, 18, -999999999.999999)
+-- !query analysis
+Project [make_time(1, 18, cast(-999999999.999999 as decimal(16,6))) AS make_time(1, 18, -999999999.999999)#x]
++- OneRowRelation
+
+
+-- !query
+select make_time(1, 18, 4294967297.999999)
+-- !query analysis
+Project [make_time(1, 18, 4294967297.999999) AS make_time(1, 18, 4294967297.999999)#x]
++- OneRowRelation
+
+
+-- !query
+select second(to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
+-- !query analysis
+Project [second(to_time(23-59-58.987654, Some(HH-mm-ss.SSSSSS))) AS second(to_time(23-59-58.987654, HH-mm-ss.SSSSSS))#x]
++- OneRowRelation
+
+
+-- !query
+select minute(to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
+-- !query analysis
+Project [minute(to_time(23-59-58.987654, Some(HH-mm-ss.SSSSSS))) AS minute(to_time(23-59-58.987654, HH-mm-ss.SSSSSS))#x]
++- OneRowRelation
+
+
+-- !query
+select hour(to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
+-- !query analysis
+Project [hour(to_time(23-59-58.987654, Some(HH-mm-ss.SSSSSS))) AS hour(to_time(23-59-58.987654, HH-mm-ss.SSSSSS))#x]
++- OneRowRelation
+
+
+-- !query
+select extract(HOUR from time'00:59:00.987654')
+-- !query analysis
+Project [extract(HOUR, 00:59:00.987654) AS extract(HOUR FROM TIME '00:59:00.987654')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(H from time'23:59:00.987654')
+-- !query analysis
+Project [extract(H, 23:59:00.987654) AS extract(H FROM TIME '23:59:00.987654')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(HOURS from time'00:00:00')
+-- !query analysis
+Project [extract(HOURS, 00:00:00) AS extract(HOURS FROM TIME '00:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(HR from time'23:59:59.999999')
+-- !query analysis
+Project [extract(HR, 23:59:59.999999) AS extract(HR FROM TIME '23:59:59.999999')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(HRS from time'23:59:58.987654')
+-- !query analysis
+Project [extract(HRS, 23:59:58.987654) AS extract(HRS FROM TIME '23:59:58.987654')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(MINUTE from time'00:59:00.987654')
+-- !query analysis
+Project [extract(MINUTE, 00:59:00.987654) AS extract(MINUTE FROM TIME '00:59:00.987654')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(M from time'23:59:00.987654')
+-- !query analysis
+Project [extract(M, 23:59:00.987654) AS extract(M FROM TIME '23:59:00.987654')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(M from time'23:00:59.987654')
+-- !query analysis
+Project [extract(M, 23:00:59.987654) AS extract(M FROM TIME '23:00:59.987654')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(MIN from time'00:00:00')
+-- !query analysis
+Project [extract(MIN, 00:00:00) AS extract(MIN FROM TIME '00:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(MINS from time'23:59:59.999999')
+-- !query analysis
+Project [extract(MINS, 23:59:59.999999) AS extract(MINS FROM TIME '23:59:59.999999')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(MINUTES from time'23:59:58.987654')
+-- !query analysis
+Project [extract(MINUTES, 23:59:58.987654) AS extract(MINUTES FROM TIME '23:59:58.987654')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(SECOND from time'00:59:00.987654')
+-- !query analysis
+Project [extract(SECOND, 00:59:00.987654) AS extract(SECOND FROM TIME '00:59:00.987654')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(SECOND from time'00:0:00.000001')
+-- !query analysis
+Project [extract(SECOND, 00:00:00.000001) AS extract(SECOND FROM TIME '00:00:00.000001')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(SECOND from time'00:0:00.100000')
+-- !query analysis
+Project [extract(SECOND, 00:00:00.1) AS extract(SECOND FROM TIME '00:00:00.1')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(SECOND from time'00:0:00.100001')
+-- !query analysis
+Project [extract(SECOND, 00:00:00.100001) AS extract(SECOND FROM TIME '00:00:00.100001')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(S from time'23:59:00.987654')
+-- !query analysis
+Project [extract(S, 23:59:00.987654) AS extract(S FROM TIME '23:59:00.987654')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(SEC from time'00:00:00')
+-- !query analysis
+Project [extract(SEC, 00:00:00) AS extract(SEC FROM TIME '00:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(SEC from time'00:00:00.000000')
+-- !query analysis
+Project [extract(SEC, 00:00:00) AS extract(SEC FROM TIME '00:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(SECONDS from time'23:59:59.999999')
+-- !query analysis
+Project [extract(SECONDS, 23:59:59.999999) AS extract(SECONDS FROM TIME '23:59:59.999999')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(SECS from time'23:59:58.987654')
+-- !query analysis
+Project [extract(SECS, 23:59:58.987654) AS extract(SECS FROM TIME '23:59:58.987654')#x]
++- OneRowRelation
+
+
+-- !query
+select extract(SECOND FROM cast('09:08:01.987654' as time(0)))
+-- !query analysis
+Project [extract(SECOND, cast(09:08:01.987654 as time(0))) AS extract(SECOND FROM CAST(09:08:01.987654 AS TIME(0)))#x]
++- OneRowRelation
+
+
+-- !query
+select extract(SECOND FROM cast('09:08:01.987654' as time(1)))
+-- !query analysis
+Project [extract(SECOND, cast(09:08:01.987654 as time(1))) AS extract(SECOND FROM CAST(09:08:01.987654 AS TIME(1)))#x]
++- OneRowRelation
+
+
+-- !query
+select extract(SECOND FROM cast('09:08:01.987654' as time(2)))
+-- !query analysis
+Project [extract(SECOND, cast(09:08:01.987654 as time(2))) AS extract(SECOND FROM CAST(09:08:01.987654 AS TIME(2)))#x]
++- OneRowRelation
+
+
+-- !query
+select extract(SECOND FROM cast('09:08:01.987654' as time(3)))
+-- !query analysis
+Project [extract(SECOND, cast(09:08:01.987654 as time(3))) AS extract(SECOND FROM CAST(09:08:01.987654 AS TIME(3)))#x]
++- OneRowRelation
+
+
+-- !query
+select extract(SECOND FROM cast('09:08:01.987654' as time(4)))
+-- !query analysis
+Project [extract(SECOND, cast(09:08:01.987654 as time(4))) AS extract(SECOND FROM CAST(09:08:01.987654 AS TIME(4)))#x]
++- OneRowRelation
+
+
+-- !query
+select extract(SECOND FROM cast('09:08:01.987654' as time(5)))
+-- !query analysis
+Project [extract(SECOND, cast(09:08:01.987654 as time(5))) AS extract(SECOND FROM CAST(09:08:01.987654 AS TIME(5)))#x]
++- OneRowRelation
+
+
+-- !query
+select extract(SECOND FROM cast('09:08:01.987654' as time(6)))
+-- !query analysis
+Project [extract(SECOND, cast(09:08:01.987654 as time(6))) AS extract(SECOND FROM CAST(09:08:01.987654 AS TIME(6)))#x]
++- OneRowRelation

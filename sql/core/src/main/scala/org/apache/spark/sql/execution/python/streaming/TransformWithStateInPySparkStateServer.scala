@@ -18,16 +18,19 @@
 package org.apache.spark.sql.execution.python.streaming
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException}
-import java.net.ServerSocket
+import java.nio.channels.{Channels, ServerSocketChannel}
 import java.time.Duration
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.config.Python.PYTHON_UNIX_DOMAIN_SOCKET_ENABLED
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.InternalRow
@@ -36,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleImplBase, StatefulProcessorHandleState, StateVariableType}
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateResponseWithStringTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, UtilsRequest, ValueStateCall}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithListGet
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{BinaryType, LongType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
@@ -43,7 +47,7 @@ import org.apache.spark.util.Utils
 
 /**
  * This class is used to handle the state requests from the Python side. It runs on a separate
- * thread spawned by TransformWithStateInPandasStateRunner per task. It opens a dedicated socket
+ * thread spawned by TransformWithStateInPySparkStateRunner per task. It opens a dedicated socket
  * to process/transfer state related info which is shut down when task finishes or there's an error
  * on opening the socket. It processes following state requests and return responses to the
  * Python side:
@@ -51,19 +55,19 @@ import org.apache.spark.util.Utils
  * - Stateful processor requests.
  * - Requests for managing state variables (e.g. valueState).
  */
-class TransformWithStateInPandasStateServer(
-    stateServerSocket: ServerSocket,
+class TransformWithStateInPySparkStateServer(
+    stateServerSocket: ServerSocketChannel,
     statefulProcessorHandle: StatefulProcessorHandleImplBase,
     groupingKeySchema: StructType,
     timeZoneId: String,
     errorOnDuplicatedFieldNames: Boolean,
     largeVarTypes: Boolean,
-    arrowTransformWithStateInPandasMaxRecordsPerBatch: Int,
+    arrowTransformWithStateInPySparkMaxRecordsPerBatch: Int,
     batchTimestampMs: Option[Long] = None,
     eventTimeWatermarkForEviction: Option[Long] = None,
     outputStreamForTest: DataOutputStream = null,
     valueStateMapForTest: mutable.HashMap[String, ValueStateInfo] = null,
-    deserializerForTest: TransformWithStateInPandasDeserializer = null,
+    deserializerForTest: TransformWithStateInPySparkDeserializer = null,
     arrowStreamWriterForTest: BaseStreamingArrowWriter = null,
     listStatesMapForTest : mutable.HashMap[String, ListStateInfo] = null,
     iteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null,
@@ -79,6 +83,10 @@ class TransformWithStateInPandasStateServer(
     ExpressionEncoder(groupingKeySchema).resolveAndBind().createDeserializer()
   private var inputStream: DataInputStream = _
   private var outputStream: DataOutputStream = outputStreamForTest
+
+  private val isUnixDomainSock = Option(SparkEnv.get)
+    .map(_.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED))
+    .getOrElse(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED.defaultValue.get)
 
   /** State variable related class variables */
   // A map to store the value state name -> (value state, schema, value row deserializer) mapping.
@@ -148,12 +156,12 @@ class TransformWithStateInPandasStateServer(
     // Disabling either would work, but it's more common to disable Nagle's algorithm; there is
     // lot less reference to disabling delayed ACKs, while there are lots of resources to
     // disable Nagle's algorithm.
-    listeningSocket.setTcpNoDelay(true)
+    if (!isUnixDomainSock) listeningSocket.socket().setTcpNoDelay(true)
 
     inputStream = new DataInputStream(
-      new BufferedInputStream(listeningSocket.getInputStream))
+      new BufferedInputStream(Channels.newInputStream(listeningSocket)))
     outputStream = new DataOutputStream(
-      new BufferedOutputStream(listeningSocket.getOutputStream)
+      new BufferedOutputStream(Channels.newOutputStream(listeningSocket))
     )
 
     while (listeningSocket.isConnected &&
@@ -253,7 +261,7 @@ class TransformWithStateInPandasStateServer(
             Option(statefulProcessorHandle
               .asInstanceOf[StatefulProcessorHandleImpl].getExpiredTimers(expiryTimestamp))
         }
-        // expiryTimestampIter could be None in the TWSPandasServerSuite
+        // expiryTimestampIter could be None in the TWSPySparkServerSuite
         if (!expiryTimestampIter.isDefined || !expiryTimestampIter.get.hasNext) {
           // iterator is exhausted, signal the end of iterator on python client
           sendResponse(1)
@@ -464,7 +472,7 @@ class TransformWithStateInPandasStateServer(
     val deserializer = if (deserializerForTest != null) {
       deserializerForTest
     } else {
-      new TransformWithStateInPandasDeserializer(listStateInfo.deserializer)
+      new TransformWithStateInPySparkDeserializer(listStateInfo.deserializer)
     }
     message.getMethodCase match {
       case ListStateCall.MethodCase.EXISTS =>
@@ -475,7 +483,17 @@ class TransformWithStateInPandasStateServer(
           sendResponse(2, s"state $stateName doesn't exist")
         }
       case ListStateCall.MethodCase.LISTSTATEPUT =>
-        val rows = deserializer.readListElements(inputStream, listStateInfo)
+        val rows = if (message.getListStatePut.getFetchWithArrow) {
+          deserializer.readArrowBatches(inputStream)
+        } else {
+          val elements = message.getListStatePut.getValueList.asScala
+          elements.map { e =>
+            PythonSQLUtils.toJVMRow(
+              e.toByteArray,
+              listStateInfo.schema,
+              listStateInfo.deserializer)
+          }
+        }
         listStateInfo.listState.put(rows.toArray)
         sendResponse(0)
       case ListStateCall.MethodCase.LISTSTATEGET =>
@@ -488,8 +506,7 @@ class TransformWithStateInPandasStateServer(
         if (!iteratorOption.get.hasNext) {
           sendResponse(2, s"List state $stateName doesn't contain any value.")
         } else {
-          sendResponse(0)
-          sendIteratorForListState(iteratorOption.get)
+          sendResponseWithListGet(0, iter = iteratorOption.get)
         }
       case ListStateCall.MethodCase.APPENDVALUE =>
         val byteArray = message.getAppendValue.getValue.toByteArray
@@ -498,7 +515,17 @@ class TransformWithStateInPandasStateServer(
         listStateInfo.listState.appendValue(newRow)
         sendResponse(0)
       case ListStateCall.MethodCase.APPENDLIST =>
-        val rows = deserializer.readListElements(inputStream, listStateInfo)
+        val rows = if (message.getAppendList.getFetchWithArrow) {
+          deserializer.readArrowBatches(inputStream)
+        } else {
+          val elements = message.getAppendList.getValueList.asScala
+          elements.map { e =>
+            PythonSQLUtils.toJVMRow(
+              e.toByteArray,
+              listStateInfo.schema,
+              listStateInfo.deserializer)
+          }
+        }
         listStateInfo.listState.appendList(rows.toArray)
         sendResponse(0)
       case ListStateCall.MethodCase.CLEAR =>
@@ -515,7 +542,7 @@ class TransformWithStateInPandasStateServer(
     // when there are multiple state variables, user tries to access a different state variable
     // while the current state variable is not exhausted yet.
     var rowCount = 0
-    while (iter.hasNext && rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
+    while (iter.hasNext && rowCount < arrowTransformWithStateInPySparkMaxRecordsPerBatch) {
       val data = iter.next()
 
       // Serialize the value row as a byte array
@@ -644,6 +671,9 @@ class TransformWithStateInPandasStateServer(
           mapStateInfo.keyDeserializer)
         mapStateInfo.mapState.removeKey(keyRow)
         sendResponse(0)
+      case MapStateCall.MethodCase.CLEAR =>
+        mapStateInfo.mapState.clear()
+        sendResponse(0)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }
@@ -762,6 +792,46 @@ class TransformWithStateInPandasStateServer(
       outputStream.write(responseMessageBytes)
     }
 
+    def sendResponseWithListGet(
+        status: Int,
+        errorMessage: String = null,
+        iter: Iterator[Row] = null): Unit = {
+      val responseMessageBuilder = StateResponseWithListGet.newBuilder()
+        .setStatusCode(status)
+      if (status != 0 && errorMessage != null) {
+        responseMessageBuilder.setErrorMessage(errorMessage)
+      }
+
+      if (status == 0) {
+        // Only write a single batch in each GET request. Stops writing row if rowCount reaches
+        // the arrowTransformWithStateInPySparkMaxRecordsPerBatch limit. This is to handle a case
+        // when there are multiple state variables, user tries to access a different state variable
+        // while the current state variable is not exhausted yet.
+        var rowCount = 0
+        while (iter.hasNext && rowCount < arrowTransformWithStateInPySparkMaxRecordsPerBatch) {
+          val data = iter.next()
+
+          // Serialize the value row as a byte array
+          val valueBytes = PythonSQLUtils.toPyRow(data)
+
+          responseMessageBuilder.addValue(ByteString.copyFrom(valueBytes))
+
+          rowCount += 1
+        }
+
+        assert(rowCount > 0, s"rowCount should be greater than 0 when status code is 0, " +
+          s"iter.hasNext ${iter.hasNext}")
+
+        responseMessageBuilder.setRequireNextFetch(iter.hasNext)
+      }
+
+      val responseMessage = responseMessageBuilder.build()
+      val responseMessageBytes = responseMessage.toByteArray
+      val byteLength = responseMessageBytes.length
+      outputStream.writeInt(byteLength)
+      outputStream.write(responseMessageBytes)
+    }
+
     def sendIteratorAsArrowBatches[T](
         iter: Iterator[T],
         outputSchema: StructType,
@@ -770,21 +840,21 @@ class TransformWithStateInPandasStateServer(
       val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
         errorOnDuplicatedFieldNames, largeVarTypes)
       val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-        s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
+        s"stdout writer for transformWithStateInPySpark state socket", 0, Long.MaxValue)
       val root = VectorSchemaRoot.create(arrowSchema, allocator)
       val writer = new ArrowStreamWriter(root, null, outputStream)
       val arrowStreamWriter = if (arrowStreamWriterForTest != null) {
         arrowStreamWriterForTest
       } else {
         new BaseStreamingArrowWriter(root, writer,
-          arrowTransformWithStateInPandasMaxRecordsPerBatch)
+          arrowTransformWithStateInPySparkMaxRecordsPerBatch)
       }
       // Only write a single batch in each GET request. Stops writing row if rowCount reaches
-      // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to handle a case
+      // the arrowTransformWithStateInPySparkMaxRecordsPerBatch limit. This is to handle a case
       // when there are multiple state variables, user tries to access a different state variable
       // while the current state variable is not exhausted yet.
       var rowCount = 0
-      while (iter.hasNext && rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
+      while (iter.hasNext && rowCount < arrowTransformWithStateInPySparkMaxRecordsPerBatch) {
         val data = iter.next()
         val internalRow = func(data)
         arrowStreamWriter.writeRow(internalRow)

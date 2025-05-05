@@ -3805,12 +3805,8 @@ class SimpleDelegatingCatalog extends DelegatingCatalogExtension {
 
 
 class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
-  override def createTable(
-      ident: Identifier,
-      columns: Array[ColumnV2],
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
-    super.createTable(ident, columns, partitions, properties)
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    super.createTable(ident, tableInfo)
     null
   }
 
@@ -3836,12 +3832,9 @@ class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
 }
 
 class ReadOnlyCatalog extends InMemoryCatalog {
-  override def createTable(
-      ident: Identifier,
-      columns: Array[ColumnV2],
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
-    super.createTable(ident, columns, partitions, properties)
+
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    super.createTable(ident, tableInfo)
     null
   }
 

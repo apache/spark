@@ -654,6 +654,16 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def createFuncWithGeneratedColumnsError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_GENERATED_COLUMNS_AS_PARAMETERS",
+      ctx)
+  }
+
+  def createFuncWithConstraintError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_COLUMN_CONSTRAINTS", ctx)
+  }
+
   def defineTempFuncWithIfNotExistsError(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS", ctx)
   }
@@ -787,5 +797,21 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def clusterByWithBucketing(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED", ctx)
+  }
+
+  def invalidConstraintCharacteristics(
+      ctx: ParserRuleContext,
+      characteristics: String): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_CONSTRAINT_CHARACTERISTICS",
+      messageParameters = Map("characteristics" -> characteristics),
+      ctx)
+  }
+
+  def multiplePrimaryKeysError(ctx: ParserRuleContext, columns: String): Throwable = {
+    new ParseException(
+      errorClass = "MULTIPLE_PRIMARY_KEYS",
+      messageParameters = Map("columns" -> columns),
+      ctx)
   }
 }

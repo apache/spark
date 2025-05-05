@@ -53,7 +53,7 @@ class StreamingQueryManager private[sql] (
   with Logging {
 
   private[sql] val stateStoreCoordinator =
-    StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env)
+    StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env, sqlConf)
   private val listenerBus =
     new StreamingQueryListenerBus(Some(sparkSession.sparkContext.listenerBus))
 

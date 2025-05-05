@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.arrow.ArrowWriter
 class BaseStreamingArrowWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
   // Setting the maximum number of records per batch to 2 to make test easier.
   val arrowMaxRecordsPerBatch = 2
-  var transformWithStateInPandasWriter: BaseStreamingArrowWriter = _
+  var transformWithStateInPySparkWriter: BaseStreamingArrowWriter = _
   var arrowWriter: ArrowWriter = _
   var writer: ArrowStreamWriter = _
 
@@ -36,30 +36,30 @@ class BaseStreamingArrowWriterSuite extends SparkFunSuite with BeforeAndAfterEac
     val root: VectorSchemaRoot = mock(classOf[VectorSchemaRoot])
     writer = mock(classOf[ArrowStreamWriter])
     arrowWriter = mock(classOf[ArrowWriter])
-    transformWithStateInPandasWriter = new BaseStreamingArrowWriter(
+    transformWithStateInPySparkWriter = new BaseStreamingArrowWriter(
       root, writer, arrowMaxRecordsPerBatch, arrowWriter)
   }
 
   test("test writeRow") {
     val dataRow = mock(classOf[InternalRow])
     // Write 2 rows first, batch is not finalized.
-    transformWithStateInPandasWriter.writeRow(dataRow)
-    transformWithStateInPandasWriter.writeRow(dataRow)
+    transformWithStateInPySparkWriter.writeRow(dataRow)
+    transformWithStateInPySparkWriter.writeRow(dataRow)
     verify(arrowWriter, times(2)).write(dataRow)
     verify(writer, never()).writeBatch()
     // Write a 3rd row, batch is finalized.
-    transformWithStateInPandasWriter.writeRow(dataRow)
+    transformWithStateInPySparkWriter.writeRow(dataRow)
     verify(arrowWriter, times(3)).write(dataRow)
     verify(writer).writeBatch()
     // Write 2 more rows, a new batch is finalized.
-    transformWithStateInPandasWriter.writeRow(dataRow)
-    transformWithStateInPandasWriter.writeRow(dataRow)
+    transformWithStateInPySparkWriter.writeRow(dataRow)
+    transformWithStateInPySparkWriter.writeRow(dataRow)
     verify(arrowWriter, times(5)).write(dataRow)
     verify(writer, times(2)).writeBatch()
   }
 
   test("test finalizeCurrentArrowBatch") {
-    transformWithStateInPandasWriter.finalizeCurrentArrowBatch()
+    transformWithStateInPySparkWriter.finalizeCurrentArrowBatch()
     verify(arrowWriter).finish()
     verify(writer).writeBatch()
     verify(arrowWriter).reset()

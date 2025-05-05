@@ -2755,28 +2755,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           start = 0,
           stop = 45)
       )
-
-      withTable("t", "S") {
-        sql("CREATE TABLE t(c struct<f:int>) USING parquet")
-        sql("CREATE TABLE S(C struct<F:int>) USING parquet")
-        checkAnswer(sql("SELECT * FROM t, S WHERE t.c.f = S.C.F"), Seq.empty)
-        val query = "SELECT * FROM t, S WHERE c = C"
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql(query)
-          },
-          condition = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-          sqlState = None,
-          parameters = Map(
-            "sqlExpr" -> "\"(c = C)\"",
-            "left" -> "\"STRUCT<f: INT>\"",
-            "right" -> "\"STRUCT<F: INT>\""),
-          context = ExpectedContext(
-            fragment = "c = C",
-            start = 25,
-            stop = 29
-          ))
-      }
     }
   }
 

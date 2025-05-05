@@ -41,6 +41,11 @@ on:
         required: false
         type: string
         default: ubuntu-latest
+      arch:
+        description: The target architecture (x86, x64, arm64) of the Python or PyPy interpreter.
+        required: false
+        type: string
+        default: x64
       envs:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
@@ -172,7 +177,7 @@ jobs:
         if: contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
         with:
           python-version: '3.11'
-          architecture: x64
+          architecture: ${{ inputs.arch }}
       - name: Install Python packages (Python 3.11)
         if: contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
         run: |

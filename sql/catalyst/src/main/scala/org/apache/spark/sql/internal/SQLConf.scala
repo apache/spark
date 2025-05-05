@@ -415,21 +415,14 @@ object SQLConf {
 
   private val VALID_LOG_LEVELS: Array[String] = Level.values.map(_.toString)
 
-  private def isValidLogLevel(level: String): Boolean =
-    VALID_LOG_LEVELS.contains(level.toUpperCase(Locale.ROOT))
-
   val PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.planChangeLog.level")
     .internal()
     .doc("Configures the log level for logging the change from the original plan to the new " +
       s"plan after a rule or batch is applied. The value can be " +
       s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("3.1.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValue(isValidLogLevel,
-      "Invalid value for 'spark.sql.planChangeLog.level'. Valid values are " +
-        s"${VALID_LOG_LEVELS.mkString(", ")}.")
-    .createWithDefault("trace")
+    .enumConf(classOf[Level])
+    .createWithDefault(Level.TRACE)
 
   val PLAN_CHANGE_LOG_RULES = buildConf("spark.sql.planChangeLog.rules")
     .internal()
@@ -461,12 +454,8 @@ object SQLConf {
       "the resolved expression tree in the single-pass bottom-up Resolver. The value can be " +
       s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("4.0.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValue(isValidLogLevel,
-      "Invalid value for 'spark.sql.expressionTreeChangeLog.level'. Valid values are " +
-        s"${VALID_LOG_LEVELS.mkString(", ")}.")
-    .createWithDefault("trace")
+    .enumConf(classOf[Level])
+    .createWithDefault(Level.TRACE)
 
   val LIGHTWEIGHT_PLAN_CHANGE_VALIDATION = buildConf("spark.sql.lightweightPlanChangeValidation")
     .internal()
@@ -838,12 +827,8 @@ object SQLConf {
     .doc("Configures the log level for adaptive execution logging of plan changes. The value " +
       s"can be ${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("3.0.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValue(isValidLogLevel,
-      "Invalid value for 'spark.sql.adaptive.logLevel'. Valid values are " +
-      s"${VALID_LOG_LEVELS.mkString(", ")}.")
-    .createWithDefault("debug")
+    .enumConf(classOf[Level])
+    .createWithDefault(Level.DEBUG)
 
   val ADVISORY_PARTITION_SIZE_IN_BYTES =
     buildConf("spark.sql.adaptive.advisoryPartitionSizeInBytes")
@@ -1209,10 +1194,8 @@ object SQLConf {
       "Unix epoch. TIMESTAMP_MILLIS is also standard, but with millisecond precision, which " +
       "means Spark has to truncate the microsecond portion of its timestamp value.")
     .version("2.3.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(ParquetOutputTimestampType.values.map(_.toString))
-    .createWithDefault(ParquetOutputTimestampType.INT96.toString)
+    .enumConf(ParquetOutputTimestampType)
+    .createWithDefault(ParquetOutputTimestampType.INT96)
 
   val PARQUET_COMPRESSION = buildConf("spark.sql.parquet.compression.codec")
     .doc("Sets the compression codec used when writing Parquet files. If either `compression` or " +
@@ -1551,10 +1534,8 @@ object SQLConf {
       "attempt to write it to the table properties) and NEVER_INFER (the default mode-- fallback " +
       "to using the case-insensitive metastore schema instead of inferring).")
     .version("2.1.1")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
-    .createWithDefault(HiveCaseSensitiveInferenceMode.NEVER_INFER.toString)
+    .enumConf(HiveCaseSensitiveInferenceMode)
+    .createWithDefault(HiveCaseSensitiveInferenceMode.NEVER_INFER)
 
   val HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD =
     buildConf("spark.sql.hive.tablePropertyLengthThreshold")
@@ -1721,9 +1702,7 @@ object SQLConf {
     .doc("The output style used display binary data. Valid values are 'UTF-8', " +
       "'BASIC', 'BASE64', 'HEX', and 'HEX_DISCRETE'.")
     .version("4.0.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(BinaryOutputStyle.values.map(_.toString))
+    .enumConf(BinaryOutputStyle)
     .createOptional
 
   val PARTITION_COLUMN_TYPE_INFERENCE =
@@ -1862,10 +1841,8 @@ object SQLConf {
     .doc("The default storage level of `dataset.cache()`, `catalog.cacheTable()` and " +
       "sql query `CACHE TABLE t`.")
     .version("4.0.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(StorageLevelMapper.values.map(_.name()).toSet)
-    .createWithDefault(StorageLevelMapper.MEMORY_AND_DISK.name())
+    .enumConf(classOf[StorageLevelMapper])
+    .createWithDefault(StorageLevelMapper.MEMORY_AND_DISK)
 
   val DATAFRAME_CACHE_LOG_LEVEL = buildConf("spark.sql.dataframeCache.logLevel")
     .internal()
@@ -1874,12 +1851,8 @@ object SQLConf {
       "used for debugging purposes and not in the production environment, since it generates a " +
       "large amount of logs.")
     .version("4.0.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValue(isValidLogLevel,
-      "Invalid value for 'spark.sql.dataframeCache.logLevel'. Valid values are " +
-      s"${VALID_LOG_LEVELS.mkString(", ")}.")
-    .createWithDefault("trace")
+    .enumConf(classOf[Level])
+    .createWithDefault(Level.TRACE)
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
@@ -2058,6 +2031,7 @@ object SQLConf {
     .createWithDefault(100)
 
   val CODEGEN_FACTORY_MODE = buildConf("spark.sql.codegen.factoryMode")
+    .internal()
     .doc("This config determines the fallback behavior of several codegen generators " +
       "during tests. `FALLBACK` means trying codegen first and then falling back to " +
       "interpreted if any compile error happens. Disabling fallback if `CODEGEN_ONLY`. " +
@@ -2065,10 +2039,8 @@ object SQLConf {
       "this configuration is only for the internal usage, and NOT supposed to be set by " +
       "end users.")
     .version("2.4.0")
-    .internal()
-    .stringConf
-    .checkValues(CodegenObjectFactoryMode.values.map(_.toString))
-    .createWithDefault(CodegenObjectFactoryMode.FALLBACK.toString)
+    .enumConf(CodegenObjectFactoryMode)
+    .createWithDefault(CodegenObjectFactoryMode.FALLBACK)
 
   val CODEGEN_FALLBACK = buildConf("spark.sql.codegen.fallback")
     .internal()
@@ -2083,12 +2055,8 @@ object SQLConf {
     .doc("Configures the log level for logging of codegen. " +
       s"The value can be ${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("4.1.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValue(isValidLogLevel,
-      "Invalid value for 'spark.sql.codegen.logLevel'. Valid values are " +
-       s"${VALID_LOG_LEVELS.mkString(", ")}.")
-    .createWithDefault("DEBUG")
+    .enumConf(classOf[Level])
+    .createWithDefault(Level.DEBUG)
 
   val CODEGEN_LOGGING_MAX_LINES = buildConf("spark.sql.codegen.logging.maxLines")
     .internal()
@@ -2292,6 +2260,13 @@ object SQLConf {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(300L)
 
+  val STATE_STORE_MAINTENANCE_PROCESSING_TIMEOUT =
+    buildConf("spark.sql.streaming.stateStore.maintenanceProcessingTimeout")
+      .internal()
+      .doc("Timeout in seconds to wait for maintenance to process this partition.")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(30L)
+
   val STATE_SCHEMA_CHECK_ENABLED =
     buildConf("spark.sql.streaming.stateStore.stateSchemaCheck")
       .doc("When true, Spark will validate the state schema against schema on existing state and " +
@@ -2331,6 +2306,70 @@ object SQLConf {
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG =
+    buildConf("spark.sql.streaming.stateStore.multiplierForMinVersionDiffToLog")
+      .internal()
+      .doc(
+        "Determines the version threshold for logging warnings when a state store falls behind. " +
+        "The coordinator logs a warning when the store's uploaded snapshot version trails the " +
+        "query's latest version by the configured number of deltas needed to create a snapshot, " +
+        "times this multiplier."
+      )
+      .version("4.1.0")
+      .longConf
+      .checkValue(k => k >= 1L, "Must be greater than or equal to 1")
+      .createWithDefault(5L)
+
+  val STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_TIME_DIFF_TO_LOG =
+    buildConf("spark.sql.streaming.stateStore.multiplierForMinTimeDiffToLog")
+      .internal()
+      .doc(
+        "Determines the time threshold for logging warnings when a state store falls behind. " +
+        "The coordinator logs a warning when the store's uploaded snapshot timestamp trails the " +
+        "current time by the configured maintenance interval, times this multiplier."
+      )
+      .version("4.1.0")
+      .longConf
+      .checkValue(k => k >= 1L, "Must be greater than or equal to 1")
+      .createWithDefault(10L)
+
+  val STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG =
+    buildConf("spark.sql.streaming.stateStore.coordinatorReportSnapshotUploadLag")
+      .internal()
+      .doc(
+        "When enabled, the state store coordinator will report state stores whose snapshot " +
+        "have not been uploaded for some time. See the conf snapshotLagReportInterval for " +
+        "the minimum time between reports, and the conf multiplierForMinVersionDiffToLog " +
+        "and multiplierForMinTimeDiffToLog for the logging thresholds."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL =
+    buildConf("spark.sql.streaming.stateStore.snapshotLagReportInterval")
+      .internal()
+      .doc(
+        "The minimum amount of time between the state store coordinator's reports on " +
+        "state store instances trailing behind in snapshot uploads."
+      )
+      .version("4.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(TimeUnit.MINUTES.toMillis(5))
+
+  val STATE_STORE_COORDINATOR_MAX_LAGGING_STORES_TO_REPORT =
+    buildConf("spark.sql.streaming.stateStore.maxLaggingStoresToReport")
+      .internal()
+      .doc(
+        "Maximum number of state stores the coordinator will report as trailing in " +
+        "snapshot uploads. Stores are selected based on the most lagging behind in " +
+        "snapshot version."
+      )
+      .version("4.1.0")
+      .intConf
+      .checkValue(k => k >= 0, "Must be greater than or equal to 0")
+      .createWithDefault(5)
 
   val FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.flatMapGroupsWithState.stateFormatVersion")
@@ -2455,6 +2494,18 @@ object SQLConf {
       .stringConf
       .createWithDefault(CompressionCodec.LZ4)
 
+  val STATE_STORE_UNLOAD_ON_COMMIT =
+    buildConf("spark.sql.streaming.stateStore.unloadOnCommit")
+      .internal()
+      .doc("When true, Spark will synchronously run maintenance and then close each StateStore " +
+        "instance on task completion. This removes the overhead of keeping every StateStore " +
+        "loaded indefinitely, at the cost of having to reload each StateStore every batch. " +
+        "Stateful applications that are failing due to resource exhaustion or that use " +
+        "dynamic allocation may benefit from enabling this.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val CHECKPOINT_RENAMEDFILE_CHECK_ENABLED =
     buildConf("spark.sql.streaming.checkpoint.renamedFileCheck.enabled")
       .doc("When true, Spark will validate if renamed checkpoint file exists.")
@@ -2505,10 +2556,11 @@ object SQLConf {
       .internal()
       .doc("State format version used by streaming join operations in a streaming query. " +
         "State between versions are tend to be incompatible, so state format version shouldn't " +
-        "be modified after running.")
+        "be modified after running. Version 3 uses a single state store with virtual column " +
+        "families instead of four stores and is only supported with RocksDB.")
       .version("3.0.0")
       .intConf
-      .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
+      .checkValue(v => Set(1, 2, 3).contains(v), "Valid versions are 1, 2, and 3")
       .createWithDefault(2)
 
   val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
@@ -3487,6 +3539,19 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
+  val ARROW_EXECUTION_MAX_RECORDS_PER_OUTPUT_BATCH =
+    buildConf("spark.sql.execution.arrow.maxRecordsPerOutputBatch")
+      .doc("When using Apache Arrow, limit the maximum number of records that can be output " +
+        "in a single ArrowRecordBatch to the downstream operator. If set to zero or negative " +
+        "there is no limit. Note that the complete ArrowRecordBatch is actually created but " +
+        "the number of records is limited when sending it to the downstream operator. This is " +
+        "used to avoid large batches being sent to the downstream operator including " +
+        "the columnar-based operator implemented by third-party libraries.")
+      .version("4.1.0")
+      .internal()
+      .intConf
+      .createWithDefault(-1)
+
   val ARROW_EXECUTION_MAX_BYTES_PER_BATCH =
     buildConf("spark.sql.execution.arrow.maxBytesPerBatch")
       .internal()
@@ -3506,11 +3571,15 @@ object SQLConf {
           "than zero and less than INT_MAX.")
       .createWithDefaultString("256MB")
 
-  val ARROW_TRANSFORM_WITH_STATE_IN_PANDAS_MAX_RECORDS_PER_BATCH =
-    buildConf("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch")
-      .doc("When using TransformWithStateInPandas, limit the maximum number of state records " +
-        "that can be written to a single ArrowRecordBatch in memory.")
+  val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH =
+    buildConf("spark.sql.execution.arrow.transformWithStateInPySpark.maxStateRecordsPerBatch")
+      .doc("When using TransformWithState in PySpark (both Python Row and Pandas), limit " +
+        "the maximum number of state records that can be written to a single ArrowRecordBatch " +
+        "in memory.")
       .version("4.0.0")
+      // NOTE: This config was released already in Spark 4.0.0, so we should not remove the
+      // support of this.
+      .withAlternative("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch")
       .intConf
       .createWithDefault(10000)
 
@@ -3588,6 +3657,15 @@ object SQLConf {
       .booleanConf
       // show full stacktrace in tests but hide in production by default.
       .createWithDefault(!Utils.isTesting)
+
+  val PYSPARK_ARROW_VALIDATE_SCHEMA =
+    buildConf("spark.sql.execution.arrow.pyspark.validateSchema.enabled")
+      .doc(
+        "When true, validate the schema of Arrow batches returned by mapInArrow, mapInPandas " +
+        "and DataSource against the expected schema to ensure that they are compatible.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val PYTHON_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
@@ -3858,10 +3936,8 @@ object SQLConf {
         "dataframe.write.option(\"partitionOverwriteMode\", \"dynamic\").save(path)."
       )
       .version("2.3.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(PartitionOverwriteMode.values.map(_.toString))
-      .createWithDefault(PartitionOverwriteMode.STATIC.toString)
+      .enumConf(PartitionOverwriteMode)
+      .createWithDefault(PartitionOverwriteMode.STATIC)
 
   object StoreAssignmentPolicy extends Enumeration {
     val ANSI, LEGACY, STRICT = Value
@@ -3883,10 +3959,8 @@ object SQLConf {
         "not allowed."
       )
       .version("3.0.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(StoreAssignmentPolicy.values.map(_.toString))
-      .createWithDefault(StoreAssignmentPolicy.ANSI.toString)
+      .enumConf(StoreAssignmentPolicy)
+      .createWithDefault(StoreAssignmentPolicy.ANSI)
 
   val ANSI_ENABLED = buildConf(SqlApiConfHelper.ANSI_ENABLED_KEY)
     .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
@@ -4539,10 +4613,8 @@ object SQLConf {
         "Before the 3.4.0 release, Spark only supports the TIMESTAMP WITH " +
         "LOCAL TIME ZONE type.")
       .version("3.4.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(TimestampTypes.values.map(_.toString))
-      .createWithDefault(TimestampTypes.TIMESTAMP_LTZ.toString)
+      .enumConf(TimestampTypes)
+      .createWithDefault(TimestampTypes.TIMESTAMP_LTZ)
 
   val DATETIME_JAVA8API_ENABLED = buildConf("spark.sql.datetime.java8API.enabled")
     .doc("If the configuration property is set to true, java.time.Instant and " +
@@ -4617,10 +4689,8 @@ object SQLConf {
       "fails if duplicated map keys are detected. When LAST_WIN, the map key that is inserted " +
       "at last takes precedence.")
     .version("3.0.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(MapKeyDedupPolicy.values.map(_.toString))
-    .createWithDefault(MapKeyDedupPolicy.EXCEPTION.toString)
+    .enumConf(MapKeyDedupPolicy)
+    .createWithDefault(MapKeyDedupPolicy.EXCEPTION)
 
   val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.doLooseUpcast")
     .internal()
@@ -4636,10 +4706,8 @@ object SQLConf {
       "The default is CORRECTED, inner CTE definitions take precedence. This config " +
       "will be removed in future versions and CORRECTED will be the only behavior.")
     .version("3.0.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-    .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
+    .enumConf(LegacyBehaviorPolicy)
+    .createWithDefault(LegacyBehaviorPolicy.CORRECTED)
 
   val CTE_RECURSION_LEVEL_LIMIT = buildConf("spark.sql.cteRecursionLevelLimit")
     .doc("Maximum level of recursion that is allowed while executing a recursive CTE definition." +
@@ -4674,10 +4742,8 @@ object SQLConf {
       "When set to EXCEPTION, RuntimeException is thrown when we will get different " +
       "results. The default is CORRECTED.")
     .version("3.0.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-    .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
+    .enumConf(LegacyBehaviorPolicy)
+    .createWithDefault(LegacyBehaviorPolicy.CORRECTED)
 
   val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
     buildConf("spark.sql.legacy.followThreeValuedLogicInArrayExists")
@@ -4965,10 +5031,8 @@ object SQLConf {
         "When EXCEPTION, Spark will fail the writing if it sees ancient " +
         "timestamps that are ambiguous between the two calendars.")
       .version("3.1.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
+      .enumConf(LegacyBehaviorPolicy)
+      .createWithDefault(LegacyBehaviorPolicy.CORRECTED)
 
   val PARQUET_REBASE_MODE_IN_WRITE =
     buildConf("spark.sql.parquet.datetimeRebaseModeInWrite")
@@ -4982,10 +5046,8 @@ object SQLConf {
         "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
         s"${PARQUET_INT96_REBASE_MODE_IN_WRITE.key}.")
       .version("3.0.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
+      .enumConf(LegacyBehaviorPolicy)
+      .createWithDefault(LegacyBehaviorPolicy.CORRECTED)
 
   val PARQUET_INT96_REBASE_MODE_IN_READ =
     buildConf("spark.sql.parquet.int96RebaseModeInRead")
@@ -4997,10 +5059,8 @@ object SQLConf {
         "timestamps that are ambiguous between the two calendars. This config is only effective " +
         "if the writer info (like Spark, Hive) of the Parquet files is unknown.")
       .version("3.1.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
+      .enumConf(LegacyBehaviorPolicy)
+      .createWithDefault(LegacyBehaviorPolicy.CORRECTED)
 
   val PARQUET_REBASE_MODE_IN_READ =
     buildConf("spark.sql.parquet.datetimeRebaseModeInRead")
@@ -5016,10 +5076,8 @@ object SQLConf {
         s"${PARQUET_INT96_REBASE_MODE_IN_READ.key}.")
       .version("3.0.0")
       .withAlternative("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
+      .enumConf(LegacyBehaviorPolicy)
+      .createWithDefault(LegacyBehaviorPolicy.CORRECTED)
 
   val AVRO_REBASE_MODE_IN_WRITE =
     buildConf("spark.sql.avro.datetimeRebaseModeInWrite")
@@ -5030,10 +5088,8 @@ object SQLConf {
         "When EXCEPTION, Spark will fail the writing if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars.")
       .version("3.0.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
+      .enumConf(LegacyBehaviorPolicy)
+      .createWithDefault(LegacyBehaviorPolicy.CORRECTED)
 
   val AVRO_REBASE_MODE_IN_READ =
     buildConf("spark.sql.avro.datetimeRebaseModeInRead")
@@ -5045,10 +5101,8 @@ object SQLConf {
         "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
         "only effective if the writer info (like Spark, Hive) of the Avro files is unknown.")
       .version("3.0.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
+      .enumConf(LegacyBehaviorPolicy)
+      .createWithDefault(LegacyBehaviorPolicy.CORRECTED)
 
   val SCRIPT_TRANSFORMATION_EXIT_TIMEOUT =
     buildConf("spark.sql.scriptTransformation.exitTimeoutInSeconds")
@@ -5182,6 +5236,16 @@ object SQLConf {
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
+
+  val READ_FILE_SOURCE_TABLE_CACHE_IGNORE_OPTIONS =
+    buildConf("spark.sql.legacy.readFileSourceTableCacheIgnoreOptions")
+      .internal()
+      .doc("When set to true, reading from file source table caches the first query plan and " +
+        "ignores subsequent changes in query options. Otherwise, query options will be applied " +
+        "to the cached plan and may produce different results.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val READ_SIDE_CHAR_PADDING = buildConf("spark.sql.readSideCharPadding")
     .doc("When true, Spark applies string padding when reading CHAR type columns/fields, " +
@@ -5379,9 +5443,8 @@ object SQLConf {
       "STANDARD includes an additional JSON field `message`. This configuration property " +
       "influences on error messages of Thrift Server and SQL CLI while running queries.")
     .version("3.4.0")
-    .stringConf.transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(ErrorMessageFormat.values.map(_.toString))
-    .createWithDefault(ErrorMessageFormat.PRETTY.toString)
+    .enumConf(ErrorMessageFormat)
+    .createWithDefault(ErrorMessageFormat.PRETTY)
 
   val LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED =
     buildConf("spark.sql.lateralColumnAlias.enableImplicitResolution")
@@ -5886,13 +5949,13 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
 
-  def planChangeLogLevel: Level = Level.valueOf(getConf(PLAN_CHANGE_LOG_LEVEL))
+  def planChangeLogLevel: Level = getConf(PLAN_CHANGE_LOG_LEVEL)
 
   def planChangeRules: Option[String] = getConf(PLAN_CHANGE_LOG_RULES)
 
   def planChangeBatches: Option[String] = getConf(PLAN_CHANGE_LOG_BATCHES)
 
-  def expressionTreeChangeLogLevel: Level = Level.valueOf(getConf(EXPRESSION_TREE_CHANGE_LOG_LEVEL))
+  def expressionTreeChangeLogLevel: Level = getConf(EXPRESSION_TREE_CHANGE_LOG_LEVEL)
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
 
@@ -5924,12 +5987,30 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def stateStoreMaintenanceShutdownTimeout: Long = getConf(STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT)
 
+  def stateStoreMaintenanceProcessingTimeout: Long =
+    getConf(STATE_STORE_MAINTENANCE_PROCESSING_TIMEOUT)
+
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
   def stateStoreFormatValidationEnabled: Boolean = getConf(STATE_STORE_FORMAT_VALIDATION_ENABLED)
 
   def stateStoreSkipNullsForStreamStreamJoins: Boolean =
     getConf(STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS)
+
+  def stateStoreCoordinatorMultiplierForMinVersionDiffToLog: Long =
+    getConf(STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG)
+
+  def stateStoreCoordinatorMultiplierForMinTimeDiffToLog: Long =
+    getConf(STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_TIME_DIFF_TO_LOG)
+
+  def stateStoreCoordinatorReportSnapshotUploadLag: Boolean =
+    getConf(STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG)
+
+  def stateStoreCoordinatorSnapshotLagReportInterval: Long =
+    getConf(STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL)
+
+  def stateStoreCoordinatorMaxLaggingStoresToReport: Int =
+    getConf(STATE_STORE_COORDINATOR_MAX_LAGGING_STORES_TO_REPORT)
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
@@ -6034,7 +6115,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
-  def adaptiveExecutionLogLevel: String = getConf(ADAPTIVE_EXECUTION_LOG_LEVEL)
+  def adaptiveExecutionLogLevel: Level = getConf(ADAPTIVE_EXECUTION_LOG_LEVEL)
 
   def fetchShuffleBlocksInBatch: Boolean = getConf(FETCH_SHUFFLE_BLOCKS_IN_BATCH)
 
@@ -6048,6 +6129,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def ratioExtraSpaceAllowedInCheckpoint: Double = getConf(RATIO_EXTRA_SPACE_ALLOWED_IN_CHECKPOINT)
 
   def maxBatchesToRetainInMemory: Int = getConf(MAX_BATCHES_TO_RETAIN_IN_MEMORY)
+
+  def stateStoreUnloadOnCommit: Boolean = getConf(STATE_STORE_UNLOAD_ON_COMMIT)
 
   def streamingMaintenanceInterval: Long = getConf(STREAMING_MAINTENANCE_INTERVAL)
 
@@ -6105,7 +6188,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def filesourcePartitionFileCacheSize: Long = getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE)
 
   def caseSensitiveInferenceMode: HiveCaseSensitiveInferenceMode.Value =
-    HiveCaseSensitiveInferenceMode.withName(getConf(HIVE_CASE_SENSITIVE_INFERENCE))
+    getConf(HIVE_CASE_SENSITIVE_INFERENCE)
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 
@@ -6119,11 +6202,11 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
 
-  def codegenFactoryMode: String = getConf(CODEGEN_FACTORY_MODE)
+  def codegenFactoryMode: CodegenObjectFactoryMode.Value = getConf(CODEGEN_FACTORY_MODE)
 
   def codegenComments: Boolean = getConf(StaticSQLConf.CODEGEN_COMMENTS)
 
-  def codegenLogLevel: Level = Level.valueOf(getConf(CODEGEN_LOG_LEVEL))
+  def codegenLogLevel: Level = getConf(CODEGEN_LOG_LEVEL)
 
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
@@ -6195,9 +6278,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyPostgresDatetimeMappingEnabled: Boolean =
     getConf(LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED)
 
-  override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
-    LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
-  }
+  override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value =
+    getConf(SQLConf.LEGACY_TIME_PARSER_POLICY)
 
   def broadcastHashJoinOutputPartitioningExpandLimit: Int =
     getConf(BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
@@ -6251,9 +6333,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def isParquetINT96TimestampConversion: Boolean = getConf(PARQUET_INT96_TIMESTAMP_CONVERSION)
 
-  def parquetOutputTimestampType: ParquetOutputTimestampType.Value = {
-    ParquetOutputTimestampType.withName(getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE))
-  }
+  def parquetOutputTimestampType: ParquetOutputTimestampType.Value =
+    getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE)
 
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
@@ -6352,9 +6433,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def viewSchemaCompensation: Boolean = getConf(VIEW_SCHEMA_COMPENSATION)
 
   def defaultCacheStorageLevel: StorageLevel =
-    StorageLevel.fromString(getConf(DEFAULT_CACHE_STORAGE_LEVEL))
+    StorageLevel.fromString(getConf(DEFAULT_CACHE_STORAGE_LEVEL).name())
 
-  def dataframeCacheLogLevel: String = getConf(DATAFRAME_CACHE_LOG_LEVEL)
+  def dataframeCacheLogLevel: Level = getConf(DATAFRAME_CACHE_LOG_LEVEL)
 
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
@@ -6474,10 +6555,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
+  def arrowMaxRecordsPerOutputBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_OUTPUT_BATCH)
+
   def arrowMaxBytesPerBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_BATCH)
 
-  def arrowTransformWithStateInPandasMaxRecordsPerBatch: Int =
-    getConf(ARROW_TRANSFORM_WITH_STATE_IN_PANDAS_MAX_RECORDS_PER_BATCH)
+  def arrowTransformWithStateInPySparkMaxStateRecordsPerBatch: Int =
+    getConf(ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH)
 
   def arrowUseLargeVarTypes: Boolean = getConf(ARROW_EXECUTION_USE_LARGE_VAR_TYPES)
 
@@ -6488,6 +6571,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pysparkHideTraceback: Boolean = getConf(PYSPARK_HIDE_TRACEBACK)
 
   def pysparkSimplifiedTraceback: Boolean = getConf(PYSPARK_SIMPLIFIED_TRACEBACK)
+
+  def pysparkArrowValidateSchema: Boolean = getConf(PYSPARK_ARROW_VALIDATE_SCHEMA)
 
   def pandasGroupedMapAssignColumnsByName: Boolean =
     getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME)
@@ -6527,10 +6612,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def validatePartitionColumns: Boolean = getConf(VALIDATE_PARTITION_COLUMNS)
 
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
-    PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
+    getConf(PARTITION_OVERWRITE_MODE)
 
   def storeAssignmentPolicy: StoreAssignmentPolicy.Value =
-    StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
+    getConf(STORE_ASSIGNMENT_POLICY)
 
   override def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
@@ -6553,11 +6638,11 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def chunkBase64StringEnabled: Boolean = getConf(CHUNK_BASE64_STRING_ENABLED)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
-    case "TIMESTAMP_LTZ" =>
+    case TimestampTypes.TIMESTAMP_LTZ =>
       // For historical reason, the TimestampType maps to TIMESTAMP WITH LOCAL TIME ZONE
       TimestampType
 
-    case "TIMESTAMP_NTZ" =>
+    case TimestampTypes.TIMESTAMP_NTZ =>
       TimestampNTZType
   }
 
@@ -6707,8 +6792,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def histogramNumericPropagateInputType: Boolean =
     getConf(SQLConf.HISTOGRAM_NUMERIC_PROPAGATE_INPUT_TYPE)
 
-  def errorMessageFormat: ErrorMessageFormat.Value =
-    ErrorMessageFormat.withName(getConf(SQLConf.ERROR_MESSAGE_FORMAT))
+  def errorMessageFormat: ErrorMessageFormat.Value = getConf(SQLConf.ERROR_MESSAGE_FORMAT)
 
   def defaultDatabase: String = getConf(StaticSQLConf.CATALOG_DEFAULT_DATABASE)
 

@@ -1,0 +1,79 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Image for building and testing Spark branches. Based on Ubuntu 22.04.
+# See also in https://hub.docker.com/_/ubuntu
+FROM ubuntu:jammy-20240911.1
+LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark Classic with Python 3.11"
+# Overwrite this label to avoid exposing the underlying Ubuntu OS version label
+LABEL org.opencontainers.image.version=""
+
+ENV FULL_REFRESH_DATE=20250424
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBCONF_NONINTERACTIVE_SEEN=true
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    ca-certificates \
+    curl \
+    gfortran \
+    git \
+    gnupg \
+    libcurl4-openssl-dev \
+    libfontconfig1-dev \
+    libfreetype6-dev \
+    libfribidi-dev \
+    libgit2-dev \
+    libharfbuzz-dev \
+    libjpeg-dev \
+    liblapack-dev \
+    libopenblas-dev \
+    libpng-dev \
+    libpython3-dev \
+    libssl-dev \
+    libtiff5-dev \
+    libxml2-dev \
+    openjdk-17-jdk-headless \
+    pkg-config \
+    qpdf \
+    tzdata \
+    software-properties-common \
+    wget \
+    zlib1g-dev
+
+# Install Python 3.11
+RUN add-apt-repository ppa:deadsnakes/ppa
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    && apt-get autoremove --purge -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+
+ARG BASIC_PIP_PKGS="numpy pyarrow>=19.0.0 pandas==2.2.3 plotly<6.0.0 matplotlib openpyxl memory-profiler>=0.61.0 mlflow>=2.8.1 scipy scikit-learn>=1.3.2"
+ARG TEST_PIP_PKGS="coverage unittest-xml-reporting"
+
+# Install Python 3.11 packages
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
+RUN python3.11 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
+RUN python3.11 -m pip install $BASIC_PIP_PKGS $TEST_PIP_PKGS && \
+    python3.11 -m pip install 'torch<2.6.0' torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.11 -m pip install deepspeed torcheval && \
+    python3.11 -m pip cache purge

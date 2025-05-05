@@ -203,7 +203,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC if scale < 0 =>
       DecimalType.bounded(precision - scale, 0)
     case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC =>
-      DecimalPrecisionTypeCoercion.bounded(precision, scale)
+      DecimalPrecisionTypeCoercion.bounded(
+        // A safeguard in case the JDBC scale is larger than the precision that is not supported
+        // by Spark.
+        math.max(precision, scale),
+        scale)
     case java.sql.Types.DOUBLE => DoubleType
     case java.sql.Types.FLOAT => FloatType
     case java.sql.Types.INTEGER => if (signed) IntegerType else LongType
@@ -314,6 +318,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       metadata.putBoolean("isSigned", isSigned)
       metadata.putBoolean("isTimestampNTZ", isTimestampNTZ)
       metadata.putLong("scale", fieldScale)
+      metadata.putString("jdbcClientType", typeName)
       dialect.updateExtraColumnMeta(conn, rsmd, i + 1, metadata)
 
       val columnType =

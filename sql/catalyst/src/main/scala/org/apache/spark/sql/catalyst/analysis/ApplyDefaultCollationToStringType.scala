@@ -24,75 +24,72 @@ import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.types.{DataType, StringType}
 
 /**
- * Resolves string types in DDL commands, where the string type inherits the
- * collation from the corresponding object (table/view -> schema -> catalog).
+ * Resolves string types in logical plans by assigning them the appropriate collation. The
+ * collation is inherited from the relevant object in the hierarchy (e.g., table/view -> schema ->
+ * catalog). This rule is primarily applied to DDL commands, but it can also be triggered in other
+ * scenarios. For example, when querying a view, its query is re-resolved each time, and that query
+ * can take various forms.
  */
-object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
+object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (isDDLCommand(plan)) {
-      transformDDL(plan)
-    } else {
-      // For non-DDL commands no need to do any further resolution of string types
-      plan
+    fetchDefaultCollation(plan) match {
+      case Some(collation) =>
+        transform(plan, StringType(collation))
+      case None => plan
     }
   }
 
-  /** Default collation used, if object level collation is not provided */
-  private def defaultCollation: String = "UTF8_BINARY"
-
-  /** Returns the string type that should be used in a given DDL command */
-  private def stringTypeForDDLCommand(table: LogicalPlan): StringType = {
-    table match {
-      case createTable: CreateTable if createTable.tableSpec.collation.isDefined =>
-        StringType(createTable.tableSpec.collation.get)
+  /** Returns the default collation that should be applied to the plan
+   * if specified; otherwise, returns None.
+   */
+  private def fetchDefaultCollation(plan: LogicalPlan): Option[String] = {
+    plan match {
+      case createTable: CreateTable =>
+        createTable.tableSpec.collation
 
       // CreateView also handles CREATE OR REPLACE VIEW
       // Unlike for tables, CreateView also handles CREATE OR REPLACE VIEW
-      case createView: CreateView if createView.collation.isDefined =>
-        StringType(createView.collation.get)
+      case createView: CreateView =>
+        createView.collation
 
-      case replaceTable: ReplaceTable if replaceTable.tableSpec.collation.isDefined =>
-        StringType(replaceTable.tableSpec.collation.get)
+      case replaceTable: ReplaceTable =>
+        replaceTable.tableSpec.collation
 
       case alterTable: AlterTableCommand if alterTable.table.resolved =>
         alterTable.table match {
-          case resolvedTbl: ResolvedTable =>
-            val collation = resolvedTbl.table.properties.getOrDefault(
-              TableCatalog.PROP_COLLATION, defaultCollation)
-            StringType(collation)
+          case resolvedTbl: ResolvedTable
+            if resolvedTbl.table.properties.containsKey(TableCatalog.PROP_COLLATION ) =>
+              Some(resolvedTbl.table.properties.get(TableCatalog.PROP_COLLATION))
+          case _ => None
+        }
 
-          case _ =>
-            // As a safeguard, use the default collation for unknown cases.
-            StringType(defaultCollation)
+      case alterViewAs: AlterViewAs =>
+        alterViewAs.child match {
+          case resolvedPersistentView: ResolvedPersistentView =>
+            resolvedPersistentView.metadata.collation
+          case resolvedTempView: ResolvedTempView =>
+            resolvedTempView.metadata.collation
+          case _ => None
         }
 
       // Check if view has default collation
       case _ if AnalysisContext.get.collation.isDefined =>
-        StringType(AnalysisContext.get.collation.get)
+        AnalysisContext.get.collation
 
-      case _ => StringType(defaultCollation)
+      case _ => None
     }
-  }
-
-  private def isDDLCommand(plan: LogicalPlan): Boolean = plan exists {
-    case _: AddColumns | _: ReplaceColumns | _: AlterColumns => true
-    case _ => isCreateOrAlterPlan(plan)
   }
 
   private def isCreateOrAlterPlan(plan: LogicalPlan): Boolean = plan match {
     // For CREATE TABLE, only v2 CREATE TABLE command is supported.
     // Also, table DEFAULT COLLATION cannot be specified through CREATE TABLE AS SELECT command.
     case _: V2CreateTablePlan | _: ReplaceTable | _: CreateView | _: AlterViewAs => true
-    // Check if view has default collation
-    case _ if AnalysisContext.get.collation.isDefined => true
     case _ => false
   }
 
-  private def transformDDL(plan: LogicalPlan): LogicalPlan = {
-    val newType = stringTypeForDDLCommand(plan)
-
+  private def transform(plan: LogicalPlan, newType: StringType): LogicalPlan = {
     plan resolveOperators {
-      case p if isCreateOrAlterPlan(p) =>
+      case p if isCreateOrAlterPlan(p) || AnalysisContext.get.collation.isDefined =>
         transformPlan(p, newType)
 
       case addCols: AddColumns =>

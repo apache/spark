@@ -811,6 +811,20 @@
     },
     "sqlState" : "XX000"
   },
+  "CONSTRAINT_ALREADY_EXISTS" : {
+    "message" : [
+      "Constraint '<constraintName>' already exists. Please delete the existing constraint first.",
+      "Existing constraint:",
+      "<oldConstraint>"
+    ],
+    "sqlState" : "42710"
+  },
+  "CONSTRAINT_DOES_NOT_EXIST" : {
+    "message" : [
+      "Cannot drop nonexistent constraint <constraintName> from table <tableName>."
+    ],
+    "sqlState" : "42704"
+  },
   "CONVERSION_INVALID_INPUT" : {
     "message" : [
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
@@ -992,6 +1006,11 @@
       "INVALID_XML_MAP_KEY_TYPE" : {
         "message" : [
           "Input schema <schema> can only contain STRING as a key type for a MAP."
+        ]
+      },
+      "INVALID_XML_SCHEMA" : {
+        "message" : [
+          "Input schema <schema> must be a struct or a variant."
         ]
       },
       "IN_SUBQUERY_DATA_TYPE_MISMATCH" : {
@@ -1190,8 +1209,20 @@
   },
   "DATETIME_FIELD_OUT_OF_BOUNDS" : {
     "message" : [
-      "<rangeMessage>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "<rangeMessage>."
     ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "If necessary set <ansiConfig> to \"false\" to bypass this error."
+        ]
+      }
+    },
     "sqlState" : "22023"
   },
   "DATETIME_OVERFLOW" : {
@@ -2343,13 +2374,34 @@
       "The value '<confValue>' in the config \"<confName>\" is invalid."
     ],
     "subClass" : {
+      "OUT_OF_RANGE_OF_OPTIONS" : {
+        "message" : [
+          "It should be one of '<confOptions>'."
+        ]
+      },
+      "REQUIREMENT" : {
+        "message" : [
+          "<confRequirement>"
+        ]
+      },
       "TIME_ZONE" : {
         "message" : [
           "Cannot resolve the given timezone."
         ]
+      },
+      "TYPE_MISMATCH" : {
+        "message" : [
+          "It should be a/an '<confType>' value."
+        ]
       }
     },
     "sqlState" : "22022"
+  },
+  "INVALID_CONSTRAINT_CHARACTERISTICS" : {
+    "message" : [
+      "Constraint characteristics [<characteristics>] are duplicated or conflict with each other."
+    ],
+    "sqlState" : "42613"
   },
   "INVALID_CORRUPT_RECORD_TYPE" : {
     "message" : [
@@ -2912,6 +2964,12 @@
     ],
     "sqlState" : "F0000"
   },
+  "INVALID_KRYO_SERIALIZER_NO_DATA" : {
+    "message" : [
+      "The object '<obj>' is invalid or malformed to <serdeOp> using <serdeClass>."
+    ],
+    "sqlState" : "22002"
+  },
   "INVALID_LABEL_USAGE" : {
     "message" : [
       "The usage of the label <labelName> is invalid."
@@ -3330,7 +3388,7 @@
   },
   "INVALID_SINGLE_VARIANT_COLUMN" : {
     "message" : [
-      "The `singleVariantColumn` option cannot be used if there is also a user specified schema."
+      "User specified schema <schema> is invalid when the `singleVariantColumn` option is enabled. The schema must either be a variant field, or a variant field plus a corrupt column field."
     ],
     "sqlState" : "42613"
   },
@@ -3399,6 +3457,16 @@
       "ANALYZE_TABLE_UNEXPECTED_NOSCAN" : {
         "message" : [
           "ANALYZE TABLE(S) ... COMPUTE STATISTICS ... <ctx> must be either NOSCAN or empty."
+        ]
+      },
+      "CREATE_FUNC_WITH_COLUMN_CONSTRAINTS" : {
+        "message" : [
+          "CREATE FUNCTION with constraints on parameters is not allowed."
+        ]
+      },
+      "CREATE_FUNC_WITH_GENERATED_COLUMNS_AS_PARAMETERS" : {
+        "message" : [
+          "CREATE FUNCTION with generated columns as parameters is not allowed."
         ]
       },
       "CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
@@ -3940,6 +4008,12 @@
       "Window specification is not defined in the WINDOW clause for <windowName>. For more information about WINDOW clauses, please refer to '<docroot>/sql-ref-syntax-qry-select-window.html'."
     ],
     "sqlState" : "42P20"
+  },
+  "MULTIPLE_PRIMARY_KEYS" : {
+    "message" : [
+      "Multiple primary keys are defined: <columns>. Please ensure that only one primary key is defined for the table."
+    ],
+    "sqlState" : "42P16"
   },
   "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS" : {
     "message" : [
@@ -5184,6 +5258,12 @@
     ],
     "sqlState" : "XXKST"
   },
+  "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR" : {
+    "message" : [
+      "An error occurred in the user-defined function <function> of the StatefulProcessor. Reason: <reason>."
+    ],
+    "sqlState" : "39000"
+  },
   "TRANSPOSE_EXCEED_ROW_LIMIT" : {
     "message" : [
       "Number of rows exceeds the allowed limit of <maxValues> for TRANSPOSE. If this was intended, set <config> to at least the current row count."
@@ -5543,6 +5623,12 @@
         ]
       }
     },
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC" : {
+    "message" : [
+      "Constraint characteristic '<characteristic>' is not supported for constraint type '<constraintType>'."
+    ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
@@ -8574,11 +8660,6 @@
   "_LEGACY_ERROR_TEMP_3026" : {
     "message" : [
       "duration() called on unfinished task"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3027" : {
-    "message" : [
-      "Unrecognized <schedulerModeProperty>: <schedulingModeConf>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3028" : {

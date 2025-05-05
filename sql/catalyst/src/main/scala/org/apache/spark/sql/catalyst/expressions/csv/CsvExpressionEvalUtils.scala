@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.csv
 import com.univocity.parsers.csv.CsvParser
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{DataSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.csv.{CSVInferSchema, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.{FailFastMode, FailureSafeParser, PermissiveMode}
@@ -66,11 +66,7 @@ case class CsvToStructsEvaluator(
     if (mode != PermissiveMode && mode != FailFastMode) {
       throw QueryCompilationErrors.parseModeUnsupportedError("from_csv", mode)
     }
-    if (parsedOptions.singleVariantColumn.isDefined) {
-      if (nullableSchema.length != 1 || nullableSchema.head.dataType != VariantType) {
-        throw QueryCompilationErrors.invalidSingleVariantColumn()
-      }
-    }
+    DataSourceOptions.validateSingleVariantColumn(parsedOptions.parameters, Some(nullableSchema))
     ExprUtils.verifyColumnNameOfCorruptRecord(
       nullableSchema,
       parsedOptions.columnNameOfCorruptRecord)
