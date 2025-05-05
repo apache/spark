@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.ui
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{SparkUI, SparkUITab}
-
+import org.apache.spark.ui.UIUtils.PATH_PREFIX
 class SQLTab(val sqlStore: SQLAppStatusStore, sparkUI: SparkUI)
   extends SparkUITab(sparkUI, "SQL") with Logging {
 
@@ -34,7 +34,7 @@ class SQLTab(val sqlStore: SQLAppStatusStore, sparkUI: SparkUI)
   attachPage(new ExecutionPage(this))
   parent.attachTab(this)
 
-  parent.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, "/static/sql")
+  parent.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, s"$PATH_PREFIX/static/sql")
 
   override def displayOrder: Int = 0
 }

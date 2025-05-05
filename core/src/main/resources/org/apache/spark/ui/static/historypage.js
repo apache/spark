@@ -17,7 +17,7 @@
 
 /* global $, Mustache, jQuery, uiRoot */
 
-import {formatDuration, formatTimeMillis, stringAbbreviate} from "./utils.js";
+import {formatDuration, formatTimeMillis, stringAbbreviate, pathPrefix} from "./utils.js";
 
 export {setAppLimit};
 
@@ -121,7 +121,7 @@ $(document).ready(function() {
     status: (requestedIncomplete ? "running" : "completed")
   };
 
-  $.getJSON(uiRoot + "/api/v1/applications", appParams, function(response, _ignored_status, _ignored_jqXHR) {
+  $.getJSON(uiRoot + pathPrefix + "/api/v1/applications", appParams, function(response, _ignored_status, _ignored_jqXHR) {
     var array = [];
     var hasMultipleAttempts = false;
     for (var i in response) {
@@ -146,7 +146,7 @@ $(document).ready(function() {
         attempt["startTime"] = formatTimeMillis(attempt["startTimeEpoch"]);
         attempt["endTime"] = formatTimeMillis(attempt["endTimeEpoch"]);
         attempt["lastUpdated"] = formatTimeMillis(attempt["lastUpdatedEpoch"]);
-        attempt["log"] = uiRoot + "/api/v1/applications/" + id + "/" +
+        attempt["log"] = uiRoot + pathPrefix + "/api/v1/applications/" + id + "/" +
           (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "logs";
         attempt["durationMillisec"] = attempt["duration"];
         attempt["duration"] = formatDuration(attempt["duration"]);
@@ -170,7 +170,7 @@ $(document).ready(function() {
       "showCompletedColumns": !requestedIncomplete,
     };
 
-    $.get(uiRoot + "/static/historypage-template.html", function(template) {
+    $.get(uiRoot + pathPrefix + "/static/historypage-template.html", function(template) {
       var sibling = historySummary.prev();
       historySummary.detach();
       var apps = $(Mustache.render($(template).filter("#history-summary-template").html(),data));

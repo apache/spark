@@ -20,6 +20,7 @@ package org.apache.spark.streaming.ui
 import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.ui.{SparkUI, SparkUITab}
+import org.apache.spark.ui.UIUtils.PATH_PREFIX
 
 /**
  * Spark Web UI tab that shows statistics of a streaming job.
@@ -38,11 +39,11 @@ private[spark] class StreamingTab(val ssc: StreamingContext, sparkUI: SparkUI)
 
   def attach(): Unit = {
     parent.attachTab(this)
-    parent.addStaticHandler(STATIC_RESOURCE_DIR, "/static/streaming")
+    parent.addStaticHandler(STATIC_RESOURCE_DIR, s"$PATH_PREFIX/static/streaming")
   }
 
   def detach(): Unit = {
     parent.detachTab(this)
-    parent.detachHandler("/static/streaming")
+    parent.detachHandler(s"$PATH_PREFIX/static/streaming")
   }
 }

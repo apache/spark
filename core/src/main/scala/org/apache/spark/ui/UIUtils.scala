@@ -42,6 +42,7 @@ private[spark] object UIUtils extends Logging {
   val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-sm"
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
   val TABLE_CLASS_STRIPED_SORTABLE = TABLE_CLASS_STRIPED + " sortable"
+  val PATH_PREFIX = sys.env.get("SPARK_UI_PATH_PREFIX").getOrElse("/api/spark")
 
   private val dateTimeFormatter = DateTimeFormatter
     .ofPattern("yyyy/MM/dd HH:mm:ss", Locale.US)
@@ -200,7 +201,8 @@ private[spark] object UIUtils extends Logging {
       request: HttpServletRequest,
       basePath: String = "",
       resource: String = ""): String = {
-    uiRoot(request) + basePath + resource
+    val root = uiRoot(request)
+    root + PATH_PREFIX + basePath + resource
   }
 
   def commonHeaderNodes(request: HttpServletRequest): Seq[Node] = {
@@ -213,6 +215,7 @@ private[spark] object UIUtils extends Logging {
     <link rel="stylesheet" href={prependBaseUri(request, "/static/webui.css")} type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/timeline-view.css")} type="text/css"/>
+    <script>{ scala.xml.Unparsed(s"window.pathPrefix = '${xml.Utility.escape(PATH_PREFIX)}';") }</script>
     <script src={prependBaseUri(request, "/static/sorttable.js")} ></script>
     <script src={prependBaseUri(request, "/static/jquery-3.5.1.min.js")}></script>
     <script src={prependBaseUri(request, "/static/vis-timeline-graph2d.min.js")}></script>

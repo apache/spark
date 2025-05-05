@@ -28,6 +28,7 @@ import scala.xml.{Node, Unparsed}
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.ui.UIUtils.formatImportJavaScript
+import org.apache.spark.ui.UIUtils.PATH_PREFIX
 
 /**
  * A helper class to generate JavaScript and HTML for both timeline and histogram graphs.
@@ -65,9 +66,9 @@ private[spark] class GraphUIData(
   }
 
   def generateTimelineHtml(jsCollector: JsCollector): Seq[Node] = {
-    jsCollector.addImports("/static/streaming-page.js", "registerTimeline")
+    jsCollector.addImports(s"$PATH_PREFIX/static/streaming-page.js", "registerTimeline")
     jsCollector.addPreparedStatement(s"registerTimeline($minY, $maxY);")
-    jsCollector.addImports("/static/streaming-page.js", "drawTimeline")
+    jsCollector.addImports(s"$PATH_PREFIX/static/streaming-page.js", "drawTimeline")
     if (batchInterval.isDefined) {
       jsCollector.addStatement(
         "drawTimeline(" +
@@ -84,9 +85,9 @@ private[spark] class GraphUIData(
 
   def generateHistogramHtml(jsCollector: JsCollector): Seq[Node] = {
     val histogramData = s"$dataJavaScriptName.map(function(d) { return d.y; })"
-    jsCollector.addImports("/static/streaming-page.js", "registerHistogram")
+    jsCollector.addImports(s"$PATH_PREFIX/static/streaming-page.js", "registerHistogram")
     jsCollector.addPreparedStatement(s"registerHistogram($histogramData, $minY, $maxY);")
-    jsCollector.addImports("/static/streaming-page.js", "drawHistogram")
+    jsCollector.addImports(s"$PATH_PREFIX/static/streaming-page.js", "drawHistogram")
     if (batchInterval.isDefined) {
       jsCollector.addStatement(
         "drawHistogram(" +
@@ -114,7 +115,7 @@ private[spark] class GraphUIData(
     jsCollector.addPreparedStatement(s"var $dataJavaScriptName = $jsForData;")
     val labels = jsCollector.nextVariableName
     jsCollector.addPreparedStatement(s"var $labels = $jsForLabels;")
-    jsCollector.addImports("/static/structured-streaming-page.js", "drawAreaStack")
+    jsCollector.addImports(s"$PATH_PREFIX/static/structured-streaming-page.js", "drawAreaStack")
     jsCollector.addStatement(
       s"drawAreaStack('#$timelineDivId', $labels, $dataJavaScriptName)")
     <div id={timelineDivId}></div>

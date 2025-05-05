@@ -15,12 +15,16 @@
  * limitations under the License.
  */
 
+// Read the prefix from the globally injected variable, with a fallback
+const pathPrefix = window.sparkUiPathPrefix || "/api/spark";
+
 export {
   ConvertDurationString, createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, createTemplateURI,
   errorMessageCell, errorSummary,
   formatBytes, formatDate, formatDuration, formatLogsCells, formatTimeMillis,
   getBaseURI, getStandAloneAppId, getTimeZone,
-  setDataTableDefaults, stringAbbreviate
+  setDataTableDefaults, stringAbbreviate,
+  pathPrefix // Add pathPrefix to the export list
 };
 
 /* global $, uiRoot */
@@ -115,7 +119,7 @@ function getStandAloneAppId(cb) {
   }
   // Looks like Web UI is running in standalone mode
   // Let's get application-id using REST End Point
-  $.getJSON(uiRoot + "/api/v1/applications", function(response, _ignored_status, _ignored_jqXHR) {
+  $.getJSON(uiRoot + pathPrefix + "/api/v1/applications", function(response, _ignored_status, _ignored_jqXHR) {
     if (response && response.length > 0) {
       var appId = response[0].id;
       cb(appId);
@@ -163,7 +167,7 @@ function createTemplateURI(appId, templateName) {
     baseURI = words.slice(0, ind).join('/') + '/static/' + templateName + '-template.html';
     return baseURI;
   }
-  return uiRoot + "/static/" + templateName + "-template.html";
+  return uiRoot + pathPrefix + "/static/" + templateName + "-template.html";
 }
 
 function setDataTableDefaults() {

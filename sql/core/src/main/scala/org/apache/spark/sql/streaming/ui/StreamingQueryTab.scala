@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming.ui
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.ui.StreamingQueryStatusStore
 import org.apache.spark.ui.{SparkUI, SparkUITab}
-
+import org.apache.spark.ui.UIUtils.PATH_PREFIX
 private[sql] class StreamingQueryTab(
     val store: StreamingQueryStatusStore,
     sparkUI: SparkUI) extends SparkUITab(sparkUI, "StreamingQuery") with Logging {
@@ -32,7 +32,7 @@ private[sql] class StreamingQueryTab(
   attachPage(new StreamingQueryStatisticsPage(this))
   parent.attachTab(this)
 
-  parent.addStaticHandler(StreamingQueryTab.STATIC_RESOURCE_DIR, "/static/sql")
+  parent.addStaticHandler(StreamingQueryTab.STATIC_RESOURCE_DIR, s"$PATH_PREFIX/static/sql")
 
   override def displayOrder: Int = 2
 }
