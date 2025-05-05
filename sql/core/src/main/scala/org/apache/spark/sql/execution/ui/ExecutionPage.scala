@@ -28,6 +28,7 @@ import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_SQL_GROUP_SUB_EXECUTION_ENABLED
 import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.UIUtils.PATH_PREFIX
 
 class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
 
@@ -137,6 +138,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
 
   private def planVisualizationResources(request: HttpServletRequest): Seq[Node] = {
+    <script>{ scala.xml.Unparsed(s"window.pathPrefix = '${xml.Utility.escape(PATH_PREFIX)}';") }</script>
     // scalastyle:off
     <link rel="stylesheet" href={UIUtils.prependBaseUri(request, "/static/sql/spark-sql-viz.css")} type="text/css"/>
     <script src={UIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>

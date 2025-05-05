@@ -42,6 +42,9 @@ private[spark] object UIUtils extends Logging {
   val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-sm"
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
   val TABLE_CLASS_STRIPED_SORTABLE = TABLE_CLASS_STRIPED + " sortable"
+  val PATH_PREFIX = sys.env.get("SPARK_UI_PATH_PREFIX")
+    .getOrElse("/api/spark-ui")
+    .replaceAll("/+$", "")
 
   private val dateTimeFormatter = DateTimeFormatter
     .ofPattern("yyyy/MM/dd HH:mm:ss", Locale.US)
@@ -194,6 +197,7 @@ private[spark] object UIUtils extends Logging {
       .orElse(sys.env.get("APPLICATION_WEB_PROXY_BASE"))
       .orElse(knoxBasePath)
       .getOrElse("")
+      .replaceAll("/+$", "") + PATH_PREFIX
   }
 
   def prependBaseUri(

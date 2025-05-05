@@ -16,6 +16,7 @@
  */
 
 /* global $, d3, dagreD3, graphlibDot */
+const pathPrefix = window.pathPrefix;
 
 var PlanVizConstants = {
   svgMarginX: 16,
@@ -323,7 +324,7 @@ document.getElementById("plan-viz-download-btn").addEventListener("click", async
     const svg = planVizContainer().select("svg").node().cloneNode(true);
     let css = "";
     try {
-      css = await fetch("/static/sql/spark-sql-viz.css").then((resp) => resp.text());
+      css = await fetch(pathPrefix + "/static/sql/spark-sql-viz.css").then((resp) => resp.text());
     } catch (e) {
       console.error("Failed to fetch CSS for SVG download", e);
     }

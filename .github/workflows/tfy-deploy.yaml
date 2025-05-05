@@ -1,0 +1,32 @@
+name: Deploy to TrueFoundry
+
+on:
+  push:
+    branches:
+      - 'main'
+
+env:
+  TFY_HOST: https://internal.devtest.truefoundry.tech
+  TFY_API_KEY: ${{ secrets.TFY_API_KEY }}
+  APPLICATION_FQN: tfy-usea1-devtest:truefoundry:spark-history-server
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install dependencies
+        run: |
+          pip install "truefoundry<1.0.0"
+
+      - name: Patch the commit sha
+        run: |
+          tfy patch-application --application-fqn ${{ env.APPLICATION_FQN }} --patch='{"image": {"build_source": {"ref": "${{ github.sha }}"}}}'

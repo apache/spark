@@ -33,7 +33,7 @@ private[sql] class StreamingQueryTab(
   parent.attachTab(this)
 
   parent.addStaticHandler(StreamingQueryTab.STATIC_RESOURCE_DIR, "/static/sql")
-
+  
   override def displayOrder: Int = 2
 }
 
