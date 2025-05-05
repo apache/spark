@@ -610,7 +610,8 @@ private[sql] class RocksDBStateStoreProvider
 
   override def stateStoreId: StateStoreId = stateStoreId_
 
-  private lazy val stateMachine: RocksDBStateStoreProviderStateMachine =
+  // Exposed for testing
+  private[state] lazy val stateMachine: RocksDBStateStoreProviderStateMachine =
     new RocksDBStateStoreProviderStateMachine(stateStoreId, RocksDBConf(storeConf))
 
   /**

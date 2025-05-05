@@ -21,6 +21,9 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import javax.annotation.concurrent.GuardedBy
 
+import scala.ref.WeakReference
+
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
@@ -70,11 +73,15 @@ class RocksDBStateStoreProviderStateMachine(
   private var state: STATE = RELEASED
   @GuardedBy("instanceLock")
   private var acquiredThreadInfo: AcquiredThreadInfo = _
+  // Exposed for testing
+  private[spark] def getAcquiredThreadInfo: Option[AcquiredThreadInfo] = instanceLock.synchronized {
+    Option(acquiredThreadInfo).map(_.copy())
+  }
 
   // Can be read without holding any locks, but should only be updated when
   // instanceLock is held.
   // -1 indicates that the store is not locked.
-  private[sql] val currentValidStamp = new AtomicLong(-1L)
+  private[state] val currentValidStamp = new AtomicLong(-1L)
   @GuardedBy("instanceLock")
   private var lastValidStamp: Long = 0L
 
@@ -185,5 +192,20 @@ class RocksDBStateStoreProviderStateMachine(
   def closeStore(): Unit = instanceLock.synchronized {
     awaitNotLocked(CLOSE)
     validateAndTransitionState(CLOSE)
+  }
+}
+
+case class AcquiredThreadInfo(
+  threadRef: WeakReference[Thread] = new WeakReference[Thread](Thread.currentThread()),
+  tc: TaskContext = TaskContext.get()) {
+  override def toString(): String = {
+    val taskStr = if (tc != null) {
+      val taskDetails =
+        s"partition ${tc.partitionId()}.${tc.attemptNumber()} in stage " +
+          s"${tc.stageId()}.${tc.stageAttemptNumber()}, TID ${tc.taskAttemptId()}"
+      s", task: $taskDetails"
+    } else ""
+
+    s"[ThreadId: ${threadRef.get.map(_.getId)}$taskStr]"
   }
 }

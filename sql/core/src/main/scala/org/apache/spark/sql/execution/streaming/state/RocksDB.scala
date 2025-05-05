@@ -23,11 +23,9 @@ import java.util.Set
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
-import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
 import scala.jdk.CollectionConverters.ConcurrentMapHasAsScala
-import scala.ref.WeakReference
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
@@ -148,8 +146,6 @@ class RocksDB(
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
 
-  private val acquireLock = new Object
-
   @volatile private var db: NativeRocksDB = _
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
   private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
@@ -185,24 +181,15 @@ class RocksDB(
 
   // SPARK-46249 - Keep track of recorded metrics per version which can be used for querying later
   // Updates and access to recordedMetrics are protected by the DB instance lock
-  @GuardedBy("acquireLock")
   @volatile private var recordedMetrics: Option[RocksDBMetrics] = None
 
-  @GuardedBy("acquireLock")
-  @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
-
   // This is accessed and updated only between load and commit
-  // which means it is implicitly guarded by acquireLock
-  @GuardedBy("acquireLock")
   private val colFamilyNameToInfoMap = new ConcurrentHashMap[String, ColumnFamilyInfo]()
 
-  @GuardedBy("acquireLock")
   private val colFamilyIdToNameMap = new ConcurrentHashMap[Short, String]()
 
-  @GuardedBy("acquireLock")
   private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(-1)
 
-  @GuardedBy("acquireLock")
   private val shouldForceSnapshot: AtomicBoolean = new AtomicBoolean(false)
 
   private def getColumnFamilyInfo(cfName: String): ColumnFamilyInfo = {
@@ -294,7 +281,6 @@ class RocksDB(
   // This mapping should only be updated using the Task thread - at version load and commit time.
   // If same mapping instance is updated from different threads,
   // it will result in undefined behavior (and most likely incorrect mapping state).
-  @GuardedBy("acquireLock")
   private val rocksDBFileMapping: RocksDBFileMapping = new RocksDBFileMapping()
 
   // We send snapshots that needs to be uploaded by the maintenance thread to this queue
@@ -1215,7 +1201,6 @@ class RocksDB(
 
   /** Release all resources */
   def close(): Unit = {
-    // Acquire DB instance lock and release at the end to allow for synchronized access
     try {
       closeDB()
 
@@ -1364,11 +1349,6 @@ class RocksDB(
       }
       db = null
     }
-  }
-
-  private[state] def getAcquiredThreadInfo(): Option[AcquiredThreadInfo] =
-      acquireLock.synchronized {
-    Option(acquiredThreadInfo).map(_.copy())
   }
 
   /** Upload the snapshot to DFS and remove it from snapshots pending */
@@ -1924,21 +1904,6 @@ object RocksDBNativeHistogram {
       nativeHist.getPercentile95,
       nativeHist.getPercentile99,
       nativeHist.getCount)
-  }
-}
-
-case class AcquiredThreadInfo(
-    threadRef: WeakReference[Thread] = new WeakReference[Thread](Thread.currentThread()),
-    tc: TaskContext = TaskContext.get()) {
-  override def toString(): String = {
-    val taskStr = if (tc != null) {
-      val taskDetails =
-        s"partition ${tc.partitionId()}.${tc.attemptNumber()} in stage " +
-          s"${tc.stageId()}.${tc.stageAttemptNumber()}, TID ${tc.taskAttemptId()}"
-      s", task: $taskDetails"
-    } else ""
-
-    s"[ThreadId: ${threadRef.get.map(_.getId)}$taskStr]"
   }
 }
 
