@@ -10,7 +10,6 @@ sql/connect/common/src/test/resources/artifact-tests/smallJar.jar
 sql/core/src/test/resources/SPARK-33084.jar
 sql/core/src/test/resources/artifact-tests/udf_noA.jar
 sql/hive-thriftserver/src/test/resources/TestUDTF.jar
-sql/hive/src/test/noclasspath/hive-test-udfs.jar
 sql/hive/src/test/resources/SPARK-21101-1.0.jar
 sql/hive/src/test/resources/TestUDTF.jar
 sql/hive/src/test/resources/data/files/TestSerDe.jar
