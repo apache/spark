@@ -1755,7 +1755,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     assert(encoderSpec == deserializedEncoderSpec)
   }
 
-  test("SPARK-52008: TaskCompletionListener aborts store") {
+  test("SPARK-52008: TaskCompletionListener fails if store isn't committed/aborted") {
     // Create a custom ExecutionContext with 1 thread
     implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(
       ThreadUtils.newDaemonSingleThreadExecutor("single-thread-executor"))
@@ -1778,7 +1778,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       val ex = intercept[SparkException] {
         ThreadUtils.awaitResult(fut, timeout)
       }
-      assert(ex.getMessage.contains("STATE_STORE_UPDATING_AFTER_TASK_COMPLETION"))
+      assert(ex.getCause.getMessage.contains("STATE_STORE_UPDATING_AFTER_TASK_COMPLETION"))
       assert(taskContext.isFailed())
     }
   }
