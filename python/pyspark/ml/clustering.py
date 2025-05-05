@@ -1582,10 +1582,9 @@ class DistributedLDAModel(LDAModel, JavaMLReadable["DistributedLDAModel"], JavaM
 
         .. warning:: This involves collecting a large :py:func:`topicsMatrix` to the driver.
         """
-        model = LocalLDAModel(RemoteModelRef(self._call_java("toLocal")))
         if is_remote():
-            return model
-
+            return LocalLDAModel(RemoteModelRef(self._call_java("toLocal")))
+        model = LocalLDAModel(self._call_java("toLocal"))
         # SPARK-10931: Temporary fix to be removed once LDAModel defines Params
         model._create_params_from_java()
         model._transfer_params_from_java()
