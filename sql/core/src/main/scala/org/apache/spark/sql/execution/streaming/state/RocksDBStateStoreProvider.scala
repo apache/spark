@@ -67,6 +67,7 @@ private[sql] class RocksDBStateStoreProvider
     case object UPDATING extends STATE
     case object COMMITTED extends STATE
     case object ABORTED extends STATE
+    case object RELEASED extends STATE
 
     private sealed trait TRANSITION
     private case object UPDATE extends TRANSITION
@@ -75,10 +76,6 @@ private[sql] class RocksDBStateStoreProvider
     private case object METRICS extends TRANSITION
 
     @volatile private var state: STATE = UPDATING
-
-    override def getReadStamp: Long = {
-      stamp
-    }
 
     /**
      * Validates the expected state, throws exception if state is not as expected.
@@ -497,6 +494,18 @@ private[sql] class RocksDBStateStoreProvider
       }
       result
     }
+
+    override def release(): Unit = {
+      if (state != RELEASED) {
+        logInfo(log"Releasing ${MDC(VERSION_NUM, version + 1)} " +
+          log"for ${MDC(STATE_STORE_ID, id)}")
+        rocksDB.release()
+        state = RELEASED
+      } else {
+        // Optionally log at DEBUG level that it's already released
+        logDebug(log"State store already released")
+      }
+    }
   }
 
   // Test-visible method to fetch the internal RocksDBStateStore class
@@ -600,11 +609,6 @@ private[sql] class RocksDBStateStoreProvider
         throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
 
-      // Determine stamp - either use existing or acquire new
-      val stamp = existingStore.map(_.getReadStamp).getOrElse {
-        stateMachine.acquireStore()
-      }
-
       try {
         // Load RocksDB store
         rocksDB.load(
@@ -620,11 +624,13 @@ private[sql] class RocksDBStateStoreProvider
           case Some(_) =>
             throw new IllegalArgumentException("Existing store must be a RocksDBStateStore")
           case None =>
+            val stamp = stateMachine.acquireStore()
             // Create new store instance for getStore/getReadStore cases
             new RocksDBStateStore(version, stamp)
         }
       } catch {
         case e: Throwable =>
+          val stamp = stateMachine.acquireStore()
           stateMachine.releaseStore(stamp)
           throw e
       }
@@ -645,7 +651,7 @@ private[sql] class RocksDBStateStoreProvider
     loadStateStore(version, uniqueId, readOnly = false)
   }
 
-  override def getWriteStore(
+  override def upgradeReadStoreToWriteStore(
       readStore: ReadStateStore,
       version: Long,
       uniqueId: Option[String] = None): StateStore = {
