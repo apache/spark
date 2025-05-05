@@ -334,23 +334,36 @@ object Connect {
     }
   }
 
-  val CONNECT_SESSION_CONNECT_ML_CACHE_MAX_SIZE =
-    buildConf("spark.connect.session.connectML.mlCache.maxSize")
-      .doc("Maximum size of the MLCache per session. The cache will evict the least recently" +
-        "used models if the size exceeds this limit. The size is in bytes.")
+  val CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_MAX_IN_MEMORY_SIZE =
+    buildConf("spark.connect.session.connectML.mlCache.offloading.maxInMemorySize")
+      .doc(
+        "In-memory maximum size of the MLCache per session. The cache will offload the least " +
+          "recently used models to Spark driver local disk if the size exceeds this limit. " +
+          "The size is in bytes. This configuration only works when " +
+          "'spark.connect.session.connectML.mlCache.offloading.enabled' is 'true'.")
       .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)
       // By default, 1/3 of total designated memory (the configured -Xmx).
       .createWithDefault(Runtime.getRuntime.maxMemory() / 3)
 
-  val CONNECT_SESSION_CONNECT_ML_CACHE_TIMEOUT =
-    buildConf("spark.connect.session.connectML.mlCache.timeout")
+  val CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_TIMEOUT =
+    buildConf("spark.connect.session.connectML.mlCache.offloading.timeout")
       .doc(
-        "Timeout of models in MLCache. Models will be evicted from the cache if they are not " +
-          "used for this amount of time. The timeout is in minutes.")
+        "Timeout of model offloading in MLCache. Models will be offloaded to Spark driver local " +
+          "disk if they are not used for this amount of time. The timeout is in minutes. " +
+          "This configuration only works when " +
+          "'spark.connect.session.connectML.mlCache.offloading.enabled' is 'true'.")
       .version("4.1.0")
       .internal()
       .timeConf(TimeUnit.MINUTES)
-      .createWithDefault(15)
+      .createWithDefault(5)
+
+  val CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED =
+    buildConf("spark.connect.session.connectML.mlCache.offloading.enabled")
+      .doc("Enables ML cache offloading.")
+      .version("4.1.0")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
 }

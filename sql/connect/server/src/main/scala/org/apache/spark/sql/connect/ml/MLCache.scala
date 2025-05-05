@@ -16,17 +16,20 @@
  */
 package org.apache.spark.sql.connect.ml
 
+import java.io.File
+import java.nio.file.{Files, Path, Paths}
 import java.util.UUID
-import java.util.concurrent.{ConcurrentMap, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
 import com.google.common.cache.{CacheBuilder, RemovalNotification}
+import org.apache.commons.io.FileUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.Model
-import org.apache.spark.ml.util.ConnectHelper
+import org.apache.spark.ml.util.{ConnectHelper, MLWritable, Summary}
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.SessionHolder
 
@@ -36,30 +39,55 @@ import org.apache.spark.sql.connect.service.SessionHolder
 private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   private val helper = new ConnectHelper()
   private val helperID = "______ML_CONNECT_HELPER______"
+  private val modelClassNameFile = "__model_class_name__"
 
-  private def getMaxCacheSizeKB: Long = {
-    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MAX_SIZE) / 1024
+  // TODO: rename it to `totalInMemorySizeBytes` because it only counts the in-memory
+  //  part data size.
+  private[ml] val totalSizeBytes: AtomicLong = new AtomicLong(0)
+
+  val offloadedModelsDir: Path = {
+    val path = Paths.get(
+      System.getProperty("java.io.tmpdir"),
+      "spark_connect_model_cache",
+      sessionHolder.sessionId)
+    Files.createDirectories(path)
+  }
+  private[spark] def getOffloadingEnabled: Boolean = {
+    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED)
   }
 
-  private def getTimeoutMinute: Long = {
-    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_TIMEOUT)
+  private def getMaxInMemoryCacheSizeKB: Long = {
+    sessionHolder.session.conf.get(
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_MAX_IN_MEMORY_SIZE) / 1024
+  }
+
+  private def getOffloadingTimeoutMinute: Long = {
+    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_TIMEOUT)
   }
 
   private[ml] case class CacheItem(obj: Object, sizeBytes: Long)
-  private[ml] val cachedModel: ConcurrentMap[String, CacheItem] = CacheBuilder
-    .newBuilder()
-    .softValues()
-    .maximumWeight(getMaxCacheSizeKB)
-    .expireAfterAccess(getTimeoutMinute, TimeUnit.MINUTES)
-    .weigher((key: String, value: CacheItem) => {
-      Math.ceil(value.sizeBytes.toDouble / 1024).toInt
-    })
-    .removalListener((removed: RemovalNotification[String, CacheItem]) =>
-      totalSizeBytes.addAndGet(-removed.getValue.sizeBytes))
-    .build[String, CacheItem]()
-    .asMap()
+  private[ml] val cachedModel: ConcurrentMap[String, CacheItem] = {
+    if (getOffloadingEnabled) {
+      CacheBuilder
+        .newBuilder()
+        .softValues()
+        .removalListener((removed: RemovalNotification[String, CacheItem]) =>
+          totalSizeBytes.addAndGet(-removed.getValue.sizeBytes))
+        .maximumWeight(getMaxInMemoryCacheSizeKB)
+        .weigher((key: String, value: CacheItem) => {
+          Math.ceil(value.sizeBytes.toDouble / 1024).toInt
+        })
+        .expireAfterAccess(getOffloadingTimeoutMinute, TimeUnit.MINUTES)
+        .build[String, CacheItem]()
+        .asMap()
+    } else {
+      new ConcurrentHashMap[String, CacheItem]()
+    }
+  }
 
-  private[ml] val totalSizeBytes: AtomicLong = new AtomicLong(0)
+  private[ml] val cachedSummary: ConcurrentMap[String, Summary] = {
+    new ConcurrentHashMap[String, Summary]()
+  }
 
   private def estimateObjectSize(obj: Object): Long = {
     obj match {
@@ -67,7 +95,18 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
         model.asInstanceOf[Model[_]].estimatedSize
       case _ =>
         // There can only be Models in the cache, so we should never reach here.
-        1
+        throw new RuntimeException(f"Unexpected model object type.")
+    }
+  }
+
+  private[spark] def checkSummaryAvail(): Unit = {
+    if (getOffloadingEnabled) {
+      throw MlUnsupportedException(
+        "SparkML 'model.summary' and 'model.evaluate' APIs are not supported' when " +
+          "Spark Connect session ML cache offloading is enabled. You can use APIs in " +
+          "'pyspark.ml.evaluation' instead, or you can set Spark config " +
+          "'spark.connect.session.connectML.mlCache.offloading.enabled' to 'false' to " +
+          "disable Spark Connect session ML cache offloading.")
     }
   }
 
@@ -80,9 +119,26 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
    */
   def register(obj: Object): String = {
     val objectId = UUID.randomUUID().toString
-    val sizeBytes = estimateObjectSize(obj)
-    totalSizeBytes.addAndGet(sizeBytes)
-    cachedModel.put(objectId, CacheItem(obj, sizeBytes))
+
+    if (obj.isInstanceOf[Summary]) {
+      checkSummaryAvail()
+      cachedSummary.put(objectId, obj.asInstanceOf[Summary])
+    } else if (obj.isInstanceOf[Model[_]]) {
+      val sizeBytes = if (getOffloadingEnabled) {
+        estimateObjectSize(obj)
+      } else {
+        0L // Don't need to calculate size if disables offloading.
+      }
+      cachedModel.put(objectId, CacheItem(obj, sizeBytes))
+      if (getOffloadingEnabled) {
+        val savePath = offloadedModelsDir.resolve(objectId)
+        obj.asInstanceOf[MLWritable].write.saveToLocal(savePath.toString)
+        Files.writeString(savePath.resolve(modelClassNameFile), obj.getClass.getName)
+      }
+      totalSizeBytes.addAndGet(sizeBytes)
+    } else {
+      throw new RuntimeException("'MLCache.register' only accepts model or summary objects.")
+    }
     objectId
   }
 
@@ -97,8 +153,41 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     if (refId == helperID) {
       helper
     } else {
-      Option(cachedModel.get(refId)).map(_.obj).orNull
+      var obj: Object =
+        Option(cachedModel.get(refId)).map(_.obj).getOrElse(cachedSummary.get(refId))
+      if (obj == null && getOffloadingEnabled) {
+        val loadPath = offloadedModelsDir.resolve(refId)
+        if (Files.isDirectory(loadPath)) {
+          val className = Files.readString(loadPath.resolve(modelClassNameFile))
+          obj = MLUtils.loadTransformer(
+            sessionHolder,
+            className,
+            loadPath.toString,
+            loadFromLocal = true)
+          val sizeBytes = estimateObjectSize(obj)
+          cachedModel.put(refId, CacheItem(obj, sizeBytes))
+          totalSizeBytes.addAndGet(sizeBytes)
+        }
+      }
+      obj
     }
+  }
+
+  def _removeModel(refId: String): Boolean = {
+    val removedModel = cachedModel.remove(refId)
+    val removedFromMem = removedModel != null
+    val removedFromDisk = if (getOffloadingEnabled) {
+      val offloadingPath = new File(offloadedModelsDir.resolve(refId).toString)
+      if (offloadingPath.exists()) {
+        FileUtils.deleteDirectory(offloadingPath)
+        true
+      } else {
+        false
+      }
+    } else {
+      false
+    }
+    removedFromMem || removedFromDisk
   }
 
   /**
@@ -107,9 +196,14 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
    *   the key used to look up the corresponding object
    */
   def remove(refId: String): Boolean = {
-    val removed = cachedModel.remove(refId)
-    // remove returns null if the key is not present
-    removed != null
+    val modelIsRemoved = _removeModel(refId)
+
+    if (modelIsRemoved) {
+      true
+    } else {
+      val removedSummary = cachedSummary.remove(refId)
+      removedSummary != null
+    }
   }
 
   /**
@@ -118,6 +212,10 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   def clear(): Int = {
     val size = cachedModel.size()
     cachedModel.clear()
+    cachedSummary.clear()
+    if (getOffloadingEnabled) {
+      FileUtils.cleanDirectory(new File(offloadedModelsDir.toString))
+    }
     size
   }
 
