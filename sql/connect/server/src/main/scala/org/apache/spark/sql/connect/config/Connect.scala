@@ -375,7 +375,8 @@ object Connect {
 
   val CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_SIZE =
     buildConf("spark.connect.session.connectML.mlCache.memoryControl.maxSize")
-      .doc("Maximum total size of the ml cache. The size is in bytes.")
+      .doc("Maximum total size (including in-memory and offloaded data) of the ml cache. " +
+        "The size is in bytes.")
       .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)
