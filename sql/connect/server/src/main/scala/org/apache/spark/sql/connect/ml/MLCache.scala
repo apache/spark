@@ -41,7 +41,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   private val helperID = "______ML_CONNECT_HELPER______"
   private val modelClassNameFile = "__model_class_name__"
 
-  private[ml] val totalInMemorySizeBytes: AtomicLong = new AtomicLong(0)
+  private[ml] val totalMLCacheInMemorySizeBytes: AtomicLong = new AtomicLong(0)
 
   val offloadedModelsDir: Path = {
     val path = Paths.get(
@@ -72,7 +72,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
         .newBuilder()
         .softValues()
         .removalListener((removed: RemovalNotification[String, CacheItem]) =>
-          totalInMemorySizeBytes.addAndGet(-removed.getValue.sizeBytes))
+          totalMLCacheInMemorySizeBytes.addAndGet(-removed.getValue.sizeBytes))
         .maximumWeight(getMaxInMemoryCacheSizeKB)
         .weigher((key: String, value: CacheItem) => {
           Math.ceil(value.sizeBytes.toDouble / 1024).toInt
@@ -101,19 +101,10 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
 
   def checkModelSize(estimatedModelSize: Long): Unit = {
     if (totalMLCacheSizeBytes.get() + estimatedModelSize > getMLCacheMaxSize) {
-      throw MLCacheSizeOverflowException(
-        "The model cache size in current session is about to exceed" +
-          f"$getMLCacheMaxSize bytes. " +
-          "Please delete existing cached model by executing 'del model' in python client " +
-          "before fitting new model or loading new model, or increase " +
-          "Spark config 'spark.connect.session.connectML.mlCache.memoryControl.maxSize'.")
+      throw MLCacheSizeOverflowException(getMLCacheMaxSize)
     }
     if (estimatedModelSize > getModelMaxSize) {
-      throw MLModelSizeOverflowException(
-        f"The fitted or loaded model size exceeds $getModelMaxSize bytes. " +
-          f"Please fit or load a model smaller than $getModelMaxSize bytes. " +
-          f"or increase Spark config " +
-          f"'spark.connect.session.connectML.mlCache.memoryControl.maxModelSize'.")
+      throw MLModelSizeOverflowException(getModelMaxSize)
     }
   }
 
@@ -157,14 +148,14 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
         checkModelSize(_sizeBytes)
         _sizeBytes
       } else {
-        0L // Don't need to calculate size if disables offloading.
+        0L // Don't need to calculate size if disables memory-control.
       }
       cachedModel.put(objectId, CacheItem(obj, sizeBytes))
       if (getMemoryControlEnabled) {
         val savePath = offloadedModelsDir.resolve(objectId)
         obj.asInstanceOf[MLWritable].write.saveToLocal(savePath.toString)
         Files.writeString(savePath.resolve(modelClassNameFile), obj.getClass.getName)
-        totalInMemorySizeBytes.addAndGet(sizeBytes)
+        totalMLCacheInMemorySizeBytes.addAndGet(sizeBytes)
         totalMLCacheSizeBytes.addAndGet(sizeBytes)
       }
     } else {
@@ -197,7 +188,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
             loadFromLocal = true)
           val sizeBytes = estimateObjectSize(obj)
           cachedModel.put(refId, CacheItem(obj, sizeBytes))
-          totalInMemorySizeBytes.addAndGet(sizeBytes)
+          totalMLCacheInMemorySizeBytes.addAndGet(sizeBytes)
         }
       }
       obj

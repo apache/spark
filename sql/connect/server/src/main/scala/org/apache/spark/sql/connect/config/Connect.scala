@@ -367,7 +367,7 @@ object Connect {
 
   val CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE =
     buildConf("spark.connect.session.connectML.mlCache.memoryControl.maxModelSize")
-      .doc("Maximum size of the SparkML model. The size is in bytes.")
+      .doc("Maximum size of a single SparkML model. The size is in bytes.")
       .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)

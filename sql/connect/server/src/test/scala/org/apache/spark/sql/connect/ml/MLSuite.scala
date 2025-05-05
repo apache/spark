@@ -397,16 +397,16 @@ class MLSuite extends MLHelper {
     val modelIdList = scala.collection.mutable.ListBuffer[String]()
     modelIdList.append(trainLogisticRegressionModel(sessionHolder))
     assert(sessionHolder.mlCache.cachedModel.size() == 1)
-    assert(sessionHolder.mlCache.totalInMemorySizeBytes.get() > 0)
-    val modelSizeBytes = sessionHolder.mlCache.totalInMemorySizeBytes.get()
+    assert(sessionHolder.mlCache.totalMLCacheInMemorySizeBytes.get() > 0)
+    val modelSizeBytes = sessionHolder.mlCache.totalMLCacheInMemorySizeBytes.get()
     val maxNumModels = memorySizeBytes / modelSizeBytes.toInt
 
     // All models will be kept if the total size is less than the memory limit.
     for (i <- 1 until maxNumModels) {
       modelIdList.append(trainLogisticRegressionModel(sessionHolder))
       assert(sessionHolder.mlCache.cachedModel.size() == i + 1)
-      assert(sessionHolder.mlCache.totalInMemorySizeBytes.get() > 0)
-      assert(sessionHolder.mlCache.totalInMemorySizeBytes.get() <= memorySizeBytes)
+      assert(sessionHolder.mlCache.totalMLCacheInMemorySizeBytes.get() > 0)
+      assert(sessionHolder.mlCache.totalMLCacheInMemorySizeBytes.get() <= memorySizeBytes)
     }
 
     // Old models will be offloaded
@@ -414,8 +414,8 @@ class MLSuite extends MLHelper {
     for (_ <- 0 until 3) {
       modelIdList.append(trainLogisticRegressionModel(sessionHolder))
       assert(sessionHolder.mlCache.cachedModel.size() == maxNumModels)
-      assert(sessionHolder.mlCache.totalInMemorySizeBytes.get() > 0)
-      assert(sessionHolder.mlCache.totalInMemorySizeBytes.get() <= memorySizeBytes)
+      assert(sessionHolder.mlCache.totalMLCacheInMemorySizeBytes.get() > 0)
+      assert(sessionHolder.mlCache.totalMLCacheInMemorySizeBytes.get() <= memorySizeBytes)
     }
 
     // Assert all models can be loaded back from disk after they are offloaded.
