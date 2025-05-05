@@ -112,7 +112,7 @@ class Option:
 #
 # NOTE: if you are fixing or adding an option here, make sure you execute `show_options()` and
 #     copy & paste the results into show_options
-#     'docs/source/user_guide/pandas_on_spark/options.rst' as well.
+#     'python/docs/source/tutorial/pandas_on_spark/options.rst' as well.
 #     See the examples below:
 #     >>> from pyspark.pandas.config import show_options
 #     >>> show_options()

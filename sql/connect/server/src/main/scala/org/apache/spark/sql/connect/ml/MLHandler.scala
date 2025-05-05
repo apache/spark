@@ -28,6 +28,7 @@ import org.apache.spark.ml.tree.TreeConfig
 import org.apache.spark.ml.util.{MLWritable, Summary}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.ml.Serializer.deserializeMethodArguments
 import org.apache.spark.sql.connect.service.SessionHolder
 
@@ -43,7 +44,7 @@ private class AttributeHelper(
     val sessionHolder: SessionHolder,
     val objRef: String,
     val methods: Array[Method]) {
-  protected lazy val instance = {
+  protected def instance(): Object = {
     val obj = sessionHolder.mlCache.get(objRef)
     if (obj == null) {
       throw MLCacheInvalidException(s"object $objRef")
@@ -53,7 +54,10 @@ private class AttributeHelper(
   // Get the attribute by reflection
   def getAttribute: Any = {
     assert(methods.length >= 1)
-    methods.foldLeft(instance) { (obj, m) =>
+    methods.foldLeft(instance()) { (obj, m) =>
+      if (obj.isInstanceOf[Summary]) {
+        sessionHolder.mlCache.checkSummaryAvail()
+      }
       if (m.argValues.isEmpty) {
         MLUtils.invokeMethodAllowed(obj, m.name)
       } else {
@@ -72,7 +76,7 @@ private class ModelAttributeHelper(
 
   def transform(relation: proto.MlRelation.Transform): DataFrame = {
     // Create a copied model to avoid concurrently modify model params.
-    val model = instance.asInstanceOf[Model[_]]
+    val model = instance().asInstanceOf[Model[_]]
     val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
     MLUtils.setInstanceParams(copiedModel, relation.getParams)
     val inputDF = MLUtils.parseRelationProto(relation.getInput, sessionHolder)
@@ -128,6 +132,8 @@ private[connect] object MLHandler extends Logging {
 
     mlCommand.getCommandCase match {
       case proto.MlCommand.CommandCase.FIT =>
+        val offloadingEnabled = sessionHolder.session.conf.get(
+          Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED)
         val fitCmd = mlCommand.getFit
         val estimatorProto = fitCmd.getEstimator
         assert(estimatorProto.getType == proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR)
@@ -136,13 +142,28 @@ private[connect] object MLHandler extends Logging {
         val estimator =
           MLUtils.getEstimator(sessionHolder, estimatorProto, Some(fitCmd.getParams))
 
-        try {
-          val estimatedModelSize = estimator.estimateModelSize(dataset)
-          mlCache.checkModelSize(estimatedModelSize)
-        } catch {
-          case _: UnsupportedOperationException => ()
+        if (offloadingEnabled) {
+          try {
+            val estimatedModelSize = estimator.estimateModelSize(dataset)
+            mlCache.checkModelSize(estimatedModelSize)
+          } catch {
+            case _: UnsupportedOperationException => ()
+          }
+          if (estimator.getClass.getName == "org.apache.spark.ml.fpm.FPGrowth") {
+            throw MlUnsupportedException(
+              "FPGrowth algorithm is not supported " +
+                "if Spark Connect model cache offloading is enabled.")
+          }
+          if (estimator.getClass.getName == "org.apache.spark.ml.clustering.LDA"
+            && estimator
+              .asInstanceOf[org.apache.spark.ml.clustering.LDA]
+              .getOptimizer
+              .toLowerCase() == "em") {
+            throw MlUnsupportedException(
+              "LDA algorithm with 'em' optimizer is not supported " +
+                "if Spark Connect model cache offloading is enabled.")
+          }
         }
-
         val model = estimator.fit(dataset).asInstanceOf[Model[_]]
         val id = mlCache.register(model)
         proto.MlCommandResult
