@@ -221,6 +221,11 @@ object StateStoreErrors {
   def stateStoreOperationOutOfOrder(errorMsg: String): StateStoreOperationOutOfOrder = {
     new StateStoreOperationOutOfOrder(errorMsg)
   }
+
+  def stateStoreUpdatingAfterTaskCompletion(stateStoreId: StateStoreId):
+    StateStoreUpdatingAfterTaskCompletion = {
+    new StateStoreUpdatingAfterTaskCompletion(stateStoreId.toString)
+  }
 }
 
 class StateStoreDuplicateStateVariableDefined(stateVarName: String)
@@ -454,4 +459,10 @@ class StateStoreOperationOutOfOrder(errorMsg: String)
   extends SparkRuntimeException(
     errorClass = "STATE_STORE_OPERATION_OUT_OF_ORDER",
     messageParameters = Map("errorMsg" -> errorMsg)
+  )
+
+class StateStoreUpdatingAfterTaskCompletion(stateStoreID: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_UPDATING_AFTER_TASK_COMPLETION",
+    messageParameters = Map("stateStoreId" -> stateStoreID)
   )

@@ -24,6 +24,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
@@ -48,7 +49,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 // MaintenanceErrorOnCertainPartitionsProvider is a test-only provider that throws an
 // exception during maintenance for partitions 0 and 1 (these are arbitrary choices). It is
@@ -1716,6 +1717,34 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
     val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
     assert(encoderSpec == deserializedEncoderSpec)
+  }
+
+  test("SPARK-52008: TaskCompletionListener aborts store") {
+    // Create a custom ExecutionContext with 1 thread
+    implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(
+      ThreadUtils.newDaemonSingleThreadExecutor("single-thread-executor"))
+    val timeout = 5.seconds
+
+    tryWithProviderResource(newStoreProvider()) { provider: StateStoreProvider =>
+      val taskContext = TaskContext.empty()
+      var store: StateStore = null
+
+      val fut = Future {
+        TaskContext.setTaskContext(taskContext)
+
+        store = provider.getStore(0)
+
+        // Task completion listener should unlock
+        taskContext.markTaskCompleted(
+          Some(new SparkException("Task failure injection")))
+      }
+
+      val ex = intercept[SparkException] {
+        ThreadUtils.awaitResult(fut, timeout)
+      }
+      assert(ex.getMessage.contains("STATE_STORE_UPDATING_AFTER_TASK_COMPLETION"))
+      assert(taskContext.isFailed())
+    }
   }
 
   /** Return a new provider with a random id */
