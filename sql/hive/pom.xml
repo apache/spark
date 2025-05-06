@@ -147,15 +147,14 @@
       <artifactId>hive-standalone-metastore-server</artifactId>
       <scope>test</scope>
     </dependency>
-    <!--dependency>
+    <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-parser</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.calcite</groupId>
       <artifactId>calcite-core</artifactId>
-      <scope>runtime</scope>
-    </dependency-->
+    </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-hdfs</artifactId>
@@ -203,6 +202,10 @@
       <artifactId>datanucleus-core</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.datanucleus</groupId>
+      <artifactId>datanucleus-api-jdo</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client-runtime</artifactId>
       <scope>${hadoop.deps.scope}</scope>
@@ -214,6 +217,16 @@
     <dependency>
       <groupId>org.apache.thrift</groupId>
       <artifactId>libfb303</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.esotericsoftware.kryo</groupId>
+      <artifactId>kryo5</artifactId>
+      <version>5.5.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.jodd</groupId>
+      <artifactId>jodd-util</artifactId>
+      <version>6.0.0</version>
     </dependency>
     <dependency>
       <groupId>org.apache.derby</groupId>

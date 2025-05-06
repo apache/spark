@@ -338,7 +338,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
   }
 
   test("listTables(database)") {
-    assert((client.listTables("default") diff Seq("src", "temporary", "view1")) === Nil)
+    assert(client.listTables("default").toSet === Set("src", "temporary", "view1"))
   }
 
   test("listTables(database, pattern)") {

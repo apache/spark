@@ -210,6 +210,7 @@ private[hive] class IsolatedClientLoader(
       name.startsWith("org.apache.hadoop.") && !name.startsWith("org.apache.hadoop.hive.")
 
     name.startsWith("org.slf4j") ||
+    name.startsWith("org.apache.derby.") || // derby JDBC for embedded HMS
     name.startsWith("org.apache.log4j") || // log4j1.x
     name.startsWith("org.apache.logging.log4j") || // log4j2
     name.startsWith("org.apache.spark.") ||

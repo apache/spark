@@ -36,6 +36,7 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{HiveMetaStoreClient, IMetaStoreClient, RetryingMetaStoreClient, TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, Table => MetaStoreApiTable, _}
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf
+import org.apache.hadoop.hive.metastore.conf.MetastoreConf.ConfVars.{AUTO_CREATE_ALL, METASTORE_METADATA_TRANSFORMER_CLASS, SCHEMA_VERIFICATION, STATS_AUTO_GATHER}
 import org.apache.hadoop.hive.ql.IDriver
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -67,6 +68,7 @@ import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -210,10 +212,12 @@ private[hive] class HiveClientImpl(
         (msConnUrl != null && msConnUrl.startsWith("jdbc:derby"))
     }
     if (isEmbeddedMetaStore) {
-      MetastoreConf.setBoolVar(hiveConf, MetastoreConf.ConfVars.SCHEMA_VERIFICATION, false)
-      MetastoreConf.setBoolVar(hiveConf, MetastoreConf.ConfVars.AUTO_CREATE_ALL, true)
+      MetastoreConf.setBoolVar(hiveConf, SCHEMA_VERIFICATION, false)
+      MetastoreConf.setBoolVar(hiveConf, AUTO_CREATE_ALL, true)
+      MetastoreConf.setVar(hiveConf, METASTORE_METADATA_TRANSFORMER_CLASS, "")
+      MetastoreConf.setBoolVar(hiveConf, STATS_AUTO_GATHER, true)
       // TODO: check if this can be enabled back
-      MetastoreConf.setBoolVar(hiveConf, MetastoreConf.ConfVars.TRY_DIRECT_SQL, false)
+      // MetastoreConf.setBoolVar(hiveConf, MetastoreConf.ConfVars.TRY_DIRECT_SQL, false)
     }
     hiveConf
   }
@@ -1191,8 +1195,9 @@ private[hive] object HiveClientImpl extends Logging {
       p: CatalogTablePartition,
       ht: HiveTable): HivePartition = {
     val tpart = new org.apache.hadoop.hive.metastore.api.Partition
+    val spec = new CaseInsensitiveStringMap(p.spec.asJava).asScala.view
     val partValues = ht.getPartCols.asScala.map { hc =>
-      p.spec.getOrElse(hc.getName, throw new IllegalArgumentException(
+      spec.getOrElse(hc.getName, throw new IllegalArgumentException(
         s"Partition spec is missing a value for column '${hc.getName}': ${p.spec}"))
     }
     val storageDesc = new StorageDescriptor

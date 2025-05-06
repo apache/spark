@@ -1193,11 +1193,14 @@ object DependencyOverrides {
         SbtPomKeys.effectivePom.value.getProperties.get("avro.version").asInstanceOf[String]
       val slf4jVersion =
         SbtPomKeys.effectivePom.value.getProperties.get("slf4j.version").asInstanceOf[String]
+      val log4jVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("log4j.version").asInstanceOf[String]
       Seq(
         "com.google.guava" % "guava" % guavaVersion,
         "jline" % "jline" % jlineVersion,
         "org.apache.avro" % "avro" % avroVersion,
-        "org.slf4j" % "slf4j-api" % slf4jVersion
+        "org.slf4j" % "slf4j-api" % slf4jVersion,
+        "org.apache.logging.log4j" % "log4j-slf4j-impl" % log4jVersion
       ) ++ jacksonDeps.key.value
     }
   )
@@ -1212,8 +1215,7 @@ object ExcludedDependencies {
     libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "ch.qos.logback"),
-      ExclusionRule("org.slf4j", "slf4j-simple"),
-      ExclusionRule("javax.servlet", "javax.servlet-api"))
+      ExclusionRule("org.slf4j", "slf4j-simple"))
   )
 }
 

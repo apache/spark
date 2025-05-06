@@ -15,21 +15,42 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.catalyst.util
 
-import java.sql.Date
+import java.sql.{Timestamp => SqlTimestamp}
+import java.time.ZoneId
 
 import org.apache.hadoop.hive.common.`type`.{Date => HiveDate, Timestamp => HiveTimestamp}
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.RebaseDateTime
 
 object HiveDateTimeUtils {
+  private val zoneId = ZoneId.systemDefault()
+
+  private def toSqlTimestamp(t: HiveTimestamp): SqlTimestamp = {
+    val ts = new SqlTimestamp(t.toEpochMilli(zoneId))
+    ts.setNanos (t.getNanos)
+    ts
+  }
+
   def fromHiveTimestamp(t: HiveTimestamp): Long = {
-    DateTimeUtils.fromJavaTimestamp(t.toSqlTimestamp)
+    DateTimeUtils.fromJavaTimestamp(toSqlTimestamp(t))
   }
 
   def fromHiveDate(d: HiveDate): Int = {
-    DateTimeUtils.fromJavaDate(new Date(d.toEpochMilli))
+    d.toEpochDay
+  }
+
+  def toHiveTimestamp(t: Long): HiveTimestamp = {
+    val javaTimestamp = DateTimeUtils.toJavaTimestamp(t)
+    val hiveTimestamp = HiveTimestamp.ofEpochMilli(javaTimestamp.getTime, zoneId)
+    hiveTimestamp.setNanos(javaTimestamp.getNanos)
+    hiveTimestamp
+  }
+
+  def toHiveDate(d: Int): HiveDate = {
+    val julian = RebaseDateTime.rebaseGregorianToJulianDays(d)
+    HiveDate.ofEpochDay(julian)
   }
 
 }
