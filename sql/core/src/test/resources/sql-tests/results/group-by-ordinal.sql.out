@@ -509,6 +509,35 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT (
+  WITH cte AS (SELECT 1)
+  SELECT * FROM cte
+) AS subq1
+FROM
+  VALUES (1)
+GROUP BY
+  1
+-- !query schema
+struct<subq1:int>
+-- !query output
+1
+
+
+-- !query
+SELECT (
+  SELECT a FROM data LIMIT 1
+) AS subq1
+FROM
+  VALUES (1)
+GROUP BY
+  1
+-- !query schema
+struct<subq1:int>
+-- !query output
+1
+
+
+-- !query
 set spark.sql.groupByOrdinal=false
 -- !query schema
 struct<key:string,value:string>

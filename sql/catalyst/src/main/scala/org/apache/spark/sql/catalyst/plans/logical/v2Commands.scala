@@ -1360,6 +1360,13 @@ case class CreateView(
 }
 
 /**
+ * Used to apply ApplyDefaultCollationToStringType to CreateViewCommand
+ */
+trait CreateTempView {
+  val collation: Option[String]
+}
+
+/**
  * The logical plan of the ALTER VIEW ... SET TBLPROPERTIES command.
  */
 case class SetViewProperties(
@@ -1505,18 +1512,24 @@ case class UnresolvedTableSpec(
     serde: Option[SerdeInfo],
     external: Boolean,
     constraints: Seq[TableConstraint])
-  extends UnaryExpression with Unevaluable with TableSpecBase {
+  extends Expression with Unevaluable with TableSpecBase {
 
   override def dataType: DataType =
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3113")
 
-  override def child: Expression = optionExpression
-
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    this.copy(optionExpression = newChild.asInstanceOf[OptionList])
-
   override def simpleString(maxFields: Int): String = {
     this.copy(properties = Utils.redact(properties).toMap).toString
+  }
+
+  override def nullable: Boolean = true
+
+  override def children: Seq[Expression] = optionExpression +: constraints
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(
+      optionExpression = newChildren.head.asInstanceOf[OptionList],
+      constraints = newChildren.tail.asInstanceOf[Seq[TableConstraint]])
   }
 }
 

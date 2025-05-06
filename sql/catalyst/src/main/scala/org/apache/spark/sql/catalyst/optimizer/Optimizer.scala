@@ -671,8 +671,10 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         val subQueryAttributes = if (conf.getConf(SQLConf
           .EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES)) {
           // Collect the references for all the subquery expressions in the plan.
-          AttributeSet.fromAttributeSets(plan.expressions.collect {
-            case e: SubqueryExpression => e.references
+          AttributeSet.fromAttributeSets(plan.expressions.flatMap { e =>
+            e.collect {
+              case s: SubqueryExpression => s.references
+            }
           })
         } else {
           AttributeSet.empty
@@ -2140,6 +2142,8 @@ object EliminateLimits extends Rule[LogicalPlan] {
       child
     case GlobalLimit(l, child) if canEliminate(l, child) =>
       child
+    case LocalLimit(l, child) if canEliminate(l, child) =>
+      child
 
     case LocalLimit(IntegerLiteral(0), child) =>
       LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
@@ -2277,6 +2281,9 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
     case Limit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming, stream)) =>
       LocalRelation(output, data.take(limit), isStreaming, stream)
 
+    case LocalLimit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming, stream)) =>
+      LocalRelation(output, data.take(limit), isStreaming, stream)
+
     case Filter(condition, LocalRelation(output, data, isStreaming, stream))
         if !hasUnevaluableExpr(condition) =>
       val predicate = Predicate.create(condition, output)
@@ -2284,7 +2291,7 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
       LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming, stream)
   }
 
-  private def hasUnevaluableExpr(expr: Expression): Boolean = {
+  def hasUnevaluableExpr(expr: Expression): Boolean = {
     expr.exists(e => e.isInstanceOf[Unevaluable] && !e.isInstanceOf[AttributeReference])
   }
 }

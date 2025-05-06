@@ -227,7 +227,7 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
             conf = conf.set(k, v)
         conf = conf.set(
             "spark.worker.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
-        )
+        ).set("spark.python.unix.domain.socket.enabled", "false")
         sc = SparkContext("local-cluster[2,2,512]", cls.__name__, conf=conf)
         cls.spark = SparkSession(sc)
 
@@ -264,7 +264,7 @@ class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
             conf = conf.set(k, v)
         conf = conf.set(
             "spark.driver.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
-        )
+        ).set("spark.python.unix.domain.socket.enabled", "false")
         sc = SparkContext("local-cluster[2,2,512]", cls.__name__, conf=conf)
         cls.spark = SparkSession(sc)
 

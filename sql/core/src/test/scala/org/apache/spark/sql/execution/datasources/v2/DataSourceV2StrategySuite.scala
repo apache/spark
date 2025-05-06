@@ -400,7 +400,7 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
       v2Expr = new GeneralScalarExpression("RAND", Array(LiteralValue(17L, LongType))))
 
     checkRoundTripConversion(
-      catalystExpr = Abs(Literal(-5)),
+      catalystExpr = Abs(Literal(-5), failOnError = true),
       v2Expr = new GeneralScalarExpression("ABS", Array(LiteralValue(-5, IntegerType))))
 
     checkRoundTripConversion(
@@ -582,7 +582,7 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
           LiteralValue(5, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = Sqrt(Pow(Abs(Literal(-3)), Literal(2))),
+      catalystExpr = Sqrt(Pow(Abs(Literal(-3), failOnError = true), Literal(2))),
       v2Expr = new GeneralScalarExpression(
         "SQRT",
         Array(

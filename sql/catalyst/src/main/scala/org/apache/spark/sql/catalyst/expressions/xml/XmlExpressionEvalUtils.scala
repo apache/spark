@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions.xml
 
+import java.io.CharArrayWriter
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExprUtils}
 import org.apache.spark.sql.catalyst.util.{FailFastMode, FailureSafeParser, GenericArrayData, PermissiveMode}
-import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
+import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 object XmlExpressionEvalUtils {
 
@@ -165,5 +167,45 @@ case class XmlToStructsEvaluator(
       case _: VariantType => StaxXmlParser.parseVariant(xml.toString, parsedOptions)
       case _: StructType => converter(parser.parse(xml.toString))
     }
+  }
+}
+
+case class StructsToXmlEvaluator(
+    options: Map[String, String],
+    inputSchema: DataType,
+    timeZoneId: Option[String]) {
+
+  @transient
+  lazy val writer = new CharArrayWriter()
+
+  @transient
+  lazy val gen =
+    new StaxXmlGenerator(inputSchema, writer, new XmlOptions(options, timeZoneId.get), false)
+
+  // This converts rows to the XML output according to the given schema.
+  @transient
+  lazy val converter: Any => UTF8String = {
+    def getAndReset(): UTF8String = {
+      gen.flush()
+      val xmlString = writer.toString
+      writer.reset()
+      UTF8String.fromString(xmlString)
+    }
+
+    inputSchema match {
+      case _: StructType =>
+        (row: Any) =>
+          gen.write(row.asInstanceOf[InternalRow])
+          getAndReset()
+      case _: VariantType =>
+        (v: Any) =>
+          gen.write(v.asInstanceOf[VariantVal])
+          getAndReset()
+    }
+  }
+
+  final def evaluate(value: Any): Any = {
+    if (value == null) return null
+    converter(value)
   }
 }

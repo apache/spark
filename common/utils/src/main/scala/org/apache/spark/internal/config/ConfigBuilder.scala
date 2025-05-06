@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal.config
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.regex.PatternSyntaxException
 
@@ -32,8 +33,7 @@ private object ConfigHelpers {
     try {
       converter(s.trim)
     } catch {
-      case _: NumberFormatException =>
-        throw new IllegalArgumentException(s"$key should be $configType, but was $s")
+      case _: NumberFormatException => throw configTypeMismatchError(key, s, configType)
     }
   }
 
@@ -41,8 +41,23 @@ private object ConfigHelpers {
     try {
       s.trim.toBoolean
     } catch {
-      case _: IllegalArgumentException =>
-        throw new IllegalArgumentException(s"$key should be boolean, but was $s")
+      case _: IllegalArgumentException => throw configTypeMismatchError(key, s, "boolean")
+    }
+  }
+
+  def toEnum[E <: Enumeration](s: String, enumClass: E, key: String): enumClass.Value = {
+    try {
+      enumClass.withName(s.trim.toUpperCase(Locale.ROOT))
+    } catch {
+      case _: NoSuchElementException =>
+        throw configOutOfRangeOfOptionsError(key, s, enumClass.values)
+    }
+  }
+
+  def toEnum[E <: Enum[E]](s: String, enumClass: Class[E], key: String): E = {
+    enumClass.getEnumConstants.find(_.name().equalsIgnoreCase(s.trim)) match {
+      case Some(enum) => enum
+      case None => throw configOutOfRangeOfOptionsError(key, s, enumClass.getEnumConstants)
     }
   }
 
@@ -54,29 +69,75 @@ private object ConfigHelpers {
     v.map(stringConverter).mkString(",")
   }
 
-  def timeFromString(str: String, unit: TimeUnit): Long = JavaUtils.timeStringAs(str, unit)
-
-  def timeToString(v: Long, unit: TimeUnit): String = s"${TimeUnit.MILLISECONDS.convert(v, unit)}ms"
-
-  def byteFromString(str: String, unit: ByteUnit): Long = {
-    val (input, multiplier) =
-      if (str.length() > 0 && str.charAt(0) == '-') {
-        (str.substring(1), -1)
-      } else {
-        (str, 1)
-      }
-    multiplier * JavaUtils.byteStringAs(input, unit)
-  }
-
-  def byteToString(v: Long, unit: ByteUnit): String = s"${unit.convertTo(v, ByteUnit.BYTE)}b"
-
-  def regexFromString(str: String, key: String): Regex = {
-    try str.r catch {
-      case e: PatternSyntaxException =>
-        throw new IllegalArgumentException(s"$key should be a regex, but was $str", e)
+  def timeFromString(str: String, unit: TimeUnit, key: String): Long = {
+    try {
+      JavaUtils.timeStringAs(str, unit)
+    } catch {
+      case _: NumberFormatException => throw configTypeMismatchError(key, str, s"time in $unit")
     }
   }
 
+  def timeToString(v: Long, unit: TimeUnit): String = s"${TimeUnit.MILLISECONDS.convert(v, unit)}ms"
+
+  def byteFromString(str: String, unit: ByteUnit, key: String): Long = {
+    try {
+      val (input, multiplier) =
+        if (str.nonEmpty && str.charAt(0) == '-') {
+          (str.substring(1), -1)
+        } else {
+          (str, 1)
+        }
+      multiplier * JavaUtils.byteStringAs(input, unit)
+    } catch {
+      case _: NumberFormatException | _: IllegalArgumentException =>
+        throw configTypeMismatchError(key, str, s"bytes in $unit")
+    }
+  }
+
+  def byteToString(v: Long, unit: ByteUnit, key: String): String = {
+    try {
+      s"${unit.convertTo(v, ByteUnit.BYTE)}b"
+    } catch {
+      case _: IllegalArgumentException =>
+        throw configTypeMismatchError(key, v.toString, s"bytes in $unit")
+    }
+  }
+
+  def regexFromString(str: String, key: String): Regex = {
+    try str.r catch {
+      case _: PatternSyntaxException => throw configTypeMismatchError(key, str, "regex")
+    }
+  }
+
+  def configTypeMismatchError(
+      key: String, value: String, configType: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_CONF_VALUE.TYPE_MISMATCH",
+      messageParameters = Map(
+        "confName" -> key,
+        "confValue" -> value,
+        "confType" -> configType))
+  }
+
+  def configOutOfRangeOfOptionsError(
+      key: String, value: String, options: Iterable[AnyRef]): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_CONF_VALUE.OUT_OF_RANGE_OF_OPTIONS",
+      messageParameters = Map(
+        "confName" -> key,
+        "confValue" -> value,
+        "confOptions" -> options.mkString(", ")))
+  }
+
+  def configRequirementError(
+      key: String, value: String, requirement: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_CONF_VALUE.REQUIREMENT",
+      messageParameters = Map(
+        "confName" -> key,
+        "confValue" -> value,
+        "confRequirement" -> requirement))
+  }
 }
 
 /**
@@ -106,7 +167,7 @@ private[spark] class TypedConfigBuilder[T](
   def checkValue(validator: T => Boolean, errorMsg: String): TypedConfigBuilder[T] = {
     transform { v =>
       if (!validator(v)) {
-        throw new IllegalArgumentException(s"'$v' in ${parent.key} is invalid. $errorMsg")
+        throw configRequirementError(parent.key, stringConverter(v), errorMsg)
       }
       v
     }
@@ -134,8 +195,8 @@ private[spark] class TypedConfigBuilder[T](
   def checkValues(validValues: Set[T]): TypedConfigBuilder[T] = {
     transform { v =>
       if (!validValues.contains(v)) {
-        throw new IllegalArgumentException(
-          s"The value of ${parent.key} should be one of ${validValues.mkString(", ")}, but was $v")
+        throw configOutOfRangeOfOptionsError(
+          parent.key, stringConverter(v), validValues.map(stringConverter))
       }
       v
     }
@@ -271,14 +332,24 @@ private[spark] case class ConfigBuilder(key: String) {
     new TypedConfigBuilder(this, v => v)
   }
 
+  def enumConf(e: Enumeration): TypedConfigBuilder[e.Value] = {
+    checkPrependConfig
+    new TypedConfigBuilder(this, toEnum(_, e, key))
+  }
+
+  def enumConf[E <: Enum[E]](e: Class[E]): TypedConfigBuilder[E] = {
+    checkPrependConfig
+    new TypedConfigBuilder(this, toEnum(_, e, key))
+  }
+
   def timeConf(unit: TimeUnit): TypedConfigBuilder[Long] = {
     checkPrependConfig
-    new TypedConfigBuilder(this, timeFromString(_, unit), timeToString(_, unit))
+    new TypedConfigBuilder(this, timeFromString(_, unit, key), timeToString(_, unit))
   }
 
   def bytesConf(unit: ByteUnit): TypedConfigBuilder[Long] = {
     checkPrependConfig
-    new TypedConfigBuilder(this, byteFromString(_, unit), byteToString(_, unit))
+    new TypedConfigBuilder(this, byteFromString(_, unit, key), byteToString(_, unit, key))
   }
 
   def fallbackConf[T](fallback: ConfigEntry[T]): ConfigEntry[T] = {

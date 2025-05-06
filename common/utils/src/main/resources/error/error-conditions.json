@@ -755,6 +755,14 @@
     ],
     "sqlState" : "KD009"
   },
+  "CONFLICTING_PARTITION_COLUMN_NAME_WITH_RESERVED" : {
+    "message" : [
+      "Partition column name '<partitionColumnName>' conflicts with reserved column name.",
+      "The schema of <tableName> is Hive-incompatible, Spark automatically generates a reserved column '<partitionColumnName>' to store the table in a specific way.",
+      "Please use a different name for the partition column."
+    ],
+    "sqlState" : "KD009"
+  },
   "CONNECT" : {
     "message" : [
       "Generic Spark Connect error."
@@ -810,6 +818,20 @@
       }
     },
     "sqlState" : "XX000"
+  },
+  "CONSTRAINT_ALREADY_EXISTS" : {
+    "message" : [
+      "Constraint '<constraintName>' already exists. Please delete the existing constraint first.",
+      "Existing constraint:",
+      "<oldConstraint>"
+    ],
+    "sqlState" : "42710"
+  },
+  "CONSTRAINT_DOES_NOT_EXIST" : {
+    "message" : [
+      "Cannot drop nonexistent constraint <constraintName> from table <tableName>."
+    ],
+    "sqlState" : "42704"
   },
   "CONVERSION_INVALID_INPUT" : {
     "message" : [
@@ -1195,8 +1217,20 @@
   },
   "DATETIME_FIELD_OUT_OF_BOUNDS" : {
     "message" : [
-      "<rangeMessage>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "<rangeMessage>."
     ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "If necessary set <ansiConfig> to \"false\" to bypass this error."
+        ]
+      }
+    },
     "sqlState" : "22023"
   },
   "DATETIME_OVERFLOW" : {
@@ -2348,9 +2382,24 @@
       "The value '<confValue>' in the config \"<confName>\" is invalid."
     ],
     "subClass" : {
+      "OUT_OF_RANGE_OF_OPTIONS" : {
+        "message" : [
+          "It should be one of '<confOptions>'."
+        ]
+      },
+      "REQUIREMENT" : {
+        "message" : [
+          "<confRequirement>"
+        ]
+      },
       "TIME_ZONE" : {
         "message" : [
           "Cannot resolve the given timezone."
+        ]
+      },
+      "TYPE_MISMATCH" : {
+        "message" : [
+          "It should be a/an '<confType>' value."
         ]
       }
     },
@@ -2923,6 +2972,12 @@
     ],
     "sqlState" : "F0000"
   },
+  "INVALID_KRYO_SERIALIZER_NO_DATA" : {
+    "message" : [
+      "The object '<obj>' is invalid or malformed to <serdeOp> using <serdeClass>."
+    ],
+    "sqlState" : "22002"
+  },
   "INVALID_LABEL_USAGE" : {
     "message" : [
       "The usage of the label <labelName> is invalid."
@@ -3410,6 +3465,16 @@
       "ANALYZE_TABLE_UNEXPECTED_NOSCAN" : {
         "message" : [
           "ANALYZE TABLE(S) ... COMPUTE STATISTICS ... <ctx> must be either NOSCAN or empty."
+        ]
+      },
+      "CREATE_FUNC_WITH_COLUMN_CONSTRAINTS" : {
+        "message" : [
+          "CREATE FUNCTION with constraints on parameters is not allowed."
+        ]
+      },
+      "CREATE_FUNC_WITH_GENERATED_COLUMNS_AS_PARAMETERS" : {
+        "message" : [
+          "CREATE FUNCTION with generated columns as parameters is not allowed."
         ]
       },
       "CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
@@ -4037,6 +4102,12 @@
       "Field(s) <nonExistFields> do(es) not exist. Available fields: <fieldNames>"
     ],
     "sqlState" : "HV091"
+  },
+  "NON_DETERMINISTIC_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` is non-deterministic. Check constraints must only contain deterministic expressions."
+    ],
+    "sqlState" : "42621"
   },
   "NON_FOLDABLE_ARGUMENT" : {
     "message" : [
@@ -5200,6 +5271,12 @@
       "Please make the schema nullable. Current schema: <schema>"
     ],
     "sqlState" : "XXKST"
+  },
+  "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR" : {
+    "message" : [
+      "An error occurred in the user-defined function <function> of the StatefulProcessor. Reason: <reason>."
+    ],
+    "sqlState" : "39000"
   },
   "TRANSPOSE_EXCEED_ROW_LIMIT" : {
     "message" : [
@@ -8597,11 +8674,6 @@
   "_LEGACY_ERROR_TEMP_3026" : {
     "message" : [
       "duration() called on unfinished task"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3027" : {
-    "message" : [
-      "Unrecognized <schedulerModeProperty>: <schedulingModeConf>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3028" : {

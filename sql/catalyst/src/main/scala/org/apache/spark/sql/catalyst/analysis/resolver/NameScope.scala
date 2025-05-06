@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.{ArrayDeque, HashMap, LinkedHashMap}
+import java.util.{ArrayDeque, HashMap, HashSet, LinkedHashMap}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -169,9 +169,20 @@ class NameScope(
   /**
    * [[hiddenAttributesForResolution]] is an [[AttributeSeq]] that is used for resolution of
    * multipart attribute names, by hidden output. It's created from the `hiddenOutput` when
-   * [[NameScope]] is updated.
+   * [[NameScope]] is updated. [[AGGREGATED_ACCESS_ONLY]] attributes are excluded from
+   * resolution by default, since they can only be referenced in specific cases (see
+   * [[resolveMultipartName]] for more details).
    */
   private lazy val hiddenAttributesForResolution: AttributeSeq =
+    AttributeSeq.fromNormalOutput(hiddenOutput.filter(!_.aggregatedAccessOnly))
+
+  /**
+   * [[hiddenAttributesForResolutionWithAggregatedOnlyAccess]] is an [[AttributeSeq]] that is used
+   * for resolution of multipart attribute names, by hidden output including attributes with
+   * [[AGGREGATED_ACCESS_ONLY]]. These attributes can only be accessed if we are resolving a tree
+   * under [[AggregateExpression]] (see [[resolveMultipartName]] for more details).
+   */
+  private lazy val hiddenAttributesForResolutionWithAggregatedOnlyAccess: AttributeSeq =
     AttributeSeq.fromNormalOutput(hiddenOutput)
 
   /**
@@ -403,6 +414,25 @@ class NameScope(
    *
    * {{ SELECT col1 + col2 AS a FROM VALUES (1, 2) GROUP BY a; }}}
    *
+   * In case we are resolving names in expression trees from HAVING or ORDER BY on top of
+   * [[Aggregate]], we are able to resolve hidden attributes only if those are present in
+   * grouping expressions, or if the reference itself is under an [[AggregateExpression]].
+   * In the latter case `canReferenceAggregatedAccessOnlyAttributes` will be true, and
+   * `hiddenAttributesForResolutionWithAggregatedOnlyAccess` will be used instead of
+   * `hiddenAttributesForResolution`. Consider the following example:
+   *
+   * {{{
+   * -- This succeeds, because `col2` is in the grouping expressions.
+   * SELECT COUNT(col1) FROM t1 GROUP BY col1, col2 ORDER BY col2;
+   *
+   * -- This fails, because `col2` is not in the grouping expressions.
+   * SELECT COUNT(col1) FROM t1 GROUP BY col1 ORDER BY col2;
+   *
+   * -- This succeeds, despite the fact that `col2` is not in the grouping expressions.
+   * -- Such references are allowed under an aggregate expression (MAX).
+   * SELECT COUNT(col1) FROM t1 GROUP BY col1 ORDER BY MAX(col2);
+   * }}}
+   *
    * We are relying on the [[AttributeSeq]] to perform that work, since it requires complex
    * resolution logic involving nested field extraction and multipart name matching.
    *
@@ -412,7 +442,13 @@ class NameScope(
       multipartName: Seq[String],
       canLaterallyReferenceColumn: Boolean = true,
       canReferenceAggregateExpressionAliases: Boolean = false,
-      canResolveNameByHiddenOutput: Boolean = false): NameTarget = {
+      canResolveNameByHiddenOutput: Boolean = false,
+      canReferenceAggregatedAccessOnlyAttributes: Boolean = false): NameTarget = {
+    val currentHiddenAttributesForResolution = if (canReferenceAggregatedAccessOnlyAttributes) {
+      hiddenAttributesForResolutionWithAggregatedOnlyAccess
+    } else {
+      hiddenAttributesForResolution
+    }
 
     val resolvedMultipartName: ResolvedMultipartName =
       tryResolveMultipartNameByOutput(
@@ -432,7 +468,7 @@ class NameScope(
           tryResolveMultipartNameByOutput(
             multipartName,
             nameComparator,
-            hiddenAttributesForResolution,
+            currentHiddenAttributesForResolution,
             canResolveByProposedAttributes = canResolveNameByHiddenOutput
           )
         )
@@ -676,9 +712,9 @@ class NameScopeStack extends SQLConfHelper {
   def overwriteCurrent(
       output: Option[Seq[Attribute]] = None,
       hiddenOutput: Option[Seq[Attribute]] = None): Unit = {
-    val hiddenOutputWithUpdatedNullabilities = updateNullabilitiesInHiddenOutput(
-      output.getOrElse(stack.peek().output),
-      hiddenOutput.getOrElse(stack.peek().hiddenOutput)
+    val hiddenOutputWithUpdatedNullabilities = updateHiddenOutputProperties(
+      output = output.getOrElse(stack.peek().output),
+      hiddenOutput = hiddenOutput.getOrElse(stack.peek().hiddenOutput)
     )
     val newScope = stack.pop.overwriteOutput(output, Some(hiddenOutputWithUpdatedNullabilities))
 
@@ -708,17 +744,24 @@ class NameScopeStack extends SQLConfHelper {
    *  output we have to have both hidden output from the previous scope and the provided output.
    *  This is done for [[Project]] and [[Aggregate]] operators.
    *
-   *  2. updates nullabilities of attributes in hidden output from new output, so that if attribute
-   *  was nullable in either old hidden output or new output, it must stay nullable in new hidden
-   *  output as well.
+   *  2. updates properties of attributes in hidden output. THis includes nullabilities and access
+   *  modes. See [[updateHiddenOutputProperties]] for more details.
    */
-  def overwriteOutputAndExtendHiddenOutput(output: Seq[Attribute]): Unit = {
+  def overwriteOutputAndExtendHiddenOutput(
+      output: Seq[Attribute],
+      groupingAttributeIds: Option[HashSet[ExprId]] = None): Unit = {
     val prevScope = stack.pop
-    val hiddenOutputWithUpdatedNullabilities =
-      updateNullabilitiesInHiddenOutput(output, prevScope.hiddenOutput)
-    val hiddenOutput = hiddenOutputWithUpdatedNullabilities ++ output.filter { attribute =>
-      prevScope.getHiddenAttributeById(attribute.exprId).isEmpty
-    }
+
+    val hiddenOutputWithUpdatedProperties = updateHiddenOutputProperties(
+      output = output,
+      hiddenOutput = prevScope.hiddenOutput,
+      groupingAttributeIds = groupingAttributeIds
+    )
+
+    val hiddenOutput = hiddenOutputWithUpdatedProperties ++ output.filter { attribute =>
+        prevScope.getHiddenAttributeById(attribute.exprId).isEmpty
+      }
+
     val newScope = prevScope.overwriteOutput(
       output = Some(output),
       hiddenOutput = Some(hiddenOutput)
@@ -848,12 +891,14 @@ class NameScopeStack extends SQLConfHelper {
       multipartName: Seq[String],
       canLaterallyReferenceColumn: Boolean = true,
       canReferenceAggregateExpressionAliases: Boolean = false,
-      canResolveNameByHiddenOutput: Boolean = false): NameTarget = {
+      canResolveNameByHiddenOutput: Boolean = false,
+      canReferenceAggregatedAccessOnlyAttributes: Boolean = false): NameTarget = {
     val nameTargetFromCurrentScope = current.resolveMultipartName(
       multipartName,
       canLaterallyReferenceColumn = canLaterallyReferenceColumn,
       canReferenceAggregateExpressionAliases = canReferenceAggregateExpressionAliases,
-      canResolveNameByHiddenOutput = canResolveNameByHiddenOutput
+      canResolveNameByHiddenOutput = canResolveNameByHiddenOutput,
+      canReferenceAggregatedAccessOnlyAttributes = canReferenceAggregatedAccessOnlyAttributes
     )
 
     if (nameTargetFromCurrentScope.candidates.nonEmpty) {
@@ -864,7 +909,8 @@ class NameScopeStack extends SQLConfHelper {
           val nameTarget = outer.resolveMultipartName(
             multipartName,
             canLaterallyReferenceColumn = false,
-            canReferenceAggregateExpressionAliases = false
+            canReferenceAggregateExpressionAliases = false,
+            canReferenceAggregatedAccessOnlyAttributes = canReferenceAggregatedAccessOnlyAttributes
           )
 
           if (nameTarget.candidates.nonEmpty) {
@@ -918,20 +964,45 @@ class NameScopeStack extends SQLConfHelper {
   }
 
   /**
-   * When the scope gets the new output, we need to refresh nullabilities in its `hiddenOutput`. If
-   * an attribute is nullable in either old hidden output or new output, it must remain nullable in
-   * new hidden output as well.
+   * Update attribute properties when overwriting the current outputs.
+   *
+   * 1. When the scope gets the new output, we need to refresh nullabilities in its `hiddenOutput`.
+   * If an attribute is nullable in either old hidden output or new output, it must remain nullable
+   * in new hidden output as well.
+   *
+   * 2. If we are updating the hidden output on top of an [[Aggregate]], HAVING and ORDER BY clauses
+   * may later reference either attributes from grouping expressions, or any other attributes
+   * under the condition that they are referenced under [[AggregateExpression]]. We mark those
+   * attributes as [[AGGREGATED_ACCESS_ONLY]] to reference them in [[resolveMultipartName]] only
+   * if `canReferenceAggregatedAccessOnlyAttributes` is set to `true`.
+   * Attributes from grouping expressions lose their access metadata (e.g.
+   * [[QUALIFIED_ACCESS_ONLY]]) - grouping expression attributes can be simply referenced given
+   * that the relevant expression tree is canonically equal to the grouping expression tree.
    */
-  private def updateNullabilitiesInHiddenOutput(
+  private def updateHiddenOutputProperties(
       output: Seq[Attribute],
-      hiddenOutput: Seq[Attribute]) = {
+      hiddenOutput: Seq[Attribute],
+      groupingAttributeIds: Option[HashSet[ExprId]] = None) = {
     val outputLookup = new HashMap[ExprId, Attribute](output.size)
     output.foreach(attribute => outputLookup.put(attribute.exprId, attribute))
 
-    hiddenOutput.map {
-      case attribute if outputLookup.containsKey(attribute.exprId) =>
+    hiddenOutput.map { attribute =>
+      val attributeWithUpdatedNullability = if (outputLookup.containsKey(attribute.exprId)) {
         attribute.withNullability(attribute.nullable || outputLookup.get(attribute.exprId).nullable)
-      case attribute => attribute
+      } else {
+        attribute
+      }
+
+      groupingAttributeIds match {
+        case Some(groupingAttributeIds) =>
+          if (groupingAttributeIds.contains(attribute.exprId)) {
+            attributeWithUpdatedNullability.markAsAllowAnyAccess()
+          } else {
+            attributeWithUpdatedNullability.markAsAggregatedAccessOnly()
+          }
+        case None =>
+          attributeWithUpdatedNullability
+      }
     }
   }
 }

@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
+import java.time.LocalDateTime
 import java.util.Locale
 
 import org.apache.hadoop.fs.Path
@@ -608,6 +609,19 @@ class HiveDDLSuite
       parameters = Map(
         "details" -> "The spec ([partCol1=]) contains an empty partition column value")
     )
+  }
+
+  test("SPARK-51840: Restore Partition columns in HiveExternalCatalog#alterTable") {
+    withTable("t") {
+      sql(
+        """
+          |CREATE TABLE t USING json
+          |  PARTITIONED BY (A) AS
+          |    SELECT 'APACHE' A, TIMESTAMP_NTZ '2018-11-17 13:33:33' B
+          |""".stripMargin)
+      sql("MSCK REPAIR TABLE t")
+      checkAnswer(spark.table("t"), Row(LocalDateTime.of(2018, 11, 17, 13, 33, 33), "APACHE"))
+    }
   }
 
   test("add/drop partitions - external table") {
@@ -3361,6 +3375,21 @@ class HiveDDLSuite
     withTable(tbl) {
       sql("CREATE TABLE t1 STORED AS parquet SELECT id as `a,b` FROM range(1)")
       checkAnswer(sql("SELECT * FROM t1"), Row(0))
+    }
+  }
+
+  test("create table - partition column duplicates EMPTY_DATA_SCHEMA") {
+    withTable("t") {
+      val e = intercept[AnalysisException] {
+        sql("CREATE TABLE t (col int, b TIMESTAMP_NTZ) USING PARQUET PARTITIONED BY (col)")
+      }
+      checkError(
+        exception = e,
+        condition = "CONFLICTING_PARTITION_COLUMN_NAME_WITH_RESERVED",
+        parameters = Map(
+          "tableName" -> "spark_catalog.default.t",
+          "partitionColumnName" -> "col")
+      )
     }
   }
 }

@@ -348,7 +348,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      SubstituteUnresolvedOrdinals,
       EliminateLazyExpression),
     Batch("Disable Hints", Once,
       new ResolveHints.DisableHints),
@@ -396,7 +395,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
-      ResolveDDLCommandStringTypes ::
+      ApplyDefaultCollationToStringType ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
@@ -454,7 +453,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     Batch("DML rewrite", fixedPoint,
       RewriteDeleteFromTable,
       RewriteUpdateTable,
-      RewriteMergeIntoTable),
+      RewriteMergeIntoTable,
+      // Ensures columns of an output table are correctly resolved from the data in a logical plan.
+      ResolveOutputRelation),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
@@ -530,7 +531,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def apply(plan: LogicalPlan): LogicalPlan = {
       val collatedPlan =
         if (conf.getConf(SQLConf.RUN_COLLATION_TYPE_CASTS_BEFORE_ALIAS_ASSIGNMENT)) {
-          CollationTypeCasts(plan)
+          CollationRulesRunner(plan)
         } else {
           plan
         }
@@ -610,7 +611,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     private def constructGroupByAlias(groupByExprs: Seq[Expression]): Seq[Alias] = {
       groupByExprs.map {
         case e: NamedExpression => Alias(e, e.name)(qualifier = e.qualifier)
-        case other => Alias(other, other.toString)()
+        case other => Alias(other, toPrettySQL(other))()
       }
     }
 
@@ -677,6 +678,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      * Construct [[Aggregate]] operator from Cube/Rollup/GroupingSets.
      */
     private def constructAggregate(
+        operator: LogicalPlan,
         selectedGroupByExprs: Seq[Seq[Expression]],
         groupByExprs: Seq[Expression],
         aggregationExprs: Seq[NamedExpression],
@@ -684,6 +686,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       if (groupByExprs.size > GroupingID.dataType.defaultSize * 8) {
         throw QueryCompilationErrors.groupingSizeTooLargeError(GroupingID.dataType.defaultSize * 8)
+      }
+
+      if (groupByExprs.exists(_.exists(_.isInstanceOf[Generator]))) {
+        throw QueryCompilationErrors.generatorOutsideSelectError(operator)
       }
 
       // Expand works by setting grouping expressions to null as determined by the
@@ -747,7 +753,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         ResolveAggregateFunctions.resolveExprsWithAggregate(Seq(cond), aggForResolving)
 
       // Push the aggregate expressions into the aggregate (if any).
-      val newChild = constructAggregate(selectedGroupByExprs, groupByExprs,
+      val newChild = constructAggregate(h, selectedGroupByExprs, groupByExprs,
         aggregate.aggregateExpressions ++ extraAggExprs, aggregate.child)
 
       // Since the output exprId will be changed in the constructed aggregate, here we build an
@@ -782,9 +788,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case a if !a.childrenResolved => a
 
       // Ensure group by expressions and aggregate expressions have been resolved.
-      case Aggregate(GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, child, _)
+      case a @ Aggregate(GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, child, _)
         if aggExprs.forall(_.resolved) =>
-        constructAggregate(selectedGroupByExprs, groupByExprs, aggExprs, child)
+        constructAggregate(a, selectedGroupByExprs, groupByExprs, aggExprs, child)
 
       // We should make sure all expressions in condition have been resolved.
       case f @ Filter(cond, child) if hasGroupingFunction(cond) && cond.resolved =>
@@ -1090,12 +1096,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     // look at `AnalysisContext.catalogAndNamespace` when resolving relations with single-part name.
     // If `AnalysisContext.catalogAndNamespace` is non-empty, analyzer will expand single-part names
     // with it, instead of current catalog and namespace.
-    private def resolveViews(plan: LogicalPlan): LogicalPlan = plan match {
+    private def resolveViews(
+        plan: LogicalPlan,
+        options: CaseInsensitiveStringMap): LogicalPlan = plan match {
       case view: View if !view.child.resolved =>
         ViewResolution
-          .resolve(view, resolveChild = executeSameContext, checkAnalysis = checkAnalysis)
+          .resolve(view, options, resolveChild = executeSameContext, checkAnalysis = checkAnalysis)
       case p @ SubqueryAlias(_, view: View) =>
-        p.copy(child = resolveViews(view))
+        p.copy(child = resolveViews(view, options))
       case _ => plan
     }
 
@@ -1143,7 +1151,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         }
 
       case u: UnresolvedRelation =>
-        resolveRelation(u).map(resolveViews).getOrElse(u)
+        resolveRelation(u).map(resolveViews(_, u.options)).getOrElse(u)
 
       case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, version)
           if timestamp.forall(ts => ts.resolved && !SubqueryExpression.hasSubquery(ts)) =>
@@ -1225,8 +1233,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           // We put the synchronously resolved relation into the [[AnalyzerBridgeState]] for
           // it to be later reused by the single-pass [[Resolver]] to avoid resolving the relation
           // metadata twice.
-          AnalysisContext.get.getSinglePassResolverBridgeState.map { bridgeState =>
-            bridgeState.relationsWithResolvedMetadata.put(unresolvedRelation, relation)
+          AnalysisContext.get.getSinglePassResolverBridgeState.foreach { bridgeState =>
+            bridgeState.addUnresolvedRelation(unresolvedRelation, relation)
           }
           relation
         }
@@ -1973,24 +1981,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         withPosition(ordinal) {
           if (index > 0 && index <= aggs.size) {
             val ordinalExpr = aggs(index - 1)
+
             if (ordinalExpr.exists(_.isInstanceOf[AggregateExpression])) {
               throw QueryCompilationErrors.groupByPositionRefersToAggregateFunctionError(
                 index, ordinalExpr)
-            } else {
-              trimAliases(ordinalExpr) match {
-                // HACK ALERT: If the ordinal expression is also an integer literal, don't use it
-                //             but still keep the ordinal literal. The reason is we may repeatedly
-                //             analyze the plan. Using a different integer literal may lead to
-                //             a repeat GROUP BY ordinal resolution which is wrong. GROUP BY
-                //             constant is meaningless so whatever value does not matter here.
-                // TODO: (SPARK-45932) GROUP BY ordinal should pull out grouping expressions to
-                //       a Project, then the resolved ordinal expression is always
-                //       `AttributeReference`.
-                case Literal(_: Int, IntegerType) =>
-                  Literal(index)
-                case _ => ordinalExpr
-              }
             }
+
+            ordinalExpr
           } else {
             throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size)
           }
@@ -2819,7 +2816,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def apply(plan: LogicalPlan): LogicalPlan = {
       val collatedPlan =
         if (conf.getConf(SQLConf.RUN_COLLATION_TYPE_CASTS_BEFORE_ALIAS_ASSIGNMENT)) {
-          CollationTypeCasts(plan)
+          CollationRulesRunner(plan)
         } else {
           plan
         }
@@ -3997,6 +3994,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         c.markAsAnalyzed(AnalysisContext.get)
       case c: KeepAnalyzedQuery if c.resolved =>
         c.storeAnalyzedQuery()
+      case p: LogicalPlan if p.resolved =>
+        p.transformAllExpressionsWithPruning(_.containsPattern(ANALYSIS_AWARE_EXPRESSION)) {
+          case e: AnalysisAwareExpression[_] => e.markAsAnalyzed()
+        }
     }
   }
 }

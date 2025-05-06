@@ -58,24 +58,15 @@ def _test() -> None:
         print("Not supported in no-GIL mode", file=sys.stderr)
         sys.exit(0)
 
+    from pyspark.testing import should_test_connect
+
+    if not should_test_connect:
+        print("Skipping pyspark.ml.connect.functions doctests", file=sys.stderr)
+        sys.exit(0)
+
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.ml.connect.functions
-
-    from pyspark.sql.pandas.utils import (
-        require_minimum_pandas_version,
-        require_minimum_pyarrow_version,
-    )
-
-    try:
-        require_minimum_pandas_version()
-        require_minimum_pyarrow_version()
-    except Exception as e:
-        print(
-            f"Skipping pyspark.ml.functions doctests: {e}",
-            file=sys.stderr,
-        )
-        sys.exit(0)
 
     globs = pyspark.ml.connect.functions.__dict__.copy()
 

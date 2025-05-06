@@ -334,10 +334,14 @@ object SparkBuild extends PomBuild {
       "-groups",
       "-skip-packages", Seq(
         "org.apache.spark.api.python",
-        "org.apache.spark.network",
         "org.apache.spark.deploy",
-        "org.apache.spark.util.collection",
-        "org.apache.spark.sql.scripting"
+        "org.apache.spark.kafka010",
+        "org.apache.spark.network",
+        "org.apache.spark.sql.avro",
+        "org.apache.spark.sql.scripting",
+        "org.apache.spark.types.variant",
+        "org.apache.spark.ui.flamegraph",
+        "org.apache.spark.util.collection"
       ).mkString(":"),
       "-doc-title", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " ScalaDoc"
     ),
@@ -839,6 +843,8 @@ object SparkConnectClient {
     test := ((Test / test) dependsOn (buildTestDeps)).value,
 
     testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated,
+
+    (Test / javaOptions) += "-Darrow.memory.debug.allocator=true",
 
     (assembly / test) := { },
 
@@ -1378,10 +1384,14 @@ object Unidoc {
         f.getCanonicalPath.contains("org/apache/spark/unsafe") &&
         !f.getCanonicalPath.contains("org/apache/spark/unsafe/types/CalendarInterval")))
       .map(_.filterNot(_.getCanonicalPath.contains("python")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/kafka010")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/types/variant")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/ui/flamegraph")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/collection")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/io")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/kvstore")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/artifact")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/avro")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/connect/")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/classic/")))
@@ -1713,7 +1723,7 @@ object TestSettings {
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),
     (Test / testOptions) += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
-    libraryDependencies += "com.github.sbt.junit" % "jupiter-interface" % "0.13.3" % "test",
+    libraryDependencies += "com.github.sbt.junit" % "jupiter-interface" % "0.14.0" % "test",
     // `parallelExecutionInTest` controls whether test suites belonging to the same SBT project
     // can run in parallel with one another. It does NOT control whether tests execute in parallel
     // within the same JVM (which is controlled by `testForkedParallel`) or whether test cases

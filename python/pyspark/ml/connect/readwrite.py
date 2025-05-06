@@ -77,11 +77,13 @@ class RemoteMLWriter(MLWriter):
         # Spark Connect ML is built on scala Spark.ML, that means we're only
         # supporting JavaModel or JavaEstimator or JavaEvaluator
         if isinstance(instance, JavaModel):
+            from pyspark.ml.util import RemoteModelRef
+
             model = cast("JavaModel", instance)
             params = serialize_ml_params(model, session.client)
-            assert isinstance(model._java_obj, str)
+            assert isinstance(model._java_obj, RemoteModelRef)
             writer = pb2.MlCommand.Write(
-                obj_ref=pb2.ObjectRef(id=model._java_obj),
+                obj_ref=pb2.ObjectRef(id=model._java_obj.ref_id),
                 params=params,
                 path=path,
                 should_overwrite=shouldOverwrite,
@@ -270,9 +272,12 @@ class RemoteMLReader(MLReader[RL]):
             py_type = _get_class()
             # It must be JavaWrapper, since we're passing the string to the _java_obj
             if issubclass(py_type, JavaWrapper):
+                from pyspark.ml.util import RemoteModelRef
+
                 if ml_type == pb2.MlOperator.OPERATOR_TYPE_MODEL:
                     session.client.add_ml_cache(result.obj_ref.id)
-                    instance = py_type(result.obj_ref.id)
+                    remote_model_ref = RemoteModelRef(result.obj_ref.id)
+                    instance = py_type(remote_model_ref)
                 else:
                     instance = py_type()
                 instance._resetUid(result.uid)

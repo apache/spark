@@ -213,7 +213,7 @@ class KMeansModel private[ml] (
 }
 
 /** Helper class for storing model data */
-private case class ClusterData(clusterIdx: Int, clusterCenter: Vector)
+private[ml] case class ClusterData(clusterIdx: Int, clusterCenter: Vector)
 
 
 /** A writer for KMeans that handles the "internal" (or default) format */
@@ -233,7 +233,7 @@ private class InternalKMeansModelWriter extends MLWriterFormat with MLFormatRegi
         ClusterData(idx, center)
     }
     val dataPath = new Path(path, "data").toString
-    sparkSession.createDataFrame(data.toImmutableArraySeq).repartition(1).write.parquet(dataPath)
+    ReadWriteUtils.saveArray[ClusterData](dataPath, data, sparkSession)
   }
 }
 
@@ -265,7 +265,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
    * We store all cluster centers in a single row and use this class to store model data by
    * Spark 1.6 and earlier. A model can be loaded from such older data for backward compatibility.
    */
-  private case class OldData(clusterCenters: Array[OldVector])
+  private[ml] case class OldData(clusterCenters: Array[OldVector])
 
   private class KMeansModelReader extends MLReader[KMeansModel] {
 
@@ -281,8 +281,8 @@ object KMeansModel extends MLReadable[KMeansModel] {
       val dataPath = new Path(path, "data").toString
 
       val clusterCenters = if (majorVersion(metadata.sparkVersion) >= 2) {
-        val data: Dataset[ClusterData] = sparkSession.read.parquet(dataPath).as[ClusterData]
-        data.collect().sortBy(_.clusterIdx).map(_.clusterCenter).map(OldVectors.fromML)
+        val data = ReadWriteUtils.loadArray[ClusterData](dataPath, sparkSession)
+        data.sortBy(_.clusterIdx).map(_.clusterCenter).map(OldVectors.fromML)
       } else {
         // Loads KMeansModel stored with the old format used by Spark 1.6 and earlier.
         sparkSession.read.parquet(dataPath).as[OldData].head().clusterCenters

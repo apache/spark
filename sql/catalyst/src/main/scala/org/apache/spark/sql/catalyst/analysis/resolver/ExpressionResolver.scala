@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   withPosition,
   FunctionResolution,
   GetViewColumnByNameAndOrdinal,
+  TypeCoercionValidation,
   UnresolvedAlias,
   UnresolvedAttribute,
   UnresolvedFunction,
@@ -650,7 +651,12 @@ class ExpressionResolver(
               .peek()
               .resolvingGroupingExpressions && conf.groupByAliases
         ),
-        canResolveNameByHiddenOutput = canResolveNameByHiddenOutput
+        canResolveNameByHiddenOutput = canResolveNameByHiddenOutput,
+        canReferenceAggregatedAccessOnlyAttributes = (
+            expressionResolutionContextStack
+              .peek()
+              .resolvingTreeUnderAggregateExpression
+        )
       )
 
       val candidate = nameTarget.pickCandidate(unresolvedAttribute)
@@ -984,6 +990,10 @@ class ExpressionResolver(
   }
 
   private def validateResolvedExpressionGenerically(resolvedExpression: Expression): Unit = {
+    if (resolvedExpression.checkInputDataTypes().isFailure) {
+      TypeCoercionValidation.failOnTypeCheckResult(resolvedExpression)
+    }
+
     if (!resolvedExpression.resolved) {
       throwSinglePassFailedToResolveExpression(resolvedExpression)
     }

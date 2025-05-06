@@ -329,18 +329,6 @@ protobuf = Module(
     ],
 )
 
-connect = Module(
-    name="connect",
-    dependencies=[hive, avro, protobuf],
-    source_file_regexes=[
-        "sql/connect",
-    ],
-    sbt_test_goals=[
-        "connect/test",
-        "connect-client-jvm/test",
-    ],
-)
-
 graphx = Module(
     name="graphx",
     dependencies=[tags, core],
@@ -420,6 +408,17 @@ mllib = Module(
     ],
 )
 
+connect = Module(
+    name="connect",
+    dependencies=[hive, avro, protobuf, mllib],
+    source_file_regexes=[
+        "sql/connect",
+    ],
+    sbt_test_goals=[
+        "connect/test",
+        "connect-client-jvm/test",
+    ],
+)
 
 examples = Module(
     name="examples",
@@ -510,6 +509,7 @@ pyspark_sql = Module(
         "pyspark.sql.observation",
         "pyspark.sql.tvf",
         # unittests
+        "pyspark.sql.tests.test_artifact",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",
         "pyspark.sql.tests.test_conf",
@@ -1116,6 +1116,7 @@ pyspark_ml_connect = Module(
         # ml doctests
         "pyspark.ml.connect.functions",
         # ml unittests
+        "pyspark.ml.tests.connect.test_connect_cache",
         "pyspark.ml.tests.connect.test_connect_function",
         "pyspark.ml.tests.connect.test_parity_torch_distributor",
         "pyspark.ml.tests.connect.test_parity_torch_data_loader",
@@ -1465,6 +1466,7 @@ pyspark_errors = Module(
     ],
     python_test_goals=[
         # unittests
+        "pyspark.errors.tests.test_connect_errors_conversion",
         "pyspark.errors.tests.test_errors",
         "pyspark.errors.tests.test_traceback",
         "pyspark.errors.tests.connect.test_parity_traceback",

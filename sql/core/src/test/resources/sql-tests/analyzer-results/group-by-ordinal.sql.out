@@ -61,7 +61,7 @@ Aggregate [a#x, a#x], [a#x, 1 AS 1#x, sum(b#x) AS sum(b)#xL]
 -- !query
 select a, 1, sum(b) from data group by 1, 2
 -- !query analysis
-Aggregate [a#x, 2], [a#x, 1 AS 1#x, sum(b#x) AS sum(b)#xL]
+Aggregate [a#x, 1], [a#x, 1 AS 1#x, sum(b#x) AS sum(b)#xL]
 +- SubqueryAlias data
    +- View (`data`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
@@ -469,6 +469,67 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "3"
   } ]
 }
+
+
+-- !query
+SELECT (
+  WITH cte AS (SELECT 1)
+  SELECT * FROM cte
+) AS subq1
+FROM
+  VALUES (1)
+GROUP BY
+  1
+-- !query analysis
+Aggregate [scalar-subquery#x []], [scalar-subquery#x [] AS subq1#x]
+:  :- WithCTE
+:  :  :- CTERelationDef xxxx, false
+:  :  :  +- SubqueryAlias cte
+:  :  :     +- Project [1 AS 1#x]
+:  :  :        +- OneRowRelation
+:  :  +- Project [1#x]
+:  :     +- SubqueryAlias cte
+:  :        +- CTERelationRef xxxx, true, [1#x], false, false, 1
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias cte
+:     :     +- Project [1 AS 1#x]
+:     :        +- OneRowRelation
+:     +- Project [1#x]
+:        +- SubqueryAlias cte
+:           +- CTERelationRef xxxx, true, [1#x], false, false, 1
++- LocalRelation [col1#x]
+
+
+-- !query
+SELECT (
+  SELECT a FROM data LIMIT 1
+) AS subq1
+FROM
+  VALUES (1)
+GROUP BY
+  1
+-- !query analysis
+Aggregate [scalar-subquery#x []], [scalar-subquery#x [] AS subq1#x]
+:  :- GlobalLimit 1
+:  :  +- LocalLimit 1
+:  :     +- Project [a#x]
+:  :        +- SubqueryAlias data
+:  :           +- View (`data`, [a#x, b#x])
+:  :              +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+:  :                 +- Project [a#x, b#x]
+:  :                    +- SubqueryAlias data
+:  :                       +- LocalRelation [a#x, b#x]
+:  +- GlobalLimit 1
+:     +- LocalLimit 1
+:        +- Project [a#x]
+:           +- SubqueryAlias data
+:              +- View (`data`, [a#x, b#x])
+:                 +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+:                    +- Project [a#x, b#x]
+:                       +- SubqueryAlias data
+:                          +- LocalRelation [a#x, b#x]
++- LocalRelation [col1#x]
 
 
 -- !query

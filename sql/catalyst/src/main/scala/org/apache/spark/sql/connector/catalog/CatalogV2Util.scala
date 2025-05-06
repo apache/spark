@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector.catalog
 
 import java.util
-import java.util.Collections
+import java.util.{Collections, Locale}
 
 import scala.jdk.CollectionConverters._
 
@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.TableChange._
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, LiteralValue, Transform}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -294,6 +295,49 @@ private[sql] object CatalogV2Util {
           schema
       }
     }
+  }
+
+  /**
+   * Extracts and validates table constraints from a sequence of table changes.
+   */
+  def collectConstraintChanges(
+      table: Table,
+      changes: Seq[TableChange]): Array[Constraint] = {
+    val constraints = table.constraints()
+
+    def findExistingConstraint(name: String): Option[Constraint] = {
+      constraints.find(_.name.toLowerCase(Locale.ROOT) == name.toLowerCase(Locale.ROOT))
+    }
+
+    changes.foldLeft(constraints) { (constraints, change) =>
+      change match {
+        case add: AddConstraint =>
+          val newConstraint = add.constraint
+          val existingConstraint = findExistingConstraint(newConstraint.name)
+          if (existingConstraint.isDefined) {
+            throw new AnalysisException(
+              errorClass = "CONSTRAINT_ALREADY_EXISTS",
+              messageParameters =
+                Map("constraintName" -> existingConstraint.get.name,
+                  "oldConstraint" -> existingConstraint.get.toDDL))
+          }
+          constraints :+ newConstraint
+
+        case drop: DropConstraint =>
+          val existingConstraint = findExistingConstraint(drop.name)
+          if (existingConstraint.isEmpty && !drop.ifExists) {
+            throw new AnalysisException(
+              errorClass = "CONSTRAINT_DOES_NOT_EXIST",
+              messageParameters =
+                Map("constraintName" -> drop.name, "tableName" -> table.name()))
+          }
+          constraints.filterNot(_.name == drop.name)
+
+        case _ =>
+          // ignore non-constraint changes
+          constraints
+      }
+    }.toArray
   }
 
   private def addField(

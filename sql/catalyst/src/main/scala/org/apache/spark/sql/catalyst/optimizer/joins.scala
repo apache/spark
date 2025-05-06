@@ -314,29 +314,36 @@ trait JoinSelectionHelper extends PredicateHelper {
       conf: SQLConf,
       broadcastedCanonicalizedSubplans: mutable.Set[LogicalPlan] = mutable.Set.empty):
   Option[BuildSide] = {
-    val (buildLeft, numAggsAndFiltersLeft) = if (hintOnly) {
-      (hintToBroadcastLeft(join.hint), (0, 0))
-    } else {
-      val temp = canBroadcastBySize(join.left, conf) && !hintToNotBroadcastLeft(join.hint)
-      val (numAggs, numFilters) = if (conf.useAggsNonTrivialFiltersToSelectBHJStrategy) {
-       collectAggregateAndSelectiveFilterCount(join.left)
+    def shouldBuildLeft(): (Boolean, (Int, Int)) = {
+      if (hintOnly) {
+        (hintToBroadcastLeft(join.hint), (0, 0))
       } else {
-        0 -> 0
+        val temp = canBroadcastBySize(join.left, conf) && !hintToNotBroadcastLeft(join.hint)
+        val (numAggs, numFilters) = if (conf.useAggsNonTrivialFiltersToSelectBHJStrategy) {
+          collectAggregateAndSelectiveFilterCount(join.left)
+        } else {
+          0 -> 0
+        }
+        (temp || numFilters > 0 || numAggs > 0, numAggs -> numFilters)
       }
-      (temp || numFilters > 0 || numAggs > 0, numAggs -> numFilters)
     }
-    val (buildRight, numAggsAndFiltersRight) = if (hintOnly) {
-      (hintToBroadcastRight(join.hint), (0, 0))
-    } else {
-      val temp = canBroadcastBySize(join.right, conf) && !hintToNotBroadcastRight(join.hint)
-      val (numAggs, numFilters) = if (conf.useAggsNonTrivialFiltersToSelectBHJStrategy) {
-        collectAggregateAndSelectiveFilterCount(join.right)
+    
+    def shouldBuildRight(): (Boolean, (Int, Int)) = {
+      if (hintOnly) {
+        (hintToBroadcastRight(join.hint), (0, 0))
       } else {
-        0 -> 0
+        val temp = canBroadcastBySize(join.right, conf) && !hintToNotBroadcastRight(join.hint)
+        val (numAggs, numFilters) = if (conf.useAggsNonTrivialFiltersToSelectBHJStrategy) {
+          collectAggregateAndSelectiveFilterCount(join.right)
+        } else {
+          0 -> 0
+        }
+        (temp || numFilters > 0 || numAggs > 0, numAggs -> numFilters)
       }
-      (temp || numFilters > 0 || numAggs > 0, numAggs -> numFilters)
+    }
 
-    }
+    val (buildLeft, numAggsAndFiltersLeft) = shouldBuildLeft()
+    val (buildRight, numAggsAndFiltersRight) = shouldBuildRight()
 
     getBuildSide(
       buildLeft && canBuildBroadcastLeft(join.joinType), numAggsAndFiltersLeft,
@@ -351,25 +358,31 @@ trait JoinSelectionHelper extends PredicateHelper {
       join: Join,
       hintOnly: Boolean,
       conf: SQLConf): Option[BuildSide] = {
-    val buildLeft = if (hintOnly) {
-      hintToShuffleHashJoinLeft(join.hint)
-    } else {
-      hintToPreferShuffleHashJoinLeft(join.hint) ||
-        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.left, conf) &&
-          muchSmaller(join.left, join.right, conf)) ||
-        forceApplyShuffledHashJoin(conf)
+    def shouldBuildLeft(): Boolean = {
+      if (hintOnly) {
+        hintToShuffleHashJoinLeft(join.hint)
+      } else {
+        hintToPreferShuffleHashJoinLeft(join.hint) ||
+          (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.left, conf) &&
+            muchSmaller(join.left, join.right, conf)) ||
+          forceApplyShuffledHashJoin(conf)
+      }
     }
-    val buildRight = if (hintOnly) {
-      hintToShuffleHashJoinRight(join.hint)
-    } else {
-      hintToPreferShuffleHashJoinRight(join.hint) ||
-        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.right, conf) &&
-          muchSmaller(join.right, join.left, conf)) ||
-        forceApplyShuffledHashJoin(conf)
+
+    def shouldBuildRight(): Boolean = {
+      if (hintOnly) {
+        hintToShuffleHashJoinRight(join.hint)
+      } else {
+        hintToPreferShuffleHashJoinRight(join.hint) ||
+          (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.right, conf) &&
+            muchSmaller(join.right, join.left, conf)) ||
+          forceApplyShuffledHashJoin(conf)
+      }
     }
+
     getBuildSide(
-      buildLeft && canBuildShuffledHashJoinLeft(join.joinType), (0, 0),
-      buildRight && canBuildShuffledHashJoinRight(join.joinType), (0, 0),
+      canBuildShuffledHashJoinLeft(join.joinType) && shouldBuildLeft(), (0, 0),
+      canBuildShuffledHashJoinRight(join.joinType) && shouldBuildRight(), (0, 0),
       join.left,
       join.right,
       mutable.Set.empty

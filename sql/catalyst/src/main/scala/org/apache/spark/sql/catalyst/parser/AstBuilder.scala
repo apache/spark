@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import java.util.Locale
+import java.util.{List, Locale}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Set}
@@ -25,7 +25,6 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
 
 import org.antlr.v4.runtime.{ParserRuleContext, RuleContext, Token}
-import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable, SparkThrowableHelper}
@@ -129,9 +128,7 @@ class AstBuilder extends DataTypeAstBuilder
    * @return The original input text, including all whitespaces and formatting.
    */
   private def getOriginalText(ctx: ParserRuleContext): String = {
-    ctx.getStart.getInputStream.getText(
-      new Interval(ctx.getStart.getStartIndex, ctx.getStop.getStopIndex)
-    )
+    SparkParserUtils.source(ctx)
   }
 
   /**
@@ -1286,17 +1283,17 @@ class AstBuilder extends DataTypeAstBuilder
     val withOrder = if (
       !order.isEmpty && sort.isEmpty && distributeBy.isEmpty && clusterBy.isEmpty) {
       clause = PipeOperators.orderByClause
-      Sort(order.asScala.map(visitSortItem).toSeq, global = true, query)
+      Sort(order.asScala.map(visitSortItemAndReplaceOrdinals).toSeq, global = true, query)
     } else if (order.isEmpty && !sort.isEmpty && distributeBy.isEmpty && clusterBy.isEmpty) {
       clause = PipeOperators.sortByClause
-      Sort(sort.asScala.map(visitSortItem).toSeq, global = false, query)
+      Sort(sort.asScala.map(visitSortItemAndReplaceOrdinals).toSeq, global = false, query)
     } else if (order.isEmpty && sort.isEmpty && !distributeBy.isEmpty && clusterBy.isEmpty) {
       clause = PipeOperators.distributeByClause
       withRepartitionByExpression(ctx, expressionList(distributeBy), query)
     } else if (order.isEmpty && !sort.isEmpty && !distributeBy.isEmpty && clusterBy.isEmpty) {
       clause = PipeOperators.sortByDistributeByClause
       Sort(
-        sort.asScala.map(visitSortItem).toSeq,
+        sort.asScala.map(visitSortItemAndReplaceOrdinals).toSeq,
         global = false,
         withRepartitionByExpression(ctx, expressionList(distributeBy), query))
     } else if (order.isEmpty && sort.isEmpty && distributeBy.isEmpty && !clusterBy.isEmpty) {
@@ -1825,24 +1822,27 @@ class AstBuilder extends DataTypeAstBuilder
           }
           visitNamedExpression(n)
         }.toSeq
+      val groupByExpressionsWithOrdinals =
+        replaceOrdinalsInGroupingExpressions(groupByExpressions)
       if (ctx.GROUPING != null) {
         // GROUP BY ... GROUPING SETS (...)
         // `groupByExpressions` can be non-empty for Hive compatibility. It may add extra grouping
         // expressions that do not exist in GROUPING SETS (...), and the value is always null.
         // For example, `SELECT a, b, c FROM ... GROUP BY a, b, c GROUPING SETS (a, b)`, the output
         // of column `c` is always null.
-        val groupingSets =
-          ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)).toSeq)
-        Aggregate(Seq(GroupingSets(groupingSets.toSeq, groupByExpressions)),
-          selectExpressions, query)
+        val groupingSetsWithOrdinals = visitGroupingSetAndReplaceOrdinals(ctx.groupingSet)
+        Aggregate(
+          Seq(GroupingSets(groupingSetsWithOrdinals, groupByExpressionsWithOrdinals)),
+          selectExpressions, query
+        )
       } else {
         // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
         val mappedGroupByExpressions = if (ctx.CUBE != null) {
-          Seq(Cube(groupByExpressions.map(Seq(_))))
+          Seq(Cube(groupByExpressionsWithOrdinals.map(Seq(_))))
         } else if (ctx.ROLLUP != null) {
-          Seq(Rollup(groupByExpressions.map(Seq(_))))
+          Seq(Rollup(groupByExpressionsWithOrdinals.map(Seq(_))))
         } else {
-          groupByExpressions
+          groupByExpressionsWithOrdinals
         }
         Aggregate(mappedGroupByExpressions, selectExpressions, query)
       }
@@ -1856,8 +1856,12 @@ class AstBuilder extends DataTypeAstBuilder
             } else {
               expression(groupByExpr.expression)
             }
-          })
-      Aggregate(groupByExpressions.toSeq, selectExpressions, query)
+          }).toSeq
+      Aggregate(
+        groupingExpressions = replaceOrdinalsInGroupingExpressions(groupByExpressions),
+        aggregateExpressions = selectExpressions,
+        child = query
+      )
     }
   }
 
@@ -1865,7 +1869,7 @@ class AstBuilder extends DataTypeAstBuilder
       groupingAnalytics: GroupingAnalyticsContext): BaseGroupingSets = {
     val groupingSets = groupingAnalytics.groupingSet.asScala
       .map(_.expression.asScala.map(e => expression(e)).toSeq)
-    if (groupingAnalytics.CUBE != null) {
+    val baseGroupingSet = if (groupingAnalytics.CUBE != null) {
       // CUBE(A, B, (A, B), ()) is not supported.
       if (groupingSets.exists(_.isEmpty)) {
         throw QueryParsingErrors.invalidGroupingSetError("CUBE", groupingAnalytics)
@@ -1889,6 +1893,9 @@ class AstBuilder extends DataTypeAstBuilder
       }
       GroupingSets(groupingSets.toSeq)
     }
+    baseGroupingSet.withNewChildren(
+      newChildren = replaceOrdinalsInGroupingExpressions(baseGroupingSet.children)
+    ).asInstanceOf[BaseGroupingSets]
   }
 
   /**
@@ -2888,12 +2895,14 @@ class AstBuilder extends DataTypeAstBuilder
           CurrentDate()
         case SqlBaseParser.CURRENT_TIMESTAMP =>
           CurrentTimestamp()
+        case SqlBaseParser.CURRENT_TIME =>
+          CurrentTime()
         case SqlBaseParser.CURRENT_USER | SqlBaseParser.USER | SqlBaseParser.SESSION_USER =>
           CurrentUser()
       }
     } else {
       // If the parser is not in ansi mode, we should return `UnresolvedAttribute`, in case there
-      // are columns named `CURRENT_DATE` or `CURRENT_TIMESTAMP`.
+      // are columns named `CURRENT_DATE` or `CURRENT_TIMESTAMP` or `CURRENT_TIME`
       UnresolvedAttribute.quoted(ctx.name.getText)
     }
   }
@@ -3885,6 +3894,30 @@ class AstBuilder extends DataTypeAstBuilder
    * DataType parsing
    * ******************************************************************************************** */
 
+  override def visitSingleRoutineParamList(
+      ctx: SingleRoutineParamListContext): StructType = withOrigin(ctx) {
+    val (cols, constraints) = visitColDefinitionList(ctx.colDefinitionList())
+    // Constraints and generated columns should have been rejected by the parser.
+    assert(constraints.isEmpty)
+    for (col <- cols) {
+      assert(col.generationExpression.isEmpty)
+      assert(col.identityColumnSpec.isEmpty)
+    }
+    // Build fields from the columns, converting comments and default values
+    val fields = for (col <- cols) yield {
+      val metadataBuilder = new MetadataBuilder().withMetadata(col.metadata)
+      col.comment.foreach { c =>
+        metadataBuilder.putString("comment", c)
+      }
+      col.defaultValue.foreach { default =>
+        metadataBuilder.putString(
+          StructType.SQL_FUNCTION_DEFAULT_METADATA_KEY, default.originalSQL)
+      }
+      StructField(col.name, col.dataType, col.nullable, metadataBuilder.build())
+    }
+    StructType(fields.toArray)
+  }
+
   /**
    * Create top level table schema.
    */
@@ -3989,7 +4022,7 @@ class AstBuilder extends DataTypeAstBuilder
         visitConstraintCharacteristics(ctx.constraintCharacteristic().asScala.toSeq)
       val expr = visitColumnConstraint(columnName, ctx.columnConstraint())
 
-      expr.withName(name).withCharacteristic(constraintCharacteristic, ctx)
+      expr.withUserProvidedName(name).withUserProvidedCharacteristic(constraintCharacteristic)
     }
   }
 
@@ -4049,12 +4082,7 @@ class AstBuilder extends DataTypeAstBuilder
     if (expr.containsPattern(PARAMETER)) {
       throw QueryParsingErrors.parameterMarkerNotAllowed(place, expr.origin)
     }
-    // Extract the raw expression text so that we can save the user provided text. We don't
-    // use `Expression.sql` to avoid storing incorrect text caused by bugs in any expression's
-    // `sql` method. Note: `exprCtx.getText` returns a string without spaces, so we need to
-    // get the text from the underlying char stream instead.
-    val originalSQL = getOriginalText(exprCtx)
-    DefaultValueExpression(expr, originalSQL)
+    DefaultValueExpression(expr, getOriginalText(exprCtx))
   }
 
   /**
@@ -4872,7 +4900,7 @@ class AstBuilder extends DataTypeAstBuilder
     val asSelectPlan = Option(ctx.query).map(plan).toSeq
     withIdentClause(identifierContext, asSelectPlan, (identifiers, otherPlans) => {
       val namedConstraints =
-        constraints.map(c => c.generateConstraintNameIfNeeded(identifiers.last))
+        constraints.map(c => c.withTableName(identifiers.last))
       val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
         collation, serdeInfo, external, namedConstraints)
       val identifier = withOrigin(identifierContext) {
@@ -4951,7 +4979,7 @@ class AstBuilder extends DataTypeAstBuilder
     val asSelectPlan = Option(ctx.query).map(plan).toSeq
     withIdentClause(identifierContext, asSelectPlan, (identifiers, otherPlans) => {
       val namedConstraints =
-        constraints.map(c => c.generateConstraintNameIfNeeded(identifiers.last))
+        constraints.map(c => c.withTableName(identifiers.last))
       val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
         collation, serdeInfo, external = false, namedConstraints)
       val identifier = withOrigin(identifierContext) {
@@ -5394,7 +5422,7 @@ class AstBuilder extends DataTypeAstBuilder
       val expr =
         visitTableConstraint(ctx.tableConstraint()).asInstanceOf[TableConstraint]
 
-      expr.withName(name).withCharacteristic(constraintCharacteristic, ctx)
+      expr.withUserProvidedName(name).withUserProvidedCharacteristic(constraintCharacteristic)
   }
 
   override def visitCheckConstraint(ctx: CheckConstraintContext): CheckConstraint =
@@ -5463,7 +5491,7 @@ class AstBuilder extends DataTypeAstBuilder
       val tableConstraint = visitTableConstraintDefinition(ctx.tableConstraintDefinition())
       withIdentClause(ctx.identifierReference, identifiers => {
         val table = UnresolvedTable(identifiers, "ALTER TABLE ... ADD CONSTRAINT")
-        val namedConstraint = tableConstraint.generateConstraintNameIfNeeded(identifiers.last)
+        val namedConstraint = tableConstraint.withTableName(identifiers.last)
         AddConstraint(table, namedConstraint)
       })
     }
@@ -6530,12 +6558,12 @@ class AstBuilder extends DataTypeAstBuilder
             case n: NamedExpression =>
               newGroupingExpressions += n
               newAggregateExpressions += n
-            // If the grouping expression is an integer literal, create [[UnresolvedOrdinal]] and
-            // [[UnresolvedPipeAggregateOrdinal]] expressions to represent it in the final grouping
-            // and aggregate expressions, respectively. This will let the
+            // If the grouping expression is an [[UnresolvedOrdinal]], replace the ordinal value and
+            // create [[UnresolvedPipeAggregateOrdinal]] expressions to represent it in the final
+            // grouping and aggregate expressions, respectively. This will let the
             // [[ResolveOrdinalInOrderByAndGroupBy]] rule detect the ordinal in the aggregate list
             // and replace it with the corresponding attribute from the child operator.
-            case Literal(v: Int, IntegerType) if conf.groupByOrdinal =>
+            case UnresolvedOrdinal(v: Int) =>
               newGroupingExpressions += UnresolvedOrdinal(newAggregateExpressions.length + 1)
               newAggregateExpressions += UnresolvedAlias(UnresolvedPipeAggregateOrdinal(v), None)
             case e: Expression =>
@@ -6554,6 +6582,58 @@ class AstBuilder extends DataTypeAstBuilder
         aggregateExpressions = aggregateExpressions,
         child = left)
     }
+  }
+
+  /**
+   * Visits [[SortItemContext]] and replaces top-level [[Literal]]s with [[UnresolvedOrdinal]] in
+   * resulting expression, if `orderByOrdinal` is enabled.
+   */
+  private def visitSortItemAndReplaceOrdinals(sortItemContext: SortItemContext) = {
+    val visitedSortItem = visitSortItem(sortItemContext)
+    visitedSortItem.withNewChildren(
+      newChildren = Seq(replaceIntegerLiteralWithOrdinal(
+        expression = visitedSortItem.child,
+        canReplaceWithOrdinal = conf.orderByOrdinal
+      ))
+    ).asInstanceOf[SortOrder]
+  }
+
+  /**
+   * Replaces top-level integer [[Literal]]s with [[UnresolvedOrdinal]] in grouping expressions, if
+   * `groupByOrdinal` is enabled.
+   */
+  private def replaceOrdinalsInGroupingExpressions(groupingExpressions: Seq[Expression]) =
+    groupingExpressions.map(groupByExpression =>
+      replaceIntegerLiteralWithOrdinal(
+        expression = groupByExpression,
+        canReplaceWithOrdinal = conf.groupByOrdinal
+      )
+    ).toSeq
+
+  /**
+   * Visits grouping expressions in a [[GroupingSetContext]] and replaces top-level integer
+   * [[Literal]]s with [[UnresolvedOrdinal]]s in resulting expressions, if `groupByOrdinal` is
+   * enabled.
+   */
+  private def visitGroupingSetAndReplaceOrdinals(groupingSet: List[GroupingSetContext]) = {
+    groupingSet.asScala.map(_.expression.asScala.map(e => {
+      val visitedExpression = expression(e)
+      replaceIntegerLiteralWithOrdinal(
+        expression = visitedExpression,
+        canReplaceWithOrdinal = conf.groupByOrdinal
+      )
+    }).toSeq).toSeq
+  }
+
+  /**
+   * Replaces integer [[Literal]] with [[UnresolvedOrdinal]] if `canReplaceWithOrdinal` is true.
+   */
+  private def replaceIntegerLiteralWithOrdinal(
+      expression: Expression,
+      canReplaceWithOrdinal: Boolean = true) = expression match {
+    case literal @ Literal(value: Int, IntegerType) if canReplaceWithOrdinal =>
+      CurrentOrigin.withOrigin(literal.origin) { UnresolvedOrdinal(value) }
+    case other => other
   }
 
   /**

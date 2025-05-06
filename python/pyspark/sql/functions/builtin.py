@@ -42,7 +42,6 @@ from typing import (
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import _with_origin
 from pyspark.sql.column import Column
-from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 from pyspark.sql.types import (
     ArrayType,
     ByteType,
@@ -72,6 +71,7 @@ from pyspark.sql.utils import (
 
 if TYPE_CHECKING:
     from pyspark import SparkContext
+    from pyspark.sql.dataframe import DataFrame
     from pyspark.sql._typing import (
         ColumnOrName,
         DataTypeOrString,
@@ -6635,7 +6635,7 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
 
 
 @_try_remote_functions
-def broadcast(df: "ParentDataFrame") -> "ParentDataFrame":
+def broadcast(df: "DataFrame") -> "DataFrame":
     """
     Marks a DataFrame as small enough for use in broadcast joins.
 
@@ -6664,9 +6664,10 @@ def broadcast(df: "ParentDataFrame") -> "ParentDataFrame":
     +-----+---+
     """
     from py4j.java_gateway import JVMView
+    from pyspark.sql.dataframe import DataFrame
 
     sc = _get_active_spark_context()
-    return ParentDataFrame(cast(JVMView, sc._jvm).functions.broadcast(df._jdf), df.sparkSession)
+    return DataFrame(cast(JVMView, sc._jvm).functions.broadcast(df._jdf), df.sparkSession)
 
 
 @_try_remote_functions
@@ -7433,7 +7434,7 @@ def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 @_try_remote_functions
 def percentile(
     col: "ColumnOrName",
-    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     frequency: Union[Column, int] = 1,
 ) -> Column:
     """Returns the exact percentile(s) of numeric column `expr` at the given percentage(s)
@@ -7493,7 +7494,7 @@ def percentile(
 @_try_remote_functions
 def percentile_approx(
     col: "ColumnOrName",
-    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     accuracy: Union[Column, int] = 10000,
 ) -> Column:
     """Returns the approximate `percentile` of the numeric column `col` which is the smallest value
@@ -7564,7 +7565,7 @@ def percentile_approx(
 @_try_remote_functions
 def approx_percentile(
     col: "ColumnOrName",
-    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     accuracy: Union[Column, int] = 10000,
 ) -> Column:
     """Returns the approximate `percentile` of the numeric column `col` which is the smallest value
@@ -7685,6 +7686,9 @@ def rand(seed: Optional[int] = None) -> Column:
         return _invoke_function("rand", _enum_to_value(seed))
     else:
         return _invoke_function("rand")
+
+
+random = rand
 
 
 @_try_remote_functions
@@ -13191,6 +13195,30 @@ def session_user() -> Column:
 
 
 @_try_remote_functions
+def uuid() -> Column:
+    """Returns an universally unique identifier (UUID) string.
+    The value is returned as a canonical UUID 36-character string.
+
+    .. versionadded:: 4.1.0
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(5).select(sf.uuid()).show(truncate=False) # doctest: +SKIP
+    +------------------------------------+
+    |uuid()                              |
+    +------------------------------------+
+    |627ae05e-b319-42b5-b4e4-71c8c9754dd1|
+    |f781cce5-a2e2-464d-bc8b-426ff448e404|
+    |15e2e66e-8416-4ea2-af3c-409363408189|
+    |fb1d6178-7676-4791-baa9-f2ddcc494515|
+    |d48665e8-2657-4c6b-b7c8-8ae0cd646e41|
+    +------------------------------------+
+    """
+    return _invoke_function("uuid")
+
+
+@_try_remote_functions
 def crc32(col: "ColumnOrName") -> Column:
     """
     Calculates the cyclic redundancy check value (CRC32) of a binary column and
@@ -17156,6 +17184,41 @@ def character_length(str: "ColumnOrName") -> Column:
     +--------------------------+
     """
     return _invoke_function_over_columns("character_length", str)
+
+
+@_try_remote_functions
+def chr(n: "ColumnOrName") -> Column:
+    """
+    Returns the ASCII character having the binary equivalent to `n`.
+    If n is larger than 256 the result is equivalent to chr(n % 256).
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    n : :class:`~pyspark.sql.Column` or column name
+        target column to compute on.
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(60, 70).select("*", sf.chr("id")).show()
+    +---+-------+
+    | id|chr(id)|
+    +---+-------+
+    | 60|      <|
+    | 61|      =|
+    | 62|      >|
+    | 63|      ?|
+    | 64|      @|
+    | 65|      A|
+    | 66|      B|
+    | 67|      C|
+    | 68|      D|
+    | 69|      E|
+    +---+-------+
+    """
+    return _invoke_function_over_columns("chr", n)
 
 
 @_try_remote_functions

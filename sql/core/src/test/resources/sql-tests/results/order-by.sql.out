@@ -10,6 +10,22 @@ struct<>
 
 
 -- !query
+CREATE OR REPLACE TEMPORARY VIEW v1 AS SELECT 1 AS col1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW v2 AS SELECT 1 AS col1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT a FROM testData ORDER BY a
 -- !query schema
 struct<a:int>
@@ -187,7 +203,265 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT col1 FROM VALUES (1, 2) GROUP BY col1 ORDER BY MAX(col2), RAND()
+-- !query schema
+struct<col1:int>
+-- !query output
+1
+
+
+-- !query
+SELECT 1 AS col1, col1 FROM VALUES (10) ORDER BY col1
+-- !query schema
+struct<col1:int,col1:int>
+-- !query output
+1	10
+
+
+-- !query
+SELECT
+  COUNT(DISTINCT col1)
+FROM
+  v1
+NATURAL JOIN
+  v2
+GROUP BY
+  col1
+ORDER BY
+  col1
+-- !query schema
+struct<count(DISTINCT col1):bigint>
+-- !query output
+1
+
+
+-- !query
+SELECT
+  COUNT(DISTINCT col1)
+FROM
+  v1
+NATURAL JOIN
+  v1
+GROUP BY
+  col1
+ORDER BY
+  col1
+-- !query schema
+struct<count(DISTINCT col1):bigint>
+-- !query output
+1
+
+
+-- !query
+SELECT 'a' ORDER BY CAST('a' AS VARIANT)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "\"VARIANT\"",
+    "functionName" : "`sortorder`",
+    "sqlExpr" : "\"CAST(a AS VARIANT) ASC NULLS FIRST\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 40,
+    "fragment" : "CAST('a' AS VARIANT)"
+  } ]
+}
+
+
+-- !query
+SELECT a, b FROM testData ORDER BY CAST(a + b AS VARIANT)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "\"VARIANT\"",
+    "functionName" : "`sortorder`",
+    "sqlExpr" : "\"CAST((a + b) AS VARIANT) ASC NULLS FIRST\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 57,
+    "fragment" : "CAST(a + b AS VARIANT)"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM testData ORDER BY CAST(CAST(a AS VARIANT) AS VARIANT)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "\"VARIANT\"",
+    "functionName" : "`sortorder`",
+    "sqlExpr" : "\"CAST(CAST(a AS VARIANT) AS VARIANT) ASC NULLS FIRST\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 33,
+    "stopIndex" : 67,
+    "fragment" : "CAST(CAST(a AS VARIANT) AS VARIANT)"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM testData GROUP BY a ORDER BY CAST(CAST(a AS STRING) AS VARIANT)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "\"VARIANT\"",
+    "functionName" : "`sortorder`",
+    "sqlExpr" : "\"CAST(CAST(a AS STRING) AS VARIANT) ASC NULLS FIRST\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 44,
+    "stopIndex" : 77,
+    "fragment" : "CAST(CAST(a AS STRING) AS VARIANT)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM testData ORDER BY CAST(null AS VARIANT)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "\"VARIANT\"",
+    "functionName" : "`sortorder`",
+    "sqlExpr" : "\"CAST(NULL AS VARIANT) ASC NULLS FIRST\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 33,
+    "stopIndex" : 53,
+    "fragment" : "CAST(null AS VARIANT)"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM testData ORDER BY ARRAY(CAST(true AS VARIANT))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "\"ARRAY<VARIANT>\"",
+    "functionName" : "`sortorder`",
+    "sqlExpr" : "\"array(CAST(true AS VARIANT)) ASC NULLS FIRST\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 33,
+    "stopIndex" : 60,
+    "fragment" : "ARRAY(CAST(true AS VARIANT))"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM testData ORDER BY CAST(ARRAY('a') AS VARIANT)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "\"VARIANT\"",
+    "functionName" : "`sortorder`",
+    "sqlExpr" : "\"CAST(array(a) AS VARIANT) ASC NULLS FIRST\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 33,
+    "stopIndex" : 59,
+    "fragment" : "CAST(ARRAY('a') AS VARIANT)"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM testData ORDER BY CAST(ARRAY(CAST(true AS VARIANT)) AS VARIANT)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "\"VARIANT\"",
+    "functionName" : "`sortorder`",
+    "sqlExpr" : "\"CAST(array(CAST(true AS VARIANT)) AS VARIANT) ASC NULLS FIRST\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 33,
+    "stopIndex" : 77,
+    "fragment" : "CAST(ARRAY(CAST(true AS VARIANT)) AS VARIANT)"
+  } ]
+}
+
+
+-- !query
 DROP VIEW IF EXISTS testData
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW IF EXISTS v1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW IF EXISTS v2
 -- !query schema
 struct<>
 -- !query output

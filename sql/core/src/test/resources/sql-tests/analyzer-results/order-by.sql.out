@@ -13,6 +13,22 @@ AS testData(a, b), false, true, LocalTempView, UNSUPPORTED, true
 
 
 -- !query
+CREATE OR REPLACE TEMPORARY VIEW v1 AS SELECT 1 AS col1
+-- !query analysis
+CreateViewCommand `v1`, SELECT 1 AS col1, false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [1 AS col1#x]
+      +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW v2 AS SELECT 1 AS col1
+-- !query analysis
+CreateViewCommand `v2`, SELECT 1 AS col1, false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [1 AS col1#x]
+      +- OneRowRelation
+
+
+-- !query
 SELECT a FROM testData ORDER BY a
 -- !query analysis
 Sort [a#x ASC NULLS FIRST], true
@@ -185,6 +201,266 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT col1 FROM VALUES (1, 2) GROUP BY col1 ORDER BY MAX(col2), RAND()
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT 1 AS col1, col1 FROM VALUES (10) ORDER BY col1
+-- !query analysis
+Sort [col1#x ASC NULLS FIRST], true
++- Project [1 AS col1#x, col1#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT
+  COUNT(DISTINCT col1)
+FROM
+  v1
+NATURAL JOIN
+  v2
+GROUP BY
+  col1
+ORDER BY
+  col1
+-- !query analysis
+Project [count(DISTINCT col1)#xL]
++- Sort [col1#x ASC NULLS FIRST], true
+   +- Aggregate [col1#x], [count(distinct col1#x) AS count(DISTINCT col1)#xL, col1#x]
+      +- Project [col1#x]
+         +- Join Inner, (col1#x = col1#x)
+            :- SubqueryAlias v1
+            :  +- View (`v1`, [col1#x])
+            :     +- Project [cast(col1#x as int) AS col1#x]
+            :        +- Project [1 AS col1#x]
+            :           +- OneRowRelation
+            +- SubqueryAlias v2
+               +- View (`v2`, [col1#x])
+                  +- Project [cast(col1#x as int) AS col1#x]
+                     +- Project [1 AS col1#x]
+                        +- OneRowRelation
+
+
+-- !query
+SELECT
+  COUNT(DISTINCT col1)
+FROM
+  v1
+NATURAL JOIN
+  v1
+GROUP BY
+  col1
+ORDER BY
+  col1
+-- !query analysis
+Project [count(DISTINCT col1)#xL]
++- Sort [col1#x ASC NULLS FIRST], true
+   +- Aggregate [col1#x], [count(distinct col1#x) AS count(DISTINCT col1)#xL, col1#x]
+      +- Project [col1#x]
+         +- Join Inner, (col1#x = col1#x)
+            :- SubqueryAlias v1
+            :  +- View (`v1`, [col1#x])
+            :     +- Project [cast(col1#x as int) AS col1#x]
+            :        +- Project [1 AS col1#x]
+            :           +- OneRowRelation
+            +- SubqueryAlias v1
+               +- View (`v1`, [col1#x])
+                  +- Project [cast(col1#x as int) AS col1#x]
+                     +- Project [1 AS col1#x]
+                        +- OneRowRelation
+
+
+-- !query
+SELECT 'a' ORDER BY CAST('a' AS VARIANT)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "\"VARIANT\"",
+    "functionName" : "`sortorder`",
+    "sqlExpr" : "\"CAST(a AS VARIANT) ASC NULLS FIRST\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 40,
+    "fragment" : "CAST('a' AS VARIANT)"
+  } ]
+}
+
+
+-- !query
+SELECT a, b FROM testData ORDER BY CAST(a + b AS VARIANT)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "\"VARIANT\"",
+    "functionName" : "`sortorder`",
+    "sqlExpr" : "\"CAST((a + b) AS VARIANT) ASC NULLS FIRST\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 57,
+    "fragment" : "CAST(a + b AS VARIANT)"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM testData ORDER BY CAST(CAST(a AS VARIANT) AS VARIANT)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "\"VARIANT\"",
+    "functionName" : "`sortorder`",
+    "sqlExpr" : "\"CAST(CAST(a AS VARIANT) AS VARIANT) ASC NULLS FIRST\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 33,
+    "stopIndex" : 67,
+    "fragment" : "CAST(CAST(a AS VARIANT) AS VARIANT)"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM testData GROUP BY a ORDER BY CAST(CAST(a AS STRING) AS VARIANT)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "\"VARIANT\"",
+    "functionName" : "`sortorder`",
+    "sqlExpr" : "\"CAST(CAST(a AS STRING) AS VARIANT) ASC NULLS FIRST\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 44,
+    "stopIndex" : 77,
+    "fragment" : "CAST(CAST(a AS STRING) AS VARIANT)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM testData ORDER BY CAST(null AS VARIANT)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "\"VARIANT\"",
+    "functionName" : "`sortorder`",
+    "sqlExpr" : "\"CAST(NULL AS VARIANT) ASC NULLS FIRST\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 33,
+    "stopIndex" : 53,
+    "fragment" : "CAST(null AS VARIANT)"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM testData ORDER BY ARRAY(CAST(true AS VARIANT))
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "\"ARRAY<VARIANT>\"",
+    "functionName" : "`sortorder`",
+    "sqlExpr" : "\"array(CAST(true AS VARIANT)) ASC NULLS FIRST\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 33,
+    "stopIndex" : 60,
+    "fragment" : "ARRAY(CAST(true AS VARIANT))"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM testData ORDER BY CAST(ARRAY('a') AS VARIANT)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "\"VARIANT\"",
+    "functionName" : "`sortorder`",
+    "sqlExpr" : "\"CAST(array(a) AS VARIANT) ASC NULLS FIRST\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 33,
+    "stopIndex" : 59,
+    "fragment" : "CAST(ARRAY('a') AS VARIANT)"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM testData ORDER BY CAST(ARRAY(CAST(true AS VARIANT)) AS VARIANT)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "\"VARIANT\"",
+    "functionName" : "`sortorder`",
+    "sqlExpr" : "\"CAST(array(CAST(true AS VARIANT)) AS VARIANT) ASC NULLS FIRST\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 33,
+    "stopIndex" : 77,
+    "fragment" : "CAST(ARRAY(CAST(true AS VARIANT)) AS VARIANT)"
+  } ]
+}
+
+
+-- !query
 DROP VIEW IF EXISTS testData
 -- !query analysis
 DropTempViewCommand testData
+
+
+-- !query
+DROP VIEW IF EXISTS v1
+-- !query analysis
+DropTempViewCommand v1
+
+
+-- !query
+DROP VIEW IF EXISTS v2
+-- !query analysis
+DropTempViewCommand v2

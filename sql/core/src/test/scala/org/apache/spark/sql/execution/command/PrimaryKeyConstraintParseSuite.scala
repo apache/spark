@@ -27,7 +27,10 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
 
   test("Create table with primary key - table level") {
     val sql = "CREATE TABLE t (a INT, b STRING, PRIMARY KEY (a)) USING parquet"
-    val constraint = PrimaryKeyConstraint(columns = Seq("a"), name = "t_pk")
+    val constraint = PrimaryKeyConstraint(
+      columns = Seq("a"),
+      tableName = "t",
+      userProvidedName = null)
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints)
   }
@@ -36,7 +39,8 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
     val sql = "CREATE TABLE t (a INT, b STRING, CONSTRAINT pk1 PRIMARY KEY (a)) USING parquet"
     val constraint = PrimaryKeyConstraint(
       columns = Seq("a"),
-      name = "pk1"
+      tableName = "t",
+      userProvidedName = "pk1"
     )
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints)
@@ -44,14 +48,20 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
 
   test("Create table with composite primary key - table level") {
     val sql = "CREATE TABLE t (a INT, b STRING, PRIMARY KEY (a, b)) USING parquet"
-    val constraint = PrimaryKeyConstraint(columns = Seq("a", "b"), name = "t_pk")
+    val constraint = PrimaryKeyConstraint(
+      columns = Seq("a", "b"),
+      tableName = "t",
+      userProvidedName = null)
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints)
   }
 
   test("Create table with primary key - column level") {
     val sql = "CREATE TABLE t (a INT PRIMARY KEY, b STRING) USING parquet"
-    val constraint = PrimaryKeyConstraint(columns = Seq("a"), name = "t_pk")
+    val constraint = PrimaryKeyConstraint(
+      columns = Seq("a"),
+      tableName = "t",
+      userProvidedName = null)
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints)
   }
@@ -60,7 +70,8 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
     val sql = "CREATE TABLE t (a INT CONSTRAINT pk1 PRIMARY KEY, b STRING) USING parquet"
     val constraint = PrimaryKeyConstraint(
       columns = Seq("a"),
-      name = "pk1"
+      tableName = "t",
+      userProvidedName = "pk1"
     )
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints)
@@ -83,7 +94,10 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
 
   test("Replace table with primary key - table level") {
     val sql = "REPLACE TABLE t (a INT, b STRING, PRIMARY KEY (a)) USING parquet"
-    val constraint = PrimaryKeyConstraint(columns = Seq("a"), name = "t_pk")
+    val constraint = PrimaryKeyConstraint(
+      columns = Seq("a"),
+      tableName = "t",
+      userProvidedName = null)
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints, isCreateTable = false)
   }
@@ -92,7 +106,8 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
     val sql = "REPLACE TABLE t (a INT, b STRING, CONSTRAINT pk1 PRIMARY KEY (a)) USING parquet"
     val constraint = PrimaryKeyConstraint(
       columns = Seq("a"),
-      name = "pk1"
+      tableName = "t",
+      userProvidedName = "pk1"
     )
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints, isCreateTable = false)
@@ -100,14 +115,20 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
 
   test("Replace table with composite primary key - table level") {
     val sql = "REPLACE TABLE t (a INT, b STRING, PRIMARY KEY (a, b)) USING parquet"
-    val constraint = PrimaryKeyConstraint(columns = Seq("a", "b"), name = "t_pk")
+    val constraint = PrimaryKeyConstraint(
+      columns = Seq("a", "b"),
+      tableName = "t",
+      userProvidedName = null)
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints, isCreateTable = false)
   }
 
   test("Replace table with primary key - column level") {
     val sql = "REPLACE TABLE t (a INT PRIMARY KEY, b STRING) USING parquet"
-    val constraint = PrimaryKeyConstraint(columns = Seq("a"), name = "t_pk")
+    val constraint = PrimaryKeyConstraint(
+      columns = Seq("a"),
+      tableName = "t",
+      userProvidedName = null)
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints, isCreateTable = false)
   }
@@ -116,7 +137,8 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
     val sql = "REPLACE TABLE t (a INT CONSTRAINT pk1 PRIMARY KEY, b STRING) USING parquet"
     val constraint = PrimaryKeyConstraint(
       columns = Seq("a"),
-      name = "pk1"
+      tableName = "t",
+      userProvidedName = "pk1"
     )
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints, isCreateTable = false)
@@ -138,7 +160,7 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
   }
 
   test("Add primary key constraint") {
-    Seq(("", "c_pk"), ("CONSTRAINT pk1", "pk1")).foreach { case (constraintName, expectedName) =>
+    Seq(("", null), ("CONSTRAINT pk1", "pk1")).foreach { case (constraintName, expectedName) =>
       val sql =
         s"""
            |ALTER TABLE a.b.c ADD $constraintName PRIMARY KEY (id, name)
@@ -149,7 +171,8 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
           Seq("a", "b", "c"),
           "ALTER TABLE ... ADD CONSTRAINT"),
         PrimaryKeyConstraint(
-          name = expectedName,
+          userProvidedName = expectedName,
+          tableName = "c",
           columns = Seq("id", "name")
         ))
       comparePlans(parsed, expected)
@@ -190,9 +213,10 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
           Seq("a", "b", "c"),
           "ALTER TABLE ... ADD CONSTRAINT"),
         PrimaryKeyConstraint(
-          name = "pk1",
+          userProvidedName = "pk1",
           columns = Seq("id"),
-          characteristic = characteristic
+          tableName = "c",
+          userProvidedCharacteristic = characteristic
         ))
       comparePlans(parsed, expected)
     }
