@@ -642,9 +642,10 @@ private[sql] class RocksDBStateStoreProvider
 
         // Return appropriate store instance
         existingStore match {
-          case Some(stateStore: RocksDBStateStore) =>
-            // Reuse existing store for getWriteStore case
-            stateStore
+          // We need to match like this as opposed to case Some(ss: RocksDBStateStore)
+          // because of how the tests create the class in StateStoreRDDSuite
+          case Some(stateStore: ReadStateStore) if stateStore.isInstanceOf[RocksDBStateStore] =>
+            stateStore.asInstanceOf[StateStore]
           case Some(_) =>
             throw new IllegalArgumentException("Existing store must be a RocksDBStateStore")
           case None =>
