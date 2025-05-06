@@ -136,7 +136,7 @@ class MLSuite extends MLHelper {
   test("LogisticRegression works") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     sessionHolder.session.conf
-      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE.key, "false")
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED.key, "false")
 
     // estimator read/write
     val ret = readWrite(sessionHolder, getLogisticRegression, getMaxIter)
@@ -262,7 +262,7 @@ class MLSuite extends MLHelper {
   test("Exception: cannot retrieve object") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     sessionHolder.session.conf
-      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED.key, "false")
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED.key, "false")
     val modelId = trainLogisticRegressionModel(sessionHolder)
 
     // Fetch summary attribute
@@ -388,11 +388,11 @@ class MLSuite extends MLHelper {
   test("MLCache offloading works") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     sessionHolder.session.conf
-      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED.key, "true")
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED.key, "true")
 
     val memorySizeBytes = 1024 * 16
     sessionHolder.session.conf.set(
-      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_MAX_IN_MEMORY_SIZE.key,
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE.key,
       memorySizeBytes)
     val modelIdList = scala.collection.mutable.ListBuffer[String]()
     modelIdList.append(trainLogisticRegressionModel(sessionHolder))
@@ -427,14 +427,14 @@ class MLSuite extends MLHelper {
   test("Model size limit") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     sessionHolder.session.conf
-      .set(Connect.CONNECT_SESSION_CONNECT_MODEL_MAX_SIZE.key, "4000")
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE.key, "4000")
     intercept[MLModelSizeOverflowException] {
       trainLogisticRegressionModel(sessionHolder)
     }
     sessionHolder.session.conf
-      .set(Connect.CONNECT_SESSION_CONNECT_MODEL_MAX_SIZE.key, "8000")
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE.key, "8000")
     sessionHolder.session.conf
-      .set(Connect.CONNECT_SESSION_CONNECT_MODEL_CACHE_MAX_SIZE.key, "10000")
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_SIZE.key, "10000")
     trainLogisticRegressionModel(sessionHolder)
     intercept[MLCacheSizeOverflowException] {
       trainLogisticRegressionModel(sessionHolder)
