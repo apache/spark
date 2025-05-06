@@ -20,9 +20,10 @@ Infrastructure of options for pandas-on-Spark.
 """
 from contextlib import contextmanager
 import json
-from typing import Any, Callable, Dict, Iterator, List, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Tuple, Union, Optional
 
 from pyspark._globals import _NoValue, _NoValueType
+from pyspark.sql.session import SparkSession
 from pyspark.pandas.utils import default_session
 
 
@@ -269,6 +270,17 @@ _options: List[Option] = [
         types=bool,
     ),
     Option(
+        key="compute.ansi_mode_support",
+        doc=(
+            "'compute.ansi_mode_support' sets whether or not to support the ANSI mode of "
+            "the underlying Spark. "
+            "If False, pandas API on Spark may hit unexpected results or errors. "
+            "The default is False."
+        ),
+        default=False,
+        types=bool,
+    ),
+    Option(
         key="plotting.max_rows",
         doc=(
             "'plotting.max_rows' sets the visual limit on top-n-based plots such as `plot.bar` "
@@ -351,7 +363,12 @@ def show_options() -> None:
     print(row_format.format("=" * 31, "=" * 23, "=" * 53))
 
 
-def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:
+def get_option(
+    key: str,
+    default: Union[Any, _NoValueType] = _NoValue,
+    *,
+    spark_session: Optional[SparkSession] = None,
+) -> Any:
     """
     Retrieves the value of the specified option.
 
@@ -361,6 +378,9 @@ def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:
         The key which should match a single option.
     default : object
         The default value if the option is not set yet. The value should be JSON serializable.
+    spark_session : :class:`SparkSession`, optional
+        The explicit :class:`SparkSession` object to get the option.
+        If not specified, the default session will be used.
 
     Returns
     -------
@@ -374,12 +394,12 @@ def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:
     if default is _NoValue:
         default = _options_dict[key].default
     _options_dict[key].validate(default)
-    spark_session = default_session()
+    spark_session = spark_session or default_session()
 
     return json.loads(spark_session.conf.get(_key_format(key), default=json.dumps(default)))
 
 
-def set_option(key: str, value: Any) -> None:
+def set_option(key: str, value: Any, *, spark_session: Optional[SparkSession] = None) -> None:
     """
     Sets the value of the specified option.
 
@@ -389,6 +409,9 @@ def set_option(key: str, value: Any) -> None:
         The key which should match a single option.
     value : object
         New value of option. The value should be JSON serializable.
+    spark_session : :class:`SparkSession`, optional
+        The explicit :class:`SparkSession` object to set the option.
+        If not specified, the default session will be used.
 
     Returns
     -------
@@ -396,12 +419,12 @@ def set_option(key: str, value: Any) -> None:
     """
     _check_option(key)
     _options_dict[key].validate(value)
-    spark_session = default_session()
+    spark_session = spark_session or default_session()
 
     spark_session.conf.set(_key_format(key), json.dumps(value))
 
 
-def reset_option(key: str) -> None:
+def reset_option(key: str, *, spark_session: Optional[SparkSession] = None) -> None:
     """
     Reset one option to their default value.
 
@@ -411,13 +434,17 @@ def reset_option(key: str) -> None:
     ----------
     key : str
         If specified only option will be reset.
+    spark_session : :class:`SparkSession`, optional
+        The explicit :class:`SparkSession` object to reset the option.
+        If not specified, the default session will be used.
 
     Returns
     -------
     None
     """
     _check_option(key)
-    default_session().conf.unset(_key_format(key))
+    spark_session = spark_session or default_session()
+    spark_session.conf.unset(_key_format(key))
 
 
 @contextmanager
