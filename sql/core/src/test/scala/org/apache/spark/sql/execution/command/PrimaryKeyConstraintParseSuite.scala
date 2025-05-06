@@ -24,8 +24,6 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.AddConstraint
 
 class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
-  override val validConstraintCharacteristics =
-    super.validConstraintCharacteristics ++ notEnforcedConstraintCharacteristics
 
   test("Create table with primary key - table level") {
     val sql = "CREATE TABLE t (a INT, b STRING, PRIMARY KEY (a)) USING parquet"
