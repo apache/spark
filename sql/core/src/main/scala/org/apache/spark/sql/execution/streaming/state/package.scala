@@ -123,14 +123,6 @@ package object state {
           }
           StateStoreThreadLocalTracker.clearStore()
         })
-        ctxt.addTaskFailureListener(new TaskFailureListener {
-          override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
-            if (!StateStoreThreadLocalTracker.isUsedForWriteStore) {
-              store.abort()
-            }
-            StateStoreThreadLocalTracker.clearStore()
-          }
-        })
         cleanedF(store, iter)
       }
       new ReadStateStoreRDD(
