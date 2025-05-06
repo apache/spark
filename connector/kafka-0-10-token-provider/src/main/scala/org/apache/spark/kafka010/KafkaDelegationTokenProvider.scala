@@ -28,7 +28,7 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{CLUSTER_ID, SERVICE_NAME}
 import org.apache.spark.security.HadoopDelegationTokenProvider
 
-private[spark] class KafkaDelegationTokenProvider
+class KafkaDelegationTokenProvider
   extends HadoopDelegationTokenProvider with Logging {
 
   override def serviceName: String = "kafka"
