@@ -253,9 +253,16 @@ class ChecksumCheckpointFileManager(
     threadPool.shutdown()
     // Wait a bit for it to finish up in case there is any ongoing work
     // Can consider making this timeout configurable, if needed
-    val timeoutMs = 100
+    val timeoutMs = 500
     if (!threadPool.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
-      logWarning(log"Thread pool did not shutdown after ${MDC(TIMEOUT, timeoutMs)} ms")
+      logWarning(log"Thread pool did not shutdown after ${MDC(TIMEOUT, timeoutMs)} ms," +
+        log" forcing shutdown")
+      threadPool.shutdownNow() // stop the executing tasks
+
+      // Wait a bit for the threads to respond
+      if (!threadPool.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
+        logError("Thread pool did not terminate")
+      }
     }
   }
 }
