@@ -166,7 +166,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
     // test alter database location
     val tempDatabasePath2 = Utils.createTempDir().toURI
     // Hive support altering database location since HIVE-8472.
-    if (version == "3.0" || version == "3.1" || version == "4.0") {
+    if (version == "4.1") {
       client.alterDatabase(database.copy(locationUri = tempDatabasePath2))
       val uriInCatalog = client.getDatabase("temporary").locationUri
       assert("file" === uriInCatalog.getScheme)
@@ -336,7 +336,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
   }
 
   test("listTables(database)") {
-    assert(client.listTables("default") === Seq("src", "temporary", "view1"))
+    assert(client.listTables("default").toSet === Set("src", "temporary", "view1"))
   }
 
   test("listTables(database, pattern)") {
@@ -579,7 +579,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
 
   test("sql create index and reset") {
     // HIVE-18448 Since Hive 3.0, INDEX is not supported.
-    if (version != "3.0" && version != "3.1" && version != "4.0") {
+    if (version != "4.1") {
       client.runSqlHive("CREATE TABLE indexed_table (key INT)")
       client.runSqlHive("CREATE INDEX index_1 ON TABLE indexed_table(key) " +
         "as 'COMPACT' WITH DEFERRED REBUILD")

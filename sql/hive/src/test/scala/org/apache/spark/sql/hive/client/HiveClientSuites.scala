@@ -31,7 +31,7 @@ import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
 /**
  * A simple set of tests that call the methods of a [[HiveClient]], loading different version
  * of hive from maven central.  These tests are simple in that they are mostly just testing to make
- * sure that reflective calls are not throwing NoSuchMethod error, but the actually functionality
+ * sure that reflective calls are not throwing NoSuchMethod error, but the actual functionality
  * is not fully tested.
  */
 @SlowHiveTest

@@ -520,6 +520,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
   override def alterTable(hive: Hive, tableName: String, table: Table): Unit = {
     recordHiveCall()
     alterTableMethod.invoke(hive, tableName, table)
+    // hive.alterTable(tableName, table, )
   }
 
   override def alterPartitions(hive: Hive, tableName: String, newParts: JList[Partition]): Unit = {
@@ -906,6 +907,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
 
   override def createTable(hive: Hive, table: Table, ifNotExists: Boolean): Unit = {
     recordHiveCall()
+    table.setNumBuckets(0)
     hive.createTable(table, ifNotExists)
   }
 
@@ -1263,7 +1265,7 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
 
 private[client] class Shim_v3_1 extends Shim_v3_0
 
-private[client] class Shim_v4_0 extends Shim_v3_1 {
+private[client] class Shim_v4_1 extends Shim_v3_1 {
   private lazy val clazzLoadFileType = getClass.getClassLoader.loadClass(
     "org.apache.hadoop.hive.ql.plan.LoadTableDesc$LoadFileType")
   private lazy val clazzLoadTableDesc = getClass.getClassLoader.loadClass(
@@ -1375,7 +1377,7 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
     }
     assert(loadFileType.isDefined)
     recordHiveCall()
-    val resetStatistics = false
+    val resetStatistics = true
     val isDirectInsert = false
     loadTableMethod.invoke(
       hive,
@@ -1414,7 +1416,7 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
     val partitions = parts.map(HiveClientImpl.toHivePartition(_, table).getTPartition).asJava
     recordHiveCall()
     val needResults = false
-    addPartitionsMethod.invoke(hive, partitions, ignoreIfExists, needResults: JBoolean)
+    hive.addPartitions(partitions, ignoreIfExists, needResults: JBoolean)
   }
 
   override def loadPartition(

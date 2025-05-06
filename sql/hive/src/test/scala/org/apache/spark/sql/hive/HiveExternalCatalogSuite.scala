@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 /**
  * Test suite for the [[HiveExternalCatalog]].
@@ -34,7 +35,9 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
 class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
   private val externalCatalog: HiveExternalCatalog = {
-    val catalog = new HiveExternalCatalog(new SparkConf, new Configuration)
+    val hadoopConf = new Configuration
+    hadoopConf.set("hive.metastore.warehouse.dir", Utils.createTempDir().toURI.toString)
+    val catalog = new HiveExternalCatalog(new SparkConf, hadoopConf)
     catalog.client.reset()
     catalog
   }
