@@ -401,7 +401,7 @@ class OneHotEncoderModel private[ml] (
 
 @Since("3.0.0")
 object OneHotEncoderModel extends MLReadable[OneHotEncoderModel] {
-  private case class Data(categorySizes: Array[Int])
+  private[ml] case class Data(categorySizes: Array[Int])
 
   private[OneHotEncoderModel]
   class OneHotEncoderModelWriter(instance: OneHotEncoderModel) extends MLWriter {

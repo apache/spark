@@ -345,7 +345,7 @@ class FMClassificationModel private[classification] (
 
 @Since("3.0.0")
 object FMClassificationModel extends MLReadable[FMClassificationModel] {
-  private case class Data(
+  private[ml] case class Data(
     intercept: Double,
     linear: Vector,
     factors: Matrix

@@ -181,7 +181,7 @@ class PCAModel private[ml] (
 
 @Since("1.6.0")
 object PCAModel extends MLReadable[PCAModel] {
-  private case class Data(pc: Matrix, explainedVariance: Vector)
+  private[ml] case class Data(pc: Matrix, explainedVariance: Vector)
 
   private[PCAModel] class PCAModelWriter(instance: PCAModel) extends MLWriter {
 

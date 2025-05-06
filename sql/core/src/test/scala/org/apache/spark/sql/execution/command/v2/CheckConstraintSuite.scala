@@ -143,15 +143,11 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     val validStatus = "UNVALIDATED"
     Seq(
       ("", s"ENFORCED $validStatus NORELY"),
-      ("NOT ENFORCED", s"NOT ENFORCED $validStatus NORELY"),
-      ("NOT ENFORCED NORELY", s"NOT ENFORCED $validStatus NORELY"),
-      ("NORELY NOT ENFORCED", s"NOT ENFORCED $validStatus NORELY"),
       ("NORELY", s"ENFORCED $validStatus NORELY"),
-      ("NOT ENFORCED RELY", s"NOT ENFORCED $validStatus RELY"),
-      ("RELY NOT ENFORCED", s"NOT ENFORCED $validStatus RELY"),
-      ("NOT ENFORCED RELY", s"NOT ENFORCED $validStatus RELY"),
-      ("RELY NOT ENFORCED", s"NOT ENFORCED $validStatus RELY"),
-      ("RELY", s"ENFORCED $validStatus RELY")
+      ("RELY", s"ENFORCED $validStatus RELY"),
+      ("ENFORCED", s"ENFORCED $validStatus NORELY"),
+      ("ENFORCED NORELY", s"ENFORCED $validStatus NORELY"),
+      ("ENFORCED RELY", s"ENFORCED $validStatus RELY")
     )
   }
 

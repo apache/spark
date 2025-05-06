@@ -528,7 +528,7 @@ class VectorIndexerModel private[ml] (
 
 @Since("1.6.0")
 object VectorIndexerModel extends MLReadable[VectorIndexerModel] {
-  private case class Data(numFeatures: Int, categoryMaps: Map[Int, Map[Double, Int]])
+  private[ml] case class Data(numFeatures: Int, categoryMaps: Map[Int, Map[Double, Int]])
 
   private[VectorIndexerModel]
   class VectorIndexerModelWriter(instance: VectorIndexerModel) extends MLWriter {

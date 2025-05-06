@@ -150,8 +150,20 @@ case class CheckConstraint(
 
   override def withTableName(tableName: String): TableConstraint = copy(tableName = tableName)
 
-  override def withUserProvidedCharacteristic(c: ConstraintCharacteristic): TableConstraint =
+  override def withUserProvidedCharacteristic(c: ConstraintCharacteristic): TableConstraint = {
+    if (c.enforced.contains(false)) {
+      val origin = CurrentOrigin.get
+      throw new ParseException(
+        command = origin.sqlText,
+        start = origin,
+        errorClass = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
+        messageParameters = Map(
+          "characteristic" -> "NOT ENFORCED",
+          "constraintType" -> "CHECK")
+      )
+    }
     copy(userProvidedCharacteristic = c)
+  }
 }
 
 // scalastyle:off line.size.limit

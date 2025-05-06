@@ -137,7 +137,7 @@
     <kafka.version>3.9.0</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
-    <parquet.version>1.15.1</parquet.version>
+    <parquet.version>1.15.2</parquet.version>
     <orc.version>2.1.1</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.25</jetty.version>
@@ -236,7 +236,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>7.1.0</kubernetes-client.version>
+    <kubernetes-client.version>7.2.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 

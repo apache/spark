@@ -279,7 +279,7 @@ class RobustScalerModel private[ml] (
 
 @Since("3.0.0")
 object RobustScalerModel extends MLReadable[RobustScalerModel] {
-  private case class Data(range: Vector, median: Vector)
+  private[ml] case class Data(range: Vector, median: Vector)
 
   private[RobustScalerModel]
   class RobustScalerModelWriter(instance: RobustScalerModel) extends MLWriter {

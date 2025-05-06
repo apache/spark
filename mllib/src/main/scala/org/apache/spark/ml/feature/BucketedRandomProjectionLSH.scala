@@ -213,7 +213,7 @@ object BucketedRandomProjectionLSH extends DefaultParamsReadable[BucketedRandomP
 @Since("2.1.0")
 object BucketedRandomProjectionLSHModel extends MLReadable[BucketedRandomProjectionLSHModel] {
   // TODO: Save using the existing format of Array[Vector] once SPARK-12878 is resolved.
-  private case class Data(randUnitVectors: Matrix)
+  private[ml] case class Data(randUnitVectors: Matrix)
 
   @Since("2.1.0")
   override def read: MLReader[BucketedRandomProjectionLSHModel] = {

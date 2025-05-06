@@ -70,7 +70,7 @@ fi
 PYSPARK_VERSION=$(python3 -c "exec(open('python/pyspark/version.py').read());print(__version__)")
 PYSPARK_DIST="$FWDIR/python/dist/pyspark-$PYSPARK_VERSION.tar.gz"
 # The pip install options we use for all the pip commands
-PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall"
+PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall --use-pep517"
 # Test both regular user and edit/dev install modes.
 PIP_COMMANDS=("pip install $PIP_OPTIONS $PYSPARK_DIST"
 	      "pip install $PIP_OPTIONS -e python/packaging/classic")
