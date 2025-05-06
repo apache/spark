@@ -27,7 +27,7 @@ import com.esotericsoftware.kryo.io.Output
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.ql.io.orc._
-import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
+import org.apache.hadoop.hive.ql.io.sarg.{ConvertAstToSearchArg, SearchArgument}
 import org.apache.hadoop.hive.serde2.objectinspector
 import org.apache.hadoop.hive.serde2.objectinspector.{SettableStructObjectInspector, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
@@ -140,7 +140,7 @@ case class OrcFileFormat() extends FileFormat
     if (getSqlConf(sparkSession).orcFilterPushDown) {
       // Sets pushed predicates
       OrcFilters.createFilter(requiredSchema, filters).foreach { f =>
-        hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN, toKryo(f))
+        hadoopConf.set(ConvertAstToSearchArg.SARG_PUSHDOWN, ConvertAstToSearchArg.sargToKryo(f))
         hadoopConf.setBoolean("hive.optimize.index.filter", true)
       }
     }
@@ -321,8 +321,6 @@ private[orc] class OrcOutputWriter(
 }
 
 private[orc] object OrcFileFormat extends HiveInspectors with Logging {
-  // This constant duplicates `OrcInputFormat.SARG_PUSHDOWN`, which is unfortunately not public.
-  private[orc] val SARG_PUSHDOWN = "sarg.pushdown"
 
   def unwrapOrcStructs(
       conf: Configuration,
