@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.LogKeys.{COUNT, MAX_SPLIT_BYTES, OPEN_COST_IN_BYTES}
 import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow, SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -217,7 +217,7 @@ case class RowDataSourceScanExec(
 /**
  * A base trait for file scans containing file listing and metrics code.
  */
-trait FileSourceScanLike extends DataSourceScanExec with SQLConfHelper {
+trait FileSourceScanLike extends DataSourceScanExec {
 
   // Filters on non-partition columns.
   def dataFilters: Seq[Expression]
@@ -238,11 +238,6 @@ trait FileSourceScanLike extends DataSourceScanExec with SQLConfHelper {
   def requiredSchema: StructType
   // Identifier for the table in the metastore.
   def tableIdentifier: Option[TableIdentifier]
-
-  override def conf: SQLConf = {
-    val state: SessionState = relation.sparkSession.sessionState
-    state.conf
-  }
 
   lazy val fileConstantMetadataColumns: Seq[AttributeReference] = output.collect {
     // Collect metadata columns to be handled outside of the scan by appending constant columns.
