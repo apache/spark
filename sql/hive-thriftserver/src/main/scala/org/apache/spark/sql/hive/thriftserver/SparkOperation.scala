@@ -19,8 +19,8 @@ package org.apache.spark.sql.hive.thriftserver
 
 import org.apache.hive.service.cli.{HiveSQLException, OperationState}
 import org.apache.hive.service.cli.operation.Operation
-import org.apache.spark.SparkContext
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{HIVE_OPERATION_TYPE, STATEMENT_ID}
 import org.apache.spark.sql.SparkSession
