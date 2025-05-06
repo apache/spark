@@ -327,7 +327,7 @@ trait JoinSelectionHelper extends PredicateHelper {
         (temp || numFilters > 0 || numAggs > 0, numAggs -> numFilters)
       }
     }
-    
+
     def shouldBuildRight(): (Boolean, (Int, Int)) = {
       if (hintOnly) {
         (hintToBroadcastRight(join.hint), (0, 0))
