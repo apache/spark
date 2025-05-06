@@ -1862,6 +1862,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
     // Maintenance interval large enough that we control timing manually
     sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 30000L)
+    sqlConf.setConf(SQLConf.NUM_STATE_STORE_MAINTENANCE_THREADS, 4)
 
     // Use our test provider
     sqlConf.setConf(
