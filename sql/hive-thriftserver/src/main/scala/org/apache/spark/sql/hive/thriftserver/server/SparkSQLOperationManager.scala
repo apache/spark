@@ -28,6 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver._
+import org.apache.spark.sql.internal.SessionState
 
 /**
  * Executes queries using Spark SQL, and maintains a list of handles to active queries.
@@ -49,7 +50,7 @@ private[thriftserver] class SparkSQLOperationManager()
     val sparkSession = sessionToContexts.get(parentSession.getSessionHandle)
     require(sparkSession != null, s"Session handle: ${parentSession.getSessionHandle} " +
       s"has not been initialized or had already closed.")
-    val conf = sparkSession.sessionState.conf
+    val conf = sparkSession.sessionState.asInstanceOf[SessionState].conf
     val runInBackground = async && conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
     val operation = new SparkExecuteStatementOperation(
       sparkSession, parentSession, statement, confOverlay, runInBackground, queryTimeout)

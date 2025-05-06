@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StringType
 
 
@@ -30,7 +31,8 @@ case class ShowCatalogsCommand(pattern: Option[String]) extends LeafRunnableComm
     AttributeReference("catalog", StringType, nullable = false)())
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalogManager = sparkSession.sessionState.catalogManager
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalogManager = sessionState.catalogManager
     catalogManager.listCatalogs(pattern).map(Row(_))
   }
 }

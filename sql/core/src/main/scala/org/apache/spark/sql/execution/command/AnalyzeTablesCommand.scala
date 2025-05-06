@@ -23,6 +23,7 @@ import org.apache.spark.internal.LogKeys.{DATABASE_NAME, ERROR, TABLE_NAME}
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.internal.SessionState
 
 /**
  * Analyzes all tables in the given database to generate statistics.
@@ -32,9 +33,9 @@ case class AnalyzeTablesCommand(
     noScan: Boolean) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
-    val db = databaseName.getOrElse(catalog.getCurrentDatabase)
-    catalog.listTables(db).foreach { tbl =>
+    val sessionState: SessionState = sparkSession.sessionState
+    val db = databaseName.getOrElse(sessionState.catalog.getCurrentDatabase)
+    sessionState.catalog.listTables(db).foreach { tbl =>
       try {
         CommandUtils.analyzeTable(sparkSession, tbl, noScan)
       } catch {

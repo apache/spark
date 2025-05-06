@@ -111,7 +111,8 @@ object HiveSerDe {
     val defaultValue = {
       val defaultFormatValue = "textfile"
       SparkSession.getActiveSession.map { session =>
-        session.sessionState.newHadoopConf().get(defaultFormatKey, defaultFormatValue)
+        val sessionState: SessionState = session.sessionState
+        sessionState.newHadoopConf().get(defaultFormatKey, defaultFormatValue)
       }.getOrElse(defaultFormatValue)
     }
     val defaultStorageType = conf.getConfString("hive.default.fileformat", defaultValue)

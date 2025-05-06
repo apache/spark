@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, Limit, LogicalPlan, 
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types.{AtomicType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -162,10 +162,11 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         nonNullChild
       )
       val projectAllCastCols = Project(allCastCols, sortedChild)
-      val maxValues = sparkSession.sessionState.conf.dataFrameTransposeMaxValues
+      val sessionState: SessionState = sparkSession.sessionState
+      val maxValues = sessionState.conf.dataFrameTransposeMaxValues
       val limit = Literal(maxValues + 1)
       val limitedProject = Limit(limit, projectAllCastCols)
-      val queryExecution = sparkSession.sessionState.executePlan(limitedProject)
+      val queryExecution = sessionState.executePlan(limitedProject)
       val fullCollectedRows = queryExecution.executedPlan.executeCollect()
 
       if (fullCollectedRows.isEmpty) {

@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.util.ArrayImplicits._
 
 trait V1WritesHiveUtils {
@@ -67,7 +68,7 @@ trait V1WritesHiveUtils {
       throw QueryExecutionErrors.requestedPartitionsMismatchTablePartitionsError(table, partition)
     }
 
-    val sessionState = SparkSession.active.sessionState
+    val sessionState: SessionState = SparkSession.active.sessionState
     val hadoopConf = sessionState.newHadoopConf()
 
     // Validate partition spec if there exist any dynamic partitions
@@ -135,7 +136,8 @@ trait V1WritesHiveUtils {
         .get("mapreduce.output.fileoutputformat.compress.type"))
     } else {
       // Set compression by priority
-      HiveOptions.getHiveWriteCompression(fileSinkConf.getTableInfo, sparkSession.sessionState.conf)
+      val sessionState: SessionState = sparkSession.sessionState
+      HiveOptions.getHiveWriteCompression(fileSinkConf.getTableInfo, sessionState.conf)
         .foreach { case (compression, codec) => hadoopConf.set(compression, codec) }
     }
   }

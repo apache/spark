@@ -25,7 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveUtils._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SharedState, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.util.Utils
 
@@ -70,8 +70,8 @@ private[hive] object SparkSQLEnv extends Logging {
       sparkSession.sessionState
 
       if (!shouldUseInMemoryCatalog) {
-        val metadataHive = sparkSession
-          .sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
+        val metadataHive = sparkSession.sharedState.asInstanceOf[SharedState]
+          .externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
         metadataHive.setOut(new PrintStream(System.out, true, UTF_8.name()))
         metadataHive.setInfo(new PrintStream(System.err, true, UTF_8.name()))
         metadataHive.setError(new PrintStream(System.err, true, UTF_8.name()))

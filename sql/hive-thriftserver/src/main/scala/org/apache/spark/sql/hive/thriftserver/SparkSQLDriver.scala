@@ -26,7 +26,7 @@ import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkContext, SparkThrowable}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.COMMAND
 import org.apache.spark.sql.SparkSession
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.CommandResult
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException, SQLExecution}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
-import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
+import org.apache.spark.sql.internal.{SessionState, SQLConf, VariableSubstitution}
 
 
 private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.sparkSession)
@@ -62,12 +62,13 @@ private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.
   }
 
   override def run(command: String): CommandProcessorResponse = {
+    val sessionState: SessionState = sparkSession.sessionState
     try {
-      val substitutorCommand = SQLConf.withExistingConf(sparkSession.sessionState.conf) {
+      val substitutorCommand = SQLConf.withExistingConf(sessionState.conf) {
         new VariableSubstitution().substitute(command)
       }
-      sparkSession.sparkContext.setJobDescription(substitutorCommand)
-      val execution = sparkSession.sessionState.executePlan(sparkSession.sql(command).logicalPlan)
+      sparkSession.sparkContext.asInstanceOf[SparkContext].setJobDescription(substitutorCommand)
+      val execution = sessionState.executePlan(sparkSession.sql(command).logicalPlan)
       // The SQL command has been executed above via `executePlan`, therefore we don't need to
       // wrap it again with a new execution ID when getting Hive result.
       execution.logical match {

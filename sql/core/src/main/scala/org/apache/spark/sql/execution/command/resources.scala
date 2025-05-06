@@ -19,8 +19,10 @@ package org.apache.spark.sql.execution.command
 
 import java.io.File
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.Utils
 
@@ -29,7 +31,8 @@ import org.apache.spark.util.Utils
  */
 case class AddJarsCommand(paths: Seq[String]) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    paths.foreach(sparkSession.sessionState.resourceLoader.addJar(_))
+    val sessionState: SessionState = sparkSession.sessionState
+    paths.foreach(sessionState.resourceLoader.addJar)
     Seq.empty[Row]
   }
 }
@@ -39,8 +42,10 @@ case class AddJarsCommand(paths: Seq[String]) extends LeafRunnableCommand {
  */
 case class AddFilesCommand(paths: Seq[String]) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val recursive = !sparkSession.sessionState.conf.addSingleFileInAddFile
-    paths.foreach(sparkSession.sparkContext.addFile(_, recursive))
+    val sessionState: SessionState = sparkSession.sessionState
+    val recursive = !sessionState.conf.addSingleFileInAddFile
+    val sc: SparkContext = sparkSession.sparkContext
+    paths.foreach(sc.addFile(_, recursive))
     Seq.empty[Row]
   }
 }
@@ -50,7 +55,8 @@ case class AddFilesCommand(paths: Seq[String]) extends LeafRunnableCommand {
  */
 case class AddArchivesCommand(paths: Seq[String]) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    paths.foreach(sparkSession.sparkContext.addArchive(_))
+    val sc: SparkContext = sparkSession.sparkContext
+    paths.foreach(sc.addArchive)
     Seq.empty[Row]
   }
 }
@@ -64,7 +70,8 @@ case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends Leaf
     AttributeReference("Results", StringType, nullable = false)() :: Nil
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val fileList = sparkSession.sparkContext.listFiles()
+    val sc: SparkContext = sparkSession.sparkContext
+    val fileList = sc.listFiles()
     if (files.size > 0) {
       files.map { f =>
         val uri = Utils.resolveURI(f)
@@ -90,7 +97,8 @@ case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends LeafRu
     AttributeReference("Results", StringType, nullable = false)() :: Nil
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val jarList = sparkSession.sparkContext.listJars()
+    val sc: SparkContext = sparkSession.sparkContext
+    val jarList = sc.listJars()
     if (jars.nonEmpty) {
       for {
         jarName <- jars.map(f => Utils.resolveURI(f).toString.split("/").last)

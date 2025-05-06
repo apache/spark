@@ -35,6 +35,7 @@ import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat => oldInputClass, JobConf}
 import org.apache.hadoop.mapreduce.{InputFormat => newInputClass}
 
+import org.apache.spark.SparkContext
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
@@ -44,7 +45,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -72,26 +73,25 @@ class HadoopTableReader(
     hadoopConf: Configuration)
   extends TableReader with CastSupport with SQLConfHelper with Logging {
 
+  private def sc: SparkContext = sparkSession.sparkContext
   // Hadoop honors "mapreduce.job.maps" as hint,
   // but will ignore when mapreduce.jobtracker.address is "local".
   // https://hadoop.apache.org/docs/stable/hadoop-mapreduce-client/hadoop-mapreduce-client-core/
   // mapred-default.xml
   //
   // In order keep consistency with Hive, we will let it be 0 in local mode also.
-  private val _minSplitsPerRDD = if (sparkSession.sparkContext.isLocal) {
+  private val _minSplitsPerRDD = if (sc.isLocal) {
     0 // will splitted based on block by default.
   } else {
     math.max(hadoopConf.getInt("mapreduce.job.maps", 1),
-      sparkSession.sparkContext.defaultMinPartitions)
+      sc.defaultMinPartitions)
   }
 
-  SparkHadoopUtil.get.appendS3AndSparkHadoopHiveConfigurations(
-    sparkSession.sparkContext.conf, hadoopConf)
+  SparkHadoopUtil.get.appendS3AndSparkHadoopHiveConfigurations(sc.conf, hadoopConf)
 
-  private val _broadcastedHadoopConf =
-    sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+  private val _broadcastedHadoopConf = sc.broadcast(new SerializableConfiguration(hadoopConf))
 
-  override def conf: SQLConf = sparkSession.sessionState.conf
+  override def conf: SQLConf = sparkSession.sessionState.asInstanceOf[SessionState].conf
 
   override def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow] =
     makeRDDForTable(

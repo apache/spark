@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.util.PartitioningUtils
 
 /**
@@ -71,7 +72,7 @@ case class AnalyzePartitionCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val sessionState = sparkSession.sessionState
+    val sessionState: SessionState = sparkSession.sessionState
     val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
     val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)

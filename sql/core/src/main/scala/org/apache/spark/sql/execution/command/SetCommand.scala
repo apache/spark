@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryCompilationErrors.toSQLId
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
@@ -100,14 +100,15 @@ case class SetCommand(kv: Option[(String, Option[String])])
          * Be nice and detect if the key matches a SQL variable.
          * If it does give a meaningful error pointing the user to SET VARIABLE
          */
+        val sessionState: SessionState = sparkSession.sessionState
         val varName = try {
-          sparkSession.sessionState.sqlParser.parseMultipartIdentifier(key)
+          sessionState.sqlParser.parseMultipartIdentifier(key)
         } catch {
           case _: ParseException =>
           Seq()
         }
         if (varName.nonEmpty && varName.length <= 3) {
-          if (sparkSession.sessionState.analyzer.lookupVariable(varName).isDefined) {
+          if (sessionState.analyzer.lookupVariable(varName).isDefined) {
             throw new AnalysisException(
               errorClass = "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
               messageParameters = Map("variableName" -> toSQLId(varName)))
@@ -140,7 +141,8 @@ case class SetCommand(kv: Option[(String, Option[String])])
     // SQLConf of the sparkSession.
     case Some(("-v", None)) =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.sessionState.conf.getAllDefinedConfs.sorted.map {
+        val sessionState: SessionState = sparkSession.sessionState
+        sessionState.conf.getAllDefinedConfs.sorted.map {
           case (key, defaultValue, doc, version) =>
             Row(
               key,
@@ -159,12 +161,13 @@ case class SetCommand(kv: Option[(String, Option[String])])
     // Queries the deprecated "mapred.reduce.tasks" property.
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, None)) =>
       val runFunc = (sparkSession: SparkSession) => {
+        val sessionState: SessionState = sparkSession.sessionState
         logWarning(
           log"Property ${MDC(CONFIG, SQLConf.Deprecated.MAPRED_REDUCE_TASKS)} is deprecated, " +
             log"showing ${MDC(CONFIG2, SQLConf.SHUFFLE_PARTITIONS.key)} instead.")
         Seq(Row(
           SQLConf.SHUFFLE_PARTITIONS.key,
-          sparkSession.sessionState.conf.defaultNumShufflePartitions.toString))
+          sessionState.conf.defaultNumShufflePartitions.toString))
       }
       (keyValueOutput, runFunc)
 
@@ -185,7 +188,8 @@ case class SetCommand(kv: Option[(String, Option[String])])
           // effective default values. For example, the hadoop output codec/compression configs
           // take affect from table to table, file to file, so they are not static and users are
           // very likely to change them based the default value they see.
-          sparkSession.sharedState.hadoopConf.get(key, "<undefined>")
+          val sharedState: SharedState = sparkSession.sharedState
+          sharedState.hadoopConf.get(key, "<undefined>")
         }
         val (_, redactedValue) = SQLConf.get.redactOptions(Seq((key, value))).head
         Seq(Row(key, redactedValue))
@@ -214,7 +218,9 @@ object SetCommand {
 case class ResetCommand(config: Option[String]) extends LeafRunnableCommand with IgnoreCachedData {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val globalInitialConfigs = sparkSession.sharedState.conf
+    val sessionState: SessionState = sparkSession.sessionState
+    val sharedState: SharedState = sparkSession.sharedState
+    val globalInitialConfigs = sharedState.conf
     config match {
       case Some(key) =>
         sparkSession.conf.unset(key)
@@ -222,9 +228,9 @@ case class ResetCommand(config: Option[String]) extends LeafRunnableCommand with
           .orElse(globalInitialConfigs.getOption(key))
           .foreach(sparkSession.conf.set(key, _))
       case None =>
-        sparkSession.sessionState.conf.clear()
-        SQLConf.mergeSparkConf(sparkSession.sessionState.conf, globalInitialConfigs)
-        SQLConf.mergeNonStaticSQLConfigs(sparkSession.sessionState.conf,
+        sessionState.conf.clear()
+        SQLConf.mergeSparkConf(sessionState.conf, globalInitialConfigs)
+        SQLConf.mergeNonStaticSQLConfigs(sessionState.conf,
           sparkSession.initialSessionOptions)
     }
     Seq.empty[Row]

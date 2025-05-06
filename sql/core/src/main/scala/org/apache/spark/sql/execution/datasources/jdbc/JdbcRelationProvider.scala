@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils._
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 
@@ -33,8 +34,9 @@ class JdbcRelationProvider extends CreatableRelationProvider
       parameters: Map[String, String]): BaseRelation = {
     val jdbcOptions = new JDBCOptions(parameters)
     val sparkSession = sqlContext.sparkSession
-    val resolver = sparkSession.sessionState.conf.resolver
-    val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
+    val sessionState: SessionState = sparkSession.sessionState
+    val resolver = sessionState.conf.resolver
+    val timeZoneId = sessionState.conf.sessionLocalTimeZone
     val schema = JDBCRelation.getSchema(resolver, jdbcOptions)
     val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
     JDBCRelation(schema, parts, jdbcOptions)(sparkSession)
@@ -46,7 +48,8 @@ class JdbcRelationProvider extends CreatableRelationProvider
       parameters: Map[String, String],
       df: DataFrame): BaseRelation = {
     val options = new JdbcOptionsInWrite(parameters)
-    val isCaseSensitive = sqlContext.sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val sessionState: SessionState = sqlContext.sparkSession.sessionState
+    val isCaseSensitive = sessionState.conf.caseSensitiveAnalysis
     val dialect = JdbcDialects.get(options.url)
     val conn = dialect.createConnectionFactory(options)(-1)
     try {

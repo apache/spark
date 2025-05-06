@@ -29,7 +29,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SessionState, SQLConf}
 
 /**
  * Options for Avro Reader and Writer stored in case insensitive manner.
@@ -180,11 +180,12 @@ private[sql] class AvroOptions(
   }
 }
 
+
 private[sql] object AvroOptions extends DataSourceOptions {
   def apply(parameters: Map[String, String]): AvroOptions = {
     val hadoopConf = SparkSession
       .getActiveSession
-      .map(_.sessionState.newHadoopConf())
+      .map(_.sessionState.asInstanceOf[SessionState].newHadoopConf())
       .getOrElse(new Configuration())
     new AvroOptions(CaseInsensitiveMap(parameters), hadoopConf)
   }

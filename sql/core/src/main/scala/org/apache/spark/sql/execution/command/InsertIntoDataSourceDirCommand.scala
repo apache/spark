@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SessionState
 
 /**
  * A command used to write the result of a query to a directory.
@@ -69,7 +70,8 @@ case class InsertIntoDataSourceDirCommand(
 
     val saveMode = if (overwrite) SaveMode.Overwrite else SaveMode.ErrorIfExists
     try {
-      sparkSession.sessionState.executePlan(dataSource.planForWriting(saveMode, query)).toRdd
+      val sessionState: SessionState = sparkSession.sessionState
+      sessionState.executePlan(dataSource.planForWriting(saveMode, query)).toRdd
     } catch {
       case ex: AnalysisException =>
         logError(log"Failed to write to directory ${MDC(URI, storage.locationUri.toString)}", ex)

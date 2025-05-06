@@ -21,6 +21,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
@@ -28,6 +29,7 @@ import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -39,10 +41,11 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
+    val sessionState: SessionState = sparkSession.sessionState
     val parsedOptions = new JSONOptionsInRead(
       options,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+      sessionState.conf.sessionLocalTimeZone,
+      sessionState.conf.columnNameOfCorruptRecord)
     val jsonDataSource = JsonDataSource(parsedOptions)
     jsonDataSource.isSplitable && super.isSplitable(sparkSession, options, path)
   }
@@ -51,10 +54,11 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
+    val sessionState: SessionState = sparkSession.sessionState
     val parsedOptions = new JSONOptionsInRead(
       options,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+      sessionState.conf.sessionLocalTimeZone,
+      sessionState.conf.columnNameOfCorruptRecord)
     JsonDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
   }
 
@@ -64,10 +68,11 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
     val conf = job.getConfiguration
+    val sessionState: SessionState = sparkSession.sessionState
     val parsedOptions = new JSONOptions(
       options,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+      sessionState.conf.sessionLocalTimeZone,
+      sessionState.conf.columnNameOfCorruptRecord)
     parsedOptions.compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
@@ -95,12 +100,14 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+      sparkSession.sparkContext.asInstanceOf[SparkContext]
+        .broadcast(new SerializableConfiguration(hadoopConf))
 
+    val sessionState: SessionState = sparkSession.sessionState
     val parsedOptions = new JSONOptionsInRead(
       options,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+      sessionState.conf.sessionLocalTimeZone,
+      sessionState.conf.columnNameOfCorruptRecord)
 
     val actualSchema =
       StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))

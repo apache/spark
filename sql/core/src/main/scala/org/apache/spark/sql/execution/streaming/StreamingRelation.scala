@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat}
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.sources.SupportsStreamSourceMetadataColumns
 
 object StreamingRelation {
@@ -55,7 +56,7 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
   // to this node surviving analysis. So we satisfy the LeafNode contract with the session default
   // value.
   override def computeStats(): Statistics = Statistics(
-    sizeInBytes = BigInt(dataSource.sparkSession.sessionState.conf.defaultSizeInBytes)
+    sizeInBytes = BigInt(dataSource.conf.defaultSizeInBytes)
   )
 
   override def newInstance(): LogicalPlan = this.copy(output = output.map(_.newInstance()))
@@ -99,7 +100,7 @@ case class StreamingExecutionRelation(
   // to this node surviving analysis. So we satisfy the LeafNode contract with the session default
   // value.
   override def computeStats(): Statistics = Statistics(
-    sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
+    sizeInBytes = BigInt(session.sessionState.asInstanceOf[SessionState].conf.defaultSizeInBytes)
   )
 
   override def newInstance(): LogicalPlan = this.copy(output = output.map(_.newInstance()))(session)

@@ -30,8 +30,9 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, FileFormat, FileFormatWriter}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 object FileStreamSink extends Logging {
@@ -132,13 +133,14 @@ class FileStreamSink(
 
   import FileStreamSink._
 
-  private val hadoopConf = sparkSession.sessionState.newHadoopConf()
+  private val sessionState: SessionState = sparkSession.sessionState
+  private val hadoopConf = sessionState.newHadoopConf()
   private val basePath = new Path(path)
   if (!basePath.isAbsolute) {
     throw QueryExecutionErrors.notAbsolutePathError(basePath)
   }
   private val logPath = getMetadataLogPath(basePath.getFileSystem(hadoopConf), basePath,
-    sparkSession.sessionState.conf)
+    sessionState.conf)
   private val retention = options.get("retention").map(Utils.timeStringAsMs)
   private val fileLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession,
     logPath.toString, retention)
@@ -153,7 +155,7 @@ class FileStreamSink(
       logInfo(log"Skipping already committed batch ${MDC(BATCH_ID, batchId)}")
     } else {
       val committer = FileCommitProtocol.instantiate(
-        className = sparkSession.sessionState.conf.streamingFileCommitProtocolClass,
+        className = sessionState.conf.streamingFileCommitProtocolClass,
         jobId = batchId.toString,
         outputPath = path)
 
@@ -166,12 +168,13 @@ class FileStreamSink(
       // Get the actual partition columns as attributes after matching them by name with
       // the given columns names.
       val partitionColumns: Seq[Attribute] = partitionColumnNames.map { col =>
-        val nameEquality = data.sparkSession.sessionState.conf.resolver
+        val state: SessionState = data.sparkSession.sessionState
+        val nameEquality = state.conf.resolver
         data.logicalPlan.output.find(f => nameEquality(f.name, col)).getOrElse {
           throw QueryExecutionErrors.partitionColumnNotFoundInSchemaError(col, data.schema)
         }
       }
-      val qe = data.queryExecution
+      val qe: QueryExecution = data.queryExecution
 
       FileFormatWriter.write(
         sparkSession = sparkSession,

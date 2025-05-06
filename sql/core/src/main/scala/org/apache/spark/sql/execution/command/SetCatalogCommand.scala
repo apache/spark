@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.internal.SessionState
 
 /**
  * The command for `SET CATALOG XXX`
@@ -27,7 +28,8 @@ case class SetCatalogCommand(catalogName: String) extends LeafRunnableCommand {
   override def output: Seq[Attribute] = Seq.empty
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.catalogManager.setCurrentCatalog(catalogName)
+    val sessionState: SessionState = sparkSession.sessionState
+    sessionState.catalogManager.setCurrentCatalog(catalogName)
     Seq.empty
   }
 }

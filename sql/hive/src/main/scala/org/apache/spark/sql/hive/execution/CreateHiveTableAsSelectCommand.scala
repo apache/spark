@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{DataWritingCommand, LeafRunnableCommand}
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable.BY_CTAS
+import org.apache.spark.sql.internal.SessionState
 
 /**
  * Create table and insert the query result into it.
@@ -46,7 +47,8 @@ case class CreateHiveTableAsSelectCommand(
   protected val tableIdentifier = tableDesc.identifier
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val tableExists = catalog.tableExists(tableIdentifier)
 
     if (tableExists) {
@@ -62,18 +64,18 @@ case class CreateHiveTableAsSelectCommand(
       }
 
       val command = getWritingCommand(tableDesc, tableExists = true)
-      val qe = sparkSession.sessionState.executePlan(command)
+      val qe = sessionState.executePlan(command)
       qe.assertCommandExecuted()
     } else {
       tableDesc.storage.locationUri.foreach { p =>
-        DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf())
+        DataWritingCommand.assertEmptyRootPath(p, mode, sessionState.newHadoopConf())
       }
       // TODO ideally, we should get the output data ready first and then
       // add the relation into catalog, just in case of failure occurs while data
       // processing.
       val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(query, outputColumnNames)
       val tableSchema = CharVarcharUtils.getRawSchema(
-        outputColumns.toStructType, sparkSession.sessionState.conf)
+        outputColumns.toStructType, sessionState.conf)
       assert(tableDesc.schema.isEmpty)
       catalog.createTable(tableDesc.copy(schema = tableSchema), ignoreIfExists = false)
 
@@ -81,7 +83,7 @@ case class CreateHiveTableAsSelectCommand(
         // Read back the metadata of the table which was created just now.
         val createdTableMeta = catalog.getTableMetadata(tableDesc.identifier)
         val command = getWritingCommand(createdTableMeta, tableExists = false)
-        val qe = sparkSession.sessionState.executePlan(command)
+        val qe = sessionState.executePlan(command)
         qe.assertCommandExecuted()
       } catch {
         case NonFatal(e) =>

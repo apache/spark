@@ -46,7 +46,7 @@ case class AvroScanBuilder (
   }
 
   override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
-    if (sparkSession.sessionState.conf.avroFilterPushDown) {
+    if (conf.avroFilterPushDown) {
       StructFilters.pushedFilters(dataFilters, dataSchema)
     } else {
       Array.empty[Filter]

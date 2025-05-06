@@ -23,6 +23,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -30,6 +31,7 @@ import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoI
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming.{FileStreamSink, MetadataLogFileIndex}
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
@@ -40,15 +42,18 @@ abstract class FileTable(
     options: CaseInsensitiveStringMap,
     paths: Seq[String],
     userSpecifiedSchema: Option[StructType])
-  extends Table with SupportsRead with SupportsWrite {
+  extends Table with SupportsRead with SupportsWrite with SQLConfHelper {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  protected def sessionState: SessionState = sparkSession.sessionState
+  override def conf: SQLConf = sessionState.conf
 
   lazy val fileIndex: PartitioningAwareFileIndex = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
-    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-    if (FileStreamSink.hasMetadata(paths, hadoopConf, sparkSession.sessionState.conf)) {
+    val hadoopConf = sessionState.newHadoopConfWithOptions(caseSensitiveMap)
+    if (FileStreamSink.hasMetadata(paths, hadoopConf, conf)) {
       // We are reading from the results of a streaming query. We will load files from
       // the metadata log instead of listing them using HDFS APIs.
       new MetadataLogFileIndex(sparkSession, new Path(paths.head),
@@ -66,7 +71,7 @@ abstract class FileTable(
   lazy val dataSchema: StructType = {
     val schema = userSpecifiedSchema.map { schema =>
       val partitionSchema = fileIndex.partitionSchema
-      val resolver = sparkSession.sessionState.conf.resolver
+      val resolver = conf.resolver
       StructType(schema.filterNot(f => partitionSchema.exists(p => resolver(p.name, f.name))))
     }.orElse {
       inferSchema(fileIndex.allFiles())
@@ -80,7 +85,7 @@ abstract class FileTable(
   }
 
   override lazy val schema: StructType = {
-    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val caseSensitive = conf.caseSensitiveAnalysis
     SchemaUtils.checkSchemaColumnNameDuplication(dataSchema, caseSensitive)
     dataSchema.foreach { field =>
       if (!supportsDataType(field.dataType)) {

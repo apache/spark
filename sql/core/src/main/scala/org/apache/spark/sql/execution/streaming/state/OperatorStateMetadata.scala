@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CommitLo
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_OFFSETS
 import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataUtils.{OperatorStateMetadataReader, OperatorStateMetadataWriter}
+import org.apache.spark.sql.internal.SessionState
 
 /**
  * Metadata for a state store instance.
@@ -379,8 +380,8 @@ class OperatorStateMetadataV2FileManager(
     checkpointLocation: Path,
     sparkSession: SparkSession,
     stateStoreWriter: StateStoreWriter) extends Logging {
-
-  private val hadoopConf = sparkSession.sessionState.newHadoopConf()
+  private val sessionState: SessionState = sparkSession.sessionState
+  private val hadoopConf = sessionState.newHadoopConf()
   private val stateCheckpointPath = new Path(checkpointLocation, "state")
   private val stateOpIdPath = new Path(
     stateCheckpointPath, stateStoreWriter.getStateInfo.operatorId.toString)

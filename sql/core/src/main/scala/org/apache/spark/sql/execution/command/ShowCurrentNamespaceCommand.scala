@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -31,7 +32,8 @@ case class ShowCurrentNamespaceCommand() extends LeafRunnableCommand {
     AttributeReference("namespace", StringType, nullable = false)())
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalogManager = sparkSession.sessionState.catalogManager
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalogManager = sessionState.catalogManager
     Seq(Row(catalogManager.currentCatalog.name, catalogManager.currentNamespace.quoted))
   }
 }

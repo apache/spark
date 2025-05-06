@@ -19,12 +19,13 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan, UnaryExecNode, UnionExec}
-import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.util.Utils
 
 /**
@@ -33,7 +34,10 @@ import org.apache.spark.util.Utils
  */
 case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleReadRule {
 
-  override def conf: SQLConf = session.sessionState.conf
+  override def conf: SQLConf = {
+    val sessionState: SessionState = session.sessionState
+    sessionState.conf
+  }
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
     Seq(ENSURE_REQUIREMENTS, REPARTITION_BY_COL, REBALANCE_PARTITIONS_BY_NONE,
@@ -60,7 +64,7 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
       if (conf.getConf(SQLConf.COALESCE_PARTITIONS_PARALLELISM_FIRST)) {
         // We fall back to Spark default parallelism if the minimum number of coalesced partitions
         // is not set, so to avoid perf regressions compared to no coalescing.
-        session.sparkContext.defaultParallelism
+        session.sparkContext.asInstanceOf[SparkContext].defaultParallelism
       } else {
         // If we don't need to maximize the parallelism, we set `minPartitionNum` to 1, so that
         // the specified advisory partition size will be respected.

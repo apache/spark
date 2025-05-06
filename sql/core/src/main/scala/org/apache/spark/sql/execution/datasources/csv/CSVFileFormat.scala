@@ -21,6 +21,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce._
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
@@ -28,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -43,10 +45,11 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
+    val sessionState: SessionState = sparkSession.sessionState
     val parsedOptions = new CSVOptions(
       options,
-      columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
-      sparkSession.sessionState.conf.sessionLocalTimeZone)
+      columnPruning = sessionState.conf.csvColumnPruning,
+      sessionState.conf.sessionLocalTimeZone)
     val csvDataSource = CSVDataSource(parsedOptions)
     csvDataSource.isSplitable && super.isSplitable(sparkSession, options, path)
   }
@@ -55,10 +58,11 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
+    val sessionState: SessionState = sparkSession.sessionState
     val parsedOptions = new CSVOptions(
       options,
-      columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
-      sparkSession.sessionState.conf.sessionLocalTimeZone)
+      columnPruning = sessionState.conf.csvColumnPruning,
+      sessionState.conf.sessionLocalTimeZone)
 
     CSVDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
   }
@@ -77,10 +81,11 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       }
     }
     val conf = job.getConfiguration
+    val sessionState: SessionState = sparkSession.sessionState
     val csvOptions = new CSVOptions(
       options,
-      columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
-      sparkSession.sessionState.conf.sessionLocalTimeZone)
+      columnPruning = sessionState.conf.csvColumnPruning,
+      sessionState.conf.sessionLocalTimeZone)
     csvOptions.compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
@@ -107,13 +112,14 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+    val broadcastedHadoopConf = sparkSession.sparkContext.asInstanceOf[SparkContext]
+      .broadcast(new SerializableConfiguration(hadoopConf))
+    val sessionState: SessionState = sparkSession.sessionState
     val parsedOptions = new CSVOptions(
       options,
-      sparkSession.sessionState.conf.csvColumnPruning,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+      sessionState.conf.csvColumnPruning,
+      sessionState.conf.sessionLocalTimeZone,
+      sessionState.conf.columnNameOfCorruptRecord)
     val isColumnPruningEnabled = parsedOptions.isColumnPruningEnabled(requiredSchema)
 
     // Check a field requirement for corrupt records here to throw an exception in a driver side

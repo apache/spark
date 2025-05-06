@@ -44,8 +44,8 @@ class MetadataLogFileIndex(
 
   private val metadataDirectory = {
     val metadataDir = new Path(path, FileStreamSink.metadataDir)
-    val fs = metadataDir.getFileSystem(sparkSession.sessionState.newHadoopConf())
-    FileStreamSink.checkEscapedMetadataPath(fs, metadataDir, sparkSession.sessionState.conf)
+    val fs = metadataDir.getFileSystem(sessionState.newHadoopConf())
+    FileStreamSink.checkEscapedMetadataPath(fs, metadataDir, conf)
     metadataDir
   }
 

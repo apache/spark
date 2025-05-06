@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LogicalPlan, On
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand._
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 /**
@@ -65,10 +66,11 @@ case class CreateSQLFunctionCommand(
   import SQLFunction._
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val parser = sparkSession.sessionState.sqlParser
-    val analyzer = sparkSession.sessionState.analyzer
-    val catalog = sparkSession.sessionState.catalog
-    val conf = sparkSession.sessionState.conf
+    val sessionState: SessionState = sparkSession.sessionState
+    val parser = sessionState.sqlParser
+    val analyzer = sessionState.analyzer
+    val catalog = sessionState.catalog
+    val conf = sessionState.conf
 
     val inputParam = inputParamText.map(UserDefinedFunction.parseRoutineParam(_, parser))
     val returnType = parseReturnTypeText(returnTypeText, isTableFunc, parser)
@@ -395,9 +397,10 @@ case class CreateSQLFunctionCommand(
       session: SparkSession,
       plan: LogicalPlan,
       analyzed: LogicalPlan): Map[String, String] = {
-    val catalog = session.sessionState.catalog
-    val conf = session.sessionState.conf
-    val manager = session.sessionState.catalogManager
+    val sessionState: SessionState = session.sessionState
+    val catalog = sessionState.catalog
+    val conf = sessionState.conf
+    val manager = sessionState.catalogManager
 
     // Only collect temporary object names when the function is a temp function.
     val (tempViews, tempFunctions) = if (isTemp) {

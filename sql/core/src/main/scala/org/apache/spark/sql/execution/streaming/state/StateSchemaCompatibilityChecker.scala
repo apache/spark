@@ -97,7 +97,10 @@ class StateSchemaCompatibilityChecker(
 
   fm.mkdirs(schemaFileLocation.getParent)
 
-  private val conf = SparkSession.getActiveSession.get.sessionState.conf
+  private val conf = {
+    val sessionState: SessionState = SparkSession.active.sessionState
+    sessionState.conf
+  }
 
   // Read most recent schema file
   def readSchemaFile(): List[StateStoreColFamilySchema] = {

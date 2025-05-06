@@ -29,12 +29,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.Job
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, FileFormat, OutputWriterFactory, PartitionedFile}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -73,7 +73,8 @@ private[sql] class AvroFileFormat extends FileFormat
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    AvroUtils.prepareWrite(spark.sessionState.conf, job, options, dataSchema)
+    val sessionState: SessionState = spark.sessionState
+    AvroUtils.prepareWrite(sessionState.conf, job, options, dataSchema)
   }
 
   override def buildReader(
@@ -85,8 +86,8 @@ private[sql] class AvroFileFormat extends FileFormat
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
 
-    val broadcastedConf =
-      spark.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+    val sc: SparkContext = spark.sparkContext
+    val broadcastedConf = sc.broadcast(new SerializableConfiguration(hadoopConf))
     val parsedOptions = new AvroOptions(options, hadoopConf)
     val datetimeRebaseModeInRead = parsedOptions.datetimeRebaseModeInRead
 

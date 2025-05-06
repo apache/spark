@@ -30,7 +30,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, DATA_SOURCE, DATA_SOURCES, PATHS}
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
-import org.apache.spark.sql.catalyst.DataSourceOptions
+import org.apache.spark.sql.catalyst.{DataSourceOptions, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -51,7 +51,7 @@ import org.apache.spark.sql.execution.datasources.v2.python.PythonDataSourceV2
 import org.apache.spark.sql.execution.datasources.xml.XmlFileFormat
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
@@ -98,12 +98,14 @@ case class DataSource(
     partitionColumns: Seq[String] = Seq.empty,
     bucketSpec: Option[BucketSpec] = None,
     options: Map[String, String] = Map.empty,
-    catalogTable: Option[CatalogTable] = None) extends Logging {
+    catalogTable: Option[CatalogTable] = None) extends SQLConfHelper with Logging {
 
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
+  private def sessionState: SessionState = sparkSession.sessionState
+  override def conf: SQLConf = sessionState.conf
 
   lazy val providingClass: Class[_] = {
-    val cls = DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
+    val cls = DataSource.lookupDataSource(className, conf)
     // `providingClass` is used for resolving data source relation for catalog tables.
     // As now catalog for data source V2 is under development, here we fall back all the
     // [[FileDataSourceV2]] to [[FileFormat]] to guarantee the current catalog works.
@@ -119,7 +121,7 @@ case class DataSource(
   private[sql] def providingInstance(): Any = providingClass.getConstructor().newInstance()
 
   private def newHadoopConfiguration(): Configuration =
-    sparkSession.sessionState.newHadoopConfWithOptions(options)
+    sessionState.newHadoopConfWithOptions(options)
 
   private def makeQualified(path: Path): Path = {
     val fs = path.getFileSystem(newHadoopConfiguration())
@@ -128,7 +130,7 @@ case class DataSource(
 
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
-  private val equality = sparkSession.sessionState.conf.resolver
+  private val equality = conf.resolver
 
   /**
    * Whether or not paths should be globbed before being used to access files.
@@ -260,7 +262,7 @@ case class DataSource(
           }
         }
 
-        val isSchemaInferenceEnabled = sparkSession.sessionState.conf.streamingSchemaInference
+        val isSchemaInferenceEnabled = conf.streamingSchemaInference
         val isTextSource = providingClass == classOf[text.TextFileFormat]
         val isSingleVariantColumn = (providingClass == classOf[json.JsonFileFormat] ||
           providingClass == classOf[csv.CSVFileFormat]) &&
@@ -279,8 +281,7 @@ case class DataSource(
             checkAndGlobPathIfNecessary(checkEmptyGlobPath = false, checkFilesExist = false)
           createInMemoryFileIndex(globbedPaths)
         })
-        val forceNullable = sparkSession.sessionState.conf
-          .getConf(SQLConf.FILE_SOURCE_SCHEMA_FORCE_NULLABLE)
+        val forceNullable = conf.getConf(SQLConf.FILE_SOURCE_SCHEMA_FORCE_NULLABLE)
         val sourceDataSchema = if (forceNullable) dataSchema.asNullable else dataSchema
         SourceInfo(
           s"FileSource[$path]",
@@ -379,7 +380,7 @@ case class DataSource(
           if FileStreamSink.hasMetadata(
             caseInsensitiveOptions.get("path").toSeq ++ paths,
             newHadoopConfiguration(),
-            sparkSession.sessionState.conf) =>
+            conf) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
         val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath,
           caseInsensitiveOptions, userSpecifiedSchema)
@@ -405,11 +406,11 @@ case class DataSource(
 
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
-        val useCatalogFileIndex = sparkSession.sessionState.conf.manageFilesourcePartitions &&
+        val useCatalogFileIndex = conf.manageFilesourcePartitions &&
           catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog &&
           catalogTable.get.partitionColumnNames.nonEmpty
         val (fileCatalog, dataSchema, partitionSchema) = if (useCatalogFileIndex) {
-          val defaultTableSize = sparkSession.sessionState.conf.defaultSizeInBytes
+          val defaultTableSize = conf.defaultSizeInBytes
           val index = new CatalogFileIndex(
             sparkSession,
             catalogTable.get,
@@ -471,7 +472,7 @@ case class DataSource(
       throw QueryExecutionErrors.multiplePathsSpecifiedError(allPaths)
     }
 
-    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val caseSensitive = conf.caseSensitiveAnalysis
     PartitioningUtils.validatePartitionColumn(data.schema, partitionColumns, caseSensitive)
 
     val fileIndex = catalogTable.map(_.identifier).map { tableIdent =>
@@ -527,7 +528,7 @@ case class DataSource(
         disallowWritingIntervals(
           outputColumns.toStructType.asNullable, format.toString, forbidAnsiIntervals = false)
         val cmd = planForWritingFileFormat(format, mode, data)
-        val qe = sparkSession.sessionState.executePlan(cmd)
+        val qe = sessionState.executePlan(cmd)
         qe.assertCommandExecuted()
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(outputColumns.toStructType.asNullable)).resolveRelation()
@@ -551,7 +552,7 @@ case class DataSource(
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
         disallowWritingIntervals(data.schema, format.toString, forbidAnsiIntervals = false)
-        DataSource.validateSchema(format.toString, data.schema, sparkSession.sessionState.conf)
+        DataSource.validateSchema(format.toString, data.schema, conf)
         planForWritingFileFormat(format, mode, data)
       case _ => throw SparkException.internalError(
         s"${providingClass.getCanonicalName} does not allow create table as select.")
@@ -656,7 +657,7 @@ object DataSource extends Logging {
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
     lazy val isUserDefinedDataSource = SparkSession.getActiveSession.exists(
-      _.sessionState.dataSourceManager.dataSourceExists(provider))
+      _.sessionState.asInstanceOf[SessionState].dataSourceManager.dataSourceExists(provider))
 
     try {
       serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider1)).toList match {

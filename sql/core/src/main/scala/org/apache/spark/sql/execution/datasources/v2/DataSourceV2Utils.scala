@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -106,8 +106,9 @@ private[sql] object DataSourceV2Utils extends Logging {
       extraOptions: CaseInsensitiveMap[String],
       source: String,
       paths: String*): Option[LogicalPlan] = {
-    val catalogManager = sparkSession.sessionState.catalogManager
-    val conf = sparkSession.sessionState.conf
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalogManager = sessionState.catalogManager
+    val conf = sessionState.conf
     val sessionOptions = DataSourceV2Utils.extractSessionConfigs(provider, conf)
 
     val optionsWithPath = getOptionsWithPaths(extraOptions, paths: _*)

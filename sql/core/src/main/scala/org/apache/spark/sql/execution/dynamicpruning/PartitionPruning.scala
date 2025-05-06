@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -64,8 +65,9 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       case (resExp, l: LogicalRelation) =>
         l.relation match {
           case fs: HadoopFsRelation =>
-            val partitionColumns = AttributeSet(
-              l.resolve(fs.partitionSchema, fs.sparkSession.sessionState.analyzer.resolver))
+            val sessionState: SessionState = fs.sparkSession.sessionState
+            val partitionColumns =
+              AttributeSet(l.resolve(fs.partitionSchema, sessionState.analyzer.resolver))
             if (resExp.references.subsetOf(partitionColumns)) {
               return Some(l)
             } else {

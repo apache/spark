@@ -801,7 +801,7 @@ private[spark] class FileSystemOverwrite extends Logging {
       }
 
     } else {
-      val hadoopConf = session.sessionState.newHadoopConf()
+      val hadoopConf = session.sessionState.asInstanceOf.newHadoopConf()
       val outputPath = new Path(path)
       val fs = outputPath.getFileSystem(hadoopConf)
       val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)

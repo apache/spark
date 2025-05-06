@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 
 private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession: SparkSession)
@@ -42,6 +42,8 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession
     setSuperField(this, "operationManager", sparkSqlOperationManager)
     super.init(hiveConf)
   }
+
+  private def sparkSessionState: SessionState = sparkSession.sessionState
 
   override def openSession(
       protocol: TProtocolVersion,
@@ -58,12 +60,13 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession
       val hiveSession = super.getSession(sessionHandle)
       HiveThriftServer2.eventManager.onSessionCreated(
         hiveSession.getIpAddress, sessionHandle.getSessionId.toString, hiveSession.getUsername)
-      val session = if (sparkSession.sessionState.conf.hiveThriftServerSingleSession) {
+      val session = if (sparkSessionState.conf.hiveThriftServerSingleSession) {
         sparkSession
       } else {
         sparkSession.newSession()
       }
-      session.sessionState.conf.setConf(SQLConf.DATETIME_JAVA8API_ENABLED, true)
+      session.sessionState.asInstanceOf[SessionState]
+        .conf.setConf(SQLConf.DATETIME_JAVA8API_ENABLED, true)
       val hiveSessionState = hiveSession.getSessionState
       setConfMap(session, hiveSessionState.getOverriddenConfigurations)
       setConfMap(session, hiveSessionState.getHiveVariables)
@@ -88,7 +91,8 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession
     HiveThriftServer2.eventManager.onSessionClosed(sessionHandle.getSessionId.toString)
     val session = sparkSqlOperationManager.sessionToContexts
       .getOrDefault(sessionHandle, sparkSession)
-    session.sessionState.catalog.getTempViewNames().foreach(session.catalog.uncacheTable)
+    session.sessionState.asInstanceOf[SessionState]
+      .catalog.getTempViewNames().foreach(session.catalog.uncacheTable)
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToContexts.remove(sessionHandle)
   }

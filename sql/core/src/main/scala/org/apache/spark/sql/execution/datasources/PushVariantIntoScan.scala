@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types._
 
 // A metadata class of a struct field. All struct fields in a struct must either all have this
@@ -290,8 +290,9 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
       hadoopFsRelation: HadoopFsRelation): LogicalPlan = {
     val variants = new VariantInRelation
 
+    val sessionState: SessionState = hadoopFsRelation.sparkSession.sessionState
     val schemaAttributes = relation.resolve(hadoopFsRelation.dataSchema,
-      hadoopFsRelation.sparkSession.sessionState.analyzer.resolver)
+      sessionState.analyzer.resolver)
     val defaultValues = ResolveDefaultColumns.existenceDefaultValues(StructType(
       schemaAttributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata))))
     for ((a, defaultValue) <- schemaAttributes.zip(defaultValues)) {

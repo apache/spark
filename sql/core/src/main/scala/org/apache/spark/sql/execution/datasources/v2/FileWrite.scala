@@ -34,7 +34,7 @@ import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, Write
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, DataSource, OutputWriterFactory, WriteJobDescription}
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
@@ -55,14 +55,15 @@ trait FileWrite extends Write {
 
   override def toBatch: BatchWrite = {
     val sparkSession = SparkSession.active
-    validateInputs(sparkSession.sessionState.conf)
+    val sessionState: SessionState = sparkSession.sessionState
+    validateInputs(sessionState.conf)
     val path = new Path(paths.head)
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
-    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
+    val hadoopConf = sessionState.newHadoopConfWithOptions(caseSensitiveMap)
     val job = getJobInstance(hadoopConf, path)
     val committer = FileCommitProtocol.instantiate(
-      sparkSession.sessionState.conf.fileCommitProtocolClass,
+      sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = paths.head)
     lazy val description =
@@ -121,9 +122,10 @@ trait FileWrite extends Write {
       pathName: String,
       options: Map[String, String]): WriteJobDescription = {
     val caseInsensitiveOptions = CaseInsensitiveMap(options)
+    val sessionState: SessionState = sparkSession.sessionState
     // Note: prepareWrite has side effect. It sets "job".
     val outputWriterFactory =
-      prepareWrite(sparkSession.sessionState.conf, job, caseInsensitiveOptions, schema)
+      prepareWrite(sessionState.conf, job, caseInsensitiveOptions, schema)
     val allColumns = toAttributes(schema)
     val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.metrics
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
@@ -142,9 +144,9 @@ trait FileWrite extends Write {
       path = pathName,
       customPartitionLocations = Map.empty,
       maxRecordsPerFile = caseInsensitiveOptions.get("maxRecordsPerFile").map(_.toLong)
-        .getOrElse(sparkSession.sessionState.conf.maxRecordsPerFile),
+        .getOrElse(sessionState.conf.maxRecordsPerFile),
       timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
-        .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone),
+        .getOrElse(sessionState.conf.sessionLocalTimeZone),
       statsTrackers = Seq(statsTracker)
     )
   }

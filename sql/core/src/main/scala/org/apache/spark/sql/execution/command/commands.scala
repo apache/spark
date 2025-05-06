@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.{CommandExecutionMode, ExplainMode, LeafEx
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.IncrementalExecution
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -168,7 +169,8 @@ case class ExplainCommand(
   // Run through the optimizer to generate the physical plan.
   override def run(sparkSession: SparkSession): Seq[Row] = try {
     val stagedLogicalPlan = stageForAnalysis(logicalPlan)
-    val qe = sparkSession.sessionState.executePlan(stagedLogicalPlan, CommandExecutionMode.SKIP)
+    val sessionState: SessionState = sparkSession.sessionState
+    val qe = sessionState.executePlan(stagedLogicalPlan, CommandExecutionMode.SKIP)
     val outputString = qe.explainString(mode)
     Seq(Row(outputString))
   } catch { case NonFatal(cause) =>
@@ -232,7 +234,8 @@ object ExternalCommandExecutor {
       runner: String,
       command: String,
       options: Map[String, String]): ExternalCommandExecutor = {
-    DataSource.lookupDataSource(runner, session.sessionState.conf) match {
+    val sessionState: SessionState = session.sessionState
+    DataSource.lookupDataSource(runner, sessionState.conf) match {
       case source if classOf[ExternalCommandRunner].isAssignableFrom(source) =>
         ExternalCommandExecutor(
           source.getDeclaredConstructor().newInstance().asInstanceOf[ExternalCommandRunner],

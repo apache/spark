@@ -29,7 +29,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{DDLUtils, LeafRunnableCommand}
 import org.apache.spark.sql.execution.command.ViewHelper.createTemporaryViewRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
-import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.internal.{SessionState, StaticSQLConf}
 import org.apache.spark.sql.types._
 
 /**
@@ -97,9 +97,10 @@ case class CreateTempViewUsing(
     if (provider.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw QueryCompilationErrors.cannotCreateTempViewUsingHiveDataSourceError()
     }
+    val sessionState: SessionState = sparkSession.sessionState
 
-    val catalog = sparkSession.sessionState.catalog
-    val unresolvedPlan = DataSource.lookupDataSourceV2(provider, sparkSession.sessionState.conf)
+    val catalog = sessionState.catalog
+    val unresolvedPlan = DataSource.lookupDataSourceV2(provider, sessionState.conf)
       .flatMap { tblProvider =>
         DataSourceV2Utils.loadV2Source(sparkSession, tblProvider, userSpecifiedSchema,
           CaseInsensitiveMap(options), provider)
@@ -111,10 +112,10 @@ case class CreateTempViewUsing(
           options = options)
         LogicalRelation(dataSource.resolveRelation())
       }
-    val analyzedPlan = sparkSession.sessionState.analyzer.execute(unresolvedPlan)
+    val analyzedPlan = sessionState.analyzer.execute(unresolvedPlan)
 
     if (global) {
-      val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+      val db = sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
       val viewIdent = TableIdentifier(tableIdent.table, Option(db))
       val viewDefinition = createTemporaryViewRelation(
         viewIdent,

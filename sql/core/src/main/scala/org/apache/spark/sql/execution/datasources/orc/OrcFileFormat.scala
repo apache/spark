@@ -30,7 +30,7 @@ import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce._
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -70,7 +71,8 @@ class OrcFileFormat
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
+    val sessionState: SessionState = sparkSession.sessionState
+    val orcOptions = new OrcOptions(options, sessionState.conf)
 
     val conf = job.getConfiguration
 
@@ -79,7 +81,7 @@ class OrcFileFormat
     conf.asInstanceOf[JobConf]
       .setOutputFormat(classOf[org.apache.orc.mapred.OrcOutputFormat[OrcStruct]])
 
-    val batchSize = sparkSession.sessionState.conf.orcVectorizedWriterBatchSize
+    val batchSize = sessionState.conf.orcVectorizedWriterBatchSize
 
     new OutputWriterFactory {
       override def newInstance(
@@ -101,10 +103,10 @@ class OrcFileFormat
   }
 
   override def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
-    val conf = sparkSession.sessionState.conf
-    conf.orcVectorizedReaderEnabled &&
+    val state: SessionState = sparkSession.sessionState
+    state.conf.orcVectorizedReaderEnabled &&
       schema.forall(s => OrcUtils.supportColumnarReads(
-        s.dataType, sparkSession.sessionState.conf.orcVectorizedReaderNestedColumnEnabled))
+        s.dataType, state.conf.orcVectorizedReaderNestedColumnEnabled))
   }
 
   override def isSplitable(
@@ -136,7 +138,8 @@ class OrcFileFormat
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
 
     val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
-    val sqlConf = sparkSession.sessionState.conf
+    val state: SessionState = sparkSession.sessionState
+    val sqlConf = state.conf
     val capacity = sqlConf.orcVectorizedReaderBatchSize
 
     // Should always be set by FileSourceScanExec creating this.
@@ -161,10 +164,10 @@ class OrcFileFormat
 
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(hadoopConf, sqlConf.caseSensitiveAnalysis)
 
-    val broadcastedConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
-    val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-    val orcFilterPushDown = sparkSession.sessionState.conf.orcFilterPushDown
+    val broadcastedConf = sparkSession.sparkContext.asInstanceOf[SparkContext]
+      .broadcast(new SerializableConfiguration(hadoopConf))
+    val isCaseSensitive = sqlConf.caseSensitiveAnalysis
+    val orcFilterPushDown = sqlConf.orcFilterPushDown
 
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value

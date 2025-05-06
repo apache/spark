@@ -39,7 +39,7 @@ import org.apache.spark.sql.avro.AvroOptions.IGNORE_EXTENSION
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.OutputWriterFactory
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -52,7 +52,7 @@ private[sql] object AvroUtils extends Logging {
       spark: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    val conf = spark.sessionState.newHadoopConfWithOptions(options)
+    val conf = spark.sessionState.asInstanceOf[SessionState].newHadoopConfWithOptions(options)
     val parsedOptions = new AvroOptions(options, conf)
 
     if (parsedOptions.parameters.contains(IGNORE_EXTENSION)) {

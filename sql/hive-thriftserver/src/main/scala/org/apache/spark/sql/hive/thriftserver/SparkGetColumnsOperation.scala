@@ -55,9 +55,9 @@ private[hive] class SparkGetColumnsOperation(
   with SparkOperation
   with Logging {
 
-  val catalog: SessionCatalog = session.sessionState.catalog
+  val catalog: SessionCatalog = sessionState.catalog
 
-  override def runInternal(): Unit = {
+  override def runInternal(): Unit = withClassLoader {
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName, tablePattern : $tableName"
     val logMsg = s"Listing columns '$cmdStr, columnName : $columnName'"
@@ -71,9 +71,6 @@ private[hive] class SparkGetColumnsOperation(
       log"with ${MDC(STATEMENT_ID, statementId)}")
 
     setState(OperationState.RUNNING)
-    // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = session.sharedState.jarClassLoader
-    Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
     HiveThriftServer2.eventManager.onStatementStart(
       statementId,

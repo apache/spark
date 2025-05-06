@@ -43,6 +43,7 @@ import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count,
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils}
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -146,7 +147,8 @@ object OrcUtils extends Logging {
   def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
       : Option[StructType] = {
     val ignoreCorruptFiles = new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles
-    val conf = sparkSession.sessionState.newHadoopConfWithOptions(options)
+    val sessionState: SessionState = sparkSession.sessionState
+    val conf = sessionState.newHadoopConfWithOptions(options)
     files.iterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
       case Some(schema) =>
         logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
@@ -167,7 +169,8 @@ object OrcUtils extends Logging {
 
   def inferSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
     : Option[StructType] = {
-    val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
+    val sessionState: SessionState = sparkSession.sessionState
+    val orcOptions = new OrcOptions(options, sessionState.conf)
     if (orcOptions.mergeSchema) {
       SchemaMergeUtils.mergeSchemasInParallel(
         sparkSession, options, files, OrcUtils.readOrcSchemasInParallel)

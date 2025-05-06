@@ -90,12 +90,11 @@ class FileStreamSinkLog(
     _retentionMs: Option[Long] = None)
   extends CompactibleFileStreamLog[SinkFileStatus](metadataLogVersion, sparkSession, path) {
 
-  protected override val fileCleanupDelayMs = sparkSession.sessionState.conf.fileSinkLogCleanupDelay
+  protected override val fileCleanupDelayMs = conf.fileSinkLogCleanupDelay
 
-  protected override val isDeletingExpiredLog = sparkSession.sessionState.conf.fileSinkLogDeletion
+  protected override val isDeletingExpiredLog = conf.fileSinkLogDeletion
 
-  protected override val defaultCompactInterval =
-    sparkSession.sessionState.conf.fileSinkLogCompactInterval
+  protected override val defaultCompactInterval = conf.fileSinkLogCompactInterval
 
   require(defaultCompactInterval > 0,
     s"Please set ${SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key} (was $defaultCompactInterval) " +

@@ -45,7 +45,7 @@ case class JsonScanBuilder (
   }
 
   override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
-    if (sparkSession.sessionState.conf.jsonFilterPushDown) {
+    if (conf.jsonFilterPushDown) {
       StructFilters.pushedFilters(dataFilters, dataSchema)
     } else {
       Array.empty[Filter]
