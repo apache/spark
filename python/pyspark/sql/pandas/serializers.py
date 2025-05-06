@@ -828,7 +828,10 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
             if dataframes_in_group == 1:
                 batch = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
                 yield (
-                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch).itercolumns()]
+                    [
+                        self.arrow_to_pandas(c, i)
+                        for i, c in enumerate(pa.Table.from_batches(batch).itercolumns())
+                    ]
                 )
 
             elif dataframes_in_group != 0:
