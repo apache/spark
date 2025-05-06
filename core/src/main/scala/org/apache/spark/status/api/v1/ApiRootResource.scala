@@ -44,7 +44,9 @@ import org.apache.spark.ui.{SparkUI, UIUtils}
 private[v1] class ApiRootResource extends ApiRequestContext {
 
   @Path("applications")
-  def applicationList(): Class[ApplicationListResource] = classOf[ApplicationListResource]
+  def applicationList(): Class[ApplicationListResource] = {
+    throw new ForbiddenException("User is not authorized to access the application list.")
+  }
 
   @Path("applications/{appId}")
   def application(): Class[OneApplicationResource] = classOf[OneApplicationResource]
