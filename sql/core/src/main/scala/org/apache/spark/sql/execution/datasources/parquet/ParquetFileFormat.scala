@@ -159,6 +159,9 @@ class ParquetFileFormat
       SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
       sparkSession.sessionState.conf.legacyParquetNanosAsLong)
 
+    options.get(SQLConf.PARQUET_FIELD_ID_READ_EXTERNAL_MAPPING.key)
+      .foreach(hadoopConf.set(SQLConf.PARQUET_FIELD_ID_READ_EXTERNAL_MAPPING.key, _))
+
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))

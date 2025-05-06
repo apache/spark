@@ -2496,7 +2496,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         MessageTypeParser.parseMessageType(parquetSchema),
         catalystSchema,
         caseSensitive,
-        useFieldId = false)
+        useFieldId = false,
+        ParquetIdExternalMapping.EmptyMapping)
 
       try {
         expectedSchema.checkContains(actual)
@@ -3063,7 +3064,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
          MessageTypeParser.parseMessageType(parquetSchema),
           catalystSchema,
           caseSensitive = false,
-          useFieldId = false)
+          useFieldId = false,
+          ParquetIdExternalMapping.EmptyMapping)
       }
     }
 }

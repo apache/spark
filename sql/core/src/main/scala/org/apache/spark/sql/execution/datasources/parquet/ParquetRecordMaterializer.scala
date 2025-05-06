@@ -44,7 +44,8 @@ private[parquet] class ParquetRecordMaterializer(
     schemaConverter: ParquetToSparkSchemaConverter,
     convertTz: Option[ZoneId],
     datetimeRebaseSpec: RebaseSpec,
-    int96RebaseSpec: RebaseSpec)
+    int96RebaseSpec: RebaseSpec,
+    externalIdMappings: ParquetIdExternalMapping)
   extends RecordMaterializer[InternalRow] {
 
   private val rootConverter = new ParquetRowConverter(
@@ -54,7 +55,8 @@ private[parquet] class ParquetRecordMaterializer(
     convertTz,
     datetimeRebaseSpec,
     int96RebaseSpec,
-    NoopUpdater)
+    NoopUpdater,
+    externalIdMappings)
 
   override def getCurrentRecord: InternalRow = rootConverter.currentRecord
 

@@ -263,7 +263,8 @@ object ParquetUtils extends Logging {
       None,
       datetimeRebaseSpec,
       RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
-      NoopUpdater)
+      NoopUpdater,
+      ParquetIdExternalMapping.EmptyMapping)
     val primitiveTypeNames = primitiveTypes.map(_.getPrimitiveTypeName)
     primitiveTypeNames.zipWithIndex.foreach {
       case (PrimitiveType.PrimitiveTypeName.BOOLEAN, i) =>

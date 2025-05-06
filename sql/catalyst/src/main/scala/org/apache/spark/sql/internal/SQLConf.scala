@@ -1381,6 +1381,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PARQUET_FIELD_ID_READ_EXTERNAL_MAPPING =
+    buildConf("spark.sql.parquet.fieldId.read.externalMapping")
+      .doc("When the Parquet files do not contain field-ids in their schema, " +
+        "readers can use this property to provide a fieldId-to-columnName mapping." +
+        "The provided field-ids will be used to match Spark schema with Parquet schemas " +
+        "the same way as a reader will use field-ids embedded in Parquet schemas.")
+      .version("4.1.0")
+
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
       "`orc.compress` is specified in the table-specific options/properties, the precedence " +
