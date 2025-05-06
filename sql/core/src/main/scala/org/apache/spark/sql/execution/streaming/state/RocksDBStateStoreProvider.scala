@@ -61,7 +61,8 @@ private[sql] class RocksDBStateStoreProvider
    * verify that operations are performed by the owning thread and to prevent
    * concurrent modifications to the same store.
    */
-  class RocksDBStateStore(lastVersion: Long, stamp: Long) extends StateStore {
+  class RocksDBStateStore(
+      lastVersion: Long, stamp: Long, var readOnly: Boolean) extends StateStore {
     /** Trait and classes representing the internal state of the store */
     trait STATE
     case object UPDATING extends STATE
@@ -160,12 +161,23 @@ private[sql] class RocksDBStateStoreProvider
       state = newState
     }
 
-    // Add a listener for task threads to abort when the task completes and hasn't released
-    Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] {
-      _ =>
+    Option(TaskContext.get()).foreach { ctxt =>
+      ctxt.addTaskCompletionListener[Unit]( ctx => {
         try {
           if (state == UPDATING) {
-            abort()
+            if (readOnly) {
+              release() // Only release, do not throw an error because we rely on
+              // CompletionListener to release for read-only store in
+              // mapPartitionsWithReadStateStore.
+            } else {
+              abort() // Abort since this is an error if stateful task completes
+              // without committing or aborting
+              // Only throw error if the task is not already failed or interrupted
+              // so that we don't override the original error.
+              if (!ctx.isFailed() && !ctx.isInterrupted()) {
+                throw StateStoreErrors.stateStoreUpdatingAfterTaskCompletion(id)
+              }
+            }
           }
         } catch {
           case NonFatal(e) =>
@@ -173,7 +185,13 @@ private[sql] class RocksDBStateStoreProvider
         } finally {
           stateMachine.releaseStore(stamp, throwEx = false)
         }
-    })
+      })
+
+      ctxt.addTaskFailureListener( (_, _) => {
+        abort() // Either the store is already aborted (this is a no-op) or
+        // we need to abort it.
+      })
+    }
 
     // State row format validated
     @volatile private var isValidated = false
@@ -645,13 +663,15 @@ private[sql] class RocksDBStateStoreProvider
           // We need to match like this as opposed to case Some(ss: RocksDBStateStore)
           // because of how the tests create the class in StateStoreRDDSuite
           case Some(stateStore: ReadStateStore) if stateStore.isInstanceOf[RocksDBStateStore] =>
-            stateStore.asInstanceOf[StateStore]
+            val rocksDBStateStore = stateStore.asInstanceOf[RocksDBStateStore]
+            rocksDBStateStore.readOnly = readOnly
+            rocksDBStateStore.asInstanceOf[StateStore]
           case Some(_) =>
             throw new IllegalArgumentException("Existing store must be a RocksDBStateStore")
           case None =>
             val stamp = stateMachine.acquireStore()
             // Create new store instance for getStore/getReadStore cases
-            new RocksDBStateStore(version, stamp)
+            new RocksDBStateStore(version, stamp, readOnly)
         }
       } catch {
         case e: Throwable =>
@@ -775,7 +795,8 @@ private[sql] class RocksDBStateStoreProvider
    * @param endVersion   checkpoint version to end with
    * @return [[StateStore]]
    */
-  override def replayStateFromSnapshot(snapshotVersion: Long, endVersion: Long): StateStore = {
+  override def replayStateFromSnapshot(
+      snapshotVersion: Long, endVersion: Long, readOnly: Boolean): StateStore = {
     try {
       if (snapshotVersion < 1) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(snapshotVersion)
@@ -786,7 +807,7 @@ private[sql] class RocksDBStateStoreProvider
       val stamp = stateMachine.acquireStore()
       try {
         rocksDB.loadFromSnapshot(snapshotVersion, endVersion)
-        new RocksDBStateStore(endVersion, stamp)
+        new RocksDBStateStore(endVersion, stamp, readOnly)
       } catch {
         case e: Throwable =>
           stateMachine.releaseStore(stamp)

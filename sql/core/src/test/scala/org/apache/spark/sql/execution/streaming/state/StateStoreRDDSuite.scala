@@ -259,6 +259,9 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
       // Create input data for our chained operations
       val inputData = makeRDD(spark.sparkContext, Seq(("a", 0), ("b", 0), ("c", 0)))
 
+      var mappedReadStore: ReadStateStore = null
+      var mappedWriteStore: StateStore = null
+
       // Chain operations: first read with ReadStateStore, then write with StateStore
       val chainedResults = inputData
         // First pass: read-only state store access
@@ -273,6 +276,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
           // Read values and store them for later verification
           val inputItems = iter.toSeq // Materialize the input data
 
+          mappedReadStore = readStore
           val readValues = inputItems.map { case (s, i) =>
             val key = dataToKeyRow(s, i)
             val value = Option(readStore.get(key)).map(valueRowToData)
@@ -296,7 +300,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
         ) { (writeStore, writeIter) =>
           if (writeIter.hasNext) {
             val (readValues, allStoreValues, originalItems) = writeIter.next()
-            val usedForWriteStore = StateStoreThreadLocalTracker.isUsedForWriteStore
+            mappedWriteStore = writeStore
             // Get all existing values from the write store to verify reuse
             val storeValues = writeStore.iterator().map(rowPairToDataPair).toSeq
 
@@ -310,15 +314,14 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
             writeStore.commit()
 
             // Return all collected information for verification
-            Iterator((readValues, allStoreValues, storeValues, usedForWriteStore))
+            Iterator((readValues, allStoreValues, storeValues))
           } else {
             Iterator.empty
           }
         }
 
       // Collect the results
-      val (readValues, initialStoreState, writeStoreValues,
-        storeWasReused) = chainedResults.collect().head
+      val (readValues, initialStoreState, writeStoreValues) = chainedResults.collect().head
 
       // Verify read results
       assert(readValues.toSet === Set(
@@ -333,8 +336,8 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
       // Verify the existing values in the write store (should be the same as initial state)
       assert(writeStoreValues.toSet === Set((("a", 0), 1), (("b", 0), 2)))
 
-      // Verify the thread local flag indicates reuse
-      assert(storeWasReused,
+      // Verify that the same store was used for both read and write operations
+      assert(mappedReadStore == mappedWriteStore,
         "StateStoreThreadLocalTracker should indicate the read store was reused")
 
       // Create another ReadStateStoreRDD to verify the final state (version 2)

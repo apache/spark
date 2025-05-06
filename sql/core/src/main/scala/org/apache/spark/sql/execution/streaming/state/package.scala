@@ -26,7 +26,6 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.TaskFailureListener
 
 package object state extends Logging {
 
@@ -68,16 +67,6 @@ package object state extends Logging {
 
       val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
       val wrappedF = (store: StateStore, iter: Iterator[T]) => {
-        // Abort the state store in case of error
-        val ctxt = TaskContext.get()
-        ctxt.addTaskCompletionListener[Unit](_ => {
-          if (!store.hasCommitted) store.abort()
-        })
-        ctxt.addTaskFailureListener(new TaskFailureListener {
-          override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
-            store.abort()
-          }
-        })
         cleanedF(store, iter)
       }
 
@@ -119,9 +108,6 @@ package object state extends Logging {
         // Clean up the state store.
         val ctxt = TaskContext.get()
         ctxt.addTaskCompletionListener[Unit](_ => {
-          if (!StateStoreThreadLocalTracker.isUsedForWriteStore) {
-            store.release()
-          }
           StateStoreThreadLocalTracker.clearStore()
         })
         cleanedF(store, iter)
