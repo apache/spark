@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 
-class ResolveTableConstraint(val catalogManager: CatalogManager) extends Rule[LogicalPlan] {
+class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(COMMAND), ruleId) {
@@ -37,18 +37,16 @@ class ResolveTableConstraint(val catalogManager: CatalogManager) extends Rule[Lo
         case r: DataSourceV2Relation
           if r.table.constraints != null && r.table.constraints.nonEmpty =>
           // Check constraint is the only enforced constraint for DSV2 tables.
-          val checks = r.table.constraints.collect {
-            case c: Check => c
-          }
-          val checkInvariants = checks.map { c =>
-            val unresolvedExpr = buildCatalystExpression(c)
-            val columnExtractors = mutable.Map[String, Expression]()
-            buildColumnExtractors(unresolvedExpr, columnExtractors)
-            CheckInvariant(unresolvedExpr, columnExtractors.toSeq, c.name(), c.predicateSql())
+          val checkInvariants = r.table.constraints.collect {
+            case c: Check =>
+              val unresolvedExpr = buildCatalystExpression(c)
+              val columnExtractors = mutable.Map[String, Expression]()
+              buildColumnExtractors(unresolvedExpr, columnExtractors)
+              CheckInvariant(unresolvedExpr, columnExtractors.toSeq, c.name, c.predicateSql)
           }
           // Combine the check invariants into a single expression using conjunctive AND.
-          val condition = checkInvariants.reduce(And)
-          v2Write.withNewQuery(Filter(condition, v2Write.query))
+          checkInvariants.reduceOption(And).fold(v2Write)(
+            condition => v2Write.withNewQuery(Filter(condition, v2Write.query)))
         case _ =>
           v2Write
       }
