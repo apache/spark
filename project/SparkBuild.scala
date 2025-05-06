@@ -1090,10 +1090,12 @@ object KubernetesIntegrationTests {
  */
 object DependencyOverrides {
   lazy val guavaVersion = sys.props.get("guava.version").getOrElse("33.4.0-jre")
+  lazy val log4jVersion = sys.props.get("log4j.version").getOrElse("2.24.3")
   lazy val settings = Seq(
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides += "jline" % "jline" % "2.14.6",
-    dependencyOverrides += "org.apache.avro" % "avro" % "1.12.0")
+    dependencyOverrides += "org.apache.avro" % "avro" % "1.12.0",
+    dependencyOverrides += "org.apache.logging.log4j" % "log4j-slf4j-impl" % log4jVersion)
 }
 
 /**
@@ -1105,8 +1107,7 @@ object ExcludedDependencies {
     libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "ch.qos.logback"),
-      ExclusionRule("org.slf4j", "slf4j-simple"),
-      ExclusionRule("javax.servlet", "javax.servlet-api"))
+      ExclusionRule("org.slf4j", "slf4j-simple"))
   )
 }
 

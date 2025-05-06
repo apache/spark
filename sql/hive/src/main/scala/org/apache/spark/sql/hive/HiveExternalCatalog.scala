@@ -854,7 +854,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // Get the original table properties as defined by the user.
     table.copy(
       createVersion = version,
-      properties = table.properties.filterNot { case (key, _) => key.startsWith(SPARK_SQL_PREFIX) })
+      properties = table.properties.filterNot { case (key, value) =>
+        key.startsWith(SPARK_SQL_PREFIX) ||
+        key == "bucketing_version" && value == "2" ||
+        key == "numFilesErasureCoded" && value == "0"})
   }
 
   // Reorder table schema to put partition columns at the end. Before Spark 2.2, the partition

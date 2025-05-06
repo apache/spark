@@ -132,9 +132,9 @@
     <zookeeper.version>3.9.3</zookeeper.version>
     <curator.version>5.9.0</curator.version>
     <hive.group>org.apache.hive</hive.group>
-    <hive.classifier></hive.classifier>
+    <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>4.0.1</hive.version>
+    <hive.version>4.1.0-SNAPSHOT</hive.version>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
     <kafka.version>3.9.1</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
@@ -1817,8 +1817,12 @@
             <artifactId>hive-storage-api</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.apache.tez</groupId>
-            <artifactId>tez-api</artifactId>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-yarn-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-hdfs-client</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -2345,12 +2349,12 @@
           </exclusion>
         </exclusions>
       </dependency>
-      <!--dependency>
+      <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-parser</artifactId>
         <version>${hive.version}</version>
         <scope>runtime</scope>
-      </dependency-->
+      </dependency>
       <dependency>
         <groupId>org.apache.calcite</groupId>
         <artifactId>calcite-core</artifactId>
@@ -2507,6 +2511,11 @@
       <dependency>
         <groupId>org.datanucleus</groupId>
         <artifactId>datanucleus-core</artifactId>
+        <version>${datanucleus-core.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.datanucleus</groupId>
+        <artifactId>datanucleus-api-jdo</artifactId>
         <version>${datanucleus-core.version}</version>
       </dependency>
       <dependency>
