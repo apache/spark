@@ -53,6 +53,18 @@ __all__ = [
     "WriterCommitMessage",
     "Filter",
     "EqualTo",
+    "EqualNullSafe",
+    "GreaterThan",
+    "GreaterThanOrEqual",
+    "LessThan",
+    "LessThanOrEqual",
+    "In",
+    "IsNull",
+    "IsNotNull",
+    "Not",
+    "StringStartsWith",
+    "StringEndsWith",
+    "StringContains",
 ]
 
 
@@ -966,7 +978,7 @@ class DataSourceWriter(ABC):
 
 class DataSourceArrowWriter(DataSourceWriter):
     """
-    A base class for data source writers that process data using PyArrow’s `RecordBatch`.
+    A base class for data source writers that process data using PyArrow's `RecordBatch`.
 
     Unlike :class:`DataSourceWriter`, which works with an iterator of Spark Rows, this class
     is optimized for using the Arrow format when writing data. It can offer better performance
