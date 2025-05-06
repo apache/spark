@@ -164,6 +164,17 @@ object ColumnDefinition {
           }
         }
 
+      case cmd: AddColumns if cmd.columnsToAdd.exists(_.default.isDefined) =>
+        // Wrap analysis errors for default values in a more user-friendly message.
+        cmd.columnsToAdd.foreach { c =>
+          c.default.foreach { d =>
+            if (!d.resolved) {
+              throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+                "ALTER TABLE", c.colName, d.originalSQL, null)
+            }
+          }
+        }
+
       case _ =>
     }
   }

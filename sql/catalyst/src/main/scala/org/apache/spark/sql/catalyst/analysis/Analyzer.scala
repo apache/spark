@@ -3994,45 +3994,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         c.markAsAnalyzed(AnalysisContext.get)
       case c: KeepAnalyzedQuery if c.resolved =>
         c.storeAnalyzedQuery()
-      case c: CreateTable if c.resolved =>
-        c.copy(columns = storeDefaultForColumnDefinition(c.columns))
-      case r: ReplaceTable if r.resolved =>
-        r.copy(columns = storeDefaultForColumnDefinition(r.columns))
-      case a: AddColumns =>
-        // Wrap analysis errors for default values in a more user-friendly message.
-        a.columnsToAdd.foreach { c =>
-          c.default.foreach { d =>
-            if (!d.resolved) {
-              throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
-                "ALTER TABLE", c.colName, d.originalSQL, null)
-            }
-          }
+      case p: LogicalPlan if p.resolved =>
+        p.transformAllExpressionsWithPruning(_.containsPattern(ANALYSIS_AWARE_EXPRESSION)) {
+          case e: AnalysisAwareExpression[_] => e.markAsAnalyzed()
         }
-        if (a.resolved) {
-          a.copy(columnsToAdd = storeDefaultForQualifiedColType(a.columnsToAdd))
-        } else {
-          a
-        }
-    }
-
-    private def storeDefaultForColumnDefinition(cols: Seq[ColumnDefinition]):
-        Seq[ColumnDefinition] = {
-      cols.map { col =>
-        val analyzedDefaultValue = col.defaultValue.map { defaultValue =>
-          defaultValue.copy(analyzedChild = Some(defaultValue.child))
-        }
-        col.copy(defaultValue = analyzedDefaultValue)
-      }
-    }
-
-    private def storeDefaultForQualifiedColType(cols: Seq[QualifiedColType]):
-        Seq[QualifiedColType] = {
-      cols.map { col =>
-        val analyzedDefaultValue = col.default.map { defaultValue =>
-          defaultValue.copy(analyzedChild = Some(defaultValue.child))
-        }
-        col.copy(default = analyzedDefaultValue)
-      }
     }
   }
 }
