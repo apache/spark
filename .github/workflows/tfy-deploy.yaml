@@ -3,7 +3,7 @@ name: Deploy to TrueFoundry
 on:
   push:
     branches:
-      - 'main'
+      - 'master'
 
 env:
   TFY_HOST: https://internal.devtest.truefoundry.tech
