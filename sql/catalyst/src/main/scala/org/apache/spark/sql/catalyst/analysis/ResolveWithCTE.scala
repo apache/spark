@@ -288,7 +288,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       anchor: LogicalPlan,
       cteDefId: Long,
       columnNames: Option[Seq[String]]) = {
-    recursion.transformWithSubqueries {
+    recursion.transformUpWithSubqueriesAndPruning(_.containsPattern(CTE)) {
       case r: CTERelationRef if r.recursive && r.cteId == cteDefId =>
         val ref = UnionLoopRef(r.cteId, anchor.output, false)
         columnNames.map(UnresolvedSubqueryColumnAliases(_, ref)).getOrElse(ref)
