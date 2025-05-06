@@ -2144,6 +2144,9 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       sqlConf = Some(cloneSQLConf()))
   }
 
+  override def newStoreProviderNoInit(): RocksDBStateStoreProvider =
+    new RocksDBStateStoreProvider
+
   override def getDefaultSQLConf(
     minDeltasForSnapshot: Int,
     numOfVersToRetainInMemory: Int): SQLConf = {

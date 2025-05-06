@@ -989,6 +989,9 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       sqlConfOpt = Some(cloneSQLConf()))
   }
 
+  override def newStoreProviderNoInit(): HDFSBackedStateStoreProvider =
+    new HDFSBackedStateStoreProvider
+
   override def getLatestData(
       storeProvider: HDFSBackedStateStoreProvider,
       useColumnFamilies: Boolean = false): Set[((String, Int), Int)] = {
@@ -1629,6 +1632,64 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
+  test("Load spark 4.0 golden checkpoint written without checksum") {
+    // We have Spark 4.0 golden files for each of these operations and store names.
+    // Tuple(operation name, store name, key schema, value schema)
+    val stores = Seq(
+      ("agg", StateStoreId.DEFAULT_STORE_NAME,
+        StructType(Seq(StructField("_1", IntegerType, nullable = false))),
+        StructType(Seq(StructField("count", LongType, nullable = false)))),
+      ("dedup", StateStoreId.DEFAULT_STORE_NAME,
+        StructType(Seq(StructField("_1", IntegerType, nullable = false))),
+        StructType(Seq(StructField("__dummy__", NullType)))),
+      ("join1", "left-keyToNumValues",
+        StructType(Seq(StructField("field0", IntegerType, nullable = false))),
+        StructType(Seq(StructField("value", LongType)))),
+      ("join1", "left-keyWithIndexToValue",
+        StructType(Seq(StructField("field0", IntegerType, nullable = false))),
+        StructType(Seq(StructField("value", LongType)))),
+      ("join1", "right-keyToNumValues",
+        StructType(Seq(StructField("field0", IntegerType, nullable = false))),
+        StructType(Seq(StructField("value", LongType)))),
+      ("join1", "right-keyWithIndexToValue",
+        StructType(Seq(StructField("field0", IntegerType, nullable = false))),
+        StructType(Seq(StructField("value", LongType))))
+    )
+
+    // now try to load the store with checksum enabled.
+    withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> true.toString) {
+      stores.foreach { case (opName, storeName, keySchema, valueSchema) =>
+        (1 to 4).foreach { version =>
+          tryWithProviderResource(newStoreProviderNoInit()) { provider =>
+            // load from golden checkpoint should be successful
+            val providerName = provider match {
+              case _: HDFSBackedStateStoreProvider => "hdfs"
+              case _: RocksDBStateStoreProvider => "rocksdb"
+              case _ => throw new IllegalArgumentException("Unknown ProviderClass")
+            }
+
+            val checkpointPath = this.getClass.getResource(
+              s"/structured-streaming/checkpoint-version-4.0.0/" +
+                s"$providerName/$opName/state"
+            ).getPath
+
+            provider.init(
+              StateStoreId(checkpointPath, 0, 0, storeName),
+              keySchema,
+              valueSchema,
+              NoPrefixKeyStateEncoderSpec(keySchema),
+              useColumnFamilies = false,
+              new StateStoreConf(cloneSQLConf()),
+              new Configuration()
+            )
+            val store = provider.getStore(version)
+            store.abort()
+          }
+        }
+      }
+    }
+  }
+
   private def verifyChecksumFiles(
       dir: String, expectedNumFiles: Int, expectedNumChecksumFiles: Int): Unit = {
     val allFiles = new File(dir)
@@ -1943,6 +2004,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
   /** Return a new provider with the given id using a clone of SQLConf */
   def newStoreProviderWithClonedConf(storeId: StateStoreId): ProviderClass
+
+  /** Return a new provider without initializing it */
+  def newStoreProviderNoInit(): ProviderClass
 
   /** Get the latest data referred to by the given provider but not using this provider */
   def getLatestData(storeProvider: ProviderClass,
