@@ -244,15 +244,18 @@ trait FileSourceScanLike extends DataSourceScanExec {
     case FileSourceConstantMetadataAttribute(attr) => attr
   }
 
-  override def vectorTypes: Option[Seq[String]] =
+  protected def sessionState: SessionState = relation.sparkSession.sessionState
+
+  override def vectorTypes: Option[Seq[String]] = {
     relation.fileFormat.vectorTypes(
       requiredSchema = requiredSchema,
       partitionSchema = relation.partitionSchema,
-      conf).map { vectorTypes =>
+      sessionState.conf).map { vectorTypes =>
         vectorTypes ++
           // for column-based file format, append metadata column's vector type classes if any
           fileConstantMetadataColumns.map { _ => classOf[ConstantColumnVector].getName }
       }
+  }
 
   lazy val driverMetrics = Map(
     "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files read"),
@@ -335,7 +338,8 @@ trait FileSourceScanLike extends DataSourceScanExec {
 
   // exposed for testing
   lazy val bucketedScan: Boolean = {
-    if (conf.bucketingEnabled && relation.bucketSpec.isDefined && !disableBucketedScan) {
+    if (sessionState.conf.bucketingEnabled && relation.bucketSpec.isDefined &&
+      !disableBucketedScan) {
       val spec = relation.bucketSpec.get
       val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
       bucketColumns.size == spec.bucketColumnNames.size
@@ -371,7 +375,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
       val sortColumns =
         spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
       val shouldCalculateSortOrder =
-        conf.getConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING) &&
+        sessionState.conf.getConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING) &&
           sortColumns.nonEmpty
 
       val sortOrder = if (shouldCalculateSortOrder) {
@@ -455,7 +459,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
           bucketedKey -> "true",
           "SelectedBucketsCount" -> (s"$numSelectedBuckets out of ${spec.numBuckets}" +
             optionalNumCoalescedBuckets.map { b => s" (Coalesced to $b)"}.getOrElse("")))
-      } else if (!conf.bucketingEnabled) {
+      } else if (!sessionState.conf.bucketingEnabled) {
         metadata + (bucketedKey -> "false (disabled by configuration)")
       } else if (disableBucketedScan) {
         metadata + (bucketedKey -> "false (disabled by query planner)")
@@ -566,7 +570,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
     }
 
     override def calculateTotalPartitionBytes: Long = {
-      val openCostInBytes = conf.filesOpenCostInBytes
+      val openCostInBytes = sessionState.conf.filesOpenCostInBytes
       partitionDirectories.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
     }
 
@@ -644,8 +648,7 @@ case class FileSourceScanExec(
         requiredSchema = requiredSchema,
         filters = pushedDownFilters,
         options = options,
-        hadoopConf = relation.sparkSession.sessionState.asInstanceOf[SessionState]
-          .newHadoopConfWithOptions(relation.options))
+        hadoopConf = sessionState.newHadoopConfWithOptions(relation.options))
 
     val readRDD = if (bucketedScan) {
       createBucketedReadRDD(relation.bucketSpec.get, readFile, dynamicallySelectedPartitions)
@@ -769,7 +772,7 @@ case class FileSourceScanExec(
   private def createReadRDD(
       readFile: PartitionedFile => Iterator[InternalRow],
       selectedPartitions: ScanFileListing): RDD[InternalRow] = {
-    val openCostInBytes = conf.filesOpenCostInBytes
+    val openCostInBytes = sessionState.conf.filesOpenCostInBytes
     val maxSplitBytes =
       FilePartition.maxSplitBytes(relation.sparkSession, selectedPartitions)
     logInfo(log"Planning scan with bin packing, max size: ${MDC(MAX_SPLIT_BYTES, maxSplitBytes)} " +
@@ -777,7 +780,7 @@ case class FileSourceScanExec(
       log"bytes.")
 
     // Filter files with bucket pruning if possible
-    val bucketingEnabled = conf.bucketingEnabled
+    val bucketingEnabled = sessionState.conf.bucketingEnabled
     val shouldProcess: Path => Boolean = optionalBucketSet match {
       case Some(bucketSet) if bucketingEnabled =>
         // Do not prune the file if bucket file name is invalid
