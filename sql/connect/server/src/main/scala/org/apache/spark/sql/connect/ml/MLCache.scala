@@ -51,7 +51,8 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     Files.createDirectories(path)
   }
   private[spark] def getMemoryControlEnabled: Boolean = {
-    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED)
+    sessionHolder.session.conf.get(
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED)
   }
 
   private def getMaxInMemoryCacheSizeKB: Long = {
@@ -61,8 +62,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
 
   private def getOffloadingTimeoutMinute: Long = {
     sessionHolder.session.conf.get(
-      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_OFFLOADING_TIMEOUT
-    )
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_OFFLOADING_TIMEOUT)
   }
 
   private[ml] case class CacheItem(obj: Object, sizeBytes: Long)
@@ -91,12 +91,12 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
 
   private[ml] val totalMLCacheSizeBytes: AtomicLong = new AtomicLong(0)
   private[spark] def getMLCacheMaxSize: Long = {
-    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_SIZE)
+    sessionHolder.session.conf.get(
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_SIZE)
   }
   private[spark] def getModelMaxSize: Long = {
     sessionHolder.session.conf.get(
-      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE
-    )
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE)
   }
 
   def checkModelSize(estimatedModelSize: Long): Unit = {
