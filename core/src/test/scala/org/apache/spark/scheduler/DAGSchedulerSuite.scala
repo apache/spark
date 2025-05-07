@@ -3148,19 +3148,16 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     (ShuffleDependency[_, _, _], ShuffleDependency[_, _, _]) = {
     val numPartitions = 2
     val shuffleMapRdd0 = new MyRDD(sc, numPartitions, Nil, indeterminate = false)
-
     val shuffleDep0 = new ShuffleDependency(shuffleMapRdd0, new HashPartitioner(2))
-    val shuffleId0 = shuffleDep0.shuffleId
+
     val shuffleMapRdd1 =
       new MyRDD(sc, numPartitions, Nil, tracker = mapOutputTracker, indeterminate = true)
-
     val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
-    val shuffleId1 = shuffleDep1.shuffleId
+
     val finalRdd =
       new MyRDD(sc, numPartitions, List(shuffleDep0, shuffleDep1), tracker = mapOutputTracker)
 
     submit(finalRdd, Array(0, 1))
-    val stageId0 = this.scheduler.shuffleIdToMapStage(shuffleId0).id
 
     // Finish the first shuffle map stage.
     completeShuffleMapStageSuccessfully(0, 0, numPartitions, Seq("hostA", "hostB"))
@@ -3171,7 +3168,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     (shuffleDep0, shuffleDep1)
   }
 
-  test("SPARK-51272: re-submit of an indeterminate stage whithout partial result can succeed") {
+  test("SPARK-51272: re-submit of an indeterminate stage without partial result can succeed") {
     val shuffleDeps = constructMixedDeterminateDependencies()
     val resultStage = scheduler.stageIdToStage(2).asInstanceOf[ResultStage]
 
@@ -3193,7 +3190,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     completeNextResultStageWithSuccess(resultStage.id, 1)
   }
 
-  test("SPARK-51272: re-submit of an indeterminate stage whith partial result will fail") {
+  test("SPARK-51272: re-submit of an indeterminate stage with partial result will fail") {
     val shuffleDeps = constructMixedDeterminateDependencies()
     val resultStage = scheduler.stageIdToStage(2).asInstanceOf[ResultStage]
 
