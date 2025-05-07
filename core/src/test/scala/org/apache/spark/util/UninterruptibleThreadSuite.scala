@@ -118,15 +118,16 @@ class UninterruptibleThreadSuite extends SparkFunSuite {
 
   test("no runUninterruptibly") {
     @volatile var hasInterruptedException = false
+    val latch = new CountDownLatch(1)
     val t = new UninterruptibleThread("test") {
       override def run(): Unit = {
-        if (sleep(0)) {
-          hasInterruptedException = true
-        }
+        latch.countDown()
+        hasInterruptedException = sleep(1)
       }
     }
-    t.interrupt()
     t.start()
+    latch.await(10, TimeUnit.SECONDS)
+    t.interrupt()
     t.join()
     assert(hasInterruptedException === true)
   }
