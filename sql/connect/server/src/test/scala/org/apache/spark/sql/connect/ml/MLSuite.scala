@@ -385,6 +385,43 @@ class MLSuite extends MLHelper {
         .toArray sameElements Array("a", "b", "c"))
   }
 
+  test("tree model training early stop for limiting model size") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED.key, "true")
+
+    for (estimator <- Seq(getDecisionTreeClassifier, getRandomForestClassifier)) {
+      for (maxModelSize <- Seq(20000, 50000)) {
+        sessionHolder.session.conf.set(
+          Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE.key,
+          maxModelSize.toString
+        )
+        trainTreeModel(sessionHolder, estimator)
+        val lastModelSize = org.apache.spark.ml.tree.impl.RandomForest.lastEarlyStoppedModelSize
+        assert(lastModelSize < maxModelSize)
+        assert(lastModelSize >= maxModelSize.toDouble / 2.5)
+      }
+    }
+  }
+
+  test("GBT tree model training early stop for limiting model size") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED.key, "true")
+
+    for (maxModelSize <- Seq(20000, 50000, 130000)) {
+      sessionHolder.session.conf.set(
+        Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE.key,
+        maxModelSize.toString
+      )
+      trainTreeModel(sessionHolder, getGBTClassifier)
+      val lastModelSize =
+        org.apache.spark.ml.tree.impl.GradientBoostedTrees.lastEarlyStoppedModelSize
+      assert(lastModelSize < maxModelSize)
+      assert(lastModelSize >= maxModelSize.toDouble / 2.5)
+    }
+  }
+
   test("MLCache offloading works") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     sessionHolder.session.conf
@@ -441,41 +478,17 @@ class MLSuite extends MLHelper {
     }
   }
 
-  def trainRandomForestClassifierModel(sessionHolder: SessionHolder): String = {
+  def trainTreeModel(sessionHolder: SessionHolder, estimator: proto.MlOperator.Builder): String = {
     val fitCommand = proto.MlCommand
       .newBuilder()
       .setFit(
         proto.MlCommand.Fit
           .newBuilder()
           .setDataset(createRelationProtoForTreeModel(128, 10000))
-          .setEstimator(getRandomForestClassifier)
+          .setEstimator(estimator)
           .setParams(getMaxDepth(30)))
       .build()
     val fitResult = MLHandler.handleMlCommand(sessionHolder, fitCommand)
     fitResult.getOperatorInfo.getObjRef.getId
-  }
-
-  def trainGBTClassifierModel(sessionHolder: SessionHolder): String = {
-    val fitCommand = proto.MlCommand
-      .newBuilder()
-      .setFit(
-        proto.MlCommand.Fit
-          .newBuilder()
-          .setDataset(createRelationProtoForTreeModel(128, 1000))
-          .setEstimator(getGBTClassifier))
-      .build()
-    val fitResult = MLHandler.handleMlCommand(sessionHolder, fitCommand)
-    fitResult.getOperatorInfo.getObjRef.getId
-  }
-
-  test("tree model training early stop for limiting model size") {
-    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
-    sessionHolder.session.conf
-      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE.key, "10000")
-
-    trainRandomForestClassifierModel(sessionHolder)
-    throw new RuntimeException(
-      org.apache.spark.ml.tree.impl.RandomForest.lastEarlyStoppedModelSize.toString
-    )
   }
 }

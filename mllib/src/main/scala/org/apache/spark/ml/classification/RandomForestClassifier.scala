@@ -261,12 +261,10 @@ class RandomForestClassificationModel private[ml] (
   // For ml connect only
   private[ml] def this() = this("", Array(new DecisionTreeClassificationModel), -1, -1)
 
+  override def estimatedSize: Long = getEstimatedSize()
+
   @Since("1.4.0")
   override def trees: Array[DecisionTreeClassificationModel] = _trees
-
-  override def estimatedSize: Long = {
-    org.apache.spark.util.SizeEstimator.estimate(trees.map(_.rootNode))
-  }
 
   // Note: We may add support for weights (based on tree performance) later on.
   private lazy val _treeWeights: Array[Double] = Array.fill[Double](_trees.length)(1.0)

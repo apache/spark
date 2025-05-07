@@ -133,8 +133,9 @@ private[connect] object MLHandler extends Logging {
       //  `TreeConfig.trainingEarlyStopModelSizeThresholdInBytes`, to ensure the final
       // model size is lower than `maxModelSize`, set early-stop threshold to
       // half of `maxModelSize`, because in each tree training iteration, the tree
-      // size will grow up to 2 times size.
-      TreeConfig.trainingEarlyStopModelSizeThresholdInBytes = maxModelSize / 2
+      // nodes will grow up to 2 times, the additional 0.5 is for buffer
+      // because the in-memory size is not exactly in direct proportion to the tree nodes.
+      TreeConfig.trainingEarlyStopModelSizeThresholdInBytes = (maxModelSize.toDouble / 2.5).toLong
     }
 
     mlCommand.getCommandCase match {

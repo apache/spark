@@ -106,7 +106,9 @@ trait MLHelper extends SparkFunSuite with SparkConnectPlanTest {
       } else {
         1.0f
       }
-      val features = Array.fill[Double](numFeatures)(i.toDouble)
+      val features = Array.tabulate[Double](numFeatures)(
+        index => scala.math.cos(i.toDouble * scala.math.pow(2, index))
+      )
       rows(i) = InternalRow(label, udt.serialize(Vectors.dense(features)))
     }
     val schema = StructType(
@@ -126,6 +128,13 @@ trait MLHelper extends SparkFunSuite with SparkConnectPlanTest {
       .newBuilder()
       .setName("org.apache.spark.ml.classification.LogisticRegression")
       .setUid("LogisticRegression")
+      .setType(proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR)
+
+  def getDecisionTreeClassifier: proto.MlOperator.Builder =
+    proto.MlOperator
+      .newBuilder()
+      .setName("org.apache.spark.ml.classification.DecisionTreeClassifier")
+      .setUid("DecisionTreeClassifier")
       .setType(proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR)
 
   def getRandomForestClassifier: proto.MlOperator.Builder =
