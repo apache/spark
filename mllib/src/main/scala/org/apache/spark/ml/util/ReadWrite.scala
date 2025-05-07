@@ -844,7 +844,9 @@ private[spark] object ReadWriteUtils {
     }
   }
 
-  private[spark] def saveObjectToLocal[T <: Product: ClassTag: TypeTag](path: String, data: T): Unit = {
+  private[spark] def saveObjectToLocal[T <: Product: ClassTag: TypeTag](
+      path: String, data: T
+  ): Unit = {
     val serializer = SparkEnv.get.serializer.newInstance()
     val dataBuffer = serializer.serialize(data)
     val dataBytes = new Array[Byte](dataBuffer.limit)
@@ -873,7 +875,9 @@ private[spark] object ReadWriteUtils {
     serializer.deserialize[T](java.nio.ByteBuffer.wrap(dataBytes))
   }
 
-  private[spark] def loadObject[T <: Product: ClassTag: TypeTag](path: String, spark: SparkSession): T = {
+  private[spark] def loadObject[T <: Product: ClassTag: TypeTag](
+      path: String, spark: SparkSession
+  ): T = {
     if (localSavingModeState.get()) {
       loadObjectFromLocal(path)
     } else {
