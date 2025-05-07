@@ -170,6 +170,10 @@ object StreamingQueryListener extends Serializable {
       extends Event
       with Serializable {
 
+    def this(id: UUID, runId: UUID, name: String, timestamp: String) = {
+      this(id, runId, name, timestamp, Set())
+    }
+
     def json: String = compact(render(jsonValue))
 
     private def jsonValue: JValue = {

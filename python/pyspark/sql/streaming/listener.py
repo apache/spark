@@ -193,29 +193,29 @@ class QueryStartedEvent:
 
     @classmethod
     def fromJObject(cls, jevent: "JavaObject") -> "QueryStartedEvent":
-        jobTags = set()
-        javaIterator = jevent.jobTags().iterator()
-        while javaIterator.hasNext():
-            jobTags.add(javaIterator.next().toString())
+        job_tags = set()
+        java_iterator = jevent.jobTags().iterator()
+        while java_iterator.hasNext():
+            job_tags.add(java_iterator.next().toString())
 
         return cls(
             id=uuid.UUID(jevent.id().toString()),
             runId=uuid.UUID(jevent.runId().toString()),
             name=jevent.name(),
             timestamp=jevent.timestamp(),
-            jobTags=jobTags,
+            jobTags=job_tags,
         )
 
     @classmethod
     def fromJson(cls, j: Dict[str, Any]) -> "QueryStartedEvent":
         # Json4s will convert jobTags to a list, so we need to convert it back to a set.
-        jobTags = j["jobTags"] if "jobTags" in j else []
+        job_tags = j["jobTags"] if "jobTags" in j else []
         return cls(
             id=uuid.UUID(j["id"]),
             runId=uuid.UUID(j["runId"]),
             name=j["name"],
             timestamp=j["timestamp"],
-            jobTags=set(jobTags),
+            jobTags=set(job_tags),
         )
 
     @property
