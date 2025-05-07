@@ -249,14 +249,17 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
       objectiveHistory: Array[Double]): MultilayerPerceptronClassificationModel = {
     val model = copyValues(new MultilayerPerceptronClassificationModel(uid, weights))
 
-    val (summaryModel, _, predictionColName) = model.findSummaryModel()
-    val summary = new MultilayerPerceptronClassificationTrainingSummaryImpl(
-      summaryModel.transform(dataset),
-      predictionColName,
-      $(labelCol),
-      "",
-      objectiveHistory)
-    model.setSummary(Some(summary))
+    if (SummaryUtils.enableTrainingSummary) {
+      val (summaryModel, _, predictionColName) = model.findSummaryModel()
+      val summary = new MultilayerPerceptronClassificationTrainingSummaryImpl(
+        summaryModel.transform(dataset),
+        predictionColName,
+        $(labelCol),
+        "",
+        objectiveHistory)
+      model.setSummary(Some(summary))
+    }
+    model
   }
 }
 

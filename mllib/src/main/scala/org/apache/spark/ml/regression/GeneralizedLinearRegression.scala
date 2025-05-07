@@ -418,9 +418,12 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, wlsModel.coefficients, wlsModel.intercept)
           .setParent(this))
-      val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
-        wlsModel.diagInvAtWA.toArray, 1, getSolver)
-      model.setSummary(Some(trainingSummary))
+      if (SummaryUtils.enableTrainingSummary) {
+        val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
+          wlsModel.diagInvAtWA.toArray, 1, getSolver)
+        model.setSummary(Some(trainingSummary))
+      }
+      model
     } else {
       val instances = validated.rdd.map {
         case Row(label: Double, weight: Double, offset: Double, features: Vector) =>
@@ -435,9 +438,12 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
           .setParent(this))
-      val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
-        irlsModel.diagInvAtWA.toArray, irlsModel.numIterations, getSolver)
-      model.setSummary(Some(trainingSummary))
+      if (SummaryUtils.enableTrainingSummary) {
+        val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
+          irlsModel.diagInvAtWA.toArray, irlsModel.numIterations, getSolver)
+        model.setSummary(Some(trainingSummary))
+      }
+      model
     }
 
     model
