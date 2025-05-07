@@ -95,6 +95,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    */
   protected def getDefaultTreePatternBits: BitSet = {
     val bits: BitSet = new BitSet(TreePattern.maxId)
+    validateNodePatterns()
     // Propagate node pattern bits
     val nodePatternIterator = nodePatterns.iterator
     while (nodePatternIterator.hasNext) {
@@ -107,6 +108,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     }
     bits
   }
+
+  /**
+   * For child classes to validate `nodePatterns`.
+   */
+  protected def validateNodePatterns(): Unit = {}
 
   /**
    * A BitSet of tree patterns for this TreeNode and its subtree. If this TreeNode and its
