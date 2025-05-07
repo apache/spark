@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{CACHED_TABLE_PARTITION_METADATA_SIZE, MAX_TABLE_PARTITION_METADATA_SIZE}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.util.SizeEstimator
 
 
@@ -42,12 +43,13 @@ object FileStatusCache {
    *         shared across all clients.
    */
   def getOrCreate(session: SparkSession): FileStatusCache = synchronized {
-    if (session.sessionState.conf.manageFilesourcePartitions &&
-      session.sessionState.conf.filesourcePartitionFileCacheSize > 0) {
+    val sessionState: SessionState = session.sessionState
+    if (sessionState.conf.manageFilesourcePartitions &&
+      sessionState.conf.filesourcePartitionFileCacheSize > 0) {
       if (sharedCache == null) {
         sharedCache = new SharedInMemoryCache(
-          session.sessionState.conf.filesourcePartitionFileCacheSize,
-          session.sessionState.conf.metadataCacheTTL
+          sessionState.conf.filesourcePartitionFileCacheSize,
+          sessionState.conf.metadataCacheTTL
         )
       }
       sharedCache.createForNewClient()

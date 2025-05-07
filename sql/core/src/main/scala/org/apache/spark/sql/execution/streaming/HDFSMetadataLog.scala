@@ -32,8 +32,9 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.util.ArrayImplicits._
 
 
@@ -49,7 +50,7 @@ import org.apache.spark.util.ArrayImplicits._
  * files in a directory always shows the latest files.
  */
 class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: String)
-  extends MetadataLog[T] with Logging {
+  extends MetadataLog[T] with SQLConfHelper with Logging {
 
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
@@ -63,15 +64,17 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
 
   val metadataPath = new Path(path)
 
+  protected val sessionState: SessionState = sparkSession.sessionState
+  override def conf: SQLConf = sessionState.conf
   protected val fileManager =
-    CheckpointFileManager.create(metadataPath, sparkSession.sessionState.newHadoopConf())
+    CheckpointFileManager.create(metadataPath, sessionState.newHadoopConf())
 
   if (!fileManager.exists(metadataPath)) {
     fileManager.mkdirs(metadataPath)
   }
 
-  protected val metadataCacheEnabled: Boolean
-    = sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_METADATA_CACHE_ENABLED)
+  protected val metadataCacheEnabled: Boolean =
+    conf.getConf(SQLConf.STREAMING_METADATA_CACHE_ENABLED)
 
   /**
    * Cache the latest two batches. [[StreamExecution]] usually just accesses the latest two batches

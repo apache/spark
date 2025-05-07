@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -42,9 +43,10 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
   def getXmlOptions(
       sparkSession: SparkSession,
       parameters: Map[String, String]): XmlOptions = {
+    val sessionState: SessionState = sparkSession.sessionState
     new XmlOptions(parameters,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord,
+      sessionState.conf.sessionLocalTimeZone,
+      sessionState.conf.columnNameOfCorruptRecord,
       true)
   }
 
@@ -101,8 +103,8 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+    val broadcastedHadoopConf = SerializableConfiguration.broadcast(
+      sparkSession.sparkContext, hadoopConf)
 
     val xmlOptions = getXmlOptions(sparkSession, options)
 

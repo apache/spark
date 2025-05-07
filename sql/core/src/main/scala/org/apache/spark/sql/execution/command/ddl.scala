@@ -28,6 +28,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{Row, SparkSession}
@@ -48,7 +49,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.hiveTableWithAnsiIntervalsError
 import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
-import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.internal.{HiveSerDe, SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitioningUtils
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
@@ -79,7 +80,8 @@ case class CreateDatabaseCommand(
   extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     catalog.createDatabase(
       CatalogDatabase(
         databaseName,
@@ -115,7 +117,8 @@ case class DropDatabaseCommand(
   extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.catalog.dropDatabase(databaseName, ifExists, cascade)
+    val sessionState: SessionState = sparkSession.sessionState
+    sessionState.catalog.dropDatabase(databaseName, ifExists, cascade)
     Seq.empty[Row]
   }
 }
@@ -135,7 +138,8 @@ case class AlterDatabasePropertiesCommand(
   extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val db: CatalogDatabase = catalog.getDatabaseMetadata(databaseName)
     catalog.alterDatabase(db.copy(properties = db.properties ++ props))
 
@@ -156,7 +160,8 @@ case class AlterDatabaseSetLocationCommand(databaseName: String, location: Strin
   extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val oldDb = catalog.getDatabaseMetadata(databaseName)
     catalog.alterDatabase(oldDb.copy(locationUri = CatalogUtils.stringToURI(location)))
 
@@ -181,8 +186,9 @@ case class DescribeDatabaseCommand(
   extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    val sessionState: SessionState = sparkSession.sessionState
     val dbMetadata: CatalogDatabase =
-      sparkSession.sessionState.catalog.getDatabaseMetadata(databaseName)
+      sessionState.catalog.getDatabaseMetadata(databaseName)
     val allDbProperties = dbMetadata.properties
     val result =
       Row("Catalog Name", SESSION_CATALOG_NAME) ::
@@ -197,7 +203,7 @@ case class DescribeDatabaseCommand(
         if (properties.isEmpty) {
           ""
         } else {
-          sparkSession.sessionState.conf.redactOptions(properties).toSeq
+          sessionState.conf.redactOptions(properties).toSeq
             .sortBy(_._1).mkString("(", ", ", ")")
         }
       result :+ Row("Properties", propertiesStr)
@@ -224,7 +230,8 @@ case class DropTableCommand(
     purge: Boolean) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
 
     if (catalog.tableExists(tableName)) {
       // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
@@ -250,8 +257,8 @@ case class DropTableCommand(
       }
 
       try {
-        sparkSession.sharedState.cacheManager.uncacheQuery(
-          sparkSession.table(tableName), cascade = true)
+        val sharedState: SharedState = sparkSession.sharedState
+        sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName), cascade = true)
       } catch {
         case NonFatal(e) => log.warn(e.toString, e)
       }
@@ -271,10 +278,12 @@ case class DropTempViewCommand(ident: Identifier) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     assert(ident.namespace().isEmpty || ident.namespace().length == 1)
     val nameParts = (ident.namespace() :+ ident.name()).toImmutableArraySeq
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     catalog.getRawLocalOrGlobalTempView(nameParts).foreach { view =>
       val hasViewText = view.tableMeta.viewText.isDefined
-      sparkSession.sharedState.cacheManager.uncacheTableOrView(
+      val sharedState: SharedState = sparkSession.sharedState
+      sharedState.cacheManager.uncacheTableOrView(
         sparkSession, nameParts, cascade = hasViewText)
       view.refresh()
       if (ident.namespace().isEmpty) {
@@ -303,7 +312,8 @@ case class AlterTableSetPropertiesCommand(
   extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
     // This overrides old properties and update the comment parameter of CatalogTable
     // with the newly added/modified comment since CatalogTable also holds comment as its
@@ -335,7 +345,8 @@ case class AlterTableUnsetPropertiesCommand(
   extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
     // If comment is in the table property, we reset it to None
     val tableComment = if (propKeys.contains(TableCatalog.PROP_COMMENT)) None else table.comment
@@ -367,12 +378,13 @@ case class AlterTableChangeColumnCommand(
 
   // TODO: support change column name/dataType/metadata/position.
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     // This command may change column default values, so we need to refresh the table relation cache
     // here so that DML commands can resolve these default values correctly.
     catalog.refreshTable(tableName)
     val table = catalog.getTableRawMetadata(tableName)
-    val resolver = sparkSession.sessionState.conf.resolver
+    val resolver = sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
 
     // Check that the column is not a partition column
@@ -488,7 +500,8 @@ case class AlterTableSerDePropertiesCommand(
     "ALTER TABLE attempted to set neither serde class name nor serde properties")
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
     // For datasource tables, disallow setting serde or specifying partition
     if (partSpec.isDefined && DDLUtils.isDatasourceTable(table)) {
@@ -533,7 +546,8 @@ case class AlterTableAddPartitionCommand(
   extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE ADD PARTITION")
     val parts = partitionSpecsAndLocs.map { case (spec, location) =>
@@ -541,7 +555,7 @@ case class AlterTableAddPartitionCommand(
         spec,
         table.partitionSchema,
         table.identifier.quotedString,
-        sparkSession.sessionState.conf.resolver)
+        sessionState.conf.resolver)
       // inherit table storage format (possibly except for location)
       CatalogTablePartition(normalizedSpec, table.storage.copy(
         locationUri = location.map(CatalogUtils.stringToURI)))
@@ -550,13 +564,13 @@ case class AlterTableAddPartitionCommand(
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC.
     // Also the request to metastore times out when adding lot of partitions in one shot.
     // we should split them into smaller batches
-    val batchSize = sparkSession.sessionState.conf.getConf(SQLConf.ADD_PARTITION_BATCH_SIZE)
+    val batchSize = sessionState.conf.getConf(SQLConf.ADD_PARTITION_BATCH_SIZE)
     parts.iterator.grouped(batchSize).foreach { batch =>
       catalog.createPartitions(table.identifier, batch, ignoreIfExists = ifNotExists)
     }
 
     sparkSession.catalog.refreshTable(table.identifier.quotedString)
-    if (table.stats.nonEmpty && sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
+    if (table.stats.nonEmpty && sessionState.conf.autoSizeUpdateEnabled) {
       // Updating table stats only if new partition is not empty
       val addedSize = CommandUtils.calculateMultipleLocationSizes(sparkSession, table.identifier,
         parts.map(_.storage.locationUri)).sum
@@ -589,7 +603,8 @@ case class AlterTableRenamePartitionCommand(
   extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE RENAME PARTITION")
 
@@ -597,13 +612,13 @@ case class AlterTableRenamePartitionCommand(
       oldPartition,
       table.partitionSchema,
       table.identifier.quotedString,
-      sparkSession.sessionState.conf.resolver)
+      sessionState.conf.resolver)
 
     val normalizedNewPartition = PartitioningUtils.normalizePartitionSpec(
       newPartition,
       table.partitionSchema,
       table.identifier.quotedString,
-      sparkSession.sessionState.conf.resolver)
+      sessionState.conf.resolver)
 
     catalog.renamePartitions(
       tableName, Seq(normalizedOldPartition), Seq(normalizedNewPartition))
@@ -636,7 +651,8 @@ case class AlterTableDropPartitionCommand(
   extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
 
@@ -645,7 +661,7 @@ case class AlterTableDropPartitionCommand(
         spec,
         table.partitionSchema,
         table.identifier.quotedString,
-        sparkSession.sessionState.conf.resolver)
+        sessionState.conf.resolver)
     }
 
     catalog.dropPartitions(
@@ -702,7 +718,8 @@ case class RepairTableCommand(
   }
 
   override def run(spark: SparkSession): Seq[Row] = {
-    val catalog = spark.sessionState.catalog
+    val sessionState: SessionState = spark.sessionState
+    val catalog = sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
     val tableIdentWithDB = table.identifier.quotedString
     if (table.partitionColumnNames.isEmpty) {
@@ -715,7 +732,7 @@ case class RepairTableCommand(
 
     val root = new Path(table.location)
     logInfo(log"Recover all the partitions in ${MDC(LogKeys.PATH, root)}")
-    val hadoopConf = spark.sessionState.newHadoopConf()
+    val hadoopConf = sessionState.newHadoopConf()
     val fs = root.getFileSystem(hadoopConf)
 
     val droppedAmount = if (enableDropPartitions) {
@@ -729,7 +746,7 @@ case class RepairTableCommand(
       val partitionSpecsAndLocs: Seq[(TablePartitionSpec, Path)] =
         try {
           scanPartitions(spark, fs, pathFilter, root, Map(), table.partitionColumnNames, threshold,
-            spark.sessionState.conf.resolver, new ForkJoinTaskSupport(evalPool))
+            sessionState.conf.resolver, new ForkJoinTaskSupport(evalPool))
         } finally {
           evalPool.shutdown()
         }
@@ -737,7 +754,7 @@ case class RepairTableCommand(
       logInfo(log"Found ${MDC(LogKeys.NUM_PARTITIONS, total)} partitions " +
         log"in ${MDC(LogKeys.PATH, root)}")
 
-      val partitionStats = if (spark.sessionState.conf.gatherFastStats) {
+      val partitionStats = if (sessionState.conf.gatherFastStats) {
         gatherPartitionStats(spark, partitionSpecsAndLocs, fs, pathFilter, threshold)
       } else {
         Map.empty[Path, PartitionStatistics]
@@ -751,7 +768,7 @@ case class RepairTableCommand(
     // Updates the table to indicate that its partition metadata is stored in the Hive metastore.
     // This is always the case for Hive format tables, but is not true for Datasource tables created
     // before Spark 2.1 unless they are converted via `msck repair table`.
-    spark.sessionState.catalog.alterTable(table.copy(tracksPartitionsInCatalog = true))
+    sessionState.catalog.alterTable(table.copy(tracksPartitionsInCatalog = true))
     try {
       spark.catalog.refreshTable(tableIdentWithDB)
     } catch {
@@ -822,21 +839,22 @@ case class RepairTableCommand(
       fs: FileSystem,
       pathFilter: PathFilter,
       threshold: Int): Map[Path, PartitionStatistics] = {
+    val sessionState: SessionState = spark.sessionState
     val partitionNum = partitionSpecsAndLocs.length
     if (partitionNum > threshold) {
-      val hadoopConf = spark.sessionState.newHadoopConf()
+      val hadoopConf = sessionState.newHadoopConf()
       val serializableConfiguration = new SerializableConfiguration(hadoopConf)
       val locations = partitionSpecsAndLocs.map(_._2)
-
+      val sc: SparkContext = spark.sparkContext
       // Set the number of parallelism to prevent following file listing from generating many tasks
       // in case of large #defaultParallelism.
       val numParallelism = Math.min(partitionNum,
-        Math.min(spark.sparkContext.defaultParallelism, 10000))
+        Math.min(sc.defaultParallelism, 10000))
       // gather the fast stats for all the partitions otherwise Hive metastore will list all the
       // files for all the new partitions in sequential way, which is super slow.
       logInfo(log"Gather the fast stats in parallel using ${MDC(LogKeys.COUNT, numParallelism)} " +
         log"tasks.")
-      spark.sparkContext.parallelize(locations, numParallelism)
+      sc.parallelize(locations, numParallelism)
         .mapPartitions { locationsEachPartition =>
           val pathFilter = getPathFilter(serializableConfiguration.value)
           locationsEachPartition.map { location =>
@@ -860,10 +878,11 @@ case class RepairTableCommand(
       partitionStats: Map[Path, PartitionStatistics]): Unit = {
     val total = partitionSpecsAndLocs.length
     var done = 0L
+    val sessionState: SessionState = spark.sessionState
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC,
     // we should split them into smaller batches. Since Hive client is not thread safe, we cannot
     // do this in parallel.
-    val batchSize = spark.sessionState.conf.getConf(SQLConf.ADD_PARTITION_BATCH_SIZE)
+    val batchSize = sessionState.conf.getConf(SQLConf.ADD_PARTITION_BATCH_SIZE)
     partitionSpecsAndLocs.iterator.grouped(batchSize).foreach { batch =>
       val now = MILLISECONDS.toSeconds(System.currentTimeMillis())
       val parts = batch.map { case (spec, location) =>
@@ -882,7 +901,7 @@ case class RepairTableCommand(
           table.storage.copy(locationUri = Some(location.toUri)),
           params)
       }
-      spark.sessionState.catalog.createPartitions(tableName, parts, ignoreIfExists = true)
+      sessionState.catalog.createPartitions(tableName, parts, ignoreIfExists = true)
       done += parts.length
       logDebug(s"Recovered ${parts.length} partitions ($done/$total so far)")
     }
@@ -928,7 +947,8 @@ case class AlterTableSetLocationCommand(
   extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     val locUri = CatalogUtils.stringToURI(location)
     partitionSpec match {
@@ -940,7 +960,7 @@ case class AlterTableSetLocationCommand(
           spec,
           table.partitionSchema,
           table.identifier.quotedString,
-          sparkSession.sessionState.conf.resolver)
+          sessionState.conf.resolver)
         val part = catalog.getPartition(table.identifier, normalizedSpec)
         val newPart = part.copy(storage = part.storage.copy(locationUri = Some(locUri)))
         catalog.alterPartitions(table.identifier, Seq(newPart))
@@ -984,7 +1004,8 @@ object DDLUtils extends Logging {
   def verifyPartitionProviderIsHive(
       spark: SparkSession, table: CatalogTable, action: String): Unit = {
     val tableName = table.identifier.table
-    if (!spark.sessionState.conf.manageFilesourcePartitions && isDatasourceTable(table)) {
+    val sessionState: SessionState = spark.sessionState
+    if (!sessionState.conf.manageFilesourcePartitions && isDatasourceTable(table)) {
       throw QueryCompilationErrors
         .actionNotAllowedOnTableWithFilesourcePartitionManagementDisabledError(action, tableName)
     }

@@ -26,6 +26,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -39,8 +40,9 @@ object SchemaMergeUtils extends Logging {
       files: Seq[FileStatus],
       schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType])
       : Option[StructType] = {
+    val sessionState: SessionState = sparkSession.sessionState
     val serializedConf = new SerializableConfiguration(
-      sparkSession.sessionState.newHadoopConfWithOptions(parameters))
+      sessionState.newHadoopConfWithOptions(parameters))
 
     // !! HACK ALERT !!
     // Here is a hack for Parquet, but it can be used by Orc as well.
@@ -64,13 +66,11 @@ object SchemaMergeUtils extends Logging {
 
     val ignoreCorruptFiles =
       new FileSourceOptions(CaseInsensitiveMap(parameters)).ignoreCorruptFiles
-    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val caseSensitive = sessionState.conf.caseSensitiveAnalysis
 
     // Issues a Spark job to read Parquet/ORC schema in parallel.
     val partiallyMergedSchemas =
-      sparkSession
-        .sparkContext
-        .parallelize(partialFileStatusInfo, numParallelism)
+      sparkSession.sparkContext.parallelize(partialFileStatusInfo, numParallelism)
         .mapPartitions { iterator =>
           // Resembles fake `FileStatus`es with serialized path and length information.
           val fakeFileStatuses = iterator.map { case (path, length) =>

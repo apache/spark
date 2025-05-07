@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 
 
@@ -40,7 +41,8 @@ class CatalogFileIndex(
     val table: CatalogTable,
     override val sizeInBytes: Long) extends FileIndex {
 
-  protected val hadoopConf: Configuration = sparkSession.sessionState.newHadoopConf()
+  private def sessionState: SessionState = sparkSession.sessionState
+  protected val hadoopConf: Configuration = sessionState.newHadoopConf()
 
   /** Globally shared (not exclusive to this table) cache for file statuses to speed up listing. */
   private val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
@@ -71,12 +73,12 @@ class CatalogFileIndex(
     if (table.partitionColumnNames.nonEmpty) {
       val startTime = System.nanoTime()
       val selectedPartitions = ExternalCatalogUtils.listPartitionsByFilter(
-        sparkSession.sessionState.conf, sparkSession.sessionState.catalog, table, filters)
+        sessionState.conf, sessionState.catalog, table, filters)
       val partitions = selectedPartitions.map { p =>
         val path = new Path(p.location)
         val fs = path.getFileSystem(hadoopConf)
         PartitionPath(
-          p.toRow(partitionSchema, sparkSession.sessionState.conf.sessionLocalTimeZone),
+          p.toRow(partitionSchema, sessionState.conf.sessionLocalTimeZone),
           path.makeQualified(fs.getUri, fs.getWorkingDirectory))
       }
       val partitionSpec = PartitionSpec(partitionSchema, partitions)

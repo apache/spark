@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -49,8 +49,9 @@ trait AsyncLogPurge extends Logging {
   // which are written per run.
   protected def purgeStatefulMetadata(plan: SparkPlan): Unit
 
-  protected lazy val useAsyncPurge: Boolean = sparkSession.sessionState.conf
-    .getConf(SQLConf.ASYNC_LOG_PURGE)
+  protected lazy val useAsyncPurge: Boolean =
+    sparkSession.sessionState.asInstanceOf[SessionState].conf
+      .getConf(SQLConf.ASYNC_LOG_PURGE)
 
   protected def purgeAsync(batchId: Long): Unit = {
     if (purgeRunning.compareAndSet(false, true)) {

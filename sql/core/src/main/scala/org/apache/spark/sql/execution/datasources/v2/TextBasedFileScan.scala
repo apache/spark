@@ -28,8 +28,9 @@ import org.apache.spark.util.Utils
 abstract class TextBasedFileScan(
     sparkSession: SparkSession,
     options: CaseInsensitiveStringMap) extends FileScan {
-  @transient private lazy val codecFactory: CompressionCodecFactory = new CompressionCodecFactory(
-    sparkSession.sessionState.newHadoopConfWithOptions(options.asScala.toMap))
+  @transient private lazy val codecFactory: CompressionCodecFactory =
+    new CompressionCodecFactory(
+      sessionState.newHadoopConfWithOptions(options.asScala.toMap))
 
   override def isSplitable(path: Path): Boolean = Utils.isFileSplittable(path, codecFactory)
 

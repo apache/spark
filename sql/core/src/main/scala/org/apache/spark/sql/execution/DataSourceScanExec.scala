@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => 
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -239,21 +239,23 @@ trait FileSourceScanLike extends DataSourceScanExec {
   // Identifier for the table in the metastore.
   def tableIdentifier: Option[TableIdentifier]
 
-
   lazy val fileConstantMetadataColumns: Seq[AttributeReference] = output.collect {
     // Collect metadata columns to be handled outside of the scan by appending constant columns.
     case FileSourceConstantMetadataAttribute(attr) => attr
   }
 
-  override def vectorTypes: Option[Seq[String]] =
+  protected def sessionState: SessionState = relation.sparkSession.sessionState
+
+  override def vectorTypes: Option[Seq[String]] = {
     relation.fileFormat.vectorTypes(
       requiredSchema = requiredSchema,
       partitionSchema = relation.partitionSchema,
-      relation.sparkSession.sessionState.conf).map { vectorTypes =>
+      sessionState.conf).map { vectorTypes =>
         vectorTypes ++
           // for column-based file format, append metadata column's vector type classes if any
           fileConstantMetadataColumns.map { _ => classOf[ConstantColumnVector].getName }
       }
+  }
 
   lazy val driverMetrics = Map(
     "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files read"),
@@ -336,8 +338,8 @@ trait FileSourceScanLike extends DataSourceScanExec {
 
   // exposed for testing
   lazy val bucketedScan: Boolean = {
-    if (relation.sparkSession.sessionState.conf.bucketingEnabled && relation.bucketSpec.isDefined
-      && !disableBucketedScan) {
+    if (sessionState.conf.bucketingEnabled && relation.bucketSpec.isDefined &&
+      !disableBucketedScan) {
       val spec = relation.bucketSpec.get
       val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
       bucketColumns.size == spec.bucketColumnNames.size
@@ -373,7 +375,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
       val sortColumns =
         spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
       val shouldCalculateSortOrder =
-        conf.getConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING) &&
+        sessionState.conf.getConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING) &&
           sortColumns.nonEmpty
 
       val sortOrder = if (shouldCalculateSortOrder) {
@@ -457,7 +459,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
           bucketedKey -> "true",
           "SelectedBucketsCount" -> (s"$numSelectedBuckets out of ${spec.numBuckets}" +
             optionalNumCoalescedBuckets.map { b => s" (Coalesced to $b)"}.getOrElse("")))
-      } else if (!relation.sparkSession.sessionState.conf.bucketingEnabled) {
+      } else if (!sessionState.conf.bucketingEnabled) {
         metadata + (bucketedKey -> "false (disabled by configuration)")
       } else if (disableBucketedScan) {
         metadata + (bucketedKey -> "false (disabled by query planner)")
@@ -568,7 +570,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
     }
 
     override def calculateTotalPartitionBytes: Long = {
-      val openCostInBytes = relation.sparkSession.sessionState.conf.filesOpenCostInBytes
+      val openCostInBytes = sessionState.conf.filesOpenCostInBytes
       partitionDirectories.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
     }
 
@@ -620,7 +622,6 @@ case class FileSourceScanExec(
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
   override lazy val supportsColumnar: Boolean = {
-    val conf = relation.sparkSession.sessionState.conf
     // Only output columnar if there is WSCG to read it.
     val requiredWholeStageCodegenSettings =
       conf.wholeStageEnabled && !WholeStageCodegenExec.isTooManyFields(conf, schema)
@@ -647,7 +648,7 @@ case class FileSourceScanExec(
         requiredSchema = requiredSchema,
         filters = pushedDownFilters,
         options = options,
-        hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
+        hadoopConf = sessionState.newHadoopConfWithOptions(relation.options))
 
     val readRDD = if (bucketedScan) {
       createBucketedReadRDD(relation.bucketSpec.get, readFile, dynamicallySelectedPartitions)
@@ -771,7 +772,7 @@ case class FileSourceScanExec(
   private def createReadRDD(
       readFile: PartitionedFile => Iterator[InternalRow],
       selectedPartitions: ScanFileListing): RDD[InternalRow] = {
-    val openCostInBytes = relation.sparkSession.sessionState.conf.filesOpenCostInBytes
+    val openCostInBytes = sessionState.conf.filesOpenCostInBytes
     val maxSplitBytes =
       FilePartition.maxSplitBytes(relation.sparkSession, selectedPartitions)
     logInfo(log"Planning scan with bin packing, max size: ${MDC(MAX_SPLIT_BYTES, maxSplitBytes)} " +
@@ -779,7 +780,7 @@ case class FileSourceScanExec(
       log"bytes.")
 
     // Filter files with bucket pruning if possible
-    val bucketingEnabled = relation.sparkSession.sessionState.conf.bucketingEnabled
+    val bucketingEnabled = sessionState.conf.bucketingEnabled
     val shouldProcess: Path => Boolean = optionalBucketSet match {
       case Some(bucketSet) if bucketingEnabled =>
         // Do not prune the file if bucket file name is invalid

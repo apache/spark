@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.write.{DataWriter, LogicalWriteInfo, Physi
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.python.streaming.PythonForeachWriter
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.types.StructType
 
@@ -84,9 +85,8 @@ class ForeachWrite[T](
         info: PhysicalWriteInfo): StreamingDataWriterFactory = {
         val rowConverter: InternalRow => T = converter match {
           case Left(enc) =>
-            val boundEnc = enc.resolveAndBind(
-              toAttributes(inputSchema),
-              SparkSession.getActiveSession.get.sessionState.analyzer)
+            val sessionState: SessionState = SparkSession.active.sessionState
+            val boundEnc = enc.resolveAndBind(toAttributes(inputSchema), sessionState.analyzer)
             boundEnc.createDeserializer()
           case Right(func) =>
             func

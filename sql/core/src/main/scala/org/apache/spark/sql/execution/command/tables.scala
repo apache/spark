@@ -48,7 +48,7 @@ import org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.json.JsonDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
-import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.internal.{HiveSerDe, SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitioningUtils
 import org.apache.spark.sql.util.SchemaUtils
@@ -89,19 +89,20 @@ case class CreateTableLikeCommand(
     ifNotExists: Boolean) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val sourceTableDesc = catalog.getTempViewOrPermanentTableMetadata(sourceTable)
     val newProvider = if (provider.isDefined) {
       if (!DDLUtils.isHiveTable(provider)) {
         // check the validation of provider input, invalid provider will throw
         // AnalysisException, ClassNotFoundException, or NoClassDefFoundError
-        DataSource.lookupDataSource(provider.get, sparkSession.sessionState.conf)
+        DataSource.lookupDataSource(provider.get, sessionState.conf)
       }
       provider
     } else if (fileFormat.inputFormat.isDefined) {
       Some(DDLUtils.HIVE_PROVIDER)
     } else if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
-      Some(sparkSession.sessionState.conf.defaultDataSourceName)
+      Some(sessionState.conf.defaultDataSourceName)
     } else {
       sourceTableDesc.provider
     }
@@ -121,7 +122,7 @@ case class CreateTableLikeCommand(
     }
 
     val newTableSchema = CharVarcharUtils.getRawSchema(
-      sourceTableDesc.schema, sparkSession.sessionState.conf)
+      sourceTableDesc.schema, sessionState.conf)
     val newTableDesc =
       CatalogTable(
         identifier = targetTable,
@@ -169,7 +170,8 @@ case class CreateTableCommand(
     ignoreIfExists: Boolean) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.catalog.createTable(table, ignoreIfExists)
+    val sessionState: SessionState = sparkSession.sessionState
+    sessionState.catalog.createTable(table, ignoreIfExists)
     Seq.empty[Row]
   }
 }
@@ -191,7 +193,8 @@ case class AlterTableRenameCommand(
   extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     // If this is a temp view, just rename the view.
     // Otherwise, if this is a real table, we also need to uncache and invalidate the table.
     if (catalog.isTempView(oldName)) {
@@ -200,7 +203,8 @@ case class AlterTableRenameCommand(
       val table = catalog.getTableMetadata(oldName)
       DDLUtils.verifyAlterTableType(catalog, table, isView)
       // If `optStorageLevel` is defined, the old table was cached.
-      val optCachedData = sparkSession.sharedState.cacheManager.lookupCachedData(
+      val sharedState: SharedState = sparkSession.sharedState
+      val optCachedData = sharedState.cacheManager.lookupCachedData(
         sparkSession.table(oldName.unquotedString))
       val optStorageLevel = optCachedData.map(_.cachedRepresentation.cacheBuilder.storageLevel)
       if (optStorageLevel.isDefined) {
@@ -231,8 +235,9 @@ case class AlterTableAddColumnsCommand(
     table: TableIdentifier,
     colsToAdd: Seq[StructField]) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
-    val catalogTable = verifyAlterTableAddColumn(sparkSession.sessionState.conf, catalog, table)
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
+    val catalogTable = verifyAlterTableAddColumn(sessionState.conf, catalog, table)
     val colsWithProcessedDefaults =
       constantFoldCurrentDefaultsToExistDefaults(sparkSession, catalogTable.provider)
 
@@ -241,7 +246,7 @@ case class AlterTableAddColumnsCommand(
 
     SchemaUtils.checkColumnNameDuplication(
       (colsWithProcessedDefaults ++ catalogTable.schema).map(_.name),
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+      sessionState.conf.caseSensitiveAnalysis)
     if (!conf.allowCollationsInMapKeys) {
       colsToAdd.foreach(col => SchemaUtils.checkNoCollationsInMapKeys(col.dataType))
     }
@@ -325,7 +330,8 @@ case class LoadDataCommand(
     partition: Option[TablePartitionSpec]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val targetTable = catalog.getTableMetadata(table)
     val tableIdentWithDB = targetTable.identifier.quotedString
     val normalizedSpec = partition.map { spec =>
@@ -333,7 +339,7 @@ case class LoadDataCommand(
         spec,
         targetTable.partitionSchema,
         tableIdentWithDB,
-        sparkSession.sessionState.conf.resolver)
+        sessionState.conf.resolver)
     }
 
     if (DDLUtils.isDatasourceTable(targetTable)) {
@@ -363,7 +369,7 @@ case class LoadDataCommand(
         // Follow Hive's behavior:
         // If no schema or authority is provided with non-local inpath,
         // we will use hadoop configuration "fs.defaultFS".
-        val defaultFSConf = sparkSession.sessionState.newHadoopConf().get("fs.defaultFS")
+        val defaultFSConf = sessionState.newHadoopConf().get("fs.defaultFS")
         val defaultFS = if (defaultFSConf == null) new URI("") else new URI(defaultFSConf)
         // Follow Hive's behavior:
         // If LOCAL is not specified, and the path is relative,
@@ -377,7 +383,7 @@ case class LoadDataCommand(
         LoadDataCommand.makeQualified(defaultFS, uriPath, loadPath)
       }
     }
-    val fs = loadPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    val fs = loadPath.getFileSystem(sessionState.newHadoopConf())
     // This handling is because while resolving the invalid URLs starting with file:///
     // system throws IllegalArgumentException from globStatus API,so in order to handle
     // such scenarios this code is added in try catch block and after catching the
@@ -462,7 +468,8 @@ case class TruncateTableCommand(
     partitionSpec: Option[TablePartitionSpec]) extends LeafRunnableCommand {
 
   override def run(spark: SparkSession): Seq[Row] = {
-    val catalog = spark.sessionState.catalog
+    val sessionState: SessionState = spark.sessionState
+    val catalog = sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     val tableIdentWithDB = table.identifier.quotedString
 
@@ -487,7 +494,7 @@ case class TruncateTableCommand(
             spec,
             table.partitionSchema,
             table.identifier.quotedString,
-            spark.sessionState.conf.resolver)
+            sessionState.conf.resolver)
         }
         val partLocations =
           catalog.listPartitions(table.identifier, normalizedSpec).map(_.storage.locationUri)
@@ -501,8 +508,8 @@ case class TruncateTableCommand(
 
         partLocations
       }
-    val hadoopConf = spark.sessionState.newHadoopConf()
-    val ignorePermissionAcl = spark.sessionState.conf.truncateTableIgnorePermissionAcl
+    val hadoopConf = sessionState.newHadoopConf()
+    val ignorePermissionAcl = sessionState.conf.truncateTableIgnorePermissionAcl
     locations.foreach { location =>
       if (location.isDefined) {
         val path = new Path(location.get)
@@ -627,7 +634,8 @@ case class DescribeTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
 
     if (catalog.isTempView(table)) {
       if (partitionSpec.nonEmpty) {
@@ -717,11 +725,12 @@ case class DescribeTableCommand(
       throw QueryCompilationErrors.descPartitionNotAllowedOnView(table.identifier)
     }
     DDLUtils.verifyPartitionProviderIsHive(spark, metadata, "DESC PARTITION")
+    val sessionState: SessionState = spark.sessionState
     val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
       partitionSpec,
       metadata.partitionSchema,
       table.quotedString,
-      spark.sessionState.conf.resolver)
+      sessionState.conf.resolver)
     val partition = catalog.getPartition(table, normalizedPartSpec)
     if (isExtended) describeFormattedDetailedPartitionInfo(table, metadata, partition, result)
   }
@@ -772,7 +781,8 @@ case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
-    val queryExecution = sparkSession.sessionState.executePlan(plan)
+    val sessionState: SessionState = sparkSession.sessionState
+    val queryExecution = sessionState.executePlan(plan)
     describeSchema(queryExecution.analyzed.schema, result, header = false)
     result.toSeq
   }
@@ -802,8 +812,9 @@ case class DescribeColumnCommand(
 
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
-    val resolver = sparkSession.sessionState.conf.resolver
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
+    val resolver = sessionState.conf.resolver
     val relation = sparkSession.table(table).queryExecution.analyzed
 
     val colName = UnresolvedAttribute(colNameParts).name
@@ -820,7 +831,7 @@ case class DescribeColumnCommand(
 
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
     val colStatsMap = catalogTable.stats.map(_.colStats).getOrElse(Map.empty)
-    val colStats = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) colStatsMap
+    val colStats = if (sessionState.conf.caseSensitiveAnalysis) colStatsMap
       else CaseInsensitiveMap(colStatsMap)
     val cs = colStats.get(field.name)
 
@@ -914,7 +925,8 @@ case class ShowTablesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Since we need to return a Seq of rows, we will call getTables directly
     // instead of calling tables in sparkSession.
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val db = databaseName.getOrElse(catalog.getCurrentDatabase)
     if (partitionSpec.isEmpty) {
       // Show the information of tables.
@@ -945,7 +957,7 @@ case class ShowTablesCommand(
         partitionSpec.get,
         table.partitionSchema,
         tableIdent.quotedString,
-        sparkSession.sessionState.conf.resolver)
+        sessionState.conf.resolver)
       val partition = catalog.getPartition(tableIdent, normalizedSpec)
       val database = tableIdent.database.getOrElse("")
       val tableName = tableIdent.table
@@ -972,12 +984,13 @@ case class ShowTablePropertiesCommand(
     override val output: Seq[Attribute]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     if (catalog.isTempView(table)) {
       Seq.empty[Row]
     } else {
       val catalogTable = catalog.getTableMetadata(table)
-      val properties = sparkSession.sessionState.conf.redactOptions(catalogTable.properties)
+      val properties = sessionState.conf.redactOptions(catalogTable.properties)
       propertyKey match {
         case Some(p) =>
           val propValue = properties
@@ -1009,7 +1022,8 @@ case class ShowColumnsCommand(
     override val output: Seq[Attribute]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val lookupTable = databaseName match {
       case None => tableName
       case Some(db) => TableIdentifier(tableName.identifier, Some(db))
@@ -1040,7 +1054,8 @@ case class ShowPartitionsCommand(
     spec: Option[TablePartitionSpec]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     val tableIdentWithDB = table.identifier.quotedString
 
@@ -1067,7 +1082,7 @@ case class ShowPartitionsCommand(
       partitionSpec,
       table.partitionSchema,
       table.identifier.quotedString,
-      sparkSession.sessionState.conf.resolver))
+      sessionState.conf.resolver))
 
     val partNames = catalog.listPartitionNames(tableName, normalizedSpec)
     partNames.map(Row(_))
@@ -1175,7 +1190,8 @@ case class ShowCreateTableCommand(
     extends LeafRunnableCommand with ShowCreateTableCommandBase {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     if (catalog.isTempView(table)) {
       throw QueryCompilationErrors.showCreateTableNotSupportedOnTempView(table.identifier)
     } else {
@@ -1317,7 +1333,8 @@ case class ShowCreateTableAsSerdeCommand(
     extends LeafRunnableCommand with ShowCreateTableCommandBase {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val tableMetadata = catalog.getTableRawMetadata(table)
 
     val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {

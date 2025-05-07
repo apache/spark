@@ -65,14 +65,14 @@ case class OrcFileFormat() extends FileFormat with DataSourceRegister with Seria
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
+    val orcOptions = new OrcOptions(options, sessionState(sparkSession).conf)
     if (orcOptions.mergeSchema) {
       SchemaMergeUtils.mergeSchemasInParallel(
         sparkSession, options, files, OrcFileOperator.readOrcSchemasInParallel)
     } else {
       OrcFileOperator.readSchema(
         files.map(_.getPath.toString),
-        Some(sparkSession.sessionState.newHadoopConfWithOptions(options)),
+        Some(sessionState(sparkSession).newHadoopConfWithOptions(options)),
         orcOptions.ignoreCorruptFiles
       )
     }
@@ -84,7 +84,7 @@ case class OrcFileFormat() extends FileFormat with DataSourceRegister with Seria
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
 
-    val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
+    val orcOptions = new OrcOptions(options, sessionState(sparkSession).conf)
 
     val configuration = job.getConfiguration
 
@@ -134,7 +134,7 @@ case class OrcFileFormat() extends FileFormat with DataSourceRegister with Seria
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
 
-    if (sparkSession.sessionState.conf.orcFilterPushDown) {
+    if (sessionState(sparkSession).conf.orcFilterPushDown) {
       // Sets pushed predicates
       OrcFilters.createFilter(requiredSchema, filters).foreach { f =>
         hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN, toKryo(f))
@@ -142,10 +142,10 @@ case class OrcFileFormat() extends FileFormat with DataSourceRegister with Seria
       }
     }
 
-    val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+    val broadcastedHadoopConf = SerializableConfiguration.broadcast(
+        sparkSession.sparkContext, hadoopConf)
     val ignoreCorruptFiles =
-      new OrcOptions(options, sparkSession.sessionState.conf).ignoreCorruptFiles
+      new OrcOptions(options, sessionState(sparkSession).conf).ignoreCorruptFiles
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value

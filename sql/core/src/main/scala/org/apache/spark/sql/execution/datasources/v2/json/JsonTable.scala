@@ -43,8 +43,8 @@ case class JsonTable(
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] = {
     val parsedOptions = new JSONOptionsInRead(
       options.asScala.toMap,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+      conf.sessionLocalTimeZone,
+      conf.columnNameOfCorruptRecord)
     JsonDataSource(parsedOptions).inferSchema(
       sparkSession, files, parsedOptions)
   }

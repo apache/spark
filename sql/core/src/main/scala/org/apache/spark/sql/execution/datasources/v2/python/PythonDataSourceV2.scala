@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.python
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -39,8 +40,10 @@ class PythonDataSourceV2 extends TableProvider {
   }
 
   private var dataSourceInPython: PythonDataSourceCreationResult = _
-  private[python] lazy val source: UserDefinedPythonDataSource =
-    SparkSession.active.sessionState.dataSourceManager.lookupDataSource(shortName)
+  private[python] lazy val source: UserDefinedPythonDataSource = {
+    val sessionState: SessionState = SparkSession.active.sessionState
+    sessionState.dataSourceManager.lookupDataSource(shortName)
+  }
 
   def getOrCreateDataSourceInPython(
       shortName: String,

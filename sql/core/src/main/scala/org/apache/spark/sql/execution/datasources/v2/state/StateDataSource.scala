@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.streaming.{OffsetSeqMetadata, StreamingQue
 import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_STATE
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.state.{InMemoryStateSchemaProvider, KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateSchemaCompatibilityChecker, StateSchemaMetadata, StateSchemaProvider, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId}
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.types.StructType
@@ -49,7 +50,8 @@ import org.apache.spark.util.SerializableConfiguration
 class StateDataSource extends TableProvider with DataSourceRegister with Logging {
   private lazy val session: SparkSession = SparkSession.active
 
-  private lazy val hadoopConf: Configuration = session.sessionState.newHadoopConf()
+  private lazy val sessionState: SessionState = session.sessionState
+  private lazy val hadoopConf: Configuration = sessionState.newHadoopConf()
 
   private lazy val serializedHadoopConf = new SerializableConfiguration(hadoopConf)
 
@@ -129,7 +131,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           throw StateDataSourceErrors.offsetMetadataLogUnavailable(batchId, checkpointLocation)
         )
 
-        val clonedSqlConf = session.sessionState.conf.clone()
+        val clonedSqlConf = sessionState.conf.clone()
         OffsetSeqMetadata.setSessionConf(metadata, clonedSqlConf)
         StateStoreConf(clonedSqlConf)
 

@@ -38,6 +38,7 @@ import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -181,7 +182,8 @@ object MultiLineJsonDataSource extends JsonDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): RDD[PortableDataStream] = {
     val paths = inputPaths.map(_.getPath)
-    val job = Job.getInstance(sparkSession.sessionState.newHadoopConfWithOptions(
+    val sessionState: SessionState = sparkSession.sessionState
+    val job = Job.getInstance(sessionState.newHadoopConfWithOptions(
       parsedOptions.parameters))
     val conf = job.getConfiguration
     val name = paths.mkString(",")

@@ -34,6 +34,7 @@ import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.ui._
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
@@ -63,9 +64,12 @@ object HiveThriftServer2 extends Logging {
       exitOnError: Boolean): HiveThriftServer2 = {
     systemExitOnError.set(exitOnError)
 
+    val sc: SparkContext = sparkSession.sparkContext
+    val sessionState: SessionState = sparkSession.sessionState
+
     val executionHive = HiveUtils.newClientForExecution(
-      sparkSession.sparkContext.conf,
-      sparkSession.sessionState.newHadoopConf())
+      sc.conf,
+      sessionState.newHadoopConf())
 
     // Cleanup the scratch dir before starting
     ServerUtils.cleanUpScratchDir(executionHive.conf)
@@ -74,7 +78,7 @@ object HiveThriftServer2 extends Logging {
     server.init(executionHive.conf)
     server.start()
     logInfo("HiveThriftServer2 started")
-    createListenerAndUI(server, sparkSession.sparkContext)
+    createListenerAndUI(server, sc)
     server
   }
 

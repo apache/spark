@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClientImpl
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types.{BooleanType, DataType}
 import org.apache.spark.util.Utils
 
@@ -62,7 +62,8 @@ case class HiveTableScanExec(
   require(partitionPruningPred.isEmpty || relation.isPartitioned,
     "Partition pruning predicates only supported for partitioned tables.")
 
-  override def conf: SQLConf = sparkSession.sessionState.conf
+  private def sessionState: SessionState = sparkSession.sessionState
+  override def conf: SQLConf = sessionState.conf
 
   override def nodeName: String = s"Scan hive ${relation.tableMeta.qualifiedName}"
 
@@ -98,7 +99,7 @@ case class HiveTableScanExec(
   // Create a local copy of hadoopConf,so that scan specific modifications should not impact
   // other queries
   @transient private lazy val hadoopConf = {
-    val c = sparkSession.sessionState.newHadoopConf()
+    val c = sessionState.newHadoopConf()
     // append columns ids and names before broadcast
     addColumnMetadataToConf(c)
     c
@@ -175,8 +176,7 @@ case class HiveTableScanExec(
         prunePartitions(hivePartitions)
       }
     } else {
-      if (sparkSession.sessionState.conf.metastorePartitionPruning &&
-        partitionPruningPred.nonEmpty) {
+      if (sessionState.conf.metastorePartitionPruning && partitionPruningPred.nonEmpty) {
         rawPartitions
       } else {
         prunePartitions(rawPartitions)
@@ -187,16 +187,16 @@ case class HiveTableScanExec(
   // exposed for tests
   @transient lazy val rawPartitions: Seq[HivePartition] = {
     val prunedPartitions =
-      if (sparkSession.sessionState.conf.metastorePartitionPruning &&
+      if (sessionState.conf.metastorePartitionPruning &&
         partitionPruningPred.nonEmpty) {
         // Retrieve the original attributes based on expression ID so that capitalization matches.
         val normalizedFilters = partitionPruningPred.map(_.transform {
           case a: AttributeReference => originalAttributes(a)
         })
-        sparkSession.sessionState.catalog
+        sessionState.catalog
           .listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters)
       } else {
-        sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
+        sessionState.catalog.listPartitions(relation.tableMeta.identifier)
       }
     prunedPartitions.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
   }

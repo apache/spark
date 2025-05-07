@@ -43,7 +43,7 @@ case class ParquetScanBuilder(
   lazy val hadoopConf = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
-    sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
+    sessionState.newHadoopConfWithOptions(caseSensitiveMap)
   }
 
   private var finalSchema = new StructType()
@@ -53,16 +53,14 @@ case class ParquetScanBuilder(
   override protected val supportsNestedSchemaPruning: Boolean = true
 
   override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
-    val sqlConf = sparkSession.sessionState.conf
-    if (sqlConf.parquetFilterPushDown) {
-      val pushDownDate = sqlConf.parquetFilterPushDownDate
-      val pushDownTimestamp = sqlConf.parquetFilterPushDownTimestamp
-      val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
-      val pushDownStringPredicate = sqlConf.parquetFilterPushDownStringPredicate
-      val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
-      val isCaseSensitive = sqlConf.caseSensitiveAnalysis
-      val parquetSchema =
-        new SparkToParquetSchemaConverter(sparkSession.sessionState.conf).convert(readDataSchema())
+    if (conf.parquetFilterPushDown) {
+      val pushDownDate = conf.parquetFilterPushDownDate
+      val pushDownTimestamp = conf.parquetFilterPushDownTimestamp
+      val pushDownDecimal = conf.parquetFilterPushDownDecimal
+      val pushDownStringPredicate = conf.parquetFilterPushDownStringPredicate
+      val pushDownInFilterThreshold = conf.parquetFilterPushDownInFilterThreshold
+      val isCaseSensitive = conf.caseSensitiveAnalysis
+      val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(readDataSchema())
       val parquetFilters = new ParquetFilters(
         parquetSchema,
         pushDownDate,
@@ -81,7 +79,7 @@ case class ParquetScanBuilder(
   }
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
-    if (!sparkSession.sessionState.conf.parquetAggregatePushDown) {
+    if (!conf.parquetAggregatePushDown) {
       return false
     }
 

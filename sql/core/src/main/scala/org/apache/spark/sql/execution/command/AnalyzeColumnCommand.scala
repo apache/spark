@@ -25,6 +25,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.CacheManager
+import org.apache.spark.sql.internal.{SessionState, SharedState}
 import org.apache.spark.sql.types.{DatetimeType, _}
 
 
@@ -41,10 +43,10 @@ case class AnalyzeColumnCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     require(columnNames.isDefined ^ allColumns, "Parameter `columnNames` or `allColumns` are " +
       "mutually exclusive. Only one of them should be specified.")
-    val sessionState = sparkSession.sessionState
+    val sessionState: SessionState = sparkSession.sessionState
 
     tableIdent.database match {
-      case Some(db) if db == sparkSession.sharedState.globalTempDB =>
+      case Some(db) if db == sparkSession.sharedState.asInstanceOf[SharedState].globalTempDB =>
         val plan = sessionState.catalog.getGlobalTempView(tableIdent.identifier).getOrElse {
           throw QueryCompilationErrors.noSuchTableError(db, tableIdent.identifier)
         }
@@ -62,7 +64,7 @@ case class AnalyzeColumnCommand(
   }
 
   private def analyzeColumnInCachedData(plan: LogicalPlan, sparkSession: SparkSession): Boolean = {
-    val cacheManager = sparkSession.sharedState.cacheManager
+    val cacheManager: CacheManager = sparkSession.sharedState.asInstanceOf[SharedState].cacheManager
     val df = Dataset.ofRows(sparkSession, plan)
     cacheManager.lookupCachedData(df).map { cachedData =>
       val columnsToAnalyze = getColumnsToAnalyze(
@@ -102,7 +104,7 @@ case class AnalyzeColumnCommand(
   }
 
   private def analyzeColumnInCatalog(sparkSession: SparkSession): Unit = {
-    val sessionState = sparkSession.sessionState
+    val sessionState: SessionState = sparkSession.sessionState
     val tableMeta = sessionState.catalog.getTableMetadata(tableIdent)
     if (tableMeta.tableType == CatalogTableType.VIEW) {
       // Analyzes a catalog view if the view is cached

@@ -26,6 +26,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, PartitionOffset}
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.util.RpcUtils
 
 private[continuous] sealed trait EpochCoordinatorMessage extends Serializable
@@ -124,7 +125,7 @@ private[continuous] class EpochCoordinator(
   extends ThreadSafeRpcEndpoint with Logging {
 
   private val epochBacklogQueueSize =
-    session.sessionState.conf.continuousStreamingEpochBacklogQueueSize
+    session.sessionState.asInstanceOf[SessionState].conf.continuousStreamingEpochBacklogQueueSize
 
   private var queryWritesStopped: Boolean = false
 

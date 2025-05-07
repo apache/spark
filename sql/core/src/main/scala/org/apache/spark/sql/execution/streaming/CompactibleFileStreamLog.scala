@@ -56,7 +56,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
   @scala.annotation.nowarn
   private implicit val manifest = Manifest.classType[T](implicitly[ClassTag[T]].runtimeClass)
 
-  protected val minBatchesToRetain = sparkSession.sessionState.conf.minBatchesToRetain
+  protected val minBatchesToRetain = conf.minBatchesToRetain
 
   /**
    * If we delete the old files after compaction at once, there is a race condition in S3: other

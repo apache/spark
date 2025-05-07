@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.Utils
 
@@ -29,7 +30,8 @@ import org.apache.spark.util.Utils
  */
 case class AddJarsCommand(paths: Seq[String]) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    paths.foreach(sparkSession.sessionState.resourceLoader.addJar(_))
+    val sessionState: SessionState = sparkSession.sessionState
+    paths.foreach(sessionState.resourceLoader.addJar)
     Seq.empty[Row]
   }
 }
@@ -39,7 +41,8 @@ case class AddJarsCommand(paths: Seq[String]) extends LeafRunnableCommand {
  */
 case class AddFilesCommand(paths: Seq[String]) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val recursive = !sparkSession.sessionState.conf.addSingleFileInAddFile
+    val sessionState: SessionState = sparkSession.sessionState
+    val recursive = !sessionState.conf.addSingleFileInAddFile
     paths.foreach(sparkSession.sparkContext.addFile(_, recursive))
     Seq.empty[Row]
   }
@@ -50,7 +53,7 @@ case class AddFilesCommand(paths: Seq[String]) extends LeafRunnableCommand {
  */
 case class AddArchivesCommand(paths: Seq[String]) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    paths.foreach(sparkSession.sparkContext.addArchive(_))
+    paths.foreach(sparkSession.sparkContext.addArchive)
     Seq.empty[Row]
   }
 }

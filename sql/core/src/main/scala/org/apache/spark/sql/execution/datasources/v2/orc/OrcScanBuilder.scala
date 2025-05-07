@@ -43,7 +43,7 @@ case class OrcScanBuilder(
   lazy val hadoopConf = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
-    sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
+    sessionState.newHadoopConfWithOptions(caseSensitiveMap)
   }
 
   private var finalSchema = new StructType()
@@ -65,7 +65,7 @@ case class OrcScanBuilder(
   }
 
   override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
-    if (sparkSession.sessionState.conf.orcFilterPushDown) {
+    if (conf.orcFilterPushDown) {
       val dataTypeMap = OrcFilters.getSearchableTypeMap(
         readDataSchema(), SQLConf.get.caseSensitiveAnalysis)
       OrcFilters.convertibleFilters(dataTypeMap, dataFilters.toImmutableArraySeq).toArray
@@ -75,7 +75,7 @@ case class OrcScanBuilder(
   }
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
-    if (!sparkSession.sessionState.conf.orcAggregatePushDown) {
+    if (!conf.orcAggregatePushDown) {
       return false
     }
 

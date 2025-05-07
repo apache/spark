@@ -28,9 +28,10 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{COUNT, PERCENT, TOTAL}
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.{expressions, InternalRow}
+import org.apache.spark.sql.catalyst.{expressions, InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
 
@@ -46,15 +47,17 @@ abstract class PartitioningAwareFileIndex(
     sparkSession: SparkSession,
     parameters: Map[String, String],
     userSpecifiedSchema: Option[StructType],
-    fileStatusCache: FileStatusCache = NoopCache) extends FileIndex with Logging {
+    fileStatusCache: FileStatusCache = NoopCache) extends FileIndex
+  with SQLConfHelper with Logging {
 
   /** Returns the specification of the partitions inferred from the data. */
   def partitionSpec(): PartitionSpec
 
   override def partitionSchema: StructType = partitionSpec().partitionColumns
 
-  protected val hadoopConf: Configuration =
-    sparkSession.sessionState.newHadoopConfWithOptions(parameters)
+  protected val sessionState: SessionState = sparkSession.sessionState
+  override def conf: SQLConf = sessionState.conf
+  protected val hadoopConf: Configuration = sessionState.newHadoopConfWithOptions(parameters)
 
   protected def leafFiles: mutable.LinkedHashMap[Path, FileStatus]
 
@@ -74,7 +77,7 @@ abstract class PartitioningAwareFileIndex(
     caseInsensitiveMap
       .get(FileIndexOptions.IGNORE_INVALID_PARTITION_PATHS)
       .map(_.toBoolean)
-      .getOrElse(sparkSession.sessionState.conf.ignoreInvalidPartitionPaths)
+      .getOrElse(conf.ignoreInvalidPartitionPaths)
   }
 
   override def listFiles(
@@ -160,15 +163,15 @@ abstract class PartitioningAwareFileIndex(
 
       val caseInsensitiveOptions = CaseInsensitiveMap(parameters)
       val timeZoneId = caseInsensitiveOptions.get(FileIndexOptions.TIME_ZONE)
-        .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone)
+        .getOrElse(conf.sessionLocalTimeZone)
 
       PartitioningUtils.parsePartitions(
         leafDirs,
-        typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled,
+        typeInference = conf.partitionColumnTypeInferenceEnabled,
         basePaths = basePaths,
         userSpecifiedSchema = userSpecifiedSchema,
-        caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis,
-        validatePartitionColumns = sparkSession.sessionState.conf.validatePartitionColumns,
+        caseSensitive = conf.caseSensitiveAnalysis,
+        validatePartitionColumns = conf.validatePartitionColumns,
         timeZoneId = timeZoneId,
         ignoreInvalidPartitionPaths = ignoreInvalidPartitionPaths)
     }

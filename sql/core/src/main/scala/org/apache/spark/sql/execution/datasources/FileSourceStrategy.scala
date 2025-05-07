@@ -166,8 +166,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         filters.filter(_.deterministic), l.output)
 
       val partitionColumns =
-        l.resolve(
-          fsRelation.partitionSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
+        l.resolve(fsRelation.partitionSchema, fsRelation.conf.resolver)
       val partitionSet = AttributeSet(partitionColumns)
 
       // this partitionKeyFilters should be the same with the ones being executed in
@@ -183,7 +182,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       }
 
       val dataColumns =
-        l.resolve(fsRelation.dataSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
+        l.resolve(fsRelation.dataSchema, fsRelation.conf.resolver)
 
       // Partition keys are not available in the statistics of the files.
       // `dataColumns` might have partition columns, we need to filter them out.

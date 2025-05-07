@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable
 
 import org.apache.spark.sql.{sources, SparkSession}
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Expression, PythonUDF, SubqueryExpression}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils, PartitioningAwareFileIndex, PartitioningUtils}
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
@@ -33,9 +35,13 @@ abstract class FileScanBuilder(
     dataSchema: StructType)
   extends ScanBuilder
     with SupportsPushDownRequiredColumns
-    with SupportsPushDownCatalystFilters {
+    with SupportsPushDownCatalystFilters
+    with SQLConfHelper {
+
+  protected def sessionState: SessionState = sparkSession.sessionState
+  override def conf: SQLConf = sessionState.conf
   private val partitionSchema = fileIndex.partitionSchema
-  private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+  private val isCaseSensitive = conf.caseSensitiveAnalysis
   protected val supportsNestedSchemaPruning = false
   protected var requiredSchema = StructType(dataSchema.fields ++ partitionSchema.fields)
   protected var partitionFilters = Seq.empty[Expression]

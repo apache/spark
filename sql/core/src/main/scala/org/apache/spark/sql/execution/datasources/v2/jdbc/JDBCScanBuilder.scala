@@ -27,8 +27,10 @@ import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownAggrega
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.types.StructType
+
 
 case class JDBCScanBuilder(
     session: SparkSession,
@@ -46,7 +48,8 @@ case class JDBCScanBuilder(
 
   private val dialect = JdbcDialects.get(jdbcOptions.url)
 
-  private val isCaseSensitive = session.sessionState.conf.caseSensitiveAnalysis
+  private val sessionState: SessionState = session.sessionState
+  private val isCaseSensitive = sessionState.conf.caseSensitiveAnalysis
 
   private var pushedPredicate = Array.empty[Predicate]
 
@@ -180,8 +183,8 @@ case class JDBCScanBuilder(
   }
 
   override def build(): JDBCScan = {
-    val resolver = session.sessionState.conf.resolver
-    val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
+    val resolver = sessionState.conf.resolver
+    val timeZoneId = sessionState.conf.sessionLocalTimeZone
     val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
 
     // the `finalSchema` is either pruned in pushAggregation (if aggregates are

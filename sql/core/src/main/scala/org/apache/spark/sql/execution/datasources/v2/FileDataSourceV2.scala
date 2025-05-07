@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -52,6 +53,7 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
   def fallbackFileFormat: Class[_ <: FileFormat]
 
   lazy val sparkSession = SparkSession.active
+  def sessionState: SessionState = sparkSession.sessionState
 
   protected def getPaths(map: CaseInsensitiveStringMap): Seq[String] = {
     val paths = Option(map.get("paths")).map { pathStr =>
@@ -68,10 +70,10 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
   }
 
   protected def getTableName(map: CaseInsensitiveStringMap, paths: Seq[String]): String = {
-    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(
+    val hadoopConf = sessionState.newHadoopConfWithOptions(
       map.asCaseSensitiveMap().asScala.toMap)
     val name = shortName() + " " + paths.map(qualifiedPathName(_, hadoopConf)).mkString(",")
-    Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, name)
+    Utils.redact(sessionState.conf.stringRedactionPattern, name)
   }
 
   private def qualifiedPathName(path: String, hadoopConf: Configuration): String = {

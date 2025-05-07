@@ -37,17 +37,15 @@ class FileStreamSourceLog(
   import FileStreamSourceLog._
 
   // Configurations about metadata compaction
-  protected override val defaultCompactInterval: Int =
-    sparkSession.sessionState.conf.fileSourceLogCompactInterval
+  protected override val defaultCompactInterval: Int = conf.fileSourceLogCompactInterval
 
   require(defaultCompactInterval > 0,
     s"Please set ${SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key} " +
       s"(was $defaultCompactInterval) to a positive value.")
 
-  protected override val fileCleanupDelayMs =
-    sparkSession.sessionState.conf.fileSourceLogCleanupDelay
+  protected override val fileCleanupDelayMs = conf.fileSourceLogCleanupDelay
 
-  protected override val isDeletingExpiredLog = sparkSession.sessionState.conf.fileSourceLogDeletion
+  protected override val isDeletingExpiredLog = conf.fileSourceLogDeletion
 
   // A fixed size log entry cache to cache the file entries belong to the compaction batch. It is
   // used to avoid scanning the compacted log file to retrieve it's own batch data.

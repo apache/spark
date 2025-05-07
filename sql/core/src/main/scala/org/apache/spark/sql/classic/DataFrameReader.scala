@@ -179,7 +179,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
       StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
 
     val createParser = CreateJacksonParser.string _
-    val parsed = jsonDataset.rdd.mapPartitions { iter =>
+    val rdd: RDD[String] = jsonDataset.rdd
+    val parsed = rdd.mapPartitions { iter =>
       val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = true)
       val parser = new FailureSafeParser[String](
         input => rawParser.parse(input, createParser, UTF8String.fromString),
@@ -285,7 +286,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
     val actualSchema =
       StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
 
-    val parsed = xmlDataset.rdd.mapPartitions { iter =>
+    val rdd: RDD[String] = xmlDataset.rdd
+    val parsed = rdd.mapPartitions { iter =>
       val rawParser = new StaxXmlParser(actualSchema, parsedOptions)
       val parser = new FailureSafeParser[String](
         input => rawParser.parse(input),

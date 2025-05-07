@@ -27,7 +27,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedPersistentView, ResolvedTable, ResolvedTempView}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -36,6 +36,7 @@ import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.V1Table
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitioningUtils
 
@@ -90,8 +91,7 @@ case class DescribeRelationJsonCommand(
         if (partitionSpec.nonEmpty) {
           // Outputs the partition-specific info for the DDL command:
           // "DESCRIBE [EXTENDED|FORMATTED] table_name PARTITION (partitionVal*)"
-          describePartitionInfoJson(
-            sparkSession, sparkSession.sessionState.catalog, metadata, jsonMap)
+          describePartitionInfoJson(sparkSession, metadata, jsonMap)
         } else {
           describeFormattedTableInfoJson(metadata, jsonMap)
         }
@@ -297,7 +297,6 @@ case class DescribeRelationJsonCommand(
 
   private def describePartitionInfoJson(
       spark: SparkSession,
-      catalog: SessionCatalog,
       metadata: CatalogTable,
       jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
     if (metadata.tableType == CatalogTableType.VIEW) {
@@ -305,12 +304,13 @@ case class DescribeRelationJsonCommand(
     }
 
     DDLUtils.verifyPartitionProviderIsHive(spark, metadata, "DESC PARTITION")
+    val sessionState: SessionState = spark.sessionState
     val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
       partitionSpec,
       metadata.partitionSchema,
       metadata.identifier.quotedString,
-      spark.sessionState.conf.resolver)
-    val partition = catalog.getPartition(metadata.identifier, normalizedPartSpec)
+      sessionState.conf.resolver)
+    val partition = sessionState.catalog.getPartition(metadata.identifier, normalizedPartSpec)
 
     // First add partition details to jsonMap.
     // `addKeyValueToMap` only adds unique keys, so this ensures the

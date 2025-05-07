@@ -53,7 +53,7 @@ import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, PushedDownOperators}
 import org.apache.spark.sql.execution.streaming.StreamingRelation
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -215,8 +215,9 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
       val outputPath = t.location.rootPaths.head
       val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
 
+      val sessionState: SessionState = t.sparkSession.sessionState
       val partitionSchema = actualQuery.resolve(
-        t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver)
+        t.partitionSchema, sessionState.analyzer.resolver)
       val staticPartitions = parts.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
 
       val insertCommand = InsertIntoHadoopFsRelationCommand(

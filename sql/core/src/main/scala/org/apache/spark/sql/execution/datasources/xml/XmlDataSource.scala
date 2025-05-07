@@ -39,9 +39,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
-import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.{StructField, StructType, VariantType}
 import org.apache.spark.util.Utils
 
@@ -136,7 +137,8 @@ object TextInputXmlDataSource extends XmlDataSource {
       xml: Dataset[String],
       parsedOptions: XmlOptions): StructType = {
     SQLExecution.withSQLConfPropagated(xml.sparkSession) {
-      new XmlInferSchema(parsedOptions, xml.sparkSession.sessionState.conf.caseSensitiveAnalysis)
+      val sessionState: SessionState = xml.sparkSession.sessionState
+      new XmlInferSchema(parsedOptions, sessionState.conf.caseSensitiveAnalysis)
         .infer(xml.rdd)
     }
   }
@@ -159,7 +161,7 @@ object TextInputXmlDataSource extends XmlDataSource {
       df
     } else {
       val charset = options.charset
-      sparkSession.createDataset(df.queryExecution.toRdd.map { row =>
+      sparkSession.createDataset(df.queryExecution.asInstanceOf[QueryExecution].toRdd.map { row =>
         val bytes = row.getBinary(0)
         new String(bytes, 0, bytes.length, charset)
       })(Encoders.STRING)
@@ -209,8 +211,9 @@ object MultiLineXmlDataSource extends XmlDataSource {
         }
       }
     SQLExecution.withSQLConfPropagated(sparkSession) {
+      val sessionState: SessionState = sparkSession.sessionState
       val schema =
-        new XmlInferSchema(parsedOptions, sparkSession.sessionState.conf.caseSensitiveAnalysis)
+        new XmlInferSchema(parsedOptions, sessionState.conf.caseSensitiveAnalysis)
           .infer(tokenRDD)
       schema
     }
@@ -222,7 +225,8 @@ object MultiLineXmlDataSource extends XmlDataSource {
       options: XmlOptions): RDD[PortableDataStream] = {
     val paths = inputPaths.map(_.getPath)
     val name = paths.mkString(",")
-    val job = Job.getInstance(sparkSession.sessionState.newHadoopConfWithOptions(
+    val sessionState: SessionState = sparkSession.sessionState
+    val job = Job.getInstance(sessionState.newHadoopConfWithOptions(
       options.parameters))
     FileInputFormat.setInputPaths(job, paths: _*)
     val conf = job.getConfiguration

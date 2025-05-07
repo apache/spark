@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrate
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.execution.HiveScriptTransformationExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable.BY_CTAS
-import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.internal.{HiveSerDe, SessionState, SQLConf}
 
 
 /**
@@ -119,7 +119,8 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
 
 class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 
-  override def conf: SQLConf = session.sessionState.conf
+  private def sessionState: SessionState = session.sessionState
+  override def conf: SQLConf = sessionState.conf
 
   private def hiveTableWithStats(relation: HiveTableRelation): HiveTableRelation = {
     val table = relation.tableMeta
@@ -128,7 +129,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
     // Which is expensive to get table size. Please see how we implemented it in the AnalyzeTable.
     val sizeInBytes = if (conf.fallBackToHdfsForStatsEnabled && partitionCols.isEmpty) {
       try {
-        val hadoopConf = session.sessionState.newHadoopConf()
+        val hadoopConf = sessionState.newHadoopConf()
         val tablePath = new Path(table.location)
         val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
         fs.getContentSummary(tablePath).getLength

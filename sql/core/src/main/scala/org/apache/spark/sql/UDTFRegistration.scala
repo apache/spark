@@ -21,6 +21,7 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry
 import org.apache.spark.sql.execution.python.UserDefinedPythonTableFunction
+import org.apache.spark.sql.internal.SessionState
 
 /**
  * Functions for registering user-defined table functions. Use `SparkSession.udtf` to access this.
@@ -44,8 +45,9 @@ private[sql] class UDTFRegistration private[sql] (tableFunctionRegistry: TableFu
          | udfDeterministic: ${udtf.udfDeterministic}
       """.stripMargin)
 
+    val sessionState: SessionState = SparkSession.getActiveSession.get.sessionState
     tableFunctionRegistry.createOrReplaceTempFunction(
-      name, udtf.builder(_, SparkSession.getActiveSession.get.sessionState.sqlParser),
+      name, udtf.builder(_, sessionState.sqlParser),
       source = "python_udtf")
   }
 }

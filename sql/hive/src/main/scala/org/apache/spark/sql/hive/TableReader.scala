@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -88,10 +88,13 @@ class HadoopTableReader(
   SparkHadoopUtil.get.appendS3AndSparkHadoopHiveConfigurations(
     sparkSession.sparkContext.conf, hadoopConf)
 
-  private val _broadcastedHadoopConf =
-    sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+  private val _broadcastedHadoopConf = SerializableConfiguration.broadcast(
+    sparkSession.sparkContext, hadoopConf)
 
-  override def conf: SQLConf = sparkSession.sessionState.conf
+  override def conf: SQLConf = {
+    val sessionState: SessionState = sparkSession.sessionState
+    sessionState.conf
+  }
 
   override def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow] =
     makeRDDForTable(

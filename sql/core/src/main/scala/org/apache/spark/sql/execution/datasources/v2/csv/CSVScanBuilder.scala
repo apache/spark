@@ -47,7 +47,7 @@ case class CSVScanBuilder(
   }
 
   override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
-    if (sparkSession.sessionState.conf.csvFilterPushDown) {
+    if (conf.csvFilterPushDown) {
       StructFilters.pushedFilters(dataFilters, dataSchema)
     } else {
       Array.empty[Filter]

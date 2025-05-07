@@ -21,6 +21,7 @@ import java.util.UUID
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.JoinSide
 import org.apache.spark.sql.execution.streaming.state.{StateSchemaCompatibilityChecker, StateStore, StateStoreId, StateStoreProviderId, SymmetricHashJoinStateManager}
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.{BooleanType, StructType}
 
 /**
@@ -65,7 +66,7 @@ object StreamStreamJoinStateHelper {
     val providerIdForKeyWithIndexToValue = new StateStoreProviderId(storeIdForKeyWithIndexToValue,
       UUID.randomUUID())
 
-    val newHadoopConf = session.sessionState.newHadoopConf()
+    val newHadoopConf = session.sessionState.asInstanceOf[SessionState].newHadoopConf()
 
     // read the key schema from the keyToNumValues store for the join keys
     val manager = new StateSchemaCompatibilityChecker(providerIdForKeyToNumValues, newHadoopConf)

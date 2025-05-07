@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
@@ -56,7 +57,8 @@ case class CreateFunctionCommand(
   extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val func = CatalogFunction(identifier, className, resources)
     if (isTemp) {
       if (!replace && catalog.isRegisteredFunction(identifier)) {
@@ -102,7 +104,8 @@ case class DescribeFunctionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val identifier = if (info.getDb != null) {
-      sparkSession.sessionState.catalog.qualifyIdentifier(
+      val sessionState: SessionState = sparkSession.sessionState
+      sessionState.catalog.qualifyIdentifier(
         FunctionIdentifier(info.getName, Some(info.getDb)))
     } else {
       FunctionIdentifier(info.getName)
@@ -137,7 +140,8 @@ case class DropFunctionCommand(
   extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     if (isTemp) {
       assert(identifier.database.isEmpty)
       if (FunctionRegistry.builtin.functionExists(identifier)) {
@@ -173,8 +177,9 @@ case class ShowFunctionsCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // If pattern is not specified, we use '*', which is used to
     // match any sequence of characters (including no characters).
+    val sessionState: SessionState = sparkSession.sessionState
     val functionNames =
-      sparkSession.sessionState.catalog
+      sessionState.catalog
         .listFunctions(db, pattern.getOrElse("*"))
         .collect {
           case (f, "USER") if showUserFunctions => f.unquotedString
@@ -210,7 +215,8 @@ case class RefreshFunctionCommand(
   extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    val sessionState: SessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val ident = FunctionIdentifier(functionName, databaseName)
     if (FunctionRegistry.builtin.functionExists(ident)) {
       throw QueryCompilationErrors.cannotRefreshBuiltInFuncError(functionName)

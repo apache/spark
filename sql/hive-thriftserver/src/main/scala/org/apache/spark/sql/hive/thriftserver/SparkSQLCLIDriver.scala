@@ -48,7 +48,7 @@ import org.apache.spark.sql.catalyst.util.SQLKeywordUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver.closeHiveSessionStateIfStarted
-import org.apache.spark.sql.internal.{SharedState, SQLConf}
+import org.apache.spark.sql.internal.{SessionState => SparkSessionState, SharedState, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.LEGACY_EMPTY_CURRENT_DB_IN_CLI
 import org.apache.spark.util.ShutdownHookManager
 import org.apache.spark.util.SparkExitCode._
@@ -83,6 +83,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     exitCode = code
     System.exit(exitCode)
   }
+
+  private def sparkSessionState: SparkSessionState = SparkSQLEnv.sparkSession.sessionState
 
   def main(args: Array[String]): Unit = {
     val oproc = new OptionsProcessor()
@@ -167,7 +169,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Spark's SessionResourceLoader to obtain these jars.
     val auxJars = HiveConf.getVar(conf, HiveConf.getConfVars("hive.aux.jars.path"))
     if (StringUtils.isNotBlank(auxJars)) {
-      val resourceLoader = SparkSQLEnv.sparkSession.sessionState.resourceLoader
+      val resourceLoader = sparkSessionState.resourceLoader
       StringUtils.split(auxJars, ",").foreach(resourceLoader.addJar(_))
     }
 
@@ -176,7 +178,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // sharedState.jarClassLoader which contain jar path passed by --jars in main thread.
     // We set CliSessionState's conf class loader to sharedState.jarClassLoader.
     // Thus we can load all jars passed by --jars and AddJarsCommand.
-    sessionState.getConf.setClassLoader(SparkSQLEnv.sparkSession.sharedState.jarClassLoader)
+    sessionState.getConf.setClassLoader(
+      SparkSQLEnv.sparkSession.sharedState.asInstanceOf[SharedState].jarClassLoader)
 
     // TODO work around for set the log output to console, because the HiveContext
     // will set the output into an invalid buffer.
@@ -261,8 +264,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     var prefix = ""
 
     def currentDB = {
-      if (!SparkSQLEnv.sparkSession.sessionState.conf
-        .getConf(LEGACY_EMPTY_CURRENT_DB_IN_CLI)) {
+      if (!sparkSessionState.conf.getConf(LEGACY_EMPTY_CURRENT_DB_IN_CLI)) {
         s" (${SparkSQLEnv.sparkSession.catalog.currentDatabase})"
       } else {
         ReflectionUtils.invokeStatic(classOf[CliDriver], "getFormattedDb",
@@ -409,7 +411,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
   override def setHiveVariables(hiveVariables: java.util.Map[String, String]): Unit = {
     hiveVariables.asScala.foreach(kv =>
-      SparkSQLEnv.sparkSession.sessionState.conf.setConfString(kv._1, kv._2))
+      SparkSQLCLIDriver.sparkSessionState.conf.setConfString(kv._1, kv._2))
   }
 
   def printMasterAndAppId(): Unit = {
@@ -463,7 +465,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           } catch {
             case t: Throwable =>
               ret = 1
-              val format = SparkSQLEnv.sparkSession.sessionState.conf.errorMessageFormat
+              val format = SparkSQLCLIDriver.sparkSessionState.conf.errorMessageFormat
               val msg = t match {
                 case st: SparkThrowable with Throwable =>
                   SparkThrowableHelper.getMessage(st, format)
@@ -484,7 +486,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           val res = new JArrayList[String]()
 
           if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER) ||
-              SparkSQLEnv.sparkSession.sessionState.conf.cliPrintHeader) {
+            SparkSQLCLIDriver.sparkSessionState.conf.cliPrintHeader) {
             // Print the column names.
             Option(driver.getSchema.getFieldSchemas).foreach { fields =>
               out.println(fields.asScala.map(_.getName).mkString("\t"))
