@@ -22,6 +22,7 @@ SOURCEDIR     ?= source
 BUILDDIR      ?= build
 
 export PYTHONPATH=$(realpath ..):$(realpath ../lib/py4j-0.10.9.9-src.zip)
+export SPARK_ANSI_SQL_MODE=false
 
 # Put it first so that "make" without argument is like "make help".
 help:
