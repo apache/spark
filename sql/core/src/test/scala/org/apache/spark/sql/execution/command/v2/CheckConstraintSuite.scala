@@ -206,6 +206,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
 
         sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (id > 0) $characteristic")
         val table = loadTable(nonPartitionCatalog, "ns", "tbl")
+        assert(table.currentVersion() == "1")
+        assert(table.validatedVersion() == "0")
         val constraint = getCheckConstraint(table)
         assert(constraint.name() == "c1")
         assert(constraint.toDDL == s"CONSTRAINT c1 CHECK (id > 0) $expectedDDL")
