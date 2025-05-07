@@ -821,11 +821,11 @@ private[spark] class FileSystemOverwrite extends Logging {
 
 private[spark] object ReadWriteUtils {
 
-  val localSavingModeState = new ThreadLocal[Boolean]() {
+  private[spark] val localSavingModeState = new ThreadLocal[Boolean]() {
     override def initialValue: Boolean = false
   }
 
-  def saveText(path: String, data: String, spark: SparkSession): Unit = {
+  private[spark] def saveText(path: String, data: String, spark: SparkSession): Unit = {
     if (localSavingModeState.get()) {
       val filePath = Paths.get(path)
 
@@ -836,7 +836,7 @@ private[spark] object ReadWriteUtils {
     }
   }
 
-  def loadText(path: String, spark: SparkSession): String = {
+  private[spark] def loadText(path: String, spark: SparkSession): String = {
     if (localSavingModeState.get()) {
       Files.readString(Paths.get(path))
     } else {
@@ -844,7 +844,7 @@ private[spark] object ReadWriteUtils {
     }
   }
 
-  def saveObjectToLocal[T <: Product: ClassTag: TypeTag](path: String, data: T): Unit = {
+  private[spark] def saveObjectToLocal[T <: Product: ClassTag: TypeTag](path: String, data: T): Unit = {
     val serializer = SparkEnv.get.serializer.newInstance()
     val dataBuffer = serializer.serialize(data)
     val dataBytes = new Array[Byte](dataBuffer.limit)
@@ -856,7 +856,7 @@ private[spark] object ReadWriteUtils {
     Files.write(filePath, dataBytes)
   }
 
-  def saveObject[T <: Product: ClassTag: TypeTag](
+  private[spark] def saveObject[T <: Product: ClassTag: TypeTag](
       path: String, data: T, spark: SparkSession
   ): Unit = {
     if (localSavingModeState.get()) {
@@ -866,14 +866,14 @@ private[spark] object ReadWriteUtils {
     }
   }
 
-  def loadObjectFromLocal[T <: Product: ClassTag: TypeTag](path: String): T = {
+  private[spark] def loadObjectFromLocal[T <: Product: ClassTag: TypeTag](path: String): T = {
     val serializer = SparkEnv.get.serializer.newInstance()
 
     val dataBytes = Files.readAllBytes(Paths.get(path))
     serializer.deserialize[T](java.nio.ByteBuffer.wrap(dataBytes))
   }
 
-  def loadObject[T <: Product: ClassTag: TypeTag](path: String, spark: SparkSession): T = {
+  private[spark] def loadObject[T <: Product: ClassTag: TypeTag](path: String, spark: SparkSession): T = {
     if (localSavingModeState.get()) {
       loadObjectFromLocal(path)
     } else {
@@ -882,7 +882,7 @@ private[spark] object ReadWriteUtils {
     }
   }
 
-  def saveArray[T <: Product: ClassTag: TypeTag](
+  private[spark] def saveArray[T <: Product: ClassTag: TypeTag](
       path: String, data: Array[T], spark: SparkSession,
       numDataParts: Int = -1
   ): Unit = {
@@ -907,7 +907,9 @@ private[spark] object ReadWriteUtils {
     }
   }
 
-  def loadArray[T <: Product: ClassTag: TypeTag](path: String, spark: SparkSession): Array[T] = {
+  private[spark] def loadArray[T <: Product: ClassTag: TypeTag](
+      path: String, spark: SparkSession
+  ): Array[T] = {
     if (localSavingModeState.get()) {
       val serializer = SparkEnv.get.serializer.newInstance()
 
