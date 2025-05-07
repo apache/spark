@@ -20,7 +20,6 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
@@ -74,8 +73,8 @@ case class TextScan(
       // Hadoop Configurations are case sensitive.
       sessionState.newHadoopConfWithOptions(caseSensitiveMap)
     }
-    val broadcastedConf = sparkSession.sparkContext.asInstanceOf[SparkContext]
-      .broadcast(new SerializableConfiguration(hadoopConf))
+    val broadcastedConf =
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     TextPartitionReaderFactory(sessionState.conf, broadcastedConf, readDataSchema,
       readPartitionSchema, textOptions)
   }

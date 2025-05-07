@@ -30,7 +30,7 @@ import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce._
 
-import org.apache.spark.{SparkContext, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -164,8 +164,8 @@ class OrcFileFormat
 
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(hadoopConf, sqlConf.caseSensitiveAnalysis)
 
-    val broadcastedConf = sparkSession.sparkContext.asInstanceOf[SparkContext]
-      .broadcast(new SerializableConfiguration(hadoopConf))
+    val broadcastedConf =
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
     val orcFilterPushDown = sqlConf.orcFilterPushDown
 

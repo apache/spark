@@ -39,7 +39,7 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.orc.OrcConf
 import org.apache.orc.OrcConf.COMPRESS
 
-import org.apache.spark.{SparkContext, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -142,8 +142,8 @@ case class OrcFileFormat() extends FileFormat with DataSourceRegister with Seria
       }
     }
 
-    val broadcastedHadoopConf = sparkSession.sparkContext.asInstanceOf[SparkContext]
-      .broadcast(new SerializableConfiguration(hadoopConf))
+    val broadcastedHadoopConf = SerializableConfiguration.broadcast(
+        sparkSession.sparkContext, hadoopConf)
     val ignoreCorruptFiles =
       new OrcOptions(options, sessionState(sparkSession).conf).ignoreCorruptFiles
 

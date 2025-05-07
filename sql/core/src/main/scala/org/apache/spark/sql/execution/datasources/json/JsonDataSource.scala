@@ -27,7 +27,7 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
-import org.apache.spark.{SparkContext, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.input.{PortableDataStream, StreamInputFormat}
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
@@ -188,16 +188,15 @@ object MultiLineJsonDataSource extends JsonDataSource {
     val conf = job.getConfiguration
     val name = paths.mkString(",")
     FileInputFormat.setInputPaths(job, paths: _*)
-    val sc: SparkContext = sparkSession.sparkContext
     new BinaryFileRDD(
-      sc,
+      sparkSession.sparkContext,
       classOf[StreamInputFormat],
       classOf[String],
       classOf[PortableDataStream],
       conf,
-      sc.defaultMinPartitions)
-        .setName(s"JsonFile: $name")
-        .values
+      sparkSession.sparkContext.defaultMinPartitions)
+      .setName(s"JsonFile: $name")
+      .values
   }
 
   private def dataToInputStream(dataStream: PortableDataStream): InputStream = {

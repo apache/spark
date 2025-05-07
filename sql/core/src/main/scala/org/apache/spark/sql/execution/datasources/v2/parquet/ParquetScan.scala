@@ -22,7 +22,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetInputFormat
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
@@ -94,8 +93,8 @@ case class ParquetScan(
       SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
       conf.legacyParquetNanosAsLong)
 
-    val sc: SparkContext = sparkSession.sparkContext
-    val broadcastedConf = sc.broadcast(new SerializableConfiguration(hadoopConf))
+    val broadcastedConf =
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     ParquetPartitionReaderFactory(
       conf,
       broadcastedConf,

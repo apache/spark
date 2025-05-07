@@ -64,8 +64,8 @@ case class OrcScan(
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    val broadcastedConf = sparkSession.sparkContext.broadcast(
-      new SerializableConfiguration(hadoopConf))
+    val broadcastedConf =
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val memoryMode = if (conf.offHeapColumnVectorEnabled) {
       MemoryMode.OFF_HEAP
     } else {

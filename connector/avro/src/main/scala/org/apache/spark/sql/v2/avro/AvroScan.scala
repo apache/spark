@@ -20,7 +20,6 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.avro.AvroOptions
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -49,8 +48,7 @@ case class AvroScan(
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
     val hadoopConf = sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-    val broadcastedConf = sparkSession.sparkContext.asInstanceOf[SparkContext]
-      .broadcast(new SerializableConfiguration(hadoopConf))
+    val broadcastedConf = SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val parsedOptions = new AvroOptions(caseSensitiveMap, hadoopConf)
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.

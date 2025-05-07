@@ -20,7 +20,6 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExprUtils}
@@ -86,8 +85,8 @@ case class CSVScan(
     // Hadoop Configurations are case sensitive.
     val sessionState: SessionState = sparkSession.sessionState
     val hadoopConf = sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-    val broadcastedConf = sparkSession.sparkContext.asInstanceOf[SparkContext]
-      .broadcast(new SerializableConfiguration(hadoopConf))
+    val broadcastedConf =
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     CSVPartitionReaderFactory(conf, broadcastedConf,

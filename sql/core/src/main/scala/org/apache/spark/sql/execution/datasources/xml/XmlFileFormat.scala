@@ -21,7 +21,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce._
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
@@ -104,8 +103,8 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    val broadcastedHadoopConf = sparkSession.sparkContext.asInstanceOf[SparkContext]
-      .broadcast(new SerializableConfiguration(hadoopConf))
+    val broadcastedHadoopConf = SerializableConfiguration.broadcast(
+      sparkSession.sparkContext, hadoopConf)
 
     val xmlOptions = getXmlOptions(sparkSession, options)
 

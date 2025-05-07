@@ -20,7 +20,6 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExprUtils}
 import org.apache.spark.sql.catalyst.json.JSONOptionsInRead
@@ -77,8 +76,7 @@ case class JsonScan(
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
     val hadoopConf = sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-    val sc: SparkContext = sparkSession.sparkContext
-    val broadcastedConf = sc.broadcast(new SerializableConfiguration(hadoopConf))
+    val broadcastedConf = SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     JsonPartitionReaderFactory(conf, broadcastedConf,

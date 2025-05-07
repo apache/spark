@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan, UnaryExecNode, UnionExec}
@@ -64,7 +63,7 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
       if (conf.getConf(SQLConf.COALESCE_PARTITIONS_PARALLELISM_FIRST)) {
         // We fall back to Spark default parallelism if the minimum number of coalesced partitions
         // is not set, so to avoid perf regressions compared to no coalescing.
-        session.sparkContext.asInstanceOf[SparkContext].defaultParallelism
+        session.sparkContext.defaultParallelism
       } else {
         // If we don't need to maximize the parallelism, we set `minPartitionNum` to 1, so that
         // the specified advisory partition size will be respected.

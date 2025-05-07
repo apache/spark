@@ -29,7 +29,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.Job
 
-import org.apache.spark.{SparkContext, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
@@ -86,8 +86,7 @@ private[sql] class AvroFileFormat extends FileFormat
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
 
-    val sc: SparkContext = spark.sparkContext
-    val broadcastedConf = sc.broadcast(new SerializableConfiguration(hadoopConf))
+    val broadcastedConf = SerializableConfiguration.broadcast(spark.sparkContext, hadoopConf)
     val parsedOptions = new AvroOptions(options, hadoopConf)
     val datetimeRebaseModeInRead = parsedOptions.datetimeRebaseModeInRead
 

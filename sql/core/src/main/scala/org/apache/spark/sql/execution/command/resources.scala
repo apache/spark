@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command
 
 import java.io.File
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.internal.SessionState
@@ -44,8 +43,7 @@ case class AddFilesCommand(paths: Seq[String]) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val sessionState: SessionState = sparkSession.sessionState
     val recursive = !sessionState.conf.addSingleFileInAddFile
-    val sc: SparkContext = sparkSession.sparkContext
-    paths.foreach(sc.addFile(_, recursive))
+    paths.foreach(sparkSession.sparkContext.addFile(_, recursive))
     Seq.empty[Row]
   }
 }
@@ -55,8 +53,7 @@ case class AddFilesCommand(paths: Seq[String]) extends LeafRunnableCommand {
  */
 case class AddArchivesCommand(paths: Seq[String]) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val sc: SparkContext = sparkSession.sparkContext
-    paths.foreach(sc.addArchive)
+    paths.foreach(sparkSession.sparkContext.addArchive)
     Seq.empty[Row]
   }
 }
@@ -70,8 +67,7 @@ case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends Leaf
     AttributeReference("Results", StringType, nullable = false)() :: Nil
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val sc: SparkContext = sparkSession.sparkContext
-    val fileList = sc.listFiles()
+    val fileList = sparkSession.sparkContext.listFiles()
     if (files.size > 0) {
       files.map { f =>
         val uri = Utils.resolveURI(f)
@@ -97,8 +93,7 @@ case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends LeafRu
     AttributeReference("Results", StringType, nullable = false)() :: Nil
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val sc: SparkContext = sparkSession.sparkContext
-    val jarList = sc.listJars()
+    val jarList = sparkSession.sparkContext.listJars()
     if (jars.nonEmpty) {
       for {
         jarName <- jars.map(f => Utils.resolveURI(f).toString.split("/").last)

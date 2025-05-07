@@ -30,7 +30,7 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.security.AccessControlException
 
-import org.apache.spark.{SparkContext, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.input.{PortableDataStream, StreamInputFormat}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
@@ -231,14 +231,13 @@ object MultiLineXmlDataSource extends XmlDataSource {
     FileInputFormat.setInputPaths(job, paths: _*)
     val conf = job.getConfiguration
 
-    val sc: SparkContext = sparkSession.sparkContext
     val rdd = new BinaryFileRDD(
-      sc,
+      sparkSession.sparkContext,
       classOf[StreamInputFormat],
       classOf[String],
       classOf[PortableDataStream],
       conf,
-      sc.defaultMinPartitions)
+      sparkSession.sparkContext.defaultMinPartitions)
 
     // Only returns `PortableDataStream`s without paths.
     rdd.setName(s"XMLFile: $name").values

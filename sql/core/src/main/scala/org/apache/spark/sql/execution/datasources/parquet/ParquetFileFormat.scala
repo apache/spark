@@ -31,7 +31,7 @@ import org.apache.parquet.filter2.predicate.FilterApi
 import org.apache.parquet.format.converter.ParquetMetadataConverter.SKIP_ROW_GROUPS
 import org.apache.parquet.hadoop._
 
-import org.apache.spark.{SparkContext, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{PATH, SCHEMA}
 import org.apache.spark.sql.SparkSession
@@ -164,8 +164,8 @@ class ParquetFileFormat
       sqlConf.legacyParquetNanosAsLong)
 
 
-    val sc: SparkContext = sparkSession.sparkContext
-    val broadcastedHadoopConf = sc.broadcast(new SerializableConfiguration(hadoopConf))
+    val broadcastedHadoopConf =
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
 
     // TODO: if you move this into the closure it reverts to the default values.
     // If true, enable using the custom RecordReader for parquet. This only works for

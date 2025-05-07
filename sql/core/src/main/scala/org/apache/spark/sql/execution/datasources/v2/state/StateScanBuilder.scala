@@ -22,7 +22,6 @@ import scala.util.Try
 
 import org.apache.hadoop.fs.{Path, PathFilter}
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
@@ -73,8 +72,7 @@ class StateScan(
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
   private val hadoopConfBroadcast = {
     val sessionState: SessionState = session.sessionState
-    val sc: SparkContext = session.sparkContext
-    sc.broadcast(new SerializableConfiguration(sessionState.newHadoopConf()))
+    SerializableConfiguration.broadcast(session.sparkContext, sessionState.newHadoopConf())
   }
 
   override def readSchema(): StructType = schema

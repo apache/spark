@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.FileSourceOptions
@@ -59,11 +59,10 @@ object SchemaMergeUtils extends Logging {
     // side, and resemble fake `FileStatus`es there.
     val partialFileStatusInfo = files.map(f => (f.getPath.toString, f.getLen))
 
-    val sc: SparkContext = sparkSession.sparkContext
     // Set the number of partitions to prevent following schema reads from generating many tasks
     // in case of a small number of orc files.
     val numParallelism = Math.min(Math.max(partialFileStatusInfo.size, 1),
-      sc.defaultParallelism)
+      sparkSession.sparkContext.defaultParallelism)
 
     val ignoreCorruptFiles =
       new FileSourceOptions(CaseInsensitiveMap(parameters)).ignoreCorruptFiles
@@ -71,7 +70,7 @@ object SchemaMergeUtils extends Logging {
 
     // Issues a Spark job to read Parquet/ORC schema in parallel.
     val partiallyMergedSchemas =
-      sc.parallelize(partialFileStatusInfo, numParallelism)
+      sparkSession.sparkContext.parallelize(partialFileStatusInfo, numParallelism)
         .mapPartitions { iterator =>
           // Resembles fake `FileStatus`es with serialized path and length information.
           val fakeFileStatuses = iterator.map { case (path, length) =>
