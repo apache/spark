@@ -274,8 +274,7 @@ _options: List[Option] = [
         doc=(
             "'compute.fail_on_ansi_mode' sets whether or not work with ANSI mode. "
             "If True, pandas API on Spark raises an exception if the underlying Spark is "
-            "working with ANSI mode enabled; otherwise, it tries to work based on the "
-            "config 'compute.ansi_mode_support'."
+            "working with ANSI mode enabled and the option 'compute.ansi_mode_support' is False."
         ),
         default=True,
         types=bool,
