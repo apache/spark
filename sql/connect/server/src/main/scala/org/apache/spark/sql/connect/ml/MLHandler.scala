@@ -122,12 +122,13 @@ private[connect] object MLHandler extends Logging {
     val mlCache = sessionHolder.mlCache
     val memoryControlEnabled = sessionHolder.mlCache.getMemoryControlEnabled
 
+    // Disable model training summary when memory control is enabled
+    // because training summary can't support
+    // size estimation and offloading.
+    SummaryUtils.enableTrainingSummary = !memoryControlEnabled
+
     if (memoryControlEnabled) {
       val maxModelSize = sessionHolder.mlCache.getModelMaxSize
-
-      // Disable model training summary because training summary can't support
-      // size estimation and offloading.
-      SummaryUtils.enableTrainingSummary = false
 
       // Note: Tree training stops early when the growing tree model exceeds
       //  `TreeConfig.trainingEarlyStopModelSizeThresholdInBytes`, to ensure the final

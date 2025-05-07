@@ -32,7 +32,6 @@ import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.util.PeriodicRDDCheckpointer
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.SizeEstimator
 
 
 private[spark] object GradientBoostedTrees extends Logging {
@@ -408,7 +407,7 @@ private[spark] object GradientBoostedTrees extends Logging {
       timer.stop("init validation")
     }
 
-    var accTreeSize = SizeEstimator.estimate(firstTreeModel)
+    var accTreeSize = firstTreeModel.estimatedSize
 
     var validM = 1
 
@@ -462,7 +461,7 @@ private[spark] object GradientBoostedTrees extends Logging {
       timer.stop(s"building tree $m")
       // Update partial model
       baseLearners(m) = model
-      accTreeSize += SizeEstimator.estimate(model)
+      accTreeSize += model.estimatedSize
       // Note: The setting of baseLearnerWeights is incorrect for losses other than SquaredError.
       //       Technically, the weight should be optimized for the particular loss.
       //       However, the behavior should be reasonable, though not optimal.
