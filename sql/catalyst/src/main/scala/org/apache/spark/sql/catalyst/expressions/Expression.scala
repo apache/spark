@@ -377,9 +377,6 @@ abstract class Expression extends TreeNode[Expression] {
 
   final override def validateNodePatterns(): Unit = {
     if (Utils.isTesting) {
-      if (toPatternBits(nodePatterns: _*).intersects(ExpressionPatternBitMask.mask)) {
-        println(s"${this.getClass.getName} returns Operator patterns")
-      }
       assert(
         !toPatternBits(nodePatterns: _*).intersects(ExpressionPatternBitMask.mask),
         s"${this.getClass.getName} returns Operator patterns")
