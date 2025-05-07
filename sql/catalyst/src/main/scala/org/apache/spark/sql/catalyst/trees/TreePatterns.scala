@@ -86,12 +86,14 @@ object TreePattern extends Enumeration  {
   val SQL_FUNCTION_EXPRESSION: Value = Value
   val SQL_SCALAR_FUNCTION: Value = Value
   val SUM: Value = Value
+  val TEMP_RESOLVED_COLUMN: Value = Value
   val TIME_WINDOW: Value = Value
   val TIME_ZONE_AWARE_EXPRESSION: Value = Value
   val TRUE_OR_FALSE_LITERAL: Value = Value
   val VARIANT_GET: Value = Value
   val WINDOW_EXPRESSION: Value = Value
   val WINDOW_TIME: Value = Value
+  val WITH_EXPRESSION: Value = Value
   val UPDATE_FIELDS: Value = Value
   val UPPER_OR_LOWER: Value = Value
   val UP_CAST: Value = Value
@@ -159,11 +161,9 @@ object TreePattern extends Enumeration  {
   val UNION: Value = Value
   val UNPIVOT: Value = Value
   val UPDATE_EVENT_TIME_WATERMARK_COLUMN: Value = Value
-  val TEMP_RESOLVED_COLUMN: Value = Value
   val TYPED_FILTER: Value = Value
   val WINDOW: Value = Value
   val WINDOW_GROUP_LIMIT: Value = Value
-  val WITH_EXPRESSION: Value = Value
   val WITH_WINDOW_DEFINITION: Value = Value
 
   // Unresolved Plan patterns (Alphabetically ordered)
