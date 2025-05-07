@@ -302,6 +302,11 @@ def _assert_pandas_almost_equal(
 
 
 class PandasOnSparkTestUtils:
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        ps.set_option("compute.ansi_mode_support", True, spark_session=cls.spark)
+
     def convert_str_to_lambda(self, func: str):
         """
         This function converts `func` str to lambda call
@@ -470,12 +475,11 @@ class PandasOnSparkTestUtils:
             return obj
 
 
-class PandasOnSparkTestCase(ReusedSQLTestCase, PandasOnSparkTestUtils):
+class PandasOnSparkTestCase(PandasOnSparkTestUtils, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
         super(PandasOnSparkTestCase, cls).setUpClass()
         cls.spark.conf.set(SPARK_CONF_ARROW_ENABLED, True)
-        ps.set_option("compute.ansi_mode_support", True, spark_session=cls.spark)
 
     def setUp(self):
         super().setUp()
