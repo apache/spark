@@ -614,7 +614,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   def collectFirstWithSubqueries[B](f: PartialFunction[PlanType, B]): Option[B] = {
     this.collectFirst(f).orElse {
-      subqueriesAll.foldLeft(Option.empty[B]) { (l, r) => l.orElse(r.collectFirst(f)) }
+      subqueriesAll.foldLeft(None: Option[B]) { (l, r) => l.orElse(r.collectFirst(f)) }
     }
   }
 

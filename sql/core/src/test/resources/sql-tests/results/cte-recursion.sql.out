@@ -321,18 +321,15 @@ WITH RECURSIVE t(col) (
   UNION ALL
   SELECT (SELECT max(col) FROM t)
 )
-SELECT * FROM t
+SELECT * FROM t LIMIT 5
 -- !query schema
-struct<>
+struct<col:int>
 -- !query output
-org.apache.spark.SparkException
-{
-  "errorClass" : "RECURSION_LEVEL_LIMIT_EXCEEDED",
-  "sqlState" : "42836",
-  "messageParameters" : {
-    "levelLimit" : "100"
-  }
-}
+1
+1
+1
+1
+1
 
 
 -- !query

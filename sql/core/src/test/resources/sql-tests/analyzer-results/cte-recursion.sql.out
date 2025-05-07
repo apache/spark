@@ -345,7 +345,7 @@ WITH RECURSIVE t(col) (
   UNION ALL
   SELECT (SELECT max(col) FROM t)
 )
-SELECT * FROM t
+SELECT * FROM t LIMIT 5
 -- !query analysis
 WithCTE
 :- CTERelationDef xxxx, false
@@ -360,9 +360,11 @@ WithCTE
 :              :        +- Project [1#x AS col#x]
 :              :           +- UnionLoopRef xxxx, [1#x], false
 :              +- OneRowRelation
-+- Project [col#x]
-   +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [col#x], false, false
++- GlobalLimit 5
+   +- LocalLimit 5
+      +- Project [col#x]
+         +- SubqueryAlias t
+            +- CTERelationRef xxxx, true, [col#x], false, false
 
 
 -- !query
