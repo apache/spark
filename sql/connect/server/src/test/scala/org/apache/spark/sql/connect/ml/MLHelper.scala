@@ -106,9 +106,8 @@ trait MLHelper extends SparkFunSuite with SparkConnectPlanTest {
       } else {
         1.0f
       }
-      val features = Array.tabulate[Double](numFeatures)(
-        index => scala.math.cos(i.toDouble * scala.math.pow(2, index))
-      )
+      val features = Array.tabulate[Double](numFeatures)(index =>
+        scala.math.cos(i.toDouble * scala.math.pow(2, index)))
       rows(i) = InternalRow(label, udt.serialize(Vectors.dense(features)))
     }
     val schema = StructType(

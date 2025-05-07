@@ -394,8 +394,7 @@ class MLSuite extends MLHelper {
       for (maxModelSize <- Seq(20000, 50000)) {
         sessionHolder.session.conf.set(
           Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE.key,
-          maxModelSize.toString
-        )
+          maxModelSize.toString)
         trainTreeModel(sessionHolder, estimator)
         val lastModelSize = org.apache.spark.ml.tree.impl.RandomForest.lastEarlyStoppedModelSize
         assert(lastModelSize < maxModelSize)
@@ -412,8 +411,7 @@ class MLSuite extends MLHelper {
     for (maxModelSize <- Seq(20000, 50000, 130000)) {
       sessionHolder.session.conf.set(
         Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE.key,
-        maxModelSize.toString
-      )
+        maxModelSize.toString)
       trainTreeModel(sessionHolder, getGBTClassifier)
       val lastModelSize =
         org.apache.spark.ml.tree.impl.GradientBoostedTrees.lastEarlyStoppedModelSize
@@ -478,7 +476,9 @@ class MLSuite extends MLHelper {
     }
   }
 
-  def trainTreeModel(sessionHolder: SessionHolder, estimator: proto.MlOperator.Builder): String = {
+  def trainTreeModel(
+      sessionHolder: SessionHolder,
+      estimator: proto.MlOperator.Builder): String = {
     val fitCommand = proto.MlCommand
       .newBuilder()
       .setFit(
