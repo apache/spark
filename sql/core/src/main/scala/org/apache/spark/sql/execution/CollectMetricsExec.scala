@@ -42,6 +42,10 @@ case class CollectMetricsExec(
     acc
   }
 
+  private[sql] def accumulatorId: Long = {
+    accumulator.id
+  }
+
   val metricsSchema: StructType = {
     DataTypeUtils.fromAttributes(metricExpressions.map(_.toAttribute))
   }
