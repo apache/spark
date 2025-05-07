@@ -821,7 +821,7 @@
       },
       "MODEL_SIZE_OVERFLOW_EXCEPTION" : {
         "message" : [
-          "The fitted or loaded model size exceeds <modelMaxSize> bytes.",
+          "The fitted or loaded model size is about <modelSize> bytes.",
           "Please fit or load a model smaller than <modelMaxSize> bytes,",
           "or increase Spark config 'spark.connect.session.connectML.mlCache.memoryControl.maxModelSize'."
         ]

@@ -185,23 +185,26 @@ class RandomForestClassifier @Since("1.4.0") (
     val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
 
     val (summaryModel, probabilityColName, predictionColName) = model.findSummaryModel()
-    val rfSummary = if (numClasses <= 2) {
-      new BinaryRandomForestClassificationTrainingSummaryImpl(
-        summaryModel.transform(dataset),
-        probabilityColName,
-        predictionColName,
-        $(labelCol),
-        weightColName,
-        Array(0.0))
-    } else {
-      new RandomForestClassificationTrainingSummaryImpl(
-        summaryModel.transform(dataset),
-        predictionColName,
-        $(labelCol),
-        weightColName,
-        Array(0.0))
+    if (SummaryUtils.enableTrainingSummary) {
+      val rfSummary = if (numClasses <= 2) {
+        new BinaryRandomForestClassificationTrainingSummaryImpl(
+          summaryModel.transform(dataset),
+          probabilityColName,
+          predictionColName,
+          $(labelCol),
+          weightColName,
+          Array(0.0))
+      } else {
+        new RandomForestClassificationTrainingSummaryImpl(
+          summaryModel.transform(dataset),
+          predictionColName,
+          $(labelCol),
+          weightColName,
+          Array(0.0))
+      }
+      model.setSummary(Some(rfSummary))
     }
-    model.setSummary(Some(rfSummary))
+    model
   }
 
   @Since("1.4.1")
@@ -260,6 +263,10 @@ class RandomForestClassificationModel private[ml] (
 
   @Since("1.4.0")
   override def trees: Array[DecisionTreeClassificationModel] = _trees
+
+  override def estimatedSize: Long = {
+    org.apache.spark.util.SizeEstimator.estimate(trees.map(_.rootNode))
+  }
 
   // Note: We may add support for weights (based on tree performance) later on.
   private lazy val _treeWeights: Array[Double] = Array.fill[Double](_trees.length)(1.0)

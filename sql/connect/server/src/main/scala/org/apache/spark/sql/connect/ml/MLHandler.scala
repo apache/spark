@@ -25,10 +25,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.tree.TreeConfig
-import org.apache.spark.ml.util.{MLWritable, Summary}
+import org.apache.spark.ml.util.{MLWritable, Summary, SummaryUtils}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
-import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.ml.Serializer.deserializeMethodArguments
 import org.apache.spark.sql.connect.service.SessionHolder
 
@@ -121,19 +120,25 @@ private[connect] object MLHandler extends Logging {
       mlCommand: proto.MlCommand): proto.MlCommandResult = {
 
     val mlCache = sessionHolder.mlCache
-    val maxModelSize = sessionHolder.mlCache.getMLCacheMaxSize
+    val memoryControlEnabled = sessionHolder.mlCache.getMemoryControlEnabled
 
-    // Note: Tree training stops early when the growing tree model exceeds
-    //  `TreeConfig.trainingEarlyStopModelSizeThresholdInBytes`, to ensure the final
-    // model size is lower than `maxModelSize`, set early-stop threshold to
-    // half of `maxModelSize`, because in each tree training iteration, the tree
-    // size will grow up to 2 times size.
-    TreeConfig.trainingEarlyStopModelSizeThresholdInBytes = maxModelSize / 2
+    if (memoryControlEnabled) {
+      val maxModelSize = sessionHolder.mlCache.getModelMaxSize
+
+      // Disable model training summary because training summary can't support
+      // size estimation and offloading.
+      SummaryUtils.enableTrainingSummary = false
+
+      // Note: Tree training stops early when the growing tree model exceeds
+      //  `TreeConfig.trainingEarlyStopModelSizeThresholdInBytes`, to ensure the final
+      // model size is lower than `maxModelSize`, set early-stop threshold to
+      // half of `maxModelSize`, because in each tree training iteration, the tree
+      // size will grow up to 2 times size.
+      TreeConfig.trainingEarlyStopModelSizeThresholdInBytes = maxModelSize / 2
+    }
 
     mlCommand.getCommandCase match {
       case proto.MlCommand.CommandCase.FIT =>
-        val offloadingEnabled = sessionHolder.session.conf.get(
-          Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED)
         val fitCmd = mlCommand.getFit
         val estimatorProto = fitCmd.getEstimator
         assert(estimatorProto.getType == proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR)
@@ -142,7 +147,7 @@ private[connect] object MLHandler extends Logging {
         val estimator =
           MLUtils.getEstimator(sessionHolder, estimatorProto, Some(fitCmd.getParams))
 
-        if (offloadingEnabled) {
+        if (memoryControlEnabled) {
           try {
             val estimatedModelSize = estimator.estimateModelSize(dataset)
             mlCache.checkModelSize(estimatedModelSize)

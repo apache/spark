@@ -102,6 +102,9 @@ private[spark] object RandomForest extends Logging with Serializable {
     run(instances, strategy, numTrees, featureSubsetStrategy, seed, None)
   }
 
+  // This member is only for testing code.
+  private[spark] var lastEarlyStoppedModelSize: Long = 0
+
   /**
    * Train a random forest with metadata and splits. This method is mainly for GBT,
    * in which bagged input can be reused among trees.
@@ -219,17 +222,18 @@ private[spark] object RandomForest extends Logging with Serializable {
 
       timer.stop("findBestSplits")
 
-      if (
-        earlyStopModelSizeThresholdInBytes > 0
-        && SizeEstimator.estimate(topNodes) > earlyStopModelSizeThresholdInBytes
-      ) {
-        earlyStop = true
-        logWarning(
-          "The random forest training stops early because the model size exceeds threshold."
-        )
+      if (earlyStopModelSizeThresholdInBytes > 0) {
+        val nodes = topNodes.map(_.toNode(prune))
+        val estimatedSize = SizeEstimator.estimate(nodes)
+        if (estimatedSize > earlyStopModelSizeThresholdInBytes){
+          earlyStop = true
+          logWarning(
+            "The random forest training stops early because the model size exceeds threshold."
+          )
+          lastEarlyStoppedModelSize = estimatedSize
+        }
       }
     }
-
     timer.stop("total")
 
     logInfo("Internal timing for DecisionTree:")

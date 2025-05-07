@@ -37,10 +37,12 @@ private[spark] case class MLCacheInvalidException(objectName: String)
       messageParameters = Map("objectName" -> objectName),
       cause = null)
 
-private[spark] case class MLModelSizeOverflowException(modelMaxSize: Long)
+private[spark] case class MLModelSizeOverflowException(modelSize: Long, modelMaxSize: Long)
     extends SparkException(
       errorClass = "CONNECT_ML.MODEL_SIZE_OVERFLOW_EXCEPTION",
-      messageParameters = Map("modelMaxSize" -> modelMaxSize.toString),
+      messageParameters = Map(
+            "modelSize" -> modelSize.toString, "modelMaxSize" -> modelMaxSize.toString
+      ),
       cause = null)
 
 private[spark] case class MLCacheSizeOverflowException(mlCacheMaxSize: Long)

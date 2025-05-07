@@ -93,6 +93,34 @@ trait MLHelper extends SparkFunSuite with SparkConnectPlanTest {
     createLocalRelationProto(schema, inputRows)
   }
 
+  def createRelationProtoForTreeModel(numFeatures: Int, numInstances: Int): proto.Relation = {
+    val udt = new VectorUDT()
+    val rows = new Array[InternalRow](numInstances)
+    for (i <- 0 until numInstances) {
+      val label = if (i < numInstances / 10) {
+        0.0f
+      } else if (i < numInstances / 2) {
+        1.0f
+      } else if (i < numInstances * 0.9) {
+        0.0f
+      } else {
+        1.0f
+      }
+      val features = Array.fill[Double](numFeatures)(i.toDouble)
+      rows(i) = InternalRow(label, udt.serialize(Vectors.dense(features)))
+    }
+    val schema = StructType(
+      Seq(
+        StructField("label", FloatType),
+        StructField("features", new VectorUDT(), false, Metadata.empty)))
+
+    val inputRows = rows.toSeq.map { row =>
+      val proj = UnsafeProjection.create(schema)
+      proj(row).copy()
+    }
+    createLocalRelationProto(DataTypeUtils.toAttributes(schema), inputRows, "UTC", Some(schema))
+  }
+
   def getLogisticRegression: proto.MlOperator.Builder =
     proto.MlOperator
       .newBuilder()
@@ -100,10 +128,29 @@ trait MLHelper extends SparkFunSuite with SparkConnectPlanTest {
       .setUid("LogisticRegression")
       .setType(proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR)
 
+  def getRandomForestClassifier: proto.MlOperator.Builder =
+    proto.MlOperator
+      .newBuilder()
+      .setName("org.apache.spark.ml.classification.RandomForestClassifier")
+      .setUid("RandomForestClassifier")
+      .setType(proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR)
+
+  def getGBTClassifier: proto.MlOperator.Builder =
+    proto.MlOperator
+      .newBuilder()
+      .setName("org.apache.spark.ml.classification.GBTClassifier")
+      .setUid("GBTClassifier")
+      .setType(proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR)
+
   def getMaxIter: proto.MlParams.Builder =
     proto.MlParams
       .newBuilder()
       .putParams("maxIter", proto.Expression.Literal.newBuilder().setInteger(2).build())
+
+  def getMaxDepth(maxDepth: Int): proto.MlParams.Builder =
+    proto.MlParams
+      .newBuilder()
+      .putParams("maxDepth", proto.Expression.Literal.newBuilder().setInteger(maxDepth).build())
 
   def getRegressorEvaluator: proto.MlOperator.Builder =
     proto.MlOperator

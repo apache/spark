@@ -274,6 +274,9 @@ private[spark] object GradientBoostedTrees extends Logging {
     errSum.map(_ / weightSum)
   }
 
+  // This member is only for testing code.
+  private[spark] var lastEarlyStoppedModelSize: Long = 0
+
   /**
    * Internal method for performing regression using trees as base learners.
    * @param input training dataset
@@ -491,6 +494,7 @@ private[spark] object GradientBoostedTrees extends Logging {
         ) {
           earlyStop = true
           validM = m + 1
+          lastEarlyStoppedModelSize = accTreeSize
         }
       }
       m += 1

@@ -104,7 +104,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       throw MLCacheSizeOverflowException(getMLCacheMaxSize)
     }
     if (estimatedModelSize > getModelMaxSize) {
-      throw MLModelSizeOverflowException(getModelMaxSize)
+      throw MLModelSizeOverflowException(estimatedModelSize, getModelMaxSize)
     }
   }
 
