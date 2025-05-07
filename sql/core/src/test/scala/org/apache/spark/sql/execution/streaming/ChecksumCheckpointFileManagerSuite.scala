@@ -26,6 +26,11 @@ import org.apache.hadoop.fs._
 
 import org.apache.spark.SparkException
 
+/**
+ * This inherits tests for the [[CheckpointFileManager]] from [[CheckpointFileManagerTests]].
+ * It also adds specific test cases for the [[ChecksumCheckpointFileManager]] e.g. test cases
+ * to detect corrupt files, non-sequential reads, backward-compatibility etc.
+ */
 abstract class ChecksumCheckpointFileManagerSuite extends CheckpointFileManagerTestsOnLocalFs {
   import ChecksumCheckpointFileManager._
 
