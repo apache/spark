@@ -83,6 +83,7 @@ Upgrading from PySpark 3.5 to 4.0
 * In Spark 4.0, ``compute.ops_on_diff_frames`` is on by default. To restore the previous behavior, set ``compute.ops_on_diff_frames`` to ``false``.
 * In Spark 4.0, the data type ``YearMonthIntervalType`` in ``DataFrame.collect`` no longer returns the underlying integers. To restore the previous behavior, set ``PYSPARK_YM_INTERVAL_LEGACY`` environment variable to ``1``.
 * In Spark 4.0, items other than functions (e.g. ``DataFrame``, ``Column``, ``StructType``) have been removed from the wildcard import ``from pyspark.sql.functions import *``, you should import these items from proper modules (e.g. ``from pyspark.sql import DataFrame, Column``, ``from pyspark.sql.types import StructType``).
+* In Spark 4.0, pandas API on Spark will raise an exception if the underlying Spark is working with ANSI mode enabled that is enabled by default, as it will not work properly with ANSI mode. To make it work, you need to explicitly disable ANSI mode by setting ``spark.sql.ansi.enabled`` to ``false``. Alternatively you can set a pandas-on-spark option ``compute.fail_on_ansi_mode`` to ``False`` to force it to work, although it can cause unexpected behavior.
 
 
 Upgrading from PySpark 3.3 to 3.4
