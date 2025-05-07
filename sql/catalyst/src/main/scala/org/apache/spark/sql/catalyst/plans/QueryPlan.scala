@@ -35,7 +35,8 @@ import org.apache.spark.sql.catalyst.trees.TreePatternBits.toPatternBits
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.util.{BestEffortLazyVal, TransientBestEffortLazyVal, Utils}
+import org.apache.spark.util.{BestEffortLazyVal, TransientBestEffortLazyVal}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
 /**
