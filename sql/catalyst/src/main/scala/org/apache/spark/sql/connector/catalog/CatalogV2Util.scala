@@ -611,9 +611,8 @@ private[sql] object CatalogV2Util {
           defaultValue.getSql
         case _ =>
           throw SparkException.internalError(
-            s"""Can't generate SQL for $defaultValue. The connector expression couldn't
-               |be converted to Catalyst and there is no provided SQL representation.
-               |""".stripMargin)
+            s"Can't generate SQL for $defaultValue. The connector expression couldn't be " +
+            "converted to Catalyst and there is no provided SQL representation.")
       }
     } else {
       defaultValue.getSql

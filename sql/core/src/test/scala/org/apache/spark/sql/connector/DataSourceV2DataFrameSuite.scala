@@ -19,12 +19,13 @@ package org.apache.spark.sql.connector
 
 import java.util.Collections
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, Identifier, InMemoryTableCatalog, TableInfo}
-import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, GeneralScalarExpression, LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, Cast => V2Cast, GeneralScalarExpression, LiteralValue, Transform}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{CreateTableExec, DataSourceV2Relation, ReplaceTableExec}
@@ -488,7 +489,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("write with expression-based default values") {
+  test("write with supported expression-based default values") {
     val tableName = "testcat.ns1.ns2.tbl"
     withTable(tableName) {
       val columns = Array(
@@ -511,6 +512,56 @@ class DataSourceV2DataFrameSuite
       checkAnswer(
         spark.table(tableName),
         Seq(Row(1, 123), Row(2, 123), Row(3, 123)))
+    }
+  }
+
+  test("write with unsupported expression-based default values (no SQL provided)") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val columns = Array(
+        Column.create("c1", IntegerType),
+        Column.create(
+          "c2",
+          IntegerType,
+          false, /* not nullable */
+          null, /* no comment */
+          new ColumnDefaultValue(
+            ApplyTransform(
+              "UNKNOWN_TRANSFORM",
+              Seq(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
+            LiteralValue(123, IntegerType)),
+          "{}"))
+      val e = intercept[SparkException] {
+        val tableInfo = new TableInfo.Builder().withColumns(columns).build()
+        catalog("testcat").createTable(Identifier.of(Array("ns1", "ns2"), "tbl"), tableInfo)
+        val df = Seq(1, 2, 3).toDF("c1")
+        df.writeTo(tableName).append()
+      }
+      assert(e.getMessage.contains("connector expression couldn't be converted to Catalyst"))
+    }
+  }
+
+  test("write with unsupported expression-based default values (with SQL provided)") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val columns = Array(
+        Column.create("c1", IntegerType),
+        Column.create(
+          "c2",
+          IntegerType,
+          false, /* not nullable */
+          null, /* no comment */
+          new ColumnDefaultValue(
+            "100 + 23",
+            ApplyTransform(
+              "INVALID_TRANSFORM",
+              Seq(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
+            LiteralValue(123, IntegerType)),
+          "{}"))
+      val tableInfo = new TableInfo.Builder().withColumns(columns).build()
+      catalog("testcat").createTable(Identifier.of(Array("ns1", "ns2"), "tbl"), tableInfo)
+      val df = Seq(1, 2, 3).toDF("c1")
+      df.writeTo(tableName).append()
     }
   }
 
