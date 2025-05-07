@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ResolvedFieldName, ResolvedTable, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
-import org.apache.spark.sql.catalyst.expressions.{Expression, TableConstraint, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{CheckConstraint, Expression, TableConstraint, Unevaluable}
 import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{TableCatalog, TableChange}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -289,12 +289,9 @@ case class AlterTableCollation(
   protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
 }
 
-/**
- * The logical plan of the ALTER TABLE ... ADD CONSTRAINT command.
- */
-case class AddConstraint(
-    table: LogicalPlan,
-    tableConstraint: TableConstraint) extends AlterTableCommand {
+abstract class AddConstraintBase extends AlterTableCommand {
+  def tableConstraint: TableConstraint
+
   override def changes: Seq[TableChange] = {
     val constraint = tableConstraint.toV2Constraint
     val validatedTableVersion = table match {
@@ -305,6 +302,24 @@ case class AddConstraint(
     }
     Seq(TableChange.addConstraint(constraint, validatedTableVersion))
   }
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... ADD CONSTRAINT command for Primary Key, Foreign Key,
+ * and Unique constraints.
+ */
+case class AddConstraint(
+    override val table: LogicalPlan,
+    override val tableConstraint: TableConstraint) extends AddConstraintBase {
+  protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... ADD CONSTRAINT command for Check constraints.
+ */
+case class AddCheckConstraint(
+    override val table: LogicalPlan,
+    override val tableConstraint: CheckConstraint) extends AddConstraintBase {
 
   protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
 }

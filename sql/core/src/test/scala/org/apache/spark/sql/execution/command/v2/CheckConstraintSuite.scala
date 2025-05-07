@@ -216,6 +216,25 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("Alter table add check constraint -- violation") {
+    getConstraintCharacteristics().foreach { case (characteristic, expectedDDL) =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
+        assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
+        sql(s"INSERT INTO $t VALUES (-1, 'a'), (2, 'b')")
+        val error = intercept[SparkRuntimeException] {
+          sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (id > 0) $characteristic")
+        }
+        checkError(
+          exception = error,
+          condition = "NEW_CHECK_CONSTRAINT_VIOLATION",
+          parameters = Map("expression" -> "id > 0", "tableName" -> "tbl")
+        )
+        assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
+      }
+    }
+  }
+
   test("Add duplicated check constraint") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")

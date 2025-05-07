@@ -1037,10 +1037,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)
 
-      case AddConstraint(_: ResolvedTable, check: CheckConstraint) if !check.deterministic =>
-        check.child.failAnalysis(
+      case a: AddCheckConstraint if !a.tableConstraint.deterministic =>
+        a.tableConstraint.child.failAnalysis(
           errorClass = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
-          messageParameters = Map("checkCondition" -> check.condition)
+          messageParameters = Map("checkCondition" -> a.tableConstraint.condition)
         )
 
       case AlterColumns(table: ResolvedTable, specs) =>
