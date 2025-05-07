@@ -25,7 +25,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils.REDACTION_REPLACEMENT_TEXT
 
-private[spark] case class KafkaTokenClusterConf(
+case class KafkaTokenClusterConf(
     identifier: String,
     authBootstrapServers: String,
     targetServersRegex: String,
@@ -57,7 +57,7 @@ private[spark] case class KafkaTokenClusterConf(
     s"specifiedKafkaParams=${KafkaRedactionUtil.redactParams(specifiedKafkaParams.toSeq)}}"
 }
 
-private [kafka010] object KafkaTokenSparkConf extends Logging {
+object KafkaTokenSparkConf extends Logging {
   val CLUSTERS_CONFIG_PREFIX = "spark.kafka.clusters."
   val DEFAULT_TARGET_SERVERS_REGEX = ".*"
   val DEFAULT_SASL_KERBEROS_SERVICE_NAME = "kafka"

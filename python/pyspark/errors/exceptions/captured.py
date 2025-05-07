@@ -122,8 +122,10 @@ class CapturedException(PySparkException):
         assert SparkContext._gateway is not None
 
         gw = SparkContext._gateway
-        if self._origin is not None and is_instance_of(
-            gw, self._origin, "org.apache.spark.SparkThrowable"
+        if (
+            self._origin is not None
+            and is_instance_of(gw, self._origin, "org.apache.spark.SparkThrowable")
+            and hasattr(self._origin, "getMessageParameters")
         ):
             return dict(self._origin.getMessageParameters())
         else:
@@ -135,8 +137,10 @@ class CapturedException(PySparkException):
 
         assert SparkContext._gateway is not None
         gw = SparkContext._gateway
-        if self._origin is not None and is_instance_of(
-            gw, self._origin, "org.apache.spark.SparkThrowable"
+        if (
+            self._origin is not None
+            and is_instance_of(gw, self._origin, "org.apache.spark.SparkThrowable")
+            and hasattr(self._origin, "getSqlState")
         ):
             return self._origin.getSqlState()
         else:
@@ -149,8 +153,10 @@ class CapturedException(PySparkException):
         assert SparkContext._gateway is not None
         gw = SparkContext._gateway
 
-        if self._origin is not None and is_instance_of(
-            gw, self._origin, "org.apache.spark.SparkThrowable"
+        if (
+            self._origin is not None
+            and is_instance_of(gw, self._origin, "org.apache.spark.SparkThrowable")
+            and hasattr(self._origin, "getMessageParameters")
         ):
             errorClass = self._origin.getCondition()
             messageParameters = self._origin.getMessageParameters()
@@ -170,8 +176,10 @@ class CapturedException(PySparkException):
         assert SparkContext._gateway is not None
 
         gw = SparkContext._gateway
-        if self._origin is not None and is_instance_of(
-            gw, self._origin, "org.apache.spark.SparkThrowable"
+        if (
+            self._origin is not None
+            and is_instance_of(gw, self._origin, "org.apache.spark.SparkThrowable")
+            and hasattr(self._origin, "getQueryContext")
         ):
             contexts: List[BaseQueryContext] = []
             for q in self._origin.getQueryContext():

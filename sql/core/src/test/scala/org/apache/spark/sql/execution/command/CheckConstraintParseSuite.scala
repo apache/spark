@@ -316,4 +316,87 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
     }
   }
 
+  test("NOT ENFORCED is not supported for CHECK -- table level") {
+    notEnforcedConstraintCharacteristics.foreach { case (c1, c2, _) =>
+      val characteristic = if (c2.isEmpty) {
+        c1
+      } else {
+        s"$c1 $c2"
+      }
+      val sql =
+        s"""
+           |CREATE TABLE a.b.t (a INT, b STRING, CONSTRAINT C1 CHECK (a > 0) $characteristic)
+           |""".stripMargin
+
+      val expectedContext = ExpectedContext(
+        fragment = s"CONSTRAINT C1 CHECK (a > 0) $characteristic"
+      )
+
+      checkError(
+        exception = intercept[ParseException] {
+          parsePlan(sql)
+        },
+        condition = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
+        parameters = Map(
+          "characteristic" -> "NOT ENFORCED",
+          "constraintType" -> "CHECK"),
+        queryContext = Array(expectedContext))
+    }
+  }
+
+  test("NOT ENFORCED is not supported for CHECK -- column level") {
+    notEnforcedConstraintCharacteristics.foreach { case (c1, c2, _) =>
+      val characteristic = if (c2.isEmpty) {
+        c1
+      } else {
+        s"$c1 $c2"
+      }
+      val sql =
+        s"""
+           |CREATE TABLE a.b.t (a INT CHECK (a > 0) $characteristic, b STRING)
+           |""".stripMargin
+
+      val expectedContext = ExpectedContext(
+        fragment = s"CHECK (a > 0) $characteristic"
+      )
+
+      checkError(
+        exception = intercept[ParseException] {
+          parsePlan(sql)
+        },
+        condition = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
+        parameters = Map(
+          "characteristic" -> "NOT ENFORCED",
+          "constraintType" -> "CHECK"),
+        queryContext = Array(expectedContext))
+    }
+  }
+
+  test("NOT ENFORCED is not supported for CHECK -- ALTER TABLE") {
+    notEnforcedConstraintCharacteristics.foreach { case (c1, c2, _) =>
+      val characteristic = if (c2.isEmpty) {
+        c1
+      } else {
+        s"$c1 $c2"
+      }
+      val sql =
+        s"""
+           |ALTER TABLE a.b.t ADD CONSTRAINT C1 CHECK (a > 0) $characteristic
+           |""".stripMargin
+
+      val expectedContext = ExpectedContext(
+        fragment = s"CONSTRAINT C1 CHECK (a > 0) $characteristic"
+      )
+
+      checkError(
+        exception = intercept[ParseException] {
+          parsePlan(sql)
+        },
+        condition = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
+        parameters = Map(
+          "characteristic" -> "NOT ENFORCED",
+          "constraintType" -> "CHECK"),
+        queryContext = Array(expectedContext))
+    }
+  }
 }

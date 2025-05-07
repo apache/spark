@@ -15,9 +15,9 @@ AS testData(a, b), false, true, LocalTempView, UNSUPPORTED, true
 -- !query
 SELECT udf(a + b), b, udf(SUM(a - b)) FROM testData GROUP BY udf(a + b), b WITH CUBE
 -- !query analysis
-Aggregate [cast(udf(cast((a#x + b#x) as string)) as int)#x, b#x, spark_grouping_id#xL], [cast(udf(cast((a#x + b#x) as string)) as int)#x AS udf((a + b))#x, b#x, cast(udf(cast(sum((a#x - b#x)) as string)) as bigint) AS udf(sum((a - b)))#xL]
-+- Expand [[a#x, b#x, cast(udf(cast((a#x + b#x) as string)) as int)#x, b#x, 0], [a#x, b#x, cast(udf(cast((a#x + b#x) as string)) as int)#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, cast(udf(cast((a#x + b#x) as string)) as int)#x, b#x, spark_grouping_id#xL]
-   +- Project [a#x, b#x, cast(udf(cast((a#x + b#x) as string)) as int) AS cast(udf(cast((a#x + b#x) as string)) as int)#x, b#x AS b#x]
+Aggregate [udf((a + b))#x, b#x, spark_grouping_id#xL], [udf((a + b))#x AS udf((a + b))#x, b#x, cast(udf(cast(sum((a#x - b#x)) as string)) as bigint) AS udf(sum((a - b)))#xL]
++- Expand [[a#x, b#x, udf((a + b))#x, b#x, 0], [a#x, b#x, udf((a + b))#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, udf((a + b))#x, b#x, spark_grouping_id#xL]
+   +- Project [a#x, b#x, cast(udf(cast((a#x + b#x) as string)) as int) AS udf((a + b))#x, b#x AS b#x]
       +- SubqueryAlias testdata
          +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
@@ -29,9 +29,9 @@ Aggregate [cast(udf(cast((a#x + b#x) as string)) as int)#x, b#x, spark_grouping_
 -- !query
 SELECT udf(a), udf(b), SUM(b) FROM testData GROUP BY udf(a), b WITH CUBE
 -- !query analysis
-Aggregate [cast(udf(cast(a#x as string)) as int)#x, b#x, spark_grouping_id#xL], [cast(udf(cast(a#x as string)) as int)#x AS udf(a)#x, cast(udf(cast(b#x as string)) as int) AS udf(b)#x, sum(b#x) AS sum(b)#xL]
-+- Expand [[a#x, b#x, cast(udf(cast(a#x as string)) as int)#x, b#x, 0], [a#x, b#x, cast(udf(cast(a#x as string)) as int)#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, cast(udf(cast(a#x as string)) as int)#x, b#x, spark_grouping_id#xL]
-   +- Project [a#x, b#x, cast(udf(cast(a#x as string)) as int) AS cast(udf(cast(a#x as string)) as int)#x, b#x AS b#x]
+Aggregate [udf(a)#x, b#x, spark_grouping_id#xL], [udf(a)#x AS udf(a)#x, cast(udf(cast(b#x as string)) as int) AS udf(b)#x, sum(b#x) AS sum(b)#xL]
++- Expand [[a#x, b#x, udf(a)#x, b#x, 0], [a#x, b#x, udf(a)#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, udf(a)#x, b#x, spark_grouping_id#xL]
+   +- Project [a#x, b#x, cast(udf(cast(a#x as string)) as int) AS udf(a)#x, b#x AS b#x]
       +- SubqueryAlias testdata
          +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
@@ -43,9 +43,9 @@ Aggregate [cast(udf(cast(a#x as string)) as int)#x, b#x, spark_grouping_id#xL], 
 -- !query
 SELECT udf(a + b), b, SUM(a - b) FROM testData GROUP BY a + b, b WITH ROLLUP
 -- !query analysis
-Aggregate [(a#x + b#x)#x, b#x, spark_grouping_id#xL], [cast(udf(cast((a#x + b#x)#x as string)) as int) AS udf((a + b))#x, b#x, sum((a#x - b#x)) AS sum((a - b))#xL]
-+- Expand [[a#x, b#x, (a#x + b#x)#x, b#x, 0], [a#x, b#x, (a#x + b#x)#x, null, 1], [a#x, b#x, null, null, 3]], [a#x, b#x, (a#x + b#x)#x, b#x, spark_grouping_id#xL]
-   +- Project [a#x, b#x, (a#x + b#x) AS (a#x + b#x)#x, b#x AS b#x]
+Aggregate [(a + b)#x, b#x, spark_grouping_id#xL], [cast(udf(cast((a + b)#x as string)) as int) AS udf((a + b))#x, b#x, sum((a#x - b#x)) AS sum((a - b))#xL]
++- Expand [[a#x, b#x, (a + b)#x, b#x, 0], [a#x, b#x, (a + b)#x, null, 1], [a#x, b#x, null, null, 3]], [a#x, b#x, (a + b)#x, b#x, spark_grouping_id#xL]
+   +- Project [a#x, b#x, (a#x + b#x) AS (a + b)#x, b#x AS b#x]
       +- SubqueryAlias testdata
          +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
@@ -57,9 +57,9 @@ Aggregate [(a#x + b#x)#x, b#x, spark_grouping_id#xL], [cast(udf(cast((a#x + b#x)
 -- !query
 SELECT udf(a), b, udf(SUM(b)) FROM testData GROUP BY udf(a), b WITH ROLLUP
 -- !query analysis
-Aggregate [cast(udf(cast(a#x as string)) as int)#x, b#x, spark_grouping_id#xL], [cast(udf(cast(a#x as string)) as int)#x AS udf(a)#x, b#x, cast(udf(cast(sum(b#x) as string)) as bigint) AS udf(sum(b))#xL]
-+- Expand [[a#x, b#x, cast(udf(cast(a#x as string)) as int)#x, b#x, 0], [a#x, b#x, cast(udf(cast(a#x as string)) as int)#x, null, 1], [a#x, b#x, null, null, 3]], [a#x, b#x, cast(udf(cast(a#x as string)) as int)#x, b#x, spark_grouping_id#xL]
-   +- Project [a#x, b#x, cast(udf(cast(a#x as string)) as int) AS cast(udf(cast(a#x as string)) as int)#x, b#x AS b#x]
+Aggregate [udf(a)#x, b#x, spark_grouping_id#xL], [udf(a)#x AS udf(a)#x, b#x, cast(udf(cast(sum(b#x) as string)) as bigint) AS udf(sum(b))#xL]
++- Expand [[a#x, b#x, udf(a)#x, b#x, 0], [a#x, b#x, udf(a)#x, null, 1], [a#x, b#x, null, null, 3]], [a#x, b#x, udf(a)#x, b#x, spark_grouping_id#xL]
+   +- Project [a#x, b#x, cast(udf(cast(a#x as string)) as int) AS udf(a)#x, b#x AS b#x]
       +- SubqueryAlias testdata
          +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
@@ -404,9 +404,9 @@ Aggregate [k#x, b#x, spark_grouping_id#xL], [k#x, b#x, sum((a#x - b#x)) AS sum((
 -- !query
 SELECT udf(a + b), udf(udf(b)) AS k, SUM(a - b) FROM testData GROUP BY a + b, k GROUPING SETS(k)
 -- !query analysis
-Aggregate [(a#x + b#x)#x, k#x, spark_grouping_id#xL], [cast(udf(cast((a#x + b#x)#x as string)) as int) AS udf((a + b))#x, k#x, sum((a#x - b#x)) AS sum((a - b))#xL]
-+- Expand [[a#x, b#x, null, k#x, 2]], [a#x, b#x, (a#x + b#x)#x, k#x, spark_grouping_id#xL]
-   +- Project [a#x, b#x, (a#x + b#x) AS (a#x + b#x)#x, cast(udf(cast(cast(udf(cast(b#x as string)) as int) as string)) as int) AS k#x]
+Aggregate [(a + b)#x, k#x, spark_grouping_id#xL], [cast(udf(cast((a + b)#x as string)) as int) AS udf((a + b))#x, k#x, sum((a#x - b#x)) AS sum((a - b))#xL]
++- Expand [[a#x, b#x, null, k#x, 2]], [a#x, b#x, (a + b)#x, k#x, spark_grouping_id#xL]
+   +- Project [a#x, b#x, (a#x + b#x) AS (a + b)#x, cast(udf(cast(cast(udf(cast(b#x as string)) as int) as string)) as int) AS k#x]
       +- SubqueryAlias testdata
          +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]

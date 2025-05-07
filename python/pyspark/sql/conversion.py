@@ -345,6 +345,9 @@ class LocalDataToArrowConversion:
             if isinstance(item, dict):
                 for i, col in enumerate(column_names):
                     pylist[i].append(column_convs[i](item.get(col)))
+            elif item is None:
+                for i, col in enumerate(column_names):
+                    pylist[i].append(None)
             else:
                 if len(item) != len(column_names):
                     raise PySparkValueError(
