@@ -41,9 +41,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   private val helperID = "______ML_CONNECT_HELPER______"
   private val modelClassNameFile = "__model_class_name__"
 
-  // TODO: rename it to `totalInMemorySizeBytes` because it only counts the in-memory
-  //  part data size.
-  private[ml] val totalSizeBytes: AtomicLong = new AtomicLong(0)
+  private[ml] val totalMLCacheInMemorySizeBytes: AtomicLong = new AtomicLong(0)
 
   val offloadedModelsDir: Path = {
     val path = Paths.get(
@@ -52,27 +50,29 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       sessionHolder.sessionId)
     Files.createDirectories(path)
   }
-  private[spark] def getOffloadingEnabled: Boolean = {
-    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED)
+  private[spark] def getMemoryControlEnabled: Boolean = {
+    sessionHolder.session.conf.get(
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED)
   }
 
   private def getMaxInMemoryCacheSizeKB: Long = {
     sessionHolder.session.conf.get(
-      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_MAX_IN_MEMORY_SIZE) / 1024
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE) / 1024
   }
 
   private def getOffloadingTimeoutMinute: Long = {
-    sessionHolder.session.conf.get(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_TIMEOUT)
+    sessionHolder.session.conf.get(
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_OFFLOADING_TIMEOUT)
   }
 
   private[ml] case class CacheItem(obj: Object, sizeBytes: Long)
   private[ml] val cachedModel: ConcurrentMap[String, CacheItem] = {
-    if (getOffloadingEnabled) {
+    if (getMemoryControlEnabled) {
       CacheBuilder
         .newBuilder()
         .softValues()
         .removalListener((removed: RemovalNotification[String, CacheItem]) =>
-          totalSizeBytes.addAndGet(-removed.getValue.sizeBytes))
+          totalMLCacheInMemorySizeBytes.addAndGet(-removed.getValue.sizeBytes))
         .maximumWeight(getMaxInMemoryCacheSizeKB)
         .weigher((key: String, value: CacheItem) => {
           Math.ceil(value.sizeBytes.toDouble / 1024).toInt
@@ -89,6 +89,25 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     new ConcurrentHashMap[String, Summary]()
   }
 
+  private[ml] val totalMLCacheSizeBytes: AtomicLong = new AtomicLong(0)
+  private[spark] def getMLCacheMaxSize: Long = {
+    sessionHolder.session.conf.get(
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_SIZE)
+  }
+  private[spark] def getModelMaxSize: Long = {
+    sessionHolder.session.conf.get(
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE)
+  }
+
+  def checkModelSize(estimatedModelSize: Long): Unit = {
+    if (totalMLCacheSizeBytes.get() + estimatedModelSize > getMLCacheMaxSize) {
+      throw MLCacheSizeOverflowException(getMLCacheMaxSize)
+    }
+    if (estimatedModelSize > getModelMaxSize) {
+      throw MLModelSizeOverflowException(estimatedModelSize, getModelMaxSize)
+    }
+  }
+
   private def estimateObjectSize(obj: Object): Long = {
     obj match {
       case model: Model[_] =>
@@ -100,12 +119,12 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   }
 
   private[spark] def checkSummaryAvail(): Unit = {
-    if (getOffloadingEnabled) {
+    if (getMemoryControlEnabled) {
       throw MlUnsupportedException(
         "SparkML 'model.summary' and 'model.evaluate' APIs are not supported' when " +
           "Spark Connect session ML cache offloading is enabled. You can use APIs in " +
           "'pyspark.ml.evaluation' instead, or you can set Spark config " +
-          "'spark.connect.session.connectML.mlCache.offloading.enabled' to 'false' to " +
+          "'spark.connect.session.connectML.mlCache.memoryControl.enabled' to 'false' to " +
           "disable Spark Connect session ML cache offloading.")
     }
   }
@@ -124,18 +143,21 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       checkSummaryAvail()
       cachedSummary.put(objectId, obj.asInstanceOf[Summary])
     } else if (obj.isInstanceOf[Model[_]]) {
-      val sizeBytes = if (getOffloadingEnabled) {
-        estimateObjectSize(obj)
+      val sizeBytes = if (getMemoryControlEnabled) {
+        val _sizeBytes = estimateObjectSize(obj)
+        checkModelSize(_sizeBytes)
+        _sizeBytes
       } else {
-        0L // Don't need to calculate size if disables offloading.
+        0L // Don't need to calculate size if disables memory-control.
       }
       cachedModel.put(objectId, CacheItem(obj, sizeBytes))
-      if (getOffloadingEnabled) {
+      if (getMemoryControlEnabled) {
         val savePath = offloadedModelsDir.resolve(objectId)
         obj.asInstanceOf[MLWritable].write.saveToLocal(savePath.toString)
         Files.writeString(savePath.resolve(modelClassNameFile), obj.getClass.getName)
+        totalMLCacheInMemorySizeBytes.addAndGet(sizeBytes)
+        totalMLCacheSizeBytes.addAndGet(sizeBytes)
       }
-      totalSizeBytes.addAndGet(sizeBytes)
     } else {
       throw new RuntimeException("'MLCache.register' only accepts model or summary objects.")
     }
@@ -155,7 +177,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     } else {
       var obj: Object =
         Option(cachedModel.get(refId)).map(_.obj).getOrElse(cachedSummary.get(refId))
-      if (obj == null && getOffloadingEnabled) {
+      if (obj == null && getMemoryControlEnabled) {
         val loadPath = offloadedModelsDir.resolve(refId)
         if (Files.isDirectory(loadPath)) {
           val className = Files.readString(loadPath.resolve(modelClassNameFile))
@@ -166,7 +188,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
             loadFromLocal = true)
           val sizeBytes = estimateObjectSize(obj)
           cachedModel.put(refId, CacheItem(obj, sizeBytes))
-          totalSizeBytes.addAndGet(sizeBytes)
+          totalMLCacheInMemorySizeBytes.addAndGet(sizeBytes)
         }
       }
       obj
@@ -176,7 +198,8 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   def _removeModel(refId: String): Boolean = {
     val removedModel = cachedModel.remove(refId)
     val removedFromMem = removedModel != null
-    val removedFromDisk = if (getOffloadingEnabled) {
+    val removedFromDisk = if (getMemoryControlEnabled) {
+      totalMLCacheSizeBytes.addAndGet(-removedModel.sizeBytes)
       val offloadingPath = new File(offloadedModelsDir.resolve(refId).toString)
       if (offloadingPath.exists()) {
         FileUtils.deleteDirectory(offloadingPath)
@@ -213,7 +236,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     val size = cachedModel.size()
     cachedModel.clear()
     cachedSummary.clear()
-    if (getOffloadingEnabled) {
+    if (getMemoryControlEnabled) {
       FileUtils.cleanDirectory(new File(offloadedModelsDir.toString))
     }
     size

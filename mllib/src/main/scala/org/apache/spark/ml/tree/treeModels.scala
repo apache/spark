@@ -116,6 +116,10 @@ private[spark] trait DecisionTreeModel {
   def predictLeaf(features: Vector): Double = {
     leafIndices(rootNode.predictImpl(features)).toDouble
   }
+
+  def getEstimatedSize(): Long = {
+    org.apache.spark.util.SizeEstimator.estimate(rootNode)
+  }
 }
 
 /**
@@ -167,6 +171,10 @@ private[spark] trait TreeEnsembleModel[M <: DecisionTreeModel] {
 
   private[ml] def getLeafField(leafCol: String) = {
     new AttributeGroup(leafCol, attrs = trees.map(_.leafAttr)).toStructField()
+  }
+
+  def getEstimatedSize(): Long = {
+    org.apache.spark.util.SizeEstimator.estimate(trees.map(_.rootNode))
   }
 }
 
@@ -582,4 +590,8 @@ private[ml] object EnsembleModelReadWrite {
       nodeData.map(nd => EnsembleNodeData(treeID, nd))
     }
   }
+}
+
+private[spark] object TreeConfig {
+  private[spark] var trainingEarlyStopModelSizeThresholdInBytes: Long = 0L
 }

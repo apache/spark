@@ -811,6 +811,21 @@
           "Cannot retrieve <objectName> from the ML cache. It is probably because the entry has been evicted."
         ]
       },
+      "ML_CACHE_SIZE_OVERFLOW_EXCEPTION" : {
+        "message" : [
+          "The model cache size in current session is about to exceed",
+          "<mlCacheMaxSize> bytes.",
+          "Please delete existing cached model by executing 'del model' in python client before fitting new model or loading new model,",
+          "or increase Spark config 'spark.connect.session.connectML.mlCache.memoryControl.maxSize'."
+        ]
+      },
+      "MODEL_SIZE_OVERFLOW_EXCEPTION" : {
+        "message" : [
+          "The fitted or loaded model size is about <modelSize> bytes.",
+          "Please fit or load a model smaller than <modelMaxSize> bytes,",
+          "or increase Spark config 'spark.connect.session.connectML.mlCache.memoryControl.maxModelSize'."
+        ]
+      },
       "UNSUPPORTED_EXCEPTION" : {
         "message" : [
           "<message>"

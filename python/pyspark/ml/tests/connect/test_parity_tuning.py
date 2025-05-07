@@ -29,9 +29,9 @@ class TuningParityWithMLCacheOffloadingEnabledTests(TuningTestsMixin, ReusedConn
     @classmethod
     def conf(cls):
         conf = super().conf()
-        conf.set("spark.connect.session.connectML.mlCache.offloading.enabled", "true")
-        conf.set("spark.connect.session.connectML.mlCache.offloading.maxInMemorySize", "1024")
-        conf.set("spark.connect.session.connectML.mlCache.offloading.timeout", "1")
+        conf.set("spark.connect.session.connectML.mlCache.memoryControl.enabled", "true")
+        conf.set("spark.connect.session.connectML.mlCache.memoryControl.maxInMemorySize", "1024")
+        conf.set("spark.connect.session.connectML.mlCache.memoryControl.offloadingTimeout", "1")
         return conf
 
 
