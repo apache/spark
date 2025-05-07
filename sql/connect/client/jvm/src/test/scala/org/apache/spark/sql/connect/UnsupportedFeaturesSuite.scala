@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.connect
 
+import org.mockito.Mockito.mock
+
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
@@ -23,6 +25,7 @@ import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.connect.test.ConnectFunSuite
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
+
 
 /**
  * Test suite that test the errors thrown when using unsupported features.
@@ -39,29 +42,29 @@ class UnsupportedFeaturesSuite extends ConnectFunSuite {
   }
 
   testUnsupportedFeature("SparkSession.createDataFrame(RDD)", "RDD") { session =>
-    session.createDataFrame(new RDD[(Int, Int)])
+    session.createDataFrame(mock(classOf[RDD[(Int, Int)]]))
   }
 
   testUnsupportedFeature("SparkSession.createDataFrame(RDD, StructType)", "RDD") { session =>
     val schema = new StructType().add("_1", "int").add("_2", "int")
-    session.createDataFrame(new RDD[Row], schema)
+    session.createDataFrame(mock(classOf[RDD[Row]]), schema)
   }
 
   testUnsupportedFeature("SparkSession.createDataFrame(JavaRDD, StructType)", "RDD") { session =>
     val schema = new StructType().add("_1", "int").add("_2", "int")
-    session.createDataFrame(new JavaRDD[Row], schema)
+    session.createDataFrame(mock(classOf[JavaRDD[Row]]), schema)
   }
 
   testUnsupportedFeature("SparkSession.createDataFrame(RDD, Class)", "RDD") { session =>
-    session.createDataFrame(new RDD[Int], classOf[Int])
+    session.createDataFrame(mock(classOf[RDD[Int]]), classOf[Int])
   }
 
   testUnsupportedFeature("SparkSession.createDataFrame(JavaRDD, Class)", "RDD") { session =>
-    session.createDataFrame(new JavaRDD[Int], classOf[Int])
+    session.createDataFrame(mock(classOf[JavaRDD[Int]]), classOf[Int])
   }
 
   testUnsupportedFeature("SparkSession.createDataset(RDD)", "RDD") { session =>
-    session.createDataset(new RDD[Int])(Encoders.scalaInt)
+    session.createDataset(mock(classOf[RDD[Int]]))(Encoders.scalaInt)
   }
 
   testUnsupportedFeature("SparkSession.experimental", "SESSION_EXPERIMENTAL_METHODS") {
@@ -103,10 +106,10 @@ class UnsupportedFeaturesSuite extends ConnectFunSuite {
   }
 
   testUnsupportedFeature("DataFrameReader.json(RDD)", "RDD") {
-    _.read.json(new RDD[String])
+    _.read.json(mock(classOf[RDD[String]]))
   }
 
   testUnsupportedFeature("DataFrameReader.json(JavaRDD)", "RDD") {
-    _.read.json(new JavaRDD[String])
+    _.read.json(mock(classOf[JavaRDD[String]]))
   }
 }
