@@ -166,7 +166,7 @@ object StreamingQueryListener extends Serializable {
       val runId: UUID,
       val name: String,
       val timestamp: String,
-      val jobTags: Set[String] = Set())
+      val jobTags: Set[String])
       extends Event
       with Serializable {
 

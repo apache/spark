@@ -183,7 +183,7 @@ class QueryStartedEvent:
         runId: uuid.UUID,
         name: Optional[str],
         timestamp: str,
-        jobTags: Set[str] = set(),
+        jobTags: Set[str],
     ) -> None:
         self._id: uuid.UUID = id
         self._runId: uuid.UUID = runId
