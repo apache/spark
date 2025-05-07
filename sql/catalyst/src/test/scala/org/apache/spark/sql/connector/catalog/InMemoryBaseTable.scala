@@ -62,7 +62,10 @@ abstract class InMemoryBaseTable(
     val numRowsPerSplit: Int = Int.MaxValue)
   extends Table with SupportsRead with SupportsWrite with SupportsMetadataColumns {
 
+  // Tracks the current version number of the table.
   protected var currentTableVersion: Int = 0
+
+  // Stores the table version validated during the last `ALTER TABLE ... ADD CONSTRAINT` operation.
   private var validatedTableVersion: String = null
 
   override def currentVersion(): String = currentTableVersion.toString
