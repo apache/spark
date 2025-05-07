@@ -1,0 +1,68 @@
+name: Build, Scan and Release Spark History Server
+
+on:
+  release:
+    types: [published]
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GITHUB_TAG: ${{ github.ref_name }}
+
+jobs:
+  build_container:
+    name: Build
+    uses: truefoundry/workflows/.github/workflows/build.yml@v0.2.4
+    with:
+      image_tag: ${{ github.sha }}
+      extra_image_tag: ${{ github.ref_name }}
+      depot_project_id: ${{ vars.DEPOT_PROJECT_ID }}
+      image_artifact_name: ${{ github.event.repository.name }}
+      artifactory_registry_url: ${{ vars.TRUEFOUNDRY_ARTIFACTORY_REGISTRY_URL }}
+      artifactory_repository_url: ${{ vars.TRUEFOUNDRY_ARTIFACTORY_PRIVATE_REPOSITORY }}
+      image_scan_severity_cutoff: critical
+    secrets:
+      depot_token: ${{ secrets.DEPOT_API_KEY }}
+      artifactory_username: ${{ secrets.TRUEFOUNDRY_ARTIFACTORY_PRIVATE_USERNAME }}
+      artifactory_password: ${{ secrets.TRUEFOUNDRY_ARTIFACTORY_PRIVATE_PASSWORD }}
+
+  update_helm_chart:
+    name: Update Helm Chart
+    runs-on: ubuntu-latest
+    needs: build_container
+    steps:
+      - name: Checkout current repo
+        uses: actions/checkout@v4
+
+      - name: Checkout charts
+        uses: actions/checkout@v4
+        with:
+          repository: truefoundry/helm-charts
+          ref: 'main'
+          token: ${{ secrets.TF_GITHUB_CI_ADMIN_TOKEN }}
+          path: tmp_ahc
+
+      - name: Update values.yaml file
+        uses: truefoundry/tfy-env-to-yaml-gh@github-action
+        with:
+          envPath: '.env.helm'
+          outputFile: 'tmp_ahc/charts/truefoundry/values.yaml'
+          imageTag: '${{ env.GITHUB_TAG }}'
+          subPath: 'servicefoundryServer'
+
+      - name: Write release version
+        run: |
+          VERSION=${{ github.event.release.tag_name }}
+          echo "RELEASE_VERSION=${VERSION#v}" >> $GITHUB_ENV
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          commit-message: '[CI] Update truefoundry serviceFoundryServer chart values.yaml'
+          branch: truefoundry-serviceFoundryServer-version-${{ github.event.release.tag_name }}
+          base: main
+          path: tmp_ahc
+          title: '[CI] Update truefoundry serviceFoundryServer chart values.yaml'
+          token: ${{ secrets.TF_GITHUB_CI_ADMIN_TOKEN }}

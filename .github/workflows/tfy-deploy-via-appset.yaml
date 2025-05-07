@@ -1,0 +1,51 @@
+name: DeployViaAppset
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SERVICE_NAME: spark-history-server
+      DEPLOYMENT_YAML: truefoundry.yaml
+      PATCHED_YAML: truefoundry-patched.yaml
+      DEVTEST_DEPLOYMENT_REPO: truefoundry/truefoundry-devtest-deployment
+      DEVTEST_DEPLOYMENT_REPO_NAME: truefoundry-devtest-deployment
+      DEVTEST_DEPLOYMENT_YAML: truefoundry.yaml
+      DEVTEST_DEPLOYMENT_PATH: truefoundry-devtest-deployment
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v3
+
+      - name: Checkout truefoundry-devtest-deployment
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DEVTEST_DEPLOYMENT_REPO }}
+          ref: 'main'
+          token: ${{ secrets.TF_GITHUB_CI_ADMIN_TOKEN }}
+          path: ${{ env.DEVTEST_DEPLOYMENT_PATH }}
+
+      - name: Install truefoundry
+        run: pipx install --pip-args=--pre truefoundry
+
+      - name: Generate ${{ env.PATCHED_YAML }}
+        run: tfy patch --file ${{ env.DEPLOYMENT_YAML }} --filter='.image.build_source.ref = "${{ github.sha }}" | .image.build_source.branch_name = "${{ github.ref_name }}"' --output-file ${{ env.PATCHED_YAML }}
+
+      - name: Update ${{ env.DEVTEST_DEPLOYMENT_PATH }}/${{ env.DEVTEST_DEPLOYMENT_YAML }} with ${{ env.PATCHED_YAML }} for ${{ env.SERVICE_NAME }}
+        run: |
+          yq eval '(.components[] | select(.name == "${{ env.SERVICE_NAME }}")) |= load("${{ env.PATCHED_YAML }}")' ${{ env.DEVTEST_DEPLOYMENT_PATH }}/${{ env.DEVTEST_DEPLOYMENT_YAML }} -i
+
+      - name: Check file changes
+        run: |
+          cat ${{ env.DEVTEST_DEPLOYMENT_PATH }}/${{ env.DEVTEST_DEPLOYMENT_YAML }}
+
+      - name: Commit and push changes to truefoundry-devtest-deployment repository
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Updates ${{ env.SERVICE_NAME }} component for git SHA: '${{ github.sha }}'"
+          branch: main
+          repository: ${{ env.DEVTEST_DEPLOYMENT_REPO_NAME }}
+          file_pattern: ${{ env.DEVTEST_DEPLOYMENT_YAML }}
