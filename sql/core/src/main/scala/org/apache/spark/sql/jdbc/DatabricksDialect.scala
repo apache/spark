@@ -31,6 +31,14 @@ private case class DatabricksDialect() extends JdbcDialect with NoLegacyJDBCErro
     url.startsWith("jdbc:databricks")
   }
 
+  override def isTableNotFoundException(e: java.sql.SQLException): Boolean = {
+    e match {
+      case sqlException: java.sql.SQLException =>
+        sqlException.getSQLState == "42P01"
+      case _ => false
+    }
+  }
+
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     sqlType match {

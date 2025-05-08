@@ -38,6 +38,15 @@ private case class DerbyDialect() extends JdbcDialect with NoLegacyJDBCError {
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  override def isTableNotFoundException(e: java.sql.SQLException): Boolean = {
+    e match {
+      case sqlException: java.sql.SQLException =>
+        sqlException.getMessage.contains("Table/View") &&
+        sqlException.getMessage.contains("does not exist")
+      case _ => false
+    }
+  }
+
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.REAL) Option(FloatType) else None

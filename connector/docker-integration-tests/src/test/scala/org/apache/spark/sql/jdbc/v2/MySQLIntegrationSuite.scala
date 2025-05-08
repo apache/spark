@@ -179,6 +179,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
   override def indexOptions: String = "KEY_BLOCK_SIZE=10"
 
   test("SPARK-42943: Use LONGTEXT instead of TEXT for StringType for effective length") {
+    assert(false)
     val tableName = catalogName + ".t1"
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName(c1 string)")

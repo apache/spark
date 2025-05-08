@@ -26,7 +26,7 @@ import java.util
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException, TaskContext}
@@ -64,18 +64,36 @@ object JdbcUtils extends Logging with SQLConfHelper {
   def tableExists(conn: Connection, options: JdbcOptionsInWrite): Boolean = {
     val dialect = JdbcDialects.get(options.url)
 
-    // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
-    // SQL database systems using JDBC meta data calls, considering "table" could also include
-    // the database name. Query used to find table exists can be overridden by the dialects.
-    Try {
+    val executionResult = Try {
       val statement = conn.prepareStatement(dialect.getTableExistsQuery(options.table))
       try {
         statement.setQueryTimeout(options.queryTimeout)
-        statement.executeQuery()
+        statement.executeQuery()  // Success means table exists (query executed without error)
       } finally {
         statement.close()
       }
-    }.isSuccess
+    }
+
+    executionResult match {
+      case Success(_) => true
+      case Failure(e: SQLException) if dialect.isTableNotFoundException(e) => false
+      case Failure(e) => throw e  // Re-throw unexpected exceptions
+    }
+  }
+
+  // Helper to identify table-not-found errors across common databases
+  private def isTableNotFoundException(e: SQLException): Boolean = {
+    // Check SQLState codes for common databases
+    val tableNotFoundStates = Set(
+      "42P01",   // PostgreSQL: undefined_table
+      "42S02",   // MySQL/H2: base table or view not found
+      "42X05",   // Derby: table/view does not exist
+      "S0002",   // SQL Server: object not found
+      "42Y55"    // Apache Derby: table does not exist
+    )
+
+    // Check error code for SQLite (uses error code 1 for missing table)
+    e.getErrorCode == 1 || tableNotFoundStates.contains(e.getSQLState)
   }
 
   /**

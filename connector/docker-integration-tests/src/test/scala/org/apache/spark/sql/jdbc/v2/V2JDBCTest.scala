@@ -1050,6 +1050,29 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     }
   }
 
+  test("SPARK-48618: Test table does not exists error") {
+    withTable(s"$catalogName.tbl1") {
+      sql(s"CREATE TABLE $catalogName.tbl1 (col1 INT, col2 INT)")
+      sql(s"INSERT INTO $catalogName.tbl1 VALUES (1, 2)")
+      val df = sql(s"SELECT * FROM $catalogName.tbl1")
+      val row = df.collect()
+      assert(row.length === 1)
+      assert(row(0).getInt(0) === 1)
+      assert(row(0).getInt(1) === 2)
+
+      // Drop the table
+      sql(s"DROP TABLE IF EXISTS $catalogName.tbl1")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT * FROM $catalogName.tbl1")
+        },
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`tbl1`")
+      )
+    }
+  }
+
   def testDatetime(tbl: String): Unit = {}
 
   test("scan with filter push-down with date time functions") {

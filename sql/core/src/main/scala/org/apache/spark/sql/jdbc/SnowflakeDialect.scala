@@ -26,6 +26,14 @@ private case class SnowflakeDialect() extends JdbcDialect with NoLegacyJDBCError
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:snowflake")
 
+  override def isTableNotFoundException(e: java.sql.SQLException): Boolean = {
+    e match {
+      case sqlException: java.sql.SQLException =>
+        sqlException.getSQLState == "002003"
+      case _ => false
+    }
+  }
+
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case BooleanType =>
       // By default, BOOLEAN is mapped to BIT(1).

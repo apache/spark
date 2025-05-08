@@ -47,6 +47,14 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  override def isTableNotFoundException(e: java.sql.SQLException): Boolean = {
+    e match {
+      case sqlException: java.sql.SQLException =>
+        sqlException.getErrorCode == -204
+      case _ => false
+    }
+  }
+
   class DB2SQLBuilder extends JDBCSQLBuilder {
 
     override def visitAggregateFunction(
