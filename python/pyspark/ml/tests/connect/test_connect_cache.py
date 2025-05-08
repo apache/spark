@@ -85,8 +85,8 @@ class MLConnectCacheTests(ReusedConnectTestCase):
 
         svc = LinearSVC(maxIter=1, regParam=1.0)
         model1 = svc.fit(df)
-        model2 = svc.fit(df)
-        model3 = svc.fit(df)
+        svc.fit(df)
+        svc.fit(df)
 
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 3)
