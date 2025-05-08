@@ -177,10 +177,10 @@ class HeartbeatReceiverSuite
     val dummyExecutorEndpoint2 = new FakeExecutorEndpoint(rpcEnv)
     val dummyExecutorEndpointRef1 = rpcEnv.setupEndpoint("fake-executor-1", dummyExecutorEndpoint1)
     val dummyExecutorEndpointRef2 = rpcEnv.setupEndpoint("fake-executor-2", dummyExecutorEndpoint2)
-    fakeSchedulerBackend.driverEndpoint.askSync[Boolean](
+    fakeSchedulerBackend.driverEndpoint.askSync[RegisterExecutorReply](
       RegisterExecutor(executorId1, dummyExecutorEndpointRef1, "1.2.3.4", 0, Map.empty, Map.empty,
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
-    fakeSchedulerBackend.driverEndpoint.askSync[Boolean](
+    fakeSchedulerBackend.driverEndpoint.askSync[RegisterExecutorReply](
       RegisterExecutor(executorId2, dummyExecutorEndpointRef2, "1.2.3.5", 0, Map.empty, Map.empty,
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)

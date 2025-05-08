@@ -112,10 +112,13 @@ private[spark] class CoarseGrainedExecutorBackend(
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
       env.executorBackend = Option(this)
-      ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls,
-        extractAttributes, _resources, resourceProfile.id))
+      ref.ask[RegisterExecutorReply](RegisterExecutor(executorId, self, hostname, cores,
+        extractLogUrls, extractAttributes, _resources, resourceProfile.id))
     }(ThreadUtils.sameThread).onComplete {
-      case Success(_) =>
+      case Success(RegisterExecutorReply(accessTokens)) =>
+        logInfo(s"Executor registration reply received from driver, with " +
+          s"${accessTokens.size} access tokens")
+        accessTokens.foreach(SparkHadoopUtil.get.addAccessTokens)
         self.send(RegisteredExecutor)
       case Failure(e) =>
         exitExecutor(1, s"Cannot register with driver: $driverUrl", e, notifyDriver = false)

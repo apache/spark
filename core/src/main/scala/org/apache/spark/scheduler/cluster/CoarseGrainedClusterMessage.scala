@@ -71,6 +71,10 @@ private[spark] object CoarseGrainedClusterMessages {
       resourceProfileId: Int)
     extends CoarseGrainedClusterMessage
 
+  case class RegisterExecutorReply(
+    accessTokens: Option[Map[String, String]]
+  )
+
   case class LaunchedExecutor(executorId: String) extends CoarseGrainedClusterMessage
 
   case class StatusUpdate(

@@ -35,7 +35,7 @@ import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster._
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{LaunchedExecutor, RegisterExecutor}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{LaunchedExecutor, RegisterExecutor, RegisterExecutorReply}
 
 /**
  * End-to-end tests for dynamic allocation in standalone mode.
@@ -519,7 +519,7 @@ class StandaloneDynamicAllocationSuite
       try {
         scheduler.start()
         val e = intercept[SparkException] {
-          scheduler.driverEndpoint.askSync[Boolean](message)
+          scheduler.driverEndpoint.askSync[RegisterExecutorReply](message)
         }
         assert(e.getCause().isInstanceOf[IllegalStateException])
         assert(scheduler.getExecutorIds().isEmpty)
@@ -630,7 +630,7 @@ class StandaloneDynamicAllocationSuite
       when(endpointRef.address).thenReturn(mockAddress)
       val message = RegisterExecutor(id, endpointRef, "localhost", 10, Map.empty, Map.empty,
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-      backend.driverEndpoint.askSync[Boolean](message)
+      backend.driverEndpoint.askSync[RegisterExecutorReply](message)
       backend.driverEndpoint.send(LaunchedExecutor(id))
     }
   }

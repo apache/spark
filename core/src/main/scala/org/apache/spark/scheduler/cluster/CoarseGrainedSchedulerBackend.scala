@@ -318,7 +318,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               decommissionExecutors(Array((executorId, v._1)), v._2, v._3)
               unknownExecutorsPendingDecommission.invalidate(executorId)
             })
-          context.reply(true)
+          val reply = RegisterExecutorReply(Option(accessTokens.get()))
+          context.reply(reply)
         }
 
       case StopDriver =>

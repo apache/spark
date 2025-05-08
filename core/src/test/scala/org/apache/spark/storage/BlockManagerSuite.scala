@@ -251,7 +251,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
         override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
           case CoarseGrainedClusterMessages.RegisterExecutor(executorId, _, _, _, _, _, _, _) =>
             executorSet += executorId
-            context.reply(true)
+            context.reply(CoarseGrainedClusterMessages.RegisterExecutorReply(None))
           case CoarseGrainedClusterMessages.IsExecutorAlive(executorId) =>
             context.reply(executorSet.contains(executorId))
         }
@@ -285,13 +285,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     // remove rdd/broadcast/shuffle in order to raise timeout error
     val bm2Id = createAndRegisterBlockManager(true)
 
-    driverEndpoint.askSync[Boolean](CoarseGrainedClusterMessages.RegisterExecutor(
-      bm1Id.executorId, null, bm1Id.host, 1, Map.empty, Map.empty,
-      Map.empty, 0))
+    driverEndpoint.askSync[CoarseGrainedClusterMessages.RegisterExecutorReply](
+      CoarseGrainedClusterMessages.RegisterExecutor(bm1Id.executorId, null, bm1Id.host,
+        1, Map.empty, Map.empty, Map.empty, 0))
 
     if (!withLost) {
-      driverEndpoint.askSync[Boolean](CoarseGrainedClusterMessages.RegisterExecutor(
-        bm2Id.executorId, null, bm1Id.host, 1, Map.empty, Map.empty, Map.empty, 0))
+      driverEndpoint.askSync[CoarseGrainedClusterMessages.RegisterExecutorReply](
+        CoarseGrainedClusterMessages.RegisterExecutor(bm2Id.executorId, null, bm1Id.host,
+          1, Map.empty, Map.empty, Map.empty, 0))
     }
 
     eventually(timeout(5.seconds)) {
@@ -371,7 +372,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
 
         override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
           case CoarseGrainedClusterMessages.RegisterExecutor(executorId, _, _, _, _, _, _, _) =>
-            context.reply(true)
+            context.reply(CoarseGrainedClusterMessages.RegisterExecutorReply(None))
           case CoarseGrainedClusterMessages.IsExecutorAlive(executorId) =>
             // always return false
             context.reply(false)

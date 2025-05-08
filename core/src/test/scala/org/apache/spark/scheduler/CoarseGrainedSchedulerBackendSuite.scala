@@ -175,13 +175,13 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     sc.addSparkListener(listener)
 
-    backend.driverEndpoint.askSync[Boolean](
+    backend.driverEndpoint.askSync[RegisterExecutorReply](
       RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, logUrls, attributes,
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
-    backend.driverEndpoint.askSync[Boolean](
+    backend.driverEndpoint.askSync[RegisterExecutorReply](
       RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, logUrls, attributes,
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
-    backend.driverEndpoint.askSync[Boolean](
+    backend.driverEndpoint.askSync[RegisterExecutorReply](
       RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, logUrls, attributes,
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
 
@@ -234,13 +234,13 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     sc.addSparkListener(listener)
 
-    backend.driverEndpoint.askSync[Boolean](
+    backend.driverEndpoint.askSync[RegisterExecutorReply](
       RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
         ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
-    backend.driverEndpoint.askSync[Boolean](
+    backend.driverEndpoint.askSync[RegisterExecutorReply](
       RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
         ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
-    backend.driverEndpoint.askSync[Boolean](
+    backend.driverEndpoint.askSync[RegisterExecutorReply](
       RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
         rp.id))
 
@@ -341,13 +341,13 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     sc.addSparkListener(listener)
 
-    backend.driverEndpoint.askSync[Boolean](
+    backend.driverEndpoint.askSync[RegisterExecutorReply](
       RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
         ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
-    backend.driverEndpoint.askSync[Boolean](
+    backend.driverEndpoint.askSync[RegisterExecutorReply](
       RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
         ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
-    backend.driverEndpoint.askSync[Boolean](
+    backend.driverEndpoint.askSync[RegisterExecutorReply](
       RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
         rp.id))
 
@@ -440,7 +440,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(Seq.empty)
-    backend.driverEndpoint.askSync[Boolean](
+    backend.driverEndpoint.askSync[RegisterExecutorReply](
       RegisterExecutor("1", mockEndpointRef, mockAddress.host, execCores, Map.empty, Map.empty,
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.send(LaunchedExecutor("1"))
@@ -508,7 +508,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     backend.decommissionExecutor(executorId, executorDecommissionInfo, false)
     assert(!mockEndpointRef.decommissionReceived)
 
-    backend.driverEndpoint.askSync[Boolean](
+    backend.driverEndpoint.askSync[RegisterExecutorReply](
       RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map(), Map(),
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
 
