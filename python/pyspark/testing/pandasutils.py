@@ -470,7 +470,7 @@ class PandasOnSparkTestUtils:
             return obj
 
 
-class PandasOnSparkTestCase(PandasOnSparkTestUtils, ReusedSQLTestCase):
+class PandasOnSparkTestCase(ReusedSQLTestCase, PandasOnSparkTestUtils):
     @classmethod
     def setUpClass(cls):
         super(PandasOnSparkTestCase, cls).setUpClass()
