@@ -453,6 +453,26 @@ case class OuterReference(e: NamedExpression)
 }
 
 /**
+ * A place holder used to hold a reference that has been resolved to a field outside of the current
+ * plan. And the reference cannot be resolved by the immediate outer plan of the current plan.
+ * It is used only for queries containing nested correlations and are used only in
+ * the SubqueryExpression to differentiate common outer references and outer scope references.
+ */
+case class OuterScopeReference(e: NamedExpression)
+  extends LeafExpression with NamedExpression with Unevaluable {
+  override def dataType: DataType = e.dataType
+  override def nullable: Boolean = e.nullable
+  override def prettyName: String = "outerScope"
+
+  override def sql: String = s"$prettyName(${e.sql})"
+  override def name: String = e.name
+  override def qualifier: Seq[String] = e.qualifier
+  override def exprId: ExprId = e.exprId
+  override def toAttribute: Attribute = e.toAttribute
+  override def newInstance(): NamedExpression = OuterScopeReference(e.newInstance())
+}
+
+/**
  * A placeholder used to hold a [[NamedExpression]] that has been temporarily resolved as the
  * reference to a lateral column alias. It will be restored back to [[UnresolvedAttribute]] if
  * the lateral column alias can't be resolved, or become a normal resolved column in the rewritten
