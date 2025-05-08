@@ -23,13 +23,14 @@ import java.util.{List => JList, Map => JMap}
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.avro.Schema
+import org.apache.avro.{Schema, SchemaFormatter}
 import org.apache.avro.generic.IndexedRecord
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.avro.AvroParquetWriter
 import org.apache.parquet.hadoop.ParquetWriter
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.avro.AvroUtils
 import org.apache.spark.sql.execution.datasources.parquet.test.avro._
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -40,7 +41,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
     logInfo(
       s"""Writing Avro records with the following Avro schema into Parquet file:
          |
-         |${schema.toString(true)}
+         |${SchemaFormatter.format(AvroUtils.JSON_PRETTY_FORMAT, schema)}
        """.stripMargin)
 
     val writer = AvroParquetWriter.builder[T](new Path(path)).withSchema(schema).build()

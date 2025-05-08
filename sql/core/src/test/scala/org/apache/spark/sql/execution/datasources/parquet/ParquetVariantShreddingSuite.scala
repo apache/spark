@@ -49,6 +49,7 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
       "a struct<value binary, typed_value int>, b struct<value binary, typed_value string>," +
       "c struct<value binary, typed_value decimal(15, 1)>>>"
     withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
+      SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> true.toString,
       SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema) {
       df.write.mode("overwrite").parquet(dir.getAbsolutePath)
 
@@ -122,6 +123,7 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
     val fullSchema = "v struct<metadata binary, value binary, typed_value array<" +
       "struct<value binary, typed_value int>>>"
     withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
+      SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> true.toString,
       SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema) {
       df.write.mode("overwrite").parquet(dir.getAbsolutePath)
 
@@ -186,6 +188,7 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
       "arr array<struct<metadata binary, value binary>>, " +
       "m map<string, struct<metadata binary, value binary>>"
     withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
+      SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> true.toString,
       SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema) {
       df.write.mode("overwrite").parquet(dir.getAbsolutePath)
 

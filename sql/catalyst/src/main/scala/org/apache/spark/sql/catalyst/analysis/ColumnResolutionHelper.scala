@@ -23,12 +23,13 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.SqlScriptingLocalVariableManager
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils.wrapOuterReference
+import org.apache.spark.sql.catalyst.parser.SqlScriptingLabelContext.isForbiddenLabelName
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -96,30 +97,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
   }
 
-  // support CURRENT_DATE, CURRENT_TIMESTAMP, CURRENT_USER, USER, SESSION_USER and grouping__id
-  private val literalFunctions: Seq[(String, () => Expression, Expression => String)] = Seq(
-    (CurrentDate().prettyName, () => CurrentDate(), toPrettySQL(_)),
-    (CurrentTimestamp().prettyName, () => CurrentTimestamp(), toPrettySQL(_)),
-    (CurrentUser().prettyName, () => CurrentUser(), toPrettySQL),
-    ("user", () => CurrentUser(), toPrettySQL),
-    ("session_user", () => CurrentUser(), toPrettySQL),
-    (VirtualColumn.hiveGroupingIdName, () => GroupingID(Nil), _ => VirtualColumn.hiveGroupingIdName)
-  )
-
-  /**
-   * Literal functions do not require the user to specify braces when calling them
-   * When an attributes is not resolvable, we try to resolve it as a literal function.
-   */
-  private def resolveLiteralFunction(nameParts: Seq[String]): Option[NamedExpression] = {
-    if (nameParts.length != 1) return None
-    val name = nameParts.head
-    literalFunctions.find(func => caseInsensitiveResolution(func._1, name)).map {
-      case (_, getFuncExpr, getAliasName) =>
-        val funcExpr = getFuncExpr()
-        Alias(funcExpr, getAliasName(funcExpr))()
-    }
-  }
-
   /**
    * Resolves `UnresolvedAttribute`, `GetColumnByOrdinal` and extract value expressions(s) by
    * traversing the input expression in top-down manner. It must be top-down because we need to
@@ -167,14 +144,17 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
         case u @ UnresolvedAttribute(nameParts) =>
           val result = withPosition(u) {
-            resolveColumnByName(nameParts).orElse(resolveLiteralFunction(nameParts)).map {
-              // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
-              // as we should resolve `UnresolvedAttribute` to a named expression. The caller side
-              // can trim the top-level alias if it's safe to do so. Since we will call
-              // CleanupAliases later in Analyzer, trim non top-level unnecessary alias is safe.
-              case Alias(child, _) if !isTopLevel => child
-              case other => other
-            }.getOrElse(u)
+            resolveColumnByName(nameParts)
+              .orElse(LiteralFunctionResolution.resolve(nameParts))
+              .map {
+                // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
+                // as we should resolve `UnresolvedAttribute` to a named expression. The caller side
+                // can trim the top-level alias if it's safe to do so. Since we will call
+                // CleanupAliases later in Analyzer, trim non top-level unnecessary alias is safe.
+                case Alias(child, _) if !isTopLevel => child
+                case other => other
+              }
+              .getOrElse(u)
           }
           logDebug(s"Resolving $u to $result")
           result
@@ -251,6 +231,14 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
   }
 
+  /**
+   * Look up variable by nameParts.
+   * If in SQL Script, first check local variables, unless in EXECUTE IMMEDIATE
+   * (EXECUTE IMMEDIATE generated query cannot access local variables).
+   * if not found fall back to session variables.
+   * @param nameParts NameParts of the variable.
+   * @return Reference to the variable.
+   */
   def lookupVariable(nameParts: Seq[String]): Option[VariableReference] = {
     // The temp variables live in `SYSTEM.SESSION`, and the name can be qualified or not.
     def maybeTempVariableName(nameParts: Seq[String]): Boolean = {
@@ -266,22 +254,41 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       }
     }
 
-    if (maybeTempVariableName(nameParts)) {
-      val variableName = if (conf.caseSensitiveAnalysis) {
-        nameParts.last
-      } else {
-        nameParts.last.toLowerCase(Locale.ROOT)
-      }
-      catalogManager.tempVariableManager.get(variableName).map { varDef =>
+    val namePartsCaseAdjusted = if (conf.caseSensitiveAnalysis) {
+      nameParts
+    } else {
+      nameParts.map(_.toLowerCase(Locale.ROOT))
+    }
+
+    SqlScriptingLocalVariableManager.get()
+      // If we are in EXECUTE IMMEDIATE lookup only session variables.
+      .filterNot(_ => AnalysisContext.get.isExecuteImmediate)
+      // If variable name is qualified with session.<varName> treat it as a session variable.
+      .filterNot(_ =>
+        nameParts.length > 2 || (nameParts.length == 2 && isForbiddenLabelName(nameParts.head)))
+      .flatMap(_.get(namePartsCaseAdjusted))
+      .map { varDef =>
         VariableReference(
           nameParts,
-          FakeSystemCatalog,
-          Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
+          FakeLocalCatalog,
+          Identifier.of(Array(varDef.identifier.namespace().last), namePartsCaseAdjusted.last),
           varDef)
       }
-    } else {
-      None
-    }
+      .orElse(
+        if (maybeTempVariableName(nameParts)) {
+          catalogManager.tempVariableManager
+            .get(namePartsCaseAdjusted)
+            .map { varDef =>
+              VariableReference(
+                nameParts,
+                FakeSystemCatalog,
+                Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), namePartsCaseAdjusted.last),
+                varDef
+              )}
+        } else {
+          None
+        }
+      )
   }
 
   // Resolves `UnresolvedAttribute` to its value.
@@ -399,7 +406,14 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           // Lateral column alias does not have qualifiers. We always use the first name part to
           // look up lateral column aliases.
           val lowerCasedName = u.nameParts.head.toLowerCase(Locale.ROOT)
-          aliasMap.get(lowerCasedName).map {
+          aliasMap.get(lowerCasedName).filter {
+            // Do not resolve LCA with aliased `Generator`, as it will be rewritten by the rule
+            // `ExtractGenerator` with fresh output attribute IDs. The `Generator` will be pulled
+            // out and put in a `Generate` node below `Project`, so that we can resolve the column
+            // normally without LCA resolution.
+            case scala.util.Left(alias) => !alias.child.isInstanceOf[Generator]
+            case _ => true
+          }.map {
             case scala.util.Left(alias) =>
               if (alias.resolved) {
                 val resolvedAttr = resolveExpressionByPlanOutput(

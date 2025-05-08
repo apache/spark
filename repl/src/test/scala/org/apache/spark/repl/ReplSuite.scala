@@ -25,7 +25,7 @@ import org.apache.logging.log4j.core.{Logger, LoggerContext}
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
 class ReplSuite extends SparkFunSuite {
@@ -400,6 +400,7 @@ class ReplSuite extends SparkFunSuite {
   test("register UDF via SparkSession.addArtifact") {
     val artifactPath = new File("src/test/resources").toPath
     val intSumUdfPath = artifactPath.resolve("IntSumUdf.class")
+    assume(intSumUdfPath.toFile.exists)
     val output = runInterpreterInPasteMode("local",
       s"""
          |import org.apache.spark.sql.api.java.UDF2
@@ -438,6 +439,7 @@ class ReplSuite extends SparkFunSuite {
   test("register a class via SparkSession.addArtifact") {
     val artifactPath = new File("src/test/resources").toPath
     val intSumUdfPath = artifactPath.resolve("IntSumUdf.class")
+    assume(intSumUdfPath.toFile.exists)
     val output = runInterpreterInPasteMode("local",
       s"""
          |import org.apache.spark.sql.functions.udf

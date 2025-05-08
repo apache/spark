@@ -281,8 +281,7 @@ class ALSModel private[ml] (
   extends Model[ALSModel] with ALSModelParams with MLWritable {
 
   // For ml connect only
-  @Since("4.0.0")
-  private[ml] def this() = this(Identifiable.randomUID("als"), 0, null, null)
+  private[ml] def this() = this("", -1, null, null)
 
   /** @group setParam */
   @Since("1.4.0")
@@ -541,7 +540,14 @@ class ALSModel private[ml] (
     }
   }
 
+  override def estimatedSize: Long = {
+    val userCount = userFactors.count()
+    val itemCount = itemFactors.count()
+    (userCount + itemCount) * (rank + 1) * 4
+  }
 }
+
+private[ml] case class FeatureData(id: Int, features: Array[Float])
 
 @Since("1.6.0")
 object ALSModel extends MLReadable[ALSModel] {
@@ -565,9 +571,21 @@ object ALSModel extends MLReadable[ALSModel] {
       val extraMetadata = "rank" -> instance.rank
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession, Some(extraMetadata))
       val userPath = new Path(path, "userFactors").toString
-      instance.userFactors.write.format("parquet").save(userPath)
       val itemPath = new Path(path, "itemFactors").toString
-      instance.itemFactors.write.format("parquet").save(itemPath)
+
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        // Import implicits for Dataset Encoder
+        val sparkSession = super.sparkSession
+        import sparkSession.implicits._
+
+        val userFactorsData = instance.userFactors.as[FeatureData].collect()
+        ReadWriteUtils.saveArray(userPath, userFactorsData, sparkSession)
+        val itemFactorsData = instance.itemFactors.as[FeatureData].collect()
+        ReadWriteUtils.saveArray(itemPath, itemFactorsData, sparkSession)
+      } else {
+        instance.userFactors.write.format("parquet").save(userPath)
+        instance.itemFactors.write.format("parquet").save(itemPath)
+      }
     }
   }
 
@@ -581,9 +599,20 @@ object ALSModel extends MLReadable[ALSModel] {
       implicit val format = DefaultFormats
       val rank = (metadata.metadata \ "rank").extract[Int]
       val userPath = new Path(path, "userFactors").toString
-      val userFactors = sparkSession.read.format("parquet").load(userPath)
       val itemPath = new Path(path, "itemFactors").toString
-      val itemFactors = sparkSession.read.format("parquet").load(itemPath)
+
+      val (userFactors, itemFactors) = if (ReadWriteUtils.localSavingModeState.get()) {
+        import org.apache.spark.util.ArrayImplicits._
+        val userFactorsData = ReadWriteUtils.loadArray[FeatureData](userPath, sparkSession)
+        val userFactors = sparkSession.createDataFrame(userFactorsData.toImmutableArraySeq)
+        val itemFactorsData = ReadWriteUtils.loadArray[FeatureData](itemPath, sparkSession)
+        val itemFactors = sparkSession.createDataFrame(itemFactorsData.toImmutableArraySeq)
+        (userFactors, itemFactors)
+      } else {
+        val userFactors = sparkSession.read.format("parquet").load(userPath)
+        val itemFactors = sparkSession.read.format("parquet").load(itemPath)
+        (userFactors, itemFactors)
+      }
 
       val model = new ALSModel(metadata.uid, rank, userFactors, itemFactors)
 
@@ -772,6 +801,13 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): ALS = defaultCopy(extra)
+
+  override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val userCount = dataset.select(getUserCol).distinct().count()
+    val itemCount = dataset.select(getItemCol).distinct().count()
+    val rank = getRank
+    (userCount + itemCount) * (rank + 1) * 4
+  }
 }
 
 

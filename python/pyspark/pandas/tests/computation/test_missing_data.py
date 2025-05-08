@@ -23,6 +23,7 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import is_ansi_mode_test, ansi_mode_not_supported_message
 
 
 # This file contains test cases for 'Missing data handling'
@@ -273,6 +274,7 @@ class FrameMissingDataMixin:
             pdf.fillna({("x", "a"): -1, ("x", "b"): -2, ("y", "c"): -5}),
         )
 
+    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_replace(self):
         pdf = pd.DataFrame(
             {

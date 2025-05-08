@@ -21,7 +21,7 @@
           "jvmOrigin": {
             "stackTrace": [{
               "classLoaderName": "app",
-              "declaringClass": "org.apache.spark.sql.Dataset",
+              "declaringClass": "org.apache.spark.sql.connect.Dataset",
               "methodName": "col",
               "fileName": "Dataset.scala"
             }, {
@@ -43,7 +43,7 @@
           "jvmOrigin": {
             "stackTrace": [{
               "classLoaderName": "app",
-              "declaringClass": "org.apache.spark.sql.Dataset",
+              "declaringClass": "org.apache.spark.sql.connect.Dataset",
               "methodName": "col",
               "fileName": "Dataset.scala"
             }, {

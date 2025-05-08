@@ -25,8 +25,27 @@ private[spark] case class MlUnsupportedException(message: String)
       messageParameters = Map("message" -> message),
       cause = null)
 
-private[spark] case class MLAttributeNotAllowedException(attribute: String)
+private[spark] case class MLAttributeNotAllowedException(className: String, attribute: String)
     extends SparkException(
       errorClass = "CONNECT_ML.ATTRIBUTE_NOT_ALLOWED",
-      messageParameters = Map("attribute" -> attribute),
+      messageParameters = Map("className" -> className, "attribute" -> attribute),
+      cause = null)
+
+private[spark] case class MLCacheInvalidException(objectName: String)
+    extends SparkException(
+      errorClass = "CONNECT_ML.CACHE_INVALID",
+      messageParameters = Map("objectName" -> objectName),
+      cause = null)
+
+private[spark] case class MLModelSizeOverflowException(modelSize: Long, modelMaxSize: Long)
+    extends SparkException(
+      errorClass = "CONNECT_ML.MODEL_SIZE_OVERFLOW_EXCEPTION",
+      messageParameters =
+        Map("modelSize" -> modelSize.toString, "modelMaxSize" -> modelMaxSize.toString),
+      cause = null)
+
+private[spark] case class MLCacheSizeOverflowException(mlCacheMaxSize: Long)
+    extends SparkException(
+      errorClass = "CONNECT_ML.ML_CACHE_SIZE_OVERFLOW_EXCEPTION",
+      messageParameters = Map("mlCacheMaxSize" -> mlCacheMaxSize.toString),
       cause = null)

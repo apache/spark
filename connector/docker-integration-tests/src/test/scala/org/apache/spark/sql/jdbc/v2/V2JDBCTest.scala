@@ -48,11 +48,29 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   def notSupportsTableComment: Boolean = false
 
-  def defaultMetadata(dataType: DataType = StringType): Metadata = new MetadataBuilder()
+  def defaultMetadata(
+      dataType: DataType = StringType,
+      jdbcClientType: String = "STRING"): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
     .putBoolean("isTimestampNTZ", false)
     .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
+    .putString("jdbcClientType", jdbcClientType)
     .build()
+
+  /**
+   * Returns a copy of the given [[StructType]] with the specified metadata key removed
+   * from all of its fields.
+   */
+  def removeMetadataFromAllFields(structType: StructType, metadataKey: String): StructType = {
+    val updatedFields = structType.fields.map { field =>
+      val oldMetadata = field.metadata
+      val newMetadataBuilder = new MetadataBuilder()
+        .withMetadata(oldMetadata)
+        .remove(metadataKey)
+      field.copy(metadata = newMetadataBuilder.build())
+    }
+    StructType(updatedFields)
+  }
 
   def testUpdateColumnNullability(tbl: String): Unit = {
     sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL)")
@@ -60,11 +78,22 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     // nullable is true in the expectedSchema because Spark always sets nullable to true
     // regardless of the JDBC metadata https://github.com/apache/spark/pull/18445
     var expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata())
-    assert(t.schema === expectedSchema)
+    // If function is not overriden we don't want to compare external engine types
+    var expectedSchemaWithoutJdbcClientType =
+      removeMetadataFromAllFields(expectedSchema, "jdbcClientType")
+    var schemaWithoutJdbcClientType =
+      removeMetadataFromAllFields(t.schema, "jdbcClientType")
+    assert(schemaWithoutJdbcClientType === expectedSchemaWithoutJdbcClientType)
     sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN ID DROP NOT NULL")
     t = spark.table(s"$catalogName.alt_table")
     expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata())
-    assert(t.schema === expectedSchema)
+
+    // If function is not overriden we don't want to compare external engine types
+    expectedSchemaWithoutJdbcClientType =
+      removeMetadataFromAllFields(expectedSchema, "jdbcClientType")
+    schemaWithoutJdbcClientType =
+      removeMetadataFromAllFields(t.schema, "jdbcClientType")
+    assert(schemaWithoutJdbcClientType === expectedSchemaWithoutJdbcClientType)
     // Update nullability of not existing column
     val sqlText = s"ALTER TABLE $catalogName.alt_table ALTER COLUMN bad_column DROP NOT NULL"
     checkError(
@@ -85,7 +114,13 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val expectedSchema = new StructType().add("RENAMED", StringType, true, defaultMetadata())
       .add("ID1", StringType, true, defaultMetadata())
       .add("ID2", StringType, true, defaultMetadata())
-    assert(t.schema === expectedSchema)
+
+    // If function is not overriden we don't want to compare external engine types
+    val expectedSchemaWithoutJdbcClientType =
+      removeMetadataFromAllFields(expectedSchema, "jdbcClientType")
+    val schemaWithoutJdbcClientType =
+      removeMetadataFromAllFields(t.schema, "jdbcClientType")
+    assert(schemaWithoutJdbcClientType === expectedSchemaWithoutJdbcClientType)
   }
 
   def testCreateTableWithProperty(tbl: String): Unit = {}
@@ -109,18 +144,30 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       var t = spark.table(s"$catalogName.alt_table")
       var expectedSchema = new StructType()
         .add("ID", StringType, true, defaultMetadata())
-      assert(t.schema === expectedSchema)
+      var expectedSchemaWithoutJdbcClientType =
+        removeMetadataFromAllFields(expectedSchema, "jdbcClientType")
+      var schemaWithoutJdbcClientType =
+        removeMetadataFromAllFields(t.schema, "jdbcClientType")
+      assert(schemaWithoutJdbcClientType === expectedSchemaWithoutJdbcClientType)
       sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C1 STRING, C2 STRING)")
       t = spark.table(s"$catalogName.alt_table")
       expectedSchema = expectedSchema
         .add("C1", StringType, true, defaultMetadata())
         .add("C2", StringType, true, defaultMetadata())
-      assert(t.schema === expectedSchema)
+      expectedSchemaWithoutJdbcClientType =
+        removeMetadataFromAllFields(expectedSchema, "jdbcClientType")
+      schemaWithoutJdbcClientType =
+        removeMetadataFromAllFields(t.schema, "jdbcClientType")
+      assert(schemaWithoutJdbcClientType === expectedSchemaWithoutJdbcClientType)
       sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C3 STRING)")
       t = spark.table(s"$catalogName.alt_table")
       expectedSchema = expectedSchema
         .add("C3", StringType, true, defaultMetadata())
-      assert(t.schema === expectedSchema)
+      expectedSchemaWithoutJdbcClientType =
+        removeMetadataFromAllFields(expectedSchema, "jdbcClientType")
+      schemaWithoutJdbcClientType =
+        removeMetadataFromAllFields(t.schema, "jdbcClientType")
+      assert(schemaWithoutJdbcClientType === expectedSchemaWithoutJdbcClientType)
       // Add already existing column
       checkError(
         exception = intercept[AnalysisException] {
@@ -141,7 +188,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ADD COLUMNS (C4 STRING)")
     }
-    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
+    checkErrorTableNotFound(
+      e,
+      s"`$catalogName`.`not_existing_table`",
+      ExpectedContext(
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
   }
 
   test("SPARK-33034: ALTER TABLE ... drop column") {
@@ -152,7 +203,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       val t = spark.table(s"$catalogName.alt_table")
       val expectedSchema = new StructType()
         .add("C2", StringType, true, defaultMetadata())
-      assert(t.schema === expectedSchema)
+      val expectedSchemaWithoutJdbcClientType =
+        removeMetadataFromAllFields(expectedSchema, "jdbcClientType")
+      val schemaWithoutJdbcClientType =
+        removeMetadataFromAllFields(t.schema, "jdbcClientType")
+      assert(schemaWithoutJdbcClientType === expectedSchemaWithoutJdbcClientType)
       // Drop not existing column
       val sqlText = s"ALTER TABLE $catalogName.alt_table DROP COLUMN bad_column"
       checkError(
@@ -170,7 +225,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table DROP COLUMN C1")
     }
-    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
+    checkErrorTableNotFound(
+      e,
+      s"`$catalogName`.`not_existing_table`",
+      ExpectedContext(
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
   }
 
   test("SPARK-33034: ALTER TABLE ... update column type") {
@@ -193,7 +252,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ALTER COLUMN id TYPE DOUBLE")
     }
-    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
+    checkErrorTableNotFound(
+      e,
+      s"`$catalogName`.`not_existing_table`",
+      ExpectedContext(
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
   }
 
   test("SPARK-33034: ALTER TABLE ... rename column") {
@@ -221,7 +284,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table RENAME COLUMN ID TO C")
     }
-    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
+    checkErrorTableNotFound(
+      e,
+      s"`$catalogName`.`not_existing_table`",
+      ExpectedContext(
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
   }
 
   test("SPARK-33034: ALTER TABLE ... update column nullability") {
@@ -232,7 +299,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ALTER COLUMN ID DROP NOT NULL")
     }
-    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
+    checkErrorTableNotFound(
+      e,
+      s"`$catalogName`.`not_existing_table`",
+      ExpectedContext(
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
   }
 
   test("CREATE TABLE with table comment") {
@@ -805,8 +876,6 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   }
 
   protected def caseConvert(tableName: String): String = tableName
-
-  private def withOrWithout(isDistinct: Boolean): String = if (isDistinct) "with" else "without"
 
   Seq(true, false).foreach { isDistinct =>
     val distinct = if (isDistinct) "DISTINCT " else ""

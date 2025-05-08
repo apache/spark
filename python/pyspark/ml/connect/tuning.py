@@ -180,7 +180,7 @@ def _parallelFitTasks(
             if not is_remote():
                 # Active session is thread-local variable, in background thread the active session
                 # is not set, the following line sets it as the main thread active session.
-                active_session._jvm.SparkSession.setActiveSession(  # type: ignore[union-attr]
+                SparkSession._get_j_spark_session_class(active_session._jvm).setActiveSession(
                     active_session._jsparkSession
                 )
 
@@ -434,7 +434,7 @@ class CrossValidator(
 
             tasks = _parallelFitTasks(est, train, eva, validation, epm)
             if not is_remote():
-                tasks = list(map(inheritable_thread_target, tasks))
+                tasks = list(map(inheritable_thread_target(dataset.sparkSession), tasks))
 
             for j, metric in pool.imap_unordered(lambda f: f(), tasks):
                 metrics_all[i][j] = metric

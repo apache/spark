@@ -16,7 +16,6 @@
 #
 
 import glob
-import datetime
 import math
 import os
 import shutil
@@ -24,7 +23,7 @@ import tempfile
 from contextlib import contextmanager
 
 from pyspark.sql import SparkSession
-from pyspark.sql.types import ArrayType, DoubleType, UserDefinedType, Row
+from pyspark.sql.types import Row
 from pyspark.testing.utils import (
     ReusedPySparkTestCase,
     PySparkErrorTestUtils,
@@ -73,108 +72,6 @@ except Exception as e:
     test_not_compiled_message = str(e)
 
 test_compiled = test_not_compiled_message is None
-
-
-class UTCOffsetTimezone(datetime.tzinfo):
-    """
-    Specifies timezone in UTC offset
-    """
-
-    def __init__(self, offset=0):
-        self.ZERO = datetime.timedelta(hours=offset)
-
-    def utcoffset(self, dt):
-        return self.ZERO
-
-    def dst(self, dt):
-        return self.ZERO
-
-
-class ExamplePointUDT(UserDefinedType):
-    """
-    User-defined type (UDT) for ExamplePoint.
-    """
-
-    @classmethod
-    def sqlType(cls):
-        return ArrayType(DoubleType(), False)
-
-    @classmethod
-    def module(cls):
-        return "pyspark.sql.tests"
-
-    @classmethod
-    def scalaUDT(cls):
-        return "org.apache.spark.sql.test.ExamplePointUDT"
-
-    def serialize(self, obj):
-        return [obj.x, obj.y]
-
-    def deserialize(self, datum):
-        return ExamplePoint(datum[0], datum[1])
-
-
-class ExamplePoint:
-    """
-    An example class to demonstrate UDT in Scala, Java, and Python.
-    """
-
-    __UDT__ = ExamplePointUDT()
-
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-
-    def __repr__(self):
-        return "ExamplePoint(%s,%s)" % (self.x, self.y)
-
-    def __str__(self):
-        return "(%s,%s)" % (self.x, self.y)
-
-    def __eq__(self, other):
-        return isinstance(other, self.__class__) and other.x == self.x and other.y == self.y
-
-
-class PythonOnlyUDT(UserDefinedType):
-    """
-    User-defined type (UDT) for ExamplePoint.
-    """
-
-    @classmethod
-    def sqlType(cls):
-        return ArrayType(DoubleType(), False)
-
-    @classmethod
-    def module(cls):
-        return "__main__"
-
-    def serialize(self, obj):
-        return [obj.x, obj.y]
-
-    def deserialize(self, datum):
-        return PythonOnlyPoint(datum[0], datum[1])
-
-    @staticmethod
-    def foo():
-        pass
-
-    @property
-    def props(self):
-        return {}
-
-
-class PythonOnlyPoint(ExamplePoint):
-    """
-    An example class to demonstrate UDT in only Python
-    """
-
-    __UDT__ = PythonOnlyUDT()  # type: ignore
-
-
-class MyObject:
-    def __init__(self, key, value):
-        self.key = key
-        self.value = value
 
 
 class SQLTestUtils:

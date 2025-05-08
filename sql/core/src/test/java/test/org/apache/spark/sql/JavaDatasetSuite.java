@@ -63,6 +63,9 @@ public class JavaDatasetSuite implements Serializable {
     spark = new TestSparkSession();
     jsc = new JavaSparkContext(spark.sparkContext());
     spark.loadTestData();
+
+    // Initialize state store coordinator endpoint
+    spark.streams().stateStoreCoordinator();
   }
 
   @AfterEach
@@ -798,6 +801,14 @@ public class JavaDatasetSuite implements Serializable {
     Encoder<Period> encoder = Encoders.PERIOD();
     List<Period> data = Arrays.asList(Period.ofYears(10));
     Dataset<Period> ds = spark.createDataset(data, encoder);
+    Assertions.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testLocalTimeEncoder() {
+    Encoder<LocalTime> encoder = Encoders.LOCALTIME();
+    List<LocalTime> data = Arrays.asList(LocalTime.NOON, LocalTime.MIDNIGHT);
+    Dataset<LocalTime> ds = spark.createDataset(data, encoder);
     Assertions.assertEquals(data, ds.collectAsList());
   }
 

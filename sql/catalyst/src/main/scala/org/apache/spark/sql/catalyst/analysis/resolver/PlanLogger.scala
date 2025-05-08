@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{MESSAGE, QUERY_PLAN}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -32,67 +32,44 @@ class PlanLogger extends Logging {
   private val expressionTreeChangeLogLevel = SQLConf.get.expressionTreeChangeLogLevel
 
   def logPlanResolutionEvent(plan: LogicalPlan, event: String): Unit = {
-    log(() => log"""
-       |=== Plan resolution: ${MDC(MESSAGE, event)} ===
-       |${MDC(QUERY_PLAN, plan.treeString)}
-     """.stripMargin, planChangeLogLevel)
+    logBasedOnLevel(planChangeLogLevel) {
+      log"""
+         |=== Plan resolution: ${MDC(MESSAGE, event)} ===
+         |${MDC(QUERY_PLAN, plan.treeString)}
+         """.stripMargin
+    }
   }
 
   def logPlanResolution(unresolvedPlan: LogicalPlan, resolvedPlan: LogicalPlan): Unit = {
-    log(
-      () =>
-        log"""
-       |=== Unresolved plan -> Resolved plan ===
-       |${MDC(
-               QUERY_PLAN,
-               sideBySide(
-                 unresolvedPlan.treeString,
-                 resolvedPlan.treeString
-               ).mkString("\n")
-             )}
-     """.stripMargin,
-      planChangeLogLevel
-    )
+    logBasedOnLevel(planChangeLogLevel) {
+      val unresolved = unresolvedPlan.treeString
+      val resolved = resolvedPlan.treeString
+      log"""
+         |=== Unresolved plan -> Resolved plan ===
+         |${MDC(QUERY_PLAN, sideBySide(unresolved, resolved).mkString("\n"))}
+         """.stripMargin
+    }
   }
 
   def logExpressionTreeResolutionEvent(expressionTree: Expression, event: String): Unit = {
-    log(
-      () => log"""
-       |=== Expression tree resolution: ${MDC(MESSAGE, event)} ===
-       |${MDC(QUERY_PLAN, expressionTree.treeString)}
-     """.stripMargin,
-      expressionTreeChangeLogLevel
-    )
+    logBasedOnLevel(expressionTreeChangeLogLevel) {
+      log"""
+         |=== Expression tree resolution: ${MDC(MESSAGE, event)} ===
+         |${MDC(QUERY_PLAN, expressionTree.treeString)}
+         """.stripMargin
+    }
   }
 
   def logExpressionTreeResolution(
       unresolvedExpressionTree: Expression,
       resolvedExpressionTree: Expression): Unit = {
-    log(
-      () =>
-        log"""
-       |=== Unresolved expression tree -> Resolved expression tree ===
-       |${MDC(
-               QUERY_PLAN,
-               sideBySide(
-                 unresolvedExpressionTree
-                   .withNewChildren(resolvedExpressionTree.children)
-                   .treeString,
-                 resolvedExpressionTree.treeString
-               ).mkString("\n")
-             )}
-     """.stripMargin,
-      expressionTreeChangeLogLevel
-    )
-  }
-
-  private def log(createMessage: () => MessageWithContext, logLevel: String): Unit =
-    logLevel match {
-      case "TRACE" => logTrace(createMessage().message)
-      case "DEBUG" => logDebug(createMessage().message)
-      case "INFO" => logInfo(createMessage())
-      case "WARN" => logWarning(createMessage())
-      case "ERROR" => logError(createMessage())
-      case _ => logTrace(createMessage().message)
+    logBasedOnLevel(expressionTreeChangeLogLevel) {
+      val unresolved = unresolvedExpressionTree.treeString
+      val resolved = resolvedExpressionTree.treeString
+      log"""
+         |=== Unresolved expression tree -> Resolved expression tree ===
+         |${MDC(QUERY_PLAN, sideBySide(unresolved, resolved).mkString("\n"))}
+         """.stripMargin
     }
+  }
 }

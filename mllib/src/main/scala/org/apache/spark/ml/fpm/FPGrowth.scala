@@ -223,7 +223,8 @@ class FPGrowthModel private[ml] (
     private val numTrainingRecords: Long)
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
 
-  private[ml] def this() = this(Identifiable.randomUID("fpgrowth"), null, Map.empty, 0L)
+  // For ml connect only
+  private[ml] def this() = this("", null, Map.empty, -1L)
 
   /** @group setParam */
   @Since("2.2.0")
@@ -321,6 +322,11 @@ class FPGrowthModel private[ml] (
   override def toString: String = {
     s"FPGrowthModel: uid=$uid, numTrainingRecords=$numTrainingRecords"
   }
+
+  override def estimatedSize: Long = {
+    // TODO: Implement this method.
+    throw new UnsupportedOperationException
+  }
 }
 
 @Since("2.2.0")
@@ -337,6 +343,11 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
   class FPGrowthModelWriter(instance: FPGrowthModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "FPGrowthModel does not support saving to local filesystem path."
+        )
+      }
       val extraMetadata: JObject = Map("numTrainingRecords" -> instance.numTrainingRecords)
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession,
         extraMetadata = Some(extraMetadata))
@@ -351,6 +362,11 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
     private val className = classOf[FPGrowthModel].getName
 
     override def load(path: String): FPGrowthModel = {
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "FPGrowthModel does not support loading from local filesystem path."
+        )
+      }
       implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)

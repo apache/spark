@@ -34,7 +34,7 @@ import org.apache.parquet.hadoop._
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{PATH, SCHEMA}
-import org.apache.spark.sql._
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection

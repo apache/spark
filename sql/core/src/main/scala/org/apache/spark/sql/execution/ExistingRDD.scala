@@ -20,13 +20,14 @@ package org.apache.spark.sql.execution
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{LOGICAL_PLAN_COLUMNS, OPTIMIZED_PLAN_COLUMNS}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, Encoder, SparkSession}
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.collection.Utils

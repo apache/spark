@@ -184,4 +184,34 @@ class BitSetSuite extends SparkFunSuite {
       assert(!bitSet.get(i))
     }
   }
+
+  test("empty intersect non-empty") {
+    val emptyBitSet = new BitSet(numBits = 10)
+    val bitSet = new BitSet(numBits = 10)
+
+    val setBits = Seq(0, 10, 20, 30)
+    setBits.foreach(bitSet.set)
+
+    assert(!bitSet.intersects(emptyBitSet))
+  }
+
+  test("intersect bitsets of different size") {
+    val oneBitSet = new BitSet(numBits = 1000)
+    val otherBitSet = new BitSet(numBits = 20)
+
+    Seq(0, 10, 20, 30).foreach(otherBitSet.set)
+    Seq(0, 10).foreach(oneBitSet.set)
+    val e = intercept[java.lang.AssertionError] {
+      oneBitSet.intersects(otherBitSet)
+    }
+    assert(e.getMessage.contains("assertion failed"))
+  }
+
+  test("intersect bitsets ") {
+    val oneBitSet = new BitSet(numBits = 1000)
+    val otherBitSet = new BitSet(numBits = 1000)
+    Seq(0, 10, 20, 900).foreach(otherBitSet.set)
+    Seq(1, 12, 22, 900).foreach(oneBitSet.set)
+    assert(oneBitSet.intersects(otherBitSet))
+  }
 }

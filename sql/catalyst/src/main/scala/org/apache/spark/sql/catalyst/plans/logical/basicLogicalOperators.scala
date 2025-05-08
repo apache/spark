@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 import org.apache.spark.util.random.RandomSampler
@@ -87,6 +88,21 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     )
 
     expressions.forall(_.resolved) && childrenResolved && !hasSpecialExpressions
+  }
+
+  override protected def doCanonicalize(): LogicalPlan = {
+    // During canonicalization, the name and exprId of Alias and Attributes will be
+    // erased and normalized. If the Project only changes name and exprId, then it
+    // can be striped as it doesn't change the semantic.
+    val noSemanticChange = projectList.length == child.output.length &&
+      projectList.zip(child.output).forall {
+        case (alias: Alias, attr) =>
+          alias.child.semanticEquals(attr) && alias.explicitMetadata.isEmpty &&
+            alias.qualifier.isEmpty && alias.nonInheritableMetadataKeys.isEmpty
+        case (attr1: Attribute, attr2) => attr1.semanticEquals(attr2)
+        case _ => false
+      }
+    if (noSemanticChange) child.canonicalized else super.doCanonicalize()
   }
 
   override lazy val validConstraints: ExpressionSet =
@@ -402,9 +418,14 @@ case class Intersect(
 
   private lazy val lazyOutput: Seq[Attribute] = computeOutput()
 
+  private def computeOutput(): Seq[Attribute] = Intersect.mergeChildOutputs(children.map(_.output))
+}
+
+/** Factory methods for `Intersect` nodes. */
+object Intersect {
   /** We don't use right.output because those rows get excluded from the set. */
-  private def computeOutput(): Seq[Attribute] =
-    left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
+  def mergeChildOutputs(childOutputs: Seq[Seq[Attribute]]): Seq[Attribute] =
+    childOutputs.head.zip(childOutputs.tail.head).map { case (leftAttr, rightAttr) =>
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
     }
 }
@@ -436,11 +457,16 @@ case class Except(
 
   private lazy val lazyOutput: Seq[Attribute] = computeOutput()
 
-  /** We don't use right.output because those rows get excluded from the set. */
-  private def computeOutput(): Seq[Attribute] = left.output
+  private def computeOutput(): Seq[Attribute] = Except.mergeChildOutputs(children.map(_.output))
 }
 
-/** Factory for constructing new `Union` nodes. */
+/** Factory methods for `Except` nodes. */
+object Except {
+  /** We don't use right.output because those rows get excluded from the set. */
+  def mergeChildOutputs(childOutputs: Seq[Seq[Attribute]]): Seq[Attribute] = childOutputs.head
+}
+
+/** Factory methods for `Union` nodes. */
 object Union {
   def apply(left: LogicalPlan, right: LogicalPlan): Union = {
     Union (left :: right :: Nil)
@@ -593,6 +619,29 @@ case class Union(
     copy(children = newChildren)
 }
 
+object Join {
+  def computeOutput(
+    joinType: JoinType,
+    leftOutput: Seq[Attribute],
+    rightOutput: Seq[Attribute]
+  ): Seq[Attribute] = {
+    joinType match {
+      case j: ExistenceJoin =>
+        leftOutput :+ j.exists
+      case LeftExistence(_) =>
+        leftOutput
+      case LeftOuter | LeftSingle =>
+        leftOutput ++ rightOutput.map(_.withNullability(true))
+      case RightOuter =>
+        leftOutput.map(_.withNullability(true)) ++ rightOutput
+      case FullOuter =>
+        leftOutput.map(_.withNullability(true)) ++ rightOutput.map(_.withNullability(true))
+      case _ =>
+        leftOutput ++ rightOutput
+    }
+  }
+}
+
 case class Join(
     left: LogicalPlan,
     right: LogicalPlan,
@@ -628,22 +677,7 @@ case class Join(
     }
   }
 
-  override def output: Seq[Attribute] = {
-    joinType match {
-      case j: ExistenceJoin =>
-        left.output :+ j.exists
-      case LeftExistence(_) =>
-        left.output
-      case LeftOuter | LeftSingle =>
-        left.output ++ right.output.map(_.withNullability(true))
-      case RightOuter =>
-        left.output.map(_.withNullability(true)) ++ right.output
-      case FullOuter =>
-        left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
-      case _ =>
-        left.output ++ right.output
-    }
-  }
+  override def output: Seq[Attribute] = Join.computeOutput(joinType, left.output, right.output)
 
   override def metadataOutput: Seq[Attribute] = {
     joinType match {
@@ -768,11 +802,13 @@ case class InsertIntoDir(
  * @param isTempView A flag to indicate whether the view is temporary or not.
  * @param child The logical plan of a view operator. If the view description is available, it should
  *              be a logical plan parsed from the `CatalogTable.viewText`.
+ * @param options The configuration used when reading data.
  */
 case class View(
     desc: CatalogTable,
     isTempView: Boolean,
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty) extends UnaryNode {
   require(!isTempViewStoringAnalyzedPlan || child.resolved)
 
   override def output: Seq[Attribute] = child.output
@@ -817,20 +853,30 @@ object View {
     // For temporary view, we always use captured sql configs
     if (activeConf.useCurrentSQLConfigsForView && !isTempView) return activeConf
 
-    val sqlConf = new SQLConf()
     // We retain below configs from current session because they are not captured by view
     // as optimization configs but they are still needed during the view resolution.
-    // TODO: remove this `retainedConfigs` after the `RelationConversions` is moved to
+    // TODO: remove this `retainedHiveConfigs` after the `RelationConversions` is moved to
     // optimization phase.
+    val retainedHiveConfigs = Seq(
+      "spark.sql.hive.convertMetastoreParquet",
+      "spark.sql.hive.convertMetastoreOrc",
+      "spark.sql.hive.convertInsertingPartitionedTable",
+      "spark.sql.hive.convertInsertingUnpartitionedTable",
+      "spark.sql.hive.convertMetastoreCtas"
+    )
+
+    val retainedLoggingConfigs = Seq(
+      "spark.sql.planChangeLog.level",
+      "spark.sql.expressionTreeChangeLog.level"
+    )
+
     val retainedConfigs = activeConf.getAllConfs.filter { case (key, _) =>
-      Seq(
-        "spark.sql.hive.convertMetastoreParquet",
-        "spark.sql.hive.convertMetastoreOrc",
-        "spark.sql.hive.convertInsertingPartitionedTable",
-        "spark.sql.hive.convertInsertingUnpartitionedTable",
-        "spark.sql.hive.convertMetastoreCtas"
-      ).contains(key) || key.startsWith("spark.sql.catalog.")
+      retainedHiveConfigs.contains(key) || retainedLoggingConfigs.contains(key) || key.startsWith(
+        "spark.sql.catalog."
+      )
     }
+
+    val sqlConf = new SQLConf()
     for ((k, v) <- configs ++ retainedConfigs) {
       sqlConf.settings.put(k, v)
     }
@@ -1166,7 +1212,14 @@ object Aggregate {
       groupingExpression.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
   }
 
-  def supportsObjectHashAggregate(aggregateExpressions: Seq[AggregateExpression]): Boolean = {
+  def supportsObjectHashAggregate(
+      aggregateExpressions: Seq[AggregateExpression],
+      groupingExpressions: Seq[Expression]): Boolean = {
+    // We should not use hash aggregation on binary unstable types.
+    if (groupingExpressions.exists(e => !UnsafeRowUtils.isBinaryStable(e.dataType))) {
+      return false
+    }
+
     aggregateExpressions.map(_.aggregateFunction).exists {
       case _: TypedImperativeAggregate[_] => true
       case _ => false
@@ -1359,6 +1412,8 @@ case class Offset(offsetExpr: Expression, child: LogicalPlan) extends OrderPrese
   }
   override protected def withNewChildInternal(newChild: LogicalPlan): Offset =
     copy(child = newChild)
+
+  override val nodePatterns: Seq[TreePattern] = Seq(OFFSET)
 }
 
 /**

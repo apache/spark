@@ -418,7 +418,7 @@ class BlockManagerMasterEndpoint(
     if (externalShuffleServiceRemoveShuffleEnabled) {
       mapOutputTracker.shuffleStatuses.get(shuffleId).foreach { shuffleStatus =>
         shuffleStatus.withMapStatuses { mapStatuses =>
-          mapStatuses.foreach { mapStatus =>
+          mapStatuses.filter(_ != null).foreach { mapStatus =>
             // Check if the executor has been deallocated
             if (!blockManagerIdByExecutor.contains(mapStatus.location.executorId)) {
               val blocksToDel =
@@ -862,31 +862,50 @@ class BlockManagerMasterEndpoint(
   private def getLocationsAndStatus(
       blockId: BlockId,
       requesterHost: String): Option[BlockLocationsAndStatus] = {
-    val locations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
-    val status = locations.headOption.flatMap { bmId =>
-      if (externalShuffleServiceRddFetchEnabled && bmId.port == externalShuffleServicePort) {
-        blockStatusByShuffleService.get(bmId).flatMap(m => m.get(blockId))
+    val allLocations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
+    val blockStatusWithBlockManagerId: Option[(BlockStatus, BlockManagerId)] =
+      (if (externalShuffleServiceRddFetchEnabled && blockId.isRDD) {
+        // If fetching disk persisted RDD from the external shuffle service is enabled then first
+        // try to find the block in the external shuffle service preferring the one running on
+        // the same host. This search includes blocks stored on already killed executors as well.
+        val hostLocalLocations = allLocations.find { bmId =>
+          bmId.host == requesterHost && bmId.port == externalShuffleServicePort
+        }
+        val location = hostLocalLocations
+          .orElse(allLocations.find(_.port == externalShuffleServicePort))
+        location
+          .flatMap(blockStatusByShuffleService.get(_).flatMap(_.get(blockId)))
+          .zip(location)
       } else {
-        blockManagerInfo.get(bmId).flatMap(_.getStatus(blockId))
+        // trying to find it in the executors running on the same host and persisted on the disk
+        // Implementation detail: using flatMap on iterators makes the transformation lazy.
+        allLocations.filter(_.host == requesterHost).iterator
+          .flatMap { bmId =>
+            blockManagerInfo.get(bmId).flatMap { blockInfo =>
+              blockInfo.getStatus(blockId).map((_, bmId))
+            }
+          }
+          .find(_._1.storageLevel.useDisk)
+      })
+      .orElse {
+        // if the block cannot be found in the same host as a disk stored block then extend the
+        // search to all active (not killed) executors and to all storage levels
+        val location = allLocations.headOption
+        location.flatMap(blockManagerInfo.get(_)).flatMap(_.getStatus(blockId)).zip(location)
       }
-    }
-
-    if (locations.nonEmpty && status.isDefined) {
-      val localDirs = locations.find { loc =>
-        // When the external shuffle service running on the same host is found among the block
-        // locations then the block must be persisted on the disk. In this case the executorId
-        // can be used to access this block even when the original executor is already stopped.
-        loc.host == requesterHost &&
-          (loc.port == externalShuffleServicePort ||
-            blockManagerInfo
-              .get(loc)
-              .flatMap(_.getStatus(blockId).map(_.storageLevel.useDisk))
-              .getOrElse(false))
-      }.flatMap { bmId => Option(executorIdToLocalDirs.getIfPresent(bmId.executorId)) }
-      Some(BlockLocationsAndStatus(locations, status.get, localDirs))
-    } else {
-      None
-    }
+    logDebug(s"Identified block: $blockStatusWithBlockManagerId")
+    blockStatusWithBlockManagerId
+      .map { case (blockStatus: BlockStatus, bmId: BlockManagerId) =>
+        if (bmId.host == requesterHost && blockStatus.storageLevel.useDisk) {
+          BlockLocationsAndStatus(
+            allLocations,
+            blockStatus,
+            Option(executorIdToLocalDirs.getIfPresent(bmId.executorId)))
+        } else {
+          BlockLocationsAndStatus(allLocations, blockStatus, None)
+        }
+      }
+      .orElse(None)
   }
 
   private def getLocationsMultipleBlockIds(

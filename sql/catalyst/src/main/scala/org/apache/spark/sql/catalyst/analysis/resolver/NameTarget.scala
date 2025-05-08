@@ -21,53 +21,71 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.util.StringUtils.orderSuggestedIdentifiersBySimilarity
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.Metadata
 
 /**
- * Class that represents results of name resolution or star expansion. It encapsulates:
- *   - `candidates` - A list of candidates that are possible matches for a given name.
- *   - `aliasName` - If the candidates size is 1 and it's type is `ExtractValue` (which means that
- *     it's a recursive type), then the `aliasName` should be the name with which the candidate is
- *     aliased. Otherwise, `aliasName` should be `None`.
- *   - `allAttributes` - A list of all attributes which is used to generate suggestions for
- *     unresolved column error.
+ * [[NameTarget]] is a result of a multipart name resolution of the
+ * [[NameScope.resolveMultipartName]].
  *
- * Example:
+ * Attribute resolution:
  *
- * - Attribute resolution:
- * {{{ SELECT col1 FROM VALUES (1); }}} will have a [[NameTarget]] with a single candidate `col1`.
- * `aliasName` would be `None` in this case because the column is not of recursive type.
+ * {{{
+ * -- [[NameTarget]] with a single candidate `col1`. `aliasName` is be `None` in this case because
+ * -- the name is not a field/value/item of some recursive type.
+ * SELECT col1 FROM VALUES (1);
+ * }}}
  *
- * - Recursive attribute resolution:
- * {{{ SELECT col1.col1 FROM VALUES(STRUCT(1,2), 3) }}} will have a [[NameTarget]] with a
- * single candidate `col1` and an `aliasName` of `Some("col1")`.
+ * Attribute resolution ambiguity:
+ *
+ * {{{
+ * -- [[NameTarget]] with candidates `col1`, `col1`. [[pickCandidate]] will throw
+ * -- `AMBIGUOUS_REFERENCE`.
+ * SELECT col1 FROM VALUES (1) t1, VALUES (2) t2;
+ * }}}
+ *
+ * Struct field resolution:
+ *
+ * {{{
+ * -- [[NameTarget]] with a single candidate `GetStructField(col1, "field1")`. `aliasName` is
+ * -- `Some("col1")`, since here we extract a field of a struct.
+ * SELECT col1.field1 FROM VALUES (named_struct('field1', 1), 3);
+ * }}}
+ *
+ * @param candidates A list of candidates that are possible matches for a given name.
+ * @param aliasName If the candidates size is 1 and it's type is [[ExtractValue]] (which means that
+ *   it's a field/value/item from a recursive type), then the `aliasName` should be the name with
+ *   which the candidate needs to be aliased. Otherwise, `aliasName` is `None`.
+ * @param aliasMetadata If the candidates were created out of expressions referenced by group by
+ *   alias, store the metadata of the alias. Otherwise, `aliasMetadata` is `None`.
+ * @param lateralAttributeReference If the candidate is laterally referencing another column this
+ *   field is populated with that column's attribute.
+ * @param output [[output]] of a [[NameScope]] that produced this [[NameTarget]]. Used to provide
+ *   suggestions for thrown errors.
+ * @param isOuterReference A flag indicating that this [[NameTarget]] resolves to an outer
+ *   reference.
  */
 case class NameTarget(
     candidates: Seq[Expression],
     aliasName: Option[String] = None,
-    allAttributes: Seq[Attribute] = Seq.empty) {
+    aliasMetadata: Option[Metadata] = None,
+    lateralAttributeReference: Option[Attribute] = None,
+    output: Seq[Attribute] = Seq.empty,
+    isOuterReference: Boolean = false) {
 
   /**
-   * Picks a candidate from the list of candidates based on the given unresolved attribute.
-   * Its behavior is as follows (based on the number of candidates):
-   *
-   * - If there is only one candidate, it will be returned.
-   *
-   * - If there are multiple candidates, an ambiguous reference error will be thrown.
-   *
-   * - If there are no candidates, an unresolved column error will be thrown.
+   * Pick a single candidate from `candidates`:
+   * - If there are no candidates, throw `UNRESOLVED_COLUMN.WITH_SUGGESTION`.
+   * - If there are several candidates, throw `AMBIGUOUS_REFERENCE`.
+   * - Otherwise, return a single [[Expression]].
    */
   def pickCandidate(unresolvedAttribute: UnresolvedAttribute): Expression = {
-    candidates match {
-      case Seq() =>
-        throwUnresolvedColumnError(unresolvedAttribute)
-      case Seq(candidate) =>
-        candidate
-      case _ =>
-        throw QueryCompilationErrors.ambiguousReferenceError(
-          unresolvedAttribute.name,
-          candidates.collect { case attribute: AttributeReference => attribute }
-        )
+    if (candidates.isEmpty) {
+      throwUnresolvedColumnError(unresolvedAttribute)
     }
+    if (candidates.length > 1) {
+      throwAmbiguousReferenceError(unresolvedAttribute)
+    }
+    candidates.head
   }
 
   private def throwUnresolvedColumnError(unresolvedAttribute: UnresolvedAttribute): Nothing =
@@ -75,7 +93,13 @@ case class NameTarget(
       unresolvedAttribute.name,
       proposal = orderSuggestedIdentifiersBySimilarity(
         unresolvedAttribute.name,
-        candidates = allAttributes.map(attribute => attribute.qualifier :+ attribute.name)
+        candidates = output.map(attribute => attribute.qualifier :+ attribute.name)
       )
+    )
+
+  private def throwAmbiguousReferenceError(unresolvedAttribute: UnresolvedAttribute): Nothing =
+    throw QueryCompilationErrors.ambiguousReferenceError(
+      unresolvedAttribute.name,
+      candidates.collect { case attribute: AttributeReference => attribute }
     )
 }

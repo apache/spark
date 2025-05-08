@@ -2976,7 +2976,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             When the given function has the return type annotated, the original index of the
             GroupBy object will be lost, and a default index will be attached to the result.
             Please be careful about configuring the default index. See also `Default Index Type
-            <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/options.html#default-index-type>`_.
+            <https://spark.apache.org/docs/latest/api/python/tutorial/pandas_on_spark/options.html#default-index-type>`_.
 
         .. note:: the series within ``func`` is actually a pandas series. Therefore,
             any pandas API within this function is allowed.
@@ -4595,12 +4595,17 @@ def _test() -> None:
     import numpy
     from pyspark.sql import SparkSession
     import pyspark.pandas.groupby
+    from pyspark.testing.utils import is_ansi_mode_test
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.groupby.__dict__.copy()
     globs["np"] = numpy
     globs["ps"] = pyspark.pandas
+
+    if is_ansi_mode_test:
+        del pyspark.pandas.groupby.DataFrameGroupBy.corr.__doc__
+
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.groupby tests")

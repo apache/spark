@@ -223,6 +223,33 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("Dynamic writes/reads of TIME partitions") {
+    Seq(
+      "00:00:00" -> TimeType(0),
+      "00:00:00.00109" -> TimeType(5),
+      "00:01:02.999999" -> TimeType(6),
+      "12:00:00" -> TimeType(1),
+      "23:59:59.000001" -> TimeType(),
+      "23:59:59.999999" -> TimeType(6)
+    ).foreach { case (timeStr, timeType) =>
+      withTempPath { f =>
+        val df = sql(s"select 0 AS id, cast('$timeStr' as ${timeType.sql}) AS tt")
+        assert(df.schema("tt").dataType === timeType)
+        df.write
+          .partitionBy("tt")
+          .format("parquet")
+          .save(f.getAbsolutePath)
+        val files = TestUtils.recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
+        assert(files.length == 1)
+        checkPartitionValues(files.head, timeStr)
+        val schema = new StructType()
+          .add("id", IntegerType)
+          .add("tt", timeType)
+        checkAnswer(spark.read.schema(schema).format("parquet").load(f.getAbsolutePath), df)
+      }
+    }
+  }
 }
 
 /**

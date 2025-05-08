@@ -69,7 +69,7 @@ case class PlanWithUnresolvedIdentifier(
     this(identifierExpr, Nil, (ident, _) => planBuilder(ident))
   }
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER)
+  final override val nodePatterns: Seq[TreePattern] = Seq(PLAN_WITH_UNRESOLVED_IDENTIFIER)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =
@@ -776,6 +776,8 @@ case class UnresolvedStarWithColumns(
 
     replacedAndExistingColumns ++ newColumns
   }
+
+  override def toString: String = super[Expression].toString
 }
 
 /**
@@ -812,6 +814,8 @@ case class UnresolvedStarWithColumnsRenames(
         )
     }
   }
+
+  override def toString: String = super[LeafExpression].toString
 }
 
 /**

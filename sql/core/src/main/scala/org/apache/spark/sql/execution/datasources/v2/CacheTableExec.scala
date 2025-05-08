@@ -21,12 +21,12 @@ import java.util.Locale
 
 import org.apache.spark.internal.LogKeys.OPTIONS
 import org.apache.spark.internal.MDC
-import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{LocalTempView, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.storage.StorageLevel

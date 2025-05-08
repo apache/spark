@@ -690,7 +690,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
         val t1 = spark.table("t")
         val t2 = t1.selectExpr("i as ii")
         val plan = t1.join(t2, t1("i") === t2("ii")).queryExecution.executedPlan
-        assert(plan.collect { case sort: SortExec => sort }.isEmpty)
+        assert(plan.collectFirst { case sort: SortExec => sort }.isEmpty)
       }
     }
   }
@@ -703,7 +703,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
           sql("CREATE VIEW v AS SELECT * FROM t").collect()
 
           val plan = sql("SELECT * FROM t a JOIN v b ON a.i = b.i").queryExecution.executedPlan
-          assert(plan.collect { case exchange: ShuffleExchangeExec => exchange }.isEmpty)
+          assert(plan.collectFirst { case exchange: ShuffleExchangeExec => exchange }.isEmpty)
         }
       }
     }

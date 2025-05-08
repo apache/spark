@@ -22,13 +22,15 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{functions, Column, DataFrame}
+import org.apache.spark.sql.{functions, Column}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.classic.DataFrame
+import org.apache.spark.sql.classic.ExpressionUtils.expression
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -52,7 +54,6 @@ object FrequentItems extends Logging {
       df: DataFrame,
       cols: Seq[String],
       support: Double): DataFrame = {
-    import df.sparkSession.expression
     require(support >= 1e-4 && support <= 1.0, s"Support must be in [1e-4, 1], but got $support.")
 
     // number of max items to keep counts for

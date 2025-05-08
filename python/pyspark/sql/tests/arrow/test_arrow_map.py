@@ -124,7 +124,7 @@ class MapInArrowTestsMixin(object):
         def empty_rows(_):
             return iter([pa.RecordBatch.from_pandas(pd.DataFrame({"a": []}))])
 
-        self.assertEqual(self.spark.range(10).mapInArrow(empty_rows, "a int").count(), 0)
+        self.assertEqual(self.spark.range(10).mapInArrow(empty_rows, "a double").count(), 0)
 
     def test_chain_map_in_arrow(self):
         def func(iterator):
@@ -170,6 +170,49 @@ class MapInArrowTestsMixin(object):
 
         df.mapInArrow(func2, "id long", True).collect()
 
+    def test_negative_and_zero_batch_size(self):
+        for batch_size in [0, -1]:
+            with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": batch_size}):
+                MapInArrowTests.test_map_in_arrow(self)
+
+    def test_nested_extraneous_field(self):
+        def func(iterator):
+            for _ in iterator:
+                struct_arr = pa.StructArray.from_arrays([[1, 2], [3, 4]], names=["a", "b"])
+                yield pa.RecordBatch.from_arrays([struct_arr], ["x"])
+
+        df = self.spark.range(1)
+        with self.assertRaisesRegex(Exception, r"ARROW_TYPE_MISMATCH.*SQL_MAP_ARROW_ITER_UDF"):
+            df.mapInArrow(func, "x struct<b:int>").collect()
+
+    def test_top_level_wrong_order(self):
+        def func(iterator):
+            for _ in iterator:
+                yield pa.RecordBatch.from_arrays([[1], [2]], ["b", "a"])
+
+        df = self.spark.range(1)
+        with self.assertRaisesRegex(Exception, r"ARROW_TYPE_MISMATCH.*SQL_MAP_ARROW_ITER_UDF"):
+            df.mapInArrow(func, "a int, b int").collect()
+
+    def test_nullability_widen(self):
+        def func(iterator):
+            for _ in iterator:
+                yield pa.RecordBatch.from_arrays([[1]], ["a"])
+
+        df = self.spark.range(1)
+        with self.assertRaisesRegex(Exception, r"ARROW_TYPE_MISMATCH.*SQL_MAP_ARROW_ITER_UDF"):
+            df.mapInArrow(func, "a int not null").collect()
+
+    def test_nullability_narrow(self):
+        def func(iterator):
+            for _ in iterator:
+                yield pa.RecordBatch.from_arrays(
+                    [[1]], pa.schema([pa.field("a", pa.int32(), nullable=False)])
+                )
+
+        df = self.spark.range(1)
+        df.mapInArrow(func, "a int").collect()
+
 
 class MapInArrowTests(MapInArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
@@ -192,6 +235,31 @@ class MapInArrowTests(MapInArrowTestsMixin, ReusedSQLTestCase):
             os.environ["TZ"] = cls.tz_prev
         time.tzset()
         ReusedSQLTestCase.tearDownClass()
+
+
+class MapInArrowWithArrowBatchSlicingTestsAndReducedBatchSizeTests(MapInArrowTests):
+    @classmethod
+    def setUpClass(cls):
+        MapInArrowTests.setUpClass()
+        # Set it to a small odd value to exercise batching logic for all test cases
+        cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "3")
+        cls.spark.conf.set("spark.sql.execution.arrow.maxBytesPerBatch", "10")
+
+
+class MapInArrowWithOutputArrowBatchSlicingRecordsTests(MapInArrowTests):
+    @classmethod
+    def setUpClass(cls):
+        MapInArrowTests.setUpClass()
+        cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "10")
+        cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerOutputBatch", "3")
+
+
+class MapInArrowWithOutputArrowBatchSlicingBytesTests(MapInArrowTests):
+    @classmethod
+    def setUpClass(cls):
+        MapInArrowTests.setUpClass()
+        cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "10")
+        cls.spark.conf.set("spark.sql.execution.arrow.maxBytesPerOutputBatch", "3")
 
 
 if __name__ == "__main__":

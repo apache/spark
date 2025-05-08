@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.expressions.{
   Subtract,
   SubtractDates
 }
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DateType, StringType}
 
 /**
@@ -90,30 +89,29 @@ class BinaryArithmeticResolver(
     extends TreeNodeResolver[BinaryArithmetic, Expression]
     with ProducesUnresolvedSubtree {
 
-  private val shouldTrackResolvedNodes =
-    conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_TRACK_RESOLVED_NODES_ENABLED)
-
-  private val typeCoercionRules: Seq[Expression => Expression] =
+  private val typeCoercionTransformations: Seq[Expression => Expression] =
     if (conf.ansiEnabled) {
-      BinaryArithmeticResolver.ANSI_TYPE_COERCION_RULES
+      BinaryArithmeticResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
     } else {
-      BinaryArithmeticResolver.TYPE_COERCION_RULES
+      BinaryArithmeticResolver.TYPE_COERCION_TRANSFORMATIONS
     }
   private val typeCoercionResolver: TypeCoercionResolver =
-    new TypeCoercionResolver(timezoneAwareExpressionResolver, typeCoercionRules)
+    new TypeCoercionResolver(timezoneAwareExpressionResolver, typeCoercionTransformations)
 
   override def resolve(unresolvedBinaryArithmetic: BinaryArithmetic): Expression = {
     val binaryArithmeticWithResolvedChildren: BinaryArithmetic =
-      withResolvedChildren(unresolvedBinaryArithmetic, expressionResolver.resolve)
+      withResolvedChildren(unresolvedBinaryArithmetic, expressionResolver.resolve _)
+        .asInstanceOf[BinaryArithmetic]
+
     val binaryArithmeticWithResolvedSubtree: Expression =
       withResolvedSubtree(binaryArithmeticWithResolvedChildren, expressionResolver.resolve) {
         transformBinaryArithmeticNode(binaryArithmeticWithResolvedChildren)
       }
-    val binaryArithmeticWithResolvedTimezone = timezoneAwareExpressionResolver.withResolvedTimezone(
+
+    timezoneAwareExpressionResolver.withResolvedTimezone(
       binaryArithmeticWithResolvedSubtree,
       conf.sessionLocalTimeZone
     )
-    reallocateKnownNodesForTracking(binaryArithmeticWithResolvedTimezone)
   }
 
   /**
@@ -156,30 +154,11 @@ class BinaryArithmeticResolver(
       BinaryArithmeticWithDatetimeResolver.resolve(arithmetic)
     case other => other
   }
-
-  /**
-   * Since [[TracksResolvedNodes]] requires all the expressions in the tree to be unique objects,
-   * we reallocate the known nodes in [[ANALYZER_SINGLE_PASS_TRACK_RESOLVED_NODES_ENABLED]] mode,
-   * otherwise we preserve the old object to avoid unnecessary memory allocations.
-   */
-  private def reallocateKnownNodesForTracking(expression: Expression): Expression = {
-    if (shouldTrackResolvedNodes) {
-      expression match {
-        case add: Add => add.copy()
-        case subtract: Subtract => subtract.copy()
-        case multiply: Multiply => multiply.copy()
-        case divide: Divide => divide.copy()
-        case _ => expression
-      }
-    } else {
-      expression
-    }
-  }
 }
 
 object BinaryArithmeticResolver {
   // Ordering in the list of type coercions should be in sync with the list in [[TypeCoercion]].
-  private val TYPE_COERCION_RULES: Seq[Expression => Expression] = Seq(
+  private val TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
     StringPromotionTypeCoercion.apply,
     DecimalPrecisionTypeCoercion.apply,
     DivisionTypeCoercion.apply,
@@ -189,7 +168,7 @@ object BinaryArithmeticResolver {
   )
 
   // Ordering in the list of type coercions should be in sync with the list in [[AnsiTypeCoercion]].
-  private val ANSI_TYPE_COERCION_RULES: Seq[Expression => Expression] = Seq(
+  private val ANSI_TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
     AnsiStringPromotionTypeCoercion.apply,
     DecimalPrecisionTypeCoercion.apply,
     DivisionTypeCoercion.apply,

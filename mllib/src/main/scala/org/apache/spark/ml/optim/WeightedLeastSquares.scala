@@ -107,7 +107,12 @@ private[ml] class WeightedLeastSquares(
       instr.logWarning("regParam is zero, which might cause numerical instability and overfitting.")
     }
 
-    val summary = instances.treeAggregate(new Aggregator)(_.add(_), _.merge(_), depth)
+    val summary = instances.treeAggregate[Aggregator](
+      zeroValue = new Aggregator,
+      seqOp = (agg: Aggregator, x: Instance) => agg.add(x),
+      combOp = (agg1: Aggregator, agg2: Aggregator) => agg1.merge(agg2),
+      depth = depth,
+      finalAggregateOnExecutor = true)
     summary.validate()
     instr.logInfo(log"Number of instances: ${MDC(COUNT, summary.count)}.")
     val k = if (fitIntercept) summary.k + 1 else summary.k

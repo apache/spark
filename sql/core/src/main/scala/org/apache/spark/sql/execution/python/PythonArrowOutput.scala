@@ -27,6 +27,7 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, PythonWorker, SpecialLengths}
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
@@ -42,6 +43,15 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
   protected def handleMetadataAfterExec(stream: DataInputStream): Unit = { }
 
   protected def deserializeColumnarBatch(batch: ColumnarBatch, schema: StructType): OUT
+
+  protected def arrowMaxRecordsPerOutputBatch: Int = SQLConf.get.arrowMaxRecordsPerOutputBatch
+
+  protected def arrowMaxBytesPerOutputBatch: Int = SQLConf.get.arrowMaxBytesPerOutputBatch.toInt
+
+  if (arrowMaxRecordsPerOutputBatch > 0 && arrowMaxBytesPerOutputBatch > 0) {
+    throw new IllegalArgumentException(
+      "Both max records and max bytes of an Arrow output batch cannot be set at the same time.")
+  }
 
   protected def newReaderIterator(
       stream: DataInputStream,
@@ -62,7 +72,7 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
       private var reader: ArrowStreamReader = _
       private var root: VectorSchemaRoot = _
       private var schema: StructType = _
-      private var vectors: Array[ColumnVector] = _
+      private var processor: ArrowOutputProcessor = _
 
       context.addTaskCompletionListener[Unit] { _ =>
         if (reader != null) {
@@ -84,17 +94,12 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
         }
         try {
           if (reader != null && batchLoaded) {
-            val bytesReadStart = reader.bytesRead()
-            batchLoaded = reader.loadNextBatch()
+            batchLoaded = processor.loadBatch()
             if (batchLoaded) {
-              val batch = new ColumnarBatch(vectors)
-              val rowCount = root.getRowCount
-              batch.setNumRows(root.getRowCount)
-              val bytesReadEnd = reader.bytesRead()
-              pythonMetrics("pythonNumRowsReceived") += rowCount
-              pythonMetrics("pythonDataReceived") += bytesReadEnd - bytesReadStart
+              val batch = processor.produceBatch()
               deserializeColumnarBatch(batch, schema)
             } else {
+              processor.close()
               reader.close(false)
               allocator.close()
               // Reach end of stream. Call `read()` again to read control data.
@@ -106,9 +111,17 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
                 reader = new ArrowStreamReader(stream, allocator)
                 root = reader.getVectorSchemaRoot()
                 schema = ArrowUtils.fromArrowSchema(root.getSchema())
-                vectors = root.getFieldVectors().asScala.map { vector =>
-                  new ArrowColumnVector(vector)
-                }.toArray[ColumnVector]
+
+                if (arrowMaxRecordsPerOutputBatch > 0) {
+                  processor = new SliceRecordsArrowOutputProcessorImpl(
+                    reader, pythonMetrics, arrowMaxRecordsPerOutputBatch)
+                } else if (arrowMaxBytesPerOutputBatch > 0) {
+                  processor = new SliceBytesArrowOutputProcessorImpl(
+                    reader, pythonMetrics, arrowMaxBytesPerOutputBatch)
+                } else {
+                  processor = new ArrowOutputProcessorImpl(reader, pythonMetrics)
+                }
+
                 read()
               case SpecialLengths.TIMING_DATA =>
                 handleTimingData()
@@ -132,4 +145,170 @@ private[python] trait BasicPythonArrowOutput extends PythonArrowOutput[ColumnarB
   protected def deserializeColumnarBatch(
       batch: ColumnarBatch,
       schema: StructType): ColumnarBatch = batch
+}
+
+trait ArrowOutputProcessor {
+  def loadBatch(): Boolean
+  protected def getRoot: VectorSchemaRoot
+  protected def getVectors(root: VectorSchemaRoot): Array[ColumnVector]
+  def produceBatch(): ColumnarBatch
+  def close(): Unit
+}
+
+class ArrowOutputProcessorImpl(reader: ArrowStreamReader, pythonMetrics: Map[String, SQLMetric])
+    extends ArrowOutputProcessor {
+  protected val root = reader.getVectorSchemaRoot()
+  protected val schema: StructType = ArrowUtils.fromArrowSchema(root.getSchema())
+  private val vectors: Array[ColumnVector] = root.getFieldVectors().asScala.map { vector =>
+    new ArrowColumnVector(vector)
+  }.toArray[ColumnVector]
+
+  protected var rowCount = -1
+
+  override def loadBatch(): Boolean = {
+    val bytesReadStart = reader.bytesRead()
+    val batchLoaded = reader.loadNextBatch()
+    if (batchLoaded) {
+      rowCount = root.getRowCount
+      val bytesReadEnd = reader.bytesRead()
+      pythonMetrics("pythonNumRowsReceived") += rowCount
+      pythonMetrics("pythonDataReceived") += bytesReadEnd - bytesReadStart
+    }
+    batchLoaded
+  }
+
+  protected override def getRoot: VectorSchemaRoot = root
+  protected override def getVectors(root: VectorSchemaRoot): Array[ColumnVector] = vectors
+  override def produceBatch(): ColumnarBatch = {
+    val batchRoot = getRoot
+    val vectors = getVectors(batchRoot)
+    val batch = new ColumnarBatch(vectors)
+    batch.setNumRows(batchRoot.getRowCount)
+    batch
+  }
+  override def close(): Unit = {
+    vectors.foreach(_.close())
+    root.close()
+  }
+}
+
+abstract class BaseSliceArrowOutputProcessor(
+    reader: ArrowStreamReader,
+    pythonMetrics: Map[String, SQLMetric])
+  extends ArrowOutputProcessorImpl(reader, pythonMetrics) {
+
+  protected var currentRowIdx = -1
+  protected var prevRoot: VectorSchemaRoot = null
+  protected var prevVectors: Array[ColumnVector] = _
+
+  override def loadBatch(): Boolean = {
+    if (rowCount > 0 && currentRowIdx < rowCount) {
+      true
+    } else {
+      val loaded = super.loadBatch()
+      currentRowIdx = 0
+      loaded
+    }
+  }
+
+  override def produceBatch(): ColumnarBatch = {
+    val batchRoot = getRoot
+
+    if (batchRoot != prevRoot) {
+      if (prevRoot != null) {
+        prevVectors.foreach(_.close())
+        prevRoot.close()
+      }
+      prevRoot = batchRoot
+    }
+
+    val vectors = getVectors(batchRoot)
+    prevVectors = vectors
+
+    val batch = new ColumnarBatch(vectors)
+    batch.setNumRows(batchRoot.getRowCount)
+    batch
+  }
+
+  protected override def getVectors(root: VectorSchemaRoot): Array[ColumnVector] = {
+    root.getFieldVectors.asScala.map { vector =>
+      new ArrowColumnVector(vector)
+    }.toArray[ColumnVector]
+  }
+
+  override def close(): Unit = {
+    if (prevRoot != null) {
+      prevVectors.foreach(_.close())
+      prevRoot.close()
+    }
+  }
+}
+
+class SliceBytesArrowOutputProcessorImpl(
+    reader: ArrowStreamReader,
+    pythonMetrics: Map[String, SQLMetric],
+    arrowMaxBytesPerOutputBatch: Int)
+  extends BaseSliceArrowOutputProcessor(reader, pythonMetrics) {
+
+  protected override def getRoot: VectorSchemaRoot = {
+    if (getBatchBytes(root) < arrowMaxBytesPerOutputBatch) {
+      currentRowIdx = currentRowIdx + root.getRowCount
+      root
+    } else {
+      // We iteratively slice the batch by 90% until we reach a batch with required byte size.
+      // If we cannot have it even with one single row, we will output a batch with one row.
+      var rootSlice = root
+      val stepRatio = 0.9
+      var sliceBatchCount = rowCount - currentRowIdx
+
+      while (sliceBatchCount > 0) {
+        rootSlice = root.slice(currentRowIdx, sliceBatchCount)
+        val batchBytes = getBatchBytes(rootSlice)
+        if (batchBytes < arrowMaxBytesPerOutputBatch) {
+          currentRowIdx = currentRowIdx + rootSlice.getRowCount
+
+          return rootSlice
+        } else {
+          rootSlice.close()
+          sliceBatchCount = (sliceBatchCount * stepRatio).toInt
+        }
+      }
+      // If the batch size is still too large, we need to slice it down to a single row.
+      // Normally, this should not happen, but it is possible if the data is very large.
+      if (sliceBatchCount == 0) {
+        sliceBatchCount = 1
+      }
+      rootSlice = root.slice(currentRowIdx, sliceBatchCount)
+      currentRowIdx = currentRowIdx + rootSlice.getRowCount
+      rootSlice
+    }
+  }
+
+  private def getBatchBytes(root: VectorSchemaRoot): Int = {
+    var batchBytes = 0
+    root.getFieldVectors.asScala.foreach { vector =>
+      batchBytes += vector.getBufferSize
+    }
+    batchBytes
+  }
+}
+
+class SliceRecordsArrowOutputProcessorImpl(
+    reader: ArrowStreamReader,
+    pythonMetrics: Map[String, SQLMetric],
+    arrowMaxRecordsPerOutputBatch: Int)
+  extends BaseSliceArrowOutputProcessor(reader, pythonMetrics) {
+
+  protected override def getRoot: VectorSchemaRoot = {
+    val remainingRows = rowCount - currentRowIdx
+    val rootSlice = if (remainingRows > arrowMaxRecordsPerOutputBatch) {
+      root.slice(currentRowIdx, arrowMaxRecordsPerOutputBatch)
+    } else {
+      root
+    }
+
+    currentRowIdx = currentRowIdx + rootSlice.getRowCount
+
+    rootSlice
+  }
 }

@@ -19,12 +19,14 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.errors.QueryErrorsBase
 
 /**
  * Base class for [[TreeNode]] resolvers. All resolvers should extend this class with
  * specific [[UnresolvedNode]] and [[ResolvedNode]] types.
  */
 trait TreeNodeResolver[UnresolvedNode <: TreeNode[_], ResolvedNode <: TreeNode[_]]
-    extends SQLConfHelper {
+    extends SQLConfHelper
+    with QueryErrorsBase {
   def resolve(unresolvedNode: UnresolvedNode): ResolvedNode
 }

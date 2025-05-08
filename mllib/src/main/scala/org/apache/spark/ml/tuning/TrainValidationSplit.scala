@@ -357,6 +357,11 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
     ValidatorParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit = {
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "TrainValidationSplitModel does not support saving to local filesystem path."
+        )
+      }
       val persistSubModelsParam = optionMap.getOrElse("persistsubmodels",
         if (instance.hasSubModels) "true" else "false")
 
@@ -370,7 +375,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
         ("persistSubModels" -> persistSubModels)
       ValidatorParams.saveImpl(path, instance, sparkSession, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString
-      instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
+      instance.bestModel.asInstanceOf[MLWritable].write.session(sparkSession).save(bestModelPath)
       if (persistSubModels) {
         require(instance.hasSubModels, "When persisting tuning models, you can only set " +
           "persistSubModels to true if the tuning was done with collectSubModels set to true. " +
@@ -378,7 +383,8 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
         val subModelsPath = new Path(path, "subModels")
         for (paramIndex <- instance.getEstimatorParamMaps.indices) {
           val modelPath = new Path(subModelsPath, paramIndex.toString).toString
-          instance.subModels(paramIndex).asInstanceOf[MLWritable].save(modelPath)
+          instance.subModels(paramIndex).asInstanceOf[MLWritable]
+            .write.session(sparkSession).save(modelPath)
         }
       }
     }
@@ -390,6 +396,11 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
     private val className = classOf[TrainValidationSplitModel].getName
 
     override def load(path: String): TrainValidationSplitModel = {
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "TrainValidationSplitModel does not support loading from local filesystem path."
+        )
+      }
       implicit val format = DefaultFormats
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =

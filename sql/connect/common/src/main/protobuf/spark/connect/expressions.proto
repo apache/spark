@@ -52,8 +52,7 @@ message Expression {
     NamedArgumentExpression named_argument_expression = 17;
     MergeAction merge_action = 19;
     TypedAggregateExpression typed_aggregate_expression = 20;
-    LazyExpression lazy_expression = 21;
-    SubqueryExpression subquery_expression = 22;
+    SubqueryExpression subquery_expression = 21;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // relations they can add them here. During the planning the correct resolution is done.
@@ -384,6 +383,8 @@ message CommonInlineUserDefinedFunction {
     ScalarScalaUDF scalar_scala_udf = 5;
     JavaUDF java_udf = 6;
   }
+  // (Required) Indicate if this function should be applied on distinct values.
+  bool is_distinct = 7;
 }
 
 message PythonUDF {
@@ -472,21 +473,36 @@ message MergeAction {
   }
 }
 
-message LazyExpression {
-  // (Required) The expression to be marked as lazy.
-  Expression child = 1;
-}
-
 message SubqueryExpression {
-  // (Required) The id of corresponding connect plan.
+  // (Required) The ID of the corresponding connect plan.
   int64 plan_id = 1;
 
   // (Required) The type of the subquery.
   SubqueryType subquery_type = 2;
 
+  // (Optional) Options specific to table arguments.
+  optional TableArgOptions table_arg_options = 3;
+
+  // (Optional) IN subquery values.
+  repeated Expression in_subquery_values = 4;
+
   enum SubqueryType {
     SUBQUERY_TYPE_UNKNOWN = 0;
     SUBQUERY_TYPE_SCALAR = 1;
     SUBQUERY_TYPE_EXISTS = 2;
+    SUBQUERY_TYPE_TABLE_ARG = 3;
+    SUBQUERY_TYPE_IN = 4;
+  }
+
+  // Nested message for table argument options.
+  message TableArgOptions {
+    // (Optional) The way that input rows are partitioned.
+    repeated Expression partition_spec = 1;
+
+    // (Optional) Ordering of rows in a partition.
+    repeated Expression.SortOrder order_spec = 2;
+
+    // (Optional) Whether this is a single partition.
+    optional bool with_single_partition = 3;
   }
 }

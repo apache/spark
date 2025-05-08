@@ -418,9 +418,12 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, wlsModel.coefficients, wlsModel.intercept)
           .setParent(this))
-      val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
-        wlsModel.diagInvAtWA.toArray, 1, getSolver)
-      model.setSummary(Some(trainingSummary))
+      if (SummaryUtils.enableTrainingSummary) {
+        val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
+          wlsModel.diagInvAtWA.toArray, 1, getSolver)
+        model.setSummary(Some(trainingSummary))
+      }
+      model
     } else {
       val instances = validated.rdd.map {
         case Row(label: Double, weight: Double, offset: Double, features: Vector) =>
@@ -435,9 +438,12 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
           .setParent(this))
-      val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
-        irlsModel.diagInvAtWA.toArray, irlsModel.numIterations, getSolver)
-      model.setSummary(Some(trainingSummary))
+      if (SummaryUtils.enableTrainingSummary) {
+        val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
+          irlsModel.diagInvAtWA.toArray, irlsModel.numIterations, getSolver)
+        model.setSummary(Some(trainingSummary))
+      }
+      model
     }
 
     model
@@ -445,6 +451,14 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
   @Since("2.0.0")
   override def copy(extra: ParamMap): GeneralizedLinearRegression = defaultCopy(extra)
+
+  override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+
+    var size = this.estimateMatadataSize
+    size += Vectors.getDenseSize(numFeatures) // coefficients
+    size
+  }
 }
 
 @Since("2.0.0")
@@ -1009,6 +1023,9 @@ class GeneralizedLinearRegressionModel private[ml] (
   with GeneralizedLinearRegressionBase with MLWritable
   with HasTrainingSummary[GeneralizedLinearRegressionTrainingSummary] {
 
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty, Double.NaN)
+
   /**
    * Sets the link prediction (linear predictor) column name.
    *
@@ -1102,6 +1119,14 @@ class GeneralizedLinearRegressionModel private[ml] (
     copied.setSummary(trainingSummary).setParent(parent)
   }
 
+  private[spark] override def estimatedSize: Long = {
+    var size = this.estimateMatadataSize
+    if (this.coefficients != null) {
+      size += this.coefficients.getSizeInBytes
+    }
+    size
+  }
+
   /**
    * Returns a [[org.apache.spark.ml.util.MLWriter]] instance for this ML instance.
    *
@@ -1124,6 +1149,7 @@ class GeneralizedLinearRegressionModel private[ml] (
 
 @Since("2.0.0")
 object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegressionModel] {
+  private[ml] case class Data(intercept: Double, coefficients: Vector)
 
   @Since("2.0.0")
   override def read: MLReader[GeneralizedLinearRegressionModel] =
@@ -1137,15 +1163,13 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
   class GeneralizedLinearRegressionModelWriter(instance: GeneralizedLinearRegressionModel)
     extends MLWriter with Logging {
 
-    private case class Data(intercept: Double, coefficients: Vector)
-
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       // Save model data: intercept, coefficients
       val data = Data(instance.intercept, instance.coefficients)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -1159,12 +1183,11 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-        .select("intercept", "coefficients").head()
-      val intercept = data.getDouble(0)
-      val coefficients = data.getAs[Vector](1)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
 
-      val model = new GeneralizedLinearRegressionModel(metadata.uid, coefficients, intercept)
+      val model = new GeneralizedLinearRegressionModel(
+        metadata.uid, data.coefficients, data.intercept
+      )
 
       metadata.getAndSetParams(model)
       model
@@ -1182,7 +1205,7 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
 @Since("2.0.0")
 class GeneralizedLinearRegressionSummary private[regression] (
     dataset: Dataset[_],
-    origModel: GeneralizedLinearRegressionModel) extends Serializable {
+    origModel: GeneralizedLinearRegressionModel) extends Summary with Serializable {
 
   import GeneralizedLinearRegression._
 

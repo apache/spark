@@ -98,6 +98,712 @@ struct<spark_catalog.default.foo1a2(1, 2, 3, 4):int>
 
 
 -- !query
+CREATE FUNCTION foo1b0() RETURNS TABLE (c1 INT) RETURN SELECT 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM foo1b0()
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+CREATE FUNCTION foo1b1(a INT) RETURNS TABLE (c1 INT) RETURN SELECT 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM foo1b1(1)
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+CREATE FUNCTION foo1b2(a INT, b INT, c INT, d INT) RETURNS TABLE(c1 INT) RETURN SELECT 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM foo1b2(1, 2, 3, 4)
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+CREATE FUNCTION foo1c1(duplicate INT, DUPLICATE INT) RETURNS INT RETURN 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_NAMES",
+  "sqlState" : "42734",
+  "messageParameters" : {
+    "names" : "`duplicate`",
+    "routineName" : "foo1c1"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo1c2(a INT, b INT, thisisaduplicate INT, c INT, d INT, e INT, f INT, thisIsaDuplicate INT, g INT)
+    RETURNS TABLE (a INT) RETURN SELECT 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_NAMES",
+  "sqlState" : "42734",
+  "messageParameters" : {
+    "names" : "`thisisaduplicate`",
+    "routineName" : "foo1c2"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT NULL) RETURNS INT RETURN a
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1d1(5), foo1d1()
+-- !query schema
+struct<spark_catalog.default.foo1d1(5):int,spark_catalog.default.foo1d1():int>
+-- !query output
+5	NULL
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT 10) RETURNS INT RETURN a
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1d1(5), foo1d1()
+-- !query schema
+struct<spark_catalog.default.foo1d1(5):int,spark_catalog.default.foo1d1():int>
+-- !query output
+5	10
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT length(substr(current_database(), 1, 1))) RETURNS INT RETURN a
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1d1(5), foo1d1()
+-- !query schema
+struct<spark_catalog.default.foo1d1(5):int,spark_catalog.default.foo1d1():int>
+-- !query output
+5	1
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT '5' || length(substr(current_database(), 1, 1)))
+  RETURNS INT RETURN a
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1d1(5), foo1d1()
+-- !query schema
+struct<spark_catalog.default.foo1d1(5):int,spark_catalog.default.foo1d1():int>
+-- !query output
+5	51
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT RAND()::INT) RETURNS INT RETURN a
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1d1(5), foo1d1()
+-- !query schema
+struct<spark_catalog.default.foo1d1(5):int,spark_catalog.default.foo1d1():int>
+-- !query output
+5	0
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT array(55, 17))
+  RETURNS INT RETURN a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"array(55, 17)\"",
+    "srcType" : "\"ARRAY<INT>\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 85,
+    "fragment" : "CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT array(55, 17))\n  RETURNS INT RETURN a"
+  } ]
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT (SELECT max(c1) FROM VALUES (1) AS T(c1)))
+  RETURNS INT RETURN a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "USER_DEFINED_FUNCTIONS.NOT_A_VALID_DEFAULT_EXPRESSION",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "functionName" : "foo1d1",
+    "parameterName" : "a"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1d2(a INT, b INT DEFAULT 7, c INT DEFAULT 8, d INT DEFAULT 9 COMMENT 'test')
+  RETURNS STRING RETURN a || ' ' || b || ' ' || c || ' ' || d
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1d2(1, 2, 3, 4), foo1d2(1, 2, 3), foo1d2(1, 2), foo1d2(1)
+-- !query schema
+struct<spark_catalog.default.foo1d2(1, 2, 3, 4):string,spark_catalog.default.foo1d2(1, 2, 3):string,spark_catalog.default.foo1d2(1, 2):string,spark_catalog.default.foo1d2(1):string>
+-- !query output
+1 2 3 4	1 2 3 9	1 2 8 9	1 7 8 9
+
+
+-- !query
+SELECT foo1d2()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "4",
+    "functionName" : "`spark_catalog`.`default`.`foo1d2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 15,
+    "fragment" : "foo1d2()"
+  } ]
+}
+
+
+-- !query
+SELECT foo1d2(1, 2, 3, 4, 5)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "5",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "4",
+    "functionName" : "`spark_catalog`.`default`.`foo1d2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "foo1d2(1, 2, 3, 4, 5)"
+  } ]
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1d2(a INT DEFAULT 5, b INT , c INT DEFAULT 8, d INT DEFAULT 9 COMMENT 'test')
+  RETURNS STRING RETURN a || ' ' || b || ' ' || c || ' ' || d
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "USER_DEFINED_FUNCTIONS.NOT_A_VALID_DEFAULT_PARAMETER_POSITION",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "functionName" : "foo1d2",
+    "nextParameterName" : "b",
+    "parameterName" : "a"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1d2(a INT, b INT DEFAULT 7, c INT DEFAULT 8, d INT COMMENT 'test')
+  RETURNS STRING RETURN a || ' ' || b || ' ' || c || ' ' || d
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "USER_DEFINED_FUNCTIONS.NOT_A_VALID_DEFAULT_PARAMETER_POSITION",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "functionName" : "foo1d2",
+    "nextParameterName" : "d",
+    "parameterName" : "c"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY FUNCTION foo1d3(a INT DEFAULT 7 COMMENT 'hello') RETURNS INT RETURN a
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1d3(5), foo1d3()
+-- !query schema
+struct<foo1d3(5):int,foo1d3():int>
+-- !query output
+5	7
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1d4(a INT, b INT DEFAULT a) RETURNS INT RETURN a + b
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`a`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 1,
+    "fragment" : "a"
+  } ]
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1d4(a INT, b INT DEFAULT 3) RETURNS INT RETURN a + b
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1d5(a INT, b INT DEFAULT foo1d4(6)) RETURNS INT RETURN a + b
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1d5(10), foo1d5(10, 2)
+-- !query schema
+struct<spark_catalog.default.foo1d5(10):int,spark_catalog.default.foo1d5(10, 2):int>
+-- !query output
+19	12
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1d5(a INT, b INT) RETURNS INT RETURN a + foo1d4(b)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1d5(10, 2)
+-- !query schema
+struct<spark_catalog.default.foo1d5(10, 2):int>
+-- !query output
+15
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1d6(a INT, b INT DEFAULT 7) RETURNS TABLE(a INT, b INT) RETURN SELECT a, b
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM foo1d6(5)
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+5	7
+
+
+-- !query
+SELECT * FROM foo1d6(5, 2)
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+5	2
+
+
+-- !query
+CREATE FUNCTION foo1e1(x INT NOT NULL, y INT) RETURNS INT RETURN 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "USER_DEFINED_FUNCTIONS.NOT_NULL_ON_FUNCTION_PARAMETERS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "input" : "x INT NOT NULL, y INT"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo1e2(x INT, y INT NOT NULL) RETURNS TABLE (x INT) RETURN SELECT 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "USER_DEFINED_FUNCTIONS.NOT_NULL_ON_FUNCTION_PARAMETERS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "input" : "x INT, y INT NOT NULL"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo1e3(x INT, y INT) RETURNS TABLE (x INT NOT NULL) RETURN SELECT 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "USER_DEFINED_FUNCTIONS.NOT_NULL_ON_FUNCTION_PARAMETERS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "input" : "x INT NOT NULL"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo1f1(x INT, y INT GENERATED ALWAYS AS (x + 10)) RETURNS INT RETURN y + 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_GENERATED_COLUMNS_AS_PARAMETERS",
+  "sqlState" : "42000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 90,
+    "fragment" : "CREATE FUNCTION foo1f1(x INT, y INT GENERATED ALWAYS AS (x + 10)) RETURNS INT RETURN y + 1"
+  } ]
+}
+
+
+-- !query
+CREATE FUNCTION foo1f2(id BIGINT GENERATED ALWAYS AS IDENTITY) RETURNS BIGINT RETURN id + 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_GENERATED_COLUMNS_AS_PARAMETERS",
+  "sqlState" : "42000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 91,
+    "fragment" : "CREATE FUNCTION foo1f2(id BIGINT GENERATED ALWAYS AS IDENTITY) RETURNS BIGINT RETURN id + 1"
+  } ]
+}
+
+
+-- !query
+CREATE FUNCTION foo1g1(x INT, y INT UNIQUE) RETURNS INT RETURN y + 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_COLUMN_CONSTRAINTS",
+  "sqlState" : "42000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 68,
+    "fragment" : "CREATE FUNCTION foo1g1(x INT, y INT UNIQUE) RETURNS INT RETURN y + 1"
+  } ]
+}
+
+
+-- !query
+CREATE FUNCTION foo1g2(id BIGINT CHECK (true)) RETURNS BIGINT RETURN id + 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_COLUMN_CONSTRAINTS",
+  "sqlState" : "42000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 75,
+    "fragment" : "CREATE FUNCTION foo1g2(id BIGINT CHECK (true)) RETURNS BIGINT RETURN id + 1"
+  } ]
+}
+
+
+-- !query
+CREATE FUNCTION foo2a0() RETURNS TABLE() RETURN SELECT 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "')'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo2a2() RETURNS TABLE(c1 INT, c2 INT) RETURN SELECT 1, 2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM foo2a2()
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	2
+
+
+-- !query
+CREATE FUNCTION foo2a4() RETURNS TABLE(c1 INT, c2 INT, c3 INT, c4 INT) RETURN SELECT 1, 2, 3, 4
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM foo2a2()
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	2
+
+
+-- !query
+CREATE FUNCTION foo2b1() RETURNS TABLE(DuPLiCatE INT, duplicate INT) RETURN SELECT 1, 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_ROUTINE_RETURNS_COLUMNS",
+  "sqlState" : "42711",
+  "messageParameters" : {
+    "columns" : "`duplicate`",
+    "routineName" : "foo2b1"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo2b2() RETURNS TABLE(a INT, b INT, duplicate INT, c INT, d INT, e INT, DUPLICATE INT)
+RETURN SELECT 1, 2, 3, 4, 5, 6, 7
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_ROUTINE_RETURNS_COLUMNS",
+  "sqlState" : "42711",
+  "messageParameters" : {
+    "columns" : "`duplicate`",
+    "routineName" : "foo2b2"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo2c1() RETURNS TABLE(c1 INT DEFAULT 5) RETURN SELECT 1, 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'DEFAULT'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo31() RETURNS INT RETURN (SELECT 1, 2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+  "sqlState" : "42823",
+  "messageParameters" : {
+    "number" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 56,
+    "fragment" : "CREATE FUNCTION foo31() RETURNS INT RETURN (SELECT 1, 2)"
+  } ]
+}
+
+
+-- !query
+CREATE FUNCTION foo32() RETURNS TABLE(a INT) RETURN SELECT 1, 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "USER_DEFINED_FUNCTIONS.RETURN_COLUMN_COUNT_MISMATCH",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "name" : "spark_catalog.default.foo32",
+    "outputSize" : "2",
+    "returnParamSize" : "1"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo33() RETURNS TABLE(a INT, b INT) RETURN SELECT 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "USER_DEFINED_FUNCTIONS.RETURN_COLUMN_COUNT_MISMATCH",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "name" : "spark_catalog.default.foo33",
+    "outputSize" : "1",
+    "returnParamSize" : "2"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo41() RETURNS INT RETURN SELECT 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo42() RETURNS TABLE(a INT) RETURN 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "USER_DEFINED_FUNCTIONS.SQL_TABLE_UDF_BODY_MUST_BE_A_QUERY",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "name" : "foo42"
+  }
+}
+
+
+-- !query
 CREATE FUNCTION foo2_1a(a INT) RETURNS INT RETURN a
 -- !query schema
 struct<>
@@ -478,6 +1184,236 @@ struct<>
 
 -- !query
 DROP VIEW V1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE VIEW t1(c1, c2) AS VALUES (0, 1), (0, 2), (1, 2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE VIEW t2(c1, c2) AS VALUES (0, 2), (0, 3)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo4_0() RETURNS TABLE (x INT) RETURN SELECT 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo4_1(x INT) RETURNS TABLE (a INT) RETURN SELECT x
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo4_2(x INT) RETURNS TABLE (a INT) RETURN SELECT c2 FROM t2 WHERE c1 = x
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo4_3(x INT) RETURNS TABLE (a INT, cnt INT) RETURN SELECT c1, COUNT(*) FROM t2 WHERE c1 = x GROUP BY c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM foo4_0()
+-- !query schema
+struct<x:int>
+-- !query output
+1
+
+
+-- !query
+SELECT * FROM foo4_1(1)
+-- !query schema
+struct<a:int>
+-- !query output
+1
+
+
+-- !query
+SELECT * FROM foo4_2(2)
+-- !query schema
+struct<a:int>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM foo4_3(0)
+-- !query schema
+struct<a:int,cnt:int>
+-- !query output
+0	2
+
+
+-- !query
+SELECT * FROM foo4_1(rand(0) * 0)
+-- !query schema
+struct<a:int>
+-- !query output
+0
+
+
+-- !query
+SELECT * FROM foo4_1(x => 1)
+-- !query schema
+struct<a:int>
+-- !query output
+1
+
+
+-- !query
+SELECT * FROM t1, LATERAL foo4_1(c1)
+-- !query schema
+struct<c1:int,c2:int,a:int>
+-- !query output
+0	1	0
+0	2	0
+1	2	1
+
+
+-- !query
+SELECT * FROM t1, LATERAL foo4_2(c1)
+-- !query schema
+struct<c1:int,c2:int,a:int>
+-- !query output
+0	1	2
+0	1	3
+0	2	2
+0	2	3
+
+
+-- !query
+SELECT * FROM t1 JOIN LATERAL foo4_2(c1) ON t1.c2 = foo4_2.a
+-- !query schema
+struct<c1:int,c2:int,a:int>
+-- !query output
+0	2	2
+
+
+-- !query
+SELECT * FROM t1, LATERAL foo4_3(c1)
+-- !query schema
+struct<c1:int,c2:int,a:int,cnt:int>
+-- !query output
+0	1	0	2
+0	2	0	2
+
+
+-- !query
+SELECT * FROM t1, LATERAL (SELECT cnt FROM foo4_3(c1))
+-- !query schema
+struct<c1:int,c2:int,cnt:int>
+-- !query output
+0	1	2
+0	2	2
+
+
+-- !query
+SELECT * FROM t1, LATERAL foo4_1(c1 + rand(0) * 0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "LateralJoin lateral-subquery#x [c1#x], Inner\n:  +- SQLFunctionNode spark_catalog.default.foo4_1\n:     +- SubqueryAlias foo4_1\n:        +- Project [cast(x#x as int) AS a#x]\n:           +- LateralJoin lateral-subquery#x [x#x], Inner\n:              :  +- Project [outer(x#x) AS x#x]\n:              :     +- OneRowRelation\n:              +- Project [cast((cast(outer(c1#x) as double) + (rand(number) * cast(0 as double))) as int) AS x#x]\n:                 +- OneRowRelation\n+- SubqueryAlias spark_catalog.default.t1\n   +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 50,
+    "fragment" : "FROM t1, LATERAL foo4_1(c1 + rand(0) * 0)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t1 JOIN foo4_1(1) AS foo4_1(x) ON t1.c1 = foo4_1.x
+-- !query schema
+struct<c1:int,c2:int,x:int>
+-- !query output
+1	2	1
+
+
+-- !query
+SELECT * FROM t1, LATERAL foo4_1(c1), LATERAL foo4_2(foo4_1.a + c1)
+-- !query schema
+struct<c1:int,c2:int,a:int,a:int>
+-- !query output
+0	1	0	2
+0	1	0	3
+0	2	0	2
+0	2	0	3
+
+
+-- !query
+SELECT (SELECT MAX(a) FROM foo4_1(c1)) FROM t1
+-- !query schema
+struct<scalarsubquery(c1):int>
+-- !query output
+0
+0
+1
+
+
+-- !query
+SELECT (SELECT MAX(a) FROM foo4_1(c1) WHERE a = c2) FROM t1
+-- !query schema
+struct<scalarsubquery(c2, c1):int>
+-- !query output
+NULL
+NULL
+NULL
+
+
+-- !query
+SELECT (SELECT MAX(cnt) FROM foo4_3(c1)) FROM t1
+-- !query schema
+struct<scalarsubquery(c1):int>
+-- !query output
+2
+2
+NULL
+
+
+-- !query
+DROP VIEW t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW t2
 -- !query schema
 struct<>
 -- !query output

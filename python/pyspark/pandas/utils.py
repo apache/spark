@@ -481,11 +481,10 @@ def default_session() -> SparkSession:
     if spark is None:
         spark = SparkSession.builder.appName("pandas-on-Spark").getOrCreate()
 
-    # Turn ANSI off when testing the pandas API on Spark since
-    # the behavior of pandas API on Spark follows pandas, not SQL.
-    if is_testing():
-        spark.conf.set("spark.sql.ansi.enabled", False)
-    if spark.conf.get("spark.sql.ansi.enabled") == "true":
+    if (
+        not ps.get_option("compute.ansi_mode_support", spark_session=spark)
+        and spark.conf.get("spark.sql.ansi.enabled") == "true"
+    ):
         log_advice(
             "The config 'spark.sql.ansi.enabled' is set to True. "
             "This can cause unexpected behavior "
@@ -957,6 +956,18 @@ def spark_column_equals(left: Column, right: Column) -> bool:
             )
         return repr(left).replace("`", "") == repr(right).replace("`", "")
     else:
+        from pyspark.sql.classic.column import Column as ClassicColumn
+
+        if not isinstance(left, ClassicColumn):
+            raise PySparkTypeError(
+                errorClass="NOT_COLUMN",
+                messageParameters={"arg_name": "left", "arg_type": type(left).__name__},
+            )
+        if not isinstance(right, ClassicColumn):
+            raise PySparkTypeError(
+                errorClass="NOT_COLUMN",
+                messageParameters={"arg_name": "right", "arg_type": type(right).__name__},
+            )
         return left._jc.equals(right._jc)
 
 

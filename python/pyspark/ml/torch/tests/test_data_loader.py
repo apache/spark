@@ -23,10 +23,11 @@ from pyspark.ml.torch.distributor import (
 )
 from pyspark.sql import SparkSession
 from pyspark.ml.linalg import Vectors
-from pyspark.testing.utils import have_torch, torch_requirement_message
 
 
-@unittest.skipIf(not have_torch, torch_requirement_message)
+# @unittest.skipIf(not have_torch, torch_requirement_message)
+# TODO(SPARK-50864): Re-enable this test after fixing the slowness
+@unittest.skip("Disabled due to slowness")
 class TorchDistributorDataLoaderUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         self.spark = (

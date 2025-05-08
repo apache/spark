@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 
@@ -66,6 +67,18 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
    * A table sample clause representing pushed-down table sample.
    */
   protected var tableSampleClause: String = ""
+
+  /**
+   * A hint clause representing query hints.
+   */
+  protected val hintClause: String = {
+    if (options.hint == "" || dialect.supportsHint) {
+      options.hint
+    } else {
+      throw QueryExecutionErrors.hintUnsupportedForJdbcDialectError(
+        dialect.getClass.getSimpleName)
+    }
+  }
 
   /**
    * The columns names that following dialect's SQL syntax.
@@ -161,7 +174,7 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
     val offsetClause = dialect.getOffsetClause(offset)
 
     options.prepareQuery +
-      s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+      s"SELECT $hintClause$columnList FROM ${options.tableOrQuery} $tableSampleClause" +
       s" $whereClause $groupByClause $orderByClause $limitClause $offsetClause"
   }
 }

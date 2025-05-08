@@ -35,9 +35,9 @@ import org.apache.logging.log4j.CloseableThreadContext
 import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{CHECKPOINT_PATH, CHECKPOINT_ROOT, LOGICAL_PLAN, PATH, PRETTY_ID_STRING, QUERY_ID, RUN_ID, SPARK_DATA_STREAM}
-import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.classic.{SparkSession, StreamingQuery}
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate, Write}
@@ -47,7 +47,7 @@ import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchUserFuncExc
 import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataV2FileManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
-import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamingQueryListener, StreamingQueryProgress, StreamingQueryStatus, Trigger}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
@@ -151,16 +151,20 @@ abstract class StreamExecution(
    */
   protected def sources: Seq[SparkDataStream]
 
-  /** Metadata associated with the whole query */
-  protected val streamMetadata: StreamMetadata = {
-    val metadataPath = new Path(checkpointFile("metadata"))
-    val hadoopConf = sparkSession.sessionState.newHadoopConf()
-    StreamMetadata.read(metadataPath, hadoopConf).getOrElse {
-      val newMetadata = new StreamMetadata(UUID.randomUUID.toString)
-      StreamMetadata.write(newMetadata, metadataPath, hadoopConf)
-      newMetadata
-    }
-  }
+  /** Isolated spark session to run the batches with. */
+  protected val sparkSessionForStream: SparkSession = sparkSession.cloneSession()
+
+  /**
+   * Manages the metadata from this checkpoint location.
+   */
+  protected val checkpointMetadata =
+    new StreamingQueryCheckpointMetadata(sparkSessionForStream, resolvedCheckpointRoot)
+
+  private val streamMetadata: StreamMetadata = checkpointMetadata.streamMetadata
+
+  lazy val offsetLog: OffsetSeqLog = checkpointMetadata.offsetLog
+
+  lazy val commitLog: CommitLog = checkpointMetadata.commitLog
 
   /**
    * A map of current watermarks, keyed by the position of the watermark operator in the
@@ -209,9 +213,6 @@ abstract class StreamExecution(
   lazy val streamMetrics = new MetricsReporter(
     this, s"spark.streaming.${Option(name).getOrElse(id)}")
 
-  /** Isolated spark session to run the batches with. */
-  protected val sparkSessionForStream = sparkSession.cloneSession()
-
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
    * [[org.apache.spark.util.UninterruptibleThread]] to workaround KAFKA-1894: interrupting a
@@ -226,21 +227,6 @@ abstract class StreamExecution(
         runStream()
       }
     }
-
-  /**
-   * A write-ahead-log that records the offsets that are present in each batch. In order to ensure
-   * that a given batch will always consist of the same data, we write to this log *before* any
-   * processing is done.  Thus, the Nth record in this log indicated data that is currently being
-   * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
-   */
-  val offsetLog = new OffsetSeqLog(sparkSession, checkpointFile("offsets"))
-
-  /**
-   * A log that records the batch ids that have completed. This is used to check if a batch was
-   * fully processed, and its output was committed to the sink, hence no need to process it again.
-   * This is used (for instance) during restart, to help identify which batch to run next.
-   */
-  val commitLog = new CommitLog(sparkSession, checkpointFile("commits"))
 
   /** Whether all fields of the query have been initialized */
   private def isInitialized: Boolean = state.get != INITIALIZING

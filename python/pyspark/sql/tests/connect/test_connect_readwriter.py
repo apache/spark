@@ -30,7 +30,7 @@ from pyspark.sql.types import (
     MapType,
     Row,
 )
-from pyspark.testing.sqlutils import (
+from pyspark.testing.objects import (
     PythonOnlyUDT,
     ExamplePoint,
     PythonOnlyPoint,

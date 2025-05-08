@@ -23,7 +23,7 @@ import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompres
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.paths.SparkPath
-import org.apache.spark.sql._
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -181,6 +181,13 @@ trait FileFormat {
    * By default all data types are supported.
    */
   def supportDataType(dataType: DataType): Boolean = true
+
+  /**
+   * Returns whether this format supports the given [[DataType]] in the read-only path.
+   * By default, it is the same as `supportDataType`. In certain file formats, it can allow more
+   * data types than `supportDataType`. At this point, only `CSVFileFormat` overrides it.
+   */
+  def supportReadDataType(dataType: DataType): Boolean = supportDataType(dataType)
 
   /**
    * Returns whether this format supports the given filed name in read/write path.

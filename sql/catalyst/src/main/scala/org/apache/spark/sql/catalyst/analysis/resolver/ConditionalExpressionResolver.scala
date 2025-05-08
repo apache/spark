@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.{ConditionalExpression, Expression}
 
@@ -28,21 +27,20 @@ class ConditionalExpressionResolver(
     expressionResolver: ExpressionResolver,
     timezoneAwareExpressionResolver: TimezoneAwareExpressionResolver)
   extends TreeNodeResolver[ConditionalExpression, Expression]
-  with ResolvesExpressionChildren
-  with SQLConfHelper {
+  with ResolvesExpressionChildren {
 
-  private val typeCoercionRules: Seq[Expression => Expression] =
+  private val typeCoercionTransformations: Seq[Expression => Expression] =
     if (conf.ansiEnabled) {
-      ConditionalExpressionResolver.ANSI_TYPE_COERCION_RULES
+      ConditionalExpressionResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
     } else {
-      ConditionalExpressionResolver.TYPE_COERCION_RULES
+      ConditionalExpressionResolver.TYPE_COERCION_TRANSFORMATIONS
     }
   private val typeCoercionResolver: TypeCoercionResolver =
-    new TypeCoercionResolver(timezoneAwareExpressionResolver, typeCoercionRules)
+    new TypeCoercionResolver(timezoneAwareExpressionResolver, typeCoercionTransformations)
 
   override def resolve(unresolvedConditionalExpression: ConditionalExpression): Expression = {
     val conditionalExpressionWithResolvedChildren =
-      withResolvedChildren(unresolvedConditionalExpression, expressionResolver.resolve)
+      withResolvedChildren(unresolvedConditionalExpression, expressionResolver.resolve _)
 
     typeCoercionResolver.resolve(conditionalExpressionWithResolvedChildren)
   }
@@ -50,14 +48,14 @@ class ConditionalExpressionResolver(
 
 object ConditionalExpressionResolver {
   // Ordering in the list of type coercions should be in sync with the list in [[TypeCoercion]].
-  private val TYPE_COERCION_RULES: Seq[Expression => Expression] = Seq(
+  private val TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
     TypeCoercion.CaseWhenTypeCoercion.apply,
     TypeCoercion.FunctionArgumentTypeCoercion.apply,
     TypeCoercion.IfTypeCoercion.apply
   )
 
   // Ordering in the list of type coercions should be in sync with the list in [[AnsiTypeCoercion]].
-  private val ANSI_TYPE_COERCION_RULES: Seq[Expression => Expression] = Seq(
+  private val ANSI_TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
     AnsiTypeCoercion.CaseWhenTypeCoercion.apply,
     AnsiTypeCoercion.FunctionArgumentTypeCoercion.apply,
     AnsiTypeCoercion.IfTypeCoercion.apply

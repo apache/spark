@@ -1166,7 +1166,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
             assert(taskId1 === taskId2)
             assert(stageId1 === stageId2)
             assert(stageAttemptId1 === stageAttemptId2)
-            assertSeqEquals[AccumulableInfo](updates1, updates2, (a, b) => a.equals(b))
+            val filteredUpdates = updates1
+              .filterNot { acc => acc.name.exists(accumulableExcludeList.contains) }
+            assertSeqEquals[AccumulableInfo](filteredUpdates, updates2, (a, b) => a.equals(b))
           })
         assertSeqEquals[((Int, Int), ExecutorMetrics)](
           e1.executorUpdates.toSeq.sortBy(_._1),
@@ -1299,7 +1301,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
         assert(r1.description === r2.description)
         assertSeqEquals(r1.stackTrace, r2.stackTrace, assertStackTraceElementEquals)
         assert(r1.fullStackTrace === r2.fullStackTrace)
-        assertSeqEquals[AccumulableInfo](r1.accumUpdates, r2.accumUpdates, (a, b) => a.equals(b))
+        val filteredUpdates = r1.accumUpdates
+          .filterNot { acc => acc.name.exists(accumulableExcludeList.contains) }
+        assertSeqEquals[AccumulableInfo](filteredUpdates, r2.accumUpdates, (a, b) => a.equals(b))
       case (TaskResultLost, TaskResultLost) =>
       case (r1: TaskKilled, r2: TaskKilled) =>
         assert(r1.reason == r2.reason)
@@ -1370,18 +1374,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
     }
   }
 
-  private def assertOptionEquals[T](
-      opt1: Option[T],
-      opt2: Option[T],
-      assertEquals: (T, T) => Unit): Unit = {
-    if (opt1.isDefined) {
-      assert(opt2.isDefined)
-      assertEquals(opt1.get, opt2.get)
-    } else {
-      assert(opt2.isEmpty)
-    }
-  }
-
   /**
    * Use different names for methods we pass in to assertSeqEquals or assertOptionEquals
    */
@@ -1405,10 +1397,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
     assert(ste1.getMethodName === ste2.getMethodName)
     assert(ste1.getLineNumber === ste2.getLineNumber)
     assert(ste1.getFileName === ste2.getFileName)
-  }
-
-  private def assertEquals(rp1: ResourceProfile, rp2: ResourceProfile): Unit = {
-    assert(rp1 === rp2)
   }
 
   /** ----------------------------------- *
@@ -2786,28 +2774,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "ID": 11,
       |          "Name": "$PEAK_OFF_HEAP_EXECUTION_MEMORY",
       |          "Update": 500,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 12,
-      |          "Name": "$UPDATED_BLOCK_STATUSES",
-      |          "Update": [
-      |            {
-      |              "Block ID": "rdd_0_0",
-      |              "Status": {
-      |                "Storage Level": {
-      |                  "Use Disk": true,
-      |                  "Use Memory": true,
-      |                  "Use Off Heap": false,
-      |                  "Deserialized": false,
-      |                  "Replication": 2
-      |                },
-      |                "Memory Size": 0,
-      |                "Disk Size": 0
-      |              }
-      |            }
-      |          ],
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },

@@ -358,7 +358,7 @@ jobs:
         python-version: '3.11'
         architecture: x64
     - name: Install Python packages (Python 3.11)
-      if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect')
+      if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect') || contains(matrix.modules, 'yarn')
       run: |
         python3.11 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.29.1'
         python3.11 -m pip list
@@ -979,7 +979,7 @@ jobs:
         # Should unpin 'sphinxcontrib-*' after upgrading sphinx>5
         python3.9 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe 'pyzmq<24.0.0' 'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5'
         python3.9 -m pip install ipython_genutils # See SPARK-38517
-        python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8'
+        python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly<6.0.0'
         python3.9 -m pip install 'docutils<0.18.0' # See SPARK-39421
     - name: List Python packages
       run: python3.9 -m pip list
@@ -1028,8 +1028,7 @@ jobs:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
     name: Run TPC-DS queries with SF=1
-    # Pin to 'Ubuntu 20.04' due to 'databricks/tpcds-kit' compilation
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
       SPARK_LOCAL_IP: localhost
@@ -1079,7 +1078,7 @@ jobs:
       uses: actions/checkout@v4
       with:
         repository: databricks/tpcds-kit
-        ref: 2a5078a782192ddb6efbcead8de9973d6ab4f069
+        ref: 1b7fb7529edae091684201fab142d956d6afd881
         path: ./tpcds-kit
     - name: Build tpcds-kit
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
@@ -1241,9 +1240,9 @@ jobs:
           sudo apt update
           sudo apt-get install r-base
       - name: Start Minikube
-        uses: medyagh/setup-minikube@v0.0.18
+        uses: medyagh/setup-minikube@v0.0.19
         with:
-          kubernetes-version: "1.32.0"
+          kubernetes-version: "1.33.0"
           # Github Action limit cpu:2, memory: 6947MB, limit to 2U6G for better resource statistic
           cpus: 2
           memory: 6144m
@@ -1262,7 +1261,7 @@ jobs:
           if [[ "${{ inputs.branch }}" == 'branch-3.5' ]]; then
             kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml || true
           else
-            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.10.0/installer/volcano-development.yaml || true
+            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.11.0/installer/volcano-development.yaml || true
           fi
           eval $(minikube docker-env)
           build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"

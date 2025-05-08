@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class ColumnarRulesSuite extends PlanTest with SharedSparkSession {
 
@@ -51,6 +52,15 @@ class ColumnarRulesSuite extends PlanTest with SharedSparkSession {
     val appliedTwice = rules.apply(appliedOnce)
     assert(appliedTwice == expected)
   }
+
+  test("SPARK-51474: Don't insert redundant ColumnarToRowExec") {
+    val rules = ApplyColumnarRulesAndInsertTransitions(
+      spark.sessionState.columnarRules, false)
+
+    val plan = CanDoColumnarAndRowOp(UnaryOp(LeafOp(true), true))
+    val appliedOnce = rules.apply(plan)
+    assert(appliedOnce == plan)
+  }
 }
 
 case class LeafOp(override val supportsColumnar: Boolean) extends LeafExecNode {
@@ -62,4 +72,16 @@ case class UnaryOp(child: SparkPlan, override val supportsColumnar: Boolean) ext
   override protected def doExecute(): RDD[InternalRow] = throw SparkUnsupportedOperationException()
   override def output: Seq[Attribute] = child.output
   override protected def withNewChildInternal(newChild: SparkPlan): UnaryOp = copy(child = newChild)
+}
+
+case class CanDoColumnarAndRowOp(child: SparkPlan) extends UnaryExecNode {
+  override val supportsRowBased: Boolean = true
+  override val supportsColumnar: Boolean = true
+
+  override protected def doExecute(): RDD[InternalRow] = throw SparkUnsupportedOperationException()
+  override protected def doExecuteColumnar(): RDD[ColumnarBatch] =
+    throw SparkUnsupportedOperationException()
+  override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: SparkPlan): CanDoColumnarAndRowOp =
+    copy(child = newChild)
 }

@@ -19,9 +19,14 @@ package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.analysis.resolver.{Resolver, ResolverExtension}
+import org.apache.spark.sql.catalyst.analysis.resolver.{
+  LogicalPlanResolver,
+  Resolver,
+  ResolverExtension
+}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.NormalizePlan
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 
@@ -42,8 +47,9 @@ class ResolverSuite extends QueryTest with SharedSparkSession {
         TestRelation(resolutionDone = false, output = Seq(col1Integer))
       )
     )
-    assert(
-      result == Project(
+    assertPlansEqual(
+      result,
+      Project(
         Seq(col1Integer),
         TestRelation(resolutionDone = true, output = Seq(col1Integer))
       )
@@ -70,7 +76,7 @@ class ResolverSuite extends QueryTest with SharedSparkSession {
       condition = "UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE",
       parameters = Map(
         "feature" -> ("class " +
-        "org.apache.spark.sql.analysis.resolver.ResolverSuite$UnknownRelation operator resolution")
+        "org.apache.spark.sql.analysis.resolver.UnknownRelation operator resolution")
       )
     )
   }
@@ -80,7 +86,7 @@ class ResolverSuite extends QueryTest with SharedSparkSession {
       Seq(
         new NoopResolver,
         new TestRelationResolver,
-        new TestRelationBrokenResolver
+        new TestRelationOtherResolver
       )
     )
 
@@ -95,8 +101,8 @@ class ResolverSuite extends QueryTest with SharedSparkSession {
       ),
       condition = "AMBIGUOUS_RESOLVER_EXTENSION",
       parameters = Map(
-        "operator" -> "org.apache.spark.sql.analysis.resolver.ResolverSuite$TestRelation",
-        "extensions" -> "TestRelationResolver, TestRelationBrokenResolver"
+        "operator" -> "org.apache.spark.sql.analysis.resolver.TestRelation",
+        "extensions" -> "TestRelationResolver, TestRelationOtherResolver"
       )
     )
   }
@@ -108,9 +114,13 @@ class ResolverSuite extends QueryTest with SharedSparkSession {
   private class TestRelationResolver extends ResolverExtension {
     var timesCalled = 0
 
-    override def resolveOperator: PartialFunction[LogicalPlan, LogicalPlan] = {
+    override def resolveOperator(
+        operator: LogicalPlan,
+        resolver: LogicalPlanResolver): Option[LogicalPlan] = operator match {
       case testNode: TestRelation if countTimesCalled() =>
-        testNode.copy(resolutionDone = true)
+        Some(testNode.copy(resolutionDone = true))
+      case _ =>
+        None
     }
 
     private def countTimesCalled(): Boolean = {
@@ -120,38 +130,35 @@ class ResolverSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  private class TestRelationBrokenResolver extends ResolverExtension {
-    override def resolveOperator: PartialFunction[LogicalPlan, LogicalPlan] = {
+  private class TestRelationOtherResolver extends ResolverExtension {
+    override def resolveOperator(
+        operator: LogicalPlan,
+        resolver: LogicalPlanResolver): Option[LogicalPlan] = operator match {
       case testNode: TestRelation =>
-        assert(false)
-        testNode
+        Some(testNode)
+      case _ =>
+        None
     }
   }
 
   private class NoopResolver extends ResolverExtension {
-    override def resolveOperator: PartialFunction[LogicalPlan, LogicalPlan] = {
+    override def resolveOperator(
+        operator: LogicalPlan,
+        resolver: LogicalPlanResolver): Option[LogicalPlan] = operator match {
       case node: LogicalPlan if false =>
         assert(false)
-        node
+        Some(node)
+      case _ =>
+        None
     }
   }
 
-  private case class TestRelation(
-      resolutionDone: Boolean,
-      override val output: Seq[Attribute],
-      override val children: Seq[LogicalPlan] = Seq.empty)
-      extends LogicalPlan {
-    override protected def withNewChildrenInternal(
-        newChildren: IndexedSeq[LogicalPlan]): TestRelation =
-      copy(children = newChildren)
-  }
-
-  private case class UnknownRelation(
-      override val output: Seq[Attribute],
-      override val children: Seq[LogicalPlan] = Seq.empty)
-      extends LogicalPlan {
-    override protected def withNewChildrenInternal(
-        newChildren: IndexedSeq[LogicalPlan]): UnknownRelation =
-      copy(children = newChildren)
+  private def assertPlansEqual(actualPlan: LogicalPlan, expectedPlan: LogicalPlan) = {
+    assert(NormalizePlan(actualPlan) == NormalizePlan(expectedPlan))
   }
 }
+
+private case class TestRelation(resolutionDone: Boolean, override val output: Seq[Attribute])
+    extends LeafNode {}
+
+private case class UnknownRelation(override val output: Seq[Attribute]) extends LeafNode {}

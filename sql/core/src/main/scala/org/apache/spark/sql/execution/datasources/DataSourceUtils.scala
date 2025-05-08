@@ -91,9 +91,14 @@ object DataSourceUtils extends PredicateHelper {
    * Verify if the schema is supported in datasource. This verification should be done
    * in a driver side.
    */
-  def verifySchema(format: FileFormat, schema: StructType): Unit = {
+  def verifySchema(format: FileFormat, schema: StructType, readOnly: Boolean = false): Unit = {
     schema.foreach { field =>
-      if (!format.supportDataType(field.dataType)) {
+      val supported = if (readOnly) {
+        format.supportReadDataType(field.dataType)
+      } else {
+        format.supportDataType(field.dataType)
+      }
+      if (!supported) {
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(format.toString, field)
       }
     }
@@ -122,7 +127,7 @@ object DataSourceUtils extends PredicateHelper {
 
   private def getRebaseSpec(
       lookupFileMeta: String => String,
-      modeByConfig: String,
+      modeByConfig: LegacyBehaviorPolicy.Value,
       minVersion: String,
       metadataKey: String): RebaseSpec = {
     val policy = if (Utils.isTesting &&
@@ -140,7 +145,7 @@ object DataSourceUtils extends PredicateHelper {
         } else {
           LegacyBehaviorPolicy.CORRECTED
         }
-      }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
+      }.getOrElse(modeByConfig)
     }
     policy match {
       case LegacyBehaviorPolicy.LEGACY =>
@@ -151,7 +156,7 @@ object DataSourceUtils extends PredicateHelper {
 
   def datetimeRebaseSpec(
       lookupFileMeta: String => String,
-      modeByConfig: String): RebaseSpec = {
+      modeByConfig: LegacyBehaviorPolicy.Value): RebaseSpec = {
     getRebaseSpec(
       lookupFileMeta,
       modeByConfig,
@@ -161,7 +166,7 @@ object DataSourceUtils extends PredicateHelper {
 
   def int96RebaseSpec(
       lookupFileMeta: String => String,
-      modeByConfig: String): RebaseSpec = {
+      modeByConfig: LegacyBehaviorPolicy.Value): RebaseSpec = {
     getRebaseSpec(
       lookupFileMeta,
       modeByConfig,

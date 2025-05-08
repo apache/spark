@@ -990,12 +990,12 @@ class PandasOnSparkPlotAccessor(PandasObject):
         .. plotly::
 
             >>> s = ps.Series([1, 2, 2.5, 3, 3.5, 4, 5])
-            >>> s.plot.kde(bw_method=0.3)  # doctest: +SKIP
+            >>> s.plot.kde(bw_method=0.3, ind=100)  # doctest: +SKIP
 
         .. plotly::
 
             >>> s = ps.Series([1, 2, 2.5, 3, 3.5, 4, 5])
-            >>> s.plot.kde(bw_method=3)  # doctest: +SKIP
+            >>> s.plot.kde(bw_method=3, ind=100)  # doctest: +SKIP
 
         The `ind` parameter determines the evaluation points for the
         plot of the estimated KDF:
@@ -1013,7 +1013,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...     'x': [1, 2, 2.5, 3, 3.5, 4, 5],
             ...     'y': [4, 4, 4.5, 5, 5.5, 6, 6],
             ... })
-            >>> df.plot.kde(bw_method=0.3)  # doctest: +SKIP
+            >>> df.plot.kde(bw_method=0.3, ind=100)  # doctest: +SKIP
 
         .. plotly::
 
@@ -1021,7 +1021,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...     'x': [1, 2, 2.5, 3, 3.5, 4, 5],
             ...     'y': [4, 4, 4.5, 5, 5.5, 6, 6],
             ... })
-            >>> df.plot.kde(bw_method=3)  # doctest: +SKIP
+            >>> df.plot.kde(bw_method=3, ind=100)  # doctest: +SKIP
 
         .. plotly::
 

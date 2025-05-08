@@ -24,10 +24,12 @@ import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   AnalyzerBridgeState,
+  BridgedRelationId,
   BridgedRelationMetadataProvider,
   MetadataResolver,
   RelationId,
-  Resolver
+  Resolver,
+  ViewResolver
 }
 import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.expressions.{Expression, PlanExpression}
@@ -114,6 +116,41 @@ class MetadataResolverSuite extends QueryTest with SharedSparkSession with SQLTe
     }
   }
 
+  test("Relation inside a CTE definition") {
+    withTable("src") {
+      spark.sql("CREATE TABLE src (key INT, value STRING) USING PARQUET;").collect()
+
+      checkResolveUnresolvedCatalogRelation(
+        sqlText = """
+          WITH cte AS (SELECT key FROM src)
+          SELECT * FROM cte
+          """,
+        expectedTableData = Seq(createTableData("src"))
+      )
+    }
+  }
+
+  test("Relation inside a CTE definition inside a subquery expression") {
+    withTable("src") {
+      spark.sql("CREATE TABLE src (key INT, value STRING) USING PARQUET;").collect()
+
+      checkResolveUnresolvedCatalogRelation(
+        sqlText = """
+          SELECT
+            col1 + (
+              SELECT 35 * (
+                WITH cte AS (SELECT key FROM src)
+                SELECT key FROM cte LIMIT 1
+              ) * col1 FROM VALUES (2)
+            )
+          FROM
+            VALUES (1)
+          """,
+        expectedTableData = Seq(createTableData("src"))
+      )
+    }
+  }
+
   test("Relation from a file") {
     val df = spark.range(100).toDF()
     withTempPath(f => {
@@ -138,7 +175,7 @@ class MetadataResolverSuite extends QueryTest with SharedSparkSession with SQLTe
 
       val analyzerBridgeState = new AnalyzerBridgeState
       analyzerBridgeState.relationsWithResolvedMetadata.put(
-        UnresolvedRelation(Seq("src")),
+        BridgedRelationId(UnresolvedRelation(Seq("src")), Seq.empty),
         createUnresolvedCatalogRelation("src")
       )
 
@@ -204,26 +241,28 @@ class MetadataResolverSuite extends QueryTest with SharedSparkSession with SQLTe
       analyzerBridgeState: Option[AnalyzerBridgeState]): Unit = {
     val unresolvedPlan = spark.sql(sqlText).queryExecution.logical
 
+    val resolver = new Resolver(spark.sessionState.catalogManager)
+
     val metadataResolver = analyzerBridgeState match {
       case Some(analyzerBridgeState) =>
         new BridgedRelationMetadataProvider(
           spark.sessionState.catalogManager,
           Resolver.createRelationResolution(spark.sessionState.catalogManager),
-          analyzerBridgeState
+          analyzerBridgeState,
+          new ViewResolver(resolver = resolver, catalogManager = spark.sessionState.catalogManager)
         )
       case None =>
-        val metadataResolver = new MetadataResolver(
+        new MetadataResolver(
           spark.sessionState.catalogManager,
           Resolver.createRelationResolution(spark.sessionState.catalogManager),
           Seq(new FileResolver(spark))
         )
-        metadataResolver.resolve(unresolvedPlan)
-        metadataResolver
     }
+    metadataResolver.resolve(unresolvedPlan)
 
     val actualTableData = new mutable.HashMap[RelationId, TestTableData]
 
-    def findUnresolvedRelations(unresolvedPlan: LogicalPlan): Unit = unresolvedPlan.foreach {
+    def findUnresolvedRelations(unresolvedPlan: LogicalPlan): Unit = unresolvedPlan match {
       case unresolvedRelation: UnresolvedRelation =>
         metadataResolver.getRelationWithResolvedMetadata(unresolvedRelation) match {
           case Some(plan) =>
@@ -249,6 +288,11 @@ class MetadataResolverSuite extends QueryTest with SharedSparkSession with SQLTe
             expression.children.foreach(traverseExpressions)
         }
 
+        unresolvedPlan.children.foreach(findUnresolvedRelations)
+        unresolvedPlan.innerChildren.foreach {
+          case plan: LogicalPlan => findUnresolvedRelations(plan)
+          case _ =>
+        }
         unresolvedPlan.expressions.foreach(traverseExpressions)
     }
 

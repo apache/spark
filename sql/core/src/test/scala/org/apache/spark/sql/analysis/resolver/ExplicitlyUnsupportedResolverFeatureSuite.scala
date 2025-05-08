@@ -18,7 +18,11 @@
 package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.analysis.resolver.Resolver
+import org.apache.spark.sql.catalyst.analysis.resolver.{
+  ExplicitlyUnsupportedResolverFeature,
+  Resolver
+}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSparkSession {
@@ -41,22 +45,6 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSpa
     }
   }
 
-  test("Unsupported view types") {
-    withTable("src_table") {
-      spark.sql("CREATE TABLE src_table (col1 INT) USING PARQUET;").collect()
-
-      withView("temporary_view") {
-        spark.sql("CREATE TEMPORARY VIEW temporary_view AS SELECT * FROM src_table;").collect()
-        checkResolution("SELECT * FROM temporary_view;")
-      }
-
-      withView("persistent_view") {
-        spark.sql("CREATE VIEW persistent_view AS SELECT * FROM src_table;").collect()
-        checkResolution("SELECT * FROM persistent_view;")
-      }
-    }
-  }
-
   test("Unsupported char type padding") {
     withTable("char_type_padding") {
       spark.sql(s"CREATE TABLE t1 (c1 CHAR(3), c2 STRING) USING PARQUET")
@@ -64,28 +52,41 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSpa
     }
   }
 
-  test("Unsupported lateral column alias") {
-    checkResolution("SELECT 1 AS a, a AS b")
-    checkResolution("SELECT sum(1), `sum(1)` + 1 AS a")
+  test("Unsupported star expansion") {
+    checkResolution("SELECT * FROM VALUES (1, 2) WHERE 3 IN (*)")
+  }
+
+  test("LateralColumnAlias in Aggregate") {
+    checkResolution("SELECT 1 AS a, sum(col1) as sum1, a + sum(col2) FROM VALUES(1, 2)")
+  }
+
+  test("Unsupported lambda") {
+    checkResolution(
+      "SELECT array_sort(array(2, 1), (p1, p2) -> CASE WHEN p1 > p2 THEN 1 ELSE 0 END)"
+    )
   }
 
   private def checkResolution(sqlText: String, shouldPass: Boolean = false): Unit = {
+    val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(sqlText)
+    checkResolution(unresolvedPlan, shouldPass)
+  }
+
+  private def checkResolution(plan: LogicalPlan, shouldPass: Boolean): Unit = {
     def noopWrapper(body: => Unit) = body
 
     val wrapper = if (shouldPass) {
       noopWrapper _
     } else {
-      intercept[Throwable] _
+      intercept[ExplicitlyUnsupportedResolverFeature] _
     }
-
-    val unresolvedPlan = spark.sql(sqlText).queryExecution.logical
 
     val resolver = new Resolver(
       spark.sessionState.catalogManager,
-      extensions = spark.sessionState.analyzer.singlePassResolverExtensions
+      extensions = spark.sessionState.analyzer.singlePassResolverExtensions,
+      metadataResolverExtensions = spark.sessionState.analyzer.singlePassMetadataResolverExtensions
     )
     wrapper {
-      resolver.lookupMetadataAndResolve(unresolvedPlan)
+      resolver.lookupMetadataAndResolve(plan)
     }
   }
 }

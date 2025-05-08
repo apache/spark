@@ -55,10 +55,13 @@ object Statistics {
    * @return [[SummarizerBuffer]] object containing column-wise summary statistics.
    */
   private[mllib] def colStats(X: RDD[(Vector, Double)], requested: Seq[String]) = {
-    X.treeAggregate(Summarizer.createSummarizerBuffer(requested: _*))(
-      seqOp = { case (c, (v, w)) => c.add(v.nonZeroIterator, v.size, w) },
-      combOp = { case (c1, c2) => c1.merge(c2) },
-      depth = 2
+    X.treeAggregate[SummarizerBuffer](
+      zeroValue = Summarizer.createSummarizerBuffer(requested: _*),
+      seqOp = (c: SummarizerBuffer,
+               vw: (Vector, Double)) => c.add(vw._1.nonZeroIterator, vw._1.size, vw._2),
+      combOp = (c1: SummarizerBuffer, c2: SummarizerBuffer) => c1.merge(c2),
+      depth = 2,
+      finalAggregateOnExecutor = true
     )
   }
 

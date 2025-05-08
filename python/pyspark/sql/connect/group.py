@@ -41,6 +41,7 @@ import pyspark.sql.connect.plan as plan
 from pyspark.sql.column import Column
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
+from pyspark.sql.streaming.stateful_processor import StatefulProcessor
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -360,6 +361,110 @@ class GroupedData:
         )
 
     applyInPandasWithState.__doc__ = PySparkGroupedData.applyInPandasWithState.__doc__
+
+    def transformWithStateInPandas(
+        self,
+        statefulProcessor: StatefulProcessor,
+        outputStructType: Union[StructType, str],
+        outputMode: str,
+        timeMode: str,
+        initialState: Optional["GroupedData"] = None,
+        eventTimeColumnName: str = "",
+    ) -> "DataFrame":
+        from pyspark.sql.connect.udf import UserDefinedFunction
+        from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPySparkUdfUtils,
+        )
+
+        udf_util = TransformWithStateInPySparkUdfUtils(statefulProcessor, timeMode)
+        if initialState is None:
+            udf_obj = UserDefinedFunction(
+                udf_util.transformWithStateUDF,
+                returnType=outputStructType,
+                evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
+            )
+            initial_state_plan = None
+            initial_state_grouping_cols = None
+        else:
+            self._df._check_same_session(initialState._df)
+            udf_obj = UserDefinedFunction(
+                udf_util.transformWithStateWithInitStateUDF,
+                returnType=outputStructType,
+                evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
+            )
+            initial_state_plan = initialState._df._plan
+            initial_state_grouping_cols = initialState._grouping_cols
+
+        return DataFrame(
+            plan.TransformWithStateInPandas(
+                child=self._df._plan,
+                grouping_cols=self._grouping_cols,
+                function=udf_obj,
+                output_schema=outputStructType,
+                output_mode=outputMode,
+                time_mode=timeMode,
+                event_time_col_name=eventTimeColumnName,
+                cols=self._df.columns,
+                initial_state_plan=initial_state_plan,
+                initial_state_grouping_cols=initial_state_grouping_cols,
+            ),
+            session=self._df._session,
+        )
+
+    transformWithStateInPandas.__doc__ = PySparkGroupedData.transformWithStateInPandas.__doc__
+
+    def transformWithState(
+        self,
+        statefulProcessor: StatefulProcessor,
+        outputStructType: Union[StructType, str],
+        outputMode: str,
+        timeMode: str,
+        initialState: Optional["GroupedData"] = None,
+        eventTimeColumnName: str = "",
+    ) -> "DataFrame":
+        from pyspark.sql.connect.udf import UserDefinedFunction
+        from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPySparkUdfUtils,
+        )
+
+        udf_util = TransformWithStateInPySparkUdfUtils(statefulProcessor, timeMode)
+        if initialState is None:
+            udf_obj = UserDefinedFunction(
+                udf_util.transformWithStateUDF,
+                returnType=outputStructType,
+                evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
+            )
+            initial_state_plan = None
+            initial_state_grouping_cols = None
+        else:
+            self._df._check_same_session(initialState._df)
+            udf_obj = UserDefinedFunction(
+                udf_util.transformWithStateWithInitStateUDF,
+                returnType=outputStructType,
+                evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
+            )
+            initial_state_plan = initialState._df._plan
+            initial_state_grouping_cols = initialState._grouping_cols
+
+        return DataFrame(
+            plan.TransformWithStateInPySpark(
+                child=self._df._plan,
+                grouping_cols=self._grouping_cols,
+                function=udf_obj,
+                output_schema=outputStructType,
+                output_mode=outputMode,
+                time_mode=timeMode,
+                event_time_col_name=eventTimeColumnName,
+                cols=self._df.columns,
+                initial_state_plan=initial_state_plan,
+                initial_state_grouping_cols=initial_state_grouping_cols,
+            ),
+            session=self._df._session,
+        )
+
+    transformWithState.__doc__ = PySparkGroupedData.transformWithState.__doc__
 
     def applyInArrow(
         self, func: "ArrowGroupedMapFunction", schema: Union[StructType, str]

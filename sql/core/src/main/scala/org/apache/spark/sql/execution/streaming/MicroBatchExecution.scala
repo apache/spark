@@ -21,13 +21,14 @@ import scala.collection.mutable.{Map => MutableMap}
 import scala.collection.mutable
 
 import org.apache.spark.internal.{LogKeys, MDC}
-import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.classic.{Dataset, SparkSession}
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -500,6 +501,9 @@ class MicroBatchExecution(
          * i.e., committedBatchId + 1 */
         commitLog.getLatest() match {
           case Some((latestCommittedBatchId, commitMetadata)) =>
+            commitMetadata.stateUniqueIds.foreach {
+              stateUniqueIds => currentStateStoreCkptId ++= stateUniqueIds
+            }
             if (latestBatchId == latestCommittedBatchId) {
               /* The last batch was successfully committed, so we can safely process a
                * new next batch but first:
@@ -519,9 +523,6 @@ class MicroBatchExecution(
               execCtx.startOffsets ++= execCtx.endOffsets
               watermarkTracker.setWatermark(
                 math.max(watermarkTracker.currentWatermark, commitMetadata.nextBatchWatermarkMs))
-              commitMetadata.stateUniqueIds.foreach {
-                stateUniqueIds => currentStateStoreCkptId ++= stateUniqueIds
-              }
             } else if (latestCommittedBatchId == latestBatchId - 1) {
               execCtx.endOffsets.foreach {
                 case (source: Source, end: Offset) =>
@@ -857,7 +858,8 @@ class MicroBatchExecution(
         watermarkPropagator,
         execCtx.previousContext.isEmpty,
         currentStateStoreCkptId,
-        stateSchemaMetadatas)
+        stateSchemaMetadatas,
+        isTerminatingTrigger = trigger.isInstanceOf[AvailableNowTrigger.type])
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
 

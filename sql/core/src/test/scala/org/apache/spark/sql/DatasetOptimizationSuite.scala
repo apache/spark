@@ -32,10 +32,11 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
   test("SPARK-26619: Prune the unused serializers from SerializeFromObject") {
     val data = Seq(("a", 1), ("b", 2), ("c", 3))
     val ds = data.toDS().map(t => (t._1, t._2 + 1)).select("_1")
-    val serializer = ds.queryExecution.optimizedPlan.collect {
+    val serializerOpt = ds.queryExecution.optimizedPlan.collectFirst {
       case s: SerializeFromObject => s
-    }.head
-    assert(serializer.serializer.size == 1)
+    }
+    assert(serializerOpt.isDefined)
+    assert(serializerOpt.get.serializer.size == 1)
     checkAnswer(ds, Seq(Row("a"), Row("b"), Row("c")))
   }
 
@@ -45,15 +46,16 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
   // serializers. The first `structFields` is aligned with first serializer and ditto
   // for other `structFields`.
   private def testSerializer(df: DataFrame, structFields: Seq[Seq[String]]*): Unit = {
-    val serializer = df.queryExecution.optimizedPlan.collect {
+    val serializerOpt = df.queryExecution.optimizedPlan.collectFirst {
       case s: SerializeFromObject => s
-    }.head
+    }
 
     def collectNamedStruct: PartialFunction[Expression, Seq[CreateNamedStruct]] = {
       case c: CreateNamedStruct => Seq(c)
     }
 
-    serializer.serializer.zip(structFields).foreach { case (ser, fields) =>
+    assert(serializerOpt.isDefined)
+    serializerOpt.get.serializer.zip(structFields).foreach { case (ser, fields) =>
       val structs: Seq[CreateNamedStruct] = ser.collect(collectNamedStruct).flatten
       assert(structs.size == fields.size)
       structs.zip(fields).foreach { case (struct, fieldNames) =>

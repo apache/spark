@@ -28,7 +28,7 @@ import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 import org.apache.commons.lang3.StringUtils
-import org.json4s.JsonAST.{JArray, JBool, JDouble, JInt, JLong, JNull, JObject, JString, JValue}
+import org.json4s.JsonAST.{JArray, JBool, JDecimal, JDouble, JInt, JLong, JNull, JObject, JString, JValue}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkException
@@ -36,7 +36,7 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CurrentUserContext, FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, Resolver, SchemaBinding, SchemaCompensation, SchemaEvolution, SchemaTypeEvolution, SchemaUnsupported, UnresolvedLeafNode, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NormalizeableRelation, Resolver, SchemaBinding, SchemaCompensation, SchemaEvolution, SchemaTypeEvolution, SchemaUnsupported, UnresolvedLeafNode, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -61,36 +61,60 @@ trait MetadataMapSupport {
     jsonToString(toJsonLinkedHashMap)
   }
 
+  /**
+   * Some fields from JsonLinkedHashMap are reformatted for human readability in `describe table`.
+   * If a field does not require special re-formatting, it is simply handled by `jsonToString`.
+   */
+  private def jsonToStringReformat(key: String, jValue: JValue): Option[(String, String)] = {
+    val reformattedValue: Option[String] = key match {
+      case "Statistics" =>
+        jValue match {
+          case JObject(fields) =>
+            Some(fields.flatMap {
+              case ("size_in_bytes", JDecimal(bytes)) => Some(s"$bytes bytes")
+              case ("num_rows", JDecimal(rows)) => Some(s"$rows rows")
+              case _ => None
+            }.mkString(", "))
+          case _ => Some(jValue.values.toString)
+        }
+      case "Created Time" | "Last Access" =>
+        jValue match {
+          case JLong(value) => Some(new Date(value).toString)
+          case _ => Some(jValue.values.toString)
+        }
+      case _ => None
+    }
+    reformattedValue.map(value => key -> value)
+  }
+
   protected def jsonToString(
       jsonMap: mutable.LinkedHashMap[String, JValue]): mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
-    val timestampKeys = Set("Created Time", "Last Access")
     jsonMap.foreach { case (key, jValue) =>
-      val stringValue = jValue match {
-        case JString(value) => value
-        case JArray(values) =>
-          values.map(_.values)
-            .map {
-              case str: String => quoteIdentifier(str)
-              case other => other.toString
-            }
-            .mkString("[", ", ", "]")
-        case JObject(fields) =>
-          fields.map { case (k, v) =>
-            s"$k=${v.values.toString}"
+      jsonToStringReformat(key, jValue) match {
+        case Some((formattedKey, formattedValue)) =>
+          map.put(formattedKey, formattedValue)
+        case None =>
+          val stringValue = jValue match {
+            case JString(value) => value
+            case JArray(values) =>
+              values.map(_.values)
+                .map {
+                  case str: String => quoteIdentifier(str)
+                  case other => other.toString
+                }
+                .mkString("[", ", ", "]")
+            case JObject(fields) =>
+              fields.map { case (k, v) =>
+                s"$k=${v.values.toString}"
+              }.mkString("[", ", ", "]")
+            case JInt(value) => value.toString
+            case JDouble(value) => value.toString
+            case JLong(value) => value.toString
+            case _ => jValue.values.toString
           }
-            .mkString("[", ", ", "]")
-        case JInt(value) => value.toString
-        case JDouble(value) => value.toString
-        case JLong(value) =>
-          if (timestampKeys.contains(key)) {
-            new Date(value).toString
-          } else {
-            value.toString
-          }
-        case _ => jValue.values.toString
+          map.put(key, stringValue)
       }
-      map.put(key, stringValue)
     }
     map
   }
@@ -132,7 +156,7 @@ case class CatalogStorageFormat(
   def toJsonLinkedHashMap: mutable.LinkedHashMap[String, JValue] = {
     val map = mutable.LinkedHashMap[String, JValue]()
 
-    locationUri.foreach(l => map += ("Location" -> JString(l.toString)))
+    locationUri.foreach(l => map += ("Location" -> JString(CatalogUtils.URIToString(l))))
     serde.foreach(s => map += ("Serde Library" -> JString(s)))
     inputFormat.foreach(format => map += ("InputFormat" -> JString(format)))
     outputFormat.foreach(format => map += ("OutputFormat" -> JString(format)))
@@ -642,7 +666,9 @@ case class CatalogTable(
       map += "View Query Output Columns" -> viewQueryOutputColumns
     }
     if (tableProperties != JNull) map += "Table Properties" -> tableProperties
-    if (stats.isDefined) map += "Statistics" -> JString(stats.get.simpleString)
+    stats.foreach { s =>
+      map += "Statistics" -> JObject(s.jsonString.toList)
+    }
     map ++= storage.toJsonLinkedHashMap.map { case (k, v) => k -> v }
     if (tracksPartitionsInCatalog) map += "Partition Provider" -> JString("Catalog")
     if (partitionColumns != JNull) map += "Partition Columns" -> partitionColumns
@@ -810,6 +836,14 @@ case class CatalogStatistics(
   def simpleString: String = {
     val rowCountString = if (rowCount.isDefined) s", ${rowCount.get} rows" else ""
     s"$sizeInBytes bytes$rowCountString"
+  }
+
+  def jsonString: Map[String, JValue] = {
+    val rowCountInt: BigInt = rowCount.getOrElse(0L)
+    Map(
+      "size_in_bytes" -> JDecimal(BigDecimal(sizeInBytes)),
+      "num_rows" -> JDecimal(BigDecimal(rowCountInt))
+    )
   }
 }
 
@@ -1048,7 +1082,7 @@ case class HiveTableRelation(
     partitionCols: Seq[AttributeReference],
     tableStats: Option[Statistics] = None,
     @transient prunedPartitions: Option[Seq[CatalogTablePartition]] = None)
-  extends LeafNode with MultiInstanceRelation {
+  extends LeafNode with MultiInstanceRelation with NormalizeableRelation {
   assert(tableMeta.identifier.database.isDefined)
   assert(DataTypeUtils.sameType(tableMeta.partitionSchema, partitionCols.toStructType))
   assert(DataTypeUtils.sameType(tableMeta.dataSchema, dataCols.toStructType))
@@ -1115,5 +1149,12 @@ case class HiveTableRelation(
 
     val metadataStr = truncatedString(metadataEntries, "[", ", ", "]", maxFields)
     s"$nodeName $metadataStr"
+  }
+
+  /**
+   * Minimally normalizes this [[HiveTableRelation]] to make it comparable in [[NormalizePlan]].
+   */
+  override def normalize(): LogicalPlan = {
+    copy(tableMeta = CatalogTable.normalize(tableMeta))
   }
 }

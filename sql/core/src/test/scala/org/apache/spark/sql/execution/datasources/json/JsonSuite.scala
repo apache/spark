@@ -4001,6 +4001,101 @@ abstract class JsonSuite
       "{\"key\":90000001,\"value\":\"Hey there\"}"
     )
   }
+
+  test("json with variant") {
+    val content = Seq(
+      "true",
+      """{"a": [], "b": null}""",
+      """{"a": 1}""",
+      "bad json",
+      "[1, 2, 3]"
+    ).mkString("\n").getBytes(StandardCharsets.UTF_8)
+
+    withTempDir { dir =>
+      val file = new File(dir, "file.json")
+      Files.write(file.toPath, content)
+
+      checkAnswer(
+        spark.read.format("json").option("singleVariantColumn", "var")
+          .load(file.getAbsolutePath)
+          .selectExpr("to_json(var)"),
+        Seq(Row("true"), Row("""{"a":[],"b":null}"""), Row("""{"a":1}"""), Row(null),
+          Row("[1,2,3]"))
+      )
+
+      checkAnswer(
+        spark.read.format("json").option("singleVariantColumn", "var")
+          .schema("var variant, _corrupt_record string")
+          .load(file.getAbsolutePath)
+          .selectExpr("to_json(var)", "_corrupt_record"),
+        Seq(Row("true", null), Row("""{"a":[],"b":null}""", null), Row("""{"a":1}""", null),
+          Row(null, "bad json"), Row("[1,2,3]", null))
+      )
+
+      checkAnswer(
+        spark.read.format("json").schema("a variant, b variant")
+          .load(file.getAbsolutePath).selectExpr("to_json(a)", "to_json(b)"),
+        Seq(Row(null, null), Row("[]", "null"), Row("1", null), Row(null, null), Row(null, null))
+      )
+
+      checkAnswer(
+        spark.read.format("json").schema("a variant, b variant, _corrupt_record string")
+          .load(file.getAbsolutePath).selectExpr("to_json(a)", "to_json(b)", "_corrupt_record"),
+        Seq(Row(null, null, "true"), Row("[]", "null", null), Row("1", null, null),
+          Row(null, null, "bad json"), Row(null, null, "[1, 2, 3]"))
+      )
+
+      withTempDir { streamDir =>
+        val stream = spark.readStream.format("json").option("singleVariantColumn", "var")
+          .load(dir.getCanonicalPath)
+          .selectExpr("to_json(var)")
+          .writeStream
+          .option("checkpointLocation", streamDir.getCanonicalPath + "/checkpoint")
+          .format("parquet")
+          .start(streamDir.getCanonicalPath + "/output")
+        stream.processAllAvailable()
+        checkAnswer(
+          spark.read.format("parquet").load(streamDir.getCanonicalPath + "/output"),
+          Seq(Row("true"), Row("""{"a":[],"b":null}"""), Row("""{"a":1}"""), Row(null),
+            Row("[1,2,3]"))
+        )
+      }
+    }
+
+    // Test scan with partitions.
+    withTempDir { dir =>
+      new File(dir, "a=1/b=2/").mkdirs()
+      Files.write(new File(dir, "a=1/b=2/file.json").toPath, content)
+      checkAnswer(
+        spark.read.format("json").option("singleVariantColumn", "var")
+          .load(dir.getAbsolutePath).selectExpr("a", "b", "to_json(var)"),
+        Seq(Row(1, 2, "true"), Row(1, 2, """{"a":[],"b":null}"""), Row(1, 2, """{"a":1}"""),
+          Row(1, 2, null), Row(1, 2, "[1,2,3]"))
+      )
+    }
+  }
+
+  test("from_json with variant") {
+    val df = Seq(
+      "true",
+      """{"a": [], "b": null}""",
+      """{"a": 1}""",
+      "bad json",
+      "[1, 2, 3]"
+    ).toDF("value")
+    checkAnswer(
+      df.selectExpr("cast(from_json(value, 'var variant', " +
+        "map('singleVariantColumn', 'var')) as string)"),
+      Seq(Row("{true}"), Row("""{{"a":[],"b":null}}"""), Row("""{{"a":1}}"""), Row("{null}"),
+        Row("{[1,2,3]}"))
+    )
+    checkAnswer(
+      df.selectExpr("cast(from_json(value, 'var variant, _corrupt_record string', " +
+        "map('singleVariantColumn', 'var')) as string)"),
+      Seq(Row("{true, null}"), Row("""{{"a":[],"b":null}, null}"""), Row("""{{"a":1}, null}"""),
+        Row("{null, bad json}"), Row("{[1,2,3], null}"))
+    )
+  }
 }
 
 class JsonV1Suite extends JsonSuite {
@@ -4054,7 +4149,7 @@ class JsonLegacyTimeParserSuite extends JsonSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.LEGACY_TIME_PARSER_POLICY, "legacy")
+      .set(SQLConf.LEGACY_TIME_PARSER_POLICY.key, "legacy")
 }
 
 class JsonUnsafeRowSuite extends JsonSuite {

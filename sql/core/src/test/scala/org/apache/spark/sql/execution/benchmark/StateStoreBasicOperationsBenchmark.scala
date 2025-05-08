@@ -353,10 +353,6 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  private def getRows(store: StateStore, keys: Seq[UnsafeRow]): Seq[UnsafeRow] = {
-    keys.map(key => store.get(key))
-  }
-
   private def loadInitialData(
       provider: StateStoreProvider,
       data: Seq[(UnsafeRow, UnsafeRow)]): Long = {

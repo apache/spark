@@ -40,6 +40,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Python.PYTHON_UNIX_DOMAIN_SOCKET_ENABLED
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart, SparkListenerExecutorAdded}
@@ -60,6 +61,16 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       case Some(path) => (true, path)
       case _ => (false, "")
     }
+  }
+
+  private var pyConnectDepChecker: PyConnectDepChecker = _
+
+  private def getOrCreatePyConnectDepChecker(
+      python: String, libPath: Seq[String]): PyConnectDepChecker = {
+    if (pyConnectDepChecker == null) {
+      pyConnectDepChecker = new PyConnectDepChecker(python, libPath)
+    }
+    pyConnectDepChecker
   }
 
   override def newYarnConfig(): YarnConfiguration = new YarnConfiguration()
@@ -84,6 +95,34 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     |    status.write(result)
     |    status.close()
     |    sc.stop()
+    """.stripMargin
+
+  private val TEST_CONNECT_PYFILE = s"""
+    |import mod1, mod2
+    |import sys
+    |from operator import add
+    |
+    |from pyspark.sql import SparkSession
+    |from pyspark.sql.functions import udf
+    |if __name__ == "__main__":
+    |    if len(sys.argv) != 2:
+    |        print >> sys.stderr, "Usage: test.py [result file]"
+    |        exit(-1)
+    |    spark = SparkSession.builder.config(
+    |        "${SPARK_API_MODE.key}", "connect").master("yarn").getOrCreate()
+    |    assert "connect" in str(spark)
+    |    status = open(sys.argv[1],'w')
+    |    result = "failure"
+    |    @udf
+    |    def test():
+    |        return mod1.func() * mod2.func()
+    |    df = spark.range(10).select(test())
+    |    cnt = df.count()
+    |    if cnt == 10:
+    |        result = "success"
+    |    status.write(result)
+    |    status.close()
+    |    spark.stop()
     """.stripMargin
 
   private val TEST_PYMODULE = """
@@ -230,11 +269,29 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("run Python application in yarn-client mode") {
-    testPySpark(true)
+    testPySpark(
+      true,
+      // User is unknown in this suite.
+      extraConf = Map(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED.key -> false.toString)
+    )
   }
 
   test("run Python application in yarn-cluster mode") {
-    testPySpark(false)
+    testPySpark(
+      false,
+      // User is unknown in this suite.
+      extraConf = Map(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED.key -> false.toString)
+    )
+  }
+
+  test("run Python application with Spark Connect in yarn-client mode") {
+    testPySpark(
+      true, extraConf = Map(SPARK_API_MODE.key -> "connect"), script = TEST_CONNECT_PYFILE)
+  }
+
+  test("run Python application with Spark Connect in yarn-cluster mode") {
+    testPySpark(
+      false, extraConf = Map(SPARK_API_MODE.key -> "connect"), script = TEST_CONNECT_PYFILE)
   }
 
   test("run Python application in yarn-cluster mode using " +
@@ -242,6 +299,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     testPySpark(
       clientMode = false,
       extraConf = Map(
+        PYTHON_UNIX_DOMAIN_SOCKET_ENABLED.key -> false.toString,  // User is unknown in this suite.
         "spark.yarn.appMasterEnv.PYSPARK_DRIVER_PYTHON"
           -> sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", pythonExecutablePath),
         "spark.yarn.appMasterEnv.PYSPARK_PYTHON"
@@ -370,10 +428,11 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   private def testPySpark(
       clientMode: Boolean,
       extraConf: Map[String, String] = Map(),
-      extraEnv: Map[String, String] = Map()): Unit = {
+      extraEnv: Map[String, String] = Map(),
+      script: String = TEST_PYFILE): Unit = {
     assume(isPythonAvailable)
     val primaryPyFile = new File(tempDir, "test.py")
-    Files.asCharSink(primaryPyFile, StandardCharsets.UTF_8).write(TEST_PYFILE)
+    Files.asCharSink(primaryPyFile, StandardCharsets.UTF_8).write(script)
 
     // When running tests, let's not assume the user has built the assembly module, which also
     // creates the pyspark archive. Instead, let's use PYSPARK_ARCHIVES_PATH to point at the
@@ -388,6 +447,12 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       "PYSPARK_DRIVER_PYTHON" -> pythonExecutablePath,
       "PYSPARK_PYTHON" -> pythonExecutablePath
     ) ++ extraEnv
+
+    if (extraConf.getOrElse(SPARK_API_MODE.key, SPARK_API_MODE.defaultValueString) == "connect") {
+      val checker = getOrCreatePyConnectDepChecker(pythonExecutablePath, pythonPath)
+      assume(checker.isSparkConnectJarAvailable)
+      assume(checker.isConnectPythonPackagesAvailable)
+    }
 
     val moduleDir = {
       val subdir = new File(tempDir, "pyModules")
@@ -799,4 +864,45 @@ private object ExecutorEnvTestApp {
     sc.stop()
   }
 
+}
+
+private class PyConnectDepChecker(python: String, libPath: Seq[String]) {
+
+  import scala.sys.process.Process
+  import scala.util.Try
+  import scala.util.Properties.versionNumberString
+
+  lazy val isSparkConnectJarAvailable: Boolean = {
+    val filePath = s"$sparkHome/assembly/target/$scalaDir/jars/" +
+      s"spark-connect_$scalaVersion-$SPARK_VERSION.jar"
+    java.nio.file.Files.exists(Paths.get(filePath))
+  }
+
+  lazy val isConnectPythonPackagesAvailable: Boolean = Try {
+    Process(
+      Seq(
+        python,
+        "-c",
+        "from pyspark.sql.connect.utils import check_dependencies;" +
+          "check_dependencies('pyspark.sql.connect.fake_module')"),
+      None,
+      "PYTHONPATH" -> libPath.mkString(File.pathSeparator)).!!
+    true
+  }.getOrElse(false)
+
+  private lazy val scalaVersion = {
+    versionNumberString.split('.') match {
+      case Array(major, minor, _*) => major + "." + minor
+      case _ => versionNumberString
+    }
+  }
+
+  private lazy val scalaDir = s"scala-$scalaVersion"
+
+  private lazy val sparkHome: String = {
+    if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
+      fail("spark.test.home or SPARK_HOME is not set.")
+    }
+    sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
+  }
 }

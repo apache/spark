@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 4.0 to 4.1
+
+- Since Spark 4.1, `mapInPandas` and `mapInArrow` enforces strict validation of the result against the schema. The column names must exactly match and types must match with compatible nullability. To restore the previous behavior, set `spark.sql.execution.arrow.pyspark.validateSchema.enabled` to `false`.
+
 ## Upgrading from Spark SQL 3.5 to 4.0
 
 - Since Spark 4.0, `spark.sql.ansi.enabled` is on by default. To restore the previous behavior, set `spark.sql.ansi.enabled` to `false` or `SPARK_ANSI_SQL_MODE` to `false`.
@@ -31,6 +35,7 @@ license: |
 - Since Spark 4.0, any read of SQL tables takes into consideration the SQL configs `spark.sql.files.ignoreCorruptFiles`/`spark.sql.files.ignoreMissingFiles` instead of the core config `spark.files.ignoreCorruptFiles`/`spark.files.ignoreMissingFiles`.
 - Since Spark 4.0, when reading SQL tables hits `org.apache.hadoop.security.AccessControlException` and `org.apache.hadoop.hdfs.BlockMissingException`, the exception will be thrown and fail the task, even if `spark.sql.files.ignoreCorruptFiles` is set to `true`.
 - Since Spark 4.0, `spark.sql.hive.metastore` drops the support of Hive prior to 2.0.0 as they require JDK 8 that Spark does not support anymore. Users should migrate to higher versions.
+- Since Spark 4.0, Spark removes `hive-llap-common` dependency. To restore the previous behavior, add `hive-llap-common` jar to the class path.
 - Since Spark 4.0, `spark.sql.parquet.compression.codec` drops the support of codec name `lz4raw`, please use `lz4_raw` instead.
 - Since Spark 4.0, when overflowing during casting timestamp to byte/short/int under non-ansi mode, Spark will return null instead a wrapping value.
 - Since Spark 4.0, the `encode()` and `decode()` functions support only the following charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32'. To restore the previous behavior when the function accepts charsets of the current JDK used by Spark, set `spark.sql.legacy.javaCharsets` to `true`.
@@ -63,6 +68,7 @@ license: |
 - Since Spark 4.0, Views allow control over how they react to underlying query changes. By default views tolerate column type changes in the query and compensate with casts. To disable this feature set `spark.sql.legacy.viewSchemaBindingMode` to `false`. This also removes the clause from `DESCRIBE EXTENDED` and `SHOW CREATE TABLE`.
 - Since Spark 4.0, The Storage-Partitioned Join feature flag `spark.sql.sources.v2.bucketing.pushPartValues.enabled` is set to `true`. To restore the previous behavior, set `spark.sql.sources.v2.bucketing.pushPartValues.enabled` to `false`.
 - Since Spark 4.0, the `sentences` function uses `Locale(language)` instead of `Locale.US` when `language` parameter is not `NULL` and `country` parameter is `NULL`.
+- Since Spark 4.0, reading from a file source table will correctly respect query options, e.g. delimiters. Previously, the first query plan was cached and subsequent option changes ignored. To restore the previous behavior, set `spark.sql.legacy.readFileSourceTableCacheIgnoreOptions` to `true`.
 
 ## Upgrading from Spark SQL 3.5.3 to 3.5.4
 

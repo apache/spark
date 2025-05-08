@@ -27,16 +27,16 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedFieldName, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableWritePrivilege, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableChange, TableWritePrivilege, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -141,6 +141,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(t.provider).thenReturn(Some(provider))
     when(t.identifier).thenReturn(
       ident.asTableIdentifier.copy(catalog = Some(SESSION_CATALOG_NAME)))
+    when(t.storage).thenReturn(CatalogStorageFormat.empty)
+    when(t.properties).thenReturn(Map.empty)
+    when(t.comment).thenReturn(None)
+    when(t.collation).thenReturn(None)
     V1Table(t)
   }
 
@@ -1317,6 +1321,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case (tblName, useV1Command) =>
         val sql1 = s"ALTER TABLE $tblName ALTER COLUMN i TYPE bigint"
         val sql2 = s"ALTER TABLE $tblName ALTER COLUMN i COMMENT 'new comment'"
+        val sql3 =
+          s"""ALTER TABLE $tblName ALTER COLUMN
+             |  i TYPE bigint,
+             |  s SET DEFAULT 'value'""".stripMargin
 
         val parsed1 = parseAndResolve(sql1)
         val parsed2 = parseAndResolve(sql2)
@@ -1333,21 +1341,30 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           comparePlans(parsed1, expected1)
           comparePlans(parsed2, expected2)
 
-          val sql3 = s"ALTER TABLE $tblName ALTER COLUMN j COMMENT 'new comment'"
           checkError(
             exception = intercept[AnalysisException] {
               parseAndResolve(sql3)
+            },
+            condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+            sqlState = "0A000",
+            parameters = Map("tableName" -> "`spark_catalog`.`default`.`v1Table`",
+              "operation" -> "ALTER COLUMN in bulk"))
+
+          val sql4 = s"ALTER TABLE $tblName ALTER COLUMN j COMMENT 'new comment'"
+          checkError(
+            exception = intercept[AnalysisException] {
+              parseAndResolve(sql4)
             },
             condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
             sqlState = "42703",
             parameters = Map(
               "objectName" -> "`j`",
               "proposal" -> "`i`, `s`, `point`"),
-            context = ExpectedContext(fragment = sql3, start = 0, stop = 55))
+            context = ExpectedContext(fragment = sql4, start = 0, stop = 55))
 
-          val sql4 = s"ALTER TABLE $tblName ALTER COLUMN point.x TYPE bigint"
+          val sql5 = s"ALTER TABLE $tblName ALTER COLUMN point.x TYPE bigint"
           val e2 = intercept[AnalysisException] {
-            parseAndResolve(sql4)
+            parseAndResolve(sql5)
           }
           checkError(
             exception = e2,
@@ -1366,29 +1383,55 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               "operation" -> "ALTER COLUMN ... SET NOT NULL"))
         } else {
           parsed1 match {
-            case AlterColumn(
+            case AlterColumns(
                 _: ResolvedTable,
-                column: ResolvedFieldName,
-                Some(LongType),
-                None,
-                None,
-                None,
-                None) =>
+                Seq(AlterColumnSpec(
+                  column: ResolvedFieldName,
+                  Some(LongType),
+                  None,
+                  None,
+                  None,
+                  None))) =>
               assert(column.name == Seq("i"))
-            case _ => fail("expect AlterTableAlterColumn")
+            case _ => fail("expect AlterColumns")
           }
 
           parsed2 match {
-            case AlterColumn(
+            case AlterColumns(
                 _: ResolvedTable,
-                column: ResolvedFieldName,
-                None,
-                None,
-                Some("new comment"),
-                None,
-                None) =>
+                Seq(AlterColumnSpec(
+                  column: ResolvedFieldName,
+                  None,
+                  None,
+                  Some("new comment"),
+                  None,
+                  None))) =>
               assert(column.name == Seq("i"))
-            case _ => fail("expect AlterTableAlterColumn")
+            case _ => fail("expect AlterColumns")
+          }
+
+          val parsed3 = parseAndResolve(sql3)
+          parsed3 match {
+            case AlterColumns(
+                _: ResolvedTable,
+                Seq(
+                  AlterColumnSpec(
+                    column1: ResolvedFieldName,
+                    Some(LongType),
+                    None,
+                    None,
+                    None,
+                    None),
+                  AlterColumnSpec(
+                    column2: ResolvedFieldName,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some("'value'")))) =>
+              assert(column1.name == Seq("i"))
+              assert(column2.name == Seq("s"))
+            case _ => fail("expect AlterColumns")
           }
         }
     }
@@ -1400,6 +1443,25 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       "i", newColumnWithCleanedType)
     val parsed = parseAndResolve(sql)
     comparePlans(parsed, expected)
+  }
+
+  test("SPARK-51010: AlterColumnSpec should correctly report resolved status") {
+    val unresolvedSpec = AlterColumnSpec(
+      ResolvedFieldName(Seq("test"), StructField("i", IntegerType)),
+      newDataType = None,
+      newNullability = None,
+      newComment = None,
+      newPosition = Some(UnresolvedFieldPosition(TableChange.ColumnPosition.first)),
+      newDefaultExpression = None)
+    assert(!unresolvedSpec.resolved)
+
+    val partiallyResolvedSpec = unresolvedSpec.copy(
+      column = ResolvedFieldName(Seq("test"), StructField("i", IntegerType)))
+    assert(!partiallyResolvedSpec.resolved)
+
+    val resolvedSpec = partiallyResolvedSpec.copy(
+      newPosition = Some(ResolvedFieldPosition(TableChange.ColumnPosition.first)))
+    assert(resolvedSpec.resolved)
   }
 
   test("alter table: alter column action is not specified") {
@@ -1445,16 +1507,29 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
   test("alter table: hive style change column") {
     Seq("v2Table", "testcat.tab").foreach { tblName =>
       parseAndResolve(s"ALTER TABLE $tblName CHANGE COLUMN i i int COMMENT 'an index'") match {
-        case AlterColumn(
-            _: ResolvedTable, _: ResolvedFieldName, None, None, Some(comment), None, None) =>
+        case AlterColumns(
+            _: ResolvedTable,
+            Seq(AlterColumnSpec(
+              _: ResolvedFieldName,
+              None,
+              None,
+              Some(comment),
+              None,
+              None))) =>
           assert(comment == "an index")
         case _ => fail("expect AlterTableAlterColumn with comment change only")
       }
 
       parseAndResolve(s"ALTER TABLE $tblName CHANGE COLUMN i i long COMMENT 'an index'") match {
-        case AlterColumn(
-            _: ResolvedTable, _: ResolvedFieldName, Some(dataType), None, Some(comment), None,
-            None) =>
+        case AlterColumns(
+            _: ResolvedTable,
+            Seq(AlterColumnSpec(
+              _: ResolvedFieldName,
+              Some(dataType),
+              None,
+              Some(comment),
+              None,
+              None))) =>
           assert(comment == "an index")
           assert(dataType == LongType)
         case _ => fail("expect AlterTableAlterColumn with type and comment changes")
@@ -1489,14 +1564,14 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       val catalog = if (isSessionCatalog) v2SessionCatalog else testCat
       val tableIdent = if (isSessionCatalog) "v2Table" else "tab"
       parsed match {
-        case AlterColumn(r: ResolvedTable, _, _, _, _, _, _) =>
+        case AlterColumns(r: ResolvedTable, _) =>
           assert(r.catalog == catalog)
           assert(r.identifier.name() == tableIdent)
         case Project(_, AsDataSourceV2Relation(r)) =>
-          assert(r.catalog.exists(_ == catalog))
+          assert(r.catalog.contains(catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
         case AppendData(r: DataSourceV2Relation, _, _, _, _, _) =>
-          assert(r.catalog.exists(_ == catalog))
+          assert(r.catalog.contains(catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
         case DescribeRelation(r: ResolvedTable, _, _, _) =>
           assert(r.catalog == catalog)

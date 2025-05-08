@@ -29,7 +29,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{LazyExpression, UnsupportedOperationChecker}
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, Command
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
@@ -208,7 +209,7 @@ class QueryExecution(
     executePhase(QueryPlanningTracker.PLANNING) {
       // Clone the logical plan here, in case the planner rules change the states of the logical
       // plan.
-      QueryExecution.createSparkPlan(sparkSession, planner, optimizedPlan.clone())
+      QueryExecution.createSparkPlan(planner, optimizedPlan.clone())
     }
   }
 
@@ -310,7 +311,7 @@ class QueryExecution(
       new IncrementalExecution(
         sparkSession, logical, OutputMode.Append(), "<unknown>",
         UUID.randomUUID, UUID.randomUUID, 0, None, OffsetSeqMetadata(0, 0),
-        WatermarkPropagator.noop(), false)
+        WatermarkPropagator.noop(), false, mode = this.mode)
     } else {
       this
     }
@@ -573,7 +574,6 @@ object QueryExecution {
    * Note that the returned physical plan still needs to be prepared for execution.
    */
   def createSparkPlan(
-      sparkSession: SparkSession,
       planner: SparkPlanner,
       plan: LogicalPlan): SparkPlan = {
     // TODO: We use next(), i.e. take the first plan returned by the planner, here for now,
@@ -593,7 +593,7 @@ object QueryExecution {
    * [[SparkPlan]] for execution.
    */
   def prepareExecutedPlan(spark: SparkSession, plan: LogicalPlan): SparkPlan = {
-    val sparkPlan = createSparkPlan(spark, spark.sessionState.planner, plan.clone())
+    val sparkPlan = createSparkPlan(spark.sessionState.planner, plan.clone())
     prepareExecutedPlan(spark, sparkPlan)
   }
 
@@ -602,11 +602,11 @@ object QueryExecution {
    * This method is only called by [[PlanAdaptiveDynamicPruningFilters]].
    */
   def prepareExecutedPlan(
-      session: SparkSession,
       plan: LogicalPlan,
       context: AdaptiveExecutionContext): SparkPlan = {
-    val sparkPlan = createSparkPlan(session, session.sessionState.planner, plan.clone())
-    val preparationRules = preparations(session, Option(InsertAdaptiveSparkPlan(context)), true)
+    val sparkPlan = createSparkPlan(context.session.sessionState.planner, plan.clone())
+    val preparationRules =
+      preparations(context.session, Option(InsertAdaptiveSparkPlan(context)), true)
     prepareForExecution(preparationRules, sparkPlan.clone())
   }
 

@@ -27,7 +27,7 @@ import org.apache.spark.annotation.Since
  * @tparam T Summary instance type
  */
 @Since("3.0.0")
-private[ml] trait HasTrainingSummary[T] {
+private[spark] trait HasTrainingSummary[T] {
 
   private[ml] final var trainingSummary: Option[T] = None
 
@@ -49,4 +49,10 @@ private[ml] trait HasTrainingSummary[T] {
     this.trainingSummary = summary
     this
   }
+}
+
+private[spark] object SummaryUtils {
+
+  // This flag is only used by Spark Connect
+  private[spark] var enableTrainingSummary: Boolean = true
 }

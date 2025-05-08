@@ -28,13 +28,17 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, CurrentOrigin, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.trees.TreePatternBits.toPatternBits
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.MULTI_COMMUTATIVE_OP_OPT_THRESHOLD
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.BitSet
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the basic expression abstract classes in Catalyst.
@@ -371,6 +375,14 @@ abstract class Expression extends TreeNode[Expression] {
     throw SparkException.internalError(s"$nodeName does not implement simpleStringWithNodeId")
   }
 
+  final override def validateNodePatterns(): Unit = {
+    if (Utils.isTesting) {
+      assert(
+        !toPatternBits(nodePatterns: _*).intersects(ExpressionPatternBitMask.mask),
+        s"${this.getClass.getName} returns Operator patterns")
+    }
+  }
+
   protected def typeSuffix =
     if (resolved) {
       dataType match {
@@ -380,6 +392,15 @@ abstract class Expression extends TreeNode[Expression] {
     } else {
       ""
     }
+}
+
+object ExpressionPatternBitMask {
+  val mask: BitSet = {
+    val bits = new BitSet(TreePattern.maxId)
+    bits.setUntil(TreePattern.maxId)
+    bits.clearUntil(OPERATOR_START.id)
+    bits
+  }
 }
 
 /**
@@ -800,9 +821,13 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes wi
 
   override def inputTypes: Seq[AbstractDataType] = Seq(inputType, inputType)
 
+  protected def sameType(left: DataType, right: DataType): Boolean = {
+    DataTypeUtils.sameType(left, right)
+  }
+
   override def checkInputDataTypes(): TypeCheckResult = {
     // First check whether left and right have the same type, then check if the type is acceptable.
-    if (!DataTypeUtils.sameType(left.dataType, right.dataType)) {
+    if (!sameType(left.dataType, right.dataType)) {
       DataTypeMismatch(
         errorSubClass = "BINARY_OP_DIFF_TYPES",
         messageParameters = Map(
@@ -1467,5 +1492,5 @@ case class MultiCommutativeOp(
  * Trait for expressions whose data type should be a default string type.
  */
 trait DefaultStringProducingExpression extends Expression {
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def dataType: DataType = StringType
 }

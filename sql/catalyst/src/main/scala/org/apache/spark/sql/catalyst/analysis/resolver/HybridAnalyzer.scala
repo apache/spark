@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
+import java.util.Random
+
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SQLConfHelper}
@@ -37,9 +39,10 @@ import org.apache.spark.sql.internal.SQLConf
  *   - If the "spark.sql.analyzer.singlePassResolver.dualRunEnabled" is "true", the
  *      [[HybridAnalyzer]] will invoke the legacy analyzer and optionally _also_ the fixed-point
  *      one depending on the structure of the unresolved plan. This decision is based on which
- *      features are supported by the single-pass Analyzer, and the checking is implemented in
- *      the [[ResolverGuard]]. After that we validate the results using the following
- *      logic:
+ *      features are supported by the single-pass Analyzer, and the checking is implemented in the
+ *      [[ResolverGuard]]. It's also determined if the query should be run in dual run mode by
+ *      the [[SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE]] flag value. After that we validate the
+ *      results using the following logic:
  *        - If the fixed-point Analyzer fails and the single-pass one succeeds, we throw an
  *          appropriate exception (please check the
  *          [[QueryCompilationErrors.fixedPointFailedSinglePassSucceeded]] method)
@@ -54,21 +57,30 @@ class HybridAnalyzer(
     legacyAnalyzer: Analyzer,
     resolverGuard: ResolverGuard,
     resolver: Resolver,
-    checkSupportedSinglePassFeatures: Boolean = true)
+    extendedResolutionChecks: Seq[LogicalPlan => Unit] = Seq.empty,
+    exposeExplicitlyUnsupportedResolverFeature: Boolean = false)
     extends SQLConfHelper {
   private var singlePassResolutionDuration: Option[Long] = None
   private var fixedPointResolutionDuration: Option[Long] = None
+  private val resolverRunner: ResolverRunner =
+    new ResolverRunner(resolver, extendedResolutionChecks)
+  private val sampleRateGenerator = new Random()
 
   def apply(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
+    val passedResolvedGuard = resolverGuard.apply(plan)
     val dualRun =
       conf.getConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER) &&
-      checkResolverGuard(plan)
+      passedResolvedGuard && checkDualRunSampleRate()
 
     withTrackedAnalyzerBridgeState(dualRun) {
       if (dualRun) {
         resolveInDualRun(plan, tracker)
       } else if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED)) {
-        resolveInSinglePass(plan)
+        resolveInSinglePass(plan, tracker)
+      } else if (passedResolvedGuard && conf.getConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY
+        )) {
+        resolveInSinglePassTentatively(plan, tracker)
       } else {
         resolveInFixedPoint(plan, tracker)
       }
@@ -133,7 +145,7 @@ class HybridAnalyzer(
     var singlePassException: Option[Throwable] = None
     val singlePassResult = try {
       val (resolutionDuration, result) = recordDuration {
-        Some(resolveInSinglePass(plan))
+        Some(resolveInSinglePass(plan, tracker))
       }
       singlePassResolutionDuration = Some(resolutionDuration)
       result
@@ -157,7 +169,7 @@ class HybridAnalyzer(
       case None =>
         singlePassException match {
           case Some(singlePassEx: ExplicitlyUnsupportedResolverFeature)
-              if checkSupportedSinglePassFeatures =>
+              if !exposeExplicitlyUnsupportedResolverFeature =>
             fixedPointResult.get
           case Some(singlePassEx) =>
             throw singlePassEx
@@ -173,20 +185,30 @@ class HybridAnalyzer(
   }
 
   /**
+   * Run the single-pass Analyzer, but fall back to the fixed-point if
+   * [[ExplicitlyUnsupportedResolverFeature]] is thrown.
+   */
+  private def resolveInSinglePassTentatively(
+      plan: LogicalPlan,
+      tracker: QueryPlanningTracker): LogicalPlan = {
+    try {
+      resolveInSinglePass(plan, tracker)
+    } catch {
+      case _: ExplicitlyUnsupportedResolverFeature =>
+        resolveInFixedPoint(plan, tracker)
+    }
+  }
+
+  /**
    * This method is used to run the single-pass Analyzer which will return the resolved plan
    * or throw an exception if the resolution fails. Both cases are handled in the caller method.
    * */
-  private def resolveInSinglePass(plan: LogicalPlan): LogicalPlan = {
-    val resolvedPlan = resolver.lookupMetadataAndResolve(
-      plan,
-      analyzerBridgeState = AnalysisContext.get.getSinglePassResolverBridgeState
+  private def resolveInSinglePass(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan =
+    resolverRunner.resolve(
+      plan = plan,
+      analyzerBridgeState = AnalysisContext.get.getSinglePassResolverBridgeState,
+      tracker = tracker
     )
-    if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED)) {
-      val validator = new ResolutionValidator
-      validator.validatePlan(resolvedPlan)
-    }
-    resolvedPlan
-  }
 
   /**
    * This method is used to run the legacy Analyzer which will return the resolved plan
@@ -198,6 +220,10 @@ class HybridAnalyzer(
       legacyAnalyzer.checkAnalysis(resolvedPlan)
     }
     resolvedPlan
+  }
+
+  private def checkDualRunSampleRate(): Boolean = {
+    sampleRateGenerator.nextDouble() < conf.getConf(SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE)
   }
 
   private def validateLogicalPlans(fixedPointResult: LogicalPlan, singlePassResult: LogicalPlan) = {
@@ -218,9 +244,6 @@ class HybridAnalyzer(
   private def normalizePlan(plan: LogicalPlan) = AnalysisHelper.allowInvokingTransformsInAnalyzer {
     NormalizePlan(plan)
   }
-
-  private def checkResolverGuard(plan: LogicalPlan): Boolean =
-    !checkSupportedSinglePassFeatures || resolverGuard.apply(plan)
 
   private def recordDuration[T](thunk: => T): (Long, T) = {
     val start = System.nanoTime()

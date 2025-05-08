@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql._
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DatetimeType, _}
 
