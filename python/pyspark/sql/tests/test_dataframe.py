@@ -870,18 +870,16 @@ class DataFrameTestsMixin:
     )
     def test_pandas_api(self):
         import pandas as pd
-        import pyspark.pandas as ps
         from pandas.testing import assert_frame_equal
 
-        with ps.option_context("compute.fail_on_ansi_mode", False):
-            sdf = self.spark.createDataFrame([("a", 1), ("b", 2), ("c", 3)], ["Col1", "Col2"])
-            psdf_from_sdf = sdf.pandas_api()
-            psdf_from_sdf_with_index = sdf.pandas_api(index_col="Col1")
-            pdf = pd.DataFrame({"Col1": ["a", "b", "c"], "Col2": [1, 2, 3]})
-            pdf_with_index = pdf.set_index("Col1")
+        sdf = self.spark.createDataFrame([("a", 1), ("b", 2), ("c", 3)], ["Col1", "Col2"])
+        psdf_from_sdf = sdf.pandas_api()
+        psdf_from_sdf_with_index = sdf.pandas_api(index_col="Col1")
+        pdf = pd.DataFrame({"Col1": ["a", "b", "c"], "Col2": [1, 2, 3]})
+        pdf_with_index = pdf.set_index("Col1")
 
-            assert_frame_equal(pdf, psdf_from_sdf.to_pandas())
-            assert_frame_equal(pdf_with_index, psdf_from_sdf_with_index.to_pandas())
+        assert_frame_equal(pdf, psdf_from_sdf.to_pandas())
+        assert_frame_equal(pdf_with_index, psdf_from_sdf_with_index.to_pandas())
 
     def test_to(self):
         schema = StructType(
