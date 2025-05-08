@@ -477,6 +477,15 @@ private[sql] class RocksDBStateStoreProvider
       if (version < 0) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
+
+      // Early validation of the existing store type before loading RocksDB
+      existingStore.foreach { store =>
+        if (!store.isInstanceOf[RocksDBStateStore]) {
+          throw new IllegalArgumentException(
+            s"Existing store must be a RocksDBStateStore, but got ${store.getClass.getSimpleName}")
+        }
+      }
+
       try {
         // Load RocksDB store
         rocksDB.load(
@@ -484,22 +493,20 @@ private[sql] class RocksDBStateStoreProvider
           stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
           readOnly = readOnly)
 
-        // Return appropriate store instance
+        // Create or reuse store instance
         existingStore match {
-          // We need to match like this as opposed to case Some(ss: RocksDBStateStore)
-          // because of how the tests create the class in StateStoreRDDSuite
-          case Some(stateStore: ReadStateStore) if stateStore.isInstanceOf[RocksDBStateStore] =>
-            stateStore.asInstanceOf[StateStore]
-          case Some(other) =>
-            throw new IllegalArgumentException(s"Existing store must be a RocksDBStateStore," +
-              s" store is actually ${other.getClass.getSimpleName}")
+          case Some(store: RocksDBStateStore) =>
+            // Mark store as being used for write operations
+            StateStoreThreadLocalTracker.setUsedForWriteStore(true)
+            store
           case None =>
-            // Create new store instance for getStore/getReadStore cases
+            // Create new store instance
             new RocksDBStateStore(version)
+          // No need for error case here since we validated earlier
         }
       } catch {
         case e: Throwable =>
-          throw e
+          throw QueryExecutionErrors.cannotLoadStore(e)
       }
     } catch {
       case e: SparkException

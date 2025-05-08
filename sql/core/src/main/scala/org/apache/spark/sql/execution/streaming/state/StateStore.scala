@@ -989,6 +989,33 @@ object StateStore extends Logging {
     storeProvider.getReadStore(version, stateStoreCkptId)
   }
 
+  /**
+   * Converts an existing read-only state store to a writable state store.
+   *
+   * This method provides an optimization for stateful operations that need to both read and update
+   * state within the same task. Instead of opening separate read and write instances (which may
+   * cause resource contention or duplication), this method reuses the already loaded read store
+   * and transforms it into a writable store.
+   *
+   * The optimization is particularly valuable for state stores with expensive initialization costs
+   * or limited concurrency capabilities (like RocksDB). It eliminates redundant loading of the same
+   * state data and reduces resource usage.
+   *
+   * @param readStore The existing read-only state store to convert to a writable store
+   * @param storeProviderId Unique identifier for the state store provider
+   * @param keySchema Schema of the state store keys
+   * @param valueSchema Schema of the state store values
+   * @param keyStateEncoderSpec Specification for encoding the state keys
+   * @param version The version of the state store (must match the read store's version)
+   * @param stateStoreCkptId Optional checkpoint identifier for the state store
+   * @param stateSchemaBroadcast Optional broadcast of the state schema
+   * @param useColumnFamilies Whether to use column families in the state store
+   * @param storeConf Configuration for the state store
+   * @param hadoopConf Hadoop configuration
+   * @param useMultipleValuesPerKey Whether the store supports multiple values per key
+   * @return A writable StateStore instance that can be used to update and commit changes
+   * @throws SparkException If the store cannot be loaded or if there's insufficient memory
+   */
   def getWriteStore(
       readStore: ReadStateStore,
       storeProviderId: StateStoreProviderId,
