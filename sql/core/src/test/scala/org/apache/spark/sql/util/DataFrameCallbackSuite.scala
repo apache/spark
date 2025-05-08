@@ -395,7 +395,7 @@ class DataFrameCallbackSuite extends QueryTest
       assert(accumulatorId != 0)
       assert(msgs.nonEmpty && !accumulatorIds.contains(accumulatorId))
     } finally {
-      sparkContext.listenerBus.removeListener(listener)
+      sparkContext.removeSparkListener(listener)
     }
   }
 
