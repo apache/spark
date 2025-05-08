@@ -186,10 +186,15 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
           val outerProjectList = collection.mutable.Seq(newProjectList: _*)
           val innerProjectList =
             collection.mutable.ArrayBuffer(child.output.map(_.asInstanceOf[NamedExpression]): _*)
-          referencedAliases.forEach { case AliasEntry(alias: Alias, idx) =>
-            outerProjectList.update(idx, alias.toAttribute)
-            innerProjectList += alias
+          val referencedAliasesOrderedByProjectListIndex =
+            referencedAliases.asScala.toSeq.sortBy(_.index)
+
+          referencedAliasesOrderedByProjectListIndex.foreach {
+            case AliasEntry(alias: Alias, idx) =>
+              outerProjectList.update(idx, alias.toAttribute)
+              innerProjectList += alias
           }
+
           p.copy(
             projectList = outerProjectList.toSeq,
             child = Project(innerProjectList.toSeq, child)
