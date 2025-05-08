@@ -269,6 +269,17 @@ _options: List[Option] = [
         types=bool,
     ),
     Option(
+        key="compute.fail_on_ansi_mode",
+        doc=(
+            "'compute.fail_on_ansi_mode' sets whether or not work with ANSI mode. "
+            "If True, pandas API on Spark raises an exception if the underlying Spark is "
+            "working with ANSI mode enabled; otherwise, it forces to work although it can "
+            "cause unexpected behavior."
+        ),
+        default=True,
+        types=bool,
+    ),
+    Option(
         key="plotting.max_rows",
         doc=(
             "'plotting.max_rows' sets the visual limit on top-n-based plots such as `plot.bar` "
@@ -374,7 +385,7 @@ def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:
     if default is _NoValue:
         default = _options_dict[key].default
     _options_dict[key].validate(default)
-    spark_session = default_session()
+    spark_session = default_session(check_ansi_mode=False)
 
     return json.loads(spark_session.conf.get(_key_format(key), default=json.dumps(default)))
 
@@ -396,7 +407,7 @@ def set_option(key: str, value: Any) -> None:
     """
     _check_option(key)
     _options_dict[key].validate(value)
-    spark_session = default_session()
+    spark_session = default_session(check_ansi_mode=False)
 
     spark_session.conf.set(_key_format(key), json.dumps(value))
 
@@ -417,7 +428,7 @@ def reset_option(key: str) -> None:
     None
     """
     _check_option(key)
-    default_session().conf.unset(_key_format(key))
+    default_session(check_ansi_mode=False).conf.unset(_key_format(key))
 
 
 @contextmanager

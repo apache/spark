@@ -319,6 +319,11 @@ compute.isin_limit              80                      'compute.isin_limit' set
                                                         better performance.
 compute.pandas_fallback         False                   'compute.pandas_fallback' sets whether or not to
                                                         fallback automatically to Pandas' implementation.
+compute.fail_on_ansi_mode       True                    'compute.fail_on_ansi_mode' sets whether or not work
+                                                        with ANSI mode. If True, pandas API on Spark raises
+                                                        an exception if the underlying Spark is working with
+                                                        ANSI mode enabled; otherwise, it forces to work
+                                                        although it can cause unexpected behavior.
 plotting.max_rows               1000                    'plotting.max_rows' sets the visual limit on top-n-
                                                         based plots such as `plot.bar` and `plot.pie`. If it
                                                         is set to 1000, the first 1000 data points will be
