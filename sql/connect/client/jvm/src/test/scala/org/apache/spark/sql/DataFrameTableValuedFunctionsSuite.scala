@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
 
 class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSession {
   import testImplicits._
@@ -527,7 +526,7 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSessi
 
   test("explode with udf") {
     Seq("NO_CODEGEN", "CODEGEN_ONLY").foreach { codegenMode =>
-      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode)  {
+      withSQLConf("spark.sql.codegen.factoryMode" -> codegenMode)  {
         sql(
           """create or replace temporary function spark_func (params array<struct<x int, y int>>)
             | returns STRUCT<a: int, b: int> LANGUAGE SQL

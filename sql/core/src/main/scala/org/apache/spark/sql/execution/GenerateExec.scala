@@ -75,25 +75,6 @@ case class GenerateExec(
 
   lazy val boundGenerator: Generator = BindReferences.bindReference(generator, child.output)
 
-  def requiredChildOutputCounts: AttributeMap[Int] =
-    requiredChildOutput.foldLeft(AttributeMap.empty[Int]) { (acc, attr) =>
-      acc + (attr -> (acc.getOrElse(attr, 0) + 1))
-    }
-
-  def childOutputReflectsRequired: Boolean = {
-    var requiredChildOutputCount = requiredChildOutputCounts
-    child.output == child.output.filter {
-      case attr =>
-        if (requiredChildOutputCount.getOrElse(attr, 0) > 0) {
-          requiredChildOutputCount =
-            requiredChildOutputCount + (attr, requiredChildOutputCount.getOrElse(attr, 0) - 1)
-          true
-        } else {
-          false
-        }
-    }
-  }
-
   protected override def doExecute(): RDD[InternalRow] = {
     // boundGenerator.terminate() should be triggered after all of the rows in the partition
     val numOutputRows = longMetric("numOutputRows")
@@ -106,7 +87,7 @@ case class GenerateExec(
       val rows = if (requiredChildOutput.nonEmpty) {
 
         val pruneChildForResult: InternalRow => InternalRow =
-          if (childOutputReflectsRequired) {
+          if (child.output == requiredChildOutput) {
             identity
           } else {
             UnsafeProjection.create(requiredChildOutput, child.output)
@@ -160,22 +141,9 @@ case class GenerateExec(
 
   override def needCopyResult: Boolean = true
 
-  def getRequiredInput(input: Seq[ExprCode]): Seq[ExprCode] = {
-    var requiredChildOutputCount = requiredChildOutputCounts
-    child.output.zip(input).filter {
-      case (attr, _) =>
-        if (requiredChildOutputCount.getOrElse(attr, 0) > 0) {
-          requiredChildOutputCount =
-            requiredChildOutputCount + (attr, requiredChildOutputCount.getOrElse(attr, 0) - 1)
-          true
-        } else {
-          false
-        }
-    }.map(_._2)
-  }
-
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val requiredInput = getRequiredInput(input)
+    val attrToInputCode = AttributeMap(child.output.zip(input))
+    val requiredInput = requiredChildOutput.map(attrToInputCode)
     boundGenerator match {
       case e: CollectionGenerator => codeGenCollection(ctx, e, requiredInput)
       case g => codeGenIterableOnce(ctx, g, requiredInput)
