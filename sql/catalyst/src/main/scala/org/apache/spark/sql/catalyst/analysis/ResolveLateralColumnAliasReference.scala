@@ -194,11 +194,12 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
               outerProjectList.update(idx, alias.toAttribute)
               innerProjectList += alias
           }
-
-          p.copy(
+          val newProject = p.copy(
             projectList = outerProjectList.toSeq,
             child = Project(innerProjectList.toSeq, child)
           )
+          newProject.copyTagsFrom(p)
+          newProject
         }
 
       case aggOriginal: Aggregate
@@ -269,10 +270,12 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
           }
           val projectExprs = aggregateExpressions.map(
             extractExpressions(_).asInstanceOf[NamedExpression])
-          Project(
+          val newProject = Project(
             projectList = projectExprs,
             child = agg.copy(aggregateExpressions = newAggExprs.asScala.toSeq)
           )
+          newProject.copyTagsFrom(agg)
+          newProject
         }
 
       case p: LogicalPlan =>
