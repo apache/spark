@@ -544,6 +544,14 @@
     ],
     "sqlState" : "56000"
   },
+  "CHECK_CONSTRAINT_VIOLATION" : {
+    "message" : [
+      "CHECK constraint <constraintName> <expression> violated by row with values:",
+      "<values>",
+      ""
+    ],
+    "sqlState" : "23001"
+  },
   "CIRCULAR_CLASS_REFERENCE" : {
     "message" : [
       "Cannot have circular references in class, but got the circular reference of class <t>."
