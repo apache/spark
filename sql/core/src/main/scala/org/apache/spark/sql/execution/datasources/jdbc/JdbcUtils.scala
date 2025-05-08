@@ -81,21 +81,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
     }
   }
 
-  // Helper to identify table-not-found errors across common databases
-  private def isTableNotFoundException(e: SQLException): Boolean = {
-    // Check SQLState codes for common databases
-    val tableNotFoundStates = Set(
-      "42P01",   // PostgreSQL: undefined_table
-      "42S02",   // MySQL/H2: base table or view not found
-      "42X05",   // Derby: table/view does not exist
-      "S0002",   // SQL Server: object not found
-      "42Y55"    // Apache Derby: table does not exist
-    )
-
-    // Check error code for SQLite (uses error code 1 for missing table)
-    e.getErrorCode == 1 || tableNotFoundStates.contains(e.getSQLState)
-  }
-
   /**
    * Drops a table from the JDBC database.
    */
