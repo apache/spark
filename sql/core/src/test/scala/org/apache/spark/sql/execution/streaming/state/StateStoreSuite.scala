@@ -363,8 +363,9 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         store.commit()
         provider.doMaintenance() // do cleanup
       }
-      val snapshotVersion = (0 to 10).find( version =>
-        fileExists(provider, version, isSnapshot = true)).getOrElse(fail("snapshot file not found"))
+      val snapshotVersion = (0 to 10).find { version =>
+        fileExists(provider, version, isSnapshot = true)
+      }.getOrElse(fail("snapshot file not found"))
 
       // Corrupt snapshot file and verify that it throws error
       assert(getData(provider, snapshotVersion,
@@ -417,8 +418,9 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         store.commit()
         provider.doMaintenance() // do cleanup
       }
-      val snapshotVersion = (0 to 10).find( version =>
-        fileExists(provider, version, isSnapshot = true)).getOrElse(fail("snapshot file not found"))
+      val snapshotVersion = (0 to 10).find { version =>
+        fileExists(provider, version, isSnapshot = true)
+      }.getOrElse(fail("snapshot file not found"))
 
       assert(getData(provider, snapshotVersion - 1) === Set(("a", 0) -> (snapshotVersion - 1)))
 
