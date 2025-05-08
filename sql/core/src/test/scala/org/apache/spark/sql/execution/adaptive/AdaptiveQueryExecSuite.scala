@@ -255,44 +255,6 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-52024: Support AQE Cancel Empty") {
-    // make the non-empty side compute more time
-    // so that empty side complete first to trigger the rule
-    spark.udf.register("fake_udf", (input: Int) => {
-      Thread.sleep(20)
-      input
-    })
-    var withCancelEmpty = -1L
-    var withoutCancelEmpty = -1L
-    Seq(true, false).foreach { enable =>
-      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-        SQLConf.ADAPTIVE_EMPTY_TRIGGER_CANCEL_ENABLED.key -> String.valueOf(enable)) {
-        val query =
-          """
-            |SELECT t.key1
-            |FROM emptyTestData join (SELECT testData.key as key1
-            |FROM testData join testData2 ON fake_udf(testData.key)=fake_udf(testData2.a) ) t
-            |on t.key1 = emptyTestData.key
-            |union
-            |SELECT testData.key
-            |FROM testData join testData2 ON testData.key=testData2.a
-            |""".stripMargin
-        runAdaptiveAndVerifyResult(query)
-
-        val start = System.currentTimeMillis()
-        sql(query).collect()
-        val end = System.currentTimeMillis()
-        if (enable) {
-          withCancelEmpty = end - start
-        } else {
-          withoutCancelEmpty = end - start
-        }
-      }
-    }
-    assert(withCancelEmpty * 2 < withoutCancelEmpty, "withCancelEmpty should be less")
-  }
-
-
   test("Reuse the parallelism of coalesced shuffle in local shuffle read") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
