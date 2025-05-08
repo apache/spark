@@ -73,7 +73,7 @@ case class TextScan(
     }
     val broadcastedConf = sparkSession.sparkContext.broadcast(
       new SerializableConfiguration(hadoopConf))
-    TextPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf, readDataSchema,
+    TextPartitionReaderFactory(conf, broadcastedConf, readDataSchema,
       readPartitionSchema, textOptions)
   }
 

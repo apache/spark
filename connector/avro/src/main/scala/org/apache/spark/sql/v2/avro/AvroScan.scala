@@ -54,7 +54,7 @@ case class AvroScan(
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     AvroPartitionReaderFactory(
-      sparkSession.sessionState.conf,
+      conf,
       broadcastedConf,
       dataSchema,
       readDataSchema,
