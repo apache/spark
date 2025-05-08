@@ -66,7 +66,8 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
  * A base interface for expressions that contain a [[LogicalPlan]].
  *
  * @param plan: the subquery plan
- * @param outerAttrs: the outer references in the subquery plan
+ * @param outerAttrs: the outer references in the subquery plan and a boolean flag marking whether
+ *                  the outer reference can be resolved in its immediate parent plan or not.
  * @param exprId: ID of the expression
  * @param joinCond: the join conditions with the outer query. It contains both inner and outer
  *                  query references.
@@ -75,18 +76,35 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
  */
 abstract class SubqueryExpression(
     plan: LogicalPlan,
-    outerAttrs: Seq[Expression],
+    outerAttrs: Seq[(Expression, Boolean)],
     exprId: ExprId,
     joinCond: Seq[Expression],
     hint: Option[HintInfo]) extends PlanExpression[LogicalPlan] {
+
   override lazy val resolved: Boolean = childrenResolved && plan.resolved
+
+  lazy val outerScopeAttrsWithoutFlags = outerAttrs.filter(!_._2).map(_._1)
+
+  lazy val outerAttrsWithoutFlags = outerAttrs.map(_._1)
+
   override lazy val references: AttributeSet =
-    AttributeSet.fromAttributeSets(outerAttrs.map(_.references))
-  override def children: Seq[Expression] = outerAttrs ++ joinCond
+    AttributeSet.fromAttributeSets(outerAttrsWithoutFlags.map(_.references)) --
+      AttributeSet.fromAttributeSets(outerScopeAttrsWithoutFlags.map(_.references))
+
+  override def children: Seq[Expression] = outerAttrsWithoutFlags ++ joinCond
+
   override def withNewPlan(plan: LogicalPlan): SubqueryExpression
-  def withNewOuterAttrs(outerAttrs: Seq[Expression]): SubqueryExpression
+
+  def withNewOuterAttrs(outerAttrs: Seq[(Expression, Boolean)]): SubqueryExpression
+
+  def getOuterAttrs: Seq[Expression] = outerAttrsWithoutFlags
+
+  def getOuterScopeAttrs: Seq[Expression] = outerScopeAttrsWithoutFlags
+
   def isCorrelated: Boolean = outerAttrs.nonEmpty
+
   def hint: Option[HintInfo]
+
   def withNewHint(hint: Option[HintInfo]): SubqueryExpression
 }
 
@@ -394,13 +412,14 @@ object SubExprUtils extends PredicateHelper {
  */
 case class ScalarSubquery(
     plan: LogicalPlan,
-    outerAttrs: Seq[Expression] = Seq.empty,
+    outerAttrs: Seq[(Expression, Boolean)] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None,
     mayHaveCountBug: Option[Boolean] = None,
     needSingleJoin: Option[Boolean] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
+
   override def dataType: DataType = {
     if (!plan.schema.fields.nonEmpty) {
       throw QueryCompilationErrors.subqueryReturnMoreThanOneColumn(plan.schema.fields.length,
@@ -408,25 +427,33 @@ case class ScalarSubquery(
     }
     plan.schema.fields.head.dataType
   }
+
   override def nullable: Boolean = true
+
   override def withNewPlan(plan: LogicalPlan): ScalarSubquery = copy(plan = plan)
-  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): ScalarSubquery = copy(
+
+  override def withNewOuterAttrs(outerAttrs: Seq[(Expression, Boolean)]): ScalarSubquery = copy(
     outerAttrs = outerAttrs)
+
   override def withNewHint(hint: Option[HintInfo]): ScalarSubquery = copy(hint = hint)
+
   override def toString: String = s"scalar-subquery#${exprId.id} $conditionString"
+
   override lazy val canonicalized: Expression = {
     ScalarSubquery(
       plan.canonicalized,
-      outerAttrs.map(_.canonicalized),
+      outerAttrs.map {case (expr, b) => (expr.canonicalized, b)},
       ExprId(0),
       joinCond.map(_.canonicalized))
   }
 
   override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): ScalarSubquery =
+      newChildren: IndexedSeq[Expression]): ScalarSubquery = {
+    val newOuterAttrs = newChildren.take(outerAttrs.size).zip(outerAttrs.map(_._2))
     copy(
-      outerAttrs = newChildren.take(outerAttrs.size),
+      outerAttrs = newOuterAttrs,
       joinCond = newChildren.drop(outerAttrs.size))
+  }
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(SCALAR_SUBQUERY)
 }
@@ -473,31 +500,40 @@ case class UnresolvedTableArgPlanId(
  */
 case class LateralSubquery(
     plan: LogicalPlan,
-    outerAttrs: Seq[Expression] = Seq.empty,
+    outerAttrs: Seq[(Expression, Boolean)] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
+
   override def dataType: DataType = plan.output.toStructType
+
   override def nullable: Boolean = true
+
   override def withNewPlan(plan: LogicalPlan): LateralSubquery = copy(plan = plan)
-  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): LateralSubquery = copy(
+
+  override def withNewOuterAttrs(outerAttrs: Seq[(Expression, Boolean)]): LateralSubquery = copy(
     outerAttrs = outerAttrs)
+
   override def withNewHint(hint: Option[HintInfo]): LateralSubquery = copy(hint = hint)
+
   override def toString: String = s"lateral-subquery#${exprId.id} $conditionString"
+
   override lazy val canonicalized: Expression = {
     LateralSubquery(
       plan.canonicalized,
-      outerAttrs.map(_.canonicalized),
+      outerAttrs.map {case (expr, b) => (expr.canonicalized, b)},
       ExprId(0),
       joinCond.map(_.canonicalized))
   }
 
   override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[Expression]): LateralSubquery =
+      newChildren: IndexedSeq[Expression]): LateralSubquery = {
+    val newOuterAttrs = newChildren.take(outerAttrs.size).zip(outerAttrs.map(_._2))
     copy(
-      outerAttrs = newChildren.take(outerAttrs.size),
+      outerAttrs = newOuterAttrs,
       joinCond = newChildren.drop(outerAttrs.size))
+  }
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(LATERAL_SUBQUERY)
 }
@@ -516,7 +552,7 @@ case class LateralSubquery(
  */
 case class ListQuery(
     plan: LogicalPlan,
-    outerAttrs: Seq[Expression] = Seq.empty,
+    outerAttrs: Seq[(Expression, Boolean)] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     // The plan of list query may have more columns after de-correlation, and we need to track the
     // number of the columns of the original plan, to report the data type properly.
@@ -524,13 +560,17 @@ case class ListQuery(
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
+
   def childOutputs: Seq[Attribute] = plan.output.take(numCols)
+
   override def dataType: DataType = if (numCols > 1) {
     childOutputs.toStructType
   } else {
     plan.output.head.dataType
   }
+
   override lazy val resolved: Boolean = childrenResolved && plan.resolved && numCols != -1
+
   override def nullable: Boolean = {
     // ListQuery can't be executed alone so its nullability is not defined.
     // Consider using ListQuery.childOutputs.exists(_.nullable)
@@ -540,24 +580,32 @@ case class ListQuery(
     }
     false
   }
+
   override def withNewPlan(plan: LogicalPlan): ListQuery = copy(plan = plan)
-  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): ListQuery = copy(
+
+  override def withNewOuterAttrs(outerAttrs: Seq[(Expression, Boolean)]): ListQuery = copy(
     outerAttrs = outerAttrs)
+
   override def withNewHint(hint: Option[HintInfo]): ListQuery = copy(hint = hint)
+
   override def toString: String = s"list#${exprId.id} $conditionString"
+
   override lazy val canonicalized: Expression = {
     ListQuery(
       plan.canonicalized,
-      outerAttrs.map(_.canonicalized),
+      outerAttrs.map {case (expr, b) => (expr.canonicalized, b)},
       ExprId(0),
       numCols,
       joinCond.map(_.canonicalized))
   }
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ListQuery =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): ListQuery = {
+    val newOuterAttrs = newChildren.take(outerAttrs.size).zip(outerAttrs.map(_._2))
     copy(
-      outerAttrs = newChildren.take(outerAttrs.size),
+      outerAttrs = newOuterAttrs,
       joinCond = newChildren.drop(outerAttrs.size))
+  }
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(LIST_SUBQUERY)
 }
@@ -590,31 +638,40 @@ case class ListQuery(
  */
 case class Exists(
     plan: LogicalPlan,
-    outerAttrs: Seq[Expression] = Seq.empty,
+    outerAttrs: Seq[(Expression, Boolean)] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint)
   with Predicate
   with Unevaluable {
+
   override def nullable: Boolean = false
+
   override def withNewPlan(plan: LogicalPlan): Exists = copy(plan = plan)
-  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): Exists = copy(
+
+  override def withNewOuterAttrs(outerAttrs: Seq[(Expression, Boolean)]): Exists = copy(
     outerAttrs = outerAttrs)
+
   override def withNewHint(hint: Option[HintInfo]): Exists = copy(hint = hint)
+
   override def toString: String = s"exists#${exprId.id} $conditionString"
+
   override lazy val canonicalized: Expression = {
     Exists(
       plan.canonicalized,
-      outerAttrs.map(_.canonicalized),
+      outerAttrs.map {case (expr, b) => (expr.canonicalized, b)},
       ExprId(0),
       joinCond.map(_.canonicalized))
   }
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Exists =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Exists = {
+    val newOuterAttrs = newChildren.take(outerAttrs.size).zip(outerAttrs.map(_._2))
     copy(
-      outerAttrs = newChildren.take(outerAttrs.size),
+      outerAttrs = newOuterAttrs,
       joinCond = newChildren.drop(outerAttrs.size))
+  }
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(EXISTS_SUBQUERY)
 }

@@ -140,7 +140,7 @@ class ExpressionResolutionValidator(resolutionValidator: ResolutionValidator) {
       resolutionValidator.validate(scalarSubquery.plan)
     }
 
-    for (outerAttribute <- scalarSubquery.outerAttrs) {
+    for (outerAttribute <- scalarSubquery.getOuterAttrs) {
       validate(outerAttribute)
     }
 
@@ -163,7 +163,7 @@ class ExpressionResolutionValidator(resolutionValidator: ResolutionValidator) {
       resolutionValidator.validate(listQuery.plan)
     }
 
-    for (outerAttribute <- listQuery.outerAttrs) {
+    for (outerAttribute <- listQuery.getOuterAttrs) {
       validate(outerAttribute)
     }
   }
@@ -173,7 +173,7 @@ class ExpressionResolutionValidator(resolutionValidator: ResolutionValidator) {
       resolutionValidator.validate(exists.plan)
     }
 
-    for (outerAttribute <- exists.outerAttrs) {
+    for (outerAttribute <- exists.getOuterAttrs) {
       validate(outerAttribute)
     }
   }

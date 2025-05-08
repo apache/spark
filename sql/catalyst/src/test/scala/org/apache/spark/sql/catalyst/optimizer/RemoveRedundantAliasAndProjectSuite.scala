@@ -146,7 +146,7 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest {
     val query = Filter(
       Exists(
         LocalRelation(b),
-        outerAttrs = Seq(a_alias_attr),
+        outerAttrs = Seq(a_alias_attr).map((_, true)),
         joinCond = Seq(EqualTo(a_alias_attr, b))
       ),
       Project(Seq(a_alias), LocalRelation(a))
@@ -162,7 +162,7 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest {
     val expectedWhenNotExcluded = Filter(
       Exists(
         LocalRelation(b),
-        outerAttrs = Seq(a),
+        outerAttrs = Seq(a).map((_, true)),
         joinCond = Seq(EqualTo(a, b))
       ),
       LocalRelation(a)
@@ -201,7 +201,7 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest {
         CaseWhen(Seq((
           Exists(
             LocalRelation(a),
-            outerAttrs = Seq(a_alias_attr),
+            outerAttrs = Seq(a_alias_attr).map((_, true)),
             joinCond = Seq(EqualTo(a_alias_attr, a))
           ), Literal(1))),
           Some(Literal(2))),

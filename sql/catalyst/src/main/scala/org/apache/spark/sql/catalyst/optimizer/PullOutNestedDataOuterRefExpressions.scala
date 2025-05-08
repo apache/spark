@@ -113,7 +113,7 @@ object PullOutNestedDataOuterRefExpressions extends Rule[LogicalPlan] {
           // them from the project.
           subqueryExpression
             .withNewPlan(newInnerPlan)
-            .withNewOuterAttrs(SubExprUtils.getOuterReferences(newInnerPlan))
+            .withNewOuterAttrs(SubExprUtils.getOuterReferences(newInnerPlan).map((_, true)))
       }
       if (newExprMap.isEmpty) {
         // Nothing to change

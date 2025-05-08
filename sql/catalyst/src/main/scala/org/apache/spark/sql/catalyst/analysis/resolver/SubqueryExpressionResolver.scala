@@ -63,7 +63,7 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
 
     val resolvedScalarSubquery = unresolvedScalarSubquery.copy(
       plan = resolvedSubqueryExpressionPlan.plan,
-      outerAttrs = resolvedSubqueryExpressionPlan.outerExpressions
+      outerAttrs = resolvedSubqueryExpressionPlan.outerExpressions.map((_, true))
     )
 
     val coercedScalarSubquery =
@@ -108,7 +108,7 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
 
     unresolvedListQuery.copy(
       plan = resolvedSubqueryExpressionPlan.plan,
-      outerAttrs = resolvedSubqueryExpressionPlan.outerExpressions,
+      outerAttrs = resolvedSubqueryExpressionPlan.outerExpressions.map((_, true)),
       numCols = resolvedSubqueryExpressionPlan.output.size
     )
   }
@@ -125,7 +125,7 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
 
     val resolvedExists = unresolvedExists.copy(
       plan = resolvedSubqueryExpressionPlan.plan,
-      outerAttrs = resolvedSubqueryExpressionPlan.outerExpressions
+      outerAttrs = resolvedSubqueryExpressionPlan.outerExpressions.map((_, true))
     )
 
     val coercedExists = typeCoercionResolver.resolve(resolvedExists).asInstanceOf[Exists]

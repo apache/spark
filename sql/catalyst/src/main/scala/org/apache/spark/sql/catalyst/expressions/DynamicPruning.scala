@@ -47,7 +47,7 @@ case class DynamicPruningSubquery(
     onlyInBroadcast: Boolean,
     exprId: ExprId = NamedExpression.newExprId,
     hint: Option[HintInfo] = None)
-  extends SubqueryExpression(buildQuery, Seq(pruningKey), exprId, Seq.empty, hint)
+  extends SubqueryExpression(buildQuery, Seq(pruningKey).map((_, true)), exprId, Seq.empty, hint)
   with DynamicPruning
   with Unevaluable
   with UnaryLike[Expression] {
@@ -60,10 +60,12 @@ case class DynamicPruningSubquery(
 
   override def withNewPlan(plan: LogicalPlan): DynamicPruningSubquery = copy(buildQuery = plan)
 
-  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): DynamicPruningSubquery = {
+  override def withNewOuterAttrs(outerAttrs: Seq[(Expression, Boolean)]): DynamicPruningSubquery = {
     // Updating outer attrs of DynamicPruningSubquery is unsupported; assert that they match
     // pruningKey and return a copy without any changes.
-    assert(outerAttrs.size == 1 && outerAttrs.head.semanticEquals(pruningKey))
+    assert(outerAttrs.size == 1)
+    val (expr, notOuterScope) = outerAttrs.head
+    assert(expr.semanticEquals(pruningKey) && notOuterScope)
     copy()
   }
 
