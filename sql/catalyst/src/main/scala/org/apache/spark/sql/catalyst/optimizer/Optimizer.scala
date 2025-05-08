@@ -1011,8 +1011,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
       p.copy(child = p2.copy(projectList = p2.projectList.filter(p.references.contains)))
     case p @ Project(_, a: Aggregate) if !a.outputSet.subsetOf(p.references) =>
       p.copy(
-        child = a.copy(aggregateExpressions =
-          a.aggregateExpressions.filter(p.references.contains)))
+        child = a.copy(aggregateExpressions = a.aggregateExpressions.filter(p.references.contains)))
     case a @ Project(_, e @ Expand(_, _, grandChild)) if !e.outputSet.subsetOf(a.references) =>
       val newOutput = e.output.filter(a.references.contains(_))
       val newProjects = e.projections.map { proj =>
@@ -1048,8 +1047,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
       val requiredAttrs = p.references -- g.producedAttributes ++ g.generator.references
       val newChild = prunedChild(g.child, requiredAttrs)
       val unrequired = g.generator.references -- p.references
-      val unrequiredIndices = newChild.output.zipWithIndex
-        .filter(t => unrequired.contains(t._1))
+      val unrequiredIndices = newChild.output.zipWithIndex.filter(t => unrequired.contains(t._1))
         .map(_._2)
       p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
 
