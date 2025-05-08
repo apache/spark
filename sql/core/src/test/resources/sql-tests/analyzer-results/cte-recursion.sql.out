@@ -345,13 +345,26 @@ WITH RECURSIVE t(col) (
   UNION ALL
   SELECT (SELECT max(col) FROM t)
 )
-SELECT * FROM t
+SELECT * FROM t LIMIT 5
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [1#x AS col#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
+:              :  +- Aggregate [max(col#x) AS max(col)#x]
+:              :     +- SubqueryAlias t
+:              :        +- Project [1#x AS col#x]
+:              :           +- UnionLoopRef xxxx, [1#x], false
+:              +- OneRowRelation
++- GlobalLimit 5
+   +- LocalLimit 5
+      +- Project [col#x]
+         +- SubqueryAlias t
+            +- CTERelationRef xxxx, true, [col#x], false, false
 
 
 -- !query
@@ -475,18 +488,26 @@ WITH RECURSIVE r(level, data) AS (
 )
 SELECT * FROM r
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 183,
-    "fragment" : "WITH RECURSIVE r(level, data) AS (\n  VALUES (0, 0)\n  UNION ALL\n  SELECT r1.level + 1, r1.data\n  FROM r AS r1\n  JOIN r AS r2 ON r2.data = r1.data\n  WHERE r1.level < 9\n)\nSELECT * FROM r"
-  } ]
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias r
+:     +- Project [col1#x AS level#x, col2#x AS data#x]
+:        +- UnionLoop xxxx
+:           :- LocalRelation [col1#x, col2#x]
+:           +- Project [(level#x + 1) AS (level + 1)#x, data#x]
+:              +- Filter (level#x < 9)
+:                 +- Join Inner, (data#x = data#x)
+:                    :- SubqueryAlias r1
+:                    :  +- SubqueryAlias r
+:                    :     +- Project [col1#x AS level#x, col2#x AS data#x]
+:                    :        +- UnionLoopRef xxxx, [col1#x, col2#x], false
+:                    +- SubqueryAlias r2
+:                       +- SubqueryAlias r
+:                          +- Project [col1#x AS level#x, col2#x AS data#x]
+:                             +- UnionLoopRef xxxx, [col1#x, col2#x], false
++- Project [level#x, data#x]
+   +- SubqueryAlias r
+      +- CTERelationRef xxxx, true, [level#x, data#x], false, false
 
 
 -- !query

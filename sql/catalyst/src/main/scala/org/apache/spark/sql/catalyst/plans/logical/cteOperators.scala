@@ -106,14 +106,12 @@ case class CTERelationDef(
 
   override def output: Seq[Attribute] = if (resolved) child.output else Nil
 
-  lazy val hasSelfReferenceAsCTERef: Boolean = child.exists{
+  lazy val hasSelfReferenceAsCTERef: Boolean = child.collectFirstWithSubqueries {
     case CTERelationRef(this.id, _, _, _, _, true, _) => true
-    case _ => false
-  }
-  lazy val hasSelfReferenceAsUnionLoopRef: Boolean = child.exists{
+  }.getOrElse(false)
+  lazy val hasSelfReferenceAsUnionLoopRef: Boolean = child.collectFirstWithSubqueries {
     case UnionLoopRef(this.id, _, _) => true
-    case _ => false
-  }
+  }.getOrElse(false)
 }
 
 object CTERelationDef {

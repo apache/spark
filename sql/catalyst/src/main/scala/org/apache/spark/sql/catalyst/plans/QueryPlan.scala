@@ -606,10 +606,20 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
   /**
    * A variant of `collect`. This method not only apply the given function to all elements in this
-   * plan, also considering all the plans in its (nested) subqueries
+   * plan, also considering all the plans in its (nested) subqueries.
    */
   def collectWithSubqueries[B](f: PartialFunction[PlanType, B]): Seq[B] =
     (this +: subqueriesAll).flatMap(_.collect(f))
+
+  /**
+   * A variant of collectFirst. This method not only apply the given function to all elements in
+   * this plan, also considering all the plans in its (nested) subqueries.
+   */
+  def collectFirstWithSubqueries[B](f: PartialFunction[PlanType, B]): Option[B] = {
+    this.collectFirst(f).orElse {
+      subqueriesAll.foldLeft(None: Option[B]) { (l, r) => l.orElse(r.collectFirst(f)) }
+    }
+  }
 
   override def innerChildren: Seq[QueryPlan[_]] = subqueries
 
