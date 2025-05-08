@@ -785,6 +785,7 @@ private[spark] object LogKeys {
   case object STATE_STORE_PROVIDER extends LogKey
   case object STATE_STORE_PROVIDER_ID extends LogKey
   case object STATE_STORE_PROVIDER_IDS extends LogKey
+  case object STATE_STORE_STATE extends LogKey
   case object STATE_STORE_VERSION extends LogKey
   case object STATS extends LogKey
   case object STATUS extends LogKey
