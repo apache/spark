@@ -1976,6 +1976,7 @@ class SparkConnectClient(object):
         return profile_id
 
     def add_ml_cache(self, cache_id: str) -> None:
+        # test.
         if not hasattr(self.thread_local, "ml_caches"):
             self.thread_local.ml_caches = set()
         self.thread_local.ml_caches.add(cache_id)
