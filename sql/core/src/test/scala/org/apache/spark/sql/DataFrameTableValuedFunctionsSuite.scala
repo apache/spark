@@ -526,4 +526,17 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with SharedSparkSessi
       )
     }
   }
+
+  test("explode with udf") {
+    sql(
+      """create or replace temporary function spark_func (params array<struct<x int, y int>>)
+        | returns STRUCT<a: int, b: int> LANGUAGE SQL
+        | return (select ns from (
+        | SELECT try_divide(SUM(item.x * item.y), SUM(item.x * item.x)) AS beta1,
+        | NAMED_STRUCT('a', beta1,'b', beta1) ns
+        | FROM (SELECT params) LATERAL VIEW EXPLODE(params) AS item LIMIT 1));""".stripMargin)
+    val expected = Seq(Row(Row(1, 1)))
+    val actual = sql("""select spark_func(collect_list(NAMED_STRUCT('x', 1, 'y', 1))) as result;""")
+    checkAnswer(actual, expected)
+  }
 }

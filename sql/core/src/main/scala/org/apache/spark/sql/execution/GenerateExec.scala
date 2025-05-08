@@ -75,6 +75,25 @@ case class GenerateExec(
 
   lazy val boundGenerator: Generator = BindReferences.bindReference(generator, child.output)
 
+  def requiredChildOutputCounts: AttributeMap[Int] =
+    requiredChildOutput.foldLeft(AttributeMap.empty[Int]) { (acc, attr) =>
+      acc + (attr -> (acc.getOrElse(attr, 0) + 1))
+    }
+
+  def childOutputReflectsRequired: Boolean = {
+    var requiredChildOutputCount = requiredChildOutputCounts
+    child.output == child.output.filter {
+      case attr =>
+        if (requiredChildOutputCount.getOrElse(attr, 0) > 0) {
+          requiredChildOutputCount =
+            requiredChildOutputCount + (attr, requiredChildOutputCount.getOrElse(attr, 0) - 1)
+          true
+        } else {
+          false
+        }
+    }
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     // boundGenerator.terminate() should be triggered after all of the rows in the partition
     val numOutputRows = longMetric("numOutputRows")
@@ -87,7 +106,7 @@ case class GenerateExec(
       val rows = if (requiredChildOutput.nonEmpty) {
 
         val pruneChildForResult: InternalRow => InternalRow =
-          if (child.outputSet == AttributeSet(requiredChildOutput)) {
+          if (childOutputReflectsRequired) {
             identity
           } else {
             UnsafeProjection.create(requiredChildOutput, child.output)
@@ -141,11 +160,22 @@ case class GenerateExec(
 
   override def needCopyResult: Boolean = true
 
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val requiredAttrSet = AttributeSet(requiredChildOutput)
-    val requiredInput = child.output.zip(input).filter {
-      case (attr, _) => requiredAttrSet.contains(attr)
+  def getRequiredInput(input: Seq[ExprCode]): Seq[ExprCode] = {
+    var requiredChildOutputCount = requiredChildOutputCounts
+    child.output.zip(input).filter {
+      case (attr, _) =>
+        if (requiredChildOutputCount.getOrElse(attr, 0) > 0) {
+          requiredChildOutputCount =
+            requiredChildOutputCount + (attr, requiredChildOutputCount.getOrElse(attr, 0) - 1)
+          true
+        } else {
+          false
+        }
     }.map(_._2)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    val requiredInput = getRequiredInput(input)
     boundGenerator match {
       case e: CollectionGenerator => codeGenCollection(ctx, e, requiredInput)
       case g => codeGenIterableOnce(ctx, g, requiredInput)
