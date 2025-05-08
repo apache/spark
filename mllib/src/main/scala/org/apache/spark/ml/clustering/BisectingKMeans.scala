@@ -303,16 +303,19 @@ class BisectingKMeans @Since("2.0.0") (
     val parentModel = bkm.runWithWeight(instances, handlePersistence, Some(instr))
     val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
 
-    val summary = new BisectingKMeansSummary(
-      model.transform(dataset),
-      $(predictionCol),
-      $(featuresCol),
-      $(k),
-      $(maxIter),
-      parentModel.trainingCost)
-    instr.logNamedValue("clusterSizes", summary.clusterSizes)
-    instr.logNumFeatures(model.clusterCenters.head.size)
-    model.setSummary(Some(summary))
+    if (SummaryUtils.enableTrainingSummary) {
+      val summary = new BisectingKMeansSummary(
+        model.transform(dataset),
+        $(predictionCol),
+        $(featuresCol),
+        $(k),
+        $(maxIter),
+        parentModel.trainingCost)
+      instr.logNamedValue("clusterSizes", summary.clusterSizes)
+      instr.logNumFeatures(model.clusterCenters.head.size)
+      model.setSummary(Some(summary))
+    }
+    model
   }
 
   @Since("2.0.0")

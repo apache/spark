@@ -711,27 +711,30 @@ class LogisticRegression @Since("1.2.0") (
       numClasses, checkMultinomial(numClasses)))
     val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
 
-    val (summaryModel, probabilityColName, predictionColName) = model.findSummaryModel()
-    val logRegSummary = if (numClasses <= 2) {
-      new BinaryLogisticRegressionTrainingSummaryImpl(
-        summaryModel.transform(dataset),
-        probabilityColName,
-        predictionColName,
-        $(labelCol),
-        $(featuresCol),
-        weightColName,
-        objectiveHistory)
-    } else {
-      new LogisticRegressionTrainingSummaryImpl(
-        summaryModel.transform(dataset),
-        probabilityColName,
-        predictionColName,
-        $(labelCol),
-        $(featuresCol),
-        weightColName,
-        objectiveHistory)
+    if (SummaryUtils.enableTrainingSummary) {
+      val (summaryModel, probabilityColName, predictionColName) = model.findSummaryModel()
+      val logRegSummary = if (numClasses <= 2) {
+        new BinaryLogisticRegressionTrainingSummaryImpl(
+          summaryModel.transform(dataset),
+          probabilityColName,
+          predictionColName,
+          $(labelCol),
+          $(featuresCol),
+          weightColName,
+          objectiveHistory)
+      } else {
+        new LogisticRegressionTrainingSummaryImpl(
+          summaryModel.transform(dataset),
+          probabilityColName,
+          predictionColName,
+          $(labelCol),
+          $(featuresCol),
+          weightColName,
+          objectiveHistory)
+      }
+      model.setSummary(Some(logRegSummary))
     }
-    model.setSummary(Some(logRegSummary))
+    model
   }
 
   private def createBounds(
