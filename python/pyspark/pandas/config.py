@@ -24,7 +24,7 @@ from typing import Any, Callable, Dict, Iterator, List, Tuple, Union, Optional
 
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.sql.session import SparkSession
-from pyspark.pandas.utils import default_session
+from pyspark.pandas.utils import default_session, is_testing
 
 
 __all__ = ["get_option", "set_option", "reset_option", "options", "option_context"]
@@ -270,6 +270,16 @@ _options: List[Option] = [
         types=bool,
     ),
     Option(
+        key="compute.fail_on_ansi_mode",
+        doc=(
+            "'compute.fail_on_ansi_mode' sets whether or not work with ANSI mode. "
+            "If True, pandas API on Spark raises an exception if the underlying Spark is "
+            "working with ANSI mode enabled and the option 'compute.ansi_mode_support' is False."
+        ),
+        default=True,
+        types=bool,
+    ),
+    Option(
         key="compute.ansi_mode_support",
         doc=(
             "'compute.ansi_mode_support' sets whether or not to support the ANSI mode of "
@@ -277,7 +287,7 @@ _options: List[Option] = [
             "If False, pandas API on Spark may hit unexpected results or errors. "
             "The default is False."
         ),
-        default=False,
+        default=is_testing(),
         types=bool,
     ),
     Option(
@@ -394,7 +404,7 @@ def get_option(
     if default is _NoValue:
         default = _options_dict[key].default
     _options_dict[key].validate(default)
-    spark_session = spark_session or default_session()
+    spark_session = spark_session or default_session(check_ansi_mode=False)
 
     return json.loads(spark_session.conf.get(_key_format(key), default=json.dumps(default)))
 
@@ -419,7 +429,7 @@ def set_option(key: str, value: Any, *, spark_session: Optional[SparkSession] = 
     """
     _check_option(key)
     _options_dict[key].validate(value)
-    spark_session = spark_session or default_session()
+    spark_session = spark_session or default_session(check_ansi_mode=False)
 
     spark_session.conf.set(_key_format(key), json.dumps(value))
 
@@ -443,7 +453,7 @@ def reset_option(key: str, *, spark_session: Optional[SparkSession] = None) -> N
     None
     """
     _check_option(key)
-    spark_session = spark_session or default_session()
+    spark_session = spark_session or default_session(check_ansi_mode=False)
     spark_session.conf.unset(_key_format(key))
 
 

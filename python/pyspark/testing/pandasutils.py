@@ -475,7 +475,6 @@ class PandasOnSparkTestCase(ReusedSQLTestCase, PandasOnSparkTestUtils):
     def setUpClass(cls):
         super(PandasOnSparkTestCase, cls).setUpClass()
         cls.spark.conf.set(SPARK_CONF_ARROW_ENABLED, True)
-        ps.set_option("compute.ansi_mode_support", True, spark_session=cls.spark)
 
     def setUp(self):
         super().setUp()

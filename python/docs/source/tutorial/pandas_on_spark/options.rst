@@ -319,6 +319,11 @@ compute.isin_limit              80                      'compute.isin_limit' set
                                                         better performance.
 compute.pandas_fallback         False                   'compute.pandas_fallback' sets whether or not to
                                                         fallback automatically to Pandas' implementation.
+compute.fail_on_ansi_mode       True                    'compute.fail_on_ansi_mode' sets whether or not work
+                                                        with ANSI mode. If True, pandas API on Spark raises
+                                                        an exception if the underlying Spark is working with
+                                                        ANSI mode enabled and the option
+                                                        'compute.ansi_mode_support' is False.
 compute.ansi_mode_support       False                   'compute.ansi_mode_support' sets whether or not to
                                                         support the ANSI mode of the underlying Spark. If
                                                         False, pandas API on Spark may hit unexpected results
