@@ -173,10 +173,6 @@ object ColumnDefinition {
                 "ALTER TABLE", c.colName, d.originalSQL, null)
             }
             validateDefaultValueExpr(d, "ALTER TABLE", c.colName, c.dataType)
-            if (!d.child.foldable) {
-              throw QueryCompilationErrors.defaultValueNotConstantError(
-                "ALTER TABLE", c.colName, d.originalSQL)
-            }
           }
         }
 

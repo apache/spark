@@ -875,6 +875,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             !o.isInstanceOf[CollectMetrics] &&
             !o.isInstanceOf[Filter] &&
             !o.isInstanceOf[Aggregate] &&
+            // The rule above is used to check Aggregate operator.
             !o.isInstanceOf[Window] &&
             !o.isInstanceOf[Expand] &&
             !o.isInstanceOf[Generate] &&
@@ -882,8 +883,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             !o.isInstanceOf[MapInPandas] &&
             !o.isInstanceOf[MapInArrow] &&
             // Lateral join is checked in checkSubqueryExpression.
-            !o.isInstanceOf[LateralJoin] =>
-            // The rule above is used to check Aggregate operator.
+            !o.isInstanceOf[LateralJoin] &&
+            // For Add Columns, default values may still be non-deterministic and
+            // will be checked after ReplaceCurrentLike in optimizer at runtime
+            !o.isInstanceOf[AddColumns] =>
             o.failAnalysis(
               errorClass = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
               messageParameters = Map("sqlExprs" -> o.expressions.map(toSQLExpr(_)).mkString(", "))

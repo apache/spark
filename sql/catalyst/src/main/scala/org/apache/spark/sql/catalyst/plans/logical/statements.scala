@@ -138,7 +138,8 @@ case class QualifiedColType(
 
   def name: Seq[String] = path.map(_.name).getOrElse(Nil) :+ colName
 
-  def getV2Default: ColumnDefaultValue = default.map(_.toV2("", colName)).orNull
+  def getV2Default(statement: String): ColumnDefaultValue =
+    default.map(_.toV2(statement, colName)).orNull
 
   override def children: Seq[Expression] = default.toSeq
 
