@@ -47,7 +47,7 @@ private[hive] trait SparkOperation extends Operation with Logging {
     }
   }
 
-  final protected def sessionState: SessionState = session.sessionState
+  private def sessionState: SessionState = session.sessionState
 
   final protected def catalog: SessionCatalog = sessionState.catalog
 

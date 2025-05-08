@@ -57,8 +57,6 @@ private[hive] class SparkGetFunctionsOperation(
       log", functionName : ${MDC(LogKeys.FUNCTION_NAME, functionName)}'"
     logInfo(logMDC + log" with ${MDC(LogKeys.STATEMENT_ID, statementId)}")
     setState(OperationState.RUNNING)
-    // Always use the latest class loader provided by executionHive's state.
-
     // get databases for schema pattern
     val schemaPattern = convertSchemaPattern(schemaName)
     val matchingDbs = catalog.listDatabases(schemaPattern)
