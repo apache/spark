@@ -371,28 +371,32 @@ class DataFrameCallbackSuite extends QueryTest
     sparkContext.listenerBus.waitUntilEmpty()
     sparkContext.addSparkListener(listener)
 
-    val heartbeatInterval = sparkContext.getConf.get(EXECUTOR_HEARTBEAT_INTERVAL)
-    val df = spark.range(0, 100, 1, 1)
-      .mapPartitions { iter =>
-        TaskContext.get().addTaskCompletionListener[Unit] { _ =>
-          // Wait for heartbeat sent, 30s timeout by default
-          assert(HeartbeatMonitor.await(heartbeatInterval * 3, TimeUnit.MILLISECONDS))
-        }
-        iter
-      }.toDF("id")
-      .observe(
-        name = "my_event",
-        max($"id").as("max_val"),
-        percentile_approx($"id", lit(0.5), lit(100)),
-        percentile_approx($"id", lit(0.5), lit(100)),
-        min($"id").as("min_val"))
-    df.collect()
-    sparkContext.listenerBus.waitUntilEmpty()
+    try {
+      val heartbeatInterval = sparkContext.getConf.get(EXECUTOR_HEARTBEAT_INTERVAL)
+      val df = spark.range(0, 100, 1, 1)
+        .mapPartitions { iter =>
+          TaskContext.get().addTaskCompletionListener[Unit] { _ =>
+            // Wait for heartbeat sent, 30s timeout by default
+            assert(HeartbeatMonitor.await(heartbeatInterval * 3, TimeUnit.MILLISECONDS))
+          }
+          iter
+        }.toDF("id")
+        .observe(
+          name = "my_event",
+          max($"id").as("max_val"),
+          percentile_approx($"id", lit(0.5), lit(100)),
+          percentile_approx($"id", lit(0.5), lit(100)),
+          min($"id").as("min_val"))
+      df.collect()
+      sparkContext.listenerBus.waitUntilEmpty()
 
-    val msgs = HeartbeatMonitor.msgs.asScala
-    val accumulatorIds = msgs.flatMap(_.accumUpdates.flatMap(_._4)).map(_.id).toSet
-    assert(accumulatorId != 0)
-    assert(msgs.nonEmpty && !accumulatorIds.contains(accumulatorId))
+      val msgs = HeartbeatMonitor.msgs.asScala
+      val accumulatorIds = msgs.flatMap(_.accumUpdates.flatMap(_._4)).map(_.id).toSet
+      assert(accumulatorId != 0)
+      assert(msgs.nonEmpty && !accumulatorIds.contains(accumulatorId))
+    } finally {
+      sparkContext.listenerBus.removeListener(listener)
+    }
   }
 
   test("SPARK-50581: support observe with udaf") {
