@@ -1006,121 +1006,121 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = removeProjectBeforeFilter(
     plan.transformWithPruning(AlwaysProcess.fn, ruleId) {
-      // Prunes the unused columns from project list of Project/Aggregate/Expand
-      case p @ Project(_, p2: Project) if !p2.outputSet.subsetOf(p.references) =>
-        p.copy(child = p2.copy(projectList = p2.projectList.filter(p.references.contains)))
-      case p @ Project(_, a: Aggregate) if !a.outputSet.subsetOf(p.references) =>
-        p.copy(
-          child = a.copy(aggregateExpressions =
-            a.aggregateExpressions.filter(p.references.contains)))
-      case a @ Project(_, e @ Expand(_, _, grandChild)) if !e.outputSet.subsetOf(a.references) =>
-        val newOutput = e.output.filter(a.references.contains(_))
-        val newProjects = e.projections.map { proj =>
-          proj.zip(e.output).filter { case (_, a) =>
-            newOutput.contains(a)
-          }.map(_._1)
-        }
-        a.copy(child = Expand(newProjects, newOutput, grandChild))
+    // Prunes the unused columns from project list of Project/Aggregate/Expand
+    case p @ Project(_, p2: Project) if !p2.outputSet.subsetOf(p.references) =>
+      p.copy(child = p2.copy(projectList = p2.projectList.filter(p.references.contains)))
+    case p @ Project(_, a: Aggregate) if !a.outputSet.subsetOf(p.references) =>
+      p.copy(
+        child = a.copy(aggregateExpressions =
+          a.aggregateExpressions.filter(p.references.contains)))
+    case a @ Project(_, e @ Expand(_, _, grandChild)) if !e.outputSet.subsetOf(a.references) =>
+      val newOutput = e.output.filter(a.references.contains(_))
+      val newProjects = e.projections.map { proj =>
+        proj.zip(e.output).filter { case (_, a) =>
+          newOutput.contains(a)
+        }.map(_._1)
+      }
+      a.copy(child = Expand(newProjects, newOutput, grandChild))
 
-      // Prune and drop AttachDistributedSequence if the produced attribute is not referred.
-      case p @ Project(_, a @ AttachDistributedSequence(_, grandChild))
+    // Prune and drop AttachDistributedSequence if the produced attribute is not referred.
+    case p @ Project(_, a @ AttachDistributedSequence(_, grandChild))
         if !p.references.contains(a.sequenceAttr) =>
-        p.copy(child = prunedChild(grandChild, p.references))
+      p.copy(child = prunedChild(grandChild, p.references))
 
-      // Prunes the unused columns from child of `DeserializeToObject`
-      case d @ DeserializeToObject(_, _, child) if !child.outputSet.subsetOf(d.references) =>
-        d.copy(child = prunedChild(child, d.references))
+    // Prunes the unused columns from child of `DeserializeToObject`
+    case d @ DeserializeToObject(_, _, child) if !child.outputSet.subsetOf(d.references) =>
+      d.copy(child = prunedChild(child, d.references))
 
-      // Prunes the unused columns from child of Aggregate/Expand/Generate/ScriptTransformation
-      case a @ Aggregate(_, _, child, _) if !child.outputSet.subsetOf(a.references) =>
-        a.copy(child = prunedChild(child, a.references))
-      case f @ FlatMapGroupsInPandas(_, _, _, child) if !child.outputSet.subsetOf(f.references) =>
-        f.copy(child = prunedChild(child, f.references))
-      case e @ Expand(_, _, child) if !child.outputSet.subsetOf(e.references) =>
-        e.copy(child = prunedChild(child, e.references))
+    // Prunes the unused columns from child of Aggregate/Expand/Generate/ScriptTransformation
+    case a @ Aggregate(_, _, child, _) if !child.outputSet.subsetOf(a.references) =>
+      a.copy(child = prunedChild(child, a.references))
+    case f @ FlatMapGroupsInPandas(_, _, _, child) if !child.outputSet.subsetOf(f.references) =>
+      f.copy(child = prunedChild(child, f.references))
+    case e @ Expand(_, _, child) if !child.outputSet.subsetOf(e.references) =>
+      e.copy(child = prunedChild(child, e.references))
 
-      // prune unused columns from child of MergeRows for row-level operations
-      case e @ MergeRows(_, _, _, _, _, _, _, child) if !child.outputSet.subsetOf(e.references) =>
-        e.copy(child = prunedChild(child, e.references))
+    // prune unused columns from child of MergeRows for row-level operations
+    case e @ MergeRows(_, _, _, _, _, _, _, child) if !child.outputSet.subsetOf(e.references) =>
+      e.copy(child = prunedChild(child, e.references))
 
-      // prune unrequired references
-      case p @ Project(_, g: Generate) if p.references != g.outputSet =>
-        val requiredAttrs = p.references -- g.producedAttributes ++ g.generator.references
-        val newChild = prunedChild(g.child, requiredAttrs)
-        val unrequired = g.generator.references -- p.references
-        val unrequiredIndices = newChild.output.zipWithIndex
-          .filter(t => unrequired.contains(t._1))
-          .map(_._2)
-        p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
+    // prune unrequired references
+    case p @ Project(_, g: Generate) if p.references != g.outputSet =>
+      val requiredAttrs = p.references -- g.producedAttributes ++ g.generator.references
+      val newChild = prunedChild(g.child, requiredAttrs)
+      val unrequired = g.generator.references -- p.references
+      val unrequiredIndices = newChild.output.zipWithIndex
+        .filter(t => unrequired.contains(t._1))
+        .map(_._2)
+      p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
 
-      // prune unrequired nested fields from `Generate`.
-      case GeneratorNestedColumnAliasing(rewrittenPlan) => rewrittenPlan
+    // prune unrequired nested fields from `Generate`.
+    case GeneratorNestedColumnAliasing(rewrittenPlan) => rewrittenPlan
 
-      // Eliminate unneeded attributes from right side of a Left Existence Join.
-      case j @ Join(_, right, LeftExistence(_), _, _) =>
-        j.copy(right = prunedChild(right, j.references))
+    // Eliminate unneeded attributes from right side of a Left Existence Join.
+    case j @ Join(_, right, LeftExistence(_), _, _) =>
+      j.copy(right = prunedChild(right, j.references))
 
-      // all the columns will be used to compare, so we can't prune them
-      case p @ Project(_, _: SetOperation) => p
-      case p @ Project(_, _: Distinct) => p
-      // Eliminate unneeded attributes from children of Union.
-      case p @ Project(_, u: Union) =>
-        if (!u.outputSet.subsetOf(p.references)) {
-          val firstChild = u.children.head
-          val newOutput = prunedChild(firstChild, p.references).output
-          // pruning the columns of all children based on the pruned first child.
-          val newChildren = u.children.map { p =>
-            val selected = p.output.zipWithIndex.filter { case (a, i) =>
-              newOutput.contains(firstChild.output(i))
-            }.map(_._1)
-            Project(selected, p)
-          }
-          p.copy(child = u.withNewChildren(newChildren))
-        } else {
-          p
+    // all the columns will be used to compare, so we can't prune them
+    case p @ Project(_, _: SetOperation) => p
+    case p @ Project(_, _: Distinct) => p
+    // Eliminate unneeded attributes from children of Union.
+    case p @ Project(_, u: Union) =>
+      if (!u.outputSet.subsetOf(p.references)) {
+        val firstChild = u.children.head
+        val newOutput = prunedChild(firstChild, p.references).output
+        // pruning the columns of all children based on the pruned first child.
+        val newChildren = u.children.map { p =>
+          val selected = p.output.zipWithIndex.filter { case (a, i) =>
+            newOutput.contains(firstChild.output(i))
+          }.map(_._1)
+          Project(selected, p)
         }
+        p.copy(child = u.withNewChildren(newChildren))
+      } else {
+        p
+      }
 
-      // Recursive CTE column pruning is handled in a separate rule. We catch it here because the
-      // default fallback will fail.
-      case p @ Project(_, _: UnionLoop) => p
+    // Recursive CTE column pruning is handled in a separate rule. We catch it here because the
+    // default fallback will fail.
+    case p @ Project(_, _: UnionLoop) => p
 
-      // Prune unnecessary window expressions
-      case p @ Project(_, w: Window) if !w.windowOutputSet.subsetOf(p.references) =>
-        val windowExprs = w.windowExpressions.filter(p.references.contains)
-        val newChild = if (windowExprs.isEmpty) {
-          w.child
-        } else {
-          w.copy(windowExpressions = windowExprs)
-        }
-        p.copy(child = newChild)
+    // Prune unnecessary window expressions
+    case p @ Project(_, w: Window) if !w.windowOutputSet.subsetOf(p.references) =>
+      val windowExprs = w.windowExpressions.filter(p.references.contains)
+      val newChild = if (windowExprs.isEmpty) {
+        w.child
+      } else {
+        w.copy(windowExpressions = windowExprs)
+      }
+      p.copy(child = newChild)
 
-      // Prune WithCTE
-      case p @ Project(_, w: WithCTE) =>
-        if (!w.outputSet.subsetOf(p.references)) {
-          p.copy(child = w.withNewPlan(prunedChild(w.plan, p.references)))
-        } else {
-          p
-        }
+    // Prune WithCTE
+    case p @ Project(_, w: WithCTE) =>
+      if (!w.outputSet.subsetOf(p.references)) {
+        p.copy(child = w.withNewPlan(prunedChild(w.plan, p.references)))
+      } else {
+        p
+      }
 
-      // Can't prune the columns on LeafNode
-      case p @ Project(_, _: LeafNode) => p
+    // Can't prune the columns on LeafNode
+    case p @ Project(_, _: LeafNode) => p
 
-      // Can't prune the columns on UpdateEventTimeWatermarkColumn
-      case p @ Project(_, _: UpdateEventTimeWatermarkColumn) => p
+    // Can't prune the columns on UpdateEventTimeWatermarkColumn
+    case p @ Project(_, _: UpdateEventTimeWatermarkColumn) => p
 
-      case NestedColumnAliasing(rewrittenPlan) => rewrittenPlan
+    case NestedColumnAliasing(rewrittenPlan) => rewrittenPlan
 
-      // for all other logical plans that inherits the output from it's children
-      // Project over project is handled by the first case, skip it here.
-      case p @ Project(_, child) if !child.isInstanceOf[Project] =>
-        val required = child.references ++ p.references
-        if (!child.inputSet.subsetOf(required)) {
-          val newChildren = child.children.map(c => prunedChild(c, required))
-          p.copy(child = child.withNewChildren(newChildren))
-        } else {
-          p
-        }
-    })
+    // for all other logical plans that inherits the output from it's children
+    // Project over project is handled by the first case, skip it here.
+    case p @ Project(_, child) if !child.isInstanceOf[Project] =>
+      val required = child.references ++ p.references
+      if (!child.inputSet.subsetOf(required)) {
+        val newChildren = child.children.map(c => prunedChild(c, required))
+        p.copy(child = child.withNewChildren(newChildren))
+      } else {
+        p
+      }
+  })
 
   /** Applies a projection only when the child is producing unnecessary attributes */
   def prunedChild(c: LogicalPlan, allReferences: AttributeSet): LogicalPlan =
@@ -1147,8 +1147,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
   }
 
   private def hasConflictingAttrsWithSubquery(
-                                               predicate: Expression,
-                                               child: LogicalPlan): Boolean = {
+      predicate: Expression,
+      child: LogicalPlan): Boolean = {
     predicate.find {
       case s: SubqueryExpression if s.plan.outputSet.intersect(child.outputSet).nonEmpty => true
       case _ => false
