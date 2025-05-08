@@ -59,3 +59,5 @@
 - [INTERNAL] Make max broadcast table size configurable
 - [INTERNAL] Temporarily switch back to OSS Hadoop
 - [INTERNAL] Improve release artifacts publishing
+- [INTERNAL] Add a new RPC message UpdateAccessTokens
+- [INTERNAL] Fix access token propagation when executors start up
