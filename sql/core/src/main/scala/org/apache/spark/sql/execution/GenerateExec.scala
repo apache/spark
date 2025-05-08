@@ -86,12 +86,16 @@ case class GenerateExec(
       val generatorNullRow = new GenericInternalRow(generator.elementSchema.length)
       val rows = if (requiredChildOutput.nonEmpty) {
 
-        val pruneChildForResult: InternalRow => InternalRow =
+        val pruneChildForResult: InternalRow => InternalRow = {
+          // The declared output of this operator is `requiredChildOutput ++ generatorOutput`.
+          // If `child.output` is different from `requiredChildOutput`, we must do an projection
+          // to adjust the child output and make sure the final result matches the declared output.
           if (child.output == requiredChildOutput) {
             identity
           } else {
             UnsafeProjection.create(requiredChildOutput, child.output)
           }
+        }
 
         val joinedRow = new JoinedRow
         iter.flatMap { row =>
