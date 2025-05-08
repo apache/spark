@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
@@ -43,7 +43,7 @@ private[sql] class RocksDBStateStoreProvider
   with SupportsFineGrainedReplay {
   import RocksDBStateStoreProvider._
 
-  class RocksDBStateStore(lastVersion: Long) extends StateStore {
+  class RocksDBStateStore(lastVersion: Long, var readOnly: Boolean) extends StateStore {
     /** Trait and classes representing the internal state of the store */
     trait STATE
     case object UPDATING extends STATE
@@ -57,6 +57,30 @@ private[sql] class RocksDBStateStoreProvider
     override def id: StateStoreId = RocksDBStateStoreProvider.this.stateStoreId
 
     override def version: Long = lastVersion
+
+    Option(TaskContext.get()).foreach { ctxt =>
+      ctxt.addTaskCompletionListener[Unit]( ctx => {
+        try {
+          if (state == UPDATING) {
+            if (readOnly) {
+              release() // Only release, do not throw an error because we rely on
+              // CompletionListener to release for read-only store in
+              // mapPartitionsWithReadStateStore.
+            } else {
+              abort() // Abort since this is an error if stateful task completes
+            }
+          }
+        } catch {
+          case NonFatal(e) =>
+            logWarning("Failed to abort state store", e)
+        }
+      })
+
+      ctxt.addTaskFailureListener( (_, _) => {
+        abort() // Either the store is already aborted (this is a no-op) or
+        // we need to abort it.
+      })
+    }
 
     override def createColFamilyIfAbsent(
         colFamilyName: String,
@@ -368,6 +392,7 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def release(): Unit = {
+      assert(readOnly, "Release can only be called on a read-only store")
       if (state != RELEASED) {
         logInfo(log"Releasing ${MDC(VERSION_NUM, version + 1)} " +
           log"for ${MDC(STATE_STORE_ID, id)}")
@@ -495,14 +520,15 @@ private[sql] class RocksDBStateStoreProvider
 
         // Create or reuse store instance
         existingStore match {
-          case Some(store: RocksDBStateStore) =>
+          case Some(store: ReadStateStore) if store.isInstanceOf[RocksDBStateStore] =>
             // Mark store as being used for write operations
-            StateStoreThreadLocalTracker.setUsedForWriteStore(true)
-            store
+            val rocksDBStateStore = store.asInstanceOf[RocksDBStateStore]
+            rocksDBStateStore.readOnly = readOnly
+            rocksDBStateStore.asInstanceOf[StateStore]
           case None =>
             // Create new store instance
-            new RocksDBStateStore(version)
-          // No need for error case here since we validated earlier
+            new RocksDBStateStore(version, readOnly)
+          case _ => null // No need for error case here since we validated earlier
         }
       } catch {
         case e: Throwable =>
@@ -626,7 +652,8 @@ private[sql] class RocksDBStateStoreProvider
    * @param endVersion   checkpoint version to end with
    * @return [[StateStore]]
    */
-  override def replayStateFromSnapshot(snapshotVersion: Long, endVersion: Long): StateStore = {
+  override def replayStateFromSnapshot(
+      snapshotVersion: Long, endVersion: Long, readOnly: Boolean): StateStore = {
     try {
       if (snapshotVersion < 1) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(snapshotVersion)
@@ -635,7 +662,7 @@ private[sql] class RocksDBStateStoreProvider
         throw QueryExecutionErrors.unexpectedStateStoreVersion(endVersion)
       }
       rocksDB.loadFromSnapshot(snapshotVersion, endVersion)
-      new RocksDBStateStore(endVersion)
+      new RocksDBStateStore(endVersion, readOnly)
     }
     catch {
       case e: OutOfMemoryError =>

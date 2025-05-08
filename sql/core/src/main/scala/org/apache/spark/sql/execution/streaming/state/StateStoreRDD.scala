@@ -33,31 +33,15 @@ import org.apache.spark.util.SerializableConfiguration
  */
 object StateStoreThreadLocalTracker {
   /** Case class to hold both the store and its usage state */
-  case class StoreInfo(store: ReadStateStore, usedForWriteStore: Boolean = false)
 
-  private val storeInfo: ThreadLocal[StoreInfo] = new ThreadLocal[StoreInfo]
+  private val storeInfo: ThreadLocal[ReadStateStore] = new ThreadLocal[ReadStateStore]
 
   def setStore(store: ReadStateStore): Unit = {
-    Option(storeInfo.get()) match {
-      case Some(info) => storeInfo.set(info.copy(store = store))
-      case None => storeInfo.set(StoreInfo(store))
-    }
+    storeInfo.set(store)
   }
 
   def getStore: Option[ReadStateStore] = {
-    Option(storeInfo.get()).map(_.store)
-  }
-
-  def setUsedForWriteStore(used: Boolean): Unit = {
-    Option(storeInfo.get()) match {
-      case Some(info) =>
-        storeInfo.set(info.copy(usedForWriteStore = used))
-      case None => // If there's no store set, we don't need to track usage
-    }
-  }
-
-  def isUsedForWriteStore: Boolean = {
-    Option(storeInfo.get()).exists(_.usedForWriteStore)
+    Option(storeInfo.get())
   }
 
   def clearStore(): Unit = {
@@ -171,16 +155,12 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStoreThreadLocalTracker.getStore match {
       case Some(readStateStore: ReadStateStore) =>
-        val writeStore = StateStore.getWriteStore(readStateStore, storeProviderId,
+        StateStore.getWriteStore(readStateStore, storeProviderId,
           keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
           uniqueId.map(_.apply(partition.index).head),
           stateSchemaBroadcast,
           useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
           useMultipleValuesPerKey)
-        if (writeStore.equals(readStateStore)) {
-          StateStoreThreadLocalTracker.setUsedForWriteStore(true)
-        }
-        writeStore
       case None =>
         StateStore.get(
           storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
