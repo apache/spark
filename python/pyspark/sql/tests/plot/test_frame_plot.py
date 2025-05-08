@@ -51,8 +51,10 @@ class DataFramePlotTestsMixin:
     def test_unsupported_plot_kind(self):
         from pyspark.sql.plot.core import PySparkPlotAccessor
 
+        data = [Row(a=i, b=i + 1, c=i + 2, d=i + 3) for i in range(2000)]
+        sdf = self.spark.createDataFrame(data)
         with self.assertRaises(PySparkValueError) as pe:
-            self.sdf.plot(kind="bubble")
+            sdf.plot(kind="bubble")
 
         self.check_error(
             exception=pe.exception,
