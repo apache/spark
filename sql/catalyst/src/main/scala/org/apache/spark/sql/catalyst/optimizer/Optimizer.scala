@@ -1087,11 +1087,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Prune unnecessary window expressions
     case p @ Project(_, w: Window) if !w.windowOutputSet.subsetOf(p.references) =>
       val windowExprs = w.windowExpressions.filter(p.references.contains)
-      val newChild = if (windowExprs.isEmpty) {
-        w.child
-      } else {
-        w.copy(windowExpressions = windowExprs)
-      }
+      val newChild = if (windowExprs.isEmpty) w.child else w.copy(windowExpressions = windowExprs)
       p.copy(child = newChild)
 
     // Prune WithCTE
