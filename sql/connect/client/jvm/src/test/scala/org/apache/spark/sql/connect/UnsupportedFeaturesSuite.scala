@@ -26,7 +26,6 @@ import org.apache.spark.sql.connect.test.ConnectFunSuite
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 
-
 /**
  * Test suite that test the errors thrown when using unsupported features.
  */
