@@ -531,8 +531,7 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with SharedSparkSessi
   test("explode with udf") {
     Seq("NO_CODEGEN", "CODEGEN_ONLY").foreach { codegenMode =>
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode)  {
-        sql(
-          """create or replace temporary function spark_func (params array<struct<x int, y int>>)
+        sql("""create or replace temporary function spark_func (params array<struct<x int, y int>>)
             | returns STRUCT<a: int, b: int> LANGUAGE SQL
             | return (select ns from (
             | SELECT try_divide(SUM(item.x * item.y), SUM(item.x * item.x)) AS beta1,
