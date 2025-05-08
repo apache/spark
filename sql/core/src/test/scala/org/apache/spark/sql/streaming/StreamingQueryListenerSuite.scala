@@ -262,12 +262,28 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       assert(newEvent.id === event.id)
       assert(newEvent.runId === event.runId)
       assert(newEvent.name === event.name)
+      assert(newEvent.timestamp === event.timestamp)
+      assert(newEvent.jobTags === event.jobTags)
     }
 
     testSerialization(
-      new QueryStartedEvent(UUID.randomUUID, UUID.randomUUID, "name", "2016-12-05T20:54:20.827Z"))
+      new QueryStartedEvent(
+        UUID.randomUUID,
+        UUID.randomUUID,
+        "name",
+        "2016-12-05T20:54:20.827Z",
+        Set()
+      )
+    )
     testSerialization(
-      new QueryStartedEvent(UUID.randomUUID, UUID.randomUUID, null, "2016-12-05T20:54:20.827Z"))
+      new QueryStartedEvent(
+        UUID.randomUUID,
+        UUID.randomUUID,
+        null,
+        "2016-12-05T20:54:20.827Z",
+        Set("tag1", "tag2")
+      )
+    )
   }
 
   test("QueryProgressEvent serialization") {
@@ -346,6 +362,32 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       } finally {
         spark.streams.removeListener(listener)
       }
+    }
+  }
+
+  test("QueryStartedEvent has the right jobTags set") {
+    val session = spark.newSession()
+    val collector = new EventCollectorV2
+    val jobTag1 = "test-jobTag1"
+    val jobTag2 = "test-jobTag2"
+
+    def runQuery(session: SparkSession): Unit = {
+      collector.reset()
+      session.sparkContext.addJobTag(jobTag1)
+      session.sparkContext.addJobTag(jobTag2)
+      val mem = MemoryStream[Int](implicitly[Encoder[Int]], session.sqlContext)
+      testStream(mem.toDS())(
+        AddData(mem, 1, 2, 3),
+        CheckAnswer(1, 2, 3)
+      )
+      session.sparkContext.listenerBus.waitUntilEmpty()
+      session.sparkContext.clearJobTags()
+    }
+
+    withListenerAdded(collector, session) {
+      runQuery(session)
+      assert(collector.startEvent !== null)
+      assert(collector.startEvent.jobTags === Set(jobTag1, jobTag2))
     }
   }
 
