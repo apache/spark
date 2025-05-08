@@ -2000,7 +2000,6 @@ class SparkConnectClient(object):
             command = pb2.Command()
             command.ml_command.clean_cache.SetInParent()
             self.execute_command(command)
-            self.thread_local.ml_caches.clear()
         except Exception:
             pass
 
