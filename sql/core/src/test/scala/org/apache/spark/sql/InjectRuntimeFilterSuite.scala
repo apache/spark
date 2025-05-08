@@ -277,8 +277,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
 
   def columnPruningTakesEffect(plan: LogicalPlan): Boolean = {
     def takesEffect(plan: LogicalPlan): Boolean = {
-      val result = org.apache.spark.sql.catalyst.optimizer
-        .SimpleTestOptimizer.ColumnPruning.apply(plan)
+      val result = org.apache.spark.sql.catalyst.optimizer.ColumnPruning.apply(plan)
       !result.fastEquals(plan)
     }
 

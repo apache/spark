@@ -117,7 +117,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.CollapseProject" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseRepartition" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseWindow" ::
-      "org.apache.spark.sql.catalyst.optimizer.Optimizer$ColumnPruning" ::
+      "org.apache.spark.sql.catalyst.optimizer.ColumnPruning" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineConcats" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineFilters" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineTypedFilters" ::
@@ -148,7 +148,8 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.Optimizer$OptimizeSubqueries" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeRepartition" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeWindowFunctions" ::
-      "org.apache.spark.sql.catalyst.optimizer.OptimizeUpdateFields"::
+      "org.apache.spark.sql.catalyst.optimizer.OptimizeUpdateFields" ::
+      "org.apache.spark.sql.catalyst.optimizer.Optimizer$RecursiveCTEColumnPruning" ::
       "org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation" ::
       "org.apache.spark.sql.catalyst.optimizer.PruneFilters" ::
       "org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin" ::
