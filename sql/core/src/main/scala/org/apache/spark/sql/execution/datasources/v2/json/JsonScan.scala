@@ -49,8 +49,8 @@ case class JsonScan(
 
   private val parsedOptions = new JSONOptionsInRead(
     CaseInsensitiveMap(options.asScala.toMap),
-    sparkSession.sessionState.conf.sessionLocalTimeZone,
-    sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+    conf.sessionLocalTimeZone,
+    conf.columnNameOfCorruptRecord)
 
   override def isSplitable(path: Path): Boolean = {
     JsonDataSource(parsedOptions).isSplitable && super.isSplitable(path)
@@ -80,7 +80,7 @@ case class JsonScan(
       new SerializableConfiguration(hadoopConf))
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
-    JsonPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
+    JsonPartitionReaderFactory(conf, broadcastedConf,
       dataSchema, readDataSchema, readPartitionSchema, parsedOptions,
       pushedFilters.toImmutableArraySeq)
   }
