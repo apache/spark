@@ -127,8 +127,6 @@ case class UnionLoopExec(
     val numAnchorOutputRows = longMetric("numAnchorOutputRows")
     val levelLimit = conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT)
     val rowLimit = conf.getConf(SQLConf.CTE_RECURSION_ROW_LIMIT)
-    Console.println(anchor)
-    Console.println(recursion)
 
     // currentLimit is initialized from the limit argument, and in each step it is decreased by
     // the number of rows generated in that step.
