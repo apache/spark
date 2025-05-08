@@ -435,10 +435,11 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     if (SummaryUtils.enableTrainingSummary) {
       // Handle possible missing or invalid prediction columns
       val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
-
       val trainingSummary = new LinearRegressionTrainingSummary(
         summaryModel.transform(dataset), predictionColName, $(labelCol), $(featuresCol),
-        model, Array(0.0), objectiveHistory)
+        summaryModel.get(summaryModel.weightCol).getOrElse(""),
+        summaryModel.numFeatures, summaryModel.getFitIntercept,
+        Array(0.0), objectiveHistory)
       model.setSummary(Some(trainingSummary))
     }
     model
