@@ -24,6 +24,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.UnknownRuleId
@@ -56,21 +57,28 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   def output: Seq[Attribute]
 
   override def nodeWithOutputColumnsString(maxColumns: Int): String = {
-    nodeName + {
-      if (this.output.length > maxColumns) {
-        val outputWithNullability = this.output.take(maxColumns).map { attr =>
-          attr.toString + s"[nullable=${attr.nullable}]"
-        }
+    try {
+      nodeName + {
+        if (this.output.length > maxColumns) {
+          val outputWithNullability = this.output.take(maxColumns).map { attr =>
+            attr.toString + s"[nullable=${attr.nullable}]"
+          }
 
-        outputWithNullability.mkString(" <output=", ", ",
-          s" ... ${this.output.length - maxColumns} more columns>")
-      } else {
-        val outputWithNullability = this.output.map { attr =>
-          attr.toString + s"[nullable=${attr.nullable}]"
-        }
+          outputWithNullability.mkString(" <output=", ", ",
+            s" ... ${this.output.length - maxColumns} more columns>")
+        } else {
+          val outputWithNullability = this.output.map { attr =>
+            attr.toString + s"[nullable=${attr.nullable}]"
+          }
 
-        outputWithNullability.mkString(" <output=", ", ", ">")
+          outputWithNullability.mkString(" <output=", ", ", ">")
+        }
       }
+    } catch {
+      case _: UnresolvedException =>
+        // If we encounter an UnresolvedException, it's high likely that the call of `this.output`
+        // throws it. In this case, we may have to give up and only show the nodeName.
+        nodeName + " <output='Unresolved'>"
     }
   }
 
