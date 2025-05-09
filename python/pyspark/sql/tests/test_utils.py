@@ -1168,6 +1168,39 @@ class UtilsTestsMixin:
 
         self.assertTrue("Column 'id' contains duplicate values" in str(cm.exception))
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency"
+    )
+    def test_assert_column_unique_mixed_types(self):
+        # Test with a Spark DataFrame and conversion to pandas
+
+        # Create a Spark DataFrame with unique values
+        df_spark = self.spark.createDataFrame([(1, "a"), (2, "b"), (3, "c")], ["id", "value"])
+
+        # Convert to pandas DataFrame
+        df_pandas = df_spark.toPandas()
+
+        # Test both ways
+        assertColumnUnique(df_spark, "id")
+        assertColumnUnique(df_pandas, "id")
+
+        # Create a Spark DataFrame with duplicate values
+        df_spark_with_duplicates = self.spark.createDataFrame(
+            [(1, "a"), (1, "b"), (3, "c")], ["id", "value"]
+        )
+
+        # Convert to pandas DataFrame
+        df_pandas_with_duplicates = df_spark_with_duplicates.toPandas()
+
+        # Test both ways
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnUnique(df_spark_with_duplicates, "id")
+        self.assertTrue("Column 'id' contains duplicate values" in str(cm.exception))
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnUnique(df_pandas_with_duplicates, "id")
+        self.assertTrue("Column 'id' contains duplicate values" in str(cm.exception))
+
     def test_assert_column_non_null_single_column(self):
         # Test with a DataFrame that has no null values in a column
         df = self.spark.createDataFrame([(1, "a"), (2, "b"), (3, "c")], ["id", "value"])
@@ -1281,6 +1314,37 @@ class UtilsTestsMixin:
         with self.assertRaises(AssertionError) as cm:
             assertColumnNonNull(psdf_with_nulls, "value")
 
+        self.assertTrue("Column 'value' contains null values" in str(cm.exception))
+
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
+    def test_assert_column_non_null_mixed_types(self):
+        # Test with a Spark DataFrame and conversion to pandas
+
+        # Create a Spark DataFrame with no null values
+        df_spark = self.spark.createDataFrame([(1, "a"), (2, "b"), (3, "c")], ["id", "value"])
+
+        # Convert to pandas DataFrame
+        df_pandas = df_spark.toPandas()
+
+        # Test both ways
+        assertColumnNonNull(df_spark, "id")
+        assertColumnNonNull(df_pandas, "id")
+
+        # Create a Spark DataFrame with null values
+        df_spark_with_nulls = self.spark.createDataFrame(
+            [(1, "a"), (2, None), (3, "c")], ["id", "value"]
+        )
+
+        # Convert to pandas DataFrame
+        df_pandas_with_nulls = df_spark_with_nulls.toPandas()
+
+        # Test both ways
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnNonNull(df_spark_with_nulls, "value")
+        self.assertTrue("Column 'value' contains null values" in str(cm.exception))
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnNonNull(df_pandas_with_nulls, "value")
         self.assertTrue("Column 'value' contains null values" in str(cm.exception))
 
     def test_assert_column_values_in_set_single_column(self):
@@ -1459,6 +1523,55 @@ class UtilsTestsMixin:
             assertColumnValuesInSet(psdf_with_invalid, "category", {"A", "B", "C"})
 
         self.assertTrue("Column 'category' contains values not in the accepted set" in str(cm.exception))
+
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
+    def test_assert_column_values_in_set_mixed_types(self):
+        # Test with a Spark DataFrame and conversion to pandas
+
+        # Create a Spark DataFrame with all values in the accepted set
+        df_spark = self.spark.createDataFrame([(1, "A"), (2, "B"), (3, "C")], ["id", "category"])
+
+        # Convert to pandas DataFrame
+        df_pandas = df_spark.toPandas()
+
+        # Test both ways
+        assertColumnValuesInSet(df_spark, "category", {"A", "B", "C"})
+        assertColumnValuesInSet(df_pandas, "category", {"A", "B", "C"})
+
+        # Create a Spark DataFrame with values not in the accepted set
+        df_spark_with_invalid = self.spark.createDataFrame(
+            [(1, "A"), (2, "B"), (3, "X")], ["id", "category"]
+        )
+
+        # Convert to pandas DataFrame
+        df_pandas_with_invalid = df_spark_with_invalid.toPandas()
+
+        # Test both ways
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnValuesInSet(df_spark_with_invalid, "category", {"A", "B", "C"})
+        self.assertTrue("Column 'category' contains values not in the accepted set" in str(cm.exception))
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnValuesInSet(df_pandas_with_invalid, "category", {"A", "B", "C"})
+        self.assertTrue("Column 'category' contains values not in the accepted set" in str(cm.exception))
+
+        # Test with multiple columns and different accepted values
+        df_spark_multi = self.spark.createDataFrame(
+            [(1, "A"), (2, "B"), (3, "C")], ["id", "category"]
+        )
+        df_pandas_multi = df_spark_multi.toPandas()
+
+        # Test both ways
+        assertColumnValuesInSet(
+            df_spark_multi,
+            ["id", "category"],
+            {"id": {1, 2, 3}, "category": {"A", "B", "C"}}
+        )
+        assertColumnValuesInSet(
+            df_pandas_multi,
+            ["id", "category"],
+            {"id": {1, 2, 3}, "category": {"A", "B", "C"}}
+        )
 
     def test_row_order_ignored(self):
         # test that row order is ignored (not checked) by default
@@ -2457,6 +2570,114 @@ class UtilsTestsMixin:
         # This should fail because customer_id 4 doesn't exist in customers.id
         with self.assertRaises(AssertionError) as cm:
             assertReferentialIntegrity(orders_invalid_psdf, "customer_id", customers_psdf, "id")
+
+        self.assertTrue(
+            "Column 'customer_id' contains values not found in target column 'id'" in str(cm.exception)
+        )
+
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
+    def test_assert_referential_integrity_mixed_types_spark_pandas(self):
+        # Test with Spark DataFrame as source and pandas DataFrame as target
+        import pandas as pd
+
+        # Create a "customers" pandas DataFrame with customer IDs
+        customers_pd = pd.DataFrame({"id": [1, 2, 3], "name": ["Alice", "Bob", "Charlie"]})
+
+        # Create an "orders" Spark DataFrame with customer IDs as foreign keys
+        orders_spark = self.spark.createDataFrame(
+            [(101, 1), (102, 2), (103, 3), (104, None)], ["order_id", "customer_id"]
+        )
+
+        # This should pass because all non-null customer_ids in orders exist in customers.id
+        assertReferentialIntegrity(orders_spark, "customer_id", customers_pd, "id")
+
+        # Create an orders Spark DataFrame with an invalid customer ID
+        orders_invalid_spark = self.spark.createDataFrame(
+            [(101, 1), (102, 2), (103, 4)], ["order_id", "customer_id"]
+        )
+
+        # This should fail because customer_id 4 doesn't exist in customers.id
+        with self.assertRaises(AssertionError) as cm:
+            assertReferentialIntegrity(orders_invalid_spark, "customer_id", customers_pd, "id")
+
+        self.assertTrue(
+            "Column 'customer_id' contains values not found in target column 'id'" in str(cm.exception)
+        )
+
+        # Test with pandas DataFrame as source and Spark DataFrame as target
+        # Create a "customers" Spark DataFrame with customer IDs
+        customers_spark = self.spark.createDataFrame(
+            [(1, "Alice"), (2, "Bob"), (3, "Charlie")], ["id", "name"]
+        )
+
+        # Create an "orders" pandas DataFrame with customer IDs as foreign keys
+        orders_pd = pd.DataFrame({"order_id": [101, 102, 103, 104], "customer_id": [1, 2, 3, None]})
+
+        # This should pass because all non-null customer_ids in orders exist in customers.id
+        assertReferentialIntegrity(orders_pd, "customer_id", customers_spark, "id")
+
+        # Create an orders pandas DataFrame with an invalid customer ID
+        orders_invalid_pd = pd.DataFrame({"order_id": [101, 102, 103], "customer_id": [1, 2, 4]})
+
+        # This should fail because customer_id 4 doesn't exist in customers.id
+        with self.assertRaises(AssertionError) as cm:
+            assertReferentialIntegrity(orders_invalid_pd, "customer_id", customers_spark, "id")
+
+        self.assertTrue(
+            "Column 'customer_id' contains values not found in target column 'id'" in str(cm.exception)
+        )
+
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
+    def test_assert_referential_integrity_mixed_types_spark_pandas_on_spark(self):
+        # Test with Spark DataFrame as source and pandas-on-Spark DataFrame as target
+        import pandas as pd
+        import pyspark.pandas as ps
+
+        # Create a "customers" pandas-on-Spark DataFrame with customer IDs
+        customers_pdf = pd.DataFrame({"id": [1, 2, 3], "name": ["Alice", "Bob", "Charlie"]})
+        customers_psdf = ps.from_pandas(customers_pdf)
+
+        # Create an "orders" Spark DataFrame with customer IDs as foreign keys
+        orders_spark = self.spark.createDataFrame(
+            [(101, 1), (102, 2), (103, 3), (104, None)], ["order_id", "customer_id"]
+        )
+
+        # This should pass because all non-null customer_ids in orders exist in customers.id
+        assertReferentialIntegrity(orders_spark, "customer_id", customers_psdf, "id")
+
+        # Create an orders Spark DataFrame with an invalid customer ID
+        orders_invalid_spark = self.spark.createDataFrame(
+            [(101, 1), (102, 2), (103, 4)], ["order_id", "customer_id"]
+        )
+
+        # This should fail because customer_id 4 doesn't exist in customers.id
+        with self.assertRaises(AssertionError) as cm:
+            assertReferentialIntegrity(orders_invalid_spark, "customer_id", customers_psdf, "id")
+
+        self.assertTrue(
+            "Column 'customer_id' contains values not found in target column 'id'" in str(cm.exception)
+        )
+
+        # Test with pandas-on-Spark DataFrame as source and Spark DataFrame as target
+        # Create a "customers" Spark DataFrame with customer IDs
+        customers_spark = self.spark.createDataFrame(
+            [(1, "Alice"), (2, "Bob"), (3, "Charlie")], ["id", "name"]
+        )
+
+        # Create an "orders" pandas-on-Spark DataFrame with customer IDs as foreign keys
+        orders_pdf = pd.DataFrame({"order_id": [101, 102, 103, 104], "customer_id": [1, 2, 3, None]})
+        orders_psdf = ps.from_pandas(orders_pdf)
+
+        # This should pass because all non-null customer_ids in orders exist in customers.id
+        assertReferentialIntegrity(orders_psdf, "customer_id", customers_spark, "id")
+
+        # Create an orders pandas-on-Spark DataFrame with an invalid customer ID
+        orders_invalid_pdf = pd.DataFrame({"order_id": [101, 102, 103], "customer_id": [1, 2, 4]})
+        orders_invalid_psdf = ps.from_pandas(orders_invalid_pdf)
+
+        # This should fail because customer_id 4 doesn't exist in customers.id
+        with self.assertRaises(AssertionError) as cm:
+            assertReferentialIntegrity(orders_invalid_psdf, "customer_id", customers_spark, "id")
 
         self.assertTrue(
             "Column 'customer_id' contains values not found in target column 'id'" in str(cm.exception)
