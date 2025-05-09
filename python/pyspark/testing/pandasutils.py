@@ -478,13 +478,11 @@ class PandasOnSparkTestCase(ReusedSQLTestCase, PandasOnSparkTestUtils):
 
     def setUp(self):
         super().setUp()
-        self.assertEquals(
-            is_ansi_mode_test, self.spark.conf.get("spark.sql.ansi.enabled") == "true"
-        )
+        self.assertEqual(is_ansi_mode_test, self.spark.conf.get("spark.sql.ansi.enabled") == "true")
 
     def tearDown(self):
         try:
-            self.assertEquals(
+            self.assertEqual(
                 is_ansi_mode_test, self.spark.conf.get("spark.sql.ansi.enabled") == "true"
             )
         finally:
