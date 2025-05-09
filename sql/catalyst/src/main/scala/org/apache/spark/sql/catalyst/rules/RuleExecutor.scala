@@ -62,6 +62,9 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
           log"""
              |=== Applying Rule ${MDC(RULE_NAME, ruleName)} ===
              |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n"))}
+             |
+             |Output Information:
+             |${MDC(QUERY_PLAN, newPlan.treeStringWithOutputColumns)}
            """.stripMargin
         }
 
@@ -77,6 +80,9 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
           log"""
              |=== Result of Batch ${MDC(BATCH_NAME, batchName)} ===
              |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n"))}
+             |
+             |Output Information:
+             |${MDC(QUERY_PLAN, newPlan.treeStringWithOutputColumns)}
           """.stripMargin
         } else {
           log"Batch ${MDC(BATCH_NAME, batchName)} has no effect."

@@ -55,6 +55,25 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
   def output: Seq[Attribute]
 
+  override def nodeWithOutputColumnsString(maxColumns: Int): String = {
+    nodeName + {
+      if (this.output.length > maxColumns) {
+        val outputWithNullability = this.output.take(maxColumns).map { attr =>
+          attr.toString + s"[nullable=${attr.nullable}]"
+        }
+
+        outputWithNullability.mkString(" <output=", ", ",
+          s" ... ${this.output.length - maxColumns} more columns>")
+      } else {
+        val outputWithNullability = this.output.map { attr =>
+          attr.toString + s"[nullable=${attr.nullable}]"
+        }
+
+        outputWithNullability.mkString(" <output=", ", ", ">")
+      }
+    }
+  }
+
   /**
    * Returns the set of attributes that are output by this node.
    */
