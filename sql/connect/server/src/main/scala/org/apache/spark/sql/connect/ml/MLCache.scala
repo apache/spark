@@ -159,8 +159,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     if (refId == helperID) {
       helper
     } else {
-      var obj: Object =
-        Option(cachedModel.get(refId)).map(_.obj)
+      var obj: Object = Option(cachedModel.get(refId)).map(_.obj).getOrElse(null)
       if (obj == null && getMemoryControlEnabled) {
         val loadPath = offloadedModelsDir.resolve(refId)
         if (Files.isDirectory(loadPath)) {
