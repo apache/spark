@@ -401,6 +401,7 @@ class KMeans @Since("1.5.0") (
 
     model.setSummary(Some(summary))
     instr.logNamedValue("clusterSizes", summary.clusterSizes)
+    model
   }
 
   private def preferBlockSolver(dataset: Dataset[_]): Boolean = {
