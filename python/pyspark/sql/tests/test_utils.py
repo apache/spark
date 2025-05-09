@@ -51,6 +51,7 @@ from pyspark.testing.utils import (
     assertColumnUnique,
     assertColumnValuesInSet,
     assertDataFrameEqual,
+    assertReferentialIntegrity,
     assertSchemaEqual,
     have_numpy,
 )
@@ -2351,8 +2352,115 @@ class UtilsTestsMixin:
         # This should fail because multiple customer_ids don't exist in customers.id
         from pyspark.testing.utils import assertReferentialIntegrity
 
-        with self.assertRaises(AssertionError) as cm:
+        with self.assertRaises(AssertionError):
             assertReferentialIntegrity(orders_multiple_invalid, "customer_id", customers, "id")
+
+    def test_assert_referential_integrity_with_custom_message(self):
+        # Create a "customers" DataFrame with customer IDs
+        customers = self.spark.createDataFrame(
+            [(1, "Alice"), (2, "Bob"), (3, "Charlie")], ["id", "name"]
+        )
+
+        # Create an orders DataFrame with an invalid customer ID
+        orders_invalid = self.spark.createDataFrame(
+            [(101, 1), (102, 2), (103, 4)], ["order_id", "customer_id"]
+        )
+
+        custom_message = "All customer IDs must exist in the customers table."
+
+        with self.assertRaises(AssertionError) as cm:
+            assertReferentialIntegrity(
+                orders_invalid, "customer_id", customers, "id", message=custom_message
+            )
+
+        self.assertTrue(
+            "Column 'customer_id' contains values not found in target column 'id'" in str(cm.exception)
+        )
+        self.assertTrue("Missing values: [4]" in str(cm.exception))
+        self.assertTrue("All customer IDs must exist in the customers table." in str(cm.exception))
+
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
+    def test_assert_referential_integrity_pandas_valid(self):
+        # Create a "customers" DataFrame with customer IDs
+        import pandas as pd
+
+        customers = pd.DataFrame({"id": [1, 2, 3], "name": ["Alice", "Bob", "Charlie"]})
+
+        # Create an "orders" DataFrame with customer IDs as foreign keys
+        orders = pd.DataFrame({"order_id": [101, 102, 103, 104], "customer_id": [1, 2, 3, None]})
+
+        # This should pass because all non-null customer_ids in orders exist in customers.id
+        assertReferentialIntegrity(orders, "customer_id", customers, "id")
+
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
+    def test_assert_referential_integrity_pandas_invalid(self):
+        # Create a "customers" DataFrame with customer IDs
+        import pandas as pd
+
+        customers = pd.DataFrame({"id": [1, 2, 3], "name": ["Alice", "Bob", "Charlie"]})
+
+        # Create an orders DataFrame with an invalid customer ID
+        orders_invalid = pd.DataFrame({"order_id": [101, 102, 103], "customer_id": [1, 2, 4]})
+
+        # This should fail because customer_id 4 doesn't exist in customers.id
+        with self.assertRaises(AssertionError) as cm:
+            assertReferentialIntegrity(orders_invalid, "customer_id", customers, "id")
+
+        self.assertTrue(
+            "Column 'customer_id' contains values not found in target column 'id'" in str(cm.exception)
+        )
+        self.assertTrue("Missing values: [4]" in str(cm.exception))
+
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
+    def test_assert_referential_integrity_pandas_with_custom_message(self):
+        # Create a "customers" DataFrame with customer IDs
+        import pandas as pd
+
+        customers = pd.DataFrame({"id": [1, 2, 3], "name": ["Alice", "Bob", "Charlie"]})
+
+        # Create an orders DataFrame with an invalid customer ID
+        orders_invalid = pd.DataFrame({"order_id": [101, 102, 103], "customer_id": [1, 2, 4]})
+
+        custom_message = "All customer IDs must exist in the customers table."
+
+        with self.assertRaises(AssertionError) as cm:
+            assertReferentialIntegrity(
+                orders_invalid, "customer_id", customers, "id", message=custom_message
+            )
+
+        self.assertTrue(
+            "Column 'customer_id' contains values not found in target column 'id'" in str(cm.exception)
+        )
+        self.assertTrue("Missing values: [4]" in str(cm.exception))
+        self.assertTrue("All customer IDs must exist in the customers table." in str(cm.exception))
+
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
+    def test_assert_referential_integrity_pandas_on_spark(self):
+        # Create a "customers" DataFrame with customer IDs
+        import pandas as pd
+        import pyspark.pandas as ps
+
+        customers_pdf = pd.DataFrame({"id": [1, 2, 3], "name": ["Alice", "Bob", "Charlie"]})
+        customers_psdf = ps.from_pandas(customers_pdf)
+
+        # Create an "orders" DataFrame with customer IDs as foreign keys
+        orders_pdf = pd.DataFrame({"order_id": [101, 102, 103, 104], "customer_id": [1, 2, 3, None]})
+        orders_psdf = ps.from_pandas(orders_pdf)
+
+        # This should pass because all non-null customer_ids in orders exist in customers.id
+        assertReferentialIntegrity(orders_psdf, "customer_id", customers_psdf, "id")
+
+        # Create an orders DataFrame with an invalid customer ID
+        orders_invalid_pdf = pd.DataFrame({"order_id": [101, 102, 103], "customer_id": [1, 2, 4]})
+        orders_invalid_psdf = ps.from_pandas(orders_invalid_pdf)
+
+        # This should fail because customer_id 4 doesn't exist in customers.id
+        with self.assertRaises(AssertionError) as cm:
+            assertReferentialIntegrity(orders_invalid_psdf, "customer_id", customers_psdf, "id")
+
+        self.assertTrue(
+            "Column 'customer_id' contains values not found in target column 'id'" in str(cm.exception)
+        )
 
         # Check that the error message contains information about the missing values
         error_message = str(cm.exception)

@@ -715,6 +715,96 @@ class PandasOnSparkTestUtils:
 
             raise AssertionError(error_msg)
 
+    def assert_referential_integrity(
+        self,
+        source_df: Union[pd.DataFrame, ps.DataFrame],
+        source_column: str,
+        target_df: Union[pd.DataFrame, ps.DataFrame],
+        target_column: str,
+        message: Optional[str] = None,
+    ) -> None:
+        """
+        Assert that all non-null values in a column of one DataFrame exist in a column of
+        another DataFrame.
+
+        This function checks referential integrity between two DataFrames, similar to a foreign
+        key constraint in a relational database. It verifies that all non-null values in the
+        source column exist in the target column.
+
+        Parameters
+        ----------
+        source_df : pandas.DataFrame or pyspark.pandas.DataFrame
+            The DataFrame containing the foreign key column to check.
+        source_column : str
+            The name of the column in source_df to check (foreign key).
+        target_df : pandas.DataFrame or pyspark.pandas.DataFrame
+            The DataFrame containing the primary key column to check against.
+        target_column : str
+            The name of the column in target_df to check against (primary key).
+        message : str, optional
+            Custom error message to include if the assertion fails.
+
+        Raises
+        ------
+        AssertionError
+            If any non-null values in the source column do not exist in the target column.
+        ValueError
+            If the column parameters are invalid or if specified columns don't exist in the
+            DataFrames.
+        """
+        # Convert to pandas if they're pandas-on-Spark DataFrames
+        if not isinstance(source_df, pd.DataFrame):
+            source_df = self._to_pandas(source_df)
+
+        if not isinstance(target_df, pd.DataFrame):
+            target_df = self._to_pandas(target_df)
+
+        # Validate source_column
+        if not source_column or not isinstance(source_column, str):
+            raise ValueError("The 'source_column' parameter must be a non-empty string.")
+
+        # Validate target_column
+        if not target_column or not isinstance(target_column, str):
+            raise ValueError("The 'target_column' parameter must be a non-empty string.")
+
+        # Check if source_column exists in source_df
+        if source_column not in source_df.columns:
+            raise ValueError(f"Column '{source_column}' does not exist in the source DataFrame.")
+
+        # Check if target_column exists in target_df
+        if target_column not in target_df.columns:
+            raise ValueError(f"Column '{target_column}' does not exist in the target DataFrame.")
+
+        # Get all non-null values from the source column
+        source_values = source_df[source_column].dropna()
+
+        # Get all values from the target column
+        target_values = set(target_df[target_column].dropna())
+
+        # Find values in source that are not in target
+        missing_mask = ~source_values.isin(target_values)
+        missing_values = source_values[missing_mask]
+
+        if not missing_values.empty:
+            # Get examples of missing values (limit to 10 for readability)
+            missing_examples = missing_values.drop_duplicates().head(10).tolist()
+            missing_count = len(missing_values)
+
+            # Create error message
+            error_msg = (
+                f"Column '{source_column}' contains values not found in "
+                f"target column '{target_column}'.\n"
+            )
+            error_msg += f"Missing values: {missing_examples}" + (
+                " (showing first 10 only)" if len(missing_examples) >= 10 else ""
+            )
+            error_msg += f"\nTotal missing values: {missing_count}"
+
+            if message:
+                error_msg += f"\n{message}"
+
+            raise AssertionError(error_msg)
+
 
 class PandasOnSparkTestCase(ReusedSQLTestCase, PandasOnSparkTestUtils):
     @classmethod

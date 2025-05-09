@@ -1723,87 +1723,15 @@ def assertReferentialIntegrity(
     # Handle pandas DataFrames
     if has_pandas and has_arrow:
         import pyspark.pandas as ps
+        from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
-        # Case 1: Both are pandas DataFrames
-        if isinstance(source_df, pd.DataFrame) and isinstance(target_df, pd.DataFrame):
-            # Validate columns exist
-            if source_column not in source_df.columns:
-                raise ValueError(f"Column '{source_column}' does not exist in source DataFrame.")
-            if target_column not in target_df.columns:
-                raise ValueError(f"Column '{target_column}' does not exist in target DataFrame.")
-
-            # Get unique non-null values from source column
-            source_values = source_df[source_column].dropna().unique()
-
-            # Get unique values from target column
-            target_values = set(target_df[target_column].unique())
-
-            # Find values in source that don't exist in target
-            missing_values = [val for val in source_values if val not in target_values]
-
-            if missing_values:
-                # Count occurrences of each missing value
-                missing_counts = {}
-                for val in missing_values:
-                    missing_counts[val] = len(source_df[source_df[source_column] == val])
-
-                # Create error message
-                error_msg = (
-                    f"Column '{source_column}' contains values not found in "
-                    f"target column '{target_column}'.\n"
-                )
-                error_msg += f"Missing values: {missing_values[:10]}" + (
-                    " (showing first 10 only)" if len(missing_values) > 10 else ""
-                )
-                error_msg += f"\nTotal missing values: {len(missing_values)}"
-
-                if message:
-                    error_msg += f"\n{message}"
-
-                raise AssertionError(error_msg)
-
-            # If we get here, all values exist in target
-            return
-
-        # Case 2: Both are pandas-on-Spark DataFrames
-        elif isinstance(source_df, ps.DataFrame) and isinstance(target_df, ps.DataFrame):
-            # Validate columns exist
-            if source_column not in source_df.columns:
-                raise ValueError(f"Column '{source_column}' does not exist in source DataFrame.")
-            if target_column not in target_df.columns:
-                raise ValueError(f"Column '{target_column}' does not exist in target DataFrame.")
-
-            # Get unique non-null values from source column
-            source_values = source_df[source_column].dropna().unique().to_list()
-
-            # Get unique values from target column
-            target_values = set(target_df[target_column].unique().to_list())
-
-            # Find values in source that don't exist in target
-            missing_values = [val for val in source_values if val not in target_values]
-
-            if missing_values:
-                # Count occurrences of each missing value
-                missing_counts = {}
-                for val in missing_values:
-                    missing_counts[val] = len(source_df[source_df[source_column] == val])
-
-                # Create error message
-                error_msg = (
-                    f"Column '{source_column}' contains values not found in "
-                    f"target column '{target_column}'.\n"
-                )
-                error_msg += f"Missing values: {missing_values[:10]}" + (
-                    " (showing first 10 only)" if len(missing_values) > 10 else ""
-                )
-                error_msg += f"\nTotal missing values: {len(missing_values)}"
-
-                if message:
-                    error_msg += f"\n{message}"
-
-                raise AssertionError(error_msg)
-
-            # If we get here, all values exist in target
+        # Handle pandas and pandas-on-Spark DataFrames
+        if (isinstance(source_df, (pd.DataFrame, ps.DataFrame)) and
+            isinstance(target_df, (pd.DataFrame, ps.DataFrame))):
+            # Use the PandasOnSparkTestUtils.assert_referential_integrity method
+            PandasOnSparkTestUtils().assert_referential_integrity(
+                source_df, source_column, target_df, target_column, message
+            )
             return
 
         # Case 3: Mixed DataFrame types - convert to Spark DataFrames for comparison
