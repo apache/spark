@@ -158,9 +158,6 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
         # Set a static token for all tests so the parallelism doesn't overwrite each
         # tests' environment variables
         conf.set("spark.connect.authenticate.token", "deadbeef")
-        # Disable ml cache offloading,
-        # offloading hasn't supported APIs like model.summary / model.evaluate
-        conf.set("spark.connect.session.connectML.mlCache.memoryControl.enabled", "false")
         return conf
 
     @classmethod
