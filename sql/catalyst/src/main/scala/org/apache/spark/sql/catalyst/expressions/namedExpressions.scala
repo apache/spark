@@ -453,6 +453,48 @@ case class OuterReference(e: NamedExpression)
 }
 
 /**
+ * A place holder used to hold outer references in DomainJoins to instruct RewriteDomainJoins
+ * the mapping between domain attributes and outer references.
+ * We use it instead of OuterReference to avoid treating the already decorrelated subqueries
+ * as correlated when we rerun PullUpCorrelatedPredicates.
+ */
+case class OuterReferenceForDomainJoin(e: NamedExpression)
+  extends LeafExpression with NamedExpression with Unevaluable {
+  override def dataType: DataType = e.dataType
+  override def nullable: Boolean = e.nullable
+  override def prettyName: String = "outer"
+
+  override def sql: String = s"$prettyName(${e.sql})"
+  override def name: String = e.name
+  override def qualifier: Seq[String] = e.qualifier
+  override def exprId: ExprId = e.exprId
+  override def toAttribute: Attribute = e.toAttribute
+  override def newInstance(): NamedExpression = OuterReferenceForDomainJoin(e.newInstance())
+  final override val nodePatterns: Seq[TreePattern] = Seq(OUTER_REFERENCE_FOR_DOMAIN_JOIN)
+}
+
+/**
+ * A place holder used to hold attributes need to be propagated up through subqueries.
+ * This should be only used in PullUpCorrelatedPredicates, RewritePredicateSubquery,
+ * RewriteLateralSubquery, RewriteCorrelatedScalarSubquery rules.
+ * It can only be used in the intermediate results in the optimization stage, should not appear
+ * in the physical plan.
+ */
+case class InnerReference(e: NamedExpression)
+  extends LeafExpression with NamedExpression with Unevaluable {
+  override def dataType: DataType = e.dataType
+  override def nullable: Boolean = e.nullable
+  override def prettyName: String = "inner"
+
+  override def sql: String = s"$prettyName(${e.sql})"
+  override def name: String = e.name
+  override def qualifier: Seq[String] = e.qualifier
+  override def exprId: ExprId = e.exprId
+  override def toAttribute: Attribute = e.toAttribute
+  override def newInstance(): NamedExpression = InnerReference(e.newInstance())
+}
+
+/**
  * A placeholder used to hold a [[NamedExpression]] that has been temporarily resolved as the
  * reference to a lateral column alias. It will be restored back to [[UnresolvedAttribute]] if
  * the lateral column alias can't be resolved, or become a normal resolved column in the rewritten
