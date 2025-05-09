@@ -1057,8 +1057,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       val df = sql(s"SELECT * FROM $catalogName.tbl1")
       val row = df.collect()
       assert(row.length === 1)
-      assert(row(0).getInt(0).intValue() === 1)
-      assert(row(0).getInt(1).intValue() === 2)
+      assert(row(0).getDecimal(0).intValue() === 1)
+      assert(row(0).getDecimal(1).intValue() === 2)
 
       // Drop the table
       sql(s"DROP TABLE IF EXISTS $catalogName.tbl1")
@@ -1068,7 +1068,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           sql(s"SELECT * FROM $catalogName.tbl1")
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`tbl1`")
+        parameters = Map("relationName" -> s"`$catalogName`.`tbl1`")
       )
     }
   }
