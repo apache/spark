@@ -313,7 +313,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       assert(table.currentVersion() == "2")
       assert(table.validatedVersion() == "1")
       val constraint = getCheckConstraint(table)
-      assert(constraint.name() == "valid_map_val")
+      assert(constraint.name() == "valid_array")
       assert(constraint.toDDL ==
         "CONSTRAINT valid_array CHECK (a[1] >= -2) ENFORCED UNVALIDATED NORELY")
     }

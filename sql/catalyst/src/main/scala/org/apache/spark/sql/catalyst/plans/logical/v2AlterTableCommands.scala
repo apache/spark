@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{CheckConstraint, Expression, T
 import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{TableCatalog, TableChange}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.ArrayImplicits._
 
@@ -291,6 +292,15 @@ case class AlterTableCollation(
 
 abstract class AddConstraintBase extends AlterTableCommand {
   def tableConstraint: TableConstraint
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... ADD CONSTRAINT command for Primary Key, Foreign Key,
+ * and Unique constraints.
+ */
+case class AddConstraint(
+    override val table: LogicalPlan,
+    override val tableConstraint: TableConstraint) extends AddConstraintBase {
 
   override def changes: Seq[TableChange] = {
     val constraint = tableConstraint.toV2Constraint
@@ -302,15 +312,7 @@ abstract class AddConstraintBase extends AlterTableCommand {
     }
     Seq(TableChange.addConstraint(constraint, validatedTableVersion))
   }
-}
 
-/**
- * The logical plan of the ALTER TABLE ... ADD CONSTRAINT command for Primary Key, Foreign Key,
- * and Unique constraints.
- */
-case class AddConstraint(
-    override val table: LogicalPlan,
-    override val tableConstraint: TableConstraint) extends AddConstraintBase {
   protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
 }
 
@@ -320,6 +322,17 @@ case class AddConstraint(
 case class AddCheckConstraint(
     override val table: LogicalPlan,
     override val tableConstraint: CheckConstraint) extends AddConstraintBase {
+
+  override def changes: Seq[TableChange] = {
+    val constraint = tableConstraint.toV2Constraint
+    val validatedTableVersion = child match {
+      case Filter(_, d: DataSourceV2ScanRelation) if constraint.enforced() =>
+        d.relation.table.currentVersion()
+      case _ =>
+        null
+    }
+    Seq(TableChange.addConstraint(constraint, validatedTableVersion))
+  }
 
   protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
 }
