@@ -882,12 +882,14 @@ abstract class RDD[T: ClassTag](
   private[spark] def mapPartitionsWithIndexInternal[U: ClassTag](
       f: (Int, Iterator[T]) => Iterator[U],
       preservesPartitioning: Boolean = false,
-      isOrderSensitive: Boolean = false): RDD[U] = withScope {
+      isOrderSensitive: Boolean = false,
+      isNonDeterministic: Boolean = false): RDD[U] = withScope {
     new MapPartitionsRDD(
       this,
       (_: TaskContext, index: Int, iter: Iterator[T]) => f(index, iter),
       preservesPartitioning = preservesPartitioning,
-      isOrderSensitive = isOrderSensitive)
+      isOrderSensitive = isOrderSensitive,
+      isNonDeterministic = isNonDeterministic)
   }
 
   /**
