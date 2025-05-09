@@ -205,6 +205,13 @@ abstract class Optimizer(catalogManager: CatalogManager)
       OptimizeOneRowRelationSubquery,
       PullOutNestedDataOuterRefExpressions,
       PullupCorrelatedPredicates),
+    // This batch rewrites all correlated subqueries along with any domain joins inside.
+    // Each rule in the batch is only effective when there are nested correlated subqueries
+    // in the plan.
+    Batch("Rewrite Nested Correlated Subqueries", Once,
+      RewriteDomainJoinsInOnePass,
+      RewriteCorrelatedSubqueriesInOnePass
+    ),
     // Subquery batch applies the optimizer rules recursively. Therefore, it makes no sense
     // to enforce idempotence on it and we change this batch from Once to FixedPoint(1).
     Batch("Subquery", FixedPoint(1),
@@ -295,6 +302,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteIntersectAll.ruleName,
       ReplaceDistinctWithAggregate.ruleName,
       PullupCorrelatedPredicates.ruleName,
+      RewriteDomainJoinsInOnePass.ruleName,
       RewriteCorrelatedScalarSubquery.ruleName,
       RewritePredicateSubquery.ruleName,
       NormalizeFloatingNumbers.ruleName,
@@ -364,7 +372,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       case d: DynamicPruningSubquery => d
       case s @ ScalarSubquery(
         PhysicalOperation(projections, predicates, a @ Aggregate(group, _, child, _)),
-        _, _, _, _, mayHaveCountBug, _)
+        _, _, _, _, _, mayHaveCountBug, _)
         if conf.getConf(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG) &&
           mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
         // This is a subquery with an aggregate that may suffer from a COUNT bug.

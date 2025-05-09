@@ -2846,4 +2846,162 @@ class SubquerySuite extends QueryTest
         :: Row(true) :: Row(true) :: Row(true) :: Nil
     )
   }
+
+  test("query without count bug without domain joins") {
+    sql("CREATE TEMP VIEW t0 AS SELECT 1 AS a, 2 AS b, 3 AS c")
+    sql("CREATE TEMP VIEW t1 AS SELECT 1 AS a, 2 AS b, 3 AS c")
+    sql("CREATE TEMP VIEW t2 AS SELECT 1 AS a, 2 AS b, 3 AS c")
+    sql("CREATE TEMP VIEW t3 AS SELECT 1 AS a, 2 AS b, 3 AS c")
+    val query =
+      """
+        |SELECT *
+        |FROM t1
+        |WHERE t1.a = (
+        |  SELECT MAX(t2.a)
+        |  FROM t2
+        |  WHERE t2.a = (
+        |   SELECT MAX(t3.a)
+        |   FROM t3
+        |   WHERE t3.b = t2.b AND t3.c = t1.c
+        |  ) AND t2.b = t1.b
+        |)
+        |""".stripMargin
+    withSQLConf(
+      "spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled" -> "true",
+      "spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled" -> "true",
+      "spark.sql.planChangeLog.level" -> "info"
+    ) {
+      val df = sql(query).collect()
+    }
+    val querySuperNested =
+      """
+        |SELECT *
+        |FROM t0
+        |WHERE t0.a = (
+        |SELECT t1.a
+        |FROM t1
+        |WHERE t1.a = (
+        |  SELECT MAX(t2.a)
+        |  FROM t2
+        |  WHERE t2.a = (
+        |   SELECT MAX(t3.a)
+        |   FROM t3
+        |   WHERE t3.b = t2.b AND t3.c = t0.c
+        |  ) AND t2.b = t1.b
+        | )
+        |)
+        |""".stripMargin
+    withSQLConf(
+      "spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled" -> "true",
+      "spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled" -> "true",
+      "spark.sql.planChangeLog.level" -> "info"
+    ) {
+      val df = sql(querySuperNested).collect()
+    }
+  }
+
+  test("query without count bug with domain joins") {
+    sql("CREATE TEMP VIEW t0 AS SELECT 1 AS a, 2 AS b, 3 AS c")
+    sql("CREATE TEMP VIEW t1 AS SELECT 1 AS a, 2 AS b, 3 AS c")
+    sql("CREATE TEMP VIEW t2 AS SELECT 1 AS a, 2 AS b, 3 AS c")
+    sql("CREATE TEMP VIEW t3 AS SELECT 1 AS a, 2 AS b, 3 AS c")
+    val query =
+      """
+        |SELECT *
+        |FROM t1
+        |WHERE t1.a > (
+        |  SELECT MAX(t2.a)
+        |  FROM t2
+        |  WHERE t2.a > (
+        |   SELECT MAX(t3.a)
+        |   FROM t3
+        |   WHERE t3.b > t2.b AND t3.c > t1.c
+        |  ) AND t2.b > t1.b
+        |)
+        |""".stripMargin
+    withSQLConf(
+      "spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled" -> "true",
+      "spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled" -> "true",
+      "spark.sql.planChangeLog.level" -> "info"
+    ) {
+      val df = sql(query).collect()
+    }
+    val querySuperNested =
+      """
+        |SELECT *
+        |FROM t0
+        |WHERE t0.a > (
+        |SELECT t1.a
+        |FROM t1
+        |WHERE t1.a > (
+        |  SELECT MAX(t2.a)
+        |  FROM t2
+        |  WHERE t2.a > (
+        |   SELECT MAX(t3.a)
+        |   FROM t3
+        |   WHERE t3.b > t2.b AND t3.c > t0.c
+        |  ) AND t2.b > t1.b
+        | )
+        |)
+        |""".stripMargin
+    withSQLConf(
+      "spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled" -> "true",
+      "spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled" -> "true",
+      "spark.sql.planChangeLog.level" -> "info"
+    ) {
+      val df = sql(querySuperNested).collect()
+    }
+  }
+
+  test("avery test") {
+    val query =
+      """
+        |SELECT b, MAX(t1.a)
+        |FROM t1
+        |GROUP BY b
+        |HAVING (
+        |    SELECT MAX(t2.a)
+        |    FROM t2
+        |    WHERE t2.a = (
+        |        SELECT MAX(t3.a)
+        |        FROM t3
+        |        WHERE t3.a > MAX(t1.a)
+        |    ) AND t2.b > t1.b
+        |);
+        |""".stripMargin
+    sql("CREATE TABLE IF NOT EXISTS t1(a INT, b INT, c INT);")
+    sql("CREATE TABLE IF NOT EXISTS t2(a INT, b INT, c INT);")
+    sql("CREATE TABLE IF NOT EXISTS t3(a INT, b INT, c INT);")
+    sql("INSERT INTO t1 VALUES (0, 0, 0), (1, 1, 1), (2, 2, 2), (3, 3, 3), (NULL, NULL, NULL);")
+    sql("INSERT INTO t2 VALUES (0, 0, 0), (1, 1, 1), (2, 2, 2), (3, 3, 3), (NULL, NULL, NULL);")
+    sql("INSERT INTO t3 VALUES (0, 0, 0), (1, 1, 1), (2, 2, 2), (3, 3, 3), (NULL, NULL, NULL);")
+    withTable("t1", "t2", "t3") {
+      withSQLConf(
+        "spark.sql.planChangeLog.level" -> "info",
+        "spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled" -> "true",
+        "spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled" -> "true"
+      ) {
+        val df = sql(query).collect()
+      }
+    }
+  }
+
+  test("postgresql test") {
+    val query =
+      """
+        |SELECT i, (SELECT s1.k+s2.k FROM (SELECT (SELECT 42+i1.i) AS k) s1,
+        | (SELECT (SELECT 42+i1.i) AS k) s2) AS j FROM table_integers i1 ORDER BY i;
+        |""".stripMargin
+    sql("CREATE TABLE table_integers(i INTEGER);")
+    sql("INSERT INTO table_integers VALUES (1), (2), (3), (NULL);")
+    withTable("table_integers") {
+      withSQLConf(
+        "spark.sql.planChangeLog.level" -> "info",
+        "spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled" -> "true",
+        "spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled" -> "true"
+      ) {
+        val df = sql(query).collect()
+      }
+    }
+  }
 }
