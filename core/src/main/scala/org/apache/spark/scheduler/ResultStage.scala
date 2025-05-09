@@ -38,6 +38,9 @@ private[spark] class ResultStage(
     resourceProfileId: Int)
   extends Stage(id, rdd, partitions.length, parents, firstJobId, callSite, resourceProfileId) {
 
+  @volatile
+  private var discardResultsForAttemptId: Int = -1
+
   /**
    * The active job for this result stage. Will be empty if the job has already finished
    * (e.g., because the job was cancelled).
@@ -54,6 +57,14 @@ private[spark] class ResultStage(
     _activeJob = None
   }
 
+  override def makeNewStageAttempt(
+      numPartitionsToCompute: Int,
+      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty): Unit = {
+    super.makeNewStageAttempt(numPartitionsToCompute, taskLocalityPreferences)
+    // clear the attemptId set in the attemptIdAllPartitionsMissing
+    discardResultsForAttemptId = -1
+  }
+
   /**
    * Returns the sequence of partition ids that are missing (i.e. needs to be computed).
    *
@@ -63,6 +74,17 @@ private[spark] class ResultStage(
     val job = activeJob.get
     (0 until job.numPartitions).filter(id => !job.finished(id))
   }
+
+  def markAllPartitionsMissing(): Unit = {
+    this.discardResultsForAttemptId = this.latestInfo.attemptNumber()
+    val job = activeJob.get
+    for (id <- 0 until job.numPartitions) {
+      job.finished(id) = false
+    }
+  }
+
+  override def shouldDiscardResult(attemptId: Int): Boolean =
+    this.discardResultsForAttemptId >= attemptId
 
   override def toString: String = "ResultStage " + id
 }
