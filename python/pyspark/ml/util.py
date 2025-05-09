@@ -197,7 +197,6 @@ def try_remote_fit(f: FuncT) -> FuncT:
             )
             (_, properties, _) = client.execute_command(command)
             model_info = deserialize(properties)
-            client.add_ml_cache(model_info.obj_ref.id)
             remote_model_ref = RemoteModelRef(model_info.obj_ref.id)
             model = self._create_model(remote_model_ref)
             if model.__class__.__name__ not in ["Bucketizer"]:
@@ -303,11 +302,9 @@ def try_remote_call(f: FuncT) -> FuncT:
             ml_command_result = properties["ml_command_result"]
             if ml_command_result.HasField("summary"):
                 summary = ml_command_result.summary
-                session.client.add_ml_cache(summary)
                 return summary
             elif ml_command_result.HasField("operator_info"):
                 model_info = deserialize(properties)
-                session._client.add_ml_cache(model_info.obj_ref.id)
                 # get a new model ref id from the existing model,
                 # it is up to the caller to build the model
                 return model_info.obj_ref.id
@@ -327,7 +324,7 @@ def del_remote_cache(ref_id: str) -> None:
 
             session = SparkSession.getActiveSession()
             if session is not None:
-                session.client.remove_ml_cache(ref_id)
+                session.client._delete_ml_cache([ref_id])
                 return
         except Exception:
             # SparkSession's down.
