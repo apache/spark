@@ -49,6 +49,14 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  override def isTableNotFoundException(e: java.sql.SQLException): Boolean = {
+    e match {
+      case sqlException: java.sql.SQLException =>
+        sqlException.getMessage.contains("ORA-00942")
+      case _ => false
+    }
+  }
+
   class OracleSQLBuilder extends JDBCSQLBuilder {
 
     override def visitAggregateFunction(
