@@ -384,6 +384,7 @@ case class AdaptiveSparkPlanExec(
                 }
               })
             }
+            stagesToCancel.clear()
           }
         }
         // Now that some stages have finished, we can try creating new stages.
