@@ -391,18 +391,16 @@ class KMeans @Since("1.5.0") (
     }
 
     val model = copyValues(new KMeansModel(uid, oldModel).setParent(this))
-    if (SummaryUtils.enableTrainingSummary) {
-      val summary = new KMeansSummary(
-        model.transform(dataset),
-        $(predictionCol),
-        $(featuresCol),
-        $(k),
-        oldModel.numIter,
-        oldModel.trainingCost)
+    val summary = new KMeansSummary(
+      model.transform(dataset),
+      $(predictionCol),
+      $(featuresCol),
+      $(k),
+      oldModel.numIter,
+      oldModel.trainingCost)
 
-      model.setSummary(Some(summary))
-      instr.logNamedValue("clusterSizes", summary.clusterSizes)
-    }
+    model.setSummary(Some(summary))
+    instr.logNamedValue("clusterSizes", summary.clusterSizes)
     model
   }
 

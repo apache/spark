@@ -50,9 +50,3 @@ private[spark] trait HasTrainingSummary[T] {
     this
   }
 }
-
-private[spark] object SummaryUtils {
-
-  // This flag is only used by Spark Connect
-  private[spark] var enableTrainingSummary: Boolean = true
-}

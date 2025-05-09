@@ -430,14 +430,11 @@ class GaussianMixture @Since("2.0.0") (
 
     val model = copyValues(new GaussianMixtureModel(uid, weights, gaussianDists))
       .setParent(this)
-    if (SummaryUtils.enableTrainingSummary) {
-      val summary = new GaussianMixtureSummary(model.transform(dataset),
-        $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood, iteration)
-      instr.logNamedValue("logLikelihood", logLikelihood)
-      instr.logNamedValue("clusterSizes", summary.clusterSizes)
-      model.setSummary(Some(summary))
-    }
-    model
+    val summary = new GaussianMixtureSummary(model.transform(dataset),
+      $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood, iteration)
+    instr.logNamedValue("logLikelihood", logLikelihood)
+    instr.logNamedValue("clusterSizes", summary.clusterSizes)
+    model.setSummary(Some(summary))
   }
 
   private def trainImpl(

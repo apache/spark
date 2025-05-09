@@ -277,18 +277,15 @@ class LinearSVC @Since("2.2.0") (
     val model = copyValues(new LinearSVCModel(uid, coefficients, intercept))
     val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
 
-    if (SummaryUtils.enableTrainingSummary) {
-      val (summaryModel, rawPredictionColName, predictionColName) = model.findSummaryModel()
-      val summary = new LinearSVCTrainingSummaryImpl(
-        summaryModel.transform(dataset),
-        rawPredictionColName,
-        predictionColName,
-        $(labelCol),
-        weightColName,
-        objectiveHistory)
-      model.setSummary(Some(summary))
-    }
-    model
+    val (summaryModel, rawPredictionColName, predictionColName) = model.findSummaryModel()
+    val summary = new LinearSVCTrainingSummaryImpl(
+      summaryModel.transform(dataset),
+      rawPredictionColName,
+      predictionColName,
+      $(labelCol),
+      weightColName,
+      objectiveHistory)
+    model.setSummary(Some(summary))
   }
 
   private def trainImpl(
