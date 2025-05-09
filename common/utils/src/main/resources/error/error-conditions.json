@@ -324,6 +324,11 @@
           "The change log writer version cannot be <version>."
         ]
       },
+      "KEY_ROW_FORMAT_VALIDATION_FAILURE" : {
+        "message" : [
+          "<msg>"
+        ]
+      },
       "ROCKSDB_STORE_PROVIDER_OUT_OF_MEMORY" : {
         "message" : [
           "Could not load RocksDB state store with id <stateStoreId> because of an out of memory exception."
@@ -353,6 +358,11 @@
         "message" : [
           "<loggingId>: RocksDB instance could not be acquired by <newAcquiredThreadInfo> for operationType=<operationType> as it was not released by <acquiredThreadInfo> after <timeWaitedMs> ms.",
           "Thread holding the lock has trace: <stackTraceOutput>"
+        ]
+      },
+      "VALUE_ROW_FORMAT_VALIDATION_FAILURE" : {
+        "message" : [
+          "<msg>"
         ]
       }
     },
@@ -4944,7 +4954,7 @@
   },
   "STATE_STORE_KEY_ROW_FORMAT_VALIDATION_FAILURE" : {
     "message" : [
-      "The streaming query failed to validate written state for key row.",
+      "The streaming query failed to validate written state for key row for stateStore=<stateStoreID>.",
       "The following reasons may cause this:",
       "1. An old Spark version wrote the checkpoint that is incompatible with the current one",
       "2. Corrupt checkpoint files",
@@ -5011,7 +5021,7 @@
   },
   "STATE_STORE_VALUE_ROW_FORMAT_VALIDATION_FAILURE" : {
     "message" : [
-      "The streaming query failed to validate written state for value row.",
+      "The streaming query failed to validate written state for value row for stateStore=<stateStoreID>.",
       "The following reasons may cause this:",
       "1. An old Spark version wrote the checkpoint that is incompatible with the current one",
       "2. Corrupt checkpoint files",

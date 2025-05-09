@@ -353,7 +353,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  test("corrupted file handling") {
+  test("empty or missing file handling") {
     tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
       minDeltasForSnapshot = 5)) { provider =>
 
@@ -363,13 +363,14 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         store.commit()
         provider.doMaintenance() // do cleanup
       }
-      val snapshotVersion = (0 to 10).find( version =>
-        fileExists(provider, version, isSnapshot = true)).getOrElse(fail("snapshot file not found"))
+      val snapshotVersion = (0 to 10).find { version =>
+        fileExists(provider, version, isSnapshot = true)
+      }.getOrElse(fail("snapshot file not found"))
 
       // Corrupt snapshot file and verify that it throws error
       assert(getData(provider, snapshotVersion,
         useColumnFamilies = false) === Set(("a", 0) -> snapshotVersion))
-      corruptFile(provider, snapshotVersion, isSnapshot = true)
+      emptyFile(provider, snapshotVersion, isSnapshot = true)
       var e = intercept[SparkException] {
         getData(provider, snapshotVersion, useColumnFamilies = false)
       }
@@ -381,7 +382,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
       // Corrupt delta file and verify that it throws error
       assert(getData(provider, snapshotVersion - 1) === Set(("a", 0) -> (snapshotVersion - 1)))
-      corruptFile(provider, snapshotVersion - 1, isSnapshot = false)
+      emptyFile(provider, snapshotVersion - 1, isSnapshot = false)
       e = intercept[SparkException] {
         getData(provider, snapshotVersion - 1)
       }
@@ -404,6 +405,43 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
           "clazz" -> s"${provider.toString()}"
         )
       )
+    }
+  }
+
+  test("SPARK-51291: corrupted file handling") {
+    tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
+      minDeltasForSnapshot = 5)) { provider =>
+
+      for (i <- 1 to 6) {
+        val store = provider.getStore(i - 1)
+        put(store, "a", 0, i)
+        store.commit()
+        provider.doMaintenance() // do cleanup
+      }
+      val snapshotVersion = (0 to 10).find { version =>
+        fileExists(provider, version, isSnapshot = true)
+      }.getOrElse(fail("snapshot file not found"))
+
+      assert(getData(provider, snapshotVersion - 1) === Set(("a", 0) -> (snapshotVersion - 1)))
+
+      // Corrupt delta file and verify that it throws error
+      val method = PrivateMethod[Path](Symbol("baseDir"))
+      val basePath = provider invokePrivate method()
+      // corrupt 1.delta since we only validate the first file
+      val path = new Path(basePath.toString, "1.delta")
+      val byteArray = new Array[Byte](60)
+      provider.decompressStream(provider.fm.open(path)).readFully(byteArray)
+      byteArray(4) = -1 // Flip byte to -1 to corrupt the file and
+                        // trigger key row fmt validation error
+      val outputStream = provider.compressStream(provider.fm.createAtomic(
+        path, overwriteIfPossible = true))
+      outputStream.write(byteArray)
+      outputStream.close()
+
+      val e = intercept[SparkException] {
+        getData(provider, snapshotVersion - 1)
+      }
+      assert(e.getCondition == "CANNOT_LOAD_STATE_STORE.KEY_ROW_FORMAT_VALIDATION_FAILURE")
     }
   }
 
@@ -1068,7 +1106,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     assert(originValueMap === expectedData)
   }
 
-  def corruptFile(
+  def emptyFile(
       provider: HDFSBackedStateStoreProvider,
       version: Long,
       isSnapshot: Boolean): Unit = {
@@ -1677,7 +1715,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     val e = intercept[StateStoreValueRowFormatValidationFailure] {
       // Here valueRow doesn't match with prefixKeySchema
       StateStoreProvider.validateStateRowFormat(
-        keyRow, keySchema, valueRow, keySchema, getDefaultStoreConf())
+        keyRow, keySchema, valueRow, keySchema, StateStoreId("", 0L, 0), getDefaultStoreConf())
     }
     assert(e.getMessage.contains("The streaming query failed to validate written state"))
 
@@ -1691,7 +1729,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "true"))
     // Shouldn't throw
     StateStoreProvider.validateStateRowFormat(
-      keyRow, keySchema, valueRow, keySchema, storeConf)
+      keyRow, keySchema, valueRow, keySchema, StateStoreId("", 0L, 0), storeConf)
   }
 
   test("test serialization and deserialization of NoPrefixKeyStateEncoderSpec") {
