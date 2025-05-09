@@ -119,6 +119,38 @@ abstract class Expression extends TreeNode[Expression] {
    */
   lazy val deterministic: Boolean = children.forall(_.deterministic)
 
+  /**
+   * The information conveyed by this method hasIndeterminism differs from that conveyed
+   * by [[deterministic]] in the way that an [[Attribute]] representing an [[Expression]] having
+   * [[deterministic]] flag false, would have its [[deterministic]] flag true, but it would still
+   * have [[hasIndeterminism]] as true. Because the Attribute's evaluation represents a quantity
+   * which constitutes inDeterminism. Contrasted with [[deterministic]] flag which is always true
+   * for Leaf Expressions like [[AttributeReference]], [[hasIndeterminism]] carries information
+   * about the nature of the evaluated value, represented by the [[Expression]]
+   *
+   *
+   * To further elaborate, consider following Alias expression:
+   *
+   *  // The boolean hasInDeterminism carries the information
+   *  // that the value AttributeReference represents, has an inDeterministic
+   *  // Component to it.
+   *  val aliasExpr = new Alias (random() * Literal(3), "X")
+   *  assert aliasExpr.deterministic == false
+   *  assert aliasExpr.hasInDeterminism == true
+   *
+   *  val attribRef  = aliasExpr.toAttribute
+   *  assert attribRef.deterministic == true
+   *  assert attribRef.hasInDeterminism == true
+   *
+   * @return Boolean true if the expression's evaluated value is a result of some indeterministic
+   *         quantity.
+   */
+  def hasIndeterminism: Boolean = _hasIndeterminism
+
+  @transient
+  private lazy val _hasIndeterminism: Boolean = !deterministic ||
+    this.references.exists(_.hasIndeterminism)
+
   def nullable: Boolean
 
   /**
