@@ -418,7 +418,9 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     val df = createDSLDataFrame(
       fileName = "books-complicated.xml",
       schemaDDL = Some(
-        "_id variant, author string, title string, " +
+        "_id variant, " + // Attribute as variant
+        "author string, " +
+        "title string, " +
         "genre struct<genreid int, name variant>, " + // Struct with variant
         "price variant, " + // Scalar as variant
         "publish_dates struct<publish_date array<variant>>" // Array with variant
