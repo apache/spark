@@ -126,6 +126,7 @@ private[spark] object LogKeys {
   case object CHECKPOINT_PATH extends LogKey
   case object CHECKPOINT_ROOT extends LogKey
   case object CHECKPOINT_TIME extends LogKey
+  case object CHECKSUM extends LogKey
   case object CHOSEN_WATERMARK extends LogKey
   case object CLASSIFIER extends LogKey
   case object CLASS_LOADER extends LogKey

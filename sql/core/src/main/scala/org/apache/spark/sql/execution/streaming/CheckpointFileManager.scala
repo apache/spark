@@ -91,6 +91,8 @@ trait CheckpointFileManager {
    * checkpoint path.
    */
   def createCheckpointDirectory(): Path
+
+  def close(): Unit = {}
 }
 
 object CheckpointFileManager extends Logging {
