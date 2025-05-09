@@ -511,33 +511,25 @@ private[sql] class RocksDBStateStoreProvider
         }
       }
 
-      try {
-        // Load RocksDB store
-        rocksDB.load(
-          version,
-          stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
-          readOnly = readOnly)
+      // Load RocksDB store
+      rocksDB.load(
+        version,
+        stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
+        readOnly = readOnly)
 
-        // Create or reuse store instance
-        existingStore match {
-          case Some(store: ReadStateStore) if store.isInstanceOf[RocksDBStateStore] =>
-            // Mark store as being used for write operations
-            val rocksDBStateStore = store.asInstanceOf[RocksDBStateStore]
-            rocksDBStateStore.readOnly = readOnly
-            rocksDBStateStore.asInstanceOf[StateStore]
-          case None =>
-            // Create new store instance
-            new RocksDBStateStore(version, readOnly)
-          case _ => null // No need for error case here since we validated earlier
-        }
-      } catch {
-        case e: Throwable =>
-          throw QueryExecutionErrors.cannotLoadStore(e)
+      // Create or reuse store instance
+      existingStore match {
+        case Some(store: ReadStateStore) if store.isInstanceOf[RocksDBStateStore] =>
+          // Mark store as being used for write operations
+          val rocksDBStateStore = store.asInstanceOf[RocksDBStateStore]
+          rocksDBStateStore.readOnly = readOnly
+          rocksDBStateStore.asInstanceOf[StateStore]
+        case None =>
+          // Create new store instance
+          new RocksDBStateStore(version, readOnly)
+        case _ => null // No need for error case here since we validated earlier
       }
     } catch {
-      case e: SparkException
-        if Option(e.getCondition).exists(_.contains("CANNOT_LOAD_STATE_STORE")) =>
-        throw e
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
           stateStoreId.toString,
