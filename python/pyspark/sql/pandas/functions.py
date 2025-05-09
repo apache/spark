@@ -41,9 +41,28 @@ class PandasUDFType:
     GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
 
+class ArrowUDFType:
+    """Arrow UDF Types. See :meth:`pyspark.sql.functions.arrow_udf`."""
+
+    SCALAR = PythonEvalType.SQL_SCALAR_ARROW_UDF
+
+
+def arrow_udf(f=None, returnType=None, functionType=None):
+    return vectorized_udf(f, returnType, functionType, "arrow")
+
+
 def pandas_udf(f=None, returnType=None, functionType=None):
+    return vectorized_udf(f, returnType, functionType, "pandas")
+
+
+def vectorized_udf(
+    f=None,
+    returnType=None,
+    functionType=None,
+    kind: str = "pandas",
+):
     """
-    Creates a pandas user defined function (a.k.a. vectorized user defined function).
+    Creates a vectorized user defined function.
 
     Pandas UDFs are user defined functions that are executed by Spark using Arrow to transfer
     data and Pandas to work with the data, which allows vectorized operations. A Pandas UDF
@@ -372,6 +391,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     require_minimum_pandas_version()
     require_minimum_pyarrow_version()
 
+    assert kind in ["pandas", "arrow"], "kind should be either 'pandas' or 'arrow'"
+
     # decorator @pandas_udf(returnType, functionType)
     is_decorator = f is None or isinstance(f, (str, DataType))
 
@@ -404,7 +425,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
             messageParameters={"arg_name": "returnType"},
         )
 
-    if eval_type not in [
+    if kind == "pandas" and eval_type not in [
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
@@ -428,15 +449,38 @@ def pandas_udf(f=None, returnType=None, functionType=None):
                 "arg_type": str(eval_type),
             },
         )
+    if kind == "arrow" and eval_type not in [
+        PythonEvalType.SQL_SCALAR_ARROW_UDF,
+        None,
+    ]:  # None means it should infer the type from type hints.
+        raise PySparkTypeError(
+            errorClass="INVALID_PANDAS_UDF_TYPE",
+            messageParameters={
+                "arg_name": "functionType",
+                "arg_type": str(eval_type),
+            },
+        )
 
     if is_decorator:
-        return functools.partial(_create_pandas_udf, returnType=return_type, evalType=eval_type)
+        return functools.partial(
+            _create_vectorized_udf,
+            returnType=return_type,
+            evalType=eval_type,
+            kind=kind,
+        )
     else:
-        return _create_pandas_udf(f=f, returnType=return_type, evalType=eval_type)
+        return _create_vectorized_udf(
+            f=f,
+            returnType=return_type,
+            evalType=eval_type,
+            kind=kind,
+        )
 
 
 # validate the pandas udf and return the adjusted eval type
-def _validate_pandas_udf(f, evalType) -> int:
+def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
+    assert kind in ["pandas", "arrow"], "kind should be either 'pandas' or 'arrow'"
+
     argspec = getfullargspec(f)
 
     # pandas UDF by type hints.
@@ -482,11 +526,17 @@ def _validate_pandas_udf(f, evalType) -> int:
 
     if evalType is None:
         # Set default is scalar UDF.
-        evalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF
+        if kind == "pandas":
+            evalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF
+        else:
+            evalType = PythonEvalType.SQL_SCALAR_ARROW_UDF
+
+    kind_str = "pandas_udfs" if kind == "pandas" else "arrow_udfs"
 
     if (
         (
             evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
+            or evalType == PythonEvalType.SQL_SCALAR_ARROW_UDF
             or evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
         )
         and len(argspec.args) == 0
@@ -495,7 +545,7 @@ def _validate_pandas_udf(f, evalType) -> int:
         raise PySparkValueError(
             errorClass="INVALID_PANDAS_UDF",
             messageParameters={
-                "detail": "0-arg pandas_udfs are not supported. "
+                "detail": f"0-arg {kind_str} are not supported. "
                 "Instead, create a 1-arg pandas_udf and ignore the arg in your function.",
             },
         )
@@ -504,7 +554,7 @@ def _validate_pandas_udf(f, evalType) -> int:
         raise PySparkValueError(
             errorClass="INVALID_PANDAS_UDF",
             messageParameters={
-                "detail": "pandas_udf with function type GROUPED_MAP or the function in "
+                "detail": f"{kind_str} with function type GROUPED_MAP or the function in "
                 "groupby.applyInPandas must take either one argument (data) or "
                 "two arguments (key, data).",
             },
@@ -540,8 +590,8 @@ def _validate_pandas_udf(f, evalType) -> int:
     return evalType
 
 
-def _create_pandas_udf(f, returnType, evalType):
-    evalType = _validate_pandas_udf(f, evalType)
+def _create_vectorized_udf(f, returnType, evalType, kind):
+    evalType = _validate_vectorized_udf(f, evalType, kind)
 
     if is_remote():
         from pyspark.sql.connect.udf import _create_udf as _create_connect_udf
