@@ -2830,4 +2830,26 @@ package object config {
       .checkValues(Set("connect", "classic"))
       .createWithDefault(
         if (sys.env.get("SPARK_CONNECT_MODE").contains("1")) "connect" else "classic")
+
+  private[spark] val EXTERNAL_CLUSTER_SUBMIT_CLASS =
+    ConfigBuilder("spark.submit.external.class")
+      .doc(
+        """
+          |The class to use for submitting applications to the cluster.
+          |This is used in external cluster mode to submit the application to the cluster.
+          |""".stripMargin)
+      .version("4.0.0")
+      .stringConf
+      .createOptional
+
+  private[spark] val EXTERNAL_CLUSTER_MANAGER_JARS =
+    ConfigBuilder("spark.submit.external.jars")
+      .doc(
+        """
+          |The JAR which contains the external cluster manager implementation.
+          |This is used in external cluster mode to submit the application to the cluster.
+          |""".stripMargin)
+      .version("4.0.0")
+      .stringConf
+      .createOptional
 }
