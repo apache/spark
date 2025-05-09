@@ -123,7 +123,7 @@ case class AddColumns(
         col.nullable,
         col.comment.orNull,
         col.position.map(_.position).orNull,
-        col.getV2Default)
+        col.getV2Default("ALTER TABLE"))
     }
   }
 
@@ -159,7 +159,7 @@ case class ReplaceColumns(
         col.nullable,
         col.comment.orNull,
         null,
-        col.getV2Default)
+        col.getV2Default("ALTER TABLE"))
     }
     (deleteChanges ++ addChanges).toImmutableArraySeq
   }

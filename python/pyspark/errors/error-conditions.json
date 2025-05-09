@@ -1155,6 +1155,11 @@
       "`<backend>` does not support `<param>` set to <value>, it should be one of the values from <supported_values>"
     ]
   },
+  "UNSUPPORTED_PLOT_KIND": {
+    "message": [
+      "`<plot_type>` is not supported, it should be one of the values from <supported_plot_types>"
+    ]
+  },
   "UNSUPPORTED_SIGNATURE": {
     "message": [
       "Unsupported signature: <signature>."
