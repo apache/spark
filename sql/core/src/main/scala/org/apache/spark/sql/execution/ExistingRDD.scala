@@ -319,3 +319,51 @@ case class RDDScanExec(
 
   override def getStream: Option[SparkDataStream] = stream
 }
+
+/**
+ * A special case of RDDScanExec that is used to represent a scan without a `FROM` clause.
+ * For example, 'select version()'.
+ *
+ * We do not extend `RDDScanExec` in order to avoid complexity due to `TreeNode.makeCopy` and
+ * `TreeNode`'s general use of reflection.
+ */
+case class OneRowRelationExec() extends LeafExecNode
+  with StreamSourceAwareSparkPlan
+  with InputRDDCodegen {
+
+  override val nodeName: String = s"Scan OneRowRelation"
+
+  override val output: Seq[Attribute] = Nil
+
+  val rdd = session.sparkContext.parallelize(Seq(InternalRow()), 1)
+
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numOutputRows = longMetric("numOutputRows")
+    rdd.mapPartitionsWithIndexInternal { (index, iter) =>
+      val proj = UnsafeProjection.create(schema)
+      proj.initialize(index)
+      iter.map { r =>
+        numOutputRows += 1
+        proj(r)
+      }
+    }
+  }
+
+  override def simpleString(maxFields: Int): String = {
+    s"$nodeName${truncatedString(output, "[", ",", "]", maxFields)}"
+  }
+
+  override def inputRDD: RDD[InternalRow] = rdd
+
+  // Input can be InternalRow, has to be turned into UnsafeRows.
+  override protected val createUnsafeProjection: Boolean = true
+
+  override protected def doCanonicalize(): SparkPlan = {
+    super.doCanonicalize().asInstanceOf[OneRowRelationExec].copy()
+  }
+
+  override def getStream: Option[SparkDataStream] = None
+}
