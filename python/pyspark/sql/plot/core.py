@@ -20,7 +20,7 @@ import math
 from typing import Any, TYPE_CHECKING, List, Optional, Union, Sequence
 from types import ModuleType
 from pyspark.errors import PySparkValueError
-from pyspark.sql import Column, functions as F, SparkSession  # noqa: F401
+from pyspark.sql import Column, functions as F
 from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.pandas.utils import require_minimum_pandas_version
 from pyspark.sql.utils import NumpyHelper, require_minimum_plotly_version
@@ -151,9 +151,10 @@ class PySparkPlotAccessor:
         --------
         .. plotly::
 
+            >>> from pyspark.sql import SparkSession
+            >>> spark = SparkSession.builder.getOrCreate()
             >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
             >>> columns = ["category", "int_val", "float_val"]
-            >>> spark = SparkSession.builder.getOrCreate()
             >>> df = spark.createDataFrame(data, columns)
             >>> df.plot.line(x="category", y="int_val")  # doctest: +SKIP
             >>> df.plot.line(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
@@ -187,9 +188,10 @@ class PySparkPlotAccessor:
         --------
         .. plotly::
 
+            >>> from pyspark.sql import SparkSession
+            >>> spark = SparkSession.builder.getOrCreate()
             >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
             >>> columns = ["category", "int_val", "float_val"]
-            >>> spark = SparkSession.builder.getOrCreate()
             >>> df = spark.createDataFrame(data, columns)
             >>> df.plot.bar(x="category", y="int_val")  # doctest: +SKIP
             >>> df.plot.bar(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
@@ -232,9 +234,10 @@ class PySparkPlotAccessor:
         --------
         .. plotly::
 
+            >>> from pyspark.sql import SparkSession
+            >>> spark = SparkSession.builder.getOrCreate()
             >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
             >>> columns = ["category", "int_val", "float_val"]
-            >>> spark = SparkSession.builder.getOrCreate()
             >>> df = spark.createDataFrame(data, columns)
             >>> df.plot.barh(x="int_val", y="category")  # doctest: +SKIP
             >>> df.plot.barh(
@@ -271,9 +274,10 @@ class PySparkPlotAccessor:
         --------
         .. plotly::
 
+            >>> from pyspark.sql import SparkSession
+            >>> spark = SparkSession.builder.getOrCreate()
             >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
             >>> columns = ['length', 'width', 'species']
-            >>> spark = SparkSession.builder.getOrCreate()
             >>> df = spark.createDataFrame(data, columns)
             >>> df.plot.scatter(x='length', y='width')  # doctest: +SKIP
         """
@@ -302,6 +306,8 @@ class PySparkPlotAccessor:
         --------
         .. plotly::
 
+            >>> from pyspark.sql import SparkSession
+            >>> spark = SparkSession.builder.getOrCreate()
             >>> from datetime import datetime
             >>> data = [
             ...     (3, 5, 20, datetime(2018, 1, 31)),
@@ -310,7 +316,6 @@ class PySparkPlotAccessor:
             ...     (9, 12, 62, datetime(2018, 4, 30))
             ... ]
             >>> columns = ["sales", "signups", "visits", "date"]
-            >>> spark = SparkSession.builder.getOrCreate()
             >>> df = spark.createDataFrame(data, columns)
             >>> df.plot.area(x='date', y=['sales', 'signups', 'visits'])  # doctest: +SKIP
         """
@@ -340,6 +345,8 @@ class PySparkPlotAccessor:
         --------
         .. plotly::
 
+            >>> from pyspark.sql import SparkSession
+            >>> spark = SparkSession.builder.getOrCreate()
             >>> from datetime import datetime
             >>> data = [
             ...     (3, 5, 20, datetime(2018, 1, 31)),
@@ -348,7 +355,6 @@ class PySparkPlotAccessor:
             ...     (9, 12, 62, datetime(2018, 4, 30))
             ... ]
             >>> columns = ["sales", "signups", "visits", "date"]
-            >>> spark = SparkSession.builder.getOrCreate()
             >>> df = spark.createDataFrame(data, columns)
             >>> df.plot.pie(x='date', y='sales')  # doctest: +SKIP
             >>> df.plot.pie(x='date', subplots=True)  # doctest: +SKIP
@@ -385,6 +391,8 @@ class PySparkPlotAccessor:
         --------
         .. plotly::
 
+            >>> from pyspark.sql import SparkSession
+            >>> spark = SparkSession.builder.getOrCreate()
             >>> data = [
             ...     ("A", 50, 55),
             ...     ("B", 55, 60),
@@ -396,7 +404,6 @@ class PySparkPlotAccessor:
             ...     ("H", 5, 150),
             ... ]
             >>> columns = ["student", "math_score", "english_score"]
-            >>> spark = SparkSession.builder.getOrCreate()
             >>> df = spark.createDataFrame(data, columns)
             >>> df.plot.box()  # doctest: +SKIP
             >>> df.plot.box(column="math_score")  # doctest: +SKIP
@@ -442,9 +449,10 @@ class PySparkPlotAccessor:
         --------
         .. plotly::
 
+            >>> from pyspark.sql import SparkSession
+            >>> spark = SparkSession.builder.getOrCreate()
             >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
             >>> columns = ["length", "width", "species"]
-            >>> spark = SparkSession.builder.getOrCreate()
             >>> df = spark.createDataFrame(data, columns)
             >>> df.plot.kde(bw_method=0.3, ind=100)  # doctest: +SKIP
             >>> df.plot.kde(column=["length", "width"], bw_method=0.3, ind=100)  # doctest: +SKIP
@@ -480,9 +488,10 @@ class PySparkPlotAccessor:
         --------
         .. plotly::
 
+            >>> from pyspark.sql import SparkSession
+            >>> spark = SparkSession.builder.getOrCreate()
             >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
             >>> columns = ["length", "width", "species"]
-            >>> spark = SparkSession.builder.getOrCreate()
             >>> df = spark.createDataFrame(data, columns)
             >>> df.plot.hist(bins=4)  # doctest: +SKIP
             >>> df.plot.hist(column=["length", "width"])  # doctest: +SKIP
