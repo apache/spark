@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{AddConstraint, ColumnDefinition, CreateTable, ReplaceTable, UnresolvedTableSpec}
+import org.apache.spark.sql.catalyst.plans.logical.{AddCheckConstraint, ColumnDefinition, CreateTable, Filter, ReplaceTable, UnresolvedTableSpec}
 import org.apache.spark.sql.types.StringType
 
 class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
@@ -187,11 +187,13 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
         |ALTER TABLE a.b.t ADD CONSTRAINT c1 CHECK (a > 0)
         |""".stripMargin
     val parsed = parsePlan(sql)
-    val expected = AddConstraint(
-      UnresolvedTable(
-        Seq("a", "b", "t"),
-        "ALTER TABLE ... ADD CONSTRAINT"),
-      constraint1)
+    val expected = AddCheckConstraint(
+      Filter(
+        Not(GreaterThan(UnresolvedAttribute("a"), Literal(0))),
+        UnresolvedRelation(Seq("a", "b", "t"))
+      ),
+      constraint1
+    )
     comparePlans(parsed, expected)
   }
 
@@ -224,17 +226,20 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
            |ALTER TABLE a.b.t ADD CONSTRAINT c1 CHECK (d > 0) $enforcedStr $relyStr
            |""".stripMargin
       val parsed = parsePlan(sql)
-      val expected = AddConstraint(
-        UnresolvedTable(
-          Seq("a", "b", "t"),
-          "ALTER TABLE ... ADD CONSTRAINT"),
-        CheckConstraint(
-          child = GreaterThan(UnresolvedAttribute("d"), Literal(0)),
-          condition = "d > 0",
-          userProvidedName = "c1",
-          tableName = "t",
-          userProvidedCharacteristic = characteristic
-        ))
+      val expectedConstraint = CheckConstraint(
+        child = GreaterThan(UnresolvedAttribute("d"), Literal(0)),
+        condition = "d > 0",
+        userProvidedName = "c1",
+        tableName = "t",
+        userProvidedCharacteristic = characteristic
+      )
+      val expected = AddCheckConstraint(
+        Filter(
+          Not(GreaterThan(UnresolvedAttribute("d"), Literal(0))),
+          UnresolvedRelation(Seq("a", "b", "t"))
+        ),
+        expectedConstraint
+      )
       comparePlans(parsed, expected)
     }
   }
@@ -305,11 +310,12 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
         |""".stripMargin
     val plan = parsePlan(sql)
     plan match {
-      case a: AddConstraint =>
-        val table = a.table.asInstanceOf[UnresolvedTable]
-        assert(table.multipartIdentifier == Seq("a", "b", "t"))
-        assert(a.tableConstraint == unnamedConstraint)
-        assert(a.tableConstraint.name.matches("t_chk_[0-9a-f]{7}"))
+      case a: AddCheckConstraint =>
+        comparePlans(a.child, Filter(
+          Not(GreaterThan(UnresolvedAttribute("a"), Literal(0))),
+          UnresolvedRelation(Seq("a", "b", "t"))))
+        assert(a.checkConstraint == unnamedConstraint)
+        assert(a.checkConstraint.name.matches("t_chk_[0-9a-f]{7}"))
 
       case other =>
         fail(s"Expected AddConstraint, but got: $other")

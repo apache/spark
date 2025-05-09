@@ -534,6 +534,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       UncacheTableExec(r.table, cascade = !isTempView(r.table)) :: Nil
 
+    case a @ AddCheckConstraint(PhysicalOperation(_, _, d: DataSourceV2ScanRelation), _) =>
+      assert(d.relation.catalog.isDefined, "Catalog should be defined after analysis")
+      assert(d.relation.identifier.isDefined, "Identifier should be defined after analysis")
+      val catalog = d.relation.catalog.get.asTableCatalog
+      val identifier = d.relation.identifier.get
+      ResolveTableConstraints.validateCatalogForTableChange(a.changes, catalog, identifier)
+      AddCheckConstraintExec(
+        catalog, identifier, a.changes, a.checkConstraint.condition, planLater(a.child)) :: Nil
+
     case a: AlterTableCommand if a.table.resolved =>
       val table = a.table.asInstanceOf[ResolvedTable]
       ResolveTableConstraints.validateCatalogForTableChange(
