@@ -5818,6 +5818,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PRETTY_ALIAS_NAME_FOR_CORRELATED_AGGREGATE_FUNCTION =
+    buildConf("spark.sql.prettyAliasNameForCorrelatedAggFunc.enabled")
+      .internal()
+      .doc("When true, use prettified name for correlated aggregate functions.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *

@@ -27,11 +27,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.connector.catalog.MetadataColumn
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{MetadataBuilder, NumericType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SparkErrorUtils, Utils}
 
-package object util extends Logging {
+package object util extends Logging with SQLConfHelper {
 
   /** Silences output to stderr or stdout for the duration of f */
   def quietly[A](f: => A): A = {
@@ -103,13 +104,27 @@ package object util extends Logging {
   private def usePrettyExpression(e: Expression, stripOuterReference: Boolean = true): Expression =
     e transform {
       case aggregateExpression: AggregateExpression
-        if stripOuterReference && SubExprUtils.containsOuter(aggregateExpression) =>
+        if stripOuterReference && conf.getConf(
+          SQLConf.PRETTY_ALIAS_NAME_FOR_CORRELATED_AGGREGATE_FUNCTION
+        ) && SubExprUtils.containsOuter(aggregateExpression) =>
         val strippedAggregateExpression = SubExprUtils.stripOuterReference(aggregateExpression)
         OuterReference(
           new PrettyAttribute(
             Alias(
               strippedAggregateExpression,
-              toPrettySQL(strippedAggregateExpression)
+              toPrettySQL(strippedAggregateExpression, stripOuterReference)
+            )().toAttribute
+          )
+        )
+      case _ @ OuterReference(aggregateExpression: AggregateExpression)
+        if conf.getConf(
+          SQLConf.PRETTY_ALIAS_NAME_FOR_CORRELATED_AGGREGATE_FUNCTION
+        ) =>
+        OuterReference(
+          new PrettyAttribute(
+            Alias(
+              aggregateExpression,
+              toPrettySQL(aggregateExpression, stripOuterReference)
             )().toAttribute
           )
         )
@@ -119,16 +134,24 @@ package object util extends Logging {
       case Literal(null, dataType) => PrettyAttribute("NULL", dataType)
       case e: GetStructField =>
         val name = e.name.getOrElse(e.childSchema(e.ordinal).name)
-        PrettyAttribute(usePrettyExpression(e.child).sql + "." + name, e.dataType)
+        PrettyAttribute(
+          usePrettyExpression(e.child, stripOuterReference).sql + "." + name,
+          e.dataType
+        )
       case e: GetArrayStructFields =>
-        PrettyAttribute(s"${usePrettyExpression(e.child)}.${e.field.name}", e.dataType)
+        PrettyAttribute(
+          s"${usePrettyExpression(e.child, stripOuterReference)}.${e.field.name}",
+          e.dataType
+        )
       case r: InheritAnalysisRules =>
         PrettyAttribute(
-          r.makeSQLString(r.parameters.map(parameter => toPrettySQL(parameter))),
+          r.makeSQLString(
+            r.parameters.map(parameter => toPrettySQL(parameter, stripOuterReference))
+          ),
           r.dataType
         )
       case c: Cast if c.getTagValue(Cast.USER_SPECIFIED_CAST).isEmpty =>
-        PrettyAttribute(usePrettyExpression(c.child).sql, c.dataType)
+        PrettyAttribute(usePrettyExpression(c.child, stripOuterReference).sql, c.dataType)
       case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
     }
 
