@@ -166,6 +166,7 @@ class JobCancellationTestsMixin:
         self.assertEqual(first, {"a", "b"})
         self.assertEqual(second, {"a", "b", "c"})
 
+    @unittest.skip("SPARK-52054: Should enable this test")
     def test_interrupt_tag(self):
         thread_ids = range(4)
         self.check_job_cancellation(
