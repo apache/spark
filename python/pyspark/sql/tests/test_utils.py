@@ -1212,6 +1212,76 @@ class UtilsTestsMixin:
             "Value column must not contain nulls for this operation." in str(cm.exception)
         )
 
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
+    def test_assert_column_non_null_pandas_single_column(self):
+        # Test with a pandas DataFrame that has no null values in a column
+        import pandas as pd
+
+        df = pd.DataFrame({"id": [1, 2, 3], "value": ["a", "b", "c"]})
+        assertColumnNonNull(df, "id")
+
+        # Test with a pandas DataFrame that has null values in a column
+        df_with_nulls = pd.DataFrame({"id": [1, 2, 3], "value": ["a", None, "c"]})
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnNonNull(df_with_nulls, "value")
+
+        self.assertTrue("Column 'value' contains null values" in str(cm.exception))
+        self.assertTrue("value: 1 null value" in str(cm.exception))
+
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
+    def test_assert_column_non_null_pandas_multiple_columns(self):
+        # Test with a pandas DataFrame that has no null values in multiple columns
+        import pandas as pd
+
+        df = pd.DataFrame({"id": [1, 2, 3], "value": ["a", "b", "c"]})
+        assertColumnNonNull(df, ["id", "value"])
+
+        # Test with a pandas DataFrame that has null values in multiple columns
+        df_with_nulls = pd.DataFrame({"id": [1, None, 3], "value": ["a", "b", None]})
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnNonNull(df_with_nulls, ["id", "value"])
+
+        self.assertTrue("Columns ['id', 'value'] contain null values" in str(cm.exception))
+        self.assertTrue("id: 1 null value" in str(cm.exception))
+        self.assertTrue("value: 1 null value" in str(cm.exception))
+
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
+    def test_assert_column_non_null_pandas_with_custom_message(self):
+        # Test with a custom error message
+        import pandas as pd
+
+        df_with_nulls = pd.DataFrame({"id": [1, 2, 3], "value": ["a", None, "c"]})
+
+        custom_message = "Value column must not contain nulls for this operation."
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnNonNull(df_with_nulls, "value", message=custom_message)
+
+        self.assertTrue("Column 'value' contains null values" in str(cm.exception))
+        self.assertTrue("Value column must not contain nulls for this operation." in str(cm.exception))
+
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
+    def test_assert_column_non_null_pandas_on_spark(self):
+        # Test with a pandas-on-Spark DataFrame
+        import pandas as pd
+        import pyspark.pandas as ps
+
+        # Create a pandas-on-Spark DataFrame with no null values
+        pdf = pd.DataFrame({"id": [1, 2, 3], "value": ["a", "b", "c"]})
+        psdf = ps.from_pandas(pdf)
+        assertColumnNonNull(psdf, "id")
+
+        # Create a pandas-on-Spark DataFrame with null values
+        pdf_with_nulls = pd.DataFrame({"id": [1, 2, 3], "value": ["a", None, "c"]})
+        psdf_with_nulls = ps.from_pandas(pdf_with_nulls)
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnNonNull(psdf_with_nulls, "value")
+
+        self.assertTrue("Column 'value' contains null values" in str(cm.exception))
+
     def test_assert_column_values_in_set_single_column(self):
         # Test with a DataFrame that has all values in the accepted set
         df = self.spark.createDataFrame([(1, "A"), (2, "B"), (3, "C")], ["id", "category"])

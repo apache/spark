@@ -1338,77 +1338,11 @@ def assertColumnNonNull(
     # Handle pandas and pandas-on-Spark DataFrames
     if has_pandas and has_arrow:
         import pyspark.pandas as ps
+        from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
-        if isinstance(df, pd.DataFrame):
-            # Check if all columns exist in the DataFrame
-            missing_columns = [col for col in columns if col not in df.columns]
-            if missing_columns:
-                raise ValueError(
-                    f"The following columns do not exist in the DataFrame: {missing_columns}"
-                )
-
-            # Check for null values using pandas methods
-            null_counts = {}
-            for column in columns:
-                # Count null values in the column
-                null_count = df[column].isna().sum()
-                if null_count > 0:
-                    null_counts[column] = null_count
-
-            if null_counts:
-                # Create error message
-                column_desc = (
-                    f"Column '{columns[0]}'" if len(columns) == 1 else f"Columns {columns}"
-                )
-
-                plural = "s" if len(columns) == 1 else ""
-                error_msg = f"{column_desc} contain{plural} null values.\n"
-                error_msg += "Null counts by column:\n"
-                for col_name, count in null_counts.items():
-                    error_msg += f"- {col_name}: {count} null value{'s' if count != 1 else ''}\n"
-
-                if message:
-                    error_msg += f"\n{message}"
-
-                raise AssertionError(error_msg)
-
-            # If we get here, no null values were found
-            return
-
-        elif isinstance(df, ps.DataFrame):
-            # Check if all columns exist in the DataFrame
-            missing_columns = [col for col in columns if col not in df.columns]
-            if missing_columns:
-                raise ValueError(
-                    f"The following columns do not exist in the DataFrame: {missing_columns}"
-                )
-
-            # Check for null values using pandas-on-Spark methods
-            null_counts = {}
-            for column in columns:
-                # Count null values in the column
-                null_count = df[column].isna().sum()
-                if null_count > 0:
-                    null_counts[column] = null_count
-
-            if null_counts:
-                # Create error message
-                column_desc = (
-                    f"Column '{columns[0]}'" if len(columns) == 1 else f"Columns {columns}"
-                )
-
-                plural = "s" if len(columns) == 1 else ""
-                error_msg = f"{column_desc} contain{plural} null values.\n"
-                error_msg += "Null counts by column:\n"
-                for col_name, count in null_counts.items():
-                    error_msg += f"- {col_name}: {count} null value{'s' if count != 1 else ''}\n"
-
-                if message:
-                    error_msg += f"\n{message}"
-
-                raise AssertionError(error_msg)
-
-            # If we get here, no null values were found
+        if isinstance(df, (pd.DataFrame, ps.DataFrame)):
+            # Use the PandasOnSparkTestUtils.assert_column_non_null method to check for null values
+            PandasOnSparkTestUtils().assert_column_non_null(df, columns, message)
             return
 
     # If we get here, we're dealing with a Spark DataFrame or pandas dependencies are not available

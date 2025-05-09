@@ -547,6 +547,69 @@ class PandasOnSparkTestUtils:
 
                 raise AssertionError(error_msg)
 
+    def assert_column_non_null(
+        self,
+        df: Union[pd.DataFrame, ps.DataFrame],
+        columns: Union[str, List[str]],
+        message: Optional[str] = None,
+    ) -> None:
+        """
+        Assert that the specified column(s) in a pandas or pandas-on-Spark DataFrame
+        do not contain any null values.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame or pyspark.pandas.DataFrame
+            The DataFrame to check for null values.
+        columns : str or list of str
+            The column name(s) to check for null values. Can be a single column name or a list
+            of column names.
+        message : str, optional
+            Custom error message to include if the assertion fails.
+
+        Raises
+        ------
+        AssertionError
+            If any of the specified columns contain null values.
+        """
+        # Convert to pandas if it's a pandas-on-Spark DataFrame
+        if not isinstance(df, pd.DataFrame):
+            df = self._to_pandas(df)
+
+        # Validate columns parameter
+        if isinstance(columns, str):
+            columns = [columns]
+
+        # Check if all columns exist in the DataFrame
+        missing_columns = [col for col in columns if col not in df.columns]
+        if missing_columns:
+            raise ValueError(
+                f"The following columns do not exist in the DataFrame: {missing_columns}"
+            )
+
+        # Check for null values
+        null_counts = {}
+        for column in columns:
+            # Count null values in the column
+            null_count = df[column].isna().sum()
+            if null_count > 0:
+                null_counts[column] = null_count
+
+        if null_counts:
+            # Create error message
+            column_desc = f"Column '{columns[0]}'" if len(columns) == 1 else f"Columns {columns}"
+
+            plural = "s" if len(columns) == 1 else ""
+            error_msg = f"{column_desc} contain{plural} null values.\n"
+            error_msg += "Null counts by column:\n"
+            for col_name, count in null_counts.items():
+                error_msg += f"- {col_name}: {count} null value{'s' if count != 1 else ''}\n"
+
+            if message:
+                error_msg += f"\n{message}"
+
+            raise AssertionError(error_msg)
+
 
 class PandasOnSparkTestCase(ReusedSQLTestCase, PandasOnSparkTestUtils):
     @classmethod
