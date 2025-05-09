@@ -1013,6 +1013,12 @@ class RocksDB(
     }
   }
 
+  def release(): Unit = {
+    if (db != null) {
+      release(LoadStore)
+    }
+  }
+
   /**
    * Commit all the updates made as a version to DFS. The steps it needs to do to commits are:
    * - Flush all changes to disk
