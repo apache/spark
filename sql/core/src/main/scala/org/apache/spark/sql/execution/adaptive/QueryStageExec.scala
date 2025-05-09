@@ -148,8 +148,8 @@ abstract class QueryStageExec extends LeafExecNode {
       indent)
     lastChildren.add(true)
     plan.generateTreeString(
-      depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId, printOutputColumns,
-      indent)
+      depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId,
+      printOutputColumns, indent)
     lastChildren.remove(lastChildren.size() - 1)
   }
 

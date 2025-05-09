@@ -816,9 +816,10 @@ object QueryPlan extends PredicateHelper {
       verbose: Boolean,
       addSuffix: Boolean,
       maxFields: Int = SQLConf.get.maxToStringFields,
-      printOperatorId: Boolean = false): Unit = {
+      printOperatorId: Boolean = false,
+      printOutputColumns: Boolean = false): Unit = {
     try {
-      plan.treeString(append, verbose, addSuffix, maxFields, printOperatorId)
+      plan.treeString(append, verbose, addSuffix, maxFields, printOperatorId, printOutputColumns)
     } catch {
       case e: AnalysisException => append(e.toString)
     }

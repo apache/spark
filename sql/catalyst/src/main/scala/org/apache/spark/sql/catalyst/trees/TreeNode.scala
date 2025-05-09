@@ -1070,7 +1070,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       lastChildren.add(false)
       innerChildrenLocal.init.foreach(_.generateTreeString(
         depth + 2, lastChildren, append, verbose,
-        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent))
+        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId,
+        printOutputColumns = printOutputColumns, indent = indent))
       lastChildren.remove(lastChildren.size() - 1)
       lastChildren.remove(lastChildren.size() - 1)
 
@@ -1078,7 +1079,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       lastChildren.add(true)
       innerChildrenLocal.last.generateTreeString(
         depth + 2, lastChildren, append, verbose,
-        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent)
+        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId,
+        printOutputColumns = printOutputColumns, indent = indent)
       lastChildren.remove(lastChildren.size() - 1)
       lastChildren.remove(lastChildren.size() - 1)
     }
@@ -1087,14 +1089,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       lastChildren.add(false)
       children.init.foreach(_.generateTreeString(
         depth + 1, lastChildren, append, verbose, prefix, addSuffix,
-        maxFields, printNodeId = printNodeId, indent = indent)
+        maxFields, printNodeId = printNodeId, printOutputColumns = printOutputColumns,
+        indent = indent)
       )
       lastChildren.remove(lastChildren.size() - 1)
 
       lastChildren.add(true)
       children.last.generateTreeString(
         depth + 1, lastChildren, append, verbose, prefix,
-        addSuffix, maxFields, printNodeId = printNodeId, indent = indent)
+        addSuffix, maxFields, printNodeId = printNodeId, printOutputColumns = printOutputColumns,
+        indent = indent)
       lastChildren.remove(lastChildren.size() - 1)
     }
   }
