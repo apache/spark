@@ -526,7 +526,7 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSessi
 
   test("explode with udf") {
     Seq("NO_CODEGEN", "CODEGEN_ONLY").foreach { codegenMode =>
-      withSQLConf("spark.sql.codegen.factoryMode" -> codegenMode)  {
+      withSQLConf("spark.sql.codegen.factoryMode" -> codegenMode) {
         sql(
           """create or replace temporary function spark_func (params array<struct<x int, y int>>)
             | returns STRUCT<a: int, b: int> LANGUAGE SQL
