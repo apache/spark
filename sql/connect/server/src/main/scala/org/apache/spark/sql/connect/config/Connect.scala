@@ -352,8 +352,8 @@ object Connect {
       .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)
-      // By default, 1/3 of total designated memory (the configured -Xmx).
-      .createWithDefault(Runtime.getRuntime.maxMemory() / 3)
+      // By default, 1/4 of total designated memory (the configured -Xmx).
+      .createWithDefault(Runtime.getRuntime.maxMemory() / 4)
 
   val CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_OFFLOADING_TIMEOUT =
     buildConf("spark.connect.session.connectML.mlCache.memoryControl.offloadingTimeout")
@@ -363,7 +363,7 @@ object Connect {
       .version("4.1.0")
       .internal()
       .timeConf(TimeUnit.MINUTES)
-      .createWithDefault(5)
+      .createWithDefault(15)
 
   val CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE =
     buildConf("spark.connect.session.connectML.mlCache.memoryControl.maxModelSize")
@@ -373,8 +373,8 @@ object Connect {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("1g")
 
-  val CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_SIZE =
-    buildConf("spark.connect.session.connectML.mlCache.memoryControl.maxSize")
+  val CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_STORAGE_SIZE =
+    buildConf("spark.connect.session.connectML.mlCache.memoryControl.maxStorageSize")
       .doc("Maximum total size (including in-memory and offloaded data) of the ml cache. " +
         "The size is in bytes.")
       .version("4.1.0")

@@ -224,18 +224,15 @@ class FMClassifier @Since("3.0.0") (
     val model = copyValues(new FMClassificationModel(uid, intercept, linear, factors))
     val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
 
-    if (SummaryUtils.enableTrainingSummary) {
-      val (summaryModel, probabilityColName, predictionColName) = model.findSummaryModel()
-      val summary = new FMClassificationTrainingSummaryImpl(
-        summaryModel.transform(dataset),
-        probabilityColName,
-        predictionColName,
-        $(labelCol),
-        weightColName,
-        objectiveHistory)
-      model.setSummary(Some(summary))
-    }
-    model
+    val (summaryModel, probabilityColName, predictionColName) = model.findSummaryModel()
+    val summary = new FMClassificationTrainingSummaryImpl(
+      summaryModel.transform(dataset),
+      probabilityColName,
+      predictionColName,
+      $(labelCol),
+      weightColName,
+      objectiveHistory)
+    model.setSummary(Some(summary))
   }
 
   @Since("3.0.0")

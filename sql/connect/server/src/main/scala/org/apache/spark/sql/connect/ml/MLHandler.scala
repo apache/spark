@@ -25,7 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.tree.TreeConfig
-import org.apache.spark.ml.util.{MLWritable, Summary, SummaryUtils}
+import org.apache.spark.ml.util.{MLWritable, Summary}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.ml.Serializer.deserializeMethodArguments
@@ -54,9 +54,6 @@ private class AttributeHelper(
   def getAttribute: Any = {
     assert(methods.length >= 1)
     methods.foldLeft(instance()) { (obj, m) =>
-      if (obj.isInstanceOf[Summary]) {
-        sessionHolder.mlCache.checkSummaryAvail()
-      }
       if (m.argValues.isEmpty) {
         MLUtils.invokeMethodAllowed(obj, m.name)
       } else {
@@ -121,11 +118,6 @@ private[connect] object MLHandler extends Logging {
 
     val mlCache = sessionHolder.mlCache
     val memoryControlEnabled = sessionHolder.mlCache.getMemoryControlEnabled
-
-    // Disable model training summary when memory control is enabled
-    // because training summary can't support
-    // size estimation and offloading.
-    SummaryUtils.enableTrainingSummary = !memoryControlEnabled
 
     if (memoryControlEnabled) {
       val maxModelSize = sessionHolder.mlCache.getModelMaxSize
@@ -249,9 +241,6 @@ private[connect] object MLHandler extends Logging {
           case proto.MlCommand.Write.TypeCase.OBJ_REF => // save a model
             val objId = mlCommand.getWrite.getObjRef.getId
             val model = mlCache.get(objId).asInstanceOf[Model[_]]
-            if (model == null) {
-              throw MLCacheInvalidException(s"model $objId")
-            }
             val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
             MLUtils.setInstanceParams(copiedModel, mlCommand.getWrite.getParams)
 

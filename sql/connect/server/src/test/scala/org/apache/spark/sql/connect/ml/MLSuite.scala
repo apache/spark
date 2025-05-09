@@ -469,7 +469,7 @@ class MLSuite extends MLHelper {
     sessionHolder.session.conf
       .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE.key, "8000")
     sessionHolder.session.conf
-      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_SIZE.key, "10000")
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_STORAGE_SIZE.key, "10000")
     trainLogisticRegressionModel(sessionHolder)
     intercept[MLCacheSizeOverflowException] {
       trainLogisticRegressionModel(sessionHolder)

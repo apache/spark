@@ -185,26 +185,23 @@ class RandomForestClassifier @Since("1.4.0") (
     val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
 
     val (summaryModel, probabilityColName, predictionColName) = model.findSummaryModel()
-    if (SummaryUtils.enableTrainingSummary) {
-      val rfSummary = if (numClasses <= 2) {
-        new BinaryRandomForestClassificationTrainingSummaryImpl(
-          summaryModel.transform(dataset),
-          probabilityColName,
-          predictionColName,
-          $(labelCol),
-          weightColName,
-          Array(0.0))
-      } else {
-        new RandomForestClassificationTrainingSummaryImpl(
-          summaryModel.transform(dataset),
-          predictionColName,
-          $(labelCol),
-          weightColName,
-          Array(0.0))
-      }
-      model.setSummary(Some(rfSummary))
+    val rfSummary = if (numClasses <= 2) {
+      new BinaryRandomForestClassificationTrainingSummaryImpl(
+        summaryModel.transform(dataset),
+        probabilityColName,
+        predictionColName,
+        $(labelCol),
+        weightColName,
+        Array(0.0))
+    } else {
+      new RandomForestClassificationTrainingSummaryImpl(
+        summaryModel.transform(dataset),
+        predictionColName,
+        $(labelCol),
+        weightColName,
+        Array(0.0))
     }
-    model
+    model.setSummary(Some(rfSummary))
   }
 
   @Since("1.4.1")

@@ -826,7 +826,9 @@
       },
       "CACHE_INVALID" : {
         "message" : [
-          "Cannot retrieve <objectName> from the ML cache. It is probably because the entry has been evicted."
+          "Cannot retrieve Summary object <objectName> from the ML cache.",
+          "The Summary object is evicted if it hasn't been used a specified period of time.",
+          "You can configure the timeout by setting Spark cluster configure 'spark.connect.session.connectML.mlCache.memoryControl.offloadingTimeout'."
         ]
       },
       "ML_CACHE_SIZE_OVERFLOW_EXCEPTION" : {
@@ -834,7 +836,7 @@
           "The model cache size in current session is about to exceed",
           "<mlCacheMaxSize> bytes.",
           "Please delete existing cached model by executing 'del model' in python client before fitting new model or loading new model,",
-          "or increase Spark config 'spark.connect.session.connectML.mlCache.memoryControl.maxSize'."
+          "or increase Spark config 'spark.connect.session.connectML.mlCache.memoryControl.maxStorageSize'."
         ]
       },
       "MODEL_SIZE_OVERFLOW_EXCEPTION" : {
