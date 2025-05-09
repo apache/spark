@@ -2013,3 +2013,5 @@ class SparkConnectClient(object):
         if properties is not None and "ml_command_result" in properties:
             ml_command_result = properties["ml_command_result"]
             return [item.string for item in ml_command_result.param.array.elements]
+
+        return []
