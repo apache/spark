@@ -93,8 +93,8 @@ case class ParquetScan(
       SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
       conf.legacyParquetNanosAsLong)
 
-    val broadcastedConf = sparkSession.sparkContext.broadcast(
-      new SerializableConfiguration(hadoopConf))
+    val broadcastedConf =
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     ParquetPartitionReaderFactory(
       conf,
       broadcastedConf,
