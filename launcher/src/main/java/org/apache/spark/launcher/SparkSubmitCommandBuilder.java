@@ -126,6 +126,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     boolean isExample = false;
     List<String> submitArgs = args;
     this.userArgs = Collections.emptyList();
+    isRemote = "connect".equalsIgnoreCase(getApiMode(conf));
 
     if (args.size() > 0) {
       switch (args.get(0)) {
