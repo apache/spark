@@ -21,7 +21,7 @@ import tempfile
 import warnings
 from contextlib import contextmanager
 import decimal
-from typing import Any, Union, Optional, List
+from typing import Any, Dict, List, Optional, Set, Union
 
 
 try:
@@ -604,6 +604,111 @@ class PandasOnSparkTestUtils:
             error_msg += "Null counts by column:\n"
             for col_name, count in null_counts.items():
                 error_msg += f"- {col_name}: {count} null value{'s' if count != 1 else ''}\n"
+
+            if message:
+                error_msg += f"\n{message}"
+
+            raise AssertionError(error_msg)
+
+    def assert_column_values_in_set(
+        self,
+        df: Union[pd.DataFrame, ps.DataFrame],
+        columns: Union[str, List[str]],
+        accepted_values: Union[Set[Any], List[Any], Dict[str, Set[Any]]],
+        message: Optional[str] = None,
+    ) -> None:
+        """
+        Assert that all values in the specified column(s) of a pandas or pandas-on-Spark DataFrame
+        are within a given set of accepted values.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame or pyspark.pandas.DataFrame
+            The DataFrame to check.
+        columns : str or list of str
+            The column name(s) to check for values.
+        accepted_values : set or list or tuple or dict
+            The set of accepted values for the column(s). If columns is a list and accepted_values
+            is a dict, the keys in the dict should correspond to the column names, and the values
+            should be the sets of accepted values for each column. If columns is a list and
+            accepted_values is not a dict, the same set of accepted values will be used for all
+            columns.
+        message : str, optional
+            Custom error message to include if the assertion fails.
+
+        Raises
+        ------
+        AssertionError
+            If any of the specified columns contain values not in the accepted set.
+        """
+        # Convert to pandas if it's a pandas-on-Spark DataFrame
+        if not isinstance(df, pd.DataFrame):
+            df = self._to_pandas(df)
+
+        # Validate columns parameter
+        if isinstance(columns, str):
+            columns = [columns]
+
+        # Check if all columns exist in the DataFrame
+        missing_columns = [col for col in columns if col not in df.columns]
+        if missing_columns:
+            raise ValueError(
+                f"The following columns do not exist in the DataFrame: {missing_columns}"
+            )
+
+        # Normalize accepted_values to a dictionary mapping column names to sets of accepted values
+        if not isinstance(accepted_values, dict):
+            # Convert to set if it's not already
+            if not isinstance(accepted_values, set):
+                accepted_values = set(accepted_values)
+            # Use the same set of accepted values for all columns
+            accepted_values = {col: accepted_values for col in columns}
+        else:
+            # Verify that all columns have corresponding accepted values
+            missing_columns = [col for col in columns if col not in accepted_values]
+            if missing_columns:
+                raise ValueError(
+                    f"The following columns do not have accepted values specified: {missing_columns}"
+                )
+
+            # Convert values to sets if they're not already
+            for col, values in accepted_values.items():
+                if not isinstance(values, set):
+                    accepted_values[col] = set(values)
+
+        # Check each column for invalid values
+        invalid_columns = {}
+
+        for column in columns:
+            # Get the set of accepted values for this column
+            column_accepted_values = accepted_values[column]
+
+            # Find values that are not in the accepted set (excluding nulls)
+            invalid_mask = ~df[column].isin(list(column_accepted_values)) & ~df[column].isna()
+            invalid_values = df.loc[invalid_mask, column]
+
+            if not invalid_values.empty:
+                # Get examples of invalid values (limit to 10 for readability)
+                invalid_examples = invalid_values.drop_duplicates().head(10).tolist()
+                invalid_count = len(invalid_values)
+
+                invalid_columns[column] = {
+                    "count": invalid_count,
+                    "examples": invalid_examples,
+                    "accepted": column_accepted_values,
+                }
+
+        if invalid_columns:
+            # Create error message
+            column_desc = f"Column '{columns[0]}'" if len(columns) == 1 else f"Columns {columns}"
+            plural = "s" if len(columns) == 1 else ""
+            error_msg = f"{column_desc} contain{plural} values not in the accepted set.\n"
+
+            for column, details in invalid_columns.items():
+                error_msg += f"\nColumn '{column}':\n"
+                error_msg += f"  Accepted values: {details['accepted']}\n"
+                error_msg += f"  Invalid values found: {details['examples']}\n"
+                error_msg += f"  Total invalid values: {details['count']}\n"
 
             if message:
                 error_msg += f"\n{message}"

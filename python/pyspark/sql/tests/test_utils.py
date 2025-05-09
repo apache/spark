@@ -1367,6 +1367,98 @@ class UtilsTestsMixin:
         )
         self.assertTrue("Category must be one of the allowed values: A, B, C." in str(cm.exception))
 
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
+    def test_assert_column_values_in_set_pandas_single_column(self):
+        # Test with a pandas DataFrame that has all values in the accepted set
+        import pandas as pd
+
+        df = pd.DataFrame({"id": [1, 2, 3], "category": ["A", "B", "C"]})
+        assertColumnValuesInSet(df, "category", {"A", "B", "C"})
+
+        # Test with a pandas DataFrame that has values not in the accepted set
+        df_with_invalid = pd.DataFrame({"id": [1, 2, 3], "category": ["A", "B", "X"]})
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnValuesInSet(df_with_invalid, "category", {"A", "B", "C"})
+
+        self.assertTrue("Column 'category' contains values not in the accepted set" in str(cm.exception))
+        self.assertTrue("Invalid values found: ['X']" in str(cm.exception))
+
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
+    def test_assert_column_values_in_set_pandas_multiple_columns_same_values(self):
+        # Test with a pandas DataFrame that has all values in the accepted set for multiple columns
+        import pandas as pd
+
+        df = pd.DataFrame({"col1": ["A", "B", "C"], "col2": ["B", "A", "C"]})
+        assertColumnValuesInSet(df, ["col1", "col2"], {"A", "B", "C"})
+
+        # Test with a pandas DataFrame that has values not in the accepted set in multiple columns
+        df_with_invalid = pd.DataFrame({"col1": ["A", "B", "X"], "col2": ["B", "Y", "C"]})
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnValuesInSet(df_with_invalid, ["col1", "col2"], {"A", "B", "C"})
+
+        self.assertTrue("Columns ['col1', 'col2'] contain values not in the accepted set" in str(cm.exception))
+        self.assertTrue("Invalid values found: ['X']" in str(cm.exception))
+        self.assertTrue("Invalid values found: ['Y']" in str(cm.exception))
+
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
+    def test_assert_column_values_in_set_pandas_multiple_columns_different_values(self):
+        # Test with a pandas DataFrame that has all values in different accepted sets for multiple columns
+        import pandas as pd
+
+        df = pd.DataFrame({"id": [1, 2, 3], "category": ["A", "B", "C"]})
+        assertColumnValuesInSet(df, ["id", "category"], {"id": {1, 2, 3}, "category": {"A", "B", "C"}})
+
+        # Test with a pandas DataFrame that has values not in the accepted sets in multiple columns
+        df_with_invalid = pd.DataFrame({"id": [1, 4, 3], "category": ["A", "B", "X"]})
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnValuesInSet(
+                df_with_invalid, ["id", "category"], {"id": {1, 2, 3}, "category": {"A", "B", "C"}}
+            )
+
+        self.assertTrue("Columns ['id', 'category'] contain values not in the accepted set" in str(cm.exception))
+        self.assertTrue("Invalid values found: [4]" in str(cm.exception))
+        self.assertTrue("Invalid values found: ['X']" in str(cm.exception))
+
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
+    def test_assert_column_values_in_set_pandas_with_null_values(self):
+        # Test with a pandas DataFrame that has null values (which should be ignored)
+        import pandas as pd
+
+        df = pd.DataFrame({"id": [1, 2, 3], "category": ["A", None, "C"]})
+        assertColumnValuesInSet(df, "category", {"A", "B", "C"})
+
+        # Test with a pandas DataFrame that has null values and invalid values
+        df_with_invalid = pd.DataFrame({"id": [1, 2, 3], "category": ["A", None, "X"]})
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnValuesInSet(df_with_invalid, "category", {"A", "B", "C"})
+
+        self.assertTrue("Column 'category' contains values not in the accepted set" in str(cm.exception))
+        self.assertTrue("Invalid values found: ['X']" in str(cm.exception))
+
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
+    def test_assert_column_values_in_set_pandas_on_spark(self):
+        # Test with a pandas-on-Spark DataFrame
+        import pandas as pd
+        import pyspark.pandas as ps
+
+        # Create a pandas-on-Spark DataFrame with all values in the accepted set
+        pdf = pd.DataFrame({"id": [1, 2, 3], "category": ["A", "B", "C"]})
+        psdf = ps.from_pandas(pdf)
+        assertColumnValuesInSet(psdf, "category", {"A", "B", "C"})
+
+        # Create a pandas-on-Spark DataFrame with values not in the accepted set
+        pdf_with_invalid = pd.DataFrame({"id": [1, 2, 3], "category": ["A", "B", "X"]})
+        psdf_with_invalid = ps.from_pandas(pdf_with_invalid)
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnValuesInSet(psdf_with_invalid, "category", {"A", "B", "C"})
+
+        self.assertTrue("Column 'category' contains values not in the accepted set" in str(cm.exception))
+
     def test_row_order_ignored(self):
         # test that row order is ignored (not checked) by default
         df1 = self.spark.createDataFrame(

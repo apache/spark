@@ -1525,113 +1525,11 @@ def assertColumnValuesInSet(
     # Handle pandas and pandas-on-Spark DataFrames
     if has_pandas and has_arrow:
         import pyspark.pandas as ps
+        from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
-        if isinstance(df, pd.DataFrame):
-            # Check if all columns exist in the DataFrame
-            missing_columns = [col for col in columns if col not in df.columns]
-            if missing_columns:
-                raise ValueError(
-                    f"The following columns do not exist in the DataFrame: {missing_columns}"
-                )
-
-            # Check each column for invalid values
-            invalid_columns = {}
-
-            for column in columns:
-                # Get the set of accepted values for this column
-                column_accepted_values = accepted_values[column]
-
-                # Find values that are not in the accepted set and not null
-                invalid_mask = ~df[column].isin(list(column_accepted_values)) & ~df[column].isna()
-                invalid_values_df = df[invalid_mask]
-
-                # Count invalid values
-                invalid_count = len(invalid_values_df)
-
-                if invalid_count > 0:
-                    # Get examples of invalid values (limit to 10 for readability)
-                    invalid_examples = invalid_values_df[column].drop_duplicates().head(10).tolist()
-
-                    invalid_columns[column] = {
-                        "count": invalid_count,
-                        "examples": invalid_examples,
-                        "accepted": column_accepted_values,
-                    }
-
-            if invalid_columns:
-                # Create error message
-                column_desc = (
-                    f"Column '{columns[0]}'" if len(columns) == 1 else f"Columns {columns}"
-                )
-                plural = "s" if len(columns) == 1 else ""
-                error_msg = f"{column_desc} contain{plural} " f"values not in the accepted set.\n"
-
-                for column, details in invalid_columns.items():
-                    error_msg += f"\nColumn '{column}':\n"
-                    error_msg += f"  Accepted values: {details['accepted']}\n"
-                    error_msg += f"  Invalid values found: {details['examples']}\n"
-                    error_msg += f"  Total invalid values: {details['count']}\n"
-
-                if message:
-                    error_msg += f"\n{message}"
-
-                raise AssertionError(error_msg)
-
-            # If we get here, all values are in the accepted sets
-            return
-
-        elif isinstance(df, ps.DataFrame):
-            # Check if all columns exist in the DataFrame
-            missing_columns = [col for col in columns if col not in df.columns]
-            if missing_columns:
-                raise ValueError(
-                    f"The following columns do not exist in the DataFrame: {missing_columns}"
-                )
-
-            # Check each column for invalid values
-            invalid_columns = {}
-
-            for column in columns:
-                # Get the set of accepted values for this column
-                column_accepted_values = accepted_values[column]
-
-                # Find values that are not in the accepted set and not null
-                invalid_mask = ~df[column].isin(list(column_accepted_values)) & ~df[column].isna()
-                invalid_values_df = df[invalid_mask]
-
-                # Count invalid values
-                invalid_count = len(invalid_values_df)
-
-                if invalid_count > 0:
-                    # Get examples of invalid values (limit to 10 for readability)
-                    invalid_examples = invalid_values_df[column].drop_duplicates().head(10).tolist()
-
-                    invalid_columns[column] = {
-                        "count": invalid_count,
-                        "examples": invalid_examples,
-                        "accepted": column_accepted_values,
-                    }
-
-            if invalid_columns:
-                # Create error message
-                column_desc = (
-                    f"Column '{columns[0]}'" if len(columns) == 1 else f"Columns {columns}"
-                )
-                plural = "s" if len(columns) == 1 else ""
-                error_msg = f"{column_desc} contain{plural} " f"values not in the accepted set.\n"
-
-                for column, details in invalid_columns.items():
-                    error_msg += f"\nColumn '{column}':\n"
-                    error_msg += f"  Accepted values: {details['accepted']}\n"
-                    error_msg += f"  Invalid values found: {details['examples']}\n"
-                    error_msg += f"  Total invalid values: {details['count']}\n"
-
-                if message:
-                    error_msg += f"\n{message}"
-
-                raise AssertionError(error_msg)
-
-            # If we get here, all values are in the accepted sets
+        if isinstance(df, (pd.DataFrame, ps.DataFrame)):
+            # Use the PandasOnSparkTestUtils.assert_column_values_in_set method to check values
+            PandasOnSparkTestUtils().assert_column_values_in_set(df, columns, accepted_values, message)
             return
 
     # If we get here, we're dealing with a Spark DataFrame or pandas dependencies are not available
