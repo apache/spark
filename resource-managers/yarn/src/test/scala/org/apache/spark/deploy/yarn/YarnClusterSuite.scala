@@ -777,34 +777,6 @@ private object YarnClasspathTest extends Logging {
 
 }
 
-private object YarnConnectTest extends Logging {
-  def main(args: Array[String]): Unit = {
-    val output = new java.io.PrintStream(new File(args(0)))
-    val clz = Utils.classForName("org.apache.spark.sql.SparkSession$")
-    val moduleField = clz.getDeclaredField("MODULE$")
-    val obj = moduleField.get(null)
-    var builder = clz.getMethod("builder").invoke(obj)
-    builder = builder.getClass().getMethod(
-      "config", classOf[String], classOf[String]).invoke(builder, SPARK_API_MODE.key, "connect")
-    builder = builder.getClass().getMethod("master", classOf[String]).invoke(builder, "yarn")
-    val session = builder.getClass().getMethod("getOrCreate").invoke(builder)
-
-    try {
-      // Check if the current session is a Spark Connect session.
-      session.getClass().getDeclaredField("client")
-      val df = session.getClass().getMethod("range", classOf[Long]).invoke(session, 10)
-      assert(df.getClass().getMethod("count").invoke(df) == 10)
-    } catch {
-      case e: Throwable =>
-        e.printStackTrace(new java.io.PrintStream(output))
-        throw e
-    } finally {
-      session.getClass().getMethod("stop").invoke(session)
-      output.close()
-    }
-  }
-}
-
 private object YarnAddJarTest extends Logging {
   def main(args: Array[String]): Unit = {
     if (args.length != 3) {

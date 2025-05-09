@@ -1975,19 +1975,6 @@ class SparkConnectClient(object):
         profile_id = properties["create_resource_profile_command_result"]
         return profile_id
 
-    def add_ml_cache(self, cache_id: str) -> None:
-        if not hasattr(self.thread_local, "ml_caches"):
-            self.thread_local.ml_caches = set()
-        self.thread_local.ml_caches.add(cache_id)
-
-    def remove_ml_cache(self, cache_id: str) -> None:
-        deleted = self._delete_ml_cache([cache_id])
-        # TODO: Fix the code: change thread-local `ml_caches` to global `ml_caches`.
-        if hasattr(self.thread_local, "ml_caches"):
-            if cache_id in self.thread_local.ml_caches:
-                for obj_id in deleted:
-                    self.thread_local.ml_caches.remove(obj_id)
-
     def _delete_ml_cache(self, cache_ids: List[str]) -> List[str]:
         # try best to delete the cache
         try:
@@ -2009,24 +1996,22 @@ class SparkConnectClient(object):
             return []
 
     def _cleanup_ml_cache(self) -> None:
-        if hasattr(self.thread_local, "ml_caches"):
-            try:
-                command = pb2.Command()
-                command.ml_command.clean_cache.SetInParent()
-                self.execute_command(command)
-                self.thread_local.ml_caches.clear()
-            except Exception:
-                pass
+        try:
+            command = pb2.Command()
+            command.ml_command.clean_cache.SetInParent()
+            self.execute_command(command)
+        except Exception:
+            pass
 
     def _get_ml_cache_info(self) -> List[str]:
-        if hasattr(self.thread_local, "ml_caches"):
-            command = pb2.Command()
-            command.ml_command.get_cache_info.SetInParent()
-            (_, properties, _) = self.execute_command(command)
+        command = pb2.Command()
+        command.ml_command.get_cache_info.SetInParent()
+        (_, properties, _) = self.execute_command(command)
 
-            assert properties is not None
+        assert properties is not None
 
-            if properties is not None and "ml_command_result" in properties:
-                ml_command_result = properties["ml_command_result"]
-                return [item.string for item in ml_command_result.param.array.elements]
+        if properties is not None and "ml_command_result" in properties:
+            ml_command_result = properties["ml_command_result"]
+            return [item.string for item in ml_command_result.param.array.elements]
+
         return []

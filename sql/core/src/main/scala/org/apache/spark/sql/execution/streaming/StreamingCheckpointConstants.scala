@@ -21,4 +21,5 @@ object StreamingCheckpointConstants {
   val DIR_NAME_COMMITS = "commits"
   val DIR_NAME_OFFSETS = "offsets"
   val DIR_NAME_STATE = "state"
+  val DIR_NAME_METADATA = "metadata"
 }

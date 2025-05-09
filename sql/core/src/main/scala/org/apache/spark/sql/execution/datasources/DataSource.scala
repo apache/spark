@@ -467,8 +467,10 @@ case class DataSource(
     val allPaths = paths ++ caseInsensitiveOptions.get("path")
     val outputPath = if (allPaths.length == 1) {
       makeQualified(new Path(allPaths.head))
-    } else {
+    } else if (allPaths.length > 1) {
       throw QueryExecutionErrors.multiplePathsSpecifiedError(allPaths)
+    } else {
+      throw QueryExecutionErrors.dataPathNotSpecifiedError()
     }
 
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis

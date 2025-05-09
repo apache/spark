@@ -127,7 +127,7 @@ WITH RECURSIVE t(col) (
   UNION ALL
   SELECT (SELECT max(col) FROM t)
 )
-SELECT * FROM t;
+SELECT * FROM t LIMIT 5;
 
 -- complicated subquery example: self-reference in subquery in an inner CTE
 WITH

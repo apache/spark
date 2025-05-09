@@ -313,7 +313,13 @@ object ImputerModel extends MLReadable[ImputerModel] {
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val dataPath = new Path(path, "data").toString
-      instance.surrogateDF.repartition(1).write.parquet(dataPath)
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        ReadWriteUtils.saveObjectToLocal[(Array[String], Array[Double])](
+          dataPath, (instance.columnNames, instance.surrogates)
+        )
+      } else {
+        instance.surrogateDF.repartition(1).write.parquet(dataPath)
+      }
     }
   }
 
@@ -324,11 +330,16 @@ object ImputerModel extends MLReadable[ImputerModel] {
     override def load(path: String): ImputerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val row = sparkSession.read.parquet(dataPath).head()
-      val (columnNames, surrogates) = row.schema.fieldNames.zipWithIndex
-        .map { case (name, index) => (name, row.getDouble(index)) }
-        .unzip
-      val model = new ImputerModel(metadata.uid, columnNames, surrogates)
+      val model = if (ReadWriteUtils.localSavingModeState.get()) {
+        val data = ReadWriteUtils.loadObjectFromLocal[(Array[String], Array[Double])](dataPath)
+        new ImputerModel(metadata.uid, data._1, data._2)
+      } else {
+        val row = sparkSession.read.parquet(dataPath).head()
+        val (columnNames, surrogates) = row.schema.fieldNames.zipWithIndex
+          .map { case (name, index) => (name, row.getDouble(index)) }
+          .unzip
+        new ImputerModel(metadata.uid, columnNames, surrogates)
+      }
       metadata.getAndSetParams(model)
       model
     }

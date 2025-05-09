@@ -42,7 +42,6 @@ from typing import (
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import _with_origin
 from pyspark.sql.column import Column
-from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 from pyspark.sql.types import (
     ArrayType,
     ByteType,
@@ -72,6 +71,7 @@ from pyspark.sql.utils import (
 
 if TYPE_CHECKING:
     from pyspark import SparkContext
+    from pyspark.sql.dataframe import DataFrame
     from pyspark.sql._typing import (
         ColumnOrName,
         DataTypeOrString,
@@ -6635,7 +6635,7 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
 
 
 @_try_remote_functions
-def broadcast(df: "ParentDataFrame") -> "ParentDataFrame":
+def broadcast(df: "DataFrame") -> "DataFrame":
     """
     Marks a DataFrame as small enough for use in broadcast joins.
 
@@ -6664,9 +6664,10 @@ def broadcast(df: "ParentDataFrame") -> "ParentDataFrame":
     +-----+---+
     """
     from py4j.java_gateway import JVMView
+    from pyspark.sql.dataframe import DataFrame
 
     sc = _get_active_spark_context()
-    return ParentDataFrame(cast(JVMView, sc._jvm).functions.broadcast(df._jdf), df.sparkSession)
+    return DataFrame(cast(JVMView, sc._jvm).functions.broadcast(df._jdf), df.sparkSession)
 
 
 @_try_remote_functions

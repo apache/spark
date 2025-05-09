@@ -23,7 +23,7 @@ import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.exceptions.SqlScriptingException.errorMessageWithLineNumber
 
-class SqlScriptingException (
+private[sql] class SqlScriptingException (
     errorClass: String,
     cause: Throwable,
     val origin: Origin,

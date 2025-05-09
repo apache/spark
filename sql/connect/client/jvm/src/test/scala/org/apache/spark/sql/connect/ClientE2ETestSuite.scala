@@ -228,11 +228,12 @@ class ClientE2ETestSuite
   }
 
   test("spark deep recursion") {
+    var recursionDepth = if (System.getProperty("os.arch") == "s390x") 400 else 500
     var df = spark.range(1)
-    for (a <- 1 to 500) {
+    for (a <- 1 to recursionDepth) {
       df = df.union(spark.range(a, a + 1))
     }
-    assert(df.collect().length == 501)
+    assert(df.collect().length == recursionDepth + 1)
   }
 
   test("handle unknown exception") {

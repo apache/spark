@@ -108,7 +108,7 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val parsedOptions = new CSVOptions(
       options,
       sparkSession.sessionState.conf.csvColumnPruning,

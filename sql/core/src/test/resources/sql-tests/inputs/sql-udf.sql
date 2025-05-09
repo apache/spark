@@ -151,6 +151,43 @@ CREATE FUNCTION foo1f2(id BIGINT GENERATED ALWAYS AS IDENTITY) RETURNS BIGINT RE
 CREATE FUNCTION foo1g1(x INT, y INT UNIQUE) RETURNS INT RETURN y + 1;
 CREATE FUNCTION foo1g2(id BIGINT CHECK (true)) RETURNS BIGINT RETURN id + 1;
 
+-- 1.2 Returns Columns
+-- 1.2.a A table function with various numbers of returns columns
+-- Expect error: Cannot have an empty RETURNS
+CREATE FUNCTION foo2a0() RETURNS TABLE() RETURN SELECT 1;
+
+CREATE FUNCTION foo2a2() RETURNS TABLE(c1 INT, c2 INT) RETURN SELECT 1, 2;
+-- Expect (1, 2)
+SELECT * FROM foo2a2();
+
+CREATE FUNCTION foo2a4() RETURNS TABLE(c1 INT, c2 INT, c3 INT, c4 INT) RETURN SELECT 1, 2, 3, 4;
+-- Expect (1, 2, 3, 4)
+SELECT * FROM foo2a2();
+
+-- 1.2.b Duplicates in RETURNS clause
+-- Expect failure
+CREATE FUNCTION foo2b1() RETURNS TABLE(DuPLiCatE INT, duplicate INT) RETURN SELECT 1, 2;
+
+-- Expect failure
+CREATE FUNCTION foo2b2() RETURNS TABLE(a INT, b INT, duplicate INT, c INT, d INT, e INT, DUPLICATE INT)
+RETURN SELECT 1, 2, 3, 4, 5, 6, 7;
+
+-- 1.2.c No DEFAULT allowed in RETURNS
+CREATE FUNCTION foo2c1() RETURNS TABLE(c1 INT DEFAULT 5) RETURN SELECT 1, 2;
+
+-- 1.3 Mismatched RETURN
+-- Expect Failure
+CREATE FUNCTION foo31() RETURNS INT RETURN (SELECT 1, 2);
+
+CREATE FUNCTION foo32() RETURNS TABLE(a INT) RETURN SELECT 1, 2;
+
+CREATE FUNCTION foo33() RETURNS TABLE(a INT, b INT) RETURN SELECT 1;
+
+-- 1.4 Table function returns expression and vice versa
+CREATE FUNCTION foo41() RETURNS INT RETURN SELECT 1;
+-- Expect failure
+CREATE FUNCTION foo42() RETURNS TABLE(a INT) RETURN 1;
+
 -------------------------------
 -- 2. Scalar SQL UDF
 -- 2.1 deterministic simple expressions

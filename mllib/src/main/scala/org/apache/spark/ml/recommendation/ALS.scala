@@ -547,6 +547,8 @@ class ALSModel private[ml] (
   }
 }
 
+private[ml] case class FeatureData(id: Int, features: Array[Float])
+
 @Since("1.6.0")
 object ALSModel extends MLReadable[ALSModel] {
 
@@ -569,9 +571,21 @@ object ALSModel extends MLReadable[ALSModel] {
       val extraMetadata = "rank" -> instance.rank
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession, Some(extraMetadata))
       val userPath = new Path(path, "userFactors").toString
-      instance.userFactors.write.format("parquet").save(userPath)
       val itemPath = new Path(path, "itemFactors").toString
-      instance.itemFactors.write.format("parquet").save(itemPath)
+
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        // Import implicits for Dataset Encoder
+        val sparkSession = super.sparkSession
+        import sparkSession.implicits._
+
+        val userFactorsData = instance.userFactors.as[FeatureData].collect()
+        ReadWriteUtils.saveArray(userPath, userFactorsData, sparkSession)
+        val itemFactorsData = instance.itemFactors.as[FeatureData].collect()
+        ReadWriteUtils.saveArray(itemPath, itemFactorsData, sparkSession)
+      } else {
+        instance.userFactors.write.format("parquet").save(userPath)
+        instance.itemFactors.write.format("parquet").save(itemPath)
+      }
     }
   }
 
@@ -585,9 +599,20 @@ object ALSModel extends MLReadable[ALSModel] {
       implicit val format = DefaultFormats
       val rank = (metadata.metadata \ "rank").extract[Int]
       val userPath = new Path(path, "userFactors").toString
-      val userFactors = sparkSession.read.format("parquet").load(userPath)
       val itemPath = new Path(path, "itemFactors").toString
-      val itemFactors = sparkSession.read.format("parquet").load(itemPath)
+
+      val (userFactors, itemFactors) = if (ReadWriteUtils.localSavingModeState.get()) {
+        import org.apache.spark.util.ArrayImplicits._
+        val userFactorsData = ReadWriteUtils.loadArray[FeatureData](userPath, sparkSession)
+        val userFactors = sparkSession.createDataFrame(userFactorsData.toImmutableArraySeq)
+        val itemFactorsData = ReadWriteUtils.loadArray[FeatureData](itemPath, sparkSession)
+        val itemFactors = sparkSession.createDataFrame(itemFactorsData.toImmutableArraySeq)
+        (userFactors, itemFactors)
+      } else {
+        val userFactors = sparkSession.read.format("parquet").load(userPath)
+        val itemFactors = sparkSession.read.format("parquet").load(itemPath)
+        (userFactors, itemFactors)
+      }
 
       val model = new ALSModel(metadata.uid, rank, userFactors, itemFactors)
 

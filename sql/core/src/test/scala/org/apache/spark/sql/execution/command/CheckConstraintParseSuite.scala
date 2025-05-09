@@ -39,6 +39,8 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
     userProvidedName = "c2",
     tableName = "t")
 
+  val unnamedConstraint = constraint1.withUserProvidedName(null)
+
   test("Create table with one check constraint - table level") {
     val sql = "CREATE TABLE t (a INT, b STRING, CONSTRAINT c1 CHECK (a > 0)) USING parquet"
     verifyConstraints(sql, Seq(constraint1))
@@ -56,8 +58,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
       case (enforcedStr, relyStr, characteristic) =>
         val sql = s"CREATE TABLE t (a INT, b STRING, CONSTRAINT c1 CHECK (a > 0) " +
           s"$enforcedStr $relyStr) USING parquet"
-        val constraint = constraint1.withUserProvidedName("c1")
-          .withUserProvidedCharacteristic(characteristic)
+        val constraint = constraint1.withUserProvidedCharacteristic(characteristic)
         verifyConstraints(sql, Seq(constraint))
     }
   }
@@ -102,8 +103,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
       case (enforcedStr, relyStr, characteristic) =>
         val sql = s"CREATE TABLE t (a INT CONSTRAINT c1 CHECK (a > 0)" +
           s" $enforcedStr $relyStr, b STRING) USING parquet"
-        val constraint = constraint1.withUserProvidedName("c1")
-          .withUserProvidedCharacteristic(characteristic)
+        val constraint = constraint1.withUserProvidedCharacteristic(characteristic)
         verifyConstraints(sql, Seq(constraint))
     }
   }
@@ -151,8 +151,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
       case (enforcedStr, relyStr, characteristic) =>
         val sql = s"REPLACE TABLE t (a INT, b STRING, CONSTRAINT c1 CHECK (a > 0) " +
           s"$enforcedStr $relyStr) USING parquet"
-        val constraint = constraint1.withUserProvidedName("c1")
-          .withUserProvidedCharacteristic(characteristic)
+        val constraint = constraint1.withUserProvidedCharacteristic(characteristic)
         verifyConstraints(sql, Seq(constraint), isCreateTable = false)
     }
   }
@@ -271,7 +270,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
         case c: CreateTable =>
           val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
           assert(tableSpec.constraints.size == 1)
-          assert(tableSpec.constraints.head == constraint1.withUserProvidedName(null))
+          assert(tableSpec.constraints.head == unnamedConstraint)
           assert(tableSpec.constraints.head.name.matches("t_chk_[0-9a-f]{7}"))
 
         case other =>
@@ -290,7 +289,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
         case c: ReplaceTable =>
           val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
           assert(tableSpec.constraints.size == 1)
-          assert(tableSpec.constraints.head == constraint1.withUserProvidedName(null))
+          assert(tableSpec.constraints.head == unnamedConstraint)
           assert(tableSpec.constraints.head.name.matches("t_chk_[0-9a-f]{7}"))
 
         case other =>
@@ -309,7 +308,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
       case a: AddConstraint =>
         val table = a.table.asInstanceOf[UnresolvedTable]
         assert(table.multipartIdentifier == Seq("a", "b", "t"))
-        assert(a.tableConstraint == constraint1.withUserProvidedName(null))
+        assert(a.tableConstraint == unnamedConstraint)
         assert(a.tableConstraint.name.matches("t_chk_[0-9a-f]{7}"))
 
       case other =>
@@ -317,4 +316,87 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
     }
   }
 
+  test("NOT ENFORCED is not supported for CHECK -- table level") {
+    notEnforcedConstraintCharacteristics.foreach { case (c1, c2, _) =>
+      val characteristic = if (c2.isEmpty) {
+        c1
+      } else {
+        s"$c1 $c2"
+      }
+      val sql =
+        s"""
+           |CREATE TABLE a.b.t (a INT, b STRING, CONSTRAINT C1 CHECK (a > 0) $characteristic)
+           |""".stripMargin
+
+      val expectedContext = ExpectedContext(
+        fragment = s"CONSTRAINT C1 CHECK (a > 0) $characteristic"
+      )
+
+      checkError(
+        exception = intercept[ParseException] {
+          parsePlan(sql)
+        },
+        condition = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
+        parameters = Map(
+          "characteristic" -> "NOT ENFORCED",
+          "constraintType" -> "CHECK"),
+        queryContext = Array(expectedContext))
+    }
+  }
+
+  test("NOT ENFORCED is not supported for CHECK -- column level") {
+    notEnforcedConstraintCharacteristics.foreach { case (c1, c2, _) =>
+      val characteristic = if (c2.isEmpty) {
+        c1
+      } else {
+        s"$c1 $c2"
+      }
+      val sql =
+        s"""
+           |CREATE TABLE a.b.t (a INT CHECK (a > 0) $characteristic, b STRING)
+           |""".stripMargin
+
+      val expectedContext = ExpectedContext(
+        fragment = s"CHECK (a > 0) $characteristic"
+      )
+
+      checkError(
+        exception = intercept[ParseException] {
+          parsePlan(sql)
+        },
+        condition = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
+        parameters = Map(
+          "characteristic" -> "NOT ENFORCED",
+          "constraintType" -> "CHECK"),
+        queryContext = Array(expectedContext))
+    }
+  }
+
+  test("NOT ENFORCED is not supported for CHECK -- ALTER TABLE") {
+    notEnforcedConstraintCharacteristics.foreach { case (c1, c2, _) =>
+      val characteristic = if (c2.isEmpty) {
+        c1
+      } else {
+        s"$c1 $c2"
+      }
+      val sql =
+        s"""
+           |ALTER TABLE a.b.t ADD CONSTRAINT C1 CHECK (a > 0) $characteristic
+           |""".stripMargin
+
+      val expectedContext = ExpectedContext(
+        fragment = s"CONSTRAINT C1 CHECK (a > 0) $characteristic"
+      )
+
+      checkError(
+        exception = intercept[ParseException] {
+          parsePlan(sql)
+        },
+        condition = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
+        parameters = Map(
+          "characteristic" -> "NOT ENFORCED",
+          "constraintType" -> "CHECK"),
+        queryContext = Array(expectedContext))
+    }
+  }
 }

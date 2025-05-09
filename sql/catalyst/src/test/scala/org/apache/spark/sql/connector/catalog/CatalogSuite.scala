@@ -1327,4 +1327,25 @@ class CatalogSuite extends SparkFunSuite {
     intercept[NoSuchFunctionException](catalog.loadFunction(Identifier.of(Array("ns"), "func1")))
     intercept[NoSuchFunctionException](catalog.loadFunction(Identifier.of(Array("ns1"), "func")))
   }
+
+  test("currentVersion") {
+    val catalog = newCatalog()
+
+    val table = catalog.createTable(testIdent, columns, emptyTrans, emptyProps)
+      .asInstanceOf[InMemoryTable]
+    assert(table.currentVersion() == "0")
+    table.withData(Array(
+      new BufferedRows("3").withRow(InternalRow(0, "abc", "3")),
+      new BufferedRows("4").withRow(InternalRow(1, "def", "4"))))
+    assert(table.currentVersion() == "1")
+
+    table.truncateTable()
+    assert(catalog.loadTable(testIdent).currentVersion() == "2")
+
+    catalog.alterTable(testIdent, TableChange.setProperty("prop-1", "1"))
+    assert(catalog.loadTable(testIdent).currentVersion() == "3")
+
+    catalog.alterTable(testIdent, TableChange.addConstraint(constraints.apply(0), "3"))
+    assert(catalog.loadTable(testIdent).currentVersion() == "4")
+  }
 }

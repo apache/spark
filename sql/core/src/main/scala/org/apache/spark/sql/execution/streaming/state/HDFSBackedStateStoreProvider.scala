@@ -317,15 +317,12 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       newMap
     }
     catch {
-      case e: SparkException
-        if Option(e.getCondition).exists(_.contains("CANNOT_LOAD_STATE_STORE")) =>
-        throw e
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
           stateStoreId.toString,
           "HDFS_STORE_PROVIDER",
           e)
-      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+      case e: Throwable => throw StateStoreErrors.cannotLoadStore(e)
     }
   }
 
@@ -442,7 +439,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   private lazy val loadedMaps = new util.TreeMap[Long, HDFSBackedStateStoreMap](
     Ordering[Long].reverse)
   private lazy val baseDir = stateStoreId.storeCheckpointLocation()
-  private lazy val fm = CheckpointFileManager.create(baseDir, hadoopConf)
+  // Visible to state pkg for testing.
+  private[state] lazy val fm = CheckpointFileManager.create(baseDir, hadoopConf)
   private lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
 
   private val loadedMapCacheHitCount: LongAdder = new LongAdder
@@ -677,7 +675,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
             valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
             if (!isValidated) {
               StateStoreProvider.validateStateRowFormat(
-                keyRow, keySchema, valueRow, valueSchema, storeConf)
+                keyRow, keySchema, valueRow, valueSchema, stateStoreId, storeConf)
               isValidated = true
             }
             map.put(keyRow, valueRow)
@@ -798,7 +796,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
             valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
             if (!isValidated) {
               StateStoreProvider.validateStateRowFormat(
-                keyRow, keySchema, valueRow, valueSchema, storeConf)
+                keyRow, keySchema, valueRow, valueSchema, stateStoreId, storeConf)
               isValidated = true
             }
             map.put(keyRow, valueRow)
@@ -935,13 +933,15 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     storeFiles
   }
 
-  private def compressStream(outputStream: DataOutputStream): DataOutputStream = {
+  // Visible to state pkg for testing.
+  private[state] def compressStream(outputStream: DataOutputStream): DataOutputStream = {
     val compressed = CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec)
       .compressedOutputStream(outputStream)
     new DataOutputStream(compressed)
   }
 
-  private def decompressStream(inputStream: DataInputStream): DataInputStream = {
+  // Visible to state pkg for testing.
+  private[state] def decompressStream(inputStream: DataInputStream): DataInputStream = {
     val compressed = CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec)
       .compressedInputStream(inputStream)
     new DataInputStream(compressed)
@@ -1024,7 +1024,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
           stateStoreId.toString,
           "HDFS_STORE_PROVIDER",
           e)
-      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+      case e: Throwable => throw StateStoreErrors.cannotLoadStore(e)
     }
   }
 

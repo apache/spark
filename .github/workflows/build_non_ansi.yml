@@ -46,6 +46,7 @@ jobs:
           "build": "true",
           "docs": "true",
           "pyspark": "true",
+          "pyspark-pandas": "true",
           "sparkr": "true",
           "tpcds-1g": "true",
           "docker-integration-tests": "true",

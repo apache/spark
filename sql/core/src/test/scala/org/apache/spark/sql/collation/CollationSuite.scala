@@ -19,6 +19,8 @@ package org.apache.spark.sql.collation
 
 import scala.jdk.CollectionConverters.MapHasAsJava
 
+import com.ibm.icu.util.VersionInfo.ICU_VERSION
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -1919,7 +1921,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
     // verify that the output ordering is as expected (UTF8_BINARY, UTF8_LCASE, etc.)
     val df = sql("SELECT * FROM collations() limit 10")
-    val icvVersion = "76.1.0.0"
+    val icvVersion = ICU_VERSION.toString
     checkAnswer(df,
       Seq(Row("SYSTEM", "BUILTIN", "UTF8_BINARY", null, null,
         "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", null),
