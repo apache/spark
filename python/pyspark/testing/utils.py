@@ -1529,7 +1529,9 @@ def assertColumnValuesInSet(
 
         if isinstance(df, (pd.DataFrame, ps.DataFrame)):
             # Use the PandasOnSparkTestUtils.assert_column_values_in_set method to check values
-            PandasOnSparkTestUtils().assert_column_values_in_set(df, columns, accepted_values, message)
+            PandasOnSparkTestUtils().assert_column_values_in_set(
+                df, columns, accepted_values, message
+            )
             return
 
     # If we get here, we're dealing with a Spark DataFrame or pandas dependencies are not available
@@ -1726,8 +1728,9 @@ def assertReferentialIntegrity(
         from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
         # Handle pandas and pandas-on-Spark DataFrames
-        if (isinstance(source_df, (pd.DataFrame, ps.DataFrame)) and
-            isinstance(target_df, (pd.DataFrame, ps.DataFrame))):
+        if isinstance(source_df, (pd.DataFrame, ps.DataFrame)) and isinstance(
+            target_df, (pd.DataFrame, ps.DataFrame)
+        ):
             # Use the PandasOnSparkTestUtils.assert_referential_integrity method
             PandasOnSparkTestUtils().assert_referential_integrity(
                 source_df, source_column, target_df, target_column, message

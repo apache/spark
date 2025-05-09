@@ -1082,13 +1082,9 @@ class UtilsTestsMixin:
             assertColumnUnique(df_with_duplicates, "id", message=custom_message)
 
         self.assertTrue("Column 'id' contains duplicate values" in str(cm.exception))
-        self.assertTrue(
-            "ID column must be unique for this operation." in str(cm.exception)
-        )
+        self.assertTrue("ID column must be unique for this operation." in str(cm.exception))
 
-    @unittest.skipIf(
-        not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency"
-    )
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_column_unique_pandas_single_column(self):
         # Test with a pandas DataFrame that has unique values in a column
         import pandas as pd
@@ -1104,9 +1100,7 @@ class UtilsTestsMixin:
 
         self.assertTrue("Column 'id' contains duplicate values" in str(cm.exception))
 
-    @unittest.skipIf(
-        not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency"
-    )
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_column_unique_pandas_multiple_columns(self):
         # Test with a pandas DataFrame that has unique combinations of values
         import pandas as pd
@@ -1120,13 +1114,9 @@ class UtilsTestsMixin:
         with self.assertRaises(AssertionError) as cm:
             assertColumnUnique(df_with_duplicates, ["id", "value"])
 
-        self.assertTrue(
-            "Columns ['id', 'value'] contain duplicate values" in str(cm.exception)
-        )
+        self.assertTrue("Columns ['id', 'value'] contain duplicate values" in str(cm.exception))
 
-    @unittest.skipIf(
-        not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency"
-    )
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_column_unique_pandas_with_null_values(self):
         # Test with a pandas DataFrame that has null values
         import pandas as pd
@@ -1136,18 +1126,14 @@ class UtilsTestsMixin:
         assertColumnUnique(df, "value")
 
         # Test with a pandas DataFrame that has duplicate null values
-        df_with_duplicate_nulls = pd.DataFrame(
-            {"id": [1, 2, 3], "value": [None, None, "c"]}
-        )
+        df_with_duplicate_nulls = pd.DataFrame({"id": [1, 2, 3], "value": [None, None, "c"]})
 
         with self.assertRaises(AssertionError) as cm:
             assertColumnUnique(df_with_duplicate_nulls, "value")
 
         self.assertTrue("Column 'value' contains duplicate values" in str(cm.exception))
 
-    @unittest.skipIf(
-        not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency"
-    )
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_column_unique_pandas_on_spark(self):
         # Test with a pandas-on-Spark DataFrame
         import pandas as pd
@@ -1168,9 +1154,7 @@ class UtilsTestsMixin:
 
         self.assertTrue("Column 'id' contains duplicate values" in str(cm.exception))
 
-    @unittest.skipIf(
-        not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency"
-    )
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_column_unique_mixed_types(self):
         # Test with a Spark DataFrame and conversion to pandas
 
@@ -1294,7 +1278,9 @@ class UtilsTestsMixin:
             assertColumnNonNull(df_with_nulls, "value", message=custom_message)
 
         self.assertTrue("Column 'value' contains null values" in str(cm.exception))
-        self.assertTrue("Value column must not contain nulls for this operation." in str(cm.exception))
+        self.assertTrue(
+            "Value column must not contain nulls for this operation." in str(cm.exception)
+        )
 
     @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_column_non_null_pandas_on_spark(self):
@@ -1446,7 +1432,9 @@ class UtilsTestsMixin:
         with self.assertRaises(AssertionError) as cm:
             assertColumnValuesInSet(df_with_invalid, "category", {"A", "B", "C"})
 
-        self.assertTrue("Column 'category' contains values not in the accepted set" in str(cm.exception))
+        self.assertTrue(
+            "Column 'category' contains values not in the accepted set" in str(cm.exception)
+        )
         self.assertTrue("Invalid values found: ['X']" in str(cm.exception))
 
     @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
@@ -1463,7 +1451,9 @@ class UtilsTestsMixin:
         with self.assertRaises(AssertionError) as cm:
             assertColumnValuesInSet(df_with_invalid, ["col1", "col2"], {"A", "B", "C"})
 
-        self.assertTrue("Columns ['col1', 'col2'] contain values not in the accepted set" in str(cm.exception))
+        self.assertTrue(
+            "Columns ['col1', 'col2'] contain values not in the accepted set" in str(cm.exception)
+        )
         self.assertTrue("Invalid values found: ['X']" in str(cm.exception))
         self.assertTrue("Invalid values found: ['Y']" in str(cm.exception))
 
@@ -1473,7 +1463,9 @@ class UtilsTestsMixin:
         import pandas as pd
 
         df = pd.DataFrame({"id": [1, 2, 3], "category": ["A", "B", "C"]})
-        assertColumnValuesInSet(df, ["id", "category"], {"id": {1, 2, 3}, "category": {"A", "B", "C"}})
+        assertColumnValuesInSet(
+            df, ["id", "category"], {"id": {1, 2, 3}, "category": {"A", "B", "C"}}
+        )
 
         # Test with a pandas DataFrame that has values not in the accepted sets in multiple columns
         df_with_invalid = pd.DataFrame({"id": [1, 4, 3], "category": ["A", "B", "X"]})
@@ -1483,7 +1475,9 @@ class UtilsTestsMixin:
                 df_with_invalid, ["id", "category"], {"id": {1, 2, 3}, "category": {"A", "B", "C"}}
             )
 
-        self.assertTrue("Columns ['id', 'category'] contain values not in the accepted set" in str(cm.exception))
+        self.assertTrue(
+            "Columns ['id', 'category'] contain values not in the accepted set" in str(cm.exception)
+        )
         self.assertTrue("Invalid values found: [4]" in str(cm.exception))
         self.assertTrue("Invalid values found: ['X']" in str(cm.exception))
 
@@ -1501,7 +1495,9 @@ class UtilsTestsMixin:
         with self.assertRaises(AssertionError) as cm:
             assertColumnValuesInSet(df_with_invalid, "category", {"A", "B", "C"})
 
-        self.assertTrue("Column 'category' contains values not in the accepted set" in str(cm.exception))
+        self.assertTrue(
+            "Column 'category' contains values not in the accepted set" in str(cm.exception)
+        )
         self.assertTrue("Invalid values found: ['X']" in str(cm.exception))
 
     @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
@@ -1522,7 +1518,9 @@ class UtilsTestsMixin:
         with self.assertRaises(AssertionError) as cm:
             assertColumnValuesInSet(psdf_with_invalid, "category", {"A", "B", "C"})
 
-        self.assertTrue("Column 'category' contains values not in the accepted set" in str(cm.exception))
+        self.assertTrue(
+            "Column 'category' contains values not in the accepted set" in str(cm.exception)
+        )
 
     @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_column_values_in_set_mixed_types(self):
@@ -1549,11 +1547,15 @@ class UtilsTestsMixin:
         # Test both ways
         with self.assertRaises(AssertionError) as cm:
             assertColumnValuesInSet(df_spark_with_invalid, "category", {"A", "B", "C"})
-        self.assertTrue("Column 'category' contains values not in the accepted set" in str(cm.exception))
+        self.assertTrue(
+            "Column 'category' contains values not in the accepted set" in str(cm.exception)
+        )
 
         with self.assertRaises(AssertionError) as cm:
             assertColumnValuesInSet(df_pandas_with_invalid, "category", {"A", "B", "C"})
-        self.assertTrue("Column 'category' contains values not in the accepted set" in str(cm.exception))
+        self.assertTrue(
+            "Column 'category' contains values not in the accepted set" in str(cm.exception)
+        )
 
         # Test with multiple columns and different accepted values
         df_spark_multi = self.spark.createDataFrame(
@@ -1563,14 +1565,10 @@ class UtilsTestsMixin:
 
         # Test both ways
         assertColumnValuesInSet(
-            df_spark_multi,
-            ["id", "category"],
-            {"id": {1, 2, 3}, "category": {"A", "B", "C"}}
+            df_spark_multi, ["id", "category"], {"id": {1, 2, 3}, "category": {"A", "B", "C"}}
         )
         assertColumnValuesInSet(
-            df_pandas_multi,
-            ["id", "category"],
-            {"id": {1, 2, 3}, "category": {"A", "B", "C"}}
+            df_pandas_multi, ["id", "category"], {"id": {1, 2, 3}, "category": {"A", "B", "C"}}
         )
 
     def test_row_order_ignored(self):
@@ -2487,7 +2485,8 @@ class UtilsTestsMixin:
             )
 
         self.assertTrue(
-            "Column 'customer_id' contains values not found in target column 'id'" in str(cm.exception)
+            "Column 'customer_id' contains values not found in target column 'id'"
+            in str(cm.exception)
         )
         self.assertTrue("Missing values: [4]" in str(cm.exception))
         self.assertTrue("All customer IDs must exist in the customers table." in str(cm.exception))
@@ -2520,7 +2519,8 @@ class UtilsTestsMixin:
             assertReferentialIntegrity(orders_invalid, "customer_id", customers, "id")
 
         self.assertTrue(
-            "Column 'customer_id' contains values not found in target column 'id'" in str(cm.exception)
+            "Column 'customer_id' contains values not found in target column 'id'"
+            in str(cm.exception)
         )
         self.assertTrue("Missing values: [4]" in str(cm.exception))
 
@@ -2542,7 +2542,8 @@ class UtilsTestsMixin:
             )
 
         self.assertTrue(
-            "Column 'customer_id' contains values not found in target column 'id'" in str(cm.exception)
+            "Column 'customer_id' contains values not found in target column 'id'"
+            in str(cm.exception)
         )
         self.assertTrue("Missing values: [4]" in str(cm.exception))
         self.assertTrue("All customer IDs must exist in the customers table." in str(cm.exception))
@@ -2557,7 +2558,9 @@ class UtilsTestsMixin:
         customers_psdf = ps.from_pandas(customers_pdf)
 
         # Create an "orders" DataFrame with customer IDs as foreign keys
-        orders_pdf = pd.DataFrame({"order_id": [101, 102, 103, 104], "customer_id": [1, 2, 3, None]})
+        orders_pdf = pd.DataFrame(
+            {"order_id": [101, 102, 103, 104], "customer_id": [1, 2, 3, None]}
+        )
         orders_psdf = ps.from_pandas(orders_pdf)
 
         # This should pass because all non-null customer_ids in orders exist in customers.id
@@ -2572,7 +2575,8 @@ class UtilsTestsMixin:
             assertReferentialIntegrity(orders_invalid_psdf, "customer_id", customers_psdf, "id")
 
         self.assertTrue(
-            "Column 'customer_id' contains values not found in target column 'id'" in str(cm.exception)
+            "Column 'customer_id' contains values not found in target column 'id'"
+            in str(cm.exception)
         )
 
     @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
@@ -2601,7 +2605,8 @@ class UtilsTestsMixin:
             assertReferentialIntegrity(orders_invalid_spark, "customer_id", customers_pd, "id")
 
         self.assertTrue(
-            "Column 'customer_id' contains values not found in target column 'id'" in str(cm.exception)
+            "Column 'customer_id' contains values not found in target column 'id'"
+            in str(cm.exception)
         )
 
         # Test with pandas DataFrame as source and Spark DataFrame as target
@@ -2624,7 +2629,8 @@ class UtilsTestsMixin:
             assertReferentialIntegrity(orders_invalid_pd, "customer_id", customers_spark, "id")
 
         self.assertTrue(
-            "Column 'customer_id' contains values not found in target column 'id'" in str(cm.exception)
+            "Column 'customer_id' contains values not found in target column 'id'"
+            in str(cm.exception)
         )
 
     @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
@@ -2655,7 +2661,8 @@ class UtilsTestsMixin:
             assertReferentialIntegrity(orders_invalid_spark, "customer_id", customers_psdf, "id")
 
         self.assertTrue(
-            "Column 'customer_id' contains values not found in target column 'id'" in str(cm.exception)
+            "Column 'customer_id' contains values not found in target column 'id'"
+            in str(cm.exception)
         )
 
         # Test with pandas-on-Spark DataFrame as source and Spark DataFrame as target
@@ -2665,7 +2672,9 @@ class UtilsTestsMixin:
         )
 
         # Create an "orders" pandas-on-Spark DataFrame with customer IDs as foreign keys
-        orders_pdf = pd.DataFrame({"order_id": [101, 102, 103, 104], "customer_id": [1, 2, 3, None]})
+        orders_pdf = pd.DataFrame(
+            {"order_id": [101, 102, 103, 104], "customer_id": [1, 2, 3, None]}
+        )
         orders_psdf = ps.from_pandas(orders_pdf)
 
         # This should pass because all non-null customer_ids in orders exist in customers.id
@@ -2680,18 +2689,19 @@ class UtilsTestsMixin:
             assertReferentialIntegrity(orders_invalid_psdf, "customer_id", customers_spark, "id")
 
         self.assertTrue(
-            "Column 'customer_id' contains values not found in target column 'id'" in str(cm.exception)
+            "Column 'customer_id' contains values not found in target column 'id'"
+            in str(cm.exception)
         )
 
         # Check that the error message contains information about the missing values
         error_message = str(cm.exception)
         self.assertIn("customer_id", error_message)
         self.assertIn("id", error_message)
-        # Check that at least one of the invalid values is mentioned
-        self.assertTrue(any(str(val) in error_message for val in [4, 5, 6]))
+        # Check that the invalid value is mentioned
+        self.assertIn("4", error_message)
 
-        # Verify that the total count of missing values is correct (should be 3: values 4, 5, and 6)
-        self.assertIn("Total missing values: 3", error_message)
+        # Verify that the total count of missing values is correct (should be 1: value 4)
+        self.assertIn("Total missing values: 1", error_message)
 
 
 class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):

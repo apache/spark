@@ -516,9 +516,7 @@ class PandasOnSparkTestUtils:
             if not duplicates.empty:
                 # Get examples of duplicates
                 duplicate_examples = duplicates.head(5)
-                examples_str = "\n".join(
-                    [str(row) for _, row in duplicate_examples.iterrows()]
-                )
+                examples_str = "\n".join([str(row) for _, row in duplicate_examples.iterrows()])
 
                 # Create error message
                 error_msg = f"Column '{columns[0]}' contains duplicate values.\n"
@@ -534,9 +532,7 @@ class PandasOnSparkTestUtils:
             if not duplicates.empty:
                 # Get examples of duplicates
                 duplicate_examples = duplicates.head(5)
-                examples_str = "\n".join(
-                    [str(row) for _, row in duplicate_examples.iterrows()]
-                )
+                examples_str = "\n".join([str(row) for _, row in duplicate_examples.iterrows()])
 
                 # Create error message
                 error_msg = f"Columns {columns} contain duplicate values.\n"
