@@ -20,7 +20,7 @@ import math
 from typing import Any, TYPE_CHECKING, List, Optional, Union, Sequence
 from types import ModuleType
 from pyspark.errors import PySparkValueError
-from pyspark.sql import Column, functions as F, SparkSession
+from pyspark.sql import Column, functions as F, SparkSession  # noqa: F401
 from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.pandas.utils import require_minimum_pandas_version
 from pyspark.sql.utils import NumpyHelper, require_minimum_plotly_version
