@@ -60,9 +60,9 @@ class JobCancellationTestsMixin:
         t2.join()
 
         self.assertIsNotNone(output1)
-        self.assertEquals(output1, {"tag1"})
+        self.assertEqual(output1, {"tag1"})
         self.assertIsNotNone(output2)
-        self.assertEquals(output2, {"tag2"})
+        self.assertEqual(output2, {"tag2"})
 
     def check_job_cancellation(
         self, setter, canceller, thread_ids, thread_ids_to_cancel, thread_ids_to_run
