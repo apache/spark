@@ -30,6 +30,9 @@ import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.FilterApi
 import org.apache.parquet.format.converter.ParquetMetadataConverter.SKIP_ROW_GROUPS
 import org.apache.parquet.hadoop._
+import org.apache.parquet.hadoop.metadata.ParquetMetadata
+import org.apache.parquet.hadoop.util.HadoopInputFile
+import org.apache.parquet.io.SeekableInputStream
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.{Logging, MDC}
@@ -207,13 +210,23 @@ class ParquetFileFormat
 
       val sharedConf = broadcastedHadoopConf.value.value
 
-      val fileFooter = if (enableVectorizedReader) {
+      val (inputFile: Option[HadoopInputFile],
+          inputStream: Option[SeekableInputStream],
+          fileFooter: ParquetMetadata) = if (enableVectorizedReader) {
         // When there are vectorized reads, we can avoid reading the footer twice by reading
         // all row groups in advance and filter row groups according to filters that require
         // push down (no need to read the footer metadata again).
-        ParquetFooterReader.readFooter(sharedConf, file, ParquetFooterReader.WITH_ROW_GROUPS)
+        val hadoopInputFile = HadoopInputFile.fromStatus(file.fileStatus, sharedConf)
+        val fileInputStream = hadoopInputFile.newStream()
+        val footerFilter = ParquetFooterReader.footerFilter(
+          sharedConf, file, ParquetFooterReader.WITH_ROW_GROUPS)
+        val footer = ParquetFooterReader.readFooter(
+          hadoopInputFile, fileInputStream, footerFilter)
+        (Some(hadoopInputFile), Some(fileInputStream), footer)
       } else {
-        ParquetFooterReader.readFooter(sharedConf, file, ParquetFooterReader.SKIP_ROW_GROUPS)
+        val footer = ParquetFooterReader.readFooter(
+          sharedConf, file, ParquetFooterReader.SKIP_ROW_GROUPS)
+        (None, None, footer)
       }
 
       val footerFileMetaData = fileFooter.getFileMetaData
@@ -289,7 +302,8 @@ class ParquetFileFormat
         // Instead, we use FileScanRDD's task completion listener to close this iterator.
         val iter = new RecordReaderIterator(vectorizedReader)
         try {
-          vectorizedReader.initialize(split, hadoopAttemptContext, Option.apply(fileFooter))
+          vectorizedReader.initialize(
+            split, hadoopAttemptContext, inputFile, inputStream, Some(fileFooter))
           logDebug(s"Appending $partitionSchema ${file.partitionValues}")
           vectorizedReader.initBatch(partitionSchema, file.partitionValues)
           if (returningBatch) {
@@ -446,9 +460,9 @@ object ParquetFileFormat extends Logging {
         // Skips row group information since we only need the schema.
         // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
         // when it can't read the footer.
-        Some(new Footer(currentFile.getPath(),
+        Some(new Footer(currentFile.getPath,
           ParquetFooterReader.readFooter(
-            conf, currentFile, SKIP_ROW_GROUPS)))
+            HadoopInputFile.fromStatus(currentFile, conf), SKIP_ROW_GROUPS)))
       } catch { case e: RuntimeException =>
         if (ignoreCorruptFiles) {
           logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, currentFile)}", e)
