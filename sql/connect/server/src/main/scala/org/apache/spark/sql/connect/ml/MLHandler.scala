@@ -181,8 +181,8 @@ private[connect] object MLHandler extends Logging {
           .setOperatorInfo(
             proto.MlCommandResult.MlOperatorInfo
               .newBuilder()
-              .setObjRef(proto.ObjectRef.newBuilder().setId(id)))
-              .setWarningMessage(fitWarningMessage)
+              .setObjRef(proto.ObjectRef.newBuilder().setId(id))
+              .setWarningMessage(fitWarningMessage))
           .build()
 
       case proto.MlCommand.CommandCase.FETCH =>
