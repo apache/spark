@@ -199,21 +199,29 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
   // Resolves `UnresolvedAttribute` to `OuterReference`.
   protected def resolveOuterRef(e: Expression): Expression = {
-    val outerPlan = AnalysisContext.get.outerPlan
-    if (outerPlan.isEmpty) return e
+    val outerPlanContext = AnalysisContext.get.outerPlans
+    if (outerPlanContext.isEmpty) return e
 
     def resolve(nameParts: Seq[String]): Option[Expression] = try {
-      outerPlan.get match {
-        // Subqueries in UnresolvedHaving can host grouping expressions and aggregate functions.
-        // We should resolve columns with `agg.output` and the rule `ResolveAggregateFunctions` will
-        // push them down to Aggregate later. This is similar to what we do in `resolveColumns`.
-        case u @ UnresolvedHaving(_, agg: Aggregate) =>
-          agg.resolveChildren(nameParts, conf.resolver)
-            .orElse(u.resolveChildren(nameParts, conf.resolver))
-            .map(wrapOuterReference)
-        case other =>
-          other.resolveChildren(nameParts, conf.resolver).map(wrapOuterReference)
+      val outerPlans = outerPlanContext.get
+      val resolvedExpressions = outerPlans.flatMap {
+        _ match {
+          // Subqueries in UnresolvedHaving can host grouping
+          // expressions and aggregate functions. We should resolve
+          // columns with `agg.output` and the rule `ResolveAggregateFunctions` will
+          // push them down to Aggregate later. This is similar to what we do in `resolveColumns`.
+          case u @ UnresolvedHaving(_, agg: Aggregate) =>
+            agg.resolveChildren(nameParts, conf.resolver)
+              .orElse(u.resolveChildren(nameParts, conf.resolver))
+              .map(wrapOuterReference)
+          case other =>
+            other.resolveChildren(nameParts, conf.resolver).map(wrapOuterReference)
+        }
       }
+      // We use the first resolved expression here
+      // as the outerPlans are ordered by their depth and the
+      // first one is the closest to the subquery scope.
+      resolvedExpressions.headOption
     } catch {
       case ae: AnalysisException =>
         logDebug(ae.getMessage)

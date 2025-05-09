@@ -152,17 +152,17 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
       // Filter the plan by applying left semi and left anti joins.
       withSubquery.foldLeft(newFilter) {
-        case (p, Exists(sub, _, _, conditions, subHint)) =>
+        case (p, Exists(sub, _, _, _, conditions, subHint)) =>
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
           val join = buildJoin(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, sub, joinCond),
             LeftSemi, joinCond, subHint)
           Project(p.output, join)
-        case (p, Not(Exists(sub, _, _, conditions, subHint))) =>
+        case (p, Not(Exists(sub, _, _, _, conditions, subHint))) =>
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
           val join = buildJoin(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, sub, joinCond),
             LeftAnti, joinCond, subHint)
           Project(p.output, join)
-        case (p, InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint))) =>
+        case (p, InSubquery(values, ListQuery(sub, _, _, _, _, conditions, subHint))) =>
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
           val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
@@ -170,7 +170,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val join = Join(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, joinCond),
             LeftSemi, joinCond, JoinHint(None, subHint))
           Project(p.output, join)
-        case (p, Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)))) =>
+        case (p, Not(InSubquery(values, ListQuery(sub, _, _, _, _, conditions, subHint)))) =>
           // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
           // result; such a row will be filtered out by the Anti-Join operator.
@@ -400,7 +400,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     val introducedAttrs = ArrayBuffer.empty[Attribute]
     val newExprs = exprs.map { e =>
       e.transformDownWithPruning(_.containsAnyPattern(EXISTS_SUBQUERY, IN_SUBQUERY)) {
-        case Exists(sub, _, _, conditions, subHint) =>
+        case Exists(sub, _, _, _, conditions, subHint) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           val existenceJoin = ExistenceJoin(exists)
           val newCondition = conditions.reduceLeftOption(And)
@@ -409,7 +409,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
               existenceJoin, newCondition, subHint)
           introducedAttrs += exists
           exists
-        case Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint))) =>
+        case Not(InSubquery(values, ListQuery(sub, _, _, _, _, conditions, subHint))) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
@@ -434,7 +434,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
             ExistenceJoin(exists), Some(finalJoinCond), joinHint)
           introducedAttrs += exists
           Not(exists)
-        case InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)) =>
+        case InSubquery(values, ListQuery(sub, _, _, _, _, conditions, subHint)) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
@@ -587,7 +587,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     }
 
     plan.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-      case ScalarSubquery(sub, children, exprId, conditions, hint,
+      case ScalarSubquery(sub, children, outerScopeAttrs, exprId, conditions, hint,
       mayHaveCountBugOld, needSingleJoinOld)
         if children.nonEmpty =>
 
@@ -639,26 +639,26 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         } else {
           conf.getConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN) && !guaranteedToReturnOneRow(sub)
         }
-        ScalarSubquery(newPlan, children, exprId, getJoinCondition(newCond, conditions),
+        ScalarSubquery(newPlan, children, outerScopeAttrs, exprId, getJoinCondition(newCond, conditions),
           hint, Some(mayHaveCountBug), Some(needSingleJoin))
-      case Exists(sub, children, exprId, conditions, hint) if children.nonEmpty =>
+      case Exists(sub, children, outerScopeAttrs, exprId, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = if (SQLConf.get.decorrelateInnerQueryEnabledForExistsIn) {
           decorrelate(sub, plan, handleCountBug = true)
         } else {
           pullOutCorrelatedPredicates(sub, plan)
         }
-        Exists(newPlan, children, exprId, getJoinCondition(newCond, conditions), hint)
-      case ListQuery(sub, children, exprId, numCols, conditions, hint) if children.nonEmpty =>
+        Exists(newPlan, children, outerScopeAttrs, exprId, getJoinCondition(newCond, conditions), hint)
+      case ListQuery(sub, children, outerScopeAttrs, exprId, numCols, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = if (SQLConf.get.decorrelateInnerQueryEnabledForExistsIn) {
           decorrelate(sub, plan, handleCountBug = true)
         } else {
           pullOutCorrelatedPredicates(sub, plan)
         }
         val joinCond = getJoinCondition(newCond, conditions)
-        ListQuery(newPlan, children, exprId, numCols, joinCond, hint)
-      case LateralSubquery(sub, children, exprId, conditions, hint) if children.nonEmpty =>
+        ListQuery(newPlan, children, outerScopeAttrs, exprId, numCols, joinCond, hint)
+      case LateralSubquery(sub, children, outerScopeAttrs, exprId, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = decorrelate(sub, plan, handleCountBug = true)
-        LateralSubquery(newPlan, children, exprId, getJoinCondition(newCond, conditions), hint)
+        LateralSubquery(newPlan, children, outerScopeAttrs, exprId, getJoinCondition(newCond, conditions), hint)
     }
   }
 
@@ -898,7 +898,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       subqueries: ArrayBuffer[ScalarSubquery]): (LogicalPlan, AttributeMap[Attribute]) = {
     val subqueryAttrMapping = ArrayBuffer[(Attribute, Attribute)]()
     val newChild = subqueries.foldLeft(child) {
-      case (currentChild, ScalarSubquery(sub, _, _, conditions, subHint, mayHaveCountBug,
+      case (currentChild, ScalarSubquery(sub, _, _, _, conditions, subHint, mayHaveCountBug,
       needSingleJoin)) =>
         val query = DecorrelateInnerQuery.rewriteDomainJoins(currentChild, sub, conditions)
         val origOutput = query.output.head
@@ -1085,7 +1085,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
 object RewriteLateralSubquery extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(LATERAL_JOIN)) {
-    case LateralJoin(left, LateralSubquery(sub, _, _, joinCond, subHint), joinType, condition) =>
+    case LateralJoin(left, LateralSubquery(sub, _, _, _, joinCond, subHint), joinType, condition) =>
       val newRight = DecorrelateInnerQuery.rewriteDomainJoins(left, sub, joinCond)
       val newCond = (condition ++ joinCond).reduceOption(And)
       // The subquery appears on the right side of the join, hence add the hint to the right side
@@ -1122,7 +1122,7 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
    */
   private def rewrite(plan: LogicalPlan): LogicalPlan = plan.transformUpWithSubqueries {
     case LateralJoin(
-      left, right @ LateralSubquery(OneRowSubquery(plan), _, _, _, _), _, None)
+      left, right @ LateralSubquery(OneRowSubquery(plan), _, _, _, _, _), _, None)
         if !hasCorrelatedSubquery(right.plan) && right.joinCond.isEmpty =>
       plan match {
         case Project(projectList, _: OneRowRelation) =>
@@ -1145,7 +1145,7 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
 
     case p: LogicalPlan => p.transformExpressionsUpWithPruning(
       _.containsPattern(SCALAR_SUBQUERY)) {
-      case s @ ScalarSubquery(OneRowSubquery(p @ Project(_, _: OneRowRelation)), _, _, _, _, _, _)
+      case s @ ScalarSubquery(OneRowSubquery(p @ Project(_, _: OneRowRelation)), _, _, _, _, _, _, _)
           if !hasCorrelatedSubquery(s.plan) && s.joinCond.isEmpty =>
         assert(p.projectList.size == 1)
         stripOuterReferences(p.projectList).head

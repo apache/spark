@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -111,9 +112,13 @@ object ValidateSubqueryExpression
       case f: Filter =>
         if (hasOuterReferences(expr.plan)) {
           expr.plan.expressions.foreach(_.foreachUp {
-            case o: OuterReference =>
+            case o@OuterReference(a) =>
               p.children.foreach(e =>
-                if (!e.output.exists(_.exprId == o.exprId)) {
+                if (!e.output.exists(_.exprId == o.exprId) &&
+                  !expr.getOuterScopeAttrs.contains(a)) {
+                  // If the outer reference is not found in the children plan,
+                  // it should be a outer scope reference. Otherwise, it is
+                  // invalid.
                   o.failAnalysis(
                     errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
                       "CORRELATED_COLUMN_NOT_FOUND",
@@ -125,11 +130,53 @@ object ValidateSubqueryExpression
       case _ =>
     }
 
+    def checkNestedOuterReferences(expr: SubqueryExpression): Unit = {
+      if (expr.getOuterScopeAttrs.nonEmpty) {
+        if (!SQLConf.get.getConf(SQLConf.SUPPORT_NESTED_CORRELATED_SUBQUERIES)) {
+          throw new AnalysisException(
+            errorClass = "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED",
+            messageParameters = Map(
+              "expression" -> expr.getOuterScopeAttrs.map(_.sql).mkString(","))
+          )
+        }
+        expr match {
+          case _: ScalarSubquery if
+            !SQLConf.get.getConf(
+              SQLConf.SUPPORT_NESTED_CORRELATED_SUBQUERIES_FOR_SCALARSUBQUERIES) =>
+            throw new AnalysisException(
+              errorClass = "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED",
+              messageParameters = Map(
+                "expression" -> expr.getOuterScopeAttrs.map(_.sql).mkString(","))
+            )
+          case _: ListQuery if
+            !SQLConf.get.getConf(
+              SQLConf.SUPPORT_NESTED_CORRELATED_SUBQUERIES_FOR_INSUBQUERIES) =>
+            throw new AnalysisException(
+              errorClass = "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED",
+              messageParameters = Map(
+                "expression" -> expr.getOuterScopeAttrs.map(_.sql).mkString(","))
+            )
+          case _: Exists if
+            !SQLConf.get.getConf(
+              SQLConf.SUPPORT_NESTED_CORRELATED_SUBQUERIES_FOR_EXISTSSUBQUERIES) =>
+            throw new AnalysisException(
+              errorClass = "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED",
+              messageParameters = Map(
+                "expression" -> expr.getOuterScopeAttrs.map(_.sql).mkString(","))
+            )
+          case _ => // Do nothing
+        }
+      }
+    }
+
+    // Check if there are nested correlated subqueries in the plan.
+    checkNestedOuterReferences(expr)
+
     // Check if there is outer attribute that cannot be found from the plan.
     checkOuterReference(plan, expr)
 
     expr match {
-      case ScalarSubquery(query, outerAttrs, _, _, _, _, _) =>
+      case ScalarSubquery(query, outerAttrs, _, _, _, _, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
           throw QueryCompilationErrors.subqueryReturnMoreThanOneColumn(query.output.size,

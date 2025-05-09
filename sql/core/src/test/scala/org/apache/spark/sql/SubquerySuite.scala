@@ -2846,4 +2846,33 @@ class SubquerySuite extends QueryTest
         :: Row(true) :: Row(true) :: Row(true) :: Nil
     )
   }
+
+  test("test non deterministic query") {
+    sql("CREATE TABLE tbl(a TINYINT, b SMALLINT," +
+      " c INTEGER, d BIGINT, e VARCHAR(1), f DATE, g TIMESTAMP);")
+
+//    set spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled=true;
+//    set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled=true;
+//    set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForINSubqueries.enabled=true;
+//    set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForEXISTSSubqueries.enabled=true;
+    val query =
+      """
+        |SELECT 1 FROM tbl t1 JOIN tbl t2 ON (t1.d=t2.d) WHERE
+        | EXISTS(SELECT t1.c FROM tbl t3 WHERE t1.d+t3.c<100 AND
+        |  EXISTS(SELECT 1 FROM tbl t4 WHERE t2.f < DATE '2000-01-01'));
+        |""".stripMargin
+    withSQLConf(
+      "spark.sql.planChangeLog.level" -> "info",
+      "spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled" -> "true",
+      "spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled" -> "true",
+      "spark.sql.optimizer.supportNestedCorrelatedSubqueriesForEXISTSSubqueries.enabled" -> "true"
+    ) {
+      val df = sql(query)
+      df.collect()
+      val analyzedPlan = df.queryExecution.analyzed
+      // scalastyle:off println
+      println(analyzedPlan.toString)
+      // scalastyle:on println
+    }
+  }
 }

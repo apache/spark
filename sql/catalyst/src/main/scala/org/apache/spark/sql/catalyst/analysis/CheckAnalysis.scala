@@ -224,6 +224,68 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     }
   }
 
+  def checkNoNestedOuterReferencesInMainQuery(plan: LogicalPlan): Unit = {
+    def hasOuterScopeAttrsInSubqueryExpression(expr: Expression): Boolean = {
+      expr.exists {
+        case subExpr: SubqueryExpression if subExpr.getOuterScopeAttrs.nonEmpty => true
+        case _ => false
+      }
+    }
+
+    def getOuterScopeAttrsFromSubqueryExpression(
+        plan: LogicalPlan): Seq[(SubqueryExpression, AttributeSet)] = {
+      val res = plan.expressions.flatMap {
+        expr => expr.collect {
+          case subExpr: SubqueryExpression if subExpr.getOuterScopeAttrs.nonEmpty =>
+            (subExpr, subExpr.getOuterScopeAttrs)
+        }
+      }
+      res.map {
+        case (subExpr, nestedOuterExprs) =>
+          val attrs = nestedOuterExprs.collect {
+            case a: AttributeReference => a
+          }
+          (subExpr, AttributeSet(attrs))
+      }
+    }
+
+    def findFirstOccurence(
+        plan: LogicalPlan,
+        outerScopeAttrs: AttributeSet,
+        operator: LogicalPlan): (LogicalPlan, AttributeSet) = {
+      val firstOccuredOperator = operator
+      plan.foreach {
+        case p if p.expressions.exists(hasOuterScopeAttrsInSubqueryExpression) =>
+          val res = getOuterScopeAttrsFromSubqueryExpression(p)
+          res.find(_._2.intersect(outerScopeAttrs).nonEmpty) match {
+            case Some((subExpr, outerScopeAttrsInP)) =>
+              return findFirstOccurence(subExpr.plan,
+                outerScopeAttrsInP.intersect(outerScopeAttrs), p)
+            case None => // Do nothing
+          }
+        case _ => // Do nothing
+      }
+      (firstOccuredOperator, outerScopeAttrs)
+    }
+    def throwUnresolvedColumnErrorForOuterScopeAttrs(plan: LogicalPlan): Unit = {
+      val (subExpr, outerScopeAttrs) = getOuterScopeAttrsFromSubqueryExpression(plan).head
+      val (operator, missingInput) = findFirstOccurence(subExpr.plan, outerScopeAttrs, plan)
+      operator.failAnalysis(
+        errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
+        messageParameters = Map(
+          "missingAttributes" -> missingInput.toSeq.map(attr => toSQLExpr(attr)).mkString(", "),
+          "input" -> operator.inputSet.map(attr => toSQLExpr(attr)).mkString(", "),
+          "operator" -> operator.simpleString(SQLConf.get.maxToStringFields)
+        )
+      )
+    }
+    plan.foreach {
+      case p: LogicalPlan if p.expressions.exists(hasOuterScopeAttrsInSubqueryExpression) =>
+        throwUnresolvedColumnErrorForOuterScopeAttrs(p)
+      case _ =>
+    }
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We should inline all CTE relations to restore the original plan shape, as the analysis check
     // may need to match certain plan shapes. For dangling CTE relations, they will still be kept
@@ -237,6 +299,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     }
     preemptedError.clear()
     try {
+      checkNoNestedOuterReferencesInMainQuery(inlinedPlan)
       checkAnalysis0(inlinedPlan)
       preemptedError.getErrorOpt().foreach(throw _) // throw preempted error if any
     } catch {
