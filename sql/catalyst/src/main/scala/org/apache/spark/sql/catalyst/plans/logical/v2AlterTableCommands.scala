@@ -290,17 +290,13 @@ case class AlterTableCollation(
   protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
 }
 
-abstract class AddConstraintBase extends AlterTableCommand {
-  def tableConstraint: TableConstraint
-}
-
 /**
  * The logical plan of the ALTER TABLE ... ADD CONSTRAINT command for Primary Key, Foreign Key,
  * and Unique constraints.
  */
 case class AddConstraint(
-    override val table: LogicalPlan,
-    override val tableConstraint: TableConstraint) extends AddConstraintBase {
+    table: LogicalPlan,
+    tableConstraint: TableConstraint) extends AlterTableCommand {
 
   override def changes: Seq[TableChange] = {
     val constraint = tableConstraint.toV2Constraint
@@ -313,20 +309,23 @@ case class AddConstraint(
     Seq(TableChange.addConstraint(constraint, validatedTableVersion))
   }
 
-  protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
 }
 
 /**
  * The logical plan of the ALTER TABLE ... ADD CONSTRAINT command for Check constraints.
+ * It doesn't extend [[AlterTableCommand]] because its child is a filtered table scan rather than
+ * a table reference.
  */
 case class AddCheckConstraint(
-    override val table: LogicalPlan,
-    override val tableConstraint: CheckConstraint) extends AddConstraintBase {
+    child: LogicalPlan,
+    checkConstraint: CheckConstraint) extends UnaryCommand {
 
-  override def changes: Seq[TableChange] = {
-    val constraint = tableConstraint.toV2Constraint
-    val validatedTableVersion = child match {
-      case Filter(_, d: DataSourceV2ScanRelation) if constraint.enforced() =>
+  def changes: Seq[TableChange] = {
+    val constraint = checkConstraint.toV2Constraint
+    val validatedTableVersion = child.find(_.isInstanceOf[DataSourceV2ScanRelation]) match {
+      case Some(d: DataSourceV2ScanRelation) if constraint.enforced() =>
         d.relation.table.currentVersion()
       case _ =>
         null
@@ -334,7 +333,8 @@ case class AddCheckConstraint(
     Seq(TableChange.addConstraint(constraint, validatedTableVersion))
   }
 
-  protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
 }
 
 /**

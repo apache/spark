@@ -541,7 +541,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val identifier = d.relation.identifier.get
       ResolveTableConstraints.validateCatalogForTableChange(a.changes, catalog, identifier)
       AddCheckConstraintExec(
-        catalog, identifier, a.changes, a.tableConstraint.condition, planLater(a.child)) :: Nil
+        catalog, identifier, a.changes, a.checkConstraint.condition, planLater(a.child)) :: Nil
 
     case a: AlterTableCommand if a.table.resolved =>
       val table = a.table.asInstanceOf[ResolvedTable]

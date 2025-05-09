@@ -311,11 +311,11 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
     val plan = parsePlan(sql)
     plan match {
       case a: AddCheckConstraint =>
-        comparePlans(a.table, Filter(
+        comparePlans(a.child, Filter(
           Not(GreaterThan(UnresolvedAttribute("a"), Literal(0))),
           UnresolvedRelation(Seq("a", "b", "t"))))
-        assert(a.tableConstraint == unnamedConstraint)
-        assert(a.tableConstraint.name.matches("t_chk_[0-9a-f]{7}"))
+        assert(a.checkConstraint == unnamedConstraint)
+        assert(a.checkConstraint.name.matches("t_chk_[0-9a-f]{7}"))
 
       case other =>
         fail(s"Expected AddConstraint, but got: $other")
