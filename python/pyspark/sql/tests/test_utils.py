@@ -1081,7 +1081,91 @@ class UtilsTestsMixin:
             assertColumnUnique(df_with_duplicates, "id", message=custom_message)
 
         self.assertTrue("Column 'id' contains duplicate values" in str(cm.exception))
-        self.assertTrue("ID column must be unique for this operation." in str(cm.exception))
+        self.assertTrue(
+            "ID column must be unique for this operation." in str(cm.exception)
+        )
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency"
+    )
+    def test_assert_column_unique_pandas_single_column(self):
+        # Test with a pandas DataFrame that has unique values in a column
+        import pandas as pd
+
+        df = pd.DataFrame({"id": [1, 2, 3], "value": ["a", "b", "c"]})
+        assertColumnUnique(df, "id")
+
+        # Test with a pandas DataFrame that has duplicate values in a column
+        df_with_duplicates = pd.DataFrame({"id": [1, 1, 3], "value": ["a", "b", "c"]})
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnUnique(df_with_duplicates, "id")
+
+        self.assertTrue("Column 'id' contains duplicate values" in str(cm.exception))
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency"
+    )
+    def test_assert_column_unique_pandas_multiple_columns(self):
+        # Test with a pandas DataFrame that has unique combinations of values
+        import pandas as pd
+
+        df = pd.DataFrame({"id": [1, 1, 2], "value": ["a", "b", "a"]})
+        assertColumnUnique(df, ["id", "value"])
+
+        # Test with a pandas DataFrame that has duplicate combinations of values
+        df_with_duplicates = pd.DataFrame({"id": [1, 1, 2], "value": ["a", "a", "b"]})
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnUnique(df_with_duplicates, ["id", "value"])
+
+        self.assertTrue(
+            "Columns ['id', 'value'] contain duplicate values" in str(cm.exception)
+        )
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency"
+    )
+    def test_assert_column_unique_pandas_with_null_values(self):
+        # Test with a pandas DataFrame that has null values
+        import pandas as pd
+
+        df = pd.DataFrame({"id": [1, 2, 3], "value": ["a", None, "c"]})
+        assertColumnUnique(df, "id")
+        assertColumnUnique(df, "value")
+
+        # Test with a pandas DataFrame that has duplicate null values
+        df_with_duplicate_nulls = pd.DataFrame(
+            {"id": [1, 2, 3], "value": [None, None, "c"]}
+        )
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnUnique(df_with_duplicate_nulls, "value")
+
+        self.assertTrue("Column 'value' contains duplicate values" in str(cm.exception))
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency"
+    )
+    def test_assert_column_unique_pandas_on_spark(self):
+        # Test with a pandas-on-Spark DataFrame
+        import pandas as pd
+
+        import pyspark.pandas as ps
+
+        # Create a pandas-on-Spark DataFrame with unique values
+        pdf = pd.DataFrame({"id": [1, 2, 3], "value": ["a", "b", "c"]})
+        psdf = ps.from_pandas(pdf)
+        assertColumnUnique(psdf, "id")
+
+        # Create a pandas-on-Spark DataFrame with duplicate values
+        pdf_with_duplicates = pd.DataFrame({"id": [1, 1, 3], "value": ["a", "b", "c"]})
+        psdf_with_duplicates = ps.from_pandas(pdf_with_duplicates)
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnUnique(psdf_with_duplicates, "id")
+
+        self.assertTrue("Column 'id' contains duplicate values" in str(cm.exception))
 
     def test_assert_column_non_null_single_column(self):
         # Test with a DataFrame that has no null values in a column

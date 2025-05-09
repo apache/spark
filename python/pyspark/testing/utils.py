@@ -1198,95 +1198,11 @@ def assertColumnUnique(
     # Handle pandas and pandas-on-Spark DataFrames
     if has_pandas and has_arrow:
         import pyspark.pandas as ps
+        from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
-        if isinstance(df, pd.DataFrame):
-            # Check if all columns exist in the DataFrame
-            missing_columns = [col for col in columns if col not in df.columns]
-            if missing_columns:
-                raise ValueError(
-                    f"The following columns do not exist in the DataFrame: {missing_columns}"
-                )
-
-            # Check for duplicates using pandas methods
-            if len(columns) == 1:
-                # For a single column, use duplicated() method
-                duplicates = df[df[columns[0]].duplicated(keep=False)]
-                if not duplicates.empty:
-                    # Get examples of duplicates
-                    duplicate_examples = duplicates.head(5)
-                    examples_str = "\n".join([str(row) for _, row in duplicate_examples.iterrows()])
-
-                    # Create error message
-                    error_msg = f"Column '{columns[0]}' contains duplicate values.\n"
-                    error_msg += f"Examples of duplicates:\n{examples_str}"
-
-                    if message:
-                        error_msg += f"\n{message}"
-
-                    raise AssertionError(error_msg)
-            else:
-                # For multiple columns, use duplicated() with subset parameter
-                duplicates = df[df.duplicated(subset=columns, keep=False)]
-                if not duplicates.empty:
-                    # Get examples of duplicates
-                    duplicate_examples = duplicates.head(5)
-                    examples_str = "\n".join([str(row) for _, row in duplicate_examples.iterrows()])
-
-                    # Create error message
-                    error_msg = f"Columns {columns} contain duplicate values.\n"
-                    error_msg += f"Examples of duplicates:\n{examples_str}"
-
-                    if message:
-                        error_msg += f"\n{message}"
-
-                    raise AssertionError(error_msg)
-
-            # If we get here, no duplicates were found
-            return
-
-        elif isinstance(df, ps.DataFrame):
-            # Check if all columns exist in the DataFrame
-            missing_columns = [col for col in columns if col not in df.columns]
-            if missing_columns:
-                raise ValueError(
-                    f"The following columns do not exist in the DataFrame: {missing_columns}"
-                )
-
-            # Check for duplicates using pandas-on-Spark methods
-            if len(columns) == 1:
-                # For a single column, use duplicated() method
-                duplicates = df[df[columns[0]].duplicated(keep=False)]
-                if len(duplicates) > 0:
-                    # Get examples of duplicates
-                    duplicate_examples = duplicates.head(5)
-                    examples_str = "\n".join([str(row) for _, row in duplicate_examples.iterrows()])
-
-                    # Create error message
-                    error_msg = f"Column '{columns[0]}' contains duplicate values.\n"
-                    error_msg += f"Examples of duplicates:\n{examples_str}"
-
-                    if message:
-                        error_msg += f"\n{message}"
-
-                    raise AssertionError(error_msg)
-            else:
-                # For multiple columns, use duplicated() with subset parameter
-                duplicates = df[df.duplicated(subset=columns, keep=False)]
-                if len(duplicates) > 0:
-                    # Get examples of duplicates
-                    duplicate_examples = duplicates.head(5)
-                    examples_str = "\n".join([str(row) for _, row in duplicate_examples.iterrows()])
-
-                    # Create error message
-                    error_msg = f"Columns {columns} contain duplicate values.\n"
-                    error_msg += f"Examples of duplicates:\n{examples_str}"
-
-                    if message:
-                        error_msg += f"\n{message}"
-
-                    raise AssertionError(error_msg)
-
-            # If we get here, no duplicates were found
+        if isinstance(df, (pd.DataFrame, ps.DataFrame)):
+            # Use the PandasOnSparkTestUtils.assert_column_unique method to check for uniqueness
+            PandasOnSparkTestUtils().assert_column_unique(df, columns, message)
             return
 
     # If we get here, we're dealing with a Spark DataFrame or pandas dependencies are not available
