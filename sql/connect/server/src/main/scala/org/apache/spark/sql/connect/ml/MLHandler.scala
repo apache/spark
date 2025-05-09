@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.Model
+import org.apache.spark.ml.{EstimatorUtils, Model}
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.tree.TreeConfig
 import org.apache.spark.ml.util.{MLWritable, Summary, SummaryUtils}
@@ -171,14 +171,18 @@ private[connect] object MLHandler extends Logging {
                 "if Spark Connect model cache offloading is enabled.")
           }
         }
+
+        EstimatorUtils.warningMessagesBuffer.set(new mutable.ArrayBuffer[String]())
         val model = estimator.fit(dataset).asInstanceOf[Model[_]]
         val id = mlCache.register(model)
+        val fitWarningMessage = EstimatorUtils.warningMessagesBuffer.get().mkString("\n")
         proto.MlCommandResult
           .newBuilder()
           .setOperatorInfo(
             proto.MlCommandResult.MlOperatorInfo
               .newBuilder()
               .setObjRef(proto.ObjectRef.newBuilder().setId(id)))
+              .setWarningMessage(fitWarningMessage)
           .build()
 
       case proto.MlCommand.CommandCase.FETCH =>
