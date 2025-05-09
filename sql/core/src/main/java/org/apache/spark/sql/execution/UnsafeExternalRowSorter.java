@@ -120,6 +120,8 @@ public final class UnsafeExternalRowSorter {
       pageSizeBytes,
       (int) SparkEnv.get().conf().get(
         package$.MODULE$.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD()),
+      (long) SparkEnv.get().conf().get(
+        package$.MODULE$.SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD()),
       canUseRadixSort
     );
   }
