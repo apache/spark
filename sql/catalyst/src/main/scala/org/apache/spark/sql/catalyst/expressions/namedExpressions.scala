@@ -453,12 +453,13 @@ case class OuterReference(e: NamedExpression)
 }
 
 /**
- * A place holder used to hold a reference that has been resolved to a field outside of the current
- * plan. This is used for references that cannot be resolved by the immediate outer plan of the
- * current plan. We use it only for queries containing nested correlation and only in the
+ * A place holder used to hold a reference that has been resolved to a field outside of the subquery
+ * plan. We use it only for queries containing nested correlation and only in the
  * SubqueryExpression#outerAttrs to indicate that the correlated columns referenced by
  * this subquery expression are from the outer scopes, not the subquery plan or
- * the immediate outer plan of the subquery plan.
+ * the immediate outer plan of the subquery plan. For example,
+ * SubqueryExpression(outerAttrs=[OuterScopeReference(a)] means a cannot be resolved by the
+ * SubqueryExpression.plan or the plan holding this SubqueryExpression.
  */
 case class OuterScopeReference(e: NamedExpression)
   extends LeafExpression with NamedExpression with Unevaluable {
