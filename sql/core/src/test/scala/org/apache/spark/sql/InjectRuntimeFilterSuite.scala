@@ -562,7 +562,8 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
       SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true",
       // Re-enable `MergeScalarSubqueries`
       SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "",
-      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName) {
+      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
+        AQEPropagateEmptyRelation(collection.mutable.Map.empty).ruleName) {
 
       val query = "select * from bf1 join bf2 on bf1.c1 = bf2.c2 and " +
         "bf1.b1 = bf2.b2 where bf2.a2 = 62"

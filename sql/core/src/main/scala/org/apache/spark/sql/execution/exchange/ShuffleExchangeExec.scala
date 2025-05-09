@@ -124,10 +124,10 @@ trait ShuffleExchangeLike extends Exchange {
   /**
    * Cancels the shuffle job with an optional reason.
    */
-  final def cancelShuffleJob(reason: Option[String]): Unit = this.synchronized {
+  final def cancelShuffleJob(reason: Option[String], quiet: Boolean): Unit = this.synchronized {
     if (!isCancelled) {
       isCancelled = true
-      futureAction.get().foreach(_.cancel(reason))
+      futureAction.get().foreach(_.cancel(reason, quiet))
     }
   }
 

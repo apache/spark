@@ -134,6 +134,11 @@ object SparkException {
 }
 
 /**
+ * Exception which indicates that the queryStage should be cancelled.
+ */
+private[spark] class SparkAQEStageCancelException extends RuntimeException
+
+/**
  * Exception thrown when execution of some user code in the driver process fails, e.g.
  * accumulator update fails or failure in takeOrdered (user supplies an Ordering implementation
  * that can be misbehaving.
