@@ -1376,6 +1376,7 @@ trait ComplexTypeMergingExpression extends Expression {
  */
 trait UserDefinedExpression {
   def name: String
+  def fullName: String = s"$name:UDF"
 }
 
 trait CommutativeExpression extends Expression {
