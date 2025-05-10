@@ -403,7 +403,7 @@ private[deploy] class Worker(
         // We have exceeded the initial registration retry threshold
         // All retries from now on should use a higher interval
         if (connectionAttemptCount == INITIAL_REGISTRATION_RETRIES) {
-          registrationRetryTimer.foreach(_.cancel(true))
+          registrationRetryTimer.foreach(_.cancel(false))
           registrationRetryTimer = Some(
             forwardMessageScheduler.scheduleAtFixedRate(
               () => Utils.tryLogNonFatalError { self.send(ReregisterWithMaster) },
@@ -426,7 +426,7 @@ private[deploy] class Worker(
       registerMasterFutures.foreach(_.cancel(true))
       registerMasterFutures = null
     }
-    registrationRetryTimer.foreach(_.cancel(true))
+    registrationRetryTimer.foreach(_.cancel(false))
     registrationRetryTimer = None
   }
 
