@@ -2830,4 +2830,12 @@ package object config {
       .checkValues(Set("connect", "classic"))
       .createWithDefault(
         if (sys.env.get("SPARK_CONNECT_MODE").contains("1")) "connect" else "classic")
+
+  private[spark] val SPARK_ML_ALLOW_NATIVE_BLAS =
+    ConfigBuilder("spark.ml.allowNativeBlas")
+      .doc("Whether allow using native BLAS/LAPACK/ARPACK implementations when native " +
+        "libraries are available. If disabled, always use Java implementations.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
 }
