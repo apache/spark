@@ -175,14 +175,20 @@ private[connect] object MLHandler extends Logging {
         EstimatorUtils.warningMessagesBuffer.set(new mutable.ArrayBuffer[String]())
         val model = estimator.fit(dataset).asInstanceOf[Model[_]]
         val id = mlCache.register(model)
-        val fitWarningMessage = EstimatorUtils.warningMessagesBuffer.get().mkString("\n")
+
+        val fitWarningMessage = if (EstimatorUtils.warningMessagesBuffer.get().length > 0) {
+          EstimatorUtils.warningMessagesBuffer.get().mkString("\n")
+        } else { null }
+        EstimatorUtils.warningMessagesBuffer.set(null)
+        val opInfo = proto.MlCommandResult.MlOperatorInfo
+          .newBuilder()
+          .setObjRef(proto.ObjectRef.newBuilder().setId(id))
+        if (fitWarningMessage != null) {
+          opInfo.setWarningMessage(fitWarningMessage)
+        }
         proto.MlCommandResult
           .newBuilder()
-          .setOperatorInfo(
-            proto.MlCommandResult.MlOperatorInfo
-              .newBuilder()
-              .setObjRef(proto.ObjectRef.newBuilder().setId(id))
-              .setWarningMessage(fitWarningMessage))
+          .setOperatorInfo(opInfo)
           .build()
 
       case proto.MlCommand.CommandCase.FETCH =>

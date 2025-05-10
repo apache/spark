@@ -276,7 +276,6 @@ private[spark] object GradientBoostedTrees extends Logging {
 
   // This member is only for testing code.
   private[spark] var lastEarlyStoppedModelSize: Long = 0
-  private[spark] val modelSizeHistory = new scala.collection.mutable.ArrayBuffer[Long]()
 
   /**
    * Internal method for performing regression using trees as base learners.
@@ -414,8 +413,6 @@ private[spark] object GradientBoostedTrees extends Logging {
 
     var m = 1
     var earlyStop = false
-    modelSizeHistory.clear()
-    modelSizeHistory.append(accTreeSize)
     if (
         earlyStopModelSizeThresholdInBytes > 0
         && accTreeSize > earlyStopModelSizeThresholdInBytes
@@ -494,7 +491,6 @@ private[spark] object GradientBoostedTrees extends Logging {
         }
       }
       if (!earlyStop) {
-        modelSizeHistory.append(accTreeSize)
         if (
             earlyStopModelSizeThresholdInBytes > 0
             && accTreeSize > earlyStopModelSizeThresholdInBytes
