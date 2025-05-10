@@ -18,6 +18,7 @@
 package org.apache.spark.ml
 
 import scala.annotation.varargs
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
@@ -101,5 +102,14 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
    */
   private[spark] def estimateModelSize(dataset: Dataset[_]): Long = {
     throw new UnsupportedOperationException
+  }
+}
+
+
+object EstimatorUtils {
+  // This warningMessagesBuffer is for collecting warning messages during `estimator.fit`
+  // execution in Spark Connect server.
+  private[spark] val warningMessagesBuffer = new java.lang.ThreadLocal[ArrayBuffer[String]]() {
+    override def initialValue: ArrayBuffer[String] = null
   }
 }

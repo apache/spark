@@ -449,6 +449,7 @@ class MlCommandResult(google.protobuf.message.Message):
         NAME_FIELD_NUMBER: builtins.int
         UID_FIELD_NUMBER: builtins.int
         PARAMS_FIELD_NUMBER: builtins.int
+        WARNING_MESSAGE_FIELD_NUMBER: builtins.int
         @property
         def obj_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef:
             """The cached object which could be a model or summary evaluated by a model"""
@@ -461,6 +462,8 @@ class MlCommandResult(google.protobuf.message.Message):
         @property
         def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams:
             """(Optional) parameters"""
+        warning_message: builtins.str
+        """(Optional) warning message generated during the ML command execution"""
         def __init__(
             self,
             *,
@@ -468,6 +471,7 @@ class MlCommandResult(google.protobuf.message.Message):
             name: builtins.str = ...,
             uid: builtins.str | None = ...,
             params: pyspark.sql.connect.proto.ml_common_pb2.MlParams | None = ...,
+            warning_message: builtins.str | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -476,6 +480,8 @@ class MlCommandResult(google.protobuf.message.Message):
                 b"_params",
                 "_uid",
                 b"_uid",
+                "_warning_message",
+                b"_warning_message",
                 "name",
                 b"name",
                 "obj_ref",
@@ -486,6 +492,8 @@ class MlCommandResult(google.protobuf.message.Message):
                 b"type",
                 "uid",
                 b"uid",
+                "warning_message",
+                b"warning_message",
             ],
         ) -> builtins.bool: ...
         def ClearField(
@@ -495,6 +503,8 @@ class MlCommandResult(google.protobuf.message.Message):
                 b"_params",
                 "_uid",
                 b"_uid",
+                "_warning_message",
+                b"_warning_message",
                 "name",
                 b"name",
                 "obj_ref",
@@ -505,6 +515,8 @@ class MlCommandResult(google.protobuf.message.Message):
                 b"type",
                 "uid",
                 b"uid",
+                "warning_message",
+                b"warning_message",
             ],
         ) -> None: ...
         @typing.overload
@@ -515,6 +527,10 @@ class MlCommandResult(google.protobuf.message.Message):
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_uid", b"_uid"]
         ) -> typing_extensions.Literal["uid"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_warning_message", b"_warning_message"]
+        ) -> typing_extensions.Literal["warning_message"] | None: ...
         @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["type", b"type"]

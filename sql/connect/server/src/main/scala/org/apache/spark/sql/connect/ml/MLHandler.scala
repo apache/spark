@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.Model
+import org.apache.spark.ml.{EstimatorUtils, Model}
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.tree.TreeConfig
 import org.apache.spark.ml.util.{MLWritable, Summary}
@@ -163,14 +163,24 @@ private[connect] object MLHandler extends Logging {
                 "if Spark Connect model cache offloading is enabled.")
           }
         }
+
+        EstimatorUtils.warningMessagesBuffer.set(new mutable.ArrayBuffer[String]())
         val model = estimator.fit(dataset).asInstanceOf[Model[_]]
         val id = mlCache.register(model)
+
+        val fitWarningMessage = if (EstimatorUtils.warningMessagesBuffer.get().length > 0) {
+          EstimatorUtils.warningMessagesBuffer.get().mkString("\n")
+        } else { null }
+        EstimatorUtils.warningMessagesBuffer.set(null)
+        val opInfo = proto.MlCommandResult.MlOperatorInfo
+          .newBuilder()
+          .setObjRef(proto.ObjectRef.newBuilder().setId(id))
+        if (fitWarningMessage != null) {
+          opInfo.setWarningMessage(fitWarningMessage)
+        }
         proto.MlCommandResult
           .newBuilder()
-          .setOperatorInfo(
-            proto.MlCommandResult.MlOperatorInfo
-              .newBuilder()
-              .setObjRef(proto.ObjectRef.newBuilder().setId(id)))
+          .setOperatorInfo(opInfo)
           .build()
 
       case proto.MlCommand.CommandCase.FETCH =>

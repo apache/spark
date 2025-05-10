@@ -23,6 +23,7 @@ import scala.util.Random
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{MAX_MEMORY_SIZE, MEMORY_SIZE, NUM_CLASSES, NUM_EXAMPLES, NUM_FEATURES, NUM_NODES, NUM_WEIGHTED_EXAMPLES, TIMER}
+import org.apache.spark.ml.EstimatorUtils
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.impl.Utils
@@ -228,9 +229,14 @@ private[spark] object RandomForest extends Logging with Serializable {
         val estimatedSize = SizeEstimator.estimate(nodes)
         if (estimatedSize > earlyStopModelSizeThresholdInBytes){
           earlyStop = true
-          logWarning(
-            "The random forest training stops early because the model size exceeds threshold."
-          )
+          val warningMessage = "The random forest training stops early because the model size " +
+            s"($estimatedSize bytes) exceeds threshold " +
+            s"($earlyStopModelSizeThresholdInBytes bytes)."
+          logWarning(warningMessage)
+          val msgBuffer = EstimatorUtils.warningMessagesBuffer.get()
+          if (msgBuffer != null) {
+            msgBuffer.append(warningMessage)
+          }
           lastEarlyStoppedModelSize = estimatedSize
         }
       }
