@@ -449,6 +449,35 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(amountAndFormat(limits("memory")) === "5500Mi")
   }
 
+  test("SPARK-47573: Add some SPARK_DRIVER_ATTRIBUTE_* if CUSTOM_DRIVER_LOG_URL" +
+    " is defined") {
+    val sparkConf = new SparkConf()
+      .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(CUSTOM_DRIVER_LOG_URL, "url-pattern")
+    val kubernetesConf: KubernetesDriverConf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      labels = CUSTOM_DRIVER_LABELS,
+      environment = DRIVER_ENVS,
+      annotations = DRIVER_ANNOTATIONS)
+
+    val featureStep = new BasicDriverFeatureStep(kubernetesConf)
+    val basePod = SparkPod.initialPod()
+    val configuredPod = featureStep.configurePod(basePod)
+
+    val envs = configuredPod.container
+      .getEnv
+      .asScala
+      .map { env => (env.getName, env.getValue) }
+      .toMap
+    Map(
+      ENV_DRIVER_ATTRIBUTE_APP_ID -> "appId",
+      ENV_DRIVER_ATTRIBUTE_KUBERNETES_NAMESPACE -> "default",
+      ENV_DRIVER_ATTRIBUTE_KUBERNETES_POD_NAME -> "spark-driver-pod"
+    ).foreach { case (k, v) =>
+      assert(envs(k) === v)
+    }
+  }
 
   def containerPort(name: String, portNumber: Int): ContainerPort =
     new ContainerPortBuilder()
