@@ -283,6 +283,13 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val EVENT_LOG_READER_MAX_STRING_LENGTH =
+    ConfigBuilder("spark.eventLog.readerMaxStringLength")
+      .doc("Limit the maximum string size an eventlog item can have when deserializing it.")
+      .version("4.1.0")
+      .intConf
+      .createWithDefault(Int.MaxValue)
+
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite")
       .version("1.0.0")
