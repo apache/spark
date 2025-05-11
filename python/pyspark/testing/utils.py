@@ -1747,10 +1747,16 @@ def assertReferentialIntegrity(
             if isinstance(source_df, pd.DataFrame):
                 from pyspark.sql import SparkSession
 
+                # Drop null values from the source column before converting to Spark DataFrame
+                # This ensures that null values are not treated as values to check
+                source_df_no_nulls = source_df.dropna(subset=[source_column])
+
                 spark = SparkSession.builder.getOrCreate()
-                source_df = spark.createDataFrame(source_df)
+                source_df = spark.createDataFrame(source_df_no_nulls)
             elif isinstance(source_df, ps.DataFrame):
-                source_df = source_df.to_spark()
+                # Drop null values from the source column before converting to Spark DataFrame
+                source_df_no_nulls = source_df.dropna(subset=[source_column])
+                source_df = source_df_no_nulls.to_spark()
             else:
                 raise PySparkAssertionError(
                     errorClass="INVALID_TYPE_DF_EQUALITY_ARG",

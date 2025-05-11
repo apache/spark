@@ -2628,10 +2628,20 @@ class UtilsTestsMixin:
         with self.assertRaises(AssertionError) as cm:
             assertReferentialIntegrity(orders_invalid_pd, "customer_id", customers_spark, "id")
 
+        error_message = str(cm.exception)
         self.assertTrue(
-            "Column 'customer_id' contains values not found in target column 'id'"
-            in str(cm.exception)
+            "Column 'customer_id' contains values not found in target column 'id'" in error_message
         )
+
+        # Check that the error message contains information about the missing values
+        # The missing value could be represented as 4 or nan depending on the conversion
+        self.assertTrue(
+            "4" in error_message or "nan" in error_message,
+            f"Expected '4' or 'nan' in error message, but got: {error_message}",
+        )
+
+        # Verify that the total count of missing values is correct
+        self.assertIn("Total missing values: 1", error_message)
 
     @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_referential_integrity_mixed_types_spark_pandas_on_spark(self):
