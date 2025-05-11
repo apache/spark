@@ -38,7 +38,6 @@ __all__ = ["Column"]
 
 
 class Column(TableValuedFunctionArgument):
-
     """
     A column in a DataFrame.
 
@@ -78,92 +77,77 @@ class Column(TableValuedFunctionArgument):
 
     # arithmetic operators
     @dispatch_col_method
-    def __neg__(self) -> "Column":
-        ...
+    def __neg__(self) -> "Column": ...
 
     @dispatch_col_method
     def __add__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def __sub__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def __mul__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def __div__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def __truediv__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def __mod__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def __radd__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def __rsub__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def __rmul__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def __rdiv__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def __rtruediv__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def __rmod__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def __pow__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def __rpow__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     # logistic operators
     @dispatch_col_method
@@ -185,26 +169,22 @@ class Column(TableValuedFunctionArgument):
     @dispatch_col_method
     def __lt__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def __le__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def __ge__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def __gt__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def eqNullSafe(
@@ -280,30 +260,25 @@ class Column(TableValuedFunctionArgument):
     @dispatch_col_method
     def __and__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def __or__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
-    def __invert__(self) -> "Column":
-        ...
+    def __invert__(self) -> "Column": ...
 
     @dispatch_col_method
     def __rand__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     @dispatch_col_method
     def __ror__(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
-    ) -> "Column":
-        ...
+    ) -> "Column": ...
 
     # container operators
     @dispatch_col_method
@@ -318,7 +293,7 @@ class Column(TableValuedFunctionArgument):
     def bitwiseOR(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> "Column":
-        """ "
+        """
         Compute bitwise OR of this expression with another expression.
 
         .. versionchanged:: 3.4.0
@@ -647,8 +622,7 @@ class Column(TableValuedFunctionArgument):
         ...
 
     @dispatch_col_method
-    def __iter__(self) -> None:
-        ...
+    def __iter__(self) -> None: ...
 
     # string methods
     @dispatch_col_method
@@ -824,15 +798,15 @@ class Column(TableValuedFunctionArgument):
         ...
 
     @overload
-    def substr(self, startPos: int, length: int) -> "Column":
-        ...
+    def substr(self, startPos: int, length: int) -> "Column": ...
 
     @overload
-    def substr(self, startPos: "Column", length: "Column") -> "Column":
-        ...
+    def substr(self, startPos: "Column", length: "Column") -> "Column": ...
 
     @dispatch_col_method
-    def substr(self, startPos: Union[int, "Column"], length: Union[int, "Column"]) -> "Column":
+    def substr(
+        self, startPos: Union[int, "Column"], length: Union[int, "Column"]
+    ) -> "Column":
         """
         Return a :class:`Column` which is a substring of the column.
 
@@ -1557,16 +1531,13 @@ class Column(TableValuedFunctionArgument):
         ...
 
     @dispatch_col_method
-    def __nonzero__(self) -> None:
-        ...
+    def __nonzero__(self) -> None: ...
 
     @dispatch_col_method
-    def __bool__(self) -> None:
-        ...
+    def __bool__(self) -> None: ...
 
     @dispatch_col_method
-    def __repr__(self) -> str:
-        ...
+    def __repr__(self) -> str: ...
 
 
 def _test() -> None:
@@ -1575,13 +1546,19 @@ def _test() -> None:
     import pyspark.sql.column
 
     globs = pyspark.sql.column.__dict__.copy()
-    spark = SparkSession.builder.master("local[4]").appName("sql.column tests").getOrCreate()
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .appName("sql.column tests")
+        .getOrCreate()
+    )
     globs["spark"] = spark
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.column,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+        optionflags=doctest.ELLIPSIS
+        | doctest.NORMALIZE_WHITESPACE
+        | doctest.REPORT_NDIFF,
     )
     spark.stop()
     if failure_count:
