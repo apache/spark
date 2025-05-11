@@ -1459,7 +1459,8 @@ class UtilsTestsMixin:
 
     @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_column_values_in_set_pandas_multiple_columns_different_values(self):
-        # Test with a pandas DataFrame that has all values in different accepted sets for multiple columns
+        # Test with a pandas DataFrame that has all values in different accepted sets for multiple
+        # columns
         import pandas as pd
 
         df = pd.DataFrame({"id": [1, 2, 3], "category": ["A", "B", "C"]})

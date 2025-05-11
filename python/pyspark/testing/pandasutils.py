@@ -664,7 +664,8 @@ class PandasOnSparkTestUtils:
             missing_columns = [col for col in columns if col not in accepted_values]
             if missing_columns:
                 raise ValueError(
-                    f"The following columns do not have accepted values specified: {missing_columns}"
+                    f"""The following columns do not have accepted values specified: 
+                    {missing_columns}"""
                 )
 
             # Convert values to sets if they're not already
