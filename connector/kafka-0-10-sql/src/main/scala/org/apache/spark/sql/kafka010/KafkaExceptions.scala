@@ -183,6 +183,8 @@ object KafkaExceptions {
       errorClass = "KAFKA_NULL_TOPIC_IN_DATA",
       messageParameters = Map.empty)
   }
+
+  // todo yuchen: create error function
 }
 
 /**

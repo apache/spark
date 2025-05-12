@@ -616,6 +616,82 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     assert(df.rdd.collectPartitions().flatMap(_.map(_.getString(0))).toSet
       === (0 to 30).map(_.toString).toSet)
   }
+
+  //  test("endOffset error message") {
+  //    val kafkaRDD = new KafkaSourceRDD(
+  //      sparkContext, new java.util.HashMap[String, Object](), null, 10, false)
+  //    kafkaRDD.compute(
+  //      KafkaSourceRDDPartition(0, KafkaOffsetRange(new TopicPartition("test", 0), 5L, 0L)),
+  //      null
+  //    )
+  //  }
+
+  test("first layer of protection") {
+    val df = spark.read
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", "test")
+      .option(
+        "startingOffsets",
+        """
+          |{"test": {"0": 1, "1": 1, "2": 1}}
+          |""".stripMargin
+      )
+      .option(
+        "endingOffsets",
+        """
+          |{"test": {"0": 0, "1": 0, "2": 0}}
+          |""".stripMargin
+      )
+      .load()
+    df.collect()
+  }
+
+  test("second layer of protection") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    val df = spark.read
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option(
+        "startingOffsets",
+        s"""
+          |{"$topic": {"0": 1, "1": 1, "2": 1}}
+          |""".stripMargin
+      )
+      .option(
+        "endingOffsetsByTimestamp",
+        s"""
+          |{"$topic": {"0": 0, "1": 0, "2": 0}}
+          |""".stripMargin
+      )
+      .load()
+    df.collect()
+  }
+
+  test("third layer of protection") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    val df = spark.read
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option(
+        "startingOffsets",
+        s"""
+           |{"$topic": {"0": 1, "1": 1, "2": 1}}
+           |""".stripMargin
+      )
+//      .option(
+//        "endingOffsetsByTimestamp",
+//        s"""
+//           |{"$topic": {"0": 0, "1": 0, "2": 0}}
+//           |""".stripMargin
+//      )
+      .load()
+    df.collect()
+  }
 }
 
 class KafkaRelationSuiteWithAdminV1 extends KafkaRelationSuiteV1 {

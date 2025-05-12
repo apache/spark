@@ -401,6 +401,23 @@ private[kafka010] class KafkaOffsetReaderAdmin(
         throw new IllegalStateException(s"$tp doesn't have a from offset")
       )
       val untilOffset = untilPartitionOffsets(tp)
+      // todo yuchen: check if greater, maybe kafka broken (most likely) or bad input
+      // give different potential options
+      // (1) kafka broken
+      // (2) start is time, end is index ...
+      // (3) start is index, end is time ...
+      // (4) start is index (big), end is latest.
+      // 1 and 4 also applies to streaming (resolved offsets)
+      // todo put it to KafkaOffsetReaderConsumer as well
+      KafkaSourceProvider.checkStartOffsetNotGreaterThanEndOffset(
+        tp,
+        fromOffset,
+        untilOffset,
+        (tp, fromOffset, untilOffset) =>
+          throw new IllegalStateException(
+            s"2: Start offset $fromOffset is greater than end offset $untilOffset " +
+              s"for topic ${tp.topic()} partition ${tp.partition()}.")
+      )
       KafkaOffsetRange(tp, fromOffset, untilOffset, None)
     }.toSeq
 

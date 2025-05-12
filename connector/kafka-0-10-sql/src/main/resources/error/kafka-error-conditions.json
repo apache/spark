@@ -97,5 +97,11 @@
       }
     },
     "sqlState" : "22000"
+  },
+  // todo yuchen: use this error
+  "SPECIFIED_START_OFFSET_GREATER_THAN_END_OFFSET" : {
+    "message" : [
+      "The specified <startOffsetType> <startOffset> is greater than the end offset <endOffsetType> <endOffset> for topic <topic> partition <partition>."
+    ]
   }
 }

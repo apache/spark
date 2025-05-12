@@ -21,7 +21,7 @@ import java.{util => ju}
 
 import org.apache.kafka.clients.consumer.ConsumerRecord
 
-import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.apache.spark.{Partition, SparkContext, SparkException, TaskContext}
 import org.apache.spark.internal.LogKeys.{FROM_OFFSET, PARTITION_ID, TOPIC}
 import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
@@ -75,11 +75,9 @@ private[kafka010] class KafkaSourceRDD(
       sourcePartition.offsetRange.topicPartition, executorKafkaParams)
 
     val range = resolveRange(consumer, sourcePartition.offsetRange)
-    assert(
-      range.fromOffset <= range.untilOffset,
-      s"Beginning offset ${range.fromOffset} is after the ending offset ${range.untilOffset} " +
-        s"for topic ${range.topic} partition ${range.partition}. " +
-        "You either provided an invalid fromOffset, or the Kafka topic has been damaged")
+    assert(range.fromOffset != -1 && range.untilOffset != -1,
+      s"Should not have -1 offsets for topic ${range.topic} partition ${range.partition} " +
+        s"fromOffset ${range.fromOffset} untilOffset ${range.untilOffset}")
     if (range.fromOffset == range.untilOffset) {
       logInfo(log"Beginning offset ${MDC(FROM_OFFSET, range.fromOffset)} is the same as ending " +
         log"offset skipping ${MDC(TOPIC, range.topic)} ${MDC(PARTITION_ID, range.partition)}")
@@ -137,6 +135,26 @@ private[kafka010] class KafkaSourceRDD(
       } else {
         range.untilOffset
       }
+//      if (range.fromOffset > range.untilOffset) {
+//        // todo yuchen: check if greater, maybe kafka broken (most likely) or bad input
+//        // give different potential options
+//        // (1) kafka broken
+//        // (2) start is time, end is index ...
+//        // (3) start is index, end is time ...
+//        // (4) start is index (big), end is latest.
+//        // 1 and 4 also applies to streaming (resolved offsets)
+//        // todo yuchen: check how streaming uses getOffsetRangesFromResolvedOffsets
+//        throw new SparkIllegalArgumentException("")
+//      }
+      KafkaSourceProvider.checkStartOffsetNotGreaterThanEndOffset(
+        range.topicPartition,
+        fromOffset,
+        untilOffset,
+        (tp, fromOffset, untilOffset) =>
+          throw new IllegalStateException(
+            s"3: Start offset $fromOffset is greater than end offset $untilOffset " +
+              s"for topic ${tp.topic()} partition ${tp.partition()}.")
+      )
       KafkaOffsetRange(range.topicPartition,
         fromOffset, untilOffset, range.preferredLoc)
     } else {

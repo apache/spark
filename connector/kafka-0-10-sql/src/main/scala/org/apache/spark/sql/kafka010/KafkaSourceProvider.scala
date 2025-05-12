@@ -24,6 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySerializer}
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
@@ -140,6 +141,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       ENDING_OFFSETS_BY_TIMESTAMP_OPTION_KEY, ENDING_OFFSETS_OPTION_KEY,
       LatestOffsetRangeLimit)
     assert(endingRelationOffsets != EarliestOffsetRangeLimit)
+
+    checkOffsetLimitValidity(startingRelationOffsets, endingRelationOffsets)
 
     val includeHeaders = caseInsensitiveParameters.getOrElse(INCLUDE_HEADERS, "false").toBoolean
 
@@ -463,6 +466,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         ENDING_OFFSETS_BY_TIMESTAMP_OPTION_KEY, ENDING_OFFSETS_OPTION_KEY,
         LatestOffsetRangeLimit)
 
+      checkOffsetLimitValidity(startingRelationOffsets, endingRelationOffsets)
+
       new KafkaBatch(
         strategy(caseInsensitiveOptions),
         caseInsensitiveOptions,
@@ -608,6 +613,73 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private val serClassName = classOf[ByteArraySerializer].getName
   private val deserClassName = classOf[ByteArrayDeserializer].getName
 
+  def checkStartOffsetNotGreaterThanEndOffset(
+      topicPartition: TopicPartition,
+      startOffset: Long,
+      endOffset: Long,
+      throwException: (TopicPartition, Long, Long) => Unit): Unit = {
+    if (startOffset > endOffset && startOffset != -1 && endOffset != -1) {
+      // todo
+//      assert(false, s"Start offset $startOffset is greater than end offset $endOffset")
+      throwException(topicPartition, startOffset, endOffset)
+    }
+  }
+
+  def checkOffsetLimitValidity(
+      startOffset: KafkaOffsetRangeLimit,
+      endOffset: KafkaOffsetRangeLimit): Unit = {
+    startOffset match {
+      case start: SpecificOffsetRangeLimit if endOffset.isInstanceOf[SpecificOffsetRangeLimit] =>
+        val end = endOffset.asInstanceOf[SpecificOffsetRangeLimit]
+        if (start.partitionOffsets.keySet != end.partitionOffsets.keySet) {
+          // todo
+          // must be the same sizes
+          assert(false,
+            s"Start partition offsets ${start.partitionOffsets.keySet} " +
+              s"are not the same as end partition offsets ${end.partitionOffsets.keySet}")
+        }
+        start.partitionOffsets.foreach({
+          case (tp, startOffset) =>
+            checkStartOffsetNotGreaterThanEndOffset(
+              tp,
+              startOffset,
+              end.partitionOffsets(tp),
+              (topicPartition: TopicPartition, startOffset: Long, endOffset: Long) =>
+                throw new IllegalArgumentException(
+                  s"Start offset $startOffset is greater than end offset $endOffset for " +
+                    s"topic ${topicPartition.topic} " + s"partition ${topicPartition.partition}.")
+            )
+        })
+
+      case start: SpecificTimestampRangeLimit
+        if endOffset.isInstanceOf[SpecificTimestampRangeLimit] =>
+        val end = endOffset.asInstanceOf[SpecificTimestampRangeLimit]
+        if (start.topicTimestamps.keySet != end.topicTimestamps.keySet) {
+          // todo
+          // must be the same sizes
+          assert(false,
+            s"Start topic timestamps ${start.topicTimestamps.keySet} " +
+              s"are not the same as end topic timestamps ${end.topicTimestamps.keySet}")
+        }
+        start.topicTimestamps.foreach({
+          case (tp, startOffset) =>
+            checkStartOffsetNotGreaterThanEndOffset(
+              tp,
+              startOffset,
+              end.topicTimestamps(tp),
+              (topicPartition: TopicPartition, startOffset: Long, endOffset: Long) =>
+                throw new IllegalArgumentException(
+                  s"Start timestamp $startOffset is greater than end timestamp $endOffset for " +
+                    s"topic ${topicPartition.topic} " + s"partition ${topicPartition.partition}.")
+            )
+        })
+
+      case _ =>  // do nothing
+    }
+  }
+
+  // todo yuchen: when start and end calls this, if they are using comparable offsets,
+  // check their validity
   def getKafkaOffsetRangeLimit(
       params: CaseInsensitiveMap[String],
       globalOffsetTimestampOptionKey: String,
