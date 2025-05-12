@@ -21,7 +21,7 @@ import java.{util => ju}
 
 import org.apache.kafka.clients.consumer.ConsumerRecord
 
-import org.apache.spark.{Partition, SparkContext, SparkException, TaskContext}
+import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.LogKeys.{FROM_OFFSET, PARTITION_ID, TOPIC}
 import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
