@@ -155,9 +155,12 @@ private[sql] class RocksDBStateStoreProvider
             case RELEASED => RELEASED
           }
       }
-      logInfo(log"Transitioned state from ${MDC(LogKeys.STATE_STORE_STATE, state)} " +
-        log"to ${MDC(LogKeys.STATE_STORE_STATE, newState)} " +
-        log"for StateStoreId ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)}")
+      if (transition != UPDATE) {
+        logInfo(log"Transitioned state from ${MDC(LogKeys.STATE_STORE_STATE, state)} " +
+          log"to ${MDC(LogKeys.STATE_STORE_STATE, newState)} " +
+          log"for StateStoreId ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)} " +
+          log"with transition $transition")
+      }
       state = newState
     }
 
