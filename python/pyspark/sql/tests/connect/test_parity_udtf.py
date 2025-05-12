@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import unittest
 
 from pyspark.testing.connectutils import should_test_connect
@@ -122,6 +123,10 @@ class LegacyArrowUDTFParityTests(LegacyUDTFArrowTestsMixin, UDTFParityTests):
             TestUDTF().collect()
 
 
+@unittest.skipIf(
+    os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1",
+    "Python UDTF with Arrow is still under development.",
+)
 class ArrowUDTFParityTests(UDTFArrowTestsMixin, UDTFParityTests):
     @classmethod
     def setUpClass(cls):
