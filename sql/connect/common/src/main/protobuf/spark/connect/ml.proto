@@ -124,5 +124,7 @@ message MlCommandResult {
     optional string uid = 3;
     // (Optional) parameters
     optional MlParams params = 4;
+    // (Optional) warning message generated during the ML command execution
+    optional string warning_message = 5;
   }
 }

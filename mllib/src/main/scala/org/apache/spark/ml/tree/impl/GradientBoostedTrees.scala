@@ -20,6 +20,7 @@ package org.apache.spark.ml.tree.impl
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.TIMER
+import org.apache.spark.ml.EstimatorUtils
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
@@ -275,7 +276,6 @@ private[spark] object GradientBoostedTrees extends Logging {
 
   // This member is only for testing code.
   private[spark] var lastEarlyStoppedModelSize: Long = 0
-  private[spark] val modelSizeHistory = new scala.collection.mutable.ArrayBuffer[Long]()
 
   /**
    * Internal method for performing regression using trees as base learners.
@@ -413,8 +413,6 @@ private[spark] object GradientBoostedTrees extends Logging {
 
     var m = 1
     var earlyStop = false
-    modelSizeHistory.clear()
-    modelSizeHistory.append(accTreeSize)
     if (
         earlyStopModelSizeThresholdInBytes > 0
         && accTreeSize > earlyStopModelSizeThresholdInBytes
@@ -493,7 +491,6 @@ private[spark] object GradientBoostedTrees extends Logging {
         }
       }
       if (!earlyStop) {
-        modelSizeHistory.append(accTreeSize)
         if (
             earlyStopModelSizeThresholdInBytes > 0
             && accTreeSize > earlyStopModelSizeThresholdInBytes
@@ -526,9 +523,15 @@ private[spark] object GradientBoostedTrees extends Logging {
       //  - validation error increases
       //  - the accumulated size of trees exceeds the value of `earlyStopModelSizeThresholdInBytes`
       if (accTreeSize > earlyStopModelSizeThresholdInBytes) {
-        logWarning(
-          "The boosting tree training stops early because the model size exceeds threshold."
-        )
+        val warningMessage = "The boosting tree training stops early because the GBT accumulated " +
+          "tree models size " +
+          s"($accTreeSize bytes) exceeds threshold " +
+          s"($earlyStopModelSizeThresholdInBytes bytes)."
+        logWarning(warningMessage)
+        val msgBuffer = EstimatorUtils.warningMessagesBuffer.get()
+        if (msgBuffer != null) {
+          msgBuffer.append(warningMessage)
+        }
       }
       (baseLearners.slice(0, validM), baseLearnerWeights.slice(0, validM))
     } else {

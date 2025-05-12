@@ -16,6 +16,7 @@
 #
 
 import json
+import logging
 import os
 import threading
 import time
@@ -67,6 +68,8 @@ FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
 ML_CONNECT_HELPER_ID = "______ML_CONNECT_HELPER______"
+
+_logger = logging.getLogger("pyspark.ml.util")
 
 
 def try_remote_intermediate_result(f: FuncT) -> FuncT:
@@ -197,6 +200,8 @@ def try_remote_fit(f: FuncT) -> FuncT:
             )
             (_, properties, _) = client.execute_command(command)
             model_info = deserialize(properties)
+            if warning_msg := getattr(model_info, "warning_message", None):
+                _logger.warning(warning_msg)
             remote_model_ref = RemoteModelRef(model_info.obj_ref.id)
             model = self._create_model(remote_model_ref)
             if model.__class__.__name__ not in ["Bucketizer"]:
