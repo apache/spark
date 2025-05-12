@@ -1053,11 +1053,12 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   test("SPARK-48618: Test table does not exists error") {
     withTable(s"$catalogName.tbl1") {
       val tbl = "$catalogName.tbl1"
+      val sqlStatement = "SELECT * FROM $catalogName.tbl1"
       val startPos = sqlStatement.indexOf(tbl)
 
       sql(s"CREATE TABLE $catalogName.tbl1 (col1 INT, col2 INT)")
       sql(s"INSERT INTO $catalogName.tbl1 VALUES (1, 2)")
-      val df = sql(s"SELECT * FROM $catalogName.tbl1")
+      val df = sql(sqlStatement)
       val row = df.collect()
       assert(row.length === 1)
 
@@ -1066,7 +1067,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
       checkError(
         exception = intercept[AnalysisException] {
-          sql(s"SELECT * FROM $catalogName.tbl1").collect()
+          sql(sqlStatement).collect()
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map("relationName" -> s"`$catalogName`.`tbl1`"),
