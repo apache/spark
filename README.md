@@ -56,7 +56,7 @@ This README file only contains basic setup instructions.
 |            | Python Only/Python 3.11                                | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch40_python.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch40_python.yml)                   |
 |            | Python Only/PyPy 3.10                                  | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch40_python_pypy3.10.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch40_python_pypy3.10.yml) |
 | branch-3.5 | Java 8                                                 | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch35.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch35.yml)                                 |
-| branch-3.5 | Python Only/Python 3.9                                 | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch35_python.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch35_python.yml)                   |
+|            | Python Only/Python 3.9                                 | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch35_python.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch35_python.yml)                   |
 
 
 ## Building Spark
