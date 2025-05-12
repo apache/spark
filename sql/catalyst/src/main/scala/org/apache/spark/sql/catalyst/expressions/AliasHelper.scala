@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.analysis.MultiAlias
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.types.Metadata
 
 /**
@@ -95,22 +96,26 @@ trait AliasHelper {
   }
 
   protected def trimNonTopLevelAliases[T <: Expression](e: T): T = {
-    val res = e match {
-      case a: Alias =>
-        val metadata = if (a.metadata == Metadata.empty) {
-          None
-        } else {
-          Some(a.metadata)
-        }
-        a.copy(child = trimAliases(a.child))(
-          exprId = a.exprId,
-          qualifier = a.qualifier,
-          explicitMetadata = metadata,
-          nonInheritableMetadataKeys = a.nonInheritableMetadataKeys)
-      case a: MultiAlias =>
-        a.copy(child = trimAliases(a.child))
-      case other => trimAliases(other)
+    val res = CurrentOrigin.withOrigin(e.origin) {
+      e match {
+        case a: Alias =>
+          val metadata = if (a.metadata == Metadata.empty) {
+            None
+          } else {
+            Some(a.metadata)
+          }
+          a.copy(child = trimAliases(a.child))(
+            exprId = a.exprId,
+            qualifier = a.qualifier,
+            explicitMetadata = metadata,
+            nonInheritableMetadataKeys = a.nonInheritableMetadataKeys)
+        case a: MultiAlias =>
+          a.copy(child = trimAliases(a.child))
+        case other => trimAliases(other)
+      }
     }
+
+    res.copyTagsFrom(e)
 
     res.asInstanceOf[T]
   }
