@@ -157,6 +157,9 @@ class PySparkPlotAccessor:
             >>> columns = ["category", "int_val", "float_val"]
             >>> df = spark.createDataFrame(data, columns)
             >>> df.plot.line(x="category", y="int_val")  # doctest: +SKIP
+
+        .. plotly::
+
             >>> df.plot.line(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
         """
         return self(kind="line", x=x, y=y, **kwargs)
@@ -194,6 +197,9 @@ class PySparkPlotAccessor:
             >>> columns = ["category", "int_val", "float_val"]
             >>> df = spark.createDataFrame(data, columns)
             >>> df.plot.bar(x="category", y="int_val")  # doctest: +SKIP
+
+        .. plotly::
+
             >>> df.plot.bar(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
         """
         return self(kind="bar", x=x, y=y, **kwargs)
@@ -240,6 +246,9 @@ class PySparkPlotAccessor:
             >>> columns = ["category", "int_val", "float_val"]
             >>> df = spark.createDataFrame(data, columns)
             >>> df.plot.barh(x="int_val", y="category")  # doctest: +SKIP
+
+        .. plotly::
+
             >>> df.plot.barh(
             ...     x=["int_val", "float_val"], y="category"
             ... )  # doctest: +SKIP
@@ -357,6 +366,9 @@ class PySparkPlotAccessor:
             >>> columns = ["sales", "signups", "visits", "date"]
             >>> df = spark.createDataFrame(data, columns)
             >>> df.plot.pie(x='date', y='sales')  # doctest: +SKIP
+
+        .. plotly::
+
             >>> df.plot.pie(x='date', subplots=True)  # doctest: +SKIP
         """
         return self(kind="pie", x=x, y=y, **kwargs)
@@ -406,7 +418,13 @@ class PySparkPlotAccessor:
             >>> columns = ["student", "math_score", "english_score"]
             >>> df = spark.createDataFrame(data, columns)
             >>> df.plot.box()  # doctest: +SKIP
+
+        .. plotly::
+
             >>> df.plot.box(column="math_score")  # doctest: +SKIP
+
+        .. plotly::
+
             >>> df.plot.box(column=["math_score", "english_score"])  # doctest: +SKIP
         """
         return self(kind="box", column=column, **kwargs)
@@ -455,7 +473,13 @@ class PySparkPlotAccessor:
             >>> columns = ["length", "width", "species"]
             >>> df = spark.createDataFrame(data, columns)
             >>> df.plot.kde(bw_method=0.3, ind=100)  # doctest: +SKIP
+
+        .. plotly::
+
             >>> df.plot.kde(column=["length", "width"], bw_method=0.3, ind=100)  # doctest: +SKIP
+
+        .. plotly::
+
             >>> df.plot.kde(column="length", bw_method=0.3, ind=100)  # doctest: +SKIP
         """
         return self(kind="kde", column=column, bw_method=bw_method, ind=ind, **kwargs)
@@ -494,7 +518,13 @@ class PySparkPlotAccessor:
             >>> columns = ["length", "width", "species"]
             >>> df = spark.createDataFrame(data, columns)
             >>> df.plot.hist(bins=4)  # doctest: +SKIP
+
+        .. plotly::
+
             >>> df.plot.hist(column=["length", "width"])  # doctest: +SKIP
+
+        .. plotly::
+
             >>> df.plot.hist(column="length", bins=4)  # doctest: +SKIP
         """
         return self(kind="hist", column=column, bins=bins, **kwargs)
