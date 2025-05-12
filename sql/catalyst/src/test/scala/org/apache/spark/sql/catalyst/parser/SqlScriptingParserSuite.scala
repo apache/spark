@@ -514,32 +514,6 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(exception.origin.line.contains(4))
   }
 
-  test("SET VAR statement test") {
-    val sqlScriptText =
-      """
-        |BEGIN
-        |  DECLARE totalInsCnt = 0;
-        |  SET VAR totalInsCnt = (SELECT x FROM y WHERE id = 1);
-        |END""".stripMargin
-    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
-    assert(tree.collection.length == 2)
-    assert(tree.collection.head.isInstanceOf[SingleStatement])
-    assert(tree.collection(1).isInstanceOf[SingleStatement])
-  }
-
-  test("SET VARIABLE statement test") {
-    val sqlScriptText =
-      """
-        |BEGIN
-        |  DECLARE totalInsCnt = 0;
-        |  SET VARIABLE totalInsCnt = (SELECT x FROM y WHERE id = 1);
-        |END""".stripMargin
-    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
-    assert(tree.collection.length == 2)
-    assert(tree.collection.head.isInstanceOf[SingleStatement])
-    assert(tree.collection(1).isInstanceOf[SingleStatement])
-  }
-
   test("SET statement test") {
     val sqlScriptText =
       """
@@ -2628,7 +2602,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  DECLARE OR REPLACE flag INT = -1;
         |  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
         |  BEGIN
-        |    SET VAR flag = 1;
+        |    SET flag = 1;
         |  END;
         |  SELECT 1/0;
         |  SELECT flag;
@@ -2649,7 +2623,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  DECLARE OR REPLACE flag INT = -1;
         |  DECLARE EXIT HANDLER FOR qualified.condition.name
         |  BEGIN
-        |    SET VAR flag = 1;
+        |    SET flag = 1;
         |  END;
         |  SELECT 1/0;
         |  SELECT flag;
@@ -2705,7 +2679,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  DECLARE DUPLICATE_CONDITION CONDITION FOR SQLSTATE '12345';
         |  DECLARE EXIT HANDLER FOR duplicate_condition, duplicate_condition
         |  BEGIN
-        |    SET VAR flag = 1;
+        |    SET flag = 1;
         |  END;
         |  SELECT 1/0;
         |  SELECT flag;
@@ -2726,7 +2700,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  DECLARE OR REPLACE flag INT = -1;
         |  DECLARE EXIT HANDLER FOR SQLSTATE '12345', SQLSTATE '12345'
         |  BEGIN
-        |    SET VAR flag = 1;
+        |    SET flag = 1;
         |  END;
         |  SELECT 1/0;
         |  SELECT flag;
@@ -2747,7 +2721,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  DECLARE OR REPLACE flag INT = -1;
         |  DECLARE EXIT HANDLER FOR SQLEXCEPTION, SQLSTATE '12345'
         |  BEGIN
-        |    SET VAR flag = 1;
+        |    SET flag = 1;
         |  END;
         |  SELECT 1/0;
         |  SELECT flag;
