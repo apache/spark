@@ -868,6 +868,7 @@ private[spark] object LogKeys {
   case object TRAIN_VALIDATION_SPLIT_METRIC extends LogKey
   case object TRAIN_VALIDATION_SPLIT_METRICS extends LogKey
   case object TRANSFER_TYPE extends LogKey
+  case object TRANSITION extends LogKey
   case object TREE_NODE extends LogKey
   case object TRIGGER_INTERVAL extends LogKey
   case object UI_ACLS extends LogKey

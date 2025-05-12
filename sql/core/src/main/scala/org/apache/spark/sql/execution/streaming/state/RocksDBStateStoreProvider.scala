@@ -159,7 +159,7 @@ private[sql] class RocksDBStateStoreProvider
         logInfo(log"Transitioned state from ${MDC(LogKeys.STATE_STORE_STATE, state)} " +
           log"to ${MDC(LogKeys.STATE_STORE_STATE, newState)} " +
           log"for StateStoreId ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)} " +
-          log"with transition $transition")
+          log"with transition ${MDC(LogKeys.TRANSITION, transition)}")
       }
       state = newState
     }
