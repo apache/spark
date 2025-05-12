@@ -87,8 +87,8 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
     long bitSize = bits.bitSize();
     boolean bitsChanged = false;
-    for (int i = 1; i <= numHashFunctions; i++) {
-      int combinedHash = h1 + (i * h2);
+    for (long i = 1; i <= numHashFunctions; i++) {
+      long combinedHash = h1 + (i * h2);
       // Flip all the bits if it's negative (guaranteed positive number)
       if (combinedHash < 0) {
         combinedHash = ~combinedHash;
@@ -109,8 +109,8 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     int h2 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, h1);
 
     long bitSize = bits.bitSize();
-    for (int i = 1; i <= numHashFunctions; i++) {
-      int combinedHash = h1 + (i * h2);
+    for (long i = 1; i <= numHashFunctions; i++) {
+      long combinedHash = h1 + (i * h2);
       // Flip all the bits if it's negative (guaranteed positive number)
       if (combinedHash < 0) {
         combinedHash = ~combinedHash;
@@ -134,8 +134,8 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
     long bitSize = bits.bitSize();
     boolean bitsChanged = false;
-    for (int i = 1; i <= numHashFunctions; i++) {
-      int combinedHash = h1 + (i * h2);
+    for (long i = 1; i <= numHashFunctions; i++) {
+      long combinedHash = h1 + (i * h2);
       // Flip all the bits if it's negative (guaranteed positive number)
       if (combinedHash < 0) {
         combinedHash = ~combinedHash;
@@ -151,8 +151,8 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     int h2 = Murmur3_x86_32.hashLong(item, h1);
 
     long bitSize = bits.bitSize();
-    for (int i = 1; i <= numHashFunctions; i++) {
-      int combinedHash = h1 + (i * h2);
+    for (long i = 1; i <= numHashFunctions; i++) {
+      long combinedHash = h1 + (i * h2);
       // Flip all the bits if it's negative (guaranteed positive number)
       if (combinedHash < 0) {
         combinedHash = ~combinedHash;
