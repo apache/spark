@@ -27,6 +27,7 @@ import scala.collection.JavaConverters._
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaConsumer, OffsetOutOfRangeException}
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.config.ConfigException
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
@@ -58,7 +59,7 @@ private[kafka010] class InternalKafkaConsumer(
   // It must be updated whenever a new consumer is created.
   // Exposed for testing
   private[consumer] var kafkaParamsWithSecurity: ju.Map[String, Object] = _
-  private val consumer = createConsumer()
+  private val consumer = createConsumerWithRetry()
 
   /**
    * Poll messages from Kafka starting from `offset` and returns a pair of "list of consumer record"
@@ -131,6 +132,46 @@ private[kafka010] class InternalKafkaConsumer(
   private def seek(offset: Long): Unit = {
     logDebug(s"Seeking to $groupId $topicPartition $offset")
     consumer.seek(topicPartition, offset)
+  }
+
+  private def createConsumerWithRetry(): KafkaConsumer[Array[Byte], Array[Byte]] = {
+    val maxAttempts = 8
+    val initialDelayMillis = 1000
+    val maxDelayMillis = 30 * 1000
+
+    var attempt = 1
+
+    while (attempt <= maxAttempts) {
+      try {
+        return createConsumer()
+      } catch {
+        // Catches a known transient ConfigException:
+        // "No resolvable bootstrap urls given in bootstrap.servers"
+        case e: ConfigException
+          if e.getMessage.contains("No resolvable bootstrap urls given in bootstrap.servers") => {
+
+          val delay = math.min(initialDelayMillis * math.pow(2, attempt).toLong, maxDelayMillis)
+
+          logWarning(
+            s"Failed to create Kafka consumer for $groupId $topicPartition, " +
+            s"attempt $attempt failed: ${e.getMessage}.")
+
+          if (attempt == maxAttempts) {
+            logError(
+              s"Reached max attempts to create Kafka consumer for" +
+              s"$groupId $topicPartition")
+            throw new RuntimeException("Failed to create Kafka consumer after " +
+              s"$maxAttempts attempts due to: ${e.getMessage}")
+          }
+
+          logWarning(s"Retrying in $delay milliseconds.")
+          attempt += 1
+          Thread.sleep(delay)
+          }
+      }
+    }
+
+    throw new RuntimeException("Failed to create Kafka consumer after retries.")
   }
 }
 

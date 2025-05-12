@@ -19,10 +19,10 @@
 - [SPARK-48642][CORE] False SparkOutOfMemoryError caused by killing task on spilling
 - [SPARK-48286][SQL][3.5] Fix column default value check - Add error class
 - [SPARK-47910][CORE] close stream when DiskBlockObjectWriter closeResources to avoid memory leak
-- [SPARK-48498][SQL][3.5] Always do char padding in predicates 
+- [SPARK-48498][SQL][3.5] Always do char padding in predicates
 - [SPARK-47172][CORE][3.5] Add support for AES-GCM for RPC encryption
 - [SPARK-48428][SQL] Fix IllegalStateException in NestedColumnAliasing
-- [SPARK-46957][CORE] Decommission migrated shuffle files should be able to cleanup from executor 
+- [SPARK-46957][CORE] Decommission migrated shuffle files should be able to cleanup from executor
 - [SPARK-48709][SQL][3.5] Fix varchar type resolution mismatch for DataSourceV2 CTAS
 - [SPARK-48494][BUILD][3.5] Update `airlift:aircompressor` to 0.27
 - [SPARK-48586][SS][3.5] Remove lock acquisition in doMaintenance() by making a deep copy of file mappings in RocksDBFileManager in load()
@@ -31,7 +31,7 @@
 - [SPARK-48710][PYTHON][3.5] Limit NumPy version to supported range (>=1.15,<2)
 - [SPARK-48806][SQL] Pass actual exception when url_decode fails
 - [SPARK-48719][SQL][3.5] Fix the calculation bug of RegrSlope & RegrIntercept when the first parameter is null
-- [SPARK-48843] Prevent infinite loop with BindParameters 
+- [SPARK-48843] Prevent infinite loop with BindParameters
 - [SPARK-48863][SQL] Fix ClassCastException when parsing JSON with "spark.sql.json.enablePartialResults" enabled
 - [MINOR][DOCS] Add `docs/_generated/` to .gitignore
 - [MINOR][SQL][TESTS] Remove a duplicate test case in `CSVExprUtilsSuite`
@@ -39,7 +39,7 @@
 - [SPARK-48845][SQL] GenericUDF catch exceptions from children
 - [SPARK-48666][SQL] Do not push down filter if it contains PythonUDFs
 - [SPARK-47172][DOCS][FOLLOWUP] Fix spark.network.crypto.ciphersince version field on security page
-- [SPARK-47307][SQL][3.5] Add a config to optionally chunk base64 strings 
+- [SPARK-47307][SQL][3.5] Add a config to optionally chunk base64 strings
 - [SPARK-48889][SS] testStream to unload state stores before finishing
 - [SPARK-48920][BUILD][3.5] Upgrade ORC to 1.9.4
 - [SPARK-48930][CORE] Redact `awsAccessKeyId` by including `accesskey` pattern
@@ -61,3 +61,4 @@
 - [INTERNAL] Improve release artifacts publishing
 - [INTERNAL] Add a new RPC message UpdateAccessTokens
 - [INTERNAL] Fix access token propagation when executors start up
+- [INTERNAL] Add retry to Kakfa Consumer creation for specific transient error
