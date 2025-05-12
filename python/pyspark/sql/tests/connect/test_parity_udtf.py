@@ -132,6 +132,10 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
         super(UDTFParityTests, self).test_udtf_with_wrong_num_input()
 
 
+@unittest.skipIf(
+    os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1",
+    "Python UDTF with Arrow is still under development.",
+)
 class ArrowUDTFParityTests(UDTFArrowTestsMixin, UDTFParityTests):
     @classmethod
     def setUpClass(cls):
