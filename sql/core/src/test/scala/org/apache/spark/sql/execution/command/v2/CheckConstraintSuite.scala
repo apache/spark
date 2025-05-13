@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.SparkRuntimeException
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.execution.command.DDLCommandTestUtils
@@ -143,15 +144,11 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     val validStatus = "UNVALIDATED"
     Seq(
       ("", s"ENFORCED $validStatus NORELY"),
-      ("NOT ENFORCED", s"NOT ENFORCED $validStatus NORELY"),
-      ("NOT ENFORCED NORELY", s"NOT ENFORCED $validStatus NORELY"),
-      ("NORELY NOT ENFORCED", s"NOT ENFORCED $validStatus NORELY"),
       ("NORELY", s"ENFORCED $validStatus NORELY"),
-      ("NOT ENFORCED RELY", s"NOT ENFORCED $validStatus RELY"),
-      ("RELY NOT ENFORCED", s"NOT ENFORCED $validStatus RELY"),
-      ("NOT ENFORCED RELY", s"NOT ENFORCED $validStatus RELY"),
-      ("RELY NOT ENFORCED", s"NOT ENFORCED $validStatus RELY"),
-      ("RELY", s"ENFORCED $validStatus RELY")
+      ("RELY", s"ENFORCED $validStatus RELY"),
+      ("ENFORCED", s"ENFORCED $validStatus NORELY"),
+      ("ENFORCED NORELY", s"ENFORCED $validStatus NORELY"),
+      ("ENFORCED RELY", s"ENFORCED $validStatus RELY")
     )
   }
 
@@ -210,6 +207,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
 
         sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (id > 0) $characteristic")
         val table = loadTable(nonPartitionCatalog, "ns", "tbl")
+        assert(table.currentVersion() == "1")
+        assert(table.validatedVersion() == "0")
         val constraint = getCheckConstraint(table)
         assert(constraint.name() == "c1")
         assert(constraint.toDDL == s"CONSTRAINT c1 CHECK (id > 0) $expectedDDL")
@@ -236,6 +235,172 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
             "oldConstraint" -> "CONSTRAINT abc CHECK (id > 0) ENFORCED UNVALIDATED NORELY")
         )
       }
+    }
+  }
+
+  test("Check constraint violation on table insert - top level column") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, CONSTRAINT positive_id CHECK (id > 0)) $defaultUsing")
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (-1)")
+      }
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters =
+          Map("constraintName" -> "positive_id", "expression" -> "id > 0", "values" -> " - id : -1")
+      )
+    }
+  }
+
+  test("Check constraint violation on table insert - nested column") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT," +
+        s" s STRUCT<num INT, str STRING> CONSTRAINT positive_num CHECK (s.num > 0)) $defaultUsing")
+
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (1, struct(-1, 'test'))")
+      }
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "positive_num",
+          "expression" -> "s.num > 0",
+          "values" -> " - s.num : -1"
+        )
+      )
+    }
+  }
+
+  test("Check constraint violation on table insert - map type column") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT," +
+        s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
+
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (1, map('a', -1))")
+      }
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "positive_num",
+          "expression" -> "m['a'] > 0",
+          "values" -> " - m['a'] : -1"
+        )
+      )
+    }
+  }
+
+  test("Check constraint violation on table insert - array type column") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT," +
+        s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
+
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (1, array(1, -2, 3))")
+      }
+
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "positive_array",
+          "expression" -> "a[1] > 0",
+          "values" -> " - a[1] : -2"
+        )
+      )
+    }
+  }
+
+
+  test("Check constraint violation on insert overwrite by position") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" CONSTRAINT positive_value CHECK (value > 0)) $defaultUsing")
+      // First insert valid data
+      sql(s"INSERT INTO $t VALUES (1, 10)")
+
+      // Try to overwrite with invalid data
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT OVERWRITE TABLE $t SELECT 2, -5")
+      }
+
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "positive_value",
+          "expression" -> "value > 0",
+          "values" -> " - value : -5"
+        )
+      )
+    }
+  }
+
+  test("Check constraint violation on insert overwrite by name") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" CONSTRAINT positive_value CHECK (value > 0)) $defaultUsing")
+      // First insert valid data
+      sql(s"INSERT INTO $t VALUES (1, 10)")
+
+      // Try to overwrite with invalid data using column names
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT OVERWRITE TABLE $t BY NAME SELECT -5 as value, 2 as id")
+      }
+
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "positive_value",
+          "expression" -> "value > 0",
+          "values" -> " - value : -5"
+        )
+      )
+    }
+  }
+
+  test("Check constraint validation succeeds on table insert - top level column") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, CONSTRAINT positive_id CHECK (id > 0)) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1), (null)")
+      checkAnswer(spark.table(t), Seq(Row(1), Row(null)))
+    }
+  }
+
+  test("Check constraint validation succeeds on table insert - nested column") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT," +
+        s" s STRUCT<num INT, str STRING> CONSTRAINT positive_num CHECK (s.num > 0)) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, struct(5, 'test')), (2, struct(null, 'test'))")
+      checkAnswer(spark.table(t), Seq(Row(1, Row(5, "test")), Row(2, Row(null, "test"))))
+    }
+  }
+
+  test("Check constraint validation succeeds on table insert - map type column") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT," +
+        s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, map('a', 10, 'b', 20)), (2, map('a', null))")
+      checkAnswer(spark.table(t), Seq(Row(1, Map("a" -> 10, "b" -> 20)), Row(2, Map("a" -> null))))
+    }
+  }
+
+  test("Check constraint validation succeeds on table insert - array type column") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT," +
+        s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, array(5, 6, 7)), (2, array(8, null))")
+      checkAnswer(spark.table(t), Seq(Row(1, Seq(5, 6, 7)), Row(2, Seq(8, null))))
     }
   }
 }

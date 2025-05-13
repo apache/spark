@@ -185,7 +185,7 @@ case class UnionLoopExec(
       // the previous plan.
       // This way we support only UNION ALL case. Additional case should be added for UNION case.
       // One way of supporting UNION case can be seen at SPARK-24497 PR from Peter Toth.
-      val newRecursion = recursion.transform {
+      val newRecursion = recursion.transformWithSubqueries {
         case r: UnionLoopRef if r.loopId == loopId =>
           prevDF.queryExecution.optimizedPlan match {
             case l: LocalRelation =>

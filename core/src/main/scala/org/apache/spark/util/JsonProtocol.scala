@@ -488,7 +488,10 @@ private[spark] object JsonProtocol extends JsonUtils {
     g.writeEndObject()
   }
 
-  private[util] val accumulableExcludeList = Set(InternalAccumulator.UPDATED_BLOCK_STATUSES)
+  private[util] val accumulableExcludeList = Set(
+    InternalAccumulator.UPDATED_BLOCK_STATUSES,
+    InternalAccumulator.COLLECT_METRICS_ACCUMULATOR
+  )
 
   private[this] val taskMetricAccumulableNames = TaskMetrics.empty.nameToAccums.keySet.toSet
 

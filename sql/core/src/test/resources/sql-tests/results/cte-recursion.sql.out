@@ -321,15 +321,15 @@ WITH RECURSIVE t(col) (
   UNION ALL
   SELECT (SELECT max(col) FROM t)
 )
-SELECT * FROM t
+SELECT * FROM t LIMIT 5
 -- !query schema
-struct<>
+struct<col:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+1
+1
+1
+1
+1
 
 
 -- !query
@@ -436,20 +436,18 @@ WITH RECURSIVE r(level, data) AS (
 )
 SELECT * FROM r
 -- !query schema
-struct<>
+struct<level:int,data:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 183,
-    "fragment" : "WITH RECURSIVE r(level, data) AS (\n  VALUES (0, 0)\n  UNION ALL\n  SELECT r1.level + 1, r1.data\n  FROM r AS r1\n  JOIN r AS r2 ON r2.data = r1.data\n  WHERE r1.level < 9\n)\nSELECT * FROM r"
-  } ]
-}
+0	0
+1	0
+2	0
+3	0
+4	0
+5	0
+6	0
+7	0
+8	0
+9	0
 
 
 -- !query

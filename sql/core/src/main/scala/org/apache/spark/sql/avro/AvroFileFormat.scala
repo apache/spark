@@ -86,7 +86,7 @@ private[sql] class AvroFileFormat extends FileFormat
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
 
     val broadcastedConf =
-      spark.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+      SerializableConfiguration.broadcast(spark.sparkContext, hadoopConf)
     val parsedOptions = new AvroOptions(options, hadoopConf)
     val datetimeRebaseModeInRead = parsedOptions.datetimeRebaseModeInRead
 

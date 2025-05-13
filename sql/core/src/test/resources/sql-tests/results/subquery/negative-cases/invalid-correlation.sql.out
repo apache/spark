@@ -160,7 +160,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "sqlExprs" : "\"min(t2a) AS `min(outer(t2.t2a))`\""
+    "sqlExprs" : "\"min(t2a) AS `outer(min(t2a))`\""
   },
   "queryContext" : [ {
     "objectType" : "",

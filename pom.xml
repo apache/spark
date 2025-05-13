@@ -138,7 +138,7 @@
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.15.2</parquet.version>
-    <orc.version>2.1.1</orc.version>
+    <orc.version>2.1.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.25</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
@@ -217,7 +217,7 @@
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.1.121.Final</netty.version>
     <netty-tcnative.version>2.0.70.Final</netty-tcnative.version>
-    <icu4j.version>76.1</icu4j.version>
+    <icu4j.version>77.1</icu4j.version>
     <junit-jupiter.version>5.12.2</junit-jupiter.version>
     <junit-platform.version>1.12.2</junit-platform.version>
     <!--

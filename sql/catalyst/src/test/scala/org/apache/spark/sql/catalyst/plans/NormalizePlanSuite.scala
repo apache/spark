@@ -38,6 +38,26 @@ import org.apache.spark.sql.types.BooleanType
 
 class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
 
+  test("Normalize Project") {
+    val baselineCol1 = $"col1".int
+    val testCol1 = baselineCol1.newInstance()
+    val baselinePlan = LocalRelation(baselineCol1).select(baselineCol1)
+    val testPlan = LocalRelation(testCol1).select(testCol1)
+
+    assert(baselinePlan != testPlan)
+    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
+
+  test("Normalize ordering in a project list of an inner Project") {
+    val baselinePlan =
+      LocalRelation($"col1".int, $"col2".string).select($"col1", $"col2").select($"col1")
+    val testPlan =
+      LocalRelation($"col1".int, $"col2".string).select($"col2", $"col1").select($"col1")
+
+    assert(baselinePlan != testPlan)
+    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
+
   test("Normalize InheritAnalysisRules expressions") {
     val castWithoutTimezone =
       Cast(child = Literal(1), dataType = BooleanType, ansiEnabled = conf.ansiEnabled)

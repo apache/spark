@@ -324,6 +324,11 @@
           "The change log writer version cannot be <version>."
         ]
       },
+      "KEY_ROW_FORMAT_VALIDATION_FAILURE" : {
+        "message" : [
+          "<msg>"
+        ]
+      },
       "ROCKSDB_STORE_PROVIDER_OUT_OF_MEMORY" : {
         "message" : [
           "Could not load RocksDB state store with id <stateStoreId> because of an out of memory exception."
@@ -353,6 +358,11 @@
         "message" : [
           "<loggingId>: RocksDB instance could not be acquired by <newAcquiredThreadInfo> for operationType=<operationType> as it was not released by <acquiredThreadInfo> after <timeWaitedMs> ms.",
           "Thread holding the lock has trace: <stackTraceOutput>"
+        ]
+      },
+      "VALUE_ROW_FORMAT_VALIDATION_FAILURE" : {
+        "message" : [
+          "<msg>"
         ]
       }
     },
@@ -543,6 +553,14 @@
       "If this problem persists, you may consider using `rdd.checkpoint()` instead, which is slower than local checkpointing but more fault-tolerant."
     ],
     "sqlState" : "56000"
+  },
+  "CHECK_CONSTRAINT_VIOLATION" : {
+    "message" : [
+      "CHECK constraint <constraintName> <expression> violated by row with values:",
+      "<values>",
+      ""
+    ],
+    "sqlState" : "23001"
   },
   "CIRCULAR_CLASS_REFERENCE" : {
     "message" : [
@@ -808,7 +826,24 @@
       },
       "CACHE_INVALID" : {
         "message" : [
-          "Cannot retrieve <objectName> from the ML cache. It is probably because the entry has been evicted."
+          "Cannot retrieve Summary object <objectName> from the ML cache.",
+          "The Summary object is evicted if it hasn't been used a specified period of time.",
+          "You can configure the timeout by setting Spark cluster configure 'spark.connect.session.connectML.mlCache.memoryControl.offloadingTimeout'."
+        ]
+      },
+      "ML_CACHE_SIZE_OVERFLOW_EXCEPTION" : {
+        "message" : [
+          "The model cache size in current session is about to exceed",
+          "<mlCacheMaxSize> bytes.",
+          "Please delete existing cached model by executing 'del model' in python client before fitting new model or loading new model,",
+          "or increase Spark config 'spark.connect.session.connectML.mlCache.memoryControl.maxStorageSize'."
+        ]
+      },
+      "MODEL_SIZE_OVERFLOW_EXCEPTION" : {
+        "message" : [
+          "The fitted or loaded model size is about <modelSize> bytes.",
+          "Please fit or load a model smaller than <modelMaxSize> bytes,",
+          "or increase Spark config 'spark.connect.session.connectML.mlCache.memoryControl.maxModelSize'."
         ]
       },
       "UNSUPPORTED_EXCEPTION" : {
@@ -4921,7 +4956,7 @@
   },
   "STATE_STORE_KEY_ROW_FORMAT_VALIDATION_FAILURE" : {
     "message" : [
-      "The streaming query failed to validate written state for key row.",
+      "The streaming query failed to validate written state for key row for stateStore=<stateStoreID>.",
       "The following reasons may cause this:",
       "1. An old Spark version wrote the checkpoint that is incompatible with the current one",
       "2. Corrupt checkpoint files",
@@ -4988,7 +5023,7 @@
   },
   "STATE_STORE_VALUE_ROW_FORMAT_VALIDATION_FAILURE" : {
     "message" : [
-      "The streaming query failed to validate written state for value row.",
+      "The streaming query failed to validate written state for value row for stateStore=<stateStoreID>.",
       "The following reasons may cause this:",
       "1. An old Spark version wrote the checkpoint that is incompatible with the current one",
       "2. Corrupt checkpoint files",

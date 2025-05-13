@@ -644,18 +644,19 @@ object StateStoreProvider extends Logging {
       keySchema: StructType,
       valueRow: UnsafeRow,
       valueSchema: StructType,
+      stateStoreId: StateStoreId,
       conf: StateStoreConf): Unit = {
     if (conf.formatValidationEnabled) {
       val validationError = UnsafeRowUtils.validateStructuralIntegrityWithReason(keyRow, keySchema)
       validationError.foreach { error =>
-        throw StateStoreErrors.keyRowFormatValidationFailure(error)
+        throw StateStoreErrors.keyRowFormatValidationFailure(error, stateStoreId.toString)
       }
 
       if (conf.formatValidationCheckValue) {
         val validationError =
           UnsafeRowUtils.validateStructuralIntegrityWithReason(valueRow, valueSchema)
         validationError.foreach { error =>
-          throw StateStoreErrors.valueRowFormatValidationFailure(error)
+          throw StateStoreErrors.valueRowFormatValidationFailure(error, stateStoreId.toString)
         }
       }
     }

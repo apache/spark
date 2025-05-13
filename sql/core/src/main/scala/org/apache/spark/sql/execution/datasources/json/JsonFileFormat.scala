@@ -95,6 +95,7 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
     val broadcastedHadoopConf =
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     val parsedOptions = new JSONOptionsInRead(

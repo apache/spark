@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterTableCommand, AlterViewAs, ColumnDefinition, CreateTable, CreateTempView, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateTable, CreateTempView, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.types.{DataType, StringType}
@@ -60,13 +60,10 @@ object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
       case replaceTable: ReplaceTable =>
         replaceTable.tableSpec.collation
 
-      case alterTable: AlterTableCommand if alterTable.table.resolved =>
-        alterTable.table match {
-          case resolvedTbl: ResolvedTable
-            if resolvedTbl.table.properties.containsKey(TableCatalog.PROP_COLLATION ) =>
-              Some(resolvedTbl.table.properties.get(TableCatalog.PROP_COLLATION))
-          case _ => None
-        }
+      // In `transform` we handle these 3 ALTER TABLE commands.
+      case cmd: AddColumns => getCollationFromTableProps(cmd.table)
+      case cmd: ReplaceColumns => getCollationFromTableProps(cmd.table)
+      case cmd: AlterColumns => getCollationFromTableProps(cmd.table)
 
       case alterViewAs: AlterViewAs =>
         alterViewAs.child match {
@@ -81,6 +78,15 @@ object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
       case _ if AnalysisContext.get.collation.isDefined =>
         AnalysisContext.get.collation
 
+      case _ => None
+    }
+  }
+
+  private def getCollationFromTableProps(t: LogicalPlan): Option[String] = {
+    t match {
+      case resolvedTbl: ResolvedTable
+          if resolvedTbl.table.properties.containsKey(TableCatalog.PROP_COLLATION) =>
+        Some(resolvedTbl.table.properties.get(TableCatalog.PROP_COLLATION))
       case _ => None
     }
   }

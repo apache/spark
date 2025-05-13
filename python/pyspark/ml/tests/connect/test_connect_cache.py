@@ -42,20 +42,28 @@ class MLConnectCacheTests(ReusedConnectTestCase):
 
         model = svc.fit(df)
 
-        # model is cached in python side
-        self.assertEqual(len(spark.client.thread_local.ml_caches), 1)
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 1)
         self.assertTrue(
             "obj: class org.apache.spark.ml.classification.LinearSVCModel" in cache_info[0],
             cache_info,
         )
+        assert model._java_obj._ref_count == 1
+
+        model2 = model.copy()
+        cache_info = spark.client._get_ml_cache_info()
+        self.assertEqual(len(cache_info), 1)
+        assert model._java_obj._ref_count == 2
+        assert model2._java_obj._ref_count == 2
 
         # explicitly delete the model
         del model
 
-        # model is removed in python side
-        self.assertEqual(len(spark.client.thread_local.ml_caches), 0)
+        cache_info = spark.client._get_ml_cache_info()
+        self.assertEqual(len(cache_info), 1)
+        assert model2._java_obj._ref_count == 1
+
+        del model2
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 0)
 
@@ -81,8 +89,6 @@ class MLConnectCacheTests(ReusedConnectTestCase):
         model3 = svc.fit(df)
         self.assertEqual(len([model1, model2, model3]), 3)
 
-        # all 3 models are cached in python side
-        self.assertEqual(len(spark.client.thread_local.ml_caches), 3)
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 3)
         self.assertTrue(
@@ -96,15 +102,11 @@ class MLConnectCacheTests(ReusedConnectTestCase):
         # explicitly delete the model1
         del model1
 
-        # model1 is removed in python side
-        self.assertEqual(len(spark.client.thread_local.ml_caches), 2)
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 2)
 
         spark.client._cleanup_ml_cache()
 
-        # All models are removed in python side
-        self.assertEqual(len(spark.client.thread_local.ml_caches), 0)
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 0)
 

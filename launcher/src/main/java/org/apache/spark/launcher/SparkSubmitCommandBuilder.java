@@ -126,6 +126,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     boolean isExample = false;
     List<String> submitArgs = args;
     this.userArgs = Collections.emptyList();
+    isRemote |= "connect".equalsIgnoreCase(getApiMode(conf));
 
     if (args.size() > 0) {
       switch (args.get(0)) {
@@ -549,11 +550,15 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           checkArgument(value != null, "Missing argument to %s", CONF);
           String[] setConf = value.split("=", 2);
           checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
-          conf.put(setConf[0], setConf[1]);
           // If both spark.remote and spark.mater are set, the error will be thrown later when
           // the application is started.
-          isRemote |= conf.containsKey("spark.remote");
-          isRemote |= "connect".equalsIgnoreCase(getApiMode(conf));
+          if (setConf[0].equals("spark.remote")) {
+            isRemote = true;
+          } else if (setConf[0].equals(SparkLauncher.SPARK_API_MODE)) {
+            // Respects if the API mode is explicitly set.
+            isRemote = setConf[1].equalsIgnoreCase("connect");
+          }
+          conf.put(setConf[0], setConf[1]);
         }
         case CLASS -> {
           // The special classes require some special command line handling, since they allow
