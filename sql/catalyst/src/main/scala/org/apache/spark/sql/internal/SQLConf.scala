@@ -2030,6 +2030,16 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
+  val WHOLESTAGE_COMPLEX_EXPRESSION_THRESHOLD =
+    buildConf("spark.sql.codegen.complexExpressionThreshold")
+      .internal()
+      .doc("This config determines whether a complex expression supports whole-stage codegen. " +
+        "If the expression contains more than this of non-leaf expressions, the generated " +
+        "method may too long to be JIT compiled")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(1000)
+
   val CODEGEN_FACTORY_MODE = buildConf("spark.sql.codegen.factoryMode")
     .internal()
     .doc("This config determines the fallback behavior of several codegen generators " +
@@ -6235,6 +6245,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def wholeStageUseIdInClassName: Boolean = getConf(WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME)
 
   def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
+
+  def wholeStageComplexExpressionThreshold: Int = getConf(WHOLESTAGE_COMPLEX_EXPRESSION_THRESHOLD)
 
   def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
 

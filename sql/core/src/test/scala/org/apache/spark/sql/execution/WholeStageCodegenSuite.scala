@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
@@ -941,6 +943,41 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         })
         // Execute and validate that the executor side still yields the correct result.
         checkAnswer(df, Seq(Row(0, 0), Row(1, 1), Row(2, 2)))
+      }
+    }
+  }
+
+  test("SPARK-52103: fallback complex expression whole-stage codegen") {
+    val caseBranches =
+      (0 to 32).map(id => s" when '$id' then '$id'").mkString("\n")
+    val test_sql =
+      s"""SELECT  vv
+         |FROM (
+         |    SELECT  vv, case vv $caseBranches else '' end as cv
+         |    FROM (
+         |        SELECT  regexp_replace(trim(lower(
+         |                   get_json_object(concat(v,'}'),'$$.s'))),'\\n','') AS vv
+         |        FROM values('a') as t(v)
+         |    ) tmp
+         |) t2
+         |WHERE  length(cv) > 0
+         |AND    cv not LIKE '%xxx%'
+         |""".stripMargin
+
+    Seq(150 -> false, 300 -> true) foreach { case (threshold, containsJITFail) =>
+      withSQLConf(SQLConf.WHOLESTAGE_COMPLEX_EXPRESSION_THRESHOLD.key -> threshold.toString) {
+        val logAppender = new LogAppender("code generator")
+        logAppender.setThreshold(Level.INFO)
+        withLogAppender(logAppender,
+          loggerNames = Seq("org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator"),
+          level = Some(Level.INFO)) {
+          checkAnswer(sql(test_sql), Seq())
+        }
+        val events = logAppender.loggingEvents.filter {
+          _.getMessage().getFormattedMessage
+            .contains("Generated method too long to be JIT compiled")
+        }
+        assert(events.nonEmpty == containsJITFail)
       }
     }
   }
