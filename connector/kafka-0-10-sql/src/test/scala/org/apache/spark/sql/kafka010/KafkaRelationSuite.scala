@@ -636,6 +636,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
             |""".stripMargin
         )
         .load()
+        .collect()
     }
 
     assert(e.getMessage.contains(
@@ -662,6 +663,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
             |""".stripMargin
         )
         .load()
+        .collect()
     }
 
     assert(e.getMessage.contains(
@@ -695,28 +697,6 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     assert(e.getMessage.contains(
       "The resolved start offset 1 is greater than the resolved end offset 0 for"))
   }
-
-  test("resolved start offset greater than end offset (with latest)") {
-    val topic = newTopic()
-    testUtils.createTopic(topic, partitions = 3)
-    val df = spark.read
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("subscribe", topic)
-      .option(
-        "startingOffsets",
-        s"""
-           |{"$topic": {"0": 1, "1": 1, "2": 1}}
-           |""".stripMargin
-      )
-      .load()
-
-    val e = intercept[IllegalStateException] {
-      df.collect()
-    }
-    assert(e.getMessage.contains(
-      "The resolved start offset 1 is greater than the resolved end offset 0 for"))
-  }
 }
 
 class KafkaRelationSuiteWithAdminV1 extends KafkaRelationSuiteV1 {
@@ -741,6 +721,28 @@ class KafkaRelationSuiteV1 extends KafkaRelationSuiteBase {
     assert(df.logicalPlan.collectFirst {
       case _: LogicalRelation => true
     }.nonEmpty)
+  }
+
+  test("resolved start offset greater than end offset (with latest)") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    val df = spark.read
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option(
+        "startingOffsets",
+        s"""
+           |{"$topic": {"0": 1, "1": 1, "2": 1}}
+           |""".stripMargin
+      )
+      .load()
+
+    val e = intercept[IllegalStateException] {
+      df.collect()
+    }
+    assert(e.getMessage.contains(
+      "The resolved start offset 1 is greater than the resolved end offset 0 for"))
   }
 }
 

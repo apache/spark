@@ -5,6 +5,12 @@
       "topic-partitions for pre-fetched offset: <tpsForPrefetched>, topic-partitions for end offset: <tpsForEndOffset>."
     ]
   },
+  "MISMATCHED_TOPIC_PARTITIONS_BETWEEN_START_OFFSET_AND_END_OFFSET" : {
+    "message" : [
+      "The specified start offset and end offset should have the same topic-partitions.",
+      "Topic-partitions for start offset: <tpsForStartOffset>, topic-partitions for end offset: <tpsForEndOffset>."
+    ]
+  },
   "END_OFFSET_HAS_GREATER_OFFSET_FOR_TOPIC_PARTITION_THAN_PREFETCHED" : {
     "message" : [
       "For Kafka data source with Trigger.AvailableNow, end offset should have lower or equal offset per each topic partition than pre-fetched offset. The error could be transient - restart your query, and report if you still see the same issue.",
@@ -99,17 +105,6 @@
     },
     "sqlState" : "22000"
   },
-  "MISMATCHED_TOPIC_PARTITIONS_BETWEEN_START_OFFSET_AND_END_OFFSET" : {
-    "message" : [
-      "The specified start offset and end offset should have the same topic-partitions.",
-      "Topic-partitions for start offset: <tpsForStartOffset>, topic-partitions for end offset: <tpsForEndOffset>."
-    ]
-  },
-  "UNRESOLVED_START_OFFSET_GREATER_THAN_END_OFFSET" : {
-    "message" : [
-      "The specified start offset <startOffset> is greater than the end offset <endOffset> for topic <topic> partition <partition>."
-    ]
-  },
   "RESOLVED_START_OFFSET_GREATER_THAN_END_OFFSET" : {
     "message" : [
       "The resolved start offset <startOffset> is greater than the resolved end offset <endOffset> for topic <topic> partition <partition>.",
@@ -119,6 +114,11 @@
       "  (b) Start offset is set to an index, and the end offset is set to a timestamp.",
       "  (c) Start offset is set, and the end offset is set to latest.",
       "2. The Kafka topic partition is broken."
+    ]
+  },
+  "UNRESOLVED_START_OFFSET_GREATER_THAN_END_OFFSET" : {
+    "message" : [
+      "The specified start offset <startOffset> is greater than the end offset <endOffset> for topic <topic> partition <partition>."
     ]
   }
 }
