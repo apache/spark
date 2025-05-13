@@ -222,9 +222,9 @@ WithCTE
 
 
 -- !query
-SET spark.sql.cteRecursionRowLimit=1000000
+RESET spark.sql.cteRecursionRowLimit
 -- !query analysis
-SetCommand (spark.sql.cteRecursionRowLimit,Some(1000000))
+ResetCommand spark.sql.cteRecursionRowLimit
 
 
 -- !query

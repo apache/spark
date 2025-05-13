@@ -215,11 +215,11 @@ struct<n:int>
 
 
 -- !query
-SET spark.sql.cteRecursionRowLimit=1000000
+RESET spark.sql.cteRecursionRowLimit
 -- !query schema
-struct<key:string,value:string>
+struct<>
 -- !query output
-spark.sql.cteRecursionRowLimit	1000000
+
 
 
 -- !query
