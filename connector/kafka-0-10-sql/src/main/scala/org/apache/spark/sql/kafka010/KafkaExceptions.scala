@@ -184,7 +184,41 @@ object KafkaExceptions {
       messageParameters = Map.empty)
   }
 
-  // todo yuchen: create error function
+  def unmatchedTopicPartitionsBetweenOffsets(
+      startOffset: Set[TopicPartition],
+      endOffset: Set[TopicPartition]): KafkaIllegalArgumentException = {
+    new KafkaIllegalArgumentException(
+      errorClass = "MISMATCHED_TOPIC_PARTITIONS_BETWEEN_START_OFFSET_AND_END_OFFSET",
+      messageParameters = Map(
+        "tpsForStartOffset" -> startOffset.mkString(", "),
+        "tpsForEndOffset" -> endOffset.mkString(", ")))
+  }
+
+  def unresolvedStartOffsetGreaterThanEndOffset(
+      startOffset: Long,
+      endOffset: Long,
+      topicPartition: TopicPartition): KafkaIllegalArgumentException = {
+    new KafkaIllegalArgumentException(
+      errorClass = "UNRESOLVED_START_OFFSET_GREATER_THAN_END_OFFSET",
+      messageParameters = Map(
+        "startOffset" -> startOffset.toString,
+        "endOffset" -> endOffset.toString,
+        "topic" -> topicPartition.topic,
+        "partition" -> topicPartition.partition.toString))
+  }
+
+  def resolvedStartOffsetGreaterThanEndOffset(
+      startOffset: Long,
+      endOffset: Long,
+      topicPartition: TopicPartition): KafkaIllegalStateException = {
+    new KafkaIllegalStateException(
+      errorClass = "RESOLVED_START_OFFSET_GREATER_THAN_END_OFFSET",
+      messageParameters = Map(
+        "startOffset" -> startOffset.toString,
+        "endOffset" -> endOffset.toString,
+        "topic" -> topicPartition.topic,
+        "partition" -> topicPartition.partition.toString))
+  }
 }
 
 /**
@@ -195,6 +229,26 @@ private[kafka010] class KafkaIllegalStateException(
     messageParameters: Map[String, String],
     cause: Throwable = null)
   extends IllegalStateException(
+    KafkaExceptionsHelper.errorClassesJsonReader.getErrorMessage(
+      errorClass, messageParameters), cause)
+  with SparkThrowable {
+
+  override def getSqlState: String =
+    KafkaExceptionsHelper.errorClassesJsonReader.getSqlState(errorClass)
+
+  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
+
+  override def getCondition: String = errorClass
+}
+
+/**
+ * Illegal argument exception thrown with an error class.
+ */
+private[kafka010] class KafkaIllegalArgumentException(
+    errorClass: String,
+    messageParameters: Map[String, String],
+    cause: Throwable = null)
+  extends IllegalArgumentException(
     KafkaExceptionsHelper.errorClassesJsonReader.getErrorMessage(
       errorClass, messageParameters), cause)
   with SparkThrowable {

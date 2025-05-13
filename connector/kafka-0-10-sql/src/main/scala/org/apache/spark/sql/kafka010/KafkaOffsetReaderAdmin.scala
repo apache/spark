@@ -401,23 +401,14 @@ private[kafka010] class KafkaOffsetReaderAdmin(
         throw new IllegalStateException(s"$tp doesn't have a from offset")
       )
       val untilOffset = untilPartitionOffsets(tp)
-      // todo yuchen: check if greater, maybe kafka broken (most likely) or bad input
-      // give different potential options
-      // (1) kafka broken
-      // (2) start is time, end is index ...
-      // (3) start is index, end is time ...
-      // (4) start is index (big), end is latest.
-      // 1 and 4 also applies to streaming (resolved offsets)
-      // todo put it to KafkaOffsetReaderConsumer as well
+
       KafkaSourceProvider.checkStartOffsetNotGreaterThanEndOffset(
-        tp,
         fromOffset,
         untilOffset,
-        (tp, fromOffset, untilOffset) =>
-          throw new IllegalStateException(
-            s"2: Start offset $fromOffset is greater than end offset $untilOffset " +
-              s"for topic ${tp.topic()} partition ${tp.partition()}.")
+        tp,
+        KafkaExceptions.resolvedStartOffsetGreaterThanEndOffset
       )
+
       KafkaOffsetRange(tp, fromOffset, untilOffset, None)
     }.toSeq
 
@@ -521,7 +512,9 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       if (untilOffset < fromOffset) {
         reportDataLoss(
           s"Partition $tp's offset was changed from " +
-            s"$fromOffset to $untilOffset, some data may have been missed",
+            s"$fromOffset to $untilOffset. This could either be a user error that the start " +
+            "offset is set too high and this is the first batch, or the kafka topic-partition " +
+            "is broken, and some data may have been missed.",
           () =>
             KafkaExceptions.partitionOffsetChanged(tp, fromOffset, untilOffset))
       }

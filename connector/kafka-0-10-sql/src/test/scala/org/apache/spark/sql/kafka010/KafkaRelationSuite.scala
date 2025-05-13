@@ -617,37 +617,58 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
       === (0 to 30).map(_.toString).toSet)
   }
 
-  //  test("endOffset error message") {
-  //    val kafkaRDD = new KafkaSourceRDD(
-  //      sparkContext, new java.util.HashMap[String, Object](), null, 10, false)
-  //    kafkaRDD.compute(
-  //      KafkaSourceRDDPartition(0, KafkaOffsetRange(new TopicPartition("test", 0), 5L, 0L)),
-  //      null
-  //    )
-  //  }
+  test("topic-partition for start offset and end offset must match") {
+    val e = intercept[IllegalArgumentException] {
+      spark.read
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("subscribe", "test")
+        .option(
+          "startingOffsets",
+          """
+            |{"test": {"0": 1, "1": 1, "2": 1}}
+            |""".stripMargin
+        )
+        .option(
+          "endingOffsets",
+          """
+            |{"test": {"0": 0, "1": 0}}
+            |""".stripMargin
+        )
+        .load()
+    }
 
-  test("first layer of protection") {
-    val df = spark.read
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("subscribe", "test")
-      .option(
-        "startingOffsets",
-        """
-          |{"test": {"0": 1, "1": 1, "2": 1}}
-          |""".stripMargin
-      )
-      .option(
-        "endingOffsets",
-        """
-          |{"test": {"0": 0, "1": 0, "2": 0}}
-          |""".stripMargin
-      )
-      .load()
-    df.collect()
+    assert(e.getMessage.contains(
+      "The specified start offset and end offset should have the same topic-partitions.")
+    )
   }
 
-  test("second layer of protection") {
+  test("unresolved start offset greater than end offset") {
+    val e = intercept[IllegalArgumentException] {
+      spark.read
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("subscribe", "test")
+        .option(
+          "startingOffsets",
+          """
+            |{"test": {"0": 1, "1": 1, "2": 1}}
+            |""".stripMargin
+        )
+        .option(
+          "endingOffsets",
+          """
+            |{"test": {"0": 0, "1": 0, "2": 0}}
+            |""".stripMargin
+        )
+        .load()
+    }
+
+    assert(e.getMessage.contains(
+      "The specified start offset 1 is greater than the end offset 0 for"))
+  }
+
+  test("resolved start offset greater than end offset (without latest)") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 3)
     val df = spark.read
@@ -667,10 +688,15 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
           |""".stripMargin
       )
       .load()
-    df.collect()
+
+    val e = intercept[IllegalStateException] {
+      df.collect()
+    }
+    assert(e.getMessage.contains(
+      "The resolved start offset 1 is greater than the resolved end offset 0 for"))
   }
 
-  test("third layer of protection") {
+  test("resolved start offset greater than end offset (with latest)") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 3)
     val df = spark.read
@@ -683,14 +709,13 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
            |{"$topic": {"0": 1, "1": 1, "2": 1}}
            |""".stripMargin
       )
-//      .option(
-//        "endingOffsetsByTimestamp",
-//        s"""
-//           |{"$topic": {"0": 0, "1": 0, "2": 0}}
-//           |""".stripMargin
-//      )
       .load()
-    df.collect()
+
+    val e = intercept[IllegalStateException] {
+      df.collect()
+    }
+    assert(e.getMessage.contains(
+      "The resolved start offset 1 is greater than the resolved end offset 0 for"))
   }
 }
 

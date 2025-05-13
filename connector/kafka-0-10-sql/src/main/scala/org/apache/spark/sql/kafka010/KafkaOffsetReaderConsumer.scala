@@ -450,6 +450,14 @@ private[kafka010] class KafkaOffsetReaderConsumer(
         // fromPartitionOffsets
         throw new IllegalStateException(s"$tp doesn't have a from offset"))
       val untilOffset = untilPartitionOffsets(tp)
+
+      KafkaSourceProvider.checkStartOffsetNotGreaterThanEndOffset(
+        fromOffset,
+        untilOffset,
+        tp,
+        KafkaExceptions.resolvedStartOffsetGreaterThanEndOffset
+      )
+
       KafkaOffsetRange(tp, fromOffset, untilOffset, None)
     }.toSeq
 
@@ -553,7 +561,9 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       if (untilOffset < fromOffset) {
         reportDataLoss(
           s"Partition $tp's offset was changed from " +
-            s"$fromOffset to $untilOffset, some data may have been missed",
+            s"$fromOffset to $untilOffset. This could either be a user error that the start " +
+            "offset is set too high and this is the first batch, or the kafka topic-partition " +
+            "is broken, and some data may have been missed.",
           () =>
             KafkaExceptions.partitionOffsetChanged(tp, fromOffset, untilOffset))
       }

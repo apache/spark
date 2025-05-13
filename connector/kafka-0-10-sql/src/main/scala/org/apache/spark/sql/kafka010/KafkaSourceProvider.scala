@@ -614,14 +614,12 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private val deserClassName = classOf[ByteArrayDeserializer].getName
 
   def checkStartOffsetNotGreaterThanEndOffset(
-      topicPartition: TopicPartition,
       startOffset: Long,
       endOffset: Long,
-      throwException: (TopicPartition, Long, Long) => Unit): Unit = {
+      topicPartition: TopicPartition,
+      exception: (Long, Long, TopicPartition) => Exception): Unit = {
     if (startOffset > endOffset && startOffset != -1 && endOffset != -1) {
-      // todo
-//      assert(false, s"Start offset $startOffset is greater than end offset $endOffset")
-      throwException(topicPartition, startOffset, endOffset)
+      throw exception(startOffset, endOffset, topicPartition)
     }
   }
 
@@ -632,22 +630,17 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       case start: SpecificOffsetRangeLimit if endOffset.isInstanceOf[SpecificOffsetRangeLimit] =>
         val end = endOffset.asInstanceOf[SpecificOffsetRangeLimit]
         if (start.partitionOffsets.keySet != end.partitionOffsets.keySet) {
-          // todo
-          // must be the same sizes
-          assert(false,
-            s"Start partition offsets ${start.partitionOffsets.keySet} " +
-              s"are not the same as end partition offsets ${end.partitionOffsets.keySet}")
+          throw KafkaExceptions.unmatchedTopicPartitionsBetweenOffsets(
+            start.partitionOffsets.keySet, end.partitionOffsets.keySet
+          )
         }
         start.partitionOffsets.foreach({
           case (tp, startOffset) =>
             checkStartOffsetNotGreaterThanEndOffset(
-              tp,
               startOffset,
               end.partitionOffsets(tp),
-              (topicPartition: TopicPartition, startOffset: Long, endOffset: Long) =>
-                throw new IllegalArgumentException(
-                  s"Start offset $startOffset is greater than end offset $endOffset for " +
-                    s"topic ${topicPartition.topic} " + s"partition ${topicPartition.partition}.")
+              tp,
+              KafkaExceptions.unresolvedStartOffsetGreaterThanEndOffset
             )
         })
 
@@ -655,22 +648,17 @@ private[kafka010] object KafkaSourceProvider extends Logging {
         if endOffset.isInstanceOf[SpecificTimestampRangeLimit] =>
         val end = endOffset.asInstanceOf[SpecificTimestampRangeLimit]
         if (start.topicTimestamps.keySet != end.topicTimestamps.keySet) {
-          // todo
-          // must be the same sizes
-          assert(false,
-            s"Start topic timestamps ${start.topicTimestamps.keySet} " +
-              s"are not the same as end topic timestamps ${end.topicTimestamps.keySet}")
+          throw KafkaExceptions.unmatchedTopicPartitionsBetweenOffsets(
+            start.topicTimestamps.keySet, end.topicTimestamps.keySet
+          )
         }
         start.topicTimestamps.foreach({
           case (tp, startOffset) =>
             checkStartOffsetNotGreaterThanEndOffset(
-              tp,
               startOffset,
               end.topicTimestamps(tp),
-              (topicPartition: TopicPartition, startOffset: Long, endOffset: Long) =>
-                throw new IllegalArgumentException(
-                  s"Start timestamp $startOffset is greater than end timestamp $endOffset for " +
-                    s"topic ${topicPartition.topic} " + s"partition ${topicPartition.partition}.")
+              tp,
+              KafkaExceptions.unresolvedStartOffsetGreaterThanEndOffset
             )
         })
 
@@ -678,8 +666,6 @@ private[kafka010] object KafkaSourceProvider extends Logging {
     }
   }
 
-  // todo yuchen: when start and end calls this, if they are using comparable offsets,
-  // check their validity
   def getKafkaOffsetRangeLimit(
       params: CaseInsensitiveMap[String],
       globalOffsetTimestampOptionKey: String,

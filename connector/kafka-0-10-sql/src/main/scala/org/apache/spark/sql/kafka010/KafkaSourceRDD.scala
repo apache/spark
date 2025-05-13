@@ -135,26 +135,14 @@ private[kafka010] class KafkaSourceRDD(
       } else {
         range.untilOffset
       }
-//      if (range.fromOffset > range.untilOffset) {
-//        // todo yuchen: check if greater, maybe kafka broken (most likely) or bad input
-//        // give different potential options
-//        // (1) kafka broken
-//        // (2) start is time, end is index ...
-//        // (3) start is index, end is time ...
-//        // (4) start is index (big), end is latest.
-//        // 1 and 4 also applies to streaming (resolved offsets)
-//        // todo yuchen: check how streaming uses getOffsetRangesFromResolvedOffsets
-//        throw new SparkIllegalArgumentException("")
-//      }
+
       KafkaSourceProvider.checkStartOffsetNotGreaterThanEndOffset(
-        range.topicPartition,
         fromOffset,
         untilOffset,
-        (tp, fromOffset, untilOffset) =>
-          throw new IllegalStateException(
-            s"3: Start offset $fromOffset is greater than end offset $untilOffset " +
-              s"for topic ${tp.topic()} partition ${tp.partition()}.")
+        range.topicPartition,
+        KafkaExceptions.resolvedStartOffsetGreaterThanEndOffset
       )
+
       KafkaOffsetRange(range.topicPartition,
         fromOffset, untilOffset, range.preferredLoc)
     } else {
