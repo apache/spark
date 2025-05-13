@@ -4636,7 +4636,7 @@
   },
   "RECURSION_ROW_LIMIT_EXCEEDED" : {
     "message" : [
-      "Recursion row limit <rowLimit> reached but query has not exhausted, try increasing 'spark.sql.cteRecursionRowLimit'"
+      "Recursion row limit <rowLimit> reached but query has not exhausted, try setting a larger LIMIT value when querying the CTE relation."
     ],
     "sqlState" : "42836"
   },

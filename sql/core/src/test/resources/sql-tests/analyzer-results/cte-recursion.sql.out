@@ -170,6 +170,70 @@ DropTempViewCommand ZeroAndOne
 
 
 -- !query
+CREATE TEMPORARY VIEW ZeroAndOne(current, next) AS VALUES
+    (0,0),
+    (0,1),
+    (1,0),
+    (1,1)
+-- !query analysis
+CreateViewCommand `ZeroAndOne`, [(current,None), (next,None)], VALUES
+    (0,0),
+    (0,1),
+    (1,0),
+    (1,1), false, false, LocalTempView, UNSUPPORTED, true
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SET spark.sql.cteRecursionRowLimit=25
+-- !query analysis
+SetCommand (spark.sql.cteRecursionRowLimit,Some(25))
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT next FROM t LEFT JOIN ZeroAndOne ON n = current
+    )
+SELECT * FROM t LIMIT 30
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [1#x AS n#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [next#x]
+:              +- Join LeftOuter, (n#x = current#x)
+:                 :- SubqueryAlias t
+:                 :  +- Project [1#x AS n#x]
+:                 :     +- UnionLoopRef xxxx, [1#x], false
+:                 +- SubqueryAlias zeroandone
+:                    +- View (`ZeroAndOne`, [current#x, next#x])
+:                       +- Project [cast(col1#x as int) AS current#x, cast(col2#x as int) AS next#x]
+:                          +- LocalRelation [col1#x, col2#x]
++- GlobalLimit 30
+   +- LocalLimit 30
+      +- Project [n#x]
+         +- SubqueryAlias t
+            +- CTERelationRef xxxx, true, [n#x], false, false
+
+
+-- !query
+RESET spark.sql.cteRecursionRowLimit
+-- !query analysis
+ResetCommand spark.sql.cteRecursionRowLimit
+
+
+-- !query
+DROP VIEW ZeroAndOne
+-- !query analysis
+DropTempViewCommand ZeroAndOne
+
+
+-- !query
 WITH RECURSIVE r(level) AS (
   VALUES 0
   UNION ALL

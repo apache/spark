@@ -153,6 +153,84 @@ struct<>
 
 
 -- !query
+CREATE TEMPORARY VIEW ZeroAndOne(current, next) AS VALUES
+    (0,0),
+    (0,1),
+    (1,0),
+    (1,1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET spark.sql.cteRecursionRowLimit=25
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.cteRecursionRowLimit	25
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT next FROM t LEFT JOIN ZeroAndOne ON n = current
+    )
+SELECT * FROM t LIMIT 30
+-- !query schema
+struct<n:int>
+-- !query output
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+
+
+-- !query
+RESET spark.sql.cteRecursionRowLimit
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW ZeroAndOne
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 WITH RECURSIVE r(level) AS (
   VALUES 0
   UNION ALL
