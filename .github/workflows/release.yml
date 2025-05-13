@@ -53,11 +53,11 @@ jobs:
           EOF
 
           # Paths
-          RELEASE_DIR=~/spark-release
+          RELEASE_DIR="$PWD"/spark-release
           OUTPUT_DIR="$RELEASE_DIR/output"
           
           # Ensure release dir exists
-          mkdir "$RELEASE_DIR"
+          mkdir -p "$RELEASE_DIR"
           
           # Start the release script in the background
           dev/create-release/do-release-docker.sh -d "$RELEASE_DIR" -n &
@@ -93,3 +93,15 @@ jobs:
           
           # Once release is done, kill the tail processes
           kill $TAIL_PID1 $TAIL_PID2   
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: spark-release/docker-build.log
+      - name: Upload output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: spark-release/output
