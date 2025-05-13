@@ -466,9 +466,6 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         ENDING_OFFSETS_BY_TIMESTAMP_OPTION_KEY, ENDING_OFFSETS_OPTION_KEY,
         LatestOffsetRangeLimit)
 
-      println("YuchenYuchen: startingRelationOffsets: " + startingRelationOffsets)
-      println("YuchenYuchen: endingRelationOffsets: " + endingRelationOffsets)
-
       checkOffsetLimitValidity(startingRelationOffsets, endingRelationOffsets)
 
       new KafkaBatch(
