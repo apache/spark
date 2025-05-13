@@ -37,12 +37,8 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.OrderUtils
-<<<<<<<
-import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toLiteral, toTypedExpr}
-=======
 import org.apache.spark.sql.catalyst.util.AttributeNameParser
-import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
->>>>>>>
+import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toLiteral, toTypedExpr}
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
@@ -465,6 +461,11 @@ class Dataset[T] private[sql] (
     new Column(colName, getPlanId)
   }
 
+  /**
+   * Verify whether the input column name can be resolved with the given schema.
+   * Note that this method can not 100% match the analyzer behavior, it is designed to
+   * try the best to eliminate unnecessary validation RPCs.
+   */
   private def verifyColName(name: String, schema: StructType): Boolean = {
     val partsOpt = AttributeNameParser.parseAttributeName(name)
     if (partsOpt == null || partsOpt.isEmpty) return false
