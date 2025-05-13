@@ -46,7 +46,9 @@ class BloomFilterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
       val fpp = 0.05
       val numInsertion = numItems / 10
 
-      val allItems = Array.fill(numItems)(itemGen(r))
+      // using a Set to avoid duplicates,
+      // inserting twice as many random values as used, to compensate for lost dupes
+      val allItems = Set.fill(2 * numItems)(itemGen(r)).take(numItems)
 
       val filter = BloomFilter.create(numInsertion, fpp)
 

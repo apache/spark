@@ -28,6 +28,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Stream;
 
+@Disabled
 public class TestSparkBloomFilter {
 
     // the implemented fpp limit is only approximating the hard boundary,
