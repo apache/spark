@@ -18,6 +18,7 @@ package org.apache.spark.sql.connect
 
 import java.util
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -36,7 +37,12 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.OrderUtils
+<<<<<<<
 import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toLiteral, toTypedExpr}
+=======
+import org.apache.spark.sql.catalyst.util.AttributeNameParser
+import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
+>>>>>>>
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
@@ -45,7 +51,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
 import org.apache.spark.sql.internal.{ToScalaUDF, UDFAdaptors, UnresolvedAttribute, UnresolvedRegex}
-import org.apache.spark.sql.types.{Metadata, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkClassUtils
@@ -451,7 +457,47 @@ class Dataset[T] private[sql] (
     }
 
   /** @inheritdoc */
-  def col(colName: String): Column = new Column(colName, getPlanId)
+  def col(colName: String): Column = {
+    // Validate the column name against the schema.
+    if (!verifyColName(colName, schema)) {
+      this.select(colName).isLocal
+    }
+    new Column(colName, getPlanId)
+  }
+
+  private def verifyColName(name: String, schema: StructType): Boolean = {
+    val partsOpt = AttributeNameParser.parseAttributeName(name)
+    if (partsOpt == null || partsOpt.isEmpty) return false
+
+    @tailrec
+    def quickVerify(parts: Seq[String], schema: DataType): Boolean = {
+      if (parts.isEmpty) return true
+
+      val part = parts.head
+      val rest = parts.tail
+
+      if (part == "*") {
+        true
+      } else {
+        val structSchema = schema match {
+          case s: StructType => Some(s)
+          case a: ArrayType if a.elementType.isInstanceOf[StructType] =>
+            Some(a.elementType.asInstanceOf[StructType])
+          case _ => None
+        }
+
+        structSchema match {
+          case Some(s) =>
+            s.fields.find(_.name == part) match {
+              case Some(field) => quickVerify(rest, field.dataType)
+              case None => false
+            }
+          case None => false
+        }
+      }
+    }
+    quickVerify(partsOpt, schema)
+  }
 
   /** @inheritdoc */
   def metadataColumn(colName: String): Column = {

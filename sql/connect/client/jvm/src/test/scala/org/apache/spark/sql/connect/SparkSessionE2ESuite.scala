@@ -26,6 +26,7 @@ import scala.util.{Failure, Success}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
 import org.apache.spark.util.SparkThreadUtils.awaitResult
@@ -449,5 +450,12 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
       "command",
       Map("one" -> "1", "two" -> "2"))
     assert(df.as(StringEncoder).collect().toSet == Set("one", "two"))
+  }
+
+  test("Non-existent columns throw exception") {
+    val e = intercept[AnalysisException] {
+      spark.range(10).col("nonexistent")
+    }
+    assert(e.getMessage.contains("UNRESOLVED_COLUMN.WITH_SUGGESTION"))
   }
 }
