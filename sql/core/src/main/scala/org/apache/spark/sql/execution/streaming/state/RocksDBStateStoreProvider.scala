@@ -191,7 +191,7 @@ private[sql] class RocksDBStateStoreProvider
       })
 
       ctxt.addTaskFailureListener( (_, _) => {
-        abort() // Either the store is already aborted (this is a no-op) or
+        if (!hasCommitted) abort() // Either the store is already aborted (this is a no-op) or
         // we need to abort it.
       })
     }
