@@ -919,6 +919,10 @@ private[hive] trait HiveInspectors {
     // We will enumerate all of the possible constant expressions, throw exception if we missed
     case Literal(_, dt) =>
       throw SparkException.internalError(s"Hive doesn't support the constant type [$dt].")
+    // FoldableUnevaluable will be replaced with a foldable value in FinishAnalysis rule,
+    // skip eval() for them.
+    case _ if expr.collectFirst { case e: FoldableUnevaluable => e }.isDefined =>
+      toInspector(expr.dataType)
     // ideally, we don't test the foldable here(but in optimizer), however, some of the
     // Hive UDF / UDAF requires its argument to be constant objectinspector, we do it eagerly.
     case _ if expr.foldable => toInspector(Literal.create(expr.eval(), expr.dataType))

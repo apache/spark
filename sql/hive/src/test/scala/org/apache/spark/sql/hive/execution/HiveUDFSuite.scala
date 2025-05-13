@@ -826,6 +826,17 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-52014: Support FoldableUnevaluable in HiveGenericUDFEvaluator") {
+    withUserDefinedFunction("hive_concat" -> true) {
+      sql(s"CREATE TEMPORARY FUNCTION hive_concat AS '${classOf[GenericUDFConcat].getName}'")
+      assert(sql(
+        s"""SELECT hive_concat(
+           |         date_format(CAST(CURRENT_DATE() AS DATE), 'yyyyMMdd'),
+           |         now())""".stripMargin).collect().length == 1)
+    }
+    hiveContext.reset()
+  }
 }
 
 class TestPair(x: Int, y: Int) extends Writable with Serializable {
