@@ -87,8 +87,11 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
     long bitSize = bits.bitSize();
     boolean bitsChanged = false;
-    for (long i = 1; i <= numHashFunctions; i++) {
-      long combinedHash = h1 + (i * h2);
+
+    // Integer.MAX_VALUE takes care of scrambling the higher four bytes of combinedHash
+    long combinedHash = (long) h1 * Integer.MAX_VALUE;
+    for (long i = 0; i < numHashFunctions; i++) {
+      combinedHash += h2;
       // Flip all the bits if it's negative (guaranteed positive number)
       if (combinedHash < 0) {
         combinedHash = ~combinedHash;
@@ -109,8 +112,11 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     int h2 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, h1);
 
     long bitSize = bits.bitSize();
-    for (long i = 1; i <= numHashFunctions; i++) {
-      long combinedHash = h1 + (i * h2);
+
+    // Integer.MAX_VALUE takes care of scrambling the higher four bytes of combinedHash
+    long combinedHash = (long) h1 * Integer.MAX_VALUE;
+    for (long i = 0; i < numHashFunctions; i++) {
+      combinedHash += h2;
       // Flip all the bits if it's negative (guaranteed positive number)
       if (combinedHash < 0) {
         combinedHash = ~combinedHash;
@@ -134,8 +140,12 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
     long bitSize = bits.bitSize();
     boolean bitsChanged = false;
-    for (long i = 1; i <= numHashFunctions; i++) {
-      long combinedHash = h1 + (i * h2);
+
+    // Integer.MAX_VALUE takes care of scrambling the higher four bytes of combinedHash
+    long combinedHash = (long) h1 * Integer.MAX_VALUE;
+    for (long i = 0; i < numHashFunctions; i++) {
+      combinedHash += h2;
+
       // Flip all the bits if it's negative (guaranteed positive number)
       if (combinedHash < 0) {
         combinedHash = ~combinedHash;
@@ -151,8 +161,12 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     int h2 = Murmur3_x86_32.hashLong(item, h1);
 
     long bitSize = bits.bitSize();
-    for (long i = 1; i <= numHashFunctions; i++) {
-      long combinedHash = h1 + (i * h2);
+
+    // Integer.MAX_VALUE takes care of scrambling the higher four bytes of combinedHash
+    long combinedHash = (long) h1 * Integer.MAX_VALUE;
+    for (long i = 0; i < numHashFunctions; i++) {
+      combinedHash += h2;
+
       // Flip all the bits if it's negative (guaranteed positive number)
       if (combinedHash < 0) {
         combinedHash = ~combinedHash;

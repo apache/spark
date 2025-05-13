@@ -33,7 +33,7 @@ public class TestSparkBloomFilter {
 
     // the implemented fpp limit is only approximating the hard boundary,
     // so we'll need an error threshold for the assertion
-    final double FPP_ERROR_FACTOR = 1.0;
+    final double FPP_ERROR_FACTOR = 0.05;
 
     final long ONE_GB = 1024L * 1024L * 1024L;
 
