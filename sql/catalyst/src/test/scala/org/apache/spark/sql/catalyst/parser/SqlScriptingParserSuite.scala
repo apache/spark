@@ -190,6 +190,28 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       == "SELECT 3")
   }
 
+  test("not atomic body") {
+    val sqlScriptText =
+      """
+        |BEGIN NOT ATOMIC
+        |  SELECT 1;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText)
+    assert(tree.isInstanceOf[CompoundBody])
+  }
+
+  test("nested not atomic body") {
+    val sqlScriptText =
+      """
+        |BEGIN NOT ATOMIC
+        |  BEGIN NOT ATOMIC
+        |    SELECT 1;
+        |  END;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.collection.head.isInstanceOf[CompoundBody])
+  }
+
   // TODO: to be removed once the parser rule for top level compound is fixed to support labels!
   test("top level compound: labels not allowed") {
     val sqlScriptText =
