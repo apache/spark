@@ -203,7 +203,7 @@ class UDFProfiler2TestsMixin:
 
         self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
 
-        with self.trap_stdout() as io_all:
+        with self.trap_stdout():
             self.spark.profile.show(type="perf")
 
         with tempfile.TemporaryDirectory(prefix="test_perf_profiler_udf") as d:
