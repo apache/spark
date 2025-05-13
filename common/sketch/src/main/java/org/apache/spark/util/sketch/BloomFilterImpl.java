@@ -21,17 +21,25 @@ import java.io.*;
 
 class BloomFilterImpl extends BloomFilter implements Serializable {
 
+  public static final int DEFAULT_SEED = 0;
+
+  private int seed;
   private int numHashFunctions;
 
   private BitArray bits;
 
   BloomFilterImpl(int numHashFunctions, long numBits) {
-    this(new BitArray(numBits), numHashFunctions);
+    this(numHashFunctions, numBits, DEFAULT_SEED);
   }
 
-  private BloomFilterImpl(BitArray bits, int numHashFunctions) {
+  BloomFilterImpl(int numHashFunctions, long numBits, int seed) {
+    this(new BitArray(numBits), numHashFunctions, seed);
+  }
+
+  private BloomFilterImpl(BitArray bits, int numHashFunctions, int seed) {
     this.bits = bits;
     this.numHashFunctions = numHashFunctions;
+    this.seed = seed;
   }
 
   private BloomFilterImpl() {}
@@ -82,7 +90,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
   @Override
   public boolean putBinary(byte[] item) {
-    int h1 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, 0);
+    int h1 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, seed);
     int h2 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, h1);
 
     long bitSize = bits.bitSize();
@@ -108,7 +116,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
   @Override
   public boolean mightContainBinary(byte[] item) {
-    int h1 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, 0);
+    int h1 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, seed);
     int h2 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, h1);
 
     long bitSize = bits.bitSize();
@@ -135,7 +143,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     // Note that `CountMinSketch` use a different strategy, it hash the input long element with
     // every i to produce n hash values.
     // TODO: the strategy of `CountMinSketch` looks more advanced, should we follow it here?
-    int h1 = Murmur3_x86_32.hashLong(item, 0);
+    int h1 = Murmur3_x86_32.hashLong(item, seed);
     int h2 = Murmur3_x86_32.hashLong(item, h1);
 
     long bitSize = bits.bitSize();
@@ -157,7 +165,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
   @Override
   public boolean mightContainLong(long item) {
-    int h1 = Murmur3_x86_32.hashLong(item, 0);
+    int h1 = Murmur3_x86_32.hashLong(item, seed);
     int h2 = Murmur3_x86_32.hashLong(item, h1);
 
     long bitSize = bits.bitSize();
@@ -240,6 +248,12 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
       throw new IncompatibleMergeException("Cannot merge bloom filters with different bit size");
     }
 
+    if (this.seed != that.seed) {
+      throw new IncompatibleMergeException(
+              "Cannot merge bloom filters with different seeds"
+      );
+    }
+
     if (this.numHashFunctions != that.numHashFunctions) {
       throw new IncompatibleMergeException(
         "Cannot merge bloom filters with different number of hash functions"
@@ -253,6 +267,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     DataOutputStream dos = new DataOutputStream(out);
 
     dos.writeInt(Version.V1.getVersionNumber());
+    dos.writeInt(seed);
     dos.writeInt(numHashFunctions);
     bits.writeTo(dos);
   }
@@ -265,6 +280,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
       throw new IOException("Unexpected Bloom filter version number (" + version + ")");
     }
 
+    this.seed = dis.readInt();
     this.numHashFunctions = dis.readInt();
     this.bits = BitArray.readFrom(dis);
   }

@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Random;
 import java.util.stream.Stream;
 
 @Disabled
@@ -33,7 +34,8 @@ public class TestSparkBloomFilter {
 
     // the implemented fpp limit is only approximating the hard boundary,
     // so we'll need an error threshold for the assertion
-    final double FPP_ERROR_FACTOR = 0.05;
+    final double FPP_EVEN_ODD_ERROR_FACTOR = 0.05;
+    final double FPP_RANDOM_ERROR_FACTOR = 0.04;
 
     final long ONE_GB = 1024L * 1024L * 1024L;
 
@@ -63,29 +65,36 @@ public class TestSparkBloomFilter {
     }
 
     @CartesianTest
-    public void testAccuracy(
+    public void testAccuracyEvenOdd(
       @Values(longs = {1_000_000L, 1_000_000_000L, 5_000_000_000L}) long numItems,
-      @Values(doubles = {0.05, 0.03, 0.01, 0.001}) double expectedFpp
+      @Values(doubles = {0.05, 0.03, 0.01, 0.001}) double expectedFpp,
+      @Values(ints = {BloomFilterImpl.DEFAULT_SEED, 1, 127}) int deterministicSeed
     ) {
-        long optimalNumOfBytes = BloomFilter.optimalNumOfBits(numItems, expectedFpp) / Byte.SIZE;
-        System.err.printf("bitArray: %d MB", optimalNumOfBytes / 1024 / 1024);
+        long optimalNumOfBits = BloomFilter.optimalNumOfBits(numItems, expectedFpp) / Byte.SIZE;
+        System.err.printf(
+                "optimal   bitArray: %d (%d MB)\n",
+                optimalNumOfBits,
+                optimalNumOfBits / Byte.SIZE / 1024 / 1024
+        );
         Assumptions.assumeTrue(
-            optimalNumOfBytes < 4 * ONE_GB,
-            "this testcase would require allocating more than 4GB of heap mem (" + optimalNumOfBytes + ")"
+                optimalNumOfBits / Byte.SIZE < 4 * ONE_GB,
+            "this testcase would require allocating more than 4GB of heap mem (" + optimalNumOfBits + " bits)"
         );
 
-        //
-
-        BloomFilter bloomFilter = BloomFilter.create(numItems, expectedFpp);
+        BloomFilter bloomFilter = BloomFilter.create(numItems, optimalNumOfBits, deterministicSeed);
+        System.err.printf(
+                "allocated bitArray: %d (%d MB)\n",
+                bloomFilter.bitSize(),
+                bloomFilter.bitSize() / Byte.SIZE / 1024 / 1024
+        );
 
         for (long i = 0; i < numItems; i++) {
             if (i % 10_000_000 == 0) {
                 System.err.printf(
-                    "i: %d, bitCount: %d, b/i: %f, size: %d\n",
+                    "i: %d, bitCount: %d, saturation: %f\n",
                     i,
                     bloomFilter.cardinality(),
-                    (double) bloomFilter.cardinality() / i,
-                    bloomFilter.bitSize()
+                    (double) bloomFilter.cardinality() / bloomFilter.bitSize()
                 );
             }
             bloomFilter.putLong(2 * i);
@@ -95,8 +104,9 @@ public class TestSparkBloomFilter {
         long mightContainOdd = 0;
 
         for (long i = 0; i < numItems; i++) {
-            if (i % 10_000_000 == 0) {
-                System.err.printf("i: %d\n", i);
+            if (i % (numItems / 100) == 0) {
+                System.err.print(".");
+                System.err.flush();
             }
 
             long even = 2 * i;
@@ -109,6 +119,7 @@ public class TestSparkBloomFilter {
                 mightContainOdd++;
             }
         }
+        System.err.println();
 
         Assertions.assertEquals(
                 numItems, mightContainEven,
@@ -116,7 +127,7 @@ public class TestSparkBloomFilter {
         );
 
         double actualFpp = (double) mightContainOdd / numItems;
-        double acceptableFpp = expectedFpp * (1 + FPP_ERROR_FACTOR);
+        double acceptableFpp = expectedFpp * (1 + FPP_EVEN_ODD_ERROR_FACTOR);
 
         System.err.printf("expectedFpp:   %f %%\n", 100 * expectedFpp);
         System.err.printf("acceptableFpp: %f %%\n", 100 * acceptableFpp);
@@ -128,6 +139,111 @@ public class TestSparkBloomFilter {
                   "acceptableFpp(%f %%) < actualFpp (%f %%)",
                   100 * acceptableFpp,
                   100 * actualFpp
+                )
+        );
+
+        Assertions.assertTrue(
+                actualFpp <= acceptableFpp,
+                String.format(
+                        "acceptableFpp(%f %%) < actualFpp (%f %%)",
+                        100 * acceptableFpp,
+                        100 * actualFpp
+                )
+        );
+    }
+
+    @CartesianTest
+    public void testAccuracyRandom(
+            @Values(longs = {1_000_000L, 1_000_000_000L}) long numItems,
+            @Values(doubles = {0.05, 0.03, 0.01, 0.001}) double expectedFpp,
+            @Values(ints = {BloomFilterImpl.DEFAULT_SEED, 1, 127}) int deterministicSeed
+    ) {
+        long optimalNumOfBits = BloomFilter.optimalNumOfBits(numItems, expectedFpp);
+        System.err.printf(
+                "optimal   bitArray: %d (%d MB)\n",
+                optimalNumOfBits,
+                optimalNumOfBits / Byte.SIZE / 1024 / 1024
+        );
+        Assumptions.assumeTrue(
+                2 * optimalNumOfBits / Byte.SIZE < 4 * ONE_GB,
+                "this testcase would require allocating more than 4GB of heap mem (2x " + optimalNumOfBits + " bits)"
+        );
+
+        BloomFilter bloomFilterPrimary = BloomFilter.create(numItems, optimalNumOfBits, deterministicSeed);
+        BloomFilter bloomFilterSecondary = BloomFilter.create(numItems, optimalNumOfBits, 0xCAFEBABE);
+        System.err.printf(
+                "allocated bitArray: %d (%d MB)\n",
+                bloomFilterPrimary.bitSize(),
+                bloomFilterPrimary.bitSize() / Byte.SIZE / 1024 / 1024
+        );
+
+
+        Random pseudoRandom = new Random();
+        long iterationCount = 2 * numItems;
+
+        pseudoRandom.setSeed(deterministicSeed);
+        for (long i = 0; i < iterationCount; i++) {
+            if (i % 10_000_000 == 0) {
+                System.err.printf(
+                        "i: %d, bitCount: %d, saturation: %f\n",
+                        i,
+                        bloomFilterPrimary.cardinality(),
+                        (double) bloomFilterPrimary.cardinality() / bloomFilterPrimary.bitSize()
+                );
+            }
+
+            long candidate = pseudoRandom.nextLong();
+            if (i % 2 == 0) {
+                bloomFilterPrimary.putLong(candidate);
+                bloomFilterSecondary.putLong(candidate);
+            }
+        }
+
+        long mightContainEven = 0;
+        long mightContainOdd = 0;
+
+        pseudoRandom.setSeed(deterministicSeed);
+        for (long i = 0; i < iterationCount; i++) {
+            if (i % (iterationCount / 100) == 0) {
+                System.err.print(".");
+                System.err.flush();
+            }
+
+            long candidate = pseudoRandom.nextLong();
+            if (bloomFilterPrimary.mightContainLong(candidate)) {
+                if (i % 2 == 0) {
+                    mightContainEven++;
+                } else {
+                    // only count those cases as false positives,
+                    // where the secondary has confirmed,
+                    // that we haven't inserted before
+                    // (mitigating duplicates in input sequence)
+                    if (!bloomFilterSecondary.mightContainLong(candidate)) {
+                        mightContainOdd++;
+                    }
+                }
+            }
+        }
+        System.err.println();
+
+        Assertions.assertEquals(
+                numItems, mightContainEven,
+                "mightContainLong must return true for all inserted numbers"
+        );
+
+        double actualFpp = (double) mightContainOdd / numItems;
+        double acceptableFpp = expectedFpp * (1 + FPP_RANDOM_ERROR_FACTOR);
+
+        System.err.printf("expectedFpp:   %f %%\n", 100 * expectedFpp);
+        System.err.printf("acceptableFpp: %f %%\n", 100 * acceptableFpp);
+        System.err.printf("actualFpp:     %f %%\n", 100 * actualFpp);
+
+        Assumptions.assumeTrue(
+                actualFpp <= acceptableFpp,
+                String.format(
+                        "acceptableFpp(%f %%) < actualFpp (%f %%)",
+                        100 * acceptableFpp,
+                        100 * actualFpp
                 )
         );
 
