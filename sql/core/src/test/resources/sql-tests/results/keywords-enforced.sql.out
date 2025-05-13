@@ -20,6 +20,7 @@ ARRAY	false
 AS	true
 ASC	false
 AT	false
+ATOMIC	false
 AUTHORIZATION	true
 BEGIN	false
 BETWEEN	false

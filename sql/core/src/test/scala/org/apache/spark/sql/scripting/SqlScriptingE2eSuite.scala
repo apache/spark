@@ -82,7 +82,7 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE flag INT = -1;
         |  DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
         |  BEGIN
         |    SELECT flag;
