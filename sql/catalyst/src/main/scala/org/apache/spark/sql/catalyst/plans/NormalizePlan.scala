@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 
 object NormalizePlan extends PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -94,7 +95,7 @@ object NormalizePlan extends PredicateHelper {
       case OuterReference(a: AttributeReference) =>
         OuterReference(AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0)))
       case a: Alias =>
-        Alias(a.child, a.name)(exprId = ExprId(0))
+        normalizeAlias(a)
       case OuterReference(a: Alias) =>
         OuterReference(Alias(a.child, a.name)(exprId = ExprId(0)))
       case ae: AggregateExpression =>
@@ -182,6 +183,14 @@ object NormalizePlan extends PredicateHelper {
   }
 
   /**
+   * Used to determine whether [[Alias.name]] should be normalized. It is true when the [[Alias]]
+   * has correlated aggregate function in its expression tree, and it is in [[SubqueryExpression]]
+   * under resolved Having operator.
+   */
+  val NORMALIZE_CORRELATED_AGGREGATE_FUNCTION =
+    TreeNodeTag[Unit]("normalize_correlated_aggregate_function")
+
+  /**
    * Rewrite [[BinaryComparison]] operator to keep order. The following cases will be
    * equivalent:
    * 1. (a = b), (b = a);
@@ -206,6 +215,14 @@ object NormalizePlan extends PredicateHelper {
         }
       }
       .asInstanceOf[Seq[NamedExpression]]
+  }
+
+  private def normalizeAlias(alias: Alias): Alias = {
+    if (alias.getTagValue(NORMALIZE_CORRELATED_AGGREGATE_FUNCTION).isDefined) {
+      Alias(alias.child, "")(exprId = ExprId(0))
+    } else {
+      Alias(alias.child, alias.name)(exprId = ExprId(0))
+    }
   }
 }
 

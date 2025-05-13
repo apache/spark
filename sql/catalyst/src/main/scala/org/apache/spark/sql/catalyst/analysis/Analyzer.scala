@@ -4157,6 +4157,17 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
       plan: LogicalPlan,
       refExprs: Seq[Expression]): LogicalPlan = {
     plan resolveExpressions { case e =>
+      e match {
+        case alias: Alias =>
+          if (refExprs.exists { ref =>
+            stripOuterReference(alias).exists { expr =>
+              stripAlias(ref).semanticEquals(expr)
+            }
+          }) {
+            alias.setTagValue(NormalizePlan.NORMALIZE_CORRELATED_AGGREGATE_FUNCTION, ())
+          }
+        case _ =>
+      }
       val outerAlias =
         refExprs.find(stripAlias(_).semanticEquals(stripOuterReference(e)))
       outerAlias match {
