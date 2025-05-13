@@ -2444,8 +2444,7 @@ case class Length(child: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     child.dataType match {
-      case _: StringType => super.checkInputDataTypes()
-      case BinaryType => super.checkInputDataTypes()
+      case _: StringType | BinaryType => super.checkInputDataTypes()
       case _ =>
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
