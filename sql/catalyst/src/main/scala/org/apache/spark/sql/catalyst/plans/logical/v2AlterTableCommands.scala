@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions.{CheckConstraint, Expression, T
 import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{TableCatalog, TableChange}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.ArrayImplicits._
 
@@ -316,17 +315,6 @@ case class AddConstraint(
 case class AddCheckConstraint(
     child: LogicalPlan,
     checkConstraint: CheckConstraint) extends UnaryCommand {
-
-  def change: TableChange = {
-    val constraint = checkConstraint.toV2Constraint
-    val validatedTableVersion = child.find(_.isInstanceOf[DataSourceV2ScanRelation]) match {
-      case Some(d: DataSourceV2ScanRelation) if constraint.enforced() =>
-        d.relation.table.currentVersion()
-      case _ =>
-        null
-    }
-    TableChange.addConstraint(constraint, validatedTableVersion)
-  }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)
