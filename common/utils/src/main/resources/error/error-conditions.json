@@ -2532,6 +2532,11 @@
         "message" : [
           "which fails to resolve as a valid expression."
         ]
+      },
+      "NON_DETERMINISTIC" : {
+        "message" : [
+          "which contains a non-deterministic expression."
+        ]
       }
     },
     "sqlState" : "42623"
