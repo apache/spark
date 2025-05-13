@@ -2535,7 +2535,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.conditions("TEST").equals("12000"))
   }
 
-  ignore("declare condition: default sqlstate") {
+  test("declare condition: default sqlstate") {
     val sqlScriptText =
       """
         |BEGIN

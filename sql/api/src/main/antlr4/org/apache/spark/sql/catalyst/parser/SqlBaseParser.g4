@@ -60,10 +60,10 @@ compoundBody
     ;
 
 compoundStatement
-    : statement
+    : declareConditionStatement
+    | statement
     | setStatementInsideSqlScript
     | beginEndCompoundBlock
-    | declareConditionStatement
     | declareHandlerStatement
     | ifElseStatement
     | caseStatement
