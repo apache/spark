@@ -292,7 +292,7 @@ class AstBuilder extends DataTypeAstBuilder
     } else {
       // If there is no compound body, then there must be a statement or set statement.
       val statement = Option(ctx.statement().asInstanceOf[ParserRuleContext])
-        .orElse(Option(ctx.setStatementWithOptionalVarKeyword().asInstanceOf[ParserRuleContext]))
+        .orElse(Option(ctx.setStatementInsideSqlScript().asInstanceOf[ParserRuleContext]))
         .map { s =>
           SingleStatement(parsedPlan = visit(s).asInstanceOf[LogicalPlan])
         }
@@ -378,7 +378,7 @@ class AstBuilder extends DataTypeAstBuilder
       labelCtx: SqlScriptingLabelContext): CompoundPlanStatement =
     withOrigin(ctx) {
       Option(ctx.statement().asInstanceOf[ParserRuleContext])
-        .orElse(Option(ctx.setStatementWithOptionalVarKeyword().asInstanceOf[ParserRuleContext]))
+        .orElse(Option(ctx.setStatementInsideSqlScript().asInstanceOf[ParserRuleContext]))
         .map { s =>
           SingleStatement(parsedPlan = visit(s).asInstanceOf[LogicalPlan])
         }.getOrElse {
@@ -6375,8 +6375,8 @@ class AstBuilder extends DataTypeAstBuilder
     visitSetVariableImpl(ctx.query(), ctx.multipartIdentifierList(), ctx.assignmentList())
   }
 
-  override def visitSetVariableWithOptionalKeyword(
-      ctx: SetVariableWithOptionalKeywordContext): LogicalPlan =
+  override def visitSetVariableInsideSqlScript(
+      ctx: SetVariableInsideSqlScriptContext): LogicalPlan =
     withOrigin(ctx) {
       visitSetVariableImpl(ctx.query(), ctx.multipartIdentifierList(), ctx.assignmentList())
     }
