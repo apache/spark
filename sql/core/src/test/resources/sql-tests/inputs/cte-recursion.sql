@@ -73,7 +73,7 @@ WITH RECURSIVE t(n) AS (
     )
 SELECT * FROM t LIMIT 30;
 
-SET spark.sql.cteRecursionRowLimit=1000000;
+UNSET spark.sql.cteRecursionRowLimit;
 
 DROP VIEW ZeroAndOne;
 
