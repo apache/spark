@@ -162,7 +162,9 @@ case class UnionLoopExec(
     // the number of rows generated in that step.
     // If limit is not passed down, currentLimit is set to be zero and won't be considered in the
     // condition of while loop down (limit.isEmpty will be true).
-    var currentLimit = limit.getOrElse(-1)
+    var currentLimit = limit.getOrElse(rowLimit)
+
+    val rowLimitChanged = limit.isDefined
 
     val unionChildren = mutable.ArrayBuffer.empty[LogicalPlan]
 
@@ -171,8 +173,6 @@ case class UnionLoopExec(
     numAnchorOutputRows += prevCount
 
     var currentLevel = 1
-
-    var currentNumRows: Long = 0
 
     var limitReached: Boolean = false
 
@@ -221,20 +221,18 @@ case class UnionLoopExec(
 
       unionChildren += prevPlan
 
-      currentNumRows += prevCount
-
-      if (limit.isDefined) {
+      if (rowLimit != -1) {
         currentLimit -= prevCount.toInt
         if (currentLimit <= 0) {
-          limitReached = true
+          if (rowLimitChanged) {
+            limitReached = true
+          } else {
+            throw new SparkException(
+              errorClass = "RECURSION_ROW_LIMIT_EXCEEDED",
+              messageParameters = Map("rowLimit" -> rowLimit.toString),
+              cause = null)
+          }
         }
-      }
-
-      if (rowLimit != -1 && currentNumRows > rowLimit) {
-        throw new SparkException(
-          errorClass = "RECURSION_ROW_LIMIT_EXCEEDED",
-          messageParameters = Map("rowLimit" -> rowLimit.toString),
-          cause = null)
       }
 
       // Update metrics
