@@ -227,7 +227,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         checkError(
           exception = error,
           condition = "NEW_CHECK_CONSTRAINT_VIOLATION",
-          parameters = Map("expression" -> "id > 0", "tableName" -> "tbl")
+          parameters = Map("expression" -> "id > 0", "tableName" -> "non_part_test_catalog.ns.tbl")
         )
         assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
       }
@@ -246,7 +246,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       checkError(
         exception = error,
         condition = "NEW_CHECK_CONSTRAINT_VIOLATION",
-        parameters = Map("expression" -> "s.num > 0", "tableName" -> "tbl")
+        parameters = Map("expression" -> "s.num > 0", "tableName" -> "non_part_test_catalog.ns.tbl")
       )
       assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
 
@@ -274,7 +274,9 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       checkError(
         exception = error,
         condition = "NEW_CHECK_CONSTRAINT_VIOLATION",
-        parameters = Map("expression" -> "m['a'] > 0", "tableName" -> "tbl")
+        parameters = Map(
+          "expression" -> "m['a'] > 0",
+          "tableName" -> "non_part_test_catalog.ns.tbl")
       )
       assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
 
@@ -302,7 +304,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       checkError(
         exception = error,
         condition = "NEW_CHECK_CONSTRAINT_VIOLATION",
-        parameters = Map("expression" -> "a[1] > 0", "tableName" -> "tbl")
+        parameters = Map("expression" -> "a[1] > 0", "tableName" -> "non_part_test_catalog.ns.tbl")
       )
       assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
 

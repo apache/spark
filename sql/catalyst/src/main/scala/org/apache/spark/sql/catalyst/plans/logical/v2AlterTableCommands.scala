@@ -317,7 +317,7 @@ case class AddCheckConstraint(
     child: LogicalPlan,
     checkConstraint: CheckConstraint) extends UnaryCommand {
 
-  def changes: Seq[TableChange] = {
+  def change: TableChange = {
     val constraint = checkConstraint.toV2Constraint
     val validatedTableVersion = child.find(_.isInstanceOf[DataSourceV2ScanRelation]) match {
       case Some(d: DataSourceV2ScanRelation) if constraint.enforced() =>
@@ -325,7 +325,7 @@ case class AddCheckConstraint(
       case _ =>
         null
     }
-    Seq(TableChange.addConstraint(constraint, validatedTableVersion))
+    TableChange.addConstraint(constraint, validatedTableVersion)
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =

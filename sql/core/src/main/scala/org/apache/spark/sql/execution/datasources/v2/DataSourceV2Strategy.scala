@@ -539,9 +539,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       assert(d.relation.identifier.isDefined, "Identifier should be defined after analysis")
       val catalog = d.relation.catalog.get.asTableCatalog
       val identifier = d.relation.identifier.get
-      ResolveTableConstraints.validateCatalogForTableChange(a.changes, catalog, identifier)
+      ResolveTableConstraints.validateCatalogForTableChange(Seq(a.change), catalog, identifier)
       AddCheckConstraintExec(
-        catalog, identifier, a.changes, a.checkConstraint.condition, planLater(a.child)) :: Nil
+        catalog, identifier, a.change, a.checkConstraint.condition, planLater(a.child)) :: Nil
 
     case a: AlterTableCommand if a.table.resolved =>
       val table = a.table.asInstanceOf[ResolvedTable]

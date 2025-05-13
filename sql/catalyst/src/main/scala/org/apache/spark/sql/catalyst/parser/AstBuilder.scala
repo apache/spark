@@ -5493,7 +5493,7 @@ class AstBuilder extends DataTypeAstBuilder
         val namedConstraint = tableConstraint.withTableName(identifiers.last)
         namedConstraint match {
           case c: CheckConstraint =>
-            val relation = createUnresolvedRelation(ctx.identifierReference())
+            val relation = createUnresolvedRelation(ctx.identifierReference)
             val child = Filter(Not(c.child), relation)
             AddCheckConstraint(child, c)
           case _ =>
