@@ -2442,6 +2442,22 @@ case class Length(child: Expression)
       )
     )
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    child.dataType match {
+      case _: StringType => super.checkInputDataTypes()
+      case BinaryType => super.checkInputDataTypes()
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(0),
+            "requiredType" -> (toSQLType(StringType) + " or " + toSQLType(BinaryType)),
+            "inputSql" -> toSQLExpr(child),
+            "inputType" -> toSQLType(child.dataType)
+          )
+        )
+    }
+  }
   protected override def nullSafeEval(value: Any): Any = child.dataType match {
     case _: StringType => value.asInstanceOf[UTF8String].numChars
     case BinaryType => value.asInstanceOf[Array[Byte]].length

@@ -1179,6 +1179,19 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Length(Literal.create(null, BinaryType)), null, create_row(bytes))
     checkEvaluation(OctetLength(Literal.create(null, BinaryType)), null, create_row(bytes))
     checkEvaluation(BitLength(Literal.create(null, BinaryType)), null, create_row(bytes))
+
+    // type checking
+    assert(Length(Literal(Array("a"))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> "\"STRING\" or \"BINARY\"",
+          "inputSql" -> "\"ARRAY('a')\"",
+          "inputType" -> "\"ARRAY<STRING>\""
+        )
+      )
+    )
   }
 
   test("format_number / FormatNumber") {
