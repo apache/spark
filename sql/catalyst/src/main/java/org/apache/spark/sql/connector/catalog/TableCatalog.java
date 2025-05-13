@@ -26,9 +26,11 @@ import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.StructType;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * Catalog methods for working with Tables.
@@ -102,6 +104,23 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws NoSuchNamespaceException If the namespace does not exist (optional).
    */
   Identifier[] listTables(String[] namespace) throws NoSuchNamespaceException;
+
+  /**
+   * List the table summaries in a namespace from the catalog.
+   * <p>
+   * This method should return all tables entities from a catalog regardless of type (i.e. views
+   * should be listed as well).
+   *
+   * @param namespace a multi-part namespace
+   * @return an array of Identifiers for tables
+   * @throws NoSuchNamespaceException If the namespace does not exist (optional).
+   */
+  default TableSummary[] listTableSummaries(String[] namespace) throws NoSuchNamespaceException {
+    // By default, we assume that all tables have standard table type.
+    return Arrays.stream(this.listTables(namespace))
+      .map(identifier -> new TableSummary(identifier, TableSummary.REGULAR_TABLE_TYPE))
+      .toArray(TableSummary[]::new);
+  }
 
   /**
    * Load table metadata by {@link Identifier identifier} from the catalog.
