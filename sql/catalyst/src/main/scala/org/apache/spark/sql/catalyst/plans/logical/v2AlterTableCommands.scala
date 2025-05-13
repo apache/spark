@@ -218,13 +218,17 @@ case class AlterColumnSpec(
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
     val newColumn = newChildren(0).asInstanceOf[FieldName]
-    val newPosition = newChildren collectFirst {
-      case p: FieldPosition => p
+    val newPos = if (newPosition.isDefined) {
+      Some(newChildren(1).asInstanceOf[FieldPosition])
+    } else {
+      None
     }
-    val newDefault = newChildren collectFirst {
-      case d: DefaultValueExpression => d
+    val newDefault = if (newDefaultExpression.isDefined) {
+      Some(newChildren.last.asInstanceOf[DefaultValueExpression])
+    } else {
+      None
     }
-    copy(column = newColumn, newPosition = newPosition, newDefaultExpression = newDefault)
+    copy(column = newColumn, newPosition = newPos, newDefaultExpression = newDefault)
   }
 
 
