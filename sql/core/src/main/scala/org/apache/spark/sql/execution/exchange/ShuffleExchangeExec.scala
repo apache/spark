@@ -78,8 +78,13 @@ trait ShuffleExchangeLike extends Exchange {
   private[sql] // Exposed for testing
   val futureAction = new AtomicReference[Option[FutureAction[MapOutputStatistics]]](None)
 
+  @volatile
   @transient
   private var isCancelled: Boolean = false
+
+  @volatile
+  @transient
+  private var quietly: Boolean = false
 
   @transient
   private lazy val triggerFuture: java.util.concurrent.Future[Any] = {
@@ -90,7 +95,7 @@ trait ShuffleExchangeLike extends Exchange {
         executeQuery(null)
         // Submit shuffle job if not cancelled.
         this.synchronized {
-          if (isCancelled) {
+          if (isCancelled && !quietly) {
             promise.tryFailure(new SparkException("Shuffle cancelled."))
           } else {
             val shuffleJob = RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
@@ -124,10 +129,16 @@ trait ShuffleExchangeLike extends Exchange {
   /**
    * Cancels the shuffle job with an optional reason.
    */
-  final def cancelShuffleJob(reason: Option[String]): Unit = this.synchronized {
-    if (!isCancelled) {
-      isCancelled = true
-      futureAction.get().foreach(_.cancel(reason))
+  final def cancelShuffleJob(reason: Option[String], quiet: Boolean): Unit = this.synchronized {
+    this.synchronized {
+      if (!isCancelled) {
+        isCancelled = true
+        if (quiet) {
+          quietly = quiet
+          promise.tryFailure(new SparkAQEStageCancelException)
+        }
+        futureAction.get().foreach(_.cancel(reason, quiet))
+      }
     }
   }
 
