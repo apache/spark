@@ -2592,9 +2592,9 @@
       "Invalid condition declaration."
     ],
     "subClass" : {
-      "ONLY_AT_BEGINNING" : {
+      "NOT_AT_START_OF_COMPOUND_STATEMENT" : {
         "message" : [
-          "Condition <conditionName> can only be declared at the beginning of the compound."
+          "Condition <conditionName> can only be declared at the start of a BEGIN END compound statement."
         ]
       },
       "QUALIFIED_CONDITION_NAME" : {
