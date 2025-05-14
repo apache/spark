@@ -587,9 +587,9 @@ Below is a list of all the keywords in Spark SQL.
 |LEADING|reserved|non-reserved|reserved|
 |LEAVE|non-reserved|non-reserved|non-reserved|
 |LEFT|reserved|strict-non-reserved|reserved|
+|LEVEL|non-reserved|non-reserved|non-reserved|
 |LIKE|non-reserved|non-reserved|reserved|
 |ILIKE|non-reserved|non-reserved|non-reserved|
-|LEVEL|non-reserved|non-reserved|non-reserved|
 |LIMIT|non-reserved|non-reserved|non-reserved|
 |LINES|non-reserved|non-reserved|non-reserved|
 |LIST|non-reserved|non-reserved|non-reserved|

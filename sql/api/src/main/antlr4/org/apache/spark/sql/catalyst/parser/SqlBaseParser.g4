@@ -1808,6 +1808,7 @@ ansiNonReserved
     | LAST
     | LAZY
     | LEAVE
+    | LEVEL
     | LIKE
     | ILIKE
     | LIMIT
@@ -1824,6 +1825,7 @@ ansiNonReserved
     | MACRO
     | MAP
     | MATCHED
+    | MAX
     | MERGE
     | MICROSECOND
     | MICROSECONDS
@@ -1874,6 +1876,7 @@ ansiNonReserved
     | RECORDREADER
     | RECORDWRITER
     | RECOVER
+    | RECURSION
     | REDUCE
     | REFRESH
     | RELY
@@ -2185,10 +2188,10 @@ nonReserved
     | LAZY
     | LEADING
     | LEAVE
+    | LEVEL
     | LIKE
     | LONG
     | ILIKE
-    | LEVEL
     | LIMIT
     | LINES
     | LIST
