@@ -218,13 +218,13 @@ object SqlScriptingExecution {
 
       if (result.isEmpty) {
         // Return empty LocalRelation.
-        LocalRelation.fromExternalRows(Seq.empty, Seq.empty)
+        LocalRelation.fromExternalRows(Seq.empty, Seq.empty, isSqlScript = true)
       } else {
         // If `result` is defined, then `resultSchema` must be defined as well.
         assert(resultSchema.isDefined)
 
         val attributes = DataTypeUtils.toAttributes(resultSchema.get)
-        LocalRelation.fromExternalRows(attributes, result.get)
+        LocalRelation.fromExternalRows(attributes, result.get, isSqlScript = true)
       }
     }
   }

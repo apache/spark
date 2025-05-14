@@ -39,16 +39,26 @@ object LocalRelation {
     new LocalRelation(DataTypeUtils.toAttributes(schema))
   }
 
-  def fromExternalRows(output: Seq[Attribute], data: Seq[Row]): LocalRelation = {
+  def fromExternalRows(
+      output: Seq[Attribute],
+      data: Seq[Row],
+      isSqlScript: Boolean = false): LocalRelation = {
     val schema = DataTypeUtils.fromAttributes(output)
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    LocalRelation(output, data.map(converter(_).asInstanceOf[InternalRow]))
+    val rel = LocalRelation(output, data.map(converter(_).asInstanceOf[InternalRow]))
+    rel.isSqlScript = isSqlScript
+    rel
   }
 
-  def fromProduct(output: Seq[Attribute], data: Seq[Product]): LocalRelation = {
+  def fromProduct(
+      output: Seq[Attribute],
+      data: Seq[Product],
+      isSqlScript: Boolean = false): LocalRelation = {
     val schema = DataTypeUtils.fromAttributes(output)
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    LocalRelation(output, data.map(converter(_).asInstanceOf[InternalRow]))
+    val rel = LocalRelation(output, data.map(converter(_).asInstanceOf[InternalRow]))
+    rel.isSqlScript = isSqlScript
+    rel
   }
 }
 
@@ -70,6 +80,10 @@ case class LocalRelation(
 
   // A local relation must have resolved output.
   require(output.forall(_.resolved), "Unresolved attributes found when constructing LocalRelation.")
+
+  // Flag indicating whether this relation is a result of a query executing inside SQL Script.
+  // This is a temporary solution to support the SQL Script execution using Spark Connect.
+  var isSqlScript: Boolean = false
 
   override def withStream(stream: SparkDataStream): LocalRelation = {
     copy(stream = Some(stream))

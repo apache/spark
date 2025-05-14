@@ -143,6 +143,23 @@ trait SparkConnectServerTest extends SharedSparkSession {
     proto.Plan.newBuilder().setRoot(dsl.sql(query)).build()
   }
 
+  protected def buildSqlCommandPlan(sqlCommand: String) = {
+    proto.Plan
+      .newBuilder()
+      .setCommand(
+        proto.Command
+          .newBuilder()
+          .setSqlCommand(
+            proto.SqlCommand
+              .newBuilder()
+              .setSql(sqlCommand)
+              .build()
+          )
+          .build()
+      )
+      .build()
+  }
+
   protected def buildLocalRelation[A <: Product: TypeTag](data: Seq[A]) = {
     val encoder = ScalaReflection.encoderFor[A]
     val arrowData =
