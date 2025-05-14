@@ -400,6 +400,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
       ResolveOutputRelation ::
+      RewriteUpdateTable ::
+      RewriteMergeIntoTable ::
       new ResolveTableConstraints(catalogManager) ::
       new ResolveDataFrameDropColumns(catalogManager) ::
       new ResolveSetVariable(catalogManager) ::
@@ -449,8 +451,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveEncodersInUDF),
     // The rewrite rules might move resolved query plan into subquery. Once the resolved plan
     // contains ScalaUDF, their encoders won't be resolved if `ResolveEncodersInUDF` is not
-    // applied before the rewrite rules. So we need to apply `ResolveEncodersInUDF` before the
-    // rewrite rules.
+    // applied before the rewrite rules. So we need to apply the rewrite rules after
+    // `ResolveEncodersInUDF`
     Batch("DML rewrite", fixedPoint,
       RewriteDeleteFromTable,
       RewriteUpdateTable,

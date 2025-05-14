@@ -358,6 +358,54 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("Check constraint violation on table update - top level column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" CONSTRAINT positive_id CHECK (id > 0)) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (5, 10)")
+      val error = intercept[SparkRuntimeException] {
+        sql(s"UPDATE $t SET id = -1 WHERE value = 10")
+      }
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters =
+          Map("constraintName" -> "positive_id", "expression" -> "id > 0", "values" -> " - id : -1")
+      )
+    }
+  }
+
+  test("Check constraint violation on table merge - top level column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
+      withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { source =>
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" CONSTRAINT positive_id CHECK (id > 0)) $defaultUsing")
+        sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
+        sql(s"INSERT INTO $target VALUES (5, 10)")
+        sql(s"INSERT INTO $source VALUES (-1, 20)")
+
+        val error = intercept[SparkRuntimeException] {
+          sql(
+            s"""
+               |MERGE INTO $target t
+               |USING $source s
+               |ON t.value = s.value
+               |WHEN NOT MATCHED THEN INSERT VALUES (s.id, s.value)
+               |""".stripMargin)
+        }
+        checkError(
+          exception = error,
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters =
+            Map("constraintName" -> "positive_id", "expression" -> "id > 0",
+              "values" -> " - id : -1")
+        )
+      }
+    }
+  }
+
   test("Check constraint violation on table insert - nested column") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id INT," +
