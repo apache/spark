@@ -3026,4 +3026,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       values: java.util.List[Any]): SparkRuntimeException = {
     checkViolation(constraintName, sqlStr, columns.asScala.zip(values.asScala).toMap)
   }
+
+  def newCheckViolation(sqlStr: String, tableName: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "NEW_CHECK_CONSTRAINT_VIOLATION",
+      messageParameters = Map(
+        "expression" -> sqlStr,
+        "tableName" -> tableName
+      )
+    )
+  }
 }

@@ -4137,6 +4137,12 @@
     ],
     "sqlState" : "07501"
   },
+  "NEW_CHECK_CONSTRAINT_VIOLATION" : {
+    "message" : [
+      "The new check constraint (<expression>) cannot be added because it would be violated by existing data in table <tableName>. Please ensure all existing rows satisfy the constraint before adding it."
+    ],
+    "sqlState" : "23512"
+  },
   "NONEXISTENT_FIELD_NAME_IN_LIST" : {
     "message" : [
       "Field(s) <nonExistFields> do(es) not exist. Available fields: <fieldNames>"
