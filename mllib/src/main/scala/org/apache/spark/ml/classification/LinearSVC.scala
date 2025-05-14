@@ -445,9 +445,9 @@ class LinearSVCModel private[classification] (
   }
 }
 
-
 @Since("2.2.0")
 object LinearSVCModel extends MLReadable[LinearSVCModel] {
+  private[ml] case class Data(coefficients: Vector, intercept: Double)
 
   @Since("2.2.0")
   override def read: MLReader[LinearSVCModel] = new LinearSVCReader
@@ -460,14 +460,12 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
   class LinearSVCWriter(instance: LinearSVCModel)
     extends MLWriter with Logging {
 
-    private case class Data(coefficients: Vector, intercept: Double)
-
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.coefficients, instance.intercept)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -479,10 +477,8 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
     override def load(path: String): LinearSVCModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.format("parquet").load(dataPath)
-      val Row(coefficients: Vector, intercept: Double) =
-        data.select("coefficients", "intercept").head()
-      val model = new LinearSVCModel(metadata.uid, coefficients, intercept)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val model = new LinearSVCModel(metadata.uid, data.coefficients, data.intercept)
       metadata.getAndSetParams(model)
       model
     }

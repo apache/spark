@@ -334,10 +334,14 @@ object SparkBuild extends PomBuild {
       "-groups",
       "-skip-packages", Seq(
         "org.apache.spark.api.python",
-        "org.apache.spark.network",
         "org.apache.spark.deploy",
-        "org.apache.spark.util.collection",
-        "org.apache.spark.sql.scripting"
+        "org.apache.spark.kafka010",
+        "org.apache.spark.network",
+        "org.apache.spark.sql.avro",
+        "org.apache.spark.sql.scripting",
+        "org.apache.spark.types.variant",
+        "org.apache.spark.ui.flamegraph",
+        "org.apache.spark.util.collection"
       ).mkString(":"),
       "-doc-title", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " ScalaDoc"
     ),
@@ -1380,10 +1384,14 @@ object Unidoc {
         f.getCanonicalPath.contains("org/apache/spark/unsafe") &&
         !f.getCanonicalPath.contains("org/apache/spark/unsafe/types/CalendarInterval")))
       .map(_.filterNot(_.getCanonicalPath.contains("python")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/kafka010")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/types/variant")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/ui/flamegraph")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/collection")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/io")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/kvstore")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/artifact")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/avro")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/connect/")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/classic/")))

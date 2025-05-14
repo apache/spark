@@ -192,6 +192,14 @@ case class Alias(child: Expression, name: String)(
       explicitMetadata = explicitMetadata,
       nonInheritableMetadataKeys = nonInheritableMetadataKeys)
 
+  def withExprId(newExprId: ExprId): Alias = {
+    if (exprId == newExprId) {
+      this
+    } else {
+      Alias(child, name)(newExprId, qualifier, explicitMetadata, nonInheritableMetadataKeys)
+    }
+  }
+
   override def toAttribute: Attribute = {
     if (resolved) {
       AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifier)
@@ -442,6 +450,29 @@ case class OuterReference(e: NamedExpression)
   override def toAttribute: Attribute = e.toAttribute
   override def newInstance(): NamedExpression = OuterReference(e.newInstance())
   final override val nodePatterns: Seq[TreePattern] = Seq(OUTER_REFERENCE)
+}
+
+/**
+ * A place holder used to hold a reference that has been resolved to a field outside of the subquery
+ * plan. We use it only for queries containing nested correlation and only in the
+ * SubqueryExpression#outerAttrs to indicate that the correlated columns referenced by
+ * this subquery expression are from the outer scopes, not the subquery plan or
+ * the immediate outer plan of the subquery plan. For example,
+ * SubqueryExpression(outerAttrs=[OuterScopeReference(a)] means a cannot be resolved by the
+ * SubqueryExpression.plan or the plan holding this SubqueryExpression.
+ */
+case class OuterScopeReference(e: NamedExpression)
+  extends LeafExpression with NamedExpression with Unevaluable {
+  override def dataType: DataType = e.dataType
+  override def nullable: Boolean = e.nullable
+  override def prettyName: String = "outerScope"
+
+  override def sql: String = s"$prettyName(${e.sql})"
+  override def name: String = e.name
+  override def qualifier: Seq[String] = e.qualifier
+  override def exprId: ExprId = e.exprId
+  override def toAttribute: Attribute = e.toAttribute
+  override def newInstance(): NamedExpression = OuterScopeReference(e.newInstance())
 }
 
 /**

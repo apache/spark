@@ -514,8 +514,8 @@ case class TransformWithStateExec(
 
     if (hasInitialState) {
       val storeConf = new StateStoreConf(session.sessionState.conf)
-      val hadoopConfBroadcast = sparkContext.broadcast(
-        new SerializableConfiguration(session.sessionState.newHadoopConf()))
+      val hadoopConfBroadcast =
+        SerializableConfiguration.broadcast(sparkContext, session.sessionState.newHadoopConf())
       child.execute().stateStoreAwareZipPartitions(
         initialState.execute(),
         getStateInfo,
@@ -565,8 +565,8 @@ case class TransformWithStateExec(
       } else {
         // If the query is running in batch mode, we need to create a new StateStore and instantiate
         // a temp directory on the executors in mapPartitionsWithIndex.
-        val hadoopConfBroadcast = sparkContext.broadcast(
-          new SerializableConfiguration(session.sessionState.newHadoopConf()))
+        val hadoopConfBroadcast =
+          SerializableConfiguration.broadcast(sparkContext, session.sessionState.newHadoopConf())
         child.execute().mapPartitionsWithIndex[InternalRow](
           (i: Int, iter: Iterator[InternalRow]) => {
             initNewStateStoreAndProcessData(i, hadoopConfBroadcast) { store =>

@@ -431,12 +431,14 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     }
 
     val model = createModel(parameters, yMean, yStd, featuresMean, featuresStd)
+
     // Handle possible missing or invalid prediction columns
     val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
-
     val trainingSummary = new LinearRegressionTrainingSummary(
       summaryModel.transform(dataset), predictionColName, $(labelCol), $(featuresCol),
-      model, Array(0.0), objectiveHistory)
+      summaryModel.get(summaryModel.weightCol).getOrElse(""),
+      summaryModel.numFeatures, summaryModel.getFitIntercept,
+      Array(0.0), objectiveHistory)
     model.setSummary(Some(trainingSummary))
   }
 
@@ -456,9 +458,17 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val lrModel = copyValues(new LinearRegressionModel(
       uid, model.coefficients.compressed, model.intercept))
     val (summaryModel, predictionColName) = lrModel.findSummaryModelAndPredictionCol()
+
+    val coefficientArray = if (summaryModel.getFitIntercept) {
+      summaryModel.coefficients.toArray ++ Array(summaryModel.intercept)
+    } else {
+      summaryModel.coefficients.toArray
+    }
     val trainingSummary = new LinearRegressionTrainingSummary(
       summaryModel.transform(dataset), predictionColName, $(labelCol), $(featuresCol),
-      summaryModel, model.diagInvAtWA.toArray, model.objectiveHistory)
+      summaryModel.get(summaryModel.weightCol).getOrElse(""),
+      summaryModel.numFeatures, summaryModel.getFitIntercept,
+      model.diagInvAtWA.toArray, model.objectiveHistory, coefficientArray)
 
     lrModel.setSummary(Some(trainingSummary))
   }
@@ -490,7 +500,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
     val trainingSummary = new LinearRegressionTrainingSummary(
       summaryModel.transform(dataset), predictionColName, $(labelCol), $(featuresCol),
-      model, Array(0.0), Array(0.0))
+      summaryModel.get(summaryModel.weightCol).getOrElse(""),
+      summaryModel.numFeatures, summaryModel.getFitIntercept,
+      Array(0.0), Array(0.0))
 
     model.setSummary(Some(trainingSummary))
   }
@@ -733,7 +745,9 @@ class LinearRegressionModel private[ml] (
     // Handle possible missing or invalid prediction columns
     val (summaryModel, predictionColName) = findSummaryModelAndPredictionCol()
     new LinearRegressionSummary(summaryModel.transform(dataset), predictionColName,
-      $(labelCol), $(featuresCol), summaryModel, Array(0.0))
+      $(labelCol), $(featuresCol),
+      summaryModel.get(summaryModel.weightCol).getOrElse(""),
+      summaryModel.numFeatures, summaryModel.getFitIntercept, Array(0.0))
   }
 
   /**
@@ -786,14 +800,14 @@ class LinearRegressionModel private[ml] (
   }
 }
 
+private[ml] case class LinearModelData(intercept: Double, coefficients: Vector, scale: Double)
+
 /** A writer for LinearRegression that handles the "internal" (or default) format */
 private class InternalLinearRegressionModelWriter
   extends MLWriterFormat with MLFormatRegister {
 
   override def format(): String = "internal"
   override def stageName(): String = "org.apache.spark.ml.regression.LinearRegressionModel"
-
-  private case class Data(intercept: Double, coefficients: Vector, scale: Double)
 
   override def write(path: String, sparkSession: SparkSession,
     optionMap: mutable.Map[String, String], stage: PipelineStage): Unit = {
@@ -802,9 +816,9 @@ private class InternalLinearRegressionModelWriter
     // Save metadata and Params
     DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
     // Save model data: intercept, coefficients, scale
-    val data = Data(instance.intercept, instance.coefficients, instance.scale)
+    val data = LinearModelData(instance.intercept, instance.coefficients, instance.scale)
     val dataPath = new Path(path, "data").toString
-    sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+    ReadWriteUtils.saveObject[LinearModelData](dataPath, data, sparkSession)
   }
 }
 
@@ -816,7 +830,7 @@ private class PMMLLinearRegressionModelWriter
 
   override def stageName(): String = "org.apache.spark.ml.regression.LinearRegressionModel"
 
-  private case class Data(intercept: Double, coefficients: Vector)
+  private[ml] case class Data(intercept: Double, coefficients: Vector)
 
   override def write(path: String, sparkSession: SparkSession,
     optionMap: mutable.Map[String, String], stage: PipelineStage): Unit = {
@@ -847,20 +861,20 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.format("parquet").load(dataPath)
       val (majorVersion, minorVersion) = majorMinorVersion(metadata.sparkVersion)
       val model = if (majorVersion < 2 || (majorVersion == 2 && minorVersion <= 2)) {
         // Spark 2.2 and before
+        val data = sparkSession.read.format("parquet").load(dataPath)
         val Row(intercept: Double, coefficients: Vector) =
           MLUtils.convertVectorColumnsToML(data, "coefficients")
             .select("intercept", "coefficients")
             .head()
         new LinearRegressionModel(metadata.uid, coefficients, intercept)
       } else {
-        // Spark 2.3 and later
-        val Row(intercept: Double, coefficients: Vector, scale: Double) =
-          data.select("intercept", "coefficients", "scale").head()
-        new LinearRegressionModel(metadata.uid, coefficients, intercept, scale)
+        val data = ReadWriteUtils.loadObject[LinearModelData](dataPath, sparkSession)
+        new LinearRegressionModel(
+          metadata.uid, data.coefficients, data.intercept, data.scale
+        )
       }
 
       metadata.getAndSetParams(model)
@@ -875,6 +889,8 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
  *
  * @param predictions predictions output by the model's `transform` method.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
+ * @param coefficientArray Coefficients of the linear regression model, only necessary when
+ *                         diagInvAtWA is not Array(0).
  */
 @Since("1.5.0")
 class LinearRegressionTrainingSummary private[regression] (
@@ -882,16 +898,22 @@ class LinearRegressionTrainingSummary private[regression] (
     predictionCol: String,
     labelCol: String,
     featuresCol: String,
-    model: LinearRegressionModel,
+    private val weightCol: String,
+    private val numFeatures: Int,
+    private val fitIntercept: Boolean,
     diagInvAtWA: Array[Double],
-    val objectiveHistory: Array[Double])
+    val objectiveHistory: Array[Double],
+    private val coefficientArray: Array[Double] = Array.emptyDoubleArray)
   extends LinearRegressionSummary(
     predictions,
     predictionCol,
     labelCol,
     featuresCol,
-    model,
-    diagInvAtWA) {
+    weightCol,
+    numFeatures,
+    fitIntercept,
+    diagInvAtWA,
+    coefficientArray) {
 
   /**
    * Number of training iterations until termination
@@ -915,6 +937,8 @@ class LinearRegressionTrainingSummary private[regression] (
  *                      each instance.
  * @param labelCol Field in "predictions" which gives the true label of each instance.
  * @param featuresCol Field in "predictions" which gives the features of each instance as a vector.
+ * @param coefficientArray Coefficients of the linear regression model, only necessary when
+ *                         diagInvAtWA is not Array(0).
  */
 @Since("1.5.0")
 class LinearRegressionSummary private[regression] (
@@ -922,23 +946,21 @@ class LinearRegressionSummary private[regression] (
     val predictionCol: String,
     val labelCol: String,
     val featuresCol: String,
-    private val privateModel: LinearRegressionModel,
-    private val diagInvAtWA: Array[Double]) extends Summary with Serializable {
+    private val weightCol: String,
+    private val numFeatures: Int,
+    private val fitIntercept: Boolean,
+    private val diagInvAtWA: Array[Double],
+    private val coefficientArray: Array[Double] = Array.emptyDoubleArray)
+  extends Summary with Serializable {
 
   @transient private val metrics = {
-    val weightCol =
-      if (!privateModel.isDefined(privateModel.weightCol) || privateModel.getWeightCol.isEmpty) {
-        lit(1.0)
-      } else {
-        col(privateModel.getWeightCol).cast(DoubleType)
-      }
-
+    val w = if (weightCol.isEmpty) lit(1.0) else col(weightCol).cast(DoubleType)
     new RegressionMetrics(
       predictions
-        .select(col(predictionCol), col(labelCol).cast(DoubleType), weightCol)
+        .select(col(predictionCol), col(labelCol).cast(DoubleType), w)
         .rdd
         .map { case Row(pred: Double, label: Double, weight: Double) => (pred, label, weight) },
-      !privateModel.getFitIntercept)
+      !fitIntercept)
   }
 
   /**
@@ -986,9 +1008,9 @@ class LinearRegressionSummary private[regression] (
    */
   @Since("2.3.0")
   val r2adj: Double = {
-    val interceptDOF = if (privateModel.getFitIntercept) 1 else 0
+    val interceptDOF = if (fitIntercept) 1 else 0
     1 - (1 - r2) * (numInstances - interceptDOF) /
-      (numInstances - privateModel.coefficients.size - interceptDOF)
+      (numInstances - numFeatures - interceptDOF)
   }
 
   /** Residuals (label - predicted value) */
@@ -1003,10 +1025,10 @@ class LinearRegressionSummary private[regression] (
 
   /** Degrees of freedom */
   @Since("2.2.0")
-  val degreesOfFreedom: Long = if (privateModel.getFitIntercept) {
-    numInstances - privateModel.coefficients.size - 1
+  val degreesOfFreedom: Long = if (fitIntercept) {
+    numInstances - numFeatures - 1
   } else {
-    numInstances - privateModel.coefficients.size
+    numInstances - numFeatures
   }
 
   /**
@@ -1014,15 +1036,10 @@ class LinearRegressionSummary private[regression] (
    * the square root of the instance weights.
    */
   lazy val devianceResiduals: Array[Double] = {
-    val weighted =
-      if (!privateModel.isDefined(privateModel.weightCol) || privateModel.getWeightCol.isEmpty) {
-        lit(1.0)
-      } else {
-        sqrt(col(privateModel.getWeightCol))
-      }
+    val w = if (weightCol.isEmpty) lit(1.0) else sqrt(col(weightCol))
     val dr = predictions
-      .select(col(privateModel.getLabelCol).minus(col(privateModel.getPredictionCol))
-        .multiply(weighted).as("weightedResiduals"))
+      .select(col(labelCol).minus(col(predictionCol))
+        .multiply(w).as("weightedResiduals"))
       .select(min(col("weightedResiduals")).as("min"), max(col("weightedResiduals")).as("max"))
       .first()
     Array(dr.getDouble(0), dr.getDouble(1))
@@ -1042,15 +1059,14 @@ class LinearRegressionSummary private[regression] (
       throw new UnsupportedOperationException(
         "No Std. Error of coefficients available for this LinearRegressionModel")
     } else {
-      val rss =
-        if (!privateModel.isDefined(privateModel.weightCol) || privateModel.getWeightCol.isEmpty) {
+      val rss = if (weightCol.isEmpty) {
           meanSquaredError * numInstances
-        } else {
-          val t = udf { (pred: Double, label: Double, weight: Double) =>
-            math.pow(label - pred, 2.0) * weight }
-          predictions.select(t(col(privateModel.getPredictionCol), col(privateModel.getLabelCol),
-            col(privateModel.getWeightCol)).as("wse")).agg(sum(col("wse"))).first().getDouble(0)
-        }
+      } else {
+        val t = udf { (pred: Double, label: Double, weight: Double) =>
+          math.pow(label - pred, 2.0) * weight }
+        predictions.select(t(col(predictionCol), col(labelCol),
+          col(weightCol)).as("wse")).agg(sum(col("wse"))).first().getDouble(0)
+      }
       val sigma2 = rss / degreesOfFreedom
       diagInvAtWA.map(_ * sigma2).map(math.sqrt)
     }
@@ -1070,12 +1086,7 @@ class LinearRegressionSummary private[regression] (
       throw new UnsupportedOperationException(
         "No t-statistic available for this LinearRegressionModel")
     } else {
-      val estimate = if (privateModel.getFitIntercept) {
-        Array.concat(privateModel.coefficients.toArray, Array(privateModel.intercept))
-      } else {
-        privateModel.coefficients.toArray
-      }
-      estimate.zip(coefficientStandardErrors).map { x => x._1 / x._2 }
+      coefficientArray.zip(coefficientStandardErrors).map { x => x._1 / x._2 }
     }
   }
 
@@ -1096,6 +1107,5 @@ class LinearRegressionSummary private[regression] (
       tValues.map { x => 2.0 * (1.0 - StudentsT(degreesOfFreedom.toDouble).cdf(math.abs(x))) }
     }
   }
-
 }
 

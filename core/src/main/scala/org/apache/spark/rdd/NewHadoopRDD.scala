@@ -104,8 +104,7 @@ class NewHadoopRDD[K, V](
 
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
-  private val confBroadcast = sc.broadcast(new SerializableConfiguration(_conf))
-  // private val serializableConf = new SerializableWritable(_conf)
+  private val confBroadcast = SerializableConfiguration.broadcast(sc, _conf)
 
   private val jobTrackerId: String = {
     val dateTimeFormatter =

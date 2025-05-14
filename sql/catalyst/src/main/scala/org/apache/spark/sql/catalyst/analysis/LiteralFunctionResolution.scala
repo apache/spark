@@ -44,9 +44,9 @@ object LiteralFunctionResolution {
     (CurrentDate().prettyName, () => CurrentDate(), toPrettySQL(_)),
     (CurrentTimestamp().prettyName, () => CurrentTimestamp(), toPrettySQL(_)),
     (CurrentTime().prettyName, () => CurrentTime(), toPrettySQL(_)),
-    (CurrentUser().prettyName, () => CurrentUser(), toPrettySQL),
-    ("user", () => CurrentUser(), toPrettySQL),
-    ("session_user", () => CurrentUser(), toPrettySQL),
+    (CurrentUser().prettyName, () => CurrentUser(), toPrettySQL(_)),
+    ("user", () => CurrentUser(), toPrettySQL(_)),
+    ("session_user", () => CurrentUser(), toPrettySQL(_)),
     (VirtualColumn.hiveGroupingIdName, () => GroupingID(Nil), _ => VirtualColumn.hiveGroupingIdName)
   )
 }

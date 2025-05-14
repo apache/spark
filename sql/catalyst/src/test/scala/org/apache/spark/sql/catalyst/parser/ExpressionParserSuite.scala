@@ -705,7 +705,7 @@ class ExpressionParserSuite extends AnalysisTest {
       parameters = Map(
         "unsupportedType" -> "\"GEO\"",
         "supportedTypes" ->
-        """"DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X""""),
+        """"DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X", "TIME""""),
       context = ExpectedContext(
         fragment = "GEO '(10,-6)'",
         start = 0,

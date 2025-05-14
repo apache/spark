@@ -345,6 +345,11 @@ class FMClassificationModel private[classification] (
 
 @Since("3.0.0")
 object FMClassificationModel extends MLReadable[FMClassificationModel] {
+  private[ml] case class Data(
+    intercept: Double,
+    linear: Vector,
+    factors: Matrix
+  )
 
   @Since("3.0.0")
   override def read: MLReader[FMClassificationModel] = new FMClassificationModelReader
@@ -356,16 +361,11 @@ object FMClassificationModel extends MLReadable[FMClassificationModel] {
   private[FMClassificationModel] class FMClassificationModelWriter(
     instance: FMClassificationModel) extends MLWriter with Logging {
 
-    private case class Data(
-      intercept: Double,
-      linear: Vector,
-      factors: Matrix)
-
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.intercept, instance.linear, instance.factors)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
@@ -376,11 +376,11 @@ object FMClassificationModel extends MLReadable[FMClassificationModel] {
     override def load(path: String): FMClassificationModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.format("parquet").load(dataPath)
 
-      val Row(intercept: Double, linear: Vector, factors: Matrix) =
-        data.select("intercept", "linear", "factors").head()
-      val model = new FMClassificationModel(metadata.uid, intercept, linear, factors)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val model = new FMClassificationModel(
+        metadata.uid, data.intercept, data.linear, data.factors
+      )
       metadata.getAndSetParams(model)
       model
     }
