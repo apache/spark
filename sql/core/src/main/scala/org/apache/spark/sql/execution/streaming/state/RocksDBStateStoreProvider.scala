@@ -412,10 +412,10 @@ private[sql] class RocksDBStateStoreProvider
 
     override def abort(): Unit = {
       if (validateState(List(UPDATING, ABORTED)) != ABORTED) {
+        validateAndTransitionState(ABORT)
         logInfo(log"Aborting ${MDC(VERSION_NUM, version + 1)} " +
           log"for ${MDC(STATE_STORE_ID, id)}")
         rocksDB.rollback()
-        validateAndTransitionState(ABORT)
         stateMachine.releaseStore(stamp)
       }
     }
