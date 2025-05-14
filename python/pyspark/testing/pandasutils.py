@@ -38,6 +38,7 @@ from pyspark.pandas.indexes import Index
 from pyspark.pandas.series import Series
 from pyspark.pandas.utils import SPARK_CONF_ARROW_ENABLED
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import is_ansi_mode_test
 from pyspark.errors import PySparkAssertionError
 
 
@@ -474,6 +475,18 @@ class PandasOnSparkTestCase(ReusedSQLTestCase, PandasOnSparkTestUtils):
     def setUpClass(cls):
         super(PandasOnSparkTestCase, cls).setUpClass()
         cls.spark.conf.set(SPARK_CONF_ARROW_ENABLED, True)
+
+    def setUp(self):
+        super().setUp()
+        self.assertEqual(is_ansi_mode_test, self.spark.conf.get("spark.sql.ansi.enabled") == "true")
+
+    def tearDown(self):
+        try:
+            self.assertEqual(
+                is_ansi_mode_test, self.spark.conf.get("spark.sql.ansi.enabled") == "true"
+            )
+        finally:
+            super().tearDown()
 
 
 class TestUtils:

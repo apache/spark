@@ -245,6 +245,8 @@ class GBTRegressionModel private[ml](
   // For ml connect only
   private[ml] def this() = this("", Array(new DecisionTreeRegressionModel), Array(Double.NaN), -1)
 
+  override def estimatedSize: Long = getEstimatedSize()
+
   @Since("1.4.0")
   override def trees: Array[DecisionTreeRegressionModel] = _trees
 

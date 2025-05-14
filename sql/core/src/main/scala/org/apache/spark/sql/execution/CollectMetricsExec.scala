@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{InternalAccumulator, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -38,8 +38,12 @@ case class CollectMetricsExec(
 
   private lazy val accumulator: AggregatingAccumulator = {
     val acc = AggregatingAccumulator(metricExpressions, child.output)
-    acc.register(sparkContext, Option("Collected metrics"))
+    acc.register(sparkContext, Option(CollectMetricsExec.ACCUMULATOR_NAME))
     acc
+  }
+
+  private[sql] def accumulatorId: Long = {
+    accumulator.id
   }
 
   val metricsSchema: StructType = {
@@ -95,6 +99,9 @@ case class CollectMetricsExec(
 }
 
 object CollectMetricsExec extends AdaptiveSparkPlanHelper {
+
+  val ACCUMULATOR_NAME: String = InternalAccumulator.COLLECT_METRICS_ACCUMULATOR
+
   /**
    * Recursively collect all collected metrics from a query tree.
    */

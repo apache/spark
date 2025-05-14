@@ -799,7 +799,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisErrorCondition(parsePlan("SELECT 'length' (a)"),
       "MULTI_ALIAS_WITHOUT_GENERATOR",
       Map("expr" -> "\"length\"", "names" -> "a"),
-      Array(ExpectedContext("SELECT 'length' (a)", 0, 18))
+      Array(ExpectedContext("'length' (a)", 7, 18))
     )
   }
 

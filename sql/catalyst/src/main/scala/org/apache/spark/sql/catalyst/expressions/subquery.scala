@@ -79,14 +79,29 @@ abstract class SubqueryExpression(
     exprId: ExprId,
     joinCond: Seq[Expression],
     hint: Option[HintInfo]) extends PlanExpression[LogicalPlan] {
+
   override lazy val resolved: Boolean = childrenResolved && plan.resolved
+
+  lazy val (outerScopeAttrs, nonOuterScopeAttrs) =
+    outerAttrs.partition(_.exists(_.isInstanceOf[OuterScopeReference]))
+
   override lazy val references: AttributeSet =
-    AttributeSet.fromAttributeSets(outerAttrs.map(_.references))
+    AttributeSet.fromAttributeSets(nonOuterScopeAttrs.map(_.references))
+
   override def children: Seq[Expression] = outerAttrs ++ joinCond
+
   override def withNewPlan(plan: LogicalPlan): SubqueryExpression
+
   def withNewOuterAttrs(outerAttrs: Seq[Expression]): SubqueryExpression
+
+  def getOuterAttrs: Seq[Expression] = outerAttrs
+
+  def getOuterScopeAttrs: Seq[Expression] = outerScopeAttrs
+
   def isCorrelated: Boolean = outerAttrs.nonEmpty
+
   def hint: Option[HintInfo]
+
   def withNewHint(hint: Option[HintInfo]): SubqueryExpression
 }
 

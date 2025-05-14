@@ -30,6 +30,7 @@ from pyspark.testing.pandasutils import (
     SPARK_CONF_ARROW_ENABLED,
 )
 from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import is_ansi_mode_test, ansi_mode_not_supported_message
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.series import MissingPandasLikeSeries
 from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
@@ -661,6 +662,7 @@ class SeriesTestsMixin:
             self.assert_eq(p_name, k_name)
             self.assert_eq(p_items, k_items)
 
+    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_dot(self):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
         psdf = ps.from_pandas(pdf)
