@@ -57,6 +57,7 @@ class MLBackendSuite extends MLHelper {
   }
 
   test("ML backend: estimator works") {
+    org.apache.spark.ml.util.ReadWriteUtils.safeMLClassLoader = null
     withSparkConf(
       Connect.CONNECT_ML_BACKEND_CLASSES.key ->
         "org.apache.spark.sql.connect.ml.MyMlBackend") {
@@ -88,6 +89,7 @@ class MLBackendSuite extends MLHelper {
   }
 
   test("ML backend: model works") {
+    org.apache.spark.ml.util.ReadWriteUtils.safeMLClassLoader = null
     withSparkConf(
       Connect.CONNECT_ML_BACKEND_CLASSES.key ->
         "org.apache.spark.sql.connect.ml.MyMlBackend") {
@@ -129,6 +131,7 @@ class MLBackendSuite extends MLHelper {
   }
 
   test("ML backend: evaluator works") {
+    org.apache.spark.ml.util.ReadWriteUtils.safeMLClassLoader = null
     withSparkConf(
       Connect.CONNECT_ML_BACKEND_CLASSES.key ->
         "org.apache.spark.sql.connect.ml.MyMlBackend") {
@@ -159,6 +162,7 @@ class MLBackendSuite extends MLHelper {
   }
 
   test("ML backend: transformer works") {
+    org.apache.spark.ml.util.ReadWriteUtils.safeMLClassLoader = null
     withSparkConf(
       Connect.CONNECT_ML_BACKEND_CLASSES.key ->
         "org.apache.spark.sql.connect.ml.MyMlBackend") {

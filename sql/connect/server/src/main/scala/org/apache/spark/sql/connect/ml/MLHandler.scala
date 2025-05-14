@@ -137,7 +137,13 @@ private[connect] object MLHandler extends Logging {
         val transformerClasses = MLUtils.loadOperators(classOf[Transformer])
         val estimatorClasses = MLUtils.loadOperators(classOf[Estimator[_]])
         val evaluatorClasses = MLUtils.loadOperators(classOf[Evaluator])
-        val whitelistedClasses = transformerClasses ++ estimatorClasses ++ evaluatorClasses
+        val whitelistedClasses = (
+          transformerClasses ++ estimatorClasses ++ evaluatorClasses
+            ++ Map(
+              "org.apache.spark.ml.clustering.PowerIterationClustering" ->
+              classOf[org.apache.spark.ml.clustering.PowerIterationClustering]
+            )
+        )
 
         ReadWriteUtils.safeMLClassLoader = (className: String) => {
           val name = MLUtils.replaceOperator(sessionHolder, className)

@@ -67,6 +67,9 @@ class FakedML(override val uid: String) extends FakeArrayParams {
 }
 
 class MLSuite extends MLHelper {
+  override protected def beforeAll(): Unit = {
+    org.apache.spark.ml.util.ReadWriteUtils.safeMLClassLoader = null
+  }
 
   test("reconcileParam") {
     val fakedML = new FakedML
