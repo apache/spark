@@ -451,6 +451,32 @@ class MapInPandasTestsMixin:
 
         df.mapInPandas(func2, "id long", True).collect()
 
+    def test_map_in_pandas_type_mismatch(self):
+        def func(iterator):
+            for _ in iterator:
+                yield pd.DataFrame({"id": ["x", "y"]})
+
+        df = self.spark.range(2).mapInPandas(func, "id int")
+        with self.assertRaisesRegex(
+            PythonException,
+            "PySparkTypeError: Exception thrown when converting pandas.Series \\(object\\) "
+            "with name 'id' to Arrow Array \\(int32\\)\\.",
+        ):
+            df.collect()
+
+    def test_map_in_pandas_top_level_wrong_order(self):
+        def func(iterator):
+            for _ in iterator:
+                yield pd.DataFrame({"b": [1], "a": [2]})
+
+        df = self.spark.range(1)
+        with self.assertRaisesRegex(
+            PythonException,
+            "PySparkTypeError: Exception thrown when converting pandas.Series \\(int64\\) "
+            "with name 'a' to Arrow Array \\(int32\\)\\.",
+        ):
+            df.mapInPandas(func, "a int, b int").collect()
+
 
 class MapInPandasTests(ReusedSQLTestCase, MapInPandasTestsMixin):
     @classmethod
