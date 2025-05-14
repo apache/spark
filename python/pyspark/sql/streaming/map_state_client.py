@@ -155,8 +155,9 @@ class MapStateClient:
 
         if iterator_id in self.user_key_value_pair_iterator_cursors:
             # If the state is already in the dictionary, return the next row.
-            data_batch, index, require_next_fetch = \
-                self.user_key_value_pair_iterator_cursors[iterator_id]
+            data_batch, index, require_next_fetch = self.user_key_value_pair_iterator_cursors[
+                iterator_id
+            ]
         else:
             # If the state is not in the dictionary, fetch the state from the server.
             iterator_call = stateMessage.Iterator(iteratorId=iterator_id)
@@ -188,8 +189,11 @@ class MapStateClient:
         new_index = index + 1
         if new_index < len(data_batch):
             # Update the index in the dictionary.
-            self.user_key_value_pair_iterator_cursors[iterator_id] = \
-                (data_batch, new_index, require_next_fetch)
+            self.user_key_value_pair_iterator_cursors[iterator_id] = (
+                data_batch,
+                new_index,
+                require_next_fetch,
+            )
         else:
             # If the index is at the end of the DataFrame, remove the state from the dictionary.
             self.user_key_value_pair_iterator_cursors.pop(iterator_id, None)
@@ -204,8 +208,9 @@ class MapStateClient:
 
         if iterator_id in self.user_key_or_value_iterator_cursors:
             # If the state is already in the dictionary, return the next row.
-            data_batch, index, require_next_fetch = \
-                self.user_key_or_value_iterator_cursors[iterator_id]
+            data_batch, index, require_next_fetch = self.user_key_or_value_iterator_cursors[
+                iterator_id
+            ]
         else:
             # If the state is not in the dictionary, fetch the state from the server.
             if is_key:
@@ -238,8 +243,11 @@ class MapStateClient:
         new_index = index + 1
         if new_index < len(data_batch):
             # Update the index in the dictionary.
-            self.user_key_or_value_iterator_cursors[iterator_id] = \
-                (data_batch, new_index, require_next_fetch)
+            self.user_key_or_value_iterator_cursors[iterator_id] = (
+                data_batch,
+                new_index,
+                require_next_fetch,
+            )
         else:
             # If the index is at the end of the DataFrame, remove the state from the dictionary.
             self.user_key_or_value_iterator_cursors.pop(iterator_id, None)
@@ -298,8 +306,9 @@ class MapStateIterator:
         if self.iterator_fully_consumed:
             raise StopIteration()
 
-        row, is_last_row = \
-            self.map_state_client.get_row(self.state_name, self.iterator_id, self.is_key)
+        row, is_last_row = self.map_state_client.get_row(
+            self.state_name, self.iterator_id, self.is_key
+        )
 
         if is_last_row:
             self.iterator_fully_consumed = True
