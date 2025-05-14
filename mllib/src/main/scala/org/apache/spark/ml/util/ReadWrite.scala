@@ -563,7 +563,13 @@ private[ml] class DefaultParamsReader[T] extends MLReader[T] {
 
   override def load(path: String): T = {
     val metadata = DefaultParamsReader.loadMetadata(path, sparkSession)
-    val cls = Utils.classForName(metadata.className)
+
+    val cls = if (ReadWriteUtils.safeMLClassLoader != null) {
+      // Only loads whitelisted classes. This is for preventing RCE in Spark Connect mode.
+      ReadWriteUtils.safeMLClassLoader(metadata.className)
+    } else {
+      Utils.classForName(metadata.className)
+    }
     val instance =
       cls.getConstructor(classOf[String]).newInstance(metadata.uid).asInstanceOf[Params]
     metadata.getAndSetParams(instance)
@@ -820,6 +826,9 @@ private[spark] class FileSystemOverwrite extends Logging {
 
 
 private[spark] object ReadWriteUtils {
+
+  // This member is set by Spark Connect MLHandler.
+  @volatile var safeMLClassLoader: String => Class[_] = null
 
   val localSavingModeState = new ThreadLocal[Boolean]() {
     override def initialValue: Boolean = false

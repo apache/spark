@@ -22,10 +22,11 @@ import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.{EstimatorUtils, Model}
+import org.apache.spark.ml.{Estimator, EstimatorUtils, Model, Transformer}
+import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.tree.TreeConfig
-import org.apache.spark.ml.util.{MLWritable, Summary}
+import org.apache.spark.ml.util.{MLWritable, ReadWriteUtils, Summary}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.ml.Serializer.deserializeMethodArguments
@@ -129,6 +130,20 @@ private[connect] object MLHandler extends Logging {
       // nodes will grow up to 2 times, the additional 0.5 is for buffer
       // because the in-memory size is not exactly in direct proportion to the tree nodes.
       TreeConfig.trainingEarlyStopModelSizeThresholdInBytes = (maxModelSize.toDouble / 2.5).toLong
+    }
+
+    ReadWriteUtils.synchronized {
+      if (ReadWriteUtils.safeMLClassLoader == null) {
+        val transformerClasses = MLUtils.loadOperators(classOf[Transformer])
+        val estimatorClasses = MLUtils.loadOperators(classOf[Estimator[_]])
+        val evaluatorClasses = MLUtils.loadOperators(classOf[Evaluator])
+        val whitelistedClasses = transformerClasses ++ estimatorClasses ++ evaluatorClasses
+
+        ReadWriteUtils.safeMLClassLoader = (className: String) => {
+          val name = MLUtils.replaceOperator(sessionHolder, className)
+          whitelistedClasses(name)
+        }
+      }
     }
 
     mlCommand.getCommandCase match {
