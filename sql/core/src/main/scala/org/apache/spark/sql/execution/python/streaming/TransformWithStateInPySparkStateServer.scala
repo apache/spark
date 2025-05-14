@@ -35,10 +35,10 @@ import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleImplBase, StatefulProcessorHandleState, StateVariableType}
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateResponseWithStringTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, UtilsRequest, ValueStateCall}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateResponseWithMapIterator, StateResponseWithMapKeysOrValues, StateResponseWithStringTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, UtilsRequest, ValueStateCall}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.KeyAndValuePair
 import org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithListGet
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{BinaryType, LongType, StructField, StructType}
@@ -616,26 +616,7 @@ class TransformWithStateInPySparkStateServer(
         if (!iteratorOption.get.hasNext) {
           sendResponse(2, s"Map state $stateName doesn't contain any entry.")
         } else {
-          sendResponse(0)
-          val keyValueStateSchema: StructType = StructType(
-            Array(
-              // key row serialized as a byte array.
-              StructField("keyRow", BinaryType),
-              // value row serialized as a byte array.
-              StructField("valueRow", BinaryType)
-            )
-          )
-          sendIteratorAsArrowBatches(iteratorOption.get, keyValueStateSchema,
-            arrowStreamWriterForTest) {tuple =>
-            val keyBytes = PythonSQLUtils.toPyRow(tuple._1)
-            val valueBytes = PythonSQLUtils.toPyRow(tuple._2)
-            new GenericInternalRow(
-              Array[Any](
-                keyBytes,
-                valueBytes
-              )
-            )
-          }
+          sendResponseWithMapPair(0, iter = iteratorOption.get)
         }
       case MapStateCall.MethodCase.KEYS =>
         val iteratorId = message.getKeys.getIteratorId
@@ -647,9 +628,7 @@ class TransformWithStateInPySparkStateServer(
         if (!iteratorOption.get.hasNext) {
           sendResponse(2, s"Map state $stateName doesn't contain any key.")
         } else {
-          sendResponse(0)
-          sendIteratorAsArrowBatches(iteratorOption.get, mapStateInfo.keySchema,
-            arrowStreamWriterForTest) {data => mapStateInfo.keySerializer(data)}
+          sendResponseWithMapKeysOrValues(0, iter = iteratorOption.get)
         }
       case MapStateCall.MethodCase.VALUES =>
         val iteratorId = message.getValues.getIteratorId
@@ -661,9 +640,7 @@ class TransformWithStateInPySparkStateServer(
         if (!iteratorOption.get.hasNext) {
           sendResponse(2, s"Map state $stateName doesn't contain any value.")
         } else {
-          sendResponse(0)
-          sendIteratorAsArrowBatches(iteratorOption.get, mapStateInfo.valueSchema,
-            arrowStreamWriterForTest) {data => mapStateInfo.valueSerializer(data)}
+          sendResponseWithMapKeysOrValues(0, iter = iteratorOption.get)
         }
       case MapStateCall.MethodCase.REMOVEKEY =>
         val keyBytes = message.getRemoveKey.getUserKey.toByteArray
@@ -815,6 +792,92 @@ class TransformWithStateInPySparkStateServer(
           val valueBytes = PythonSQLUtils.toPyRow(data)
 
           responseMessageBuilder.addValue(ByteString.copyFrom(valueBytes))
+
+          rowCount += 1
+        }
+
+        assert(rowCount > 0, s"rowCount should be greater than 0 when status code is 0, " +
+          s"iter.hasNext ${iter.hasNext}")
+
+        responseMessageBuilder.setRequireNextFetch(iter.hasNext)
+      }
+
+      val responseMessage = responseMessageBuilder.build()
+      val responseMessageBytes = responseMessage.toByteArray
+      val byteLength = responseMessageBytes.length
+      outputStream.writeInt(byteLength)
+      outputStream.write(responseMessageBytes)
+    }
+
+    def sendResponseWithMapKeysOrValues(
+        status: Int,
+        errorMessage: String = null,
+        iter: Iterator[Row] = null): Unit = {
+      val responseMessageBuilder = StateResponseWithMapKeysOrValues.newBuilder()
+        .setStatusCode(status)
+      if (status != 0 && errorMessage != null) {
+        responseMessageBuilder.setErrorMessage(errorMessage)
+      }
+
+      if (status == 0) {
+        // Only write a single batch in each GET request. Stops writing row if rowCount reaches
+        // the arrowTransformWithStateInPySparkMaxRecordsPerBatch limit. This is to handle a case
+        // when there are multiple state variables, user tries to access a different state variable
+        // while the current state variable is not exhausted yet.
+        var rowCount = 0
+        while (iter.hasNext && rowCount < arrowTransformWithStateInPySparkMaxRecordsPerBatch) {
+          val data = iter.next()
+
+          // Serialize the value row as a byte array
+          val valueBytes = PythonSQLUtils.toPyRow(data)
+
+          responseMessageBuilder.addValue(ByteString.copyFrom(valueBytes))
+
+          rowCount += 1
+        }
+
+        assert(rowCount > 0, s"rowCount should be greater than 0 when status code is 0, " +
+          s"iter.hasNext ${iter.hasNext}")
+
+        responseMessageBuilder.setRequireNextFetch(iter.hasNext)
+      }
+
+      val responseMessage = responseMessageBuilder.build()
+      val responseMessageBytes = responseMessage.toByteArray
+      val byteLength = responseMessageBytes.length
+      outputStream.writeInt(byteLength)
+      outputStream.write(responseMessageBytes)
+    }
+
+    def sendResponseWithMapPair(
+        status: Int,
+        errorMessage: String = null,
+        iter: Iterator[(Row, Row)] = null): Unit = {
+      val responseMessageBuilder = StateResponseWithMapIterator.newBuilder()
+        .setStatusCode(status)
+      if (status != 0 && errorMessage != null) {
+        responseMessageBuilder.setErrorMessage(errorMessage)
+      }
+
+      if (status == 0) {
+        // Only write a single batch in each GET request. Stops writing row if rowCount reaches
+        // the arrowTransformWithStateInPySparkMaxRecordsPerBatch limit. This is to handle a case
+        // when there are multiple state variables, user tries to access a different state variable
+        // while the current state variable is not exhausted yet.
+        var rowCount = 0
+        val pairBuilder = KeyAndValuePair.newBuilder()
+        while (iter.hasNext && rowCount < arrowTransformWithStateInPySparkMaxRecordsPerBatch) {
+          val tuple = iter.next()
+
+          val keyBytes = PythonSQLUtils.toPyRow(tuple._1)
+          val valueBytes = PythonSQLUtils.toPyRow(tuple._2)
+
+          pairBuilder.setKey(ByteString.copyFrom(keyBytes))
+          pairBuilder.setValue(ByteString.copyFrom(valueBytes))
+
+          responseMessageBuilder.addKvPair(pairBuilder.build())
+
+          pairBuilder.clear()
 
           rowCount += 1
         }
