@@ -116,7 +116,9 @@ private[ml] object OneVsRestParams extends ClassifierTypeTrait {
 
     val metadata = DefaultParamsReader.loadMetadata(path, spark, expectedClassName)
     val classifierPath = new Path(path, "classifier").toString
-    val estimator = DefaultParamsReader.loadParamsInstance[ClassifierType](classifierPath, spark)
+    val estimator = DefaultParamsReader.loadParamsInstance[ClassifierType](
+      classifierPath, spark, expectedClassName
+    )
     (metadata, estimator)
   }
 }
@@ -309,7 +311,9 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
       val models = Range(0, numClasses).toArray.map { idx =>
         val modelPath = new Path(path, s"model_$idx").toString
-        DefaultParamsReader.loadParamsInstance[ClassificationModel[_, _]](modelPath, sparkSession)
+        DefaultParamsReader.loadParamsInstance[ClassificationModel[_, _]](
+          modelPath, sparkSession, className
+        )
       }
       val ovrModel = new OneVsRestModel(metadata.uid, labelMetadata, models)
       metadata.getAndSetParams(ovrModel)

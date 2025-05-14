@@ -241,7 +241,9 @@ class DefaultReadWriteSuite extends SparkFunSuite with MLlibTestSparkContext
       |"timestamp":1518852502761,"sparkVersion":"2.3.0",
       |"uid":"my_params",
       |"paramMap":{"intParamWithDefault":0}}""".stripMargin
-    val parsedMetadata = DefaultParamsReader.parseMetadata(metadata)
+    val parsedMetadata = DefaultParamsReader.parseMetadata(
+      metadata, "org.apache.spark.ml.util.MyParams"
+    )
     val myParams = new MyParams("my_params")
     assert(!myParams.isSet(myParams.intParamWithDefault))
     parsedMetadata.getAndSetParams(myParams)
@@ -257,7 +259,9 @@ class DefaultReadWriteSuite extends SparkFunSuite with MLlibTestSparkContext
       |"timestamp":1518852502761,"sparkVersion":"2.4.0",
       |"uid":"my_params",
       |"paramMap":{"intParamWithDefault":0}}""".stripMargin
-    val parsedMetadata1 = DefaultParamsReader.parseMetadata(metadata1)
+    val parsedMetadata1 = DefaultParamsReader.parseMetadata(
+      metadata1, "org.apache.spark.ml.util.MyParams"
+    )
     val err1 = intercept[IllegalArgumentException] {
       parsedMetadata1.getAndSetParams(myParams)
     }
@@ -267,7 +271,9 @@ class DefaultReadWriteSuite extends SparkFunSuite with MLlibTestSparkContext
       |"timestamp":1518852502761,"sparkVersion":"3.0.0",
       |"uid":"my_params",
       |"paramMap":{"intParamWithDefault":0}}""".stripMargin
-    val parsedMetadata2 = DefaultParamsReader.parseMetadata(metadata2)
+    val parsedMetadata2 = DefaultParamsReader.parseMetadata(
+      metadata2, "org.apache.spark.ml.util.MyParams"
+    )
     val err2 = intercept[IllegalArgumentException] {
       parsedMetadata2.getAndSetParams(myParams)
     }

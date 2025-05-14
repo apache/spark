@@ -406,7 +406,9 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
       val (metadata, estimator, evaluator, estimatorParamMaps) =
         ValidatorParams.loadImpl(path, sparkSession, className)
       val bestModelPath = new Path(path, "bestModel").toString
-      val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sparkSession)
+      val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](
+        bestModelPath, sparkSession, className
+      )
       val validationMetrics = (metadata.metadata \ "validationMetrics").extract[Seq[Double]].toArray
       val persistSubModels = (metadata.metadata \ "persistSubModels")
         .extractOrElse[Boolean](false)
@@ -417,7 +419,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
         for (paramIndex <- estimatorParamMaps.indices) {
           val modelPath = new Path(subModelsPath, paramIndex.toString).toString
           _subModels(paramIndex) =
-            DefaultParamsReader.loadParamsInstance(modelPath, sparkSession)
+            DefaultParamsReader.loadParamsInstance(modelPath, sparkSession, className)
         }
         Some(_subModels)
       } else None

@@ -445,7 +445,9 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
         ValidatorParams.loadImpl(path, sparkSession, className)
       val numFolds = (metadata.params \ "numFolds").extract[Int]
       val bestModelPath = new Path(path, "bestModel").toString
-      val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sparkSession)
+      val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](
+        bestModelPath, sparkSession, className
+      )
       val avgMetrics = (metadata.metadata \ "avgMetrics").extract[Seq[Double]].toArray
       val persistSubModels = (metadata.metadata \ "persistSubModels")
         .extractOrElse[Boolean](false)
@@ -459,7 +461,7 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
           for (paramIndex <- estimatorParamMaps.indices) {
             val modelPath = new Path(splitPath, paramIndex.toString).toString
             _subModels(splitIndex)(paramIndex) =
-              DefaultParamsReader.loadParamsInstance(modelPath, sparkSession)
+              DefaultParamsReader.loadParamsInstance(modelPath, sparkSession, className)
           }
         }
         Some(_subModels)

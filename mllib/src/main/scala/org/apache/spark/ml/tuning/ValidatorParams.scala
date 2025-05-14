@@ -182,9 +182,13 @@ private[ml] object ValidatorParams {
 
     implicit val format = DefaultFormats
     val evaluatorPath = new Path(path, "evaluator").toString
-    val evaluator = DefaultParamsReader.loadParamsInstance[Evaluator](evaluatorPath, spark)
+    val evaluator = DefaultParamsReader.loadParamsInstance[Evaluator](
+      evaluatorPath, spark, expectedClassName
+    )
     val estimatorPath = new Path(path, "estimator").toString
-    val estimator = DefaultParamsReader.loadParamsInstance[Estimator[M]](estimatorPath, spark)
+    val estimator = DefaultParamsReader.loadParamsInstance[Estimator[M]](
+      estimatorPath, spark, expectedClassName
+    )
 
     val uidToParams = Map(evaluator.uid -> evaluator) ++ MetaAlgorithmReadWrite.getUidMap(estimator)
 
@@ -202,7 +206,9 @@ private[ml] object ValidatorParams {
             } else {
               val relativePath = param.jsonDecode(pInfo("value")).toString
               val value = DefaultParamsReader
-                .loadParamsInstance[MLWritable](new Path(path, relativePath).toString, spark)
+                .loadParamsInstance[MLWritable](
+                  new Path(path, relativePath).toString, spark, expectedClassName
+                )
               param -> value
             }
           }

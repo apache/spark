@@ -368,7 +368,7 @@ abstract class MLReader[T] extends BaseReadWrite {
  * @tparam T ML instance type
  */
 @Since("1.6.0")
-trait MLReadable[T] {
+trait MLReadable[T] { self =>
 
   /**
    * Returns an `MLReader` instance for this class.
@@ -396,9 +396,9 @@ trait MLReadable[T] {
  * @tparam T ML instance type
  * @see `DefaultParamsWritable`, the counterpart to this trait
  */
-trait DefaultParamsReadable[T] extends MLReadable[T] {
+trait DefaultParamsReadable[T] extends MLReadable[T] { self =>
 
-  override def read: MLReader[T] = new DefaultParamsReader[T]
+  override def read: MLReader[T] = new DefaultParamsReader[T](self.getClass.getName.dropRight(1))
 }
 
 /**
@@ -559,10 +559,10 @@ private[ml] object DefaultParamsWriter {
  * @tparam T ML instance type
  * TODO: Consider adding check for correct class name.
  */
-private[ml] class DefaultParamsReader[T] extends MLReader[T] {
+private[ml] class DefaultParamsReader[T](expectedClassName: String) extends MLReader[T] {
 
   override def load(path: String): T = {
-    val metadata = DefaultParamsReader.loadMetadata(path, sparkSession)
+    val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, expectedClassName)
     val cls = Utils.classForName(metadata.className)
     val instance =
       cls.getConstructor(classOf[String]).newInstance(metadata.uid).asInstanceOf[Params]
@@ -683,20 +683,18 @@ private[ml] object DefaultParamsReader {
    * @throws IllegalArgumentException if expectedClassName is specified and does not match metadata
    */
   @deprecated("use loadMetadata with SparkSession", "4.0.0")
-  def loadMetadata(path: String, sc: SparkContext, expectedClassName: String = ""): Metadata =
+  def loadMetadata(path: String, sc: SparkContext, expectedClassName: String): Metadata =
     loadMetadata(
       path,
       SparkSession.builder().sparkContext(sc).getOrCreate(),
       expectedClassName)
 
   def loadMetadata(path: String, spark: SparkSession, expectedClassName: String): Metadata = {
+    assert(expectedClassName != null && expectedClassName.nonEmpty)
     val metadataPath = new Path(path, "metadata").toString
     val metadataStr = ReadWriteUtils.loadText(metadataPath, spark)
     parseMetadata(metadataStr, expectedClassName)
   }
-
-  def loadMetadata(path: String, spark: SparkSession): Metadata =
-    loadMetadata(path, spark, "")
 
   /**
    * Parse metadata JSON string produced by [[DefaultParamsWriter.getMetadataToSave()]].
@@ -706,7 +704,7 @@ private[ml] object DefaultParamsReader {
    * @param expectedClassName  If non empty, this is checked against the loaded metadata.
    * @throws IllegalArgumentException if expectedClassName is specified and does not match metadata
    */
-  def parseMetadata(metadataStr: String, expectedClassName: String = ""): Metadata = {
+  def parseMetadata(metadataStr: String, expectedClassName: String): Metadata = {
     val metadata = parse(metadataStr)
 
     implicit val format = DefaultFormats
@@ -716,10 +714,8 @@ private[ml] object DefaultParamsReader {
     val sparkVersion = (metadata \ "sparkVersion").extract[String]
     val defaultParams = metadata \ "defaultParamMap"
     val params = metadata \ "paramMap"
-    if (expectedClassName.nonEmpty) {
-      require(className == expectedClassName, s"Error loading metadata: Expected class name" +
-        s" $expectedClassName but found class name $className")
-    }
+    require(className == expectedClassName, s"Error loading metadata: Expected class name" +
+      s" $expectedClassName but found class name $className")
 
     Metadata(className, uid, timestamp, sparkVersion, params, defaultParams, metadata, metadataStr)
   }
@@ -729,22 +725,28 @@ private[ml] object DefaultParamsReader {
    * This assumes the instance implements [[MLReadable]].
    */
   @deprecated("use loadParamsInstance with SparkSession", "4.0.0")
-  def loadParamsInstance[T](path: String, sc: SparkContext): T =
-    loadParamsInstance[T](path, SparkSession.builder().sparkContext(sc).getOrCreate())
+  def loadParamsInstance[T](path: String, sc: SparkContext, expectedClassName: String): T =
+    loadParamsInstance[T](
+      path, SparkSession.builder().sparkContext(sc).getOrCreate(), expectedClassName
+    )
 
-  def loadParamsInstance[T](path: String, spark: SparkSession): T =
-    loadParamsInstanceReader(path, spark).load(path)
+  def loadParamsInstance[T](path: String, spark: SparkSession, expectedClassName: String): T =
+    loadParamsInstanceReader(path, spark, expectedClassName).load(path)
 
   /**
    * Load a `Params` instance reader from the given path, and return it.
    * This assumes the instance implements [[MLReadable]].
    */
   @deprecated("use loadParamsInstanceReader with SparkSession", "4.0.0")
-  def loadParamsInstanceReader[T](path: String, sc: SparkContext): MLReader[T] =
-    loadParamsInstanceReader[T](path, SparkSession.builder().sparkContext(sc).getOrCreate())
+  def loadParamsInstanceReader[T](
+    path: String, sc: SparkContext, expectedClassName: String
+  ): MLReader[T] =
+    loadParamsInstanceReader[T](
+      path, SparkSession.builder().sparkContext(sc).getOrCreate(), expectedClassName)
 
-  def loadParamsInstanceReader[T](path: String, spark: SparkSession): MLReader[T] = {
-    val metadata = DefaultParamsReader.loadMetadata(path, spark)
+  def loadParamsInstanceReader[T](
+      path: String, spark: SparkSession, expectedClassName: String): MLReader[T] = {
+    val metadata = DefaultParamsReader.loadMetadata(path, spark, expectedClassName)
     val cls = Utils.classForName(metadata.className)
     cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]]
   }

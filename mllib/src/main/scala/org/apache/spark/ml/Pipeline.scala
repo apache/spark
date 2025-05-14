@@ -297,7 +297,9 @@ object Pipeline extends MLReadable[Pipeline] {
       val stageUids: Array[String] = (metadata.params \ "stageUids").extract[Seq[String]].toArray
       val stages: Array[PipelineStage] = stageUids.zipWithIndex.map { case (stageUid, idx) =>
         val stagePath = SharedReadWrite.getStagePath(stageUid, idx, stageUids.length, stagesDir)
-        val reader = DefaultParamsReader.loadParamsInstanceReader[PipelineStage](stagePath, spark)
+        val reader = DefaultParamsReader.loadParamsInstanceReader[PipelineStage](
+          stagePath, spark, expectedClassName
+        )
         instr.withLoadInstanceEvent(reader, stagePath)(reader.load(stagePath))
       }
       (metadata.uid, stages)
