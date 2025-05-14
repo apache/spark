@@ -540,7 +540,7 @@ case class CreateTableAsSelect(
  * define a pipeline dataset (MV or ST).
  */
 
-trait CreatePipelineDataset {
+trait CreatePipelineDataset extends Command {
   // The name of the dataset.
   val name: LogicalPlan
 

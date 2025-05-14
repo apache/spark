@@ -15,11 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command
+package org.apache.spark.sql.execution.command.v2
+
+import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
+import org.apache.spark.sql.catalyst.plans.logical.CreateStreamingTable
+import org.apache.spark.sql.execution.SparkSqlParser
+import org.apache.spark.sql.execution.command.v1.CommandSuiteBase
 
 /**
  * The class contains tests for the `CREATE STREAMING TABLE ... AS ...` command
  */
-class CreateStreamingTableAsSelectSuite extends CreatePipelineDatasetAsSelectSuiteBase {
-  override val datasetSqlSyntax: String = "STREAMING TABLE"
+class CreateStreamingTableParserSuite extends CommandSuiteBase {
+  protected lazy val parser = new SparkSqlParser()
+
+  test("CREATE STREAMING TABLE without subquery is parsed correctly") {
+    val plan = parser.parsePlan("CREATE STREAMING TABLE st COMMENT 'populate with flow later'")
+    val cmd = plan.asInstanceOf[CreateStreamingTable]
+
+    val name = cmd.name.asInstanceOf[UnresolvedIdentifier]
+
+    assert(name.nameParts == Seq("st"))
+    assert(cmd.tableSpec.comment.contains("populate with flow later"))
+  }
 }

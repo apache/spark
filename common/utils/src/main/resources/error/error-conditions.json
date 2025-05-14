@@ -4543,12 +4543,6 @@
     ],
     "sqlState" : "0A000"
   },
-  "PIPELINE_DATASET_WITHOUT_FLOW" : {
-    "message" : [
-      "Pipeline dataset <identifier> does not have any defined flows. Please attach a query with the dataset's definition, or explicitly define at least one flow that writes to the dataset."
-    ],
-    "sqlState": "0A000"
-  },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [
       "Invalid pivot value '<value>': value data type <valueType> does not match pivot column data type <pivotType>."

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreatePipelineDatasetAsSelect}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
@@ -26,7 +25,7 @@ import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.command.v1.CommandSuiteBase
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructField, StructType}
 
-trait CreatePipelineDatasetAsSelectSuiteBase extends CommandSuiteBase with AnalysisTest {
+trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
   protected lazy val parser = new SparkSqlParser()
   protected val datasetSqlSyntax: String
 

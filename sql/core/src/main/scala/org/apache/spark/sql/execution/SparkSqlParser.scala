@@ -1244,7 +1244,7 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     val ifNotExists = createPipelineDatasetHeaderCtx.EXISTS() != null
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
-    val (colDefs, colConstraints) = Option(ctx.colDefinitionList()).map(visitColDefinitionList)
+    val (colDefs, colConstraints) = Option(ctx.tableElementList()).map(visitTableElementList)
       .getOrElse((Nil, Nil))
 
     if (colConstraints.nonEmpty) {

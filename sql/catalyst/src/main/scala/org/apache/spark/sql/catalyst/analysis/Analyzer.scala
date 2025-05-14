@@ -2106,7 +2106,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               }
             }
             if (u.isStreaming && !resolvedFunc.isStreaming) {
-              // If the function was marked as streaming in the SQL statement but its determined
+              // If the function was marked as streaming in the SQL statement but it's determined
               // through resolution that the underlying function does not actually produce a
               // streaming relation, throw an unsupported streaming exception.
               throw QueryCompilationErrors.unsupportedStreamingTVF(u.funcName)

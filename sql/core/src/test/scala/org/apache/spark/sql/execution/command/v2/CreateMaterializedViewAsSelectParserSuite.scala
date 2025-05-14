@@ -22,7 +22,8 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 /**
  * The class contains tests for the `CREATE MATERIALIZED VIEW ... AS ...` command
  */
-class CreateMaterializedViewAsSelectSuite extends CreatePipelineDatasetAsSelectSuiteBase {
+class CreateMaterializedViewAsSelectParserSuite
+  extends CreatePipelineDatasetAsSelectParserSuiteBase {
   override val datasetSqlSyntax: String = "MATERIALIZED VIEW"
 
   test("Cannot create materialized view without subquery") {

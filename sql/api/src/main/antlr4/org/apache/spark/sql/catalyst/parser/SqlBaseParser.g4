@@ -349,7 +349,7 @@ statement
         (functionArgument (COMMA functionArgument)*)?
         RIGHT_PAREN                                                    #call
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
-    | createPipelineDatasetHeader (LEFT_PAREN colDefinitionList? RIGHT_PAREN)? tableProvider?
+    | createPipelineDatasetHeader (LEFT_PAREN tableElementList? RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS query)?                                                    #createPipelineDataset
     | createPipelineFlowHeader insertInto query                        #createPipelineInsertIntoFlow
