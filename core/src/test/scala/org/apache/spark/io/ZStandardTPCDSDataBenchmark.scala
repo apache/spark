@@ -17,12 +17,12 @@
 
 package org.apache.spark.io
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectOutputStream, OutputStream}
+import java.nio.file.{Files, Paths}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
-import org.apache.spark.internal.config.{IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED, IO_COMPRESSION_ZSTD_BUFFERSIZE, IO_COMPRESSION_ZSTD_LEVEL, IO_COMPRESSION_ZSTD_WORKERS}
-
+import org.apache.spark.internal.config.{IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED, IO_COMPRESSION_ZSTD_LEVEL, IO_COMPRESSION_ZSTD_WORKERS}
 
 /**
  * Benchmark for ZStandard codec performance.
@@ -31,13 +31,15 @@ import org.apache.spark.internal.config.{IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED,
  *   1. without sbt: bin/spark-submit --class <this class> <spark core test jar>
  *   2. build/sbt "core/Test/runMain <this class>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/Test/runMain <this class>"
- *      Results will be written to "benchmarks/ZStandardBenchmark-results.txt".
+ *      Results will be written to "benchmarks/ZStandardTPCDSDataBenchmark-results.txt".
  * }}}
  */
-object ZStandardBenchmark extends BenchmarkBase {
+object ZStandardTPCDSDataBenchmark extends BenchmarkBase {
 
-  val N = 10000
-  val numInteger = IO_COMPRESSION_ZSTD_BUFFERSIZE.defaultValue.get.toInt / 4
+  val N = 4
+
+  // the size of TPCDS catalog_sales.dat (SF1) is about 283M
+  val data = Files.readAllBytes(Paths.get(sys.env("SPARK_TPCDS_DATA_TEXT"), "catalog_sales.dat"))
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val name = "Benchmark ZStandardCompressionCodec"
@@ -63,10 +65,8 @@ object ZStandardBenchmark extends BenchmarkBase {
         benchmark.addCase(s"Compression $N times at level $level $condition buffer pool") { _ =>
           (1 until N).foreach { _ =>
             val os = new ZStdCompressionCodec(conf)
-              .compressedOutputStream(new ByteArrayOutputStream())
-            for (i <- 1 until numInteger) {
-              os.write(i)
-            }
+              .compressedOutputStream(OutputStream.nullOutputStream())
+            os.write(data)
             os.close()
           }
         }
@@ -82,9 +82,7 @@ object ZStandardBenchmark extends BenchmarkBase {
           .set(IO_COMPRESSION_ZSTD_LEVEL, level)
         val outputStream = new ByteArrayOutputStream()
         val out = new ZStdCompressionCodec(conf).compressedOutputStream(outputStream)
-        for (i <- 1 until numInteger) {
-          out.write(i)
-        }
+        out.write(data)
         out.close()
         val bytes = outputStream.toByteArray
 
@@ -93,9 +91,7 @@ object ZStandardBenchmark extends BenchmarkBase {
           (1 until N).foreach { _ =>
             val bais = new ByteArrayInputStream(bytes)
             val is = new ZStdCompressionCodec(conf).compressedInputStream(bais)
-            for (i <- 1 until numInteger) {
-              is.read()
-            }
+            is.readAllBytes()
             is.close()
           }
         }
@@ -104,21 +100,18 @@ object ZStandardBenchmark extends BenchmarkBase {
   }
 
   private def parallelCompressionBenchmark(): Unit = {
-    val numberOfLargeObjectToWrite = 128
-    val data: Array[Byte] = (1 until 256 * 1024 * 1024).map(_.toByte).toArray
-
     Seq(3, 9).foreach { level =>
       val benchmark = new Benchmark(
-        s"Parallel Compression at level $level", numberOfLargeObjectToWrite, output = output)
+        s"Parallel Compression at level $level", N, output = output)
       Seq(0, 1, 2, 4, 8, 16).foreach { workers =>
         val conf = new SparkConf(false)
           .set(IO_COMPRESSION_ZSTD_LEVEL, level)
           .set(IO_COMPRESSION_ZSTD_WORKERS, workers)
         benchmark.addCase(s"Parallel Compression with $workers workers") { _ =>
-          val baos = new ByteArrayOutputStream()
-          val zcos = new ZStdCompressionCodec(conf).compressedOutputStream(baos)
+          val os = OutputStream.nullOutputStream()
+          val zcos = new ZStdCompressionCodec(conf).compressedOutputStream(os)
           val oos = new ObjectOutputStream(zcos)
-          1 to numberOfLargeObjectToWrite foreach { _ =>
+          1 to N foreach { _ =>
             oos.writeObject(data)
           }
           oos.close()
