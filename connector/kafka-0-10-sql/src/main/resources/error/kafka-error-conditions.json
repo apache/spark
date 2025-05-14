@@ -94,7 +94,7 @@
       "PARTITION_OFFSET_CHANGED" : {
         "message" : [
           "Partition <topicPartition> offset was changed from <prevOffset> to <newOffset>.",
-          "This could either be a user error that the start offset is set too high and this is the first batch, or the kafka topic-partition is broken, and some data may have been missed."
+          "This could be either 1) a user error that the start offset is set beyond available offset when starting query, or 2) the kafka topic-partition is deleted and re-created."
         ]
       },
       "START_OFFSET_RESET" : {
@@ -108,17 +108,17 @@
   "RESOLVED_START_OFFSET_GREATER_THAN_END_OFFSET" : {
     "message" : [
       "The resolved start offset <startOffset> is greater than the resolved end offset <endOffset> for topic <topic> partition <partition>.",
-      "There may be multiple reasons:",
-      "1. Start offset is set to too big a value that after resolution, end offset is smaller than it. There are multiple input cases:",
-      "  (a) Start offset is set to a timestamp, and the end offset is set to an index.",
-      "  (b) Start offset is set to an index, and the end offset is set to a timestamp.",
+      "Please investigate in this order:",
+      "1. Check whether start offset is set beyond the end offset or the latest available offset after resolution. Possible inputs are:",
+      "  (a) Start offset is set to a timestamp, and the end offset is set to an index of offset.",
+      "  (b) Start offset is set to an index of offset, and the end offset is set to a timestamp.",
       "  (c) Start offset is set, and the end offset is set to latest.",
-      "2. The Kafka topic partition is broken."
+      "2. Check whether the Kafka topic-partition is deleted and re-created."
     ]
   },
   "UNRESOLVED_START_OFFSET_GREATER_THAN_END_OFFSET" : {
     "message" : [
-      "The specified start offset <startOffset> is greater than the end offset <endOffset> for topic <topic> partition <partition>."
+      "The specified start <offsetType> <startOffset> is greater than the end <offsetType> <endOffset> for topic <topic> partition <partition>."
     ]
   }
 }

@@ -618,7 +618,8 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       endOffset: Long,
       topicPartition: TopicPartition,
       exception: (Long, Long, TopicPartition) => Exception): Unit = {
-    if (startOffset > endOffset && startOffset != -1 && endOffset != -1) {
+    // earliest or latest offsets are negative and should not be compared
+    if (startOffset > endOffset && startOffset >= 0 && endOffset >= 0) {
       throw exception(startOffset, endOffset, topicPartition)
     }
   }
@@ -634,7 +635,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
             start.partitionOffsets.keySet, end.partitionOffsets.keySet
           )
         }
-        start.partitionOffsets.foreach({
+        start.partitionOffsets.foreach {
           case (tp, startOffset) =>
             checkStartOffsetNotGreaterThanEndOffset(
               startOffset,
@@ -642,7 +643,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
               tp,
               KafkaExceptions.unresolvedStartOffsetGreaterThanEndOffset
             )
-        })
+        }
 
       case start: SpecificTimestampRangeLimit
         if endOffset.isInstanceOf[SpecificTimestampRangeLimit] =>
@@ -652,15 +653,15 @@ private[kafka010] object KafkaSourceProvider extends Logging {
             start.topicTimestamps.keySet, end.topicTimestamps.keySet
           )
         }
-        start.topicTimestamps.foreach({
+        start.topicTimestamps.foreach {
           case (tp, startOffset) =>
             checkStartOffsetNotGreaterThanEndOffset(
               startOffset,
               end.topicTimestamps(tp),
               tp,
-              KafkaExceptions.unresolvedStartOffsetGreaterThanEndOffset
+              KafkaExceptions.unresolvedStartTimestampGreaterThanEndTimestamp
             )
-        })
+        }
 
       case _ =>  // do nothing
     }

@@ -512,9 +512,9 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       if (untilOffset < fromOffset) {
         reportDataLoss(
           s"Partition $tp's offset was changed from " +
-            s"$fromOffset to $untilOffset. This could either be a user error that the start " +
-            "offset is set too high and this is the first batch, or the kafka topic-partition " +
-            "is broken, and some data may have been missed.",
+            s"$fromOffset to $untilOffset. This could be either 1) a user error that the start " +
+            "offset is set beyond available offset when starting query, or 2) the kafka " +
+            "topic-partition is deleted and re-created.",
           () =>
             KafkaExceptions.partitionOffsetChanged(tp, fromOffset, untilOffset))
       }

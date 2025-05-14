@@ -201,6 +201,21 @@ object KafkaExceptions {
     new KafkaIllegalArgumentException(
       errorClass = "UNRESOLVED_START_OFFSET_GREATER_THAN_END_OFFSET",
       messageParameters = Map(
+        "offsetType" -> "offset",
+        "startOffset" -> startOffset.toString,
+        "endOffset" -> endOffset.toString,
+        "topic" -> topicPartition.topic,
+        "partition" -> topicPartition.partition.toString))
+  }
+
+  def unresolvedStartTimestampGreaterThanEndTimestamp(
+      startOffset: Long,
+      endOffset: Long,
+      topicPartition: TopicPartition): KafkaIllegalArgumentException = {
+    new KafkaIllegalArgumentException(
+      errorClass = "UNRESOLVED_START_OFFSET_GREATER_THAN_END_OFFSET",
+      messageParameters = Map(
+        "offsetType" -> "timestamp",
         "startOffset" -> startOffset.toString,
         "endOffset" -> endOffset.toString,
         "topic" -> topicPartition.topic,
