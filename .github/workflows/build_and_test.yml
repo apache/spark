@@ -389,11 +389,11 @@ jobs:
       with:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/*.log"
-    - name: Upload yarn App log files
+    - name: Upload yarn app log files
       if: ${{ !success() && contains(matrix.modules, 'yarn') }}
       uses: actions/upload-artifact@v4
       with:
-        name: yarn-app-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
+        name: yarn-app-log-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/test/data/"
 
   infra-image:
