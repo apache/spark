@@ -47,14 +47,10 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
         """.stripMargin
     withClient(sessionId = sessionId, userId = userId) { client =>
       // this will create the session, and then ReleaseSession at the end of withClient.
-      val enableSqlScripting = client.execute(
-        buildPlan("SET spark.sql.scripting.enabled=true"))
+      val enableSqlScripting = client.execute(buildPlan("SET spark.sql.scripting.enabled=true"))
       enableSqlScripting.hasNext // trigger execution
       val query = client.execute(buildSqlCommandPlan(sqlScriptText))
-      checkSqlCommandResponse(
-        query.next().getSqlCommandResult,
-        Seq(Seq(1))
-      )
+      checkSqlCommandResponse(query.next().getSqlCommandResult, Seq(Seq(1)))
     }
   }
 

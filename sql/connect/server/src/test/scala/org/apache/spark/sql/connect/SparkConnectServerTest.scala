@@ -156,10 +156,8 @@ trait SparkConnectServerTest extends SharedSparkSession {
             proto.SqlCommand
               .newBuilder()
               .setSql(sqlCommand)
-              .build()
-          )
-          .build()
-      )
+              .build())
+          .build())
       .build()
   }
 
