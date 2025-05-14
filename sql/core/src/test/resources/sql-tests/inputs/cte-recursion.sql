@@ -65,7 +65,7 @@ WITH RECURSIVE r(level) MAX RECURSION LEVEL 200 AS (
   )
 SELECT * FROM r;
 
--- limited recursion fails at spark.sql.cteRecursionLevelLimit level because it is to low
+-- limited recursion fails at spark.sql.cteRecursionLevelLimit level because it is too low
 WITH RECURSIVE r(level) AS (
   VALUES 0
   UNION ALL
