@@ -254,7 +254,9 @@ class WritableStage(override val uid: String) extends Transformer with MLWritabl
 
 object WritableStage extends MLReadable[WritableStage] {
 
-  override def read: MLReader[WritableStage] = new DefaultParamsReader[WritableStage]
+  override def read: MLReader[WritableStage] = new DefaultParamsReader[WritableStage](
+    "org.apache.spark.ml.WritableStage"
+  )
 
   override def load(path: String): WritableStage = super.load(path)
 }

@@ -200,7 +200,9 @@ class MyParams(override val uid: String) extends Params with MLWritable {
 
 object MyParams extends MLReadable[MyParams] {
 
-  override def read: MLReader[MyParams] = new DefaultParamsReader[MyParams]
+  override def read: MLReader[MyParams] = new DefaultParamsReader[MyParams](
+    "org.apache.spark.ml.util.MyParams"
+  )
 
   override def load(path: String): MyParams = super.load(path)
 }
