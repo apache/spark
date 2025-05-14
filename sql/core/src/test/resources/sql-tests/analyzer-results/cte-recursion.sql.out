@@ -216,6 +216,7 @@ WithCTE
    +- SubqueryAlias r
       +- CTERelationRef xxxx, true, [level#x], false, false
 
+
 -- !query
 CREATE TEMPORARY VIEW ZeroAndOne(current, next) AS VALUES
     (0,0),
@@ -278,6 +279,7 @@ ResetCommand spark.sql.cteRecursionRowLimit
 DROP VIEW ZeroAndOne
 -- !query analysis
 DropTempViewCommand ZeroAndOne
+
 
 -- !query
 WITH RECURSIVE r(level) AS (
