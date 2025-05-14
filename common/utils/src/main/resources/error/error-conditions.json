@@ -2518,6 +2518,11 @@
           "which requires <expectedType> type, but the statement provided a value of incompatible <actualType> type."
         ]
       },
+      "NON_DETERMINISTIC" : {
+        "message" : [
+          "which contains a non-deterministic expression."
+        ]
+      },
       "NOT_CONSTANT" : {
         "message" : [
           "which is not a constant expression whose equivalent value is known at query planning time."
@@ -2531,11 +2536,6 @@
       "UNRESOLVED_EXPRESSION" : {
         "message" : [
           "which fails to resolve as a valid expression."
-        ]
-      },
-      "NON_DETERMINISTIC" : {
-        "message" : [
-          "which contains a non-deterministic expression."
         ]
       }
     },
