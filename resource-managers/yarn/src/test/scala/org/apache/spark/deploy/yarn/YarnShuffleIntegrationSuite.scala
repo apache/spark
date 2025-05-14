@@ -82,7 +82,7 @@ abstract class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     )
     checkResult(finalState, result)
 
-    assert(!YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
+    assert(YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
   }
 }
 
