@@ -51,7 +51,10 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
         buildPlan("SET spark.sql.scripting.enabled=true"))
       enableSqlScripting.hasNext // trigger execution
       val query = client.execute(buildSqlCommandPlan(sqlScriptText))
-      query.hasNext // trigger execution
+      checkSqlCommandResponse(
+        query.next().getSqlCommandResult,
+        Seq(Seq(1))
+      )
     }
   }
 
