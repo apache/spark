@@ -196,7 +196,7 @@ jobs:
         # See also https://github.com/actions/upload-artifact#maintaining-file-permissions-and-case-sensitive-files
         echo "Preparing the benchmark results:"
         tar -cvf benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}.tar `git diff --name-only` `git ls-files --others --exclude=tpcds-sf-1 --exclude=tpcds-sf-1-text --exclude-standard`
-    - name: Upload benchmark results`
+    - name: Upload benchmark results
       uses: actions/upload-artifact@v4
       with:
         name: benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}-${{ matrix.split }}
