@@ -21,7 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 public record TableSummary(Identifier identifier, String tableType) {
     public static final String REGULAR_TABLE_TYPE = "TABLE";
-    public static final String VIEW_TABLE_TYPE = "VIEW";
+    public static final String REGULAR_VIEW_TABLE_TYPE = "VIEW";
 
     public TableSummary {
         checkNotNull(identifier, "Identifier of a table summary object cannot be null");
