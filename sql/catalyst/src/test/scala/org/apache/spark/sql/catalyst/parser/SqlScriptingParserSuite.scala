@@ -269,6 +269,21 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.label.contains("lbl"))
   }
 
+  test("compound: beginLabel + endLabel - case sensitivity check") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: BEGIN
+        |    SELECT 1;
+        |    SELECT 2;
+        |    INSERT INTO A VALUES (a, b, 3);
+        |    SELECT a, b, c FROM T;
+        |    SELECT * FROM T;
+        |  END LbL;
+        |END""".stripMargin
+    parsePlan(sqlScriptText)
+  }
+
   test("compound: beginLabel + endLabel with different values") {
     val sqlScriptText =
       """
@@ -518,7 +533,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(exception.origin.line.contains(4))
   }
 
-  test("declare in wrong scope") {
+  test("declare variable in wrong scope") {
     val sqlScriptText =
       """
         |BEGIN
@@ -2001,6 +2016,44 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       parameters = Map("label" -> toSQLId("lbl")))
   }
 
+  test("unique label names: nested begin-end blocks - case sensitivity check 1") {
+    val sqlScriptText =
+      """BEGIN
+        |LbL: BEGIN
+        |  lbl: BEGIN
+        |    SELECT 1;
+        |  END;
+        |END;
+        |END
+      """.stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    }
+    checkError(
+      exception = exception,
+      condition = "LABEL_ALREADY_EXISTS",
+      parameters = Map("label" -> toSQLId("lbl")))
+  }
+
+  test("unique label names: nested begin-end blocks - case sensitivity check 2") {
+    val sqlScriptText =
+      """BEGIN
+        |lbl: BEGIN
+        |  LbL: BEGIN
+        |    SELECT 1;
+        |  END;
+        |END;
+        |END
+      """.stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    }
+    checkError(
+      exception = exception,
+      condition = "LABEL_ALREADY_EXISTS",
+      parameters = Map("label" -> toSQLId("lbl")))
+  }
+
   test("unique label names: nested begin-end blocks with same prefix") {
     val sqlScriptText =
       """BEGIN
@@ -2580,9 +2633,27 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "INVALID_ERROR_CONDITION_DECLARATION.ONLY_AT_BEGINNING",
+      condition = "INVALID_ERROR_CONDITION_DECLARATION.NOT_AT_START_OF_COMPOUND_STATEMENT",
       parameters = Map("conditionName" -> "`TEST_CONDITION`"))
     assert(exception.origin.line.contains(2))
+  }
+
+  test("declare condition in wrong scope") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        | IF 1=1 THEN
+        |   DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '12345';
+        | END IF;
+        |END""".stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "INVALID_ERROR_CONDITION_DECLARATION.NOT_AT_START_OF_COMPOUND_STATEMENT",
+      parameters = Map("conditionName" -> toSQLId("TEST_CONDITION")))
+    assert(exception.origin.line.contains(4))
   }
 
   test("declare qualified condition") {
@@ -2615,6 +2686,48 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       condition = "INVALID_ERROR_CONDITION_DECLARATION.SPECIAL_CHARACTER_FOUND",
       parameters = Map("conditionName" -> toSQLId("test-condition")))
     assert(exception.origin.line.contains(3))
+  }
+
+  test("declare duplicate condition") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '12000';
+        |  DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '13000';
+        |  SELECT 1;
+        |END""".stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "DUPLICATE_CONDITION_IN_SCOPE",
+      parameters = Map("condition" -> toSQLId("TEST_CONDITION")))
+    assert(exception.origin.line.contains(2))
+  }
+
+  test("declare duplicate condition nested") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '12000';
+        |  BEGIN
+        |    IF (1 = 1) THEN
+        |      BEGIN
+        |        DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '13000';
+        |      END;
+        |    END IF;
+        |  END;
+        |  SELECT 1;
+        |END""".stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "DUPLICATE_CONDITION_IN_SCOPE",
+      parameters = Map("condition" -> toSQLId("TEST_CONDITION")))
+    assert(exception.origin.line.contains(6))
   }
 
   test("continue handler not supported") {
@@ -2901,6 +3014,43 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.handlers.head.body.collection.size == 1)
   }
 
+  test("declare handler for condition in parent scope") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '12345';
+        |  BEGIN
+        |    DECLARE EXIT HANDLER FOR TEST_CONDITION SET test_var = 1;
+        |  END;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    val handlerBody = tree.collection.head.asInstanceOf[CompoundBody]
+    assert(handlerBody.handlers.length == 1)
+    assert(handlerBody.handlers.head.isInstanceOf[ExceptionHandler])
+    assert(handlerBody.handlers.head.exceptionHandlerTriggers.conditions.size == 1)
+    assert(handlerBody.handlers.head.exceptionHandlerTriggers.conditions.contains("TEST_CONDITION"))
+    assert(handlerBody.handlers.head.body.collection.size == 1)
+  }
+
+  test("declare nested handler for condition in parent scope of parent handler") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '12345';
+        |  BEGIN
+        |    DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
+        |      BEGIN
+        |        DECLARE EXIT HANDLER FOR TEST_CONDITION SET test_var = 1;
+        |      END;
+        |  END;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    val handlerBody = tree
+      .collection.head.asInstanceOf[CompoundBody]
+      .handlers.head.body.asInstanceOf[CompoundBody]
+      .handlers.head
+    assert(handlerBody.exceptionHandlerTriggers.conditions.contains("TEST_CONDITION"))
+  }
 
   // Helper methods
   def cleanupStatementString(statementStr: String): String = {
