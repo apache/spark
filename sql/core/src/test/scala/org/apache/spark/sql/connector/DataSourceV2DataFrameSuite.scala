@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, ReplaceTableExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, IntegerType, StringType}
+import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, IntegerType, NullType, StringType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -557,7 +557,7 @@ class DataSourceV2DataFrameSuite
           case u: UpdateColumnDefaultValue => u
         }.head,
         new DefaultValue(
-          "", LiteralValue(UTF8String.fromString(""), StringType)))
+          "", LiteralValue(null, NullType)))
     }
   }
 

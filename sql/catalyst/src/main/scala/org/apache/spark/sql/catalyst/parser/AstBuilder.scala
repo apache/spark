@@ -5247,7 +5247,7 @@ class AstBuilder extends DataTypeAstBuilder
         if (action.defaultExpression != null) {
           Option(action.defaultExpression()).map(visitDefaultExpression)
         } else if (action.dropDefault != null) {
-          Some(DefaultValueExpression(Literal(""), ""))
+          Some(DefaultValueExpression(Literal(null), ""))
         } else {
           None
         }

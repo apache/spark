@@ -753,7 +753,7 @@ public interface TableChange {
     /**
      * Returns the column default value as {@link DefaultValue}. The default value literal
      * is not provided as updating column default values does not need to back-fill existing data.
-     * Empty string means dropping the column default value.
+     * Empty string and Null literal means dropping the column default value.
      */
     public DefaultValue newModelDefaultValue() { return newDefaultValue; }
 

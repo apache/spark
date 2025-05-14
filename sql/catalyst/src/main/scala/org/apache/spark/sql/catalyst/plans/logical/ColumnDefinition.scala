@@ -193,7 +193,12 @@ object ColumnDefinition {
               throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
                 "ALTER TABLE ALTER COLUMN", c.column.name.quoted, d.originalSQL, null)
             }
-            validateDefaultValueExpr(d, "ALTER TABLE", c.column.name.quoted, d.dataType)
+            validateDefaultValueExpr(d, "ALTER TABLE ALTER COLUMN",
+              c.column.name.quoted, d.dataType)
+            if (!d.deterministic) {
+              throw QueryCompilationErrors.defaultValueNonDeterministicError(
+                "ALTER TABLE ALTER COLUMN", c.column.name.quoted, d.originalSQL)
+            }
           }
         }
 

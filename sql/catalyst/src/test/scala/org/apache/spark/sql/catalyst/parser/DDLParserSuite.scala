@@ -2773,7 +2773,7 @@ class DDLParserSuite extends AnalysisTest {
           None,
           None,
           None,
-          Some(DefaultValueExpression(Literal(""), ""))))))
+          Some(DefaultValueExpression(Literal(null), ""))))))
     // Make sure that the parser returns an exception when the feature is disabled.
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
       val sql = "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet"
