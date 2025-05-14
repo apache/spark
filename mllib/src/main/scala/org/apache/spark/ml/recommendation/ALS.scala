@@ -803,8 +803,8 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
   override def copy(extra: ParamMap): ALS = defaultCopy(extra)
 
   override def estimateModelSize(dataset: Dataset[_]): Long = {
-    val userCount = dataset.select(getUserCol).distinct().count()
-    val itemCount = dataset.select(getItemCol).distinct().count()
+    val Row(userCount: Long, itemCount: Long) =
+      dataset.select(count_distinct(col(getUserCol)), count_distinct(col(getItemCol))).head()
     val rank = getRank
     (userCount + itemCount) * (rank + 1) * 4
   }
