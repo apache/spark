@@ -930,6 +930,14 @@ object SQLConf {
       .checkValue(_ > 0, "The initial number of partitions must be positive.")
       .createOptional
 
+  val ADAPTIVE_EMPTY_TRIGGER_CANCEL_ENABLED =
+    buildConf("spark.sql.adaptive.empty.trigger.cancel.enabled")
+      .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is true, when propagate " +
+        " empty relation, Spark will try to cancel QueryStage that is unnecessary.")
+      .version("3.5.5")
+      .booleanConf
+      .createWithDefault(true)
+
   lazy val ALLOW_COLLATIONS_IN_MAP_KEYS =
     buildConf("spark.sql.collation.allowInMapKeys")
       .doc("Allow for non-UTF8_BINARY collated strings inside of map's keys")

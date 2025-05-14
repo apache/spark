@@ -29,7 +29,10 @@ import org.apache.spark.util.Utils
 /**
  * The optimizer for re-optimizing the logical plan used by AdaptiveSparkPlanExec.
  */
-class AQEOptimizer(conf: SQLConf, extendedRuntimeOptimizerRules: Seq[Rule[LogicalPlan]])
+class AQEOptimizer(
+  conf: SQLConf,
+  stagesToCancel: collection.mutable.Map[Int, (String, ExchangeQueryStageExec)],
+  extendedRuntimeOptimizerRules: Seq[Rule[LogicalPlan]])
   extends RuleExecutor[LogicalPlan] {
 
   private def fixedPoint =
@@ -39,7 +42,7 @@ class AQEOptimizer(conf: SQLConf, extendedRuntimeOptimizerRules: Seq[Rule[Logica
 
   private val defaultBatches = Seq(
     Batch("Propagate Empty Relations", fixedPoint,
-      AQEPropagateEmptyRelation,
+      AQEPropagateEmptyRelation(stagesToCancel),
       ConvertToLocalRelation,
       UpdateAttributeNullability),
     Batch("Dynamic Join Selection", Once, DynamicJoinSelection),

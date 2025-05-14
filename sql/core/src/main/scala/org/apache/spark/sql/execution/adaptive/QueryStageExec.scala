@@ -165,15 +165,23 @@ abstract class QueryStageExec extends LeafExecNode {
  */
 abstract class ExchangeQueryStageExec extends QueryStageExec {
 
+  @transient
+  var isCancelled: Boolean = false
+
   /**
    * Cancel the stage materialization if in progress with a reason; otherwise do nothing.
    */
-  final def cancel(reason: String): Unit = {
-    logDebug(s"Cancel query stage: $name")
-    doCancel(reason)
+  final def cancel(reason: String, quiet: Boolean = false): Unit = {
+    this.synchronized {
+      if (!isCancelled) {
+        isCancelled = true
+        logDebug(s"Cancel query stage, quiet: $quiet")
+        doCancel(reason, quiet)
+      }
+    }
   }
 
-  protected def doCancel(reason: String): Unit
+  protected def doCancel(reason: String, quiet: Boolean): Unit
 
   /**
    * The canonicalized plan before applying query stage optimizer rules.
@@ -219,7 +227,8 @@ case class ShuffleQueryStageExec(
     reuse
   }
 
-  override protected def doCancel(reason: String): Unit = shuffle.cancelShuffleJob(Option(reason))
+  override protected def doCancel(reason: String, quiet: Boolean): Unit =
+    shuffle.cancelShuffleJob(Option(reason), quiet)
 
   /**
    * Returns the Option[MapOutputStatistics]. If the shuffle map stage has no partition,
@@ -266,7 +275,8 @@ case class BroadcastQueryStageExec(
     reuse
   }
 
-  override protected def doCancel(reason: String): Unit =
+  // TODO: currently broadcast job cannot be cancelled quietly
+  override protected def doCancel(reason: String, quiet: Boolean): Unit =
     broadcast.cancelBroadcastJob(Option(reason))
 
   override def getRuntimeStatistics: Statistics = broadcast.runtimeStatistics
