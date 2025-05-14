@@ -141,8 +141,7 @@ private[connect] object MLHandler extends Logging {
           transformerClasses ++ estimatorClasses ++ evaluatorClasses
             ++ Map(
               "org.apache.spark.ml.clustering.PowerIterationClustering" ->
-              classOf[org.apache.spark.ml.clustering.PowerIterationClustering]
-            )
+                classOf[org.apache.spark.ml.clustering.PowerIterationClustering])
         )
 
         ReadWriteUtils.safeMLClassLoader = (className: String) => {
