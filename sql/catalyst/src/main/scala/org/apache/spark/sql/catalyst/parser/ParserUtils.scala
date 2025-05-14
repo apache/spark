@@ -312,7 +312,7 @@ class SqlScriptingLabelContext {
    * If the label is defined, it will be returned and added to seenLabels.
    * If the label is not defined, a random UUID will be returned.
    */
-  def enterLabeledScope(
+    def enterLabeledScope(
       beginLabelCtx: Option[BeginLabelContext],
       endLabelCtx: Option[EndLabelContext]): String = {
 
@@ -327,7 +327,7 @@ class SqlScriptingLabelContext {
           throw SqlScriptingErrors.duplicateLabels(CurrentOrigin.get, txt)
         }
       }
-      seenLabels.add(beginLabelCtx.get.multipartIdentifier().getText)
+      seenLabels.add(txt)
       txt
     } else {
       // Do not add the label to the seenLabels set if it is not defined.

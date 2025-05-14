@@ -269,6 +269,21 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.label.contains("lbl"))
   }
 
+  test("compound: beginLabel + endLabel - case sensitivity check") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: BEGIN
+        |    SELECT 1;
+        |    SELECT 2;
+        |    INSERT INTO A VALUES (a, b, 3);
+        |    SELECT a, b, c FROM T;
+        |    SELECT * FROM T;
+        |  END LbL;
+        |END""".stripMargin
+    parsePlan(sqlScriptText)
+  }
+
   test("compound: beginLabel + endLabel with different values") {
     val sqlScriptText =
       """
@@ -1987,6 +2002,44 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       """BEGIN
         |lbl: BEGIN
         |  lbl: BEGIN
+        |    SELECT 1;
+        |  END;
+        |END;
+        |END
+      """.stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    }
+    checkError(
+      exception = exception,
+      condition = "LABEL_ALREADY_EXISTS",
+      parameters = Map("label" -> toSQLId("lbl")))
+  }
+
+  test("unique label names: nested begin-end blocks - case sensitivity check 1") {
+    val sqlScriptText =
+      """BEGIN
+        |LbL: BEGIN
+        |  lbl: BEGIN
+        |    SELECT 1;
+        |  END;
+        |END;
+        |END
+      """.stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    }
+    checkError(
+      exception = exception,
+      condition = "LABEL_ALREADY_EXISTS",
+      parameters = Map("label" -> toSQLId("lbl")))
+  }
+
+  test("unique label names: nested begin-end blocks - case sensitivity check 2") {
+    val sqlScriptText =
+      """BEGIN
+        |lbl: BEGIN
+        |  LbL: BEGIN
         |    SELECT 1;
         |  END;
         |END;
