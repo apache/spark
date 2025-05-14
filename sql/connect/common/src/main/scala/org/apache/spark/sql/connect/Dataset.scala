@@ -462,9 +462,9 @@ class Dataset[T] private[sql] (
   }
 
   /**
-   * Verify whether the input column name can be resolved with the given schema.
-   * Note that this method can not 100% match the analyzer behavior, it is designed to
-   * try the best to eliminate unnecessary validation RPCs.
+   * Verify whether the input column name can be resolved with the given schema. Note that this
+   * method can not 100% match the analyzer behavior, it is designed to try the best to eliminate
+   * unnecessary validation RPCs.
    */
   private def verifyColName(name: String, schema: StructType): Boolean = {
     val partsOpt = AttributeNameParser.parseAttributeName(name)
