@@ -61,7 +61,7 @@ private[spark] object Worker {
 
   val WORKER_CLEANUP_WORKDIR_AFTER_FINISHED_APP_ENABLED =
     ConfigBuilder("spark.worker.cleanupWorkDirAfterAppFinished.enabled")
-      .version("1.0.0")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
