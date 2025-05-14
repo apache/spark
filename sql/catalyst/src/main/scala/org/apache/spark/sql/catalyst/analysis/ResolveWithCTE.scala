@@ -78,7 +78,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                   val loop = UnionLoop(
                     cteDef.id,
                     anchor,
-                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, None))
+                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, None),
+                    maxDepth = cteDef.maxDepth)
                   cteDef.copy(child = alias.copy(child = loop))
                 }
 
@@ -97,7 +98,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                   val loop = UnionLoop(
                     cteDef.id,
                     anchor,
-                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, None))
+                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, None),
+                    maxDepth = cteDef.maxDepth)
                   cteDef.copy(child = alias.copy(child = withCTE.copy(
                     plan = loop, cteDefs = newInnerCteDefs)))
                 }
@@ -115,7 +117,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                   val loop = UnionLoop(
                     cteDef.id,
                     anchor,
-                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, Some(colNames)))
+                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, Some(colNames)),
+                    maxDepth = cteDef.maxDepth)
                   cteDef.copy(child = alias.copy(child = columnAlias.copy(child = loop)))
                 }
 
@@ -138,7 +141,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                   val loop = UnionLoop(
                     cteDef.id,
                     anchor,
-                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, Some(colNames)))
+                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, Some(colNames)),
+                    maxDepth = cteDef.maxDepth)
                   cteDef.copy(child = alias.copy(child = columnAlias.copy(
                     child = withCTE.copy(plan = loop, cteDefs = newInnerCteDefs))))
                 }
@@ -161,7 +165,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                       rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, None),
                       UnionLoopRef(cteDef.id, anchor.output, true),
                       isAll = false
-                    )
+                    ),
+                    maxDepth = cteDef.maxDepth
                   )
                   cteDef.copy(child = alias.copy(child = loop))
                 }
@@ -188,7 +193,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                       rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, None),
                       UnionLoopRef(cteDef.id, anchor.output, true),
                       isAll = false
-                    )
+                    ),
+                    maxDepth = cteDef.maxDepth
                   )
                   cteDef.copy(child = alias.copy(child = withCTE.copy(
                     plan = loop, cteDefs = newInnerCteDefs)))
@@ -213,7 +219,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                       rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, Some(colNames)),
                       UnionLoopRef(cteDef.id, anchor.output, true),
                       isAll = false
-                    )
+                    ),
+                    maxDepth = cteDef.maxDepth
                   )
                   cteDef.copy(child = alias.copy(child = columnAlias.copy(child = loop)))
                 }
@@ -243,7 +250,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                       rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, Some(colNames)),
                       UnionLoopRef(cteDef.id, anchor.output, true),
                       isAll = false
-                    )
+                    ),
+                    maxDepth = cteDef.maxDepth
                   )
                   cteDef.copy(child = alias.copy(child = columnAlias.copy(
                     child = withCTE.copy(plan = loop, cteDefs = newInnerCteDefs))))

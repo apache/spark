@@ -57,6 +57,22 @@ SELECT * FROM t;
 
 DROP VIEW ZeroAndOne;
 
+-- limited recursion fails at spark.sql.cteRecursionLevelLimit level because it is to low
+WITH RECURSIVE r(level) MAX RECURSION LEVEL 200 AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 150
+  )
+SELECT * FROM r;
+
+-- limited recursion fails at spark.sql.cteRecursionLevelLimit level because it is to low
+WITH RECURSIVE r(level) AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 150
+)
+SELECT * FROM r;
+
 -- terminate recursion with LIMIT
 WITH RECURSIVE r(level) AS (
   VALUES 0

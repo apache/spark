@@ -170,6 +170,54 @@ DropTempViewCommand ZeroAndOne
 
 
 -- !query
+WITH RECURSIVE r(level) MAX RECURSION LEVEL 200 AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 150
+  )
+SELECT * FROM r
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false, 200
+:  +- SubqueryAlias r
+:     +- Project [col1#x AS level#x]
+:        +- UnionLoop xxxx, 200
+:           :- LocalRelation [col1#x]
+:           +- Project [(level#x + 1) AS (level + 1)#x]
+:              +- Filter (level#x < 150)
+:                 +- SubqueryAlias r
+:                    +- Project [col1#x AS level#x]
+:                       +- UnionLoopRef xxxx, [col1#x], false
++- Project [level#x]
+   +- SubqueryAlias r
+      +- CTERelationRef xxxx, true, [level#x], false, false
+
+
+-- !query
+WITH RECURSIVE r(level) AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 150
+)
+SELECT * FROM r
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias r
+:     +- Project [col1#x AS level#x]
+:        +- UnionLoop xxxx
+:           :- LocalRelation [col1#x]
+:           +- Project [(level#x + 1) AS (level + 1)#x]
+:              +- Filter (level#x < 150)
+:                 +- SubqueryAlias r
+:                    +- Project [col1#x AS level#x]
+:                       +- UnionLoopRef xxxx, [col1#x], false
++- Project [level#x]
+   +- SubqueryAlias r
+      +- CTERelationRef xxxx, true, [level#x], false, false
+
+
+-- !query
 WITH RECURSIVE r(level) AS (
   VALUES 0
   UNION ALL

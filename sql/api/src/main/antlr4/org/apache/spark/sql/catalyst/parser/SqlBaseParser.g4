@@ -550,7 +550,7 @@ ctes
     ;
 
 namedQuery
-    : name=errorCapturingIdentifier (columnAliases=identifierList)? AS? LEFT_PAREN query RIGHT_PAREN
+    : name=errorCapturingIdentifier (columnAliases=identifierList)? (MAX RECURSION LEVEL INTEGER_VALUE)? AS? LEFT_PAREN query RIGHT_PAREN
     ;
 
 tableProvider
@@ -2186,6 +2186,7 @@ nonReserved
     | LIKE
     | LONG
     | ILIKE
+    | LEVEL
     | LIMIT
     | LINES
     | LIST
@@ -2200,6 +2201,7 @@ nonReserved
     | MACRO
     | MAP
     | MATCHED
+    | MAX
     | MERGE
     | MICROSECOND
     | MICROSECONDS
@@ -2259,6 +2261,7 @@ nonReserved
     | RECORDREADER
     | RECORDWRITER
     | RECOVER
+    | RECURSION
     | RECURSIVE
     | REDUCE
     | REFERENCES

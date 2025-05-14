@@ -4630,7 +4630,7 @@
   },
   "RECURSION_LEVEL_LIMIT_EXCEEDED" : {
     "message" : [
-      "Recursion level limit <levelLimit> reached but query has not exhausted, try increasing 'spark.sql.cteRecursionLevelLimit'"
+      "Recursion level limit <levelLimit> reached but query has not exhausted, try increasing it using 'MAX RECURSION DEPTH'."
     ],
     "sqlState" : "42836"
   },
