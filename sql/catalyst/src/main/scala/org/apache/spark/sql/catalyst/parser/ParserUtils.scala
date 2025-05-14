@@ -139,7 +139,7 @@ object ParserUtils extends SparkParserUtils {
   }
 }
 
-class SqlScriptingParsingContext {
+class CompoundBodyParsingContext {
 
   object State extends Enumeration {
     type State = Value

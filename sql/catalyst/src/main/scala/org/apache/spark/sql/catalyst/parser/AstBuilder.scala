@@ -313,13 +313,13 @@ class AstBuilder extends DataTypeAstBuilder
     val handlers = ListBuffer[ExceptionHandler]()
     val conditions = HashMap[String, String]()
 
-    val scriptingParserContext = new SqlScriptingParsingContext()
+    val compoundBodyParserContext = new CompoundBodyParsingContext()
 
     ctx.compoundStatements.forEach(compoundStatement => {
       val stmt = visitCompoundStatementImpl(compoundStatement, labelCtx)
       stmt match {
         case handler: ExceptionHandler =>
-          scriptingParserContext.handler()
+          compoundBodyParserContext.handler()
           // All conditions are already visited when we encounter a handler.
           handler.exceptionHandlerTriggers.conditions.foreach(conditionName => {
             // Everything is stored in upper case so we can make case-insensitive comparisons.
@@ -334,7 +334,7 @@ class AstBuilder extends DataTypeAstBuilder
 
           handlers += handler
         case condition: ErrorCondition =>
-          scriptingParserContext.condition(condition)
+          compoundBodyParserContext.condition(condition)
           // Check for duplicate condition names in each scope.
           // When conditions are visited, everything is converted to upper-case
           // for case-insensitive comparisons.
@@ -346,8 +346,8 @@ class AstBuilder extends DataTypeAstBuilder
         case statement =>
           statement match {
             case SingleStatement(createVariable: CreateVariable) =>
-              scriptingParserContext.variable(createVariable, allowVarDeclare)
-            case _ => scriptingParserContext.statement()
+              compoundBodyParserContext.variable(createVariable, allowVarDeclare)
+            case _ => compoundBodyParserContext.statement()
           }
           buff += statement
       }
