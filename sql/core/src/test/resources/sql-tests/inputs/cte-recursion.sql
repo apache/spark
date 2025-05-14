@@ -58,12 +58,16 @@ SELECT * FROM t;
 DROP VIEW ZeroAndOne;
 
 -- limited recursion fails at spark.sql.cteRecursionLevelLimit level because it is too low
-WITH RECURSIVE r(level) MAX RECURSION LEVEL 200 AS (
+SET spark.sql.cteRecursionLevelLimit=25;
+
+WITH RECURSIVE r(level) MAX RECURSION LEVEL 35 AS (
   VALUES 0
   UNION ALL
-  SELECT level + 1 FROM r WHERE level < 150
+  SELECT level + 1 FROM r WHERE level < 30
   )
 SELECT * FROM r;
+
+RESET spark.sql.cteRecursionLevelLimit;
 
 -- limited recursion fails at spark.sql.cteRecursionLevelLimit level because it is too low
 WITH RECURSIVE r(level) AS (
@@ -499,7 +503,7 @@ WITH RECURSIVE t1(a,b,c) AS (
 SELECT a FROM t1 LIMIT 5;
 
 -- CROSS JOIN example
-CREATE TABLE tb (next INT);
+CREATE TABLE tb (next INT) USING json;
 
 INSERT INTO tb VALUES (0), (1);
 
