@@ -206,6 +206,30 @@ ResetCommand spark.sql.cteRecursionLevelLimit
 
 
 -- !query
+WITH r(level) MAX RECURSION LEVEL 35 AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 30
+)
+SELECT * FROM r
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "Cannot specify MAX RECURSION LEVEL when the CTE is not marked as RECURSIVE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 125,
+    "fragment" : "WITH r(level) MAX RECURSION LEVEL 35 AS (\n  VALUES 0\n  UNION ALL\n  SELECT level + 1 FROM r WHERE level < 30\n)\nSELECT * FROM r"
+  } ]
+}
+
+
+-- !query
 WITH RECURSIVE r(level) AS (
   VALUES 0
   UNION ALL

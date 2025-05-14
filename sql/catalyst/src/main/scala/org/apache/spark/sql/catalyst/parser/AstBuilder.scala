@@ -710,6 +710,10 @@ class AstBuilder extends DataTypeAstBuilder
     val ctes = ctx.namedQuery.asScala.map { nCtx =>
       val namedQuery = visitNamedQuery(nCtx)
       val rowLevelLimit: Option[Int] = if (nCtx.INTEGER_VALUE() != null) {
+        if (ctx.RECURSIVE() == null) {
+          operationNotAllowed("Cannot specify MAX RECURSION LEVEL when the CTE is not marked as " +
+            "RECURSIVE", ctx)
+        }
         Some(nCtx.INTEGER_VALUE().getText().toInt)
       } else {
         None

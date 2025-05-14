@@ -69,6 +69,14 @@ SELECT * FROM r;
 
 RESET spark.sql.cteRecursionLevelLimit;
 
+-- setting MAX RECURSION LEVEL without keyword RECURSIVE fails
+WITH r(level) MAX RECURSION LEVEL 35 AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 30
+)
+SELECT * FROM r;
+
 -- limited recursion fails at spark.sql.cteRecursionLevelLimit level because it is too low
 WITH RECURSIVE r(level) AS (
   VALUES 0
