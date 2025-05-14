@@ -2518,6 +2518,11 @@
           "which requires <expectedType> type, but the statement provided a value of incompatible <actualType> type."
         ]
       },
+      "NON_DETERMINISTIC" : {
+        "message" : [
+          "which contains a non-deterministic expression."
+        ]
+      },
       "NOT_CONSTANT" : {
         "message" : [
           "which is not a constant expression whose equivalent value is known at query planning time."
@@ -4636,7 +4641,7 @@
   },
   "RECURSION_ROW_LIMIT_EXCEEDED" : {
     "message" : [
-      "Recursion row limit <rowLimit> reached but query has not exhausted, try increasing 'spark.sql.cteRecursionRowLimit'"
+      "Recursion row limit <rowLimit> reached but query has not exhausted, try setting a larger LIMIT value when querying the CTE relation."
     ],
     "sqlState" : "42836"
   },

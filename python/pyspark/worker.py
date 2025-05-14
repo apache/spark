@@ -34,7 +34,7 @@ from pyspark.accumulators import (
     _deserialize_accumulator,
 )
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
-from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPySparkFuncMode
+from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.resource import ResourceInformation
 from pyspark.util import PythonEvalType, local_connect_and_auth
@@ -589,7 +589,7 @@ def wrap_grouped_transform_with_state_udf(f, return_type, runner_conf):
 
 def wrap_grouped_transform_with_state_init_state_udf(f, return_type, runner_conf):
     def wrapped(stateful_processor_api_client, mode, key, values):
-        if mode == TransformWithStateInPySparkFuncMode.PROCESS_DATA:
+        if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
             values_gen = values[0]
             init_states_gen = values[1]
         else:
@@ -2001,7 +2001,7 @@ def read_udfs(pickleSer, infile, eval_type):
         def mapper(a):
             mode = a[0]
 
-            if mode == TransformWithStateInPySparkFuncMode.PROCESS_DATA:
+            if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
                 key = a[1]
 
                 def values_gen():
@@ -2038,7 +2038,7 @@ def read_udfs(pickleSer, infile, eval_type):
         def mapper(a):
             mode = a[0]
 
-            if mode == TransformWithStateInPySparkFuncMode.PROCESS_DATA:
+            if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
                 key = a[1]
 
                 def values_gen():
@@ -2070,7 +2070,7 @@ def read_udfs(pickleSer, infile, eval_type):
         def mapper(a):
             mode = a[0]
 
-            if mode == TransformWithStateInPySparkFuncMode.PROCESS_DATA:
+            if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
                 key = a[1]
                 values = a[2]
 
@@ -2103,7 +2103,7 @@ def read_udfs(pickleSer, infile, eval_type):
         def mapper(a):
             mode = a[0]
 
-            if mode == TransformWithStateInPySparkFuncMode.PROCESS_DATA:
+            if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
                 key = a[1]
                 values = a[2]
 

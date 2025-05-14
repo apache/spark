@@ -48,11 +48,11 @@ compoundOrSingleStatement
     ;
 
 singleCompoundStatement
-    : BEGIN compoundBody? END SEMICOLON? EOF
+    : BEGIN (NOT ATOMIC)? compoundBody? END SEMICOLON? EOF
     ;
 
 beginEndCompoundBlock
-    : beginLabel? BEGIN compoundBody? END endLabel?
+    : beginLabel? BEGIN (NOT ATOMIC)? compoundBody? END endLabel?
     ;
 
 compoundBody
@@ -60,10 +60,10 @@ compoundBody
     ;
 
 compoundStatement
-    : statement
-    | setStatementWithOptionalVarKeyword
+    : declareConditionStatement
+    | statement
+    | setStatementInsideSqlScript
     | beginEndCompoundBlock
-    | declareConditionStatement
     | declareHandlerStatement
     | ifElseStatement
     | caseStatement
@@ -75,10 +75,10 @@ compoundStatement
     | forStatement
     ;
 
-setStatementWithOptionalVarKeyword
-    : SET variable? assignmentList                              #setVariableWithOptionalKeyword
-    | SET variable? LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
-        LEFT_PAREN query RIGHT_PAREN                            #setVariableWithOptionalKeyword
+setStatementInsideSqlScript
+    : SET assignmentList                              #setVariableInsideSqlScript
+    | SET LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
+        LEFT_PAREN query RIGHT_PAREN                  #setVariableInsideSqlScript
     ;
 
 sqlStateValue
@@ -101,7 +101,7 @@ conditionValues
     ;
 
 declareHandlerStatement
-    : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValues (beginEndCompoundBlock | statement | setStatementWithOptionalVarKeyword)
+    : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValues (beginEndCompoundBlock | statement | setStatementInsideSqlScript)
     ;
 
 whileStatement
@@ -1681,6 +1681,7 @@ ansiNonReserved
     | ARRAY
     | ASC
     | AT
+    | ATOMIC
     | BEGIN
     | BETWEEN
     | BIGINT
@@ -2024,6 +2025,7 @@ nonReserved
     | AS
     | ASC
     | AT
+    | ATOMIC
     | AUTHORIZATION
     | BEGIN
     | BETWEEN
