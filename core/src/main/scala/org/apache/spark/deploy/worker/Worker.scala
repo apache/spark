@@ -122,6 +122,8 @@ private[deploy] class Worker(
   private val PROLONGED_REGISTRATION_RETRY_INTERVAL_SECONDS = (math.round(60
     * REGISTRATION_RETRY_FUZZ_MULTIPLIER))
 
+  private val CLEANUP_WORKDIR_AFTER_FINISHED_APP_ENABLED =
+    conf.get(WORKER_CLEANUP_WORKDIR_AFTER_FINISHED_APP_ENABLED)
   private val CLEANUP_ENABLED = conf.get(WORKER_CLEANUP_ENABLED)
   // How often worker will clean up old app folders
   private val CLEANUP_INTERVAL_MILLIS = conf.get(WORKER_CLEANUP_INTERVAL) * 1000
@@ -722,6 +724,9 @@ private[deploy] class Worker(
     case ApplicationFinished(id) =>
       finishedApps += id
       maybeCleanupApplication(id)
+      if (CLEANUP_WORKDIR_AFTER_FINISHED_APP_ENABLED) {
+        maybeCleanupApplicationWorkDir(id)
+      }
 
     case DecommissionWorker =>
       decommissionSelf()
@@ -776,6 +781,32 @@ private[deploy] class Worker(
           logWarning("Failed to cleanup application as executor pool was shutdown")
       }
       shuffleService.applicationRemoved(id)
+    }
+  }
+
+  private def maybeCleanupApplicationWorkDir(id: String): Unit = {
+    val appIds = (executors.values.map(_.appId) ++ drivers.values.map(_.driverId)).toSet
+    try {
+      val cleanupFuture: concurrent.Future[Unit] = concurrent.Future {
+        val appDir = new File(workDir, id)
+        if (appDir.isDirectory) {
+          val isAppStillRunning = appIds.contains(id)
+          if (!isAppStillRunning) {
+            logInfo(s"Removing application work directory: ${appDir.getPath}")
+            Utils.deleteRecursively(appDir)
+            if (conf.get(config.SHUFFLE_SERVICE_DB_ENABLED) &&
+              conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
+              shuffleService.applicationRemoved(appDir.getName)
+            }
+          }
+        }
+      }(cleanupThreadExecutor)
+      cleanupFuture.failed.foreach(e =>
+        logError("App dir cleanup failed: " + e.getMessage, e)
+      )(cleanupThreadExecutor)
+    } catch {
+      case _: RejectedExecutionException if cleanupThreadExecutor.isShutdown =>
+        logWarning("Failed to cleanup work dir as executor pool was shutdown")
     }
   }
 
@@ -962,6 +993,9 @@ private[deploy] class Worker(
             log"${MDC(EXECUTOR_STATE, state)}" + message + exitStatus)
       }
       maybeCleanupApplication(appId)
+      if (CLEANUP_WORKDIR_AFTER_FINISHED_APP_ENABLED) {
+        maybeCleanupApplicationWorkDir(appId)
+      }
     }
   }
 }

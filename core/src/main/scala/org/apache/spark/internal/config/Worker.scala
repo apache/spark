@@ -59,6 +59,12 @@ private[spark] object Worker {
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("10s")
 
+  val WORKER_CLEANUP_WORKDIR_AFTER_FINISHED_APP_ENABLED =
+    ConfigBuilder("spark.worker.cleanupWorkDirAfterAppFinished.enabled")
+      .version("1.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val WORKER_CLEANUP_ENABLED = ConfigBuilder("spark.worker.cleanup.enabled")
     .version("1.0.0")
     .booleanConf
