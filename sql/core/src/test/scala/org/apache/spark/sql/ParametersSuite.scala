@@ -788,7 +788,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
   test("SPARK-50892: parameterized identifier inside a recursive CTE") {
     def query(p: String): String = {
       s"""
-         |WITH RECURSIVE t1(n) MAX RECURSION LEVEL 200 AS (
+         |WITH RECURSIVE t1(n) AS (
          |  SELECT 1
          |  UNION ALL
          |  SELECT n+1 FROM IDENTIFIER($p) WHERE n < 5)
