@@ -102,6 +102,10 @@ class RocksDBStateStoreProviderStateMachine(
     }
     while (state == ACQUIRED && timeWaitedMs < rocksDBConf.lockAcquireTimeoutMs) {
       instanceLock.wait(10)
+      // log every 30 seconds
+      if (timeWaitedMs % (30 * 1000) == 0) {
+        logInfo(log"Waiting to acquire lock for ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)}")
+      }
     }
     if (state == ACQUIRED) {
       val newAcquiredThreadInfo = AcquiredThreadInfo()
@@ -155,7 +159,8 @@ class RocksDBStateStoreProviderStateMachine(
     }
     logInfo(log"Transitioned state from ${MDC(LogKeys.STATE_STORE_STATE, oldState)} " +
       log"to ${MDC(LogKeys.STATE_STORE_STATE, newState)} " +
-      log"for StateStoreId ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)}")
+      log"for StateStoreId ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)} " +
+      log"with stamp: ${currentValidStamp.get()}")
     (oldState, newState)
   }
 
@@ -190,7 +195,9 @@ class RocksDBStateStoreProviderStateMachine(
   }
 
   def closeStore(): Unit = instanceLock.synchronized {
+    logInfo(log"Trying to close store ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)}")
     awaitNotLocked(CLOSE)
+    logInfo(log"Acquired lock to close store ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)}")
     validateAndTransitionState(CLOSE)
   }
 }

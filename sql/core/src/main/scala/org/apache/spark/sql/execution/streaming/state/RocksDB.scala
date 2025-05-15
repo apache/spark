@@ -330,6 +330,7 @@ class RocksDB(
     try {
       if (loadedVersion != version || (loadedStateStoreCkptId.isEmpty ||
           stateStoreCkptId.get != loadedStateStoreCkptId.get)) {
+        logInfo(log"Closing DB from loadWithCheckpointId")
         closeDB(ignoreException = false)
 
         val (latestSnapshotVersion, latestSnapshotUniqueId) = {
@@ -446,6 +447,8 @@ class RocksDB(
       readOnly: Boolean = false): RocksDB = {
     try {
       if (loadedVersion != version) {
+        logInfo(log"Closing DB from loadWithoutCheckpointId " +
+          log"for version ${MDC(LogKeys.VERSION_NUM, version)}")
         closeDB(ignoreException = false)
         val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
         val metadata = fileManager.loadCheckpointFromDfs(
@@ -614,6 +617,8 @@ class RocksDB(
    */
   private def replayFromCheckpoint(snapshotVersion: Long, endVersion: Long): Any = {
     closeDB()
+    logInfo(log"Closing DB from replayFromCheckpoint for snapshotVersion " +
+      log"${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and endVersion ${MDC(LogKeys.VERSION_NUM, endVersion)}")
     val metadata = fileManager.loadCheckpointFromDfs(snapshotVersion,
       workingDir, rocksDBFileMapping)
     loadedVersion = snapshotVersion
@@ -1202,8 +1207,8 @@ class RocksDB(
   /** Release all resources */
   def close(): Unit = {
     try {
+      logInfo(log"Closing DB from RocksDB.close()")
       closeDB()
-
       readOptions.close()
       writeOptions.close()
       flushOptions.close()

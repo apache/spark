@@ -174,6 +174,8 @@ private[sql] class RocksDBStateStoreProvider
               // CompletionListener to release for read-only store in
               // mapPartitionsWithReadStateStore.
             } else {
+              logInfo(log"Calling abort from TaskCompletionListener " +
+                log"for StateStoreId ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)}")
               abort() // Abort since this is an error if stateful task completes
               // without committing or aborting
               // Only throw error if the task is not already failed or interrupted
@@ -192,6 +194,8 @@ private[sql] class RocksDBStateStoreProvider
       })
 
       ctxt.addTaskFailureListener( (_, _) => {
+        logInfo(log"Calling abort from TaskFailureListener " +
+          log"for StateStoreId ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)}")
         if (!hasCommitted) abort() // Either the store is already aborted (this is a no-op) or
         // we need to abort it.
       })
