@@ -86,7 +86,8 @@ case class UnionLoopExec(
     @transient anchor: LogicalPlan,
     @transient recursion: LogicalPlan,
     override val output: Seq[Attribute],
-    limit: Option[Int] = None) extends LeafExecNode {
+    limit: Option[Int] = None,
+    maxDepth: Option[Int] = None) extends LeafExecNode {
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(anchor, recursion)
 
@@ -155,7 +156,7 @@ case class UnionLoopExec(
     val numOutputRows = longMetric("numOutputRows")
     val numIterations = longMetric("numIterations")
     val numAnchorOutputRows = longMetric("numAnchorOutputRows")
-    val levelLimit = conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT)
+    val levelLimit = maxDepth.getOrElse(conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT))
     val rowLimit = conf.getConf(SQLConf.CTE_RECURSION_ROW_LIMIT)
 
     // currentLimit is initialized from the limit argument, and in each step it is decreased by

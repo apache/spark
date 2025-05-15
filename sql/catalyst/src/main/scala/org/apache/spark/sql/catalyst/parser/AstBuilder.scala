@@ -709,7 +709,16 @@ class AstBuilder extends DataTypeAstBuilder
   private def withCTE(ctx: CtesContext, plan: LogicalPlan): LogicalPlan = {
     val ctes = ctx.namedQuery.asScala.map { nCtx =>
       val namedQuery = visitNamedQuery(nCtx)
-      (namedQuery.alias, namedQuery)
+      val rowLevelLimit: Option[Int] = if (nCtx.INTEGER_VALUE() != null) {
+        if (ctx.RECURSIVE() == null) {
+          operationNotAllowed("Cannot specify MAX RECURSION LEVEL when the CTE is not marked as " +
+            "RECURSIVE", ctx)
+        }
+        Some(nCtx.INTEGER_VALUE().getText().toInt)
+      } else {
+        None
+      }
+      (namedQuery.alias, namedQuery, rowLevelLimit)
     }
     // Check for duplicate names.
     val duplicates = ctes.groupBy(_._1).filter(_._2.size > 1).keys

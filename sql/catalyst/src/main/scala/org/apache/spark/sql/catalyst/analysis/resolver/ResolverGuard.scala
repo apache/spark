@@ -197,7 +197,7 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
 
   private def checkUnresolvedWith(unresolvedWith: UnresolvedWith) = {
     !unresolvedWith.allowRecursion && unresolvedWith.cteRelations.forall {
-      case (cteName, ctePlan) =>
+      case (cteName, ctePlan, _) =>
         checkOperator(ctePlan)
     } && checkOperator(unresolvedWith.child)
   }

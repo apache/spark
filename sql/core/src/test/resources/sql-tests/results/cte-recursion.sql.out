@@ -107,7 +107,7 @@ org.apache.spark.SparkException
   "errorClass" : "RECURSION_LEVEL_LIMIT_EXCEEDED",
   "sqlState" : "42836",
   "messageParameters" : {
-    "levelLimit" : "100"
+    "levelLimit" : "25"
   }
 }
 
@@ -139,7 +139,7 @@ org.apache.spark.SparkException
   "errorClass" : "RECURSION_ROW_LIMIT_EXCEEDED",
   "sqlState" : "42836",
   "messageParameters" : {
-    "rowLimit" : "1000000"
+    "rowLimit" : "50"
   }
 }
 
@@ -150,6 +150,95 @@ DROP VIEW ZeroAndOne
 struct<>
 -- !query output
 
+
+
+-- !query
+WITH RECURSIVE r(level) MAX RECURSION LEVEL 35 AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 30
+  )
+SELECT * FROM r
+-- !query schema
+struct<level:int>
+-- !query output
+0
+1
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+2
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+3
+30
+4
+5
+6
+7
+8
+9
+
+
+-- !query
+WITH r(level) MAX RECURSION LEVEL 35 AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 30
+)
+SELECT * FROM r
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "Cannot specify MAX RECURSION LEVEL when the CTE is not marked as RECURSIVE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 125,
+    "fragment" : "WITH r(level) MAX RECURSION LEVEL 35 AS (\n  VALUES 0\n  UNION ALL\n  SELECT level + 1 FROM r WHERE level < 30\n)\nSELECT * FROM r"
+  } ]
+}
+
+
+-- !query
+WITH RECURSIVE r(level) AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 150
+)
+SELECT * FROM r
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "RECURSION_LEVEL_LIMIT_EXCEEDED",
+  "sqlState" : "42836",
+  "messageParameters" : {
+    "levelLimit" : "25"
+  }
+}
 
 
 -- !query
@@ -165,20 +254,12 @@ struct<>
 
 
 -- !query
-SET spark.sql.cteRecursionRowLimit=25
--- !query schema
-struct<key:string,value:string>
--- !query output
-spark.sql.cteRecursionRowLimit	25
-
-
--- !query
 WITH RECURSIVE t(n) AS (
     SELECT 1
     UNION ALL
     SELECT next FROM t LEFT JOIN ZeroAndOne ON n = current
     )
-SELECT * FROM t LIMIT 30
+SELECT * FROM t LIMIT 60
 -- !query schema
 struct<n:int>
 -- !query output
@@ -196,6 +277,21 @@ struct<n:int>
 0
 0
 0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
 1
 1
 1
@@ -212,14 +308,21 @@ struct<n:int>
 1
 1
 1
-
-
--- !query
-RESET spark.sql.cteRecursionRowLimit
--- !query schema
-struct<>
--- !query output
-
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
 
 
 -- !query
@@ -315,7 +418,7 @@ org.apache.spark.SparkException
   "errorClass" : "RECURSION_LEVEL_LIMIT_EXCEEDED",
   "sqlState" : "42836",
   "messageParameters" : {
-    "levelLimit" : "100"
+    "levelLimit" : "25"
   }
 }
 
@@ -1119,7 +1222,7 @@ struct<a:int>
 
 
 -- !query
-CREATE TABLE tb (next INT)
+CREATE TABLE tb (next INT) USING json
 -- !query schema
 struct<>
 -- !query output

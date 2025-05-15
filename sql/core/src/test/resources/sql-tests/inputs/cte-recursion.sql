@@ -1,5 +1,5 @@
---CONFIG_DIM2 spark.sql.adaptive.enabled=false
---CONFIG_DIM2 spark.sql.adaptive.enabled=true
+--SET spark.sql.cteRecursionLevelLimit=25
+--SET spark.sql.cteRecursionRowLimit=50
 
 -- fails due to recursion isn't allowed without RECURSIVE keyword
 WITH r(level) AS (
@@ -57,6 +57,30 @@ SELECT * FROM t;
 
 DROP VIEW ZeroAndOne;
 
+-- limited recursion doesn't fail at spark.sql.cteRecursionLevelLimit by setting MAX RECURSION LEVEL
+WITH RECURSIVE r(level) MAX RECURSION LEVEL 35 AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 30
+  )
+SELECT * FROM r;
+
+-- setting MAX RECURSION LEVEL without keyword RECURSIVE fails
+WITH r(level) MAX RECURSION LEVEL 35 AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 30
+)
+SELECT * FROM r;
+
+-- limited recursion fails at spark.sql.cteRecursionLevelLimit level because it is too low
+WITH RECURSIVE r(level) AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 150
+)
+SELECT * FROM r;
+
 -- unlimited recursion stopped from failing by putting LIMIT
 CREATE TEMPORARY VIEW ZeroAndOne(current, next) AS VALUES
     (0,0),
@@ -64,19 +88,14 @@ CREATE TEMPORARY VIEW ZeroAndOne(current, next) AS VALUES
     (1,0),
     (1,1);
 
-SET spark.sql.cteRecursionRowLimit=25;
-
 WITH RECURSIVE t(n) AS (
     SELECT 1
     UNION ALL
     SELECT next FROM t LEFT JOIN ZeroAndOne ON n = current
     )
-SELECT * FROM t LIMIT 30;
-
-RESET spark.sql.cteRecursionRowLimit;
+SELECT * FROM t LIMIT 60;
 
 DROP VIEW ZeroAndOne;
-
 
 -- terminate recursion with LIMIT
 WITH RECURSIVE r(level) AS (
@@ -484,7 +503,7 @@ WITH RECURSIVE t1(a,b,c) AS (
 SELECT a FROM t1 LIMIT 5;
 
 -- CROSS JOIN example
-CREATE TABLE tb (next INT);
+CREATE TABLE tb (next INT) USING json;
 
 INSERT INTO tb VALUES (0), (1);
 
