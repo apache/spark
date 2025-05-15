@@ -31,6 +31,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.ml.Serializer.deserializeMethodArguments
 import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.util.Utils
 
 private case class Method(
     name: String,
@@ -134,7 +135,11 @@ private[connect] object MLHandler extends Logging {
       if (sessionHolder != null) {
         val name = MLUtils.replaceOperator(sessionHolder, className)
         whitelistedClasses(name)
-      } else { null }
+      } else {
+        // If sessionHolder is null, it means currently it is not running in a
+        // Spark Connect server, fallback to the default unsafe class loader.
+        Utils.classForName(className)
+      }
     }
   }
 
