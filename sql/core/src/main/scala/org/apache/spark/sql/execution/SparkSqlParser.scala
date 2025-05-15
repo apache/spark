@@ -361,19 +361,20 @@ class SparkSqlAstBuilder extends AstBuilder {
         invalidStatement("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
       }
 
-      if (ctx.tableProvider != null
-        && conf.getConf(SQLConf.BLOCK_CREATE_TEMP_TABLE_WITH_PROVIDER)) {
-        throw invalidStatement("CREATE TEMPORARY TABLE ... USING", ctx)
-      }
-
       val (_, _, _, _, options, location, _, _, _, _) =
         visitCreateTableClauses(ctx.createTableClauses())
       val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(
         throw QueryParsingErrors.createTempTableNotSpecifyProviderError(ctx))
       val schema = Option(ctx.tableElementList()).map(createSchema)
 
-      logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
+      if (ctx.tableProvider != null
+        && conf.getConf(SQLConf.BLOCK_CREATE_TEMP_TABLE_USING_PROVIDER)) {
+        throw QueryParsingErrors.createTempTableUsingProviderError(ctx)
+      }
+      else {
+        logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
           "CREATE TEMPORARY VIEW ... USING ... instead")
+      }
 
       withIdentClause(identCtx, ident => {
         val table = tableIdentifier(ident, "CREATE TEMPORARY VIEW", ctx)

@@ -3522,6 +3522,11 @@
           "Cannot create a routine with both IF NOT EXISTS and REPLACE specified."
         ]
       },
+      "CREATE_TEMP_TABLE_USING_PROVIDER" : {
+        "message" : [
+          "CREATE TEMPORARY TABLE ... USING ... is a deprecated syntax. To overcome the issue, please use CREATE TEMPORARY VIEW instead."
+        ]
+      },
       "CREATE_TEMP_FUNC_WITH_DATABASE" : {
         "message" : [
           "CREATE TEMPORARY FUNCTION with specifying a database(<database>) is not allowed."

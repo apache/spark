@@ -814,14 +814,14 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("CREATE TEMPORARY TABLE ... USING provider should be blocked under the flag") {
-    withSQLConf((SQLConf.BLOCK_CREATE_TEMP_TABLE_WITH_PROVIDER.key, "true")) {
+    withSQLConf((SQLConf.BLOCK_CREATE_TEMP_TABLE_USING_PROVIDER.key, "true")) {
       checkError(
         exception = intercept[ParseException](
           sql("CREATE TEMPORARY TABLE t (i int) USING parquet")
         ),
-        condition = s"INVALID_STATEMENT_OR_CLAUSE",
-        sqlState = Option.empty[String],
-        parameters = Map("operation" -> "CREATE TEMPORARY TABLE ... USING"),
+        condition = s"INVALID_SQL_SYNTAX.CREATE_TEMP_TABLE_USING_PROVIDER",
+        sqlState = Some("42000"),
+        parameters = Map(),
         context = ExpectedContext(
           fragment = "CREATE TEMPORARY TABLE t (i int) USING parquet",
           start = 0,
