@@ -17,7 +17,7 @@
 from typing import Any, Dict, Iterator, Union, Tuple, Optional
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
-from pyspark.sql.types import StructType, TYPE_CHECKING
+from pyspark.sql.types import StructType
 from pyspark.errors import PySparkRuntimeError
 import uuid
 
@@ -147,7 +147,7 @@ class MapStateClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error updating map state value: {response_message[1]}")
 
-    def get_key_value_pair(self, state_name: str, iterator_id: str) -> Tuple[Tuple, Tuple]:
+    def get_key_value_pair(self, state_name: str, iterator_id: str) -> Tuple[Tuple, Tuple, bool]:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if iterator_id in self.user_key_value_pair_iterator_cursors:
@@ -320,9 +320,19 @@ class MapStateKeyValuePairIterator:
         # Generate a unique identifier for the iterator to make sure iterators from the same
         # map state do not interfere with each other.
         self.iterator_id = str(uuid.uuid4())
+        self.iterator_fully_consumed = False
 
     def __iter__(self) -> Iterator[Tuple[Tuple, Tuple]]:
         return self
 
     def __next__(self) -> Tuple[Tuple, Tuple]:
-        return self.map_state_client.get_key_value_pair(self.state_name, self.iterator_id)
+        if self.iterator_fully_consumed:
+            raise StopIteration()
+        key, value, is_last_row = self.map_state_client.get_key_value_pair(
+            self.state_name, self.iterator_id
+        )
+
+        if is_last_row:
+            self.iterator_fully_consumed = True
+
+        return (key, value)
