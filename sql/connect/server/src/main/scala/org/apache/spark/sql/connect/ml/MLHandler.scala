@@ -26,7 +26,7 @@ import org.apache.spark.ml.{Estimator, EstimatorUtils, Model, Transformer}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.tree.TreeConfig
-import org.apache.spark.ml.util.{MLWritable, ReadWriteUtils, Summary}
+import org.apache.spark.ml.util.{MLWritable, Summary}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.ml.Serializer.deserializeMethodArguments
@@ -113,12 +113,37 @@ private object ModelAttributeHelper {
 
 // MLHandler is a utility to group all ML operations
 private[connect] object MLHandler extends Logging {
+
+  val threadLocalSessionHolder = new java.lang.ThreadLocal[SessionHolder] {
+    override def initialValue: SessionHolder = null
+  }
+
+  val safeMLClassLoader: String => Class[_] = {
+    val transformerClasses = MLUtils.loadOperators(classOf[Transformer])
+    val estimatorClasses = MLUtils.loadOperators(classOf[Estimator[_]])
+    val evaluatorClasses = MLUtils.loadOperators(classOf[Evaluator])
+    val whitelistedClasses = (
+      transformerClasses ++ estimatorClasses ++ evaluatorClasses
+        ++ Map(
+        "org.apache.spark.ml.clustering.PowerIterationClustering" ->
+          classOf[org.apache.spark.ml.clustering.PowerIterationClustering])
+      )
+
+    (className: String) => {
+      val sessionHolder = threadLocalSessionHolder.get()
+      assert(sessionHolder != null)
+      val name = MLUtils.replaceOperator(sessionHolder, className)
+      whitelistedClasses(name)
+    }
+  }
+
   def handleMlCommand(
       sessionHolder: SessionHolder,
       mlCommand: proto.MlCommand): proto.MlCommandResult = {
 
     val mlCache = sessionHolder.mlCache
     val memoryControlEnabled = sessionHolder.mlCache.getMemoryControlEnabled
+    threadLocalSessionHolder.set(sessionHolder)
 
     if (memoryControlEnabled) {
       val maxModelSize = sessionHolder.mlCache.getModelMaxSize
@@ -130,25 +155,6 @@ private[connect] object MLHandler extends Logging {
       // nodes will grow up to 2 times, the additional 0.5 is for buffer
       // because the in-memory size is not exactly in direct proportion to the tree nodes.
       TreeConfig.trainingEarlyStopModelSizeThresholdInBytes = (maxModelSize.toDouble / 2.5).toLong
-    }
-
-    ReadWriteUtils.synchronized {
-      if (ReadWriteUtils.safeMLClassLoader == null) {
-        val transformerClasses = MLUtils.loadOperators(classOf[Transformer])
-        val estimatorClasses = MLUtils.loadOperators(classOf[Estimator[_]])
-        val evaluatorClasses = MLUtils.loadOperators(classOf[Evaluator])
-        val whitelistedClasses = (
-          transformerClasses ++ estimatorClasses ++ evaluatorClasses
-            ++ Map(
-              "org.apache.spark.ml.clustering.PowerIterationClustering" ->
-                classOf[org.apache.spark.ml.clustering.PowerIterationClustering])
-        )
-
-        ReadWriteUtils.safeMLClassLoader = (className: String) => {
-          val name = MLUtils.replaceOperator(sessionHolder, className)
-          whitelistedClasses(name)
-        }
-      }
     }
 
     mlCommand.getCommandCase match {
