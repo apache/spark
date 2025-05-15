@@ -2797,7 +2797,7 @@ class SparkConnectPlanner(
 
     // Check if command or SQL Script has been executed.
     val isCommand = df.queryExecution.commandExecuted.isInstanceOf[CommandResult]
-    val isSqlScript: Boolean = df.queryExecution.logical.isInstanceOf[CompoundBody]
+    val isSqlScript = df.queryExecution.logical.isInstanceOf[CompoundBody]
     val rows = df.logicalPlan match {
       case lr: LocalRelation => lr.data
       case cr: CommandResult => cr.rows
