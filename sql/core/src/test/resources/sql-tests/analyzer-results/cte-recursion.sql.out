@@ -170,12 +170,6 @@ DropTempViewCommand ZeroAndOne
 
 
 -- !query
-SET spark.sql.cteRecursionLevelLimit=25
--- !query analysis
-SetCommand (spark.sql.cteRecursionLevelLimit,Some(25))
-
-
--- !query
 WITH RECURSIVE r(level) MAX RECURSION LEVEL 35 AS (
   VALUES 0
   UNION ALL
@@ -197,12 +191,6 @@ WithCTE
 +- Project [level#x]
    +- SubqueryAlias r
       +- CTERelationRef xxxx, true, [level#x], false, false
-
-
--- !query
-RESET spark.sql.cteRecursionLevelLimit
--- !query analysis
-ResetCommand spark.sql.cteRecursionLevelLimit
 
 
 -- !query
@@ -269,12 +257,6 @@ CreateViewCommand `ZeroAndOne`, [(current,None), (next,None)], VALUES
 
 
 -- !query
-SET spark.sql.cteRecursionRowLimit=25
--- !query analysis
-SetCommand (spark.sql.cteRecursionRowLimit,Some(25))
-
-
--- !query
 WITH RECURSIVE t(n) AS (
     SELECT 1
     UNION ALL
@@ -303,12 +285,6 @@ WithCTE
       +- Project [n#x]
          +- SubqueryAlias t
             +- CTERelationRef xxxx, true, [n#x], false, false
-
-
--- !query
-RESET spark.sql.cteRecursionRowLimit
--- !query analysis
-ResetCommand spark.sql.cteRecursionRowLimit
 
 
 -- !query

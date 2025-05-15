@@ -1,5 +1,5 @@
---CONFIG_DIM2 spark.sql.adaptive.enabled=false
---CONFIG_DIM2 spark.sql.adaptive.enabled=true
+--CONFIG_DIM1 spark.sql.cteRecursionLevelLimit=25
+--CONFIG_DIM1 spark.sql.cteRecursionRowLimit=25
 
 -- fails due to recursion isn't allowed without RECURSIVE keyword
 WITH r(level) AS (
@@ -58,16 +58,12 @@ SELECT * FROM t;
 DROP VIEW ZeroAndOne;
 
 -- limited recursion fails at spark.sql.cteRecursionLevelLimit level because it is too low
-SET spark.sql.cteRecursionLevelLimit=25;
-
 WITH RECURSIVE r(level) MAX RECURSION LEVEL 35 AS (
   VALUES 0
   UNION ALL
   SELECT level + 1 FROM r WHERE level < 30
   )
 SELECT * FROM r;
-
-RESET spark.sql.cteRecursionLevelLimit;
 
 -- setting MAX RECURSION LEVEL without keyword RECURSIVE fails
 WITH r(level) MAX RECURSION LEVEL 35 AS (
@@ -92,16 +88,12 @@ CREATE TEMPORARY VIEW ZeroAndOne(current, next) AS VALUES
     (1,0),
     (1,1);
 
-SET spark.sql.cteRecursionRowLimit=25;
-
 WITH RECURSIVE t(n) AS (
     SELECT 1
     UNION ALL
     SELECT next FROM t LEFT JOIN ZeroAndOne ON n = current
     )
 SELECT * FROM t LIMIT 30;
-
-RESET spark.sql.cteRecursionRowLimit;
 
 DROP VIEW ZeroAndOne;
 

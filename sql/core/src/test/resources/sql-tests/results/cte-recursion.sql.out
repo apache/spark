@@ -153,14 +153,6 @@ struct<>
 
 
 -- !query
-SET spark.sql.cteRecursionLevelLimit=25
--- !query schema
-struct<key:string,value:string>
--- !query output
-spark.sql.cteRecursionLevelLimit	25
-
-
--- !query
 WITH RECURSIVE r(level) MAX RECURSION LEVEL 35 AS (
   VALUES 0
   UNION ALL
@@ -201,14 +193,6 @@ struct<level:int>
 7
 8
 9
-
-
--- !query
-RESET spark.sql.cteRecursionLevelLimit
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query
@@ -270,14 +254,6 @@ struct<>
 
 
 -- !query
-SET spark.sql.cteRecursionRowLimit=25
--- !query schema
-struct<key:string,value:string>
--- !query output
-spark.sql.cteRecursionRowLimit	25
-
-
--- !query
 WITH RECURSIVE t(n) AS (
     SELECT 1
     UNION ALL
@@ -317,14 +293,6 @@ struct<n:int>
 1
 1
 1
-
-
--- !query
-RESET spark.sql.cteRecursionRowLimit
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query
