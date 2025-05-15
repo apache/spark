@@ -131,9 +131,10 @@ private[connect] object MLHandler extends Logging {
 
     (className: String) => {
       val sessionHolder = currentSessionHolder.get()
-      assert(sessionHolder != null)
-      val name = MLUtils.replaceOperator(sessionHolder, className)
-      whitelistedClasses(name)
+      if (sessionHolder != null) {
+        val name = MLUtils.replaceOperator(sessionHolder, className)
+        whitelistedClasses(name)
+      } else { null }
     }
   }
 

@@ -569,7 +569,10 @@ private[ml] class DefaultParamsReader[T] extends MLReader[T] {
       val MLHandlerClazz = Utils.classForName("org.apache.spark.sql.connect.ml.MLHandler")
       val safeMLClassLoader = MLHandlerClazz.getMethod("safeMLClassLoader").invoke(null)
         .asInstanceOf[String => Class[_]]
-      safeMLClassLoader(metadata.className)
+      val clazz = safeMLClassLoader(metadata.className)
+      if (clazz != null) { clazz } else {
+        Utils.classForName(metadata.className)
+      }
     } catch {
       case _: ClassNotFoundException =>
         Utils.classForName(metadata.className)
