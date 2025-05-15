@@ -52,6 +52,8 @@ object BuildCommons {
   val streamingProjects@Seq(streaming, streamingKafka010) =
     Seq("streaming", "streaming-kafka-0-10").map(ProjectRef(buildLocation, _))
 
+  val pipelinesProjects@Seq(pipelinesCore) = Seq("pipelines").map(ProjectRef(buildLocation, _))
+
   val connectProjects@Seq(connectCommon, connect, connectClient, connectShims) =
     Seq("connect-common", "connect", "connect-client-jvm", "connect-shims")
       .map(ProjectRef(buildLocation, _))
@@ -62,7 +64,7 @@ object BuildCommons {
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
     "tags", "sketch", "kvstore", "common-utils", "variant"
-  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ connectProjects
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ pipelinesProjects ++ connectProjects
 
   val optionallyEnabledProjects@Seq(kubernetes, yarn,
     sparkGangliaLgpl, streamingKinesisAsl, profiler,
@@ -372,8 +374,8 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient,
-      variant, connectShims, profiler
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, pipelinesCore, connectCommon, connect,
+      connectClient, variant, connectShims, profiler
     ).contains(x)
   }
 
@@ -417,6 +419,8 @@ object SparkBuild extends PomBuild {
   enable(Hive.settings)(hive)
 
   enable(HiveThriftServer.settings)(hiveThriftServer)
+
+  enable(SparkConnect.settings)(pipelinesCore)
 
   enable(SparkConnectCommon.settings)(connectCommon)
   enable(SparkConnect.settings)(connect)
