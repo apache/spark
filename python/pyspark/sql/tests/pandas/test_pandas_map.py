@@ -459,7 +459,7 @@ class MapInPandasTestsMixin:
         df = self.spark.range(2).mapInPandas(func, "id int")
         with self.assertRaisesRegex(
             PythonException,
-            "PySparkTypeError: Exception thrown when converting pandas.Series \\(object\\) "
+            "PySparkValueError: Exception thrown when converting pandas.Series \\(object\\) "
             "with name 'id' to Arrow Array \\(int32\\)\\.",
         ):
             df.collect()
@@ -470,12 +470,7 @@ class MapInPandasTestsMixin:
                 yield pd.DataFrame({"b": [1], "a": [2]})
 
         df = self.spark.range(1)
-        with self.assertRaisesRegex(
-            PythonException,
-            "PySparkTypeError: Exception thrown when converting pandas.Series \\(int64\\) "
-            "with name 'a' to Arrow Array \\(int32\\)\\.",
-        ):
-            df.mapInPandas(func, "a int, b int").collect()
+        self.assertEqual([Row(a=2, b=1)], df.mapInPandas(func, "a int, b int").collect())
 
 
 class MapInPandasTests(ReusedSQLTestCase, MapInPandasTestsMixin):
