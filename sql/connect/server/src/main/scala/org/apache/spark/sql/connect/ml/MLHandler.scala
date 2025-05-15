@@ -114,7 +114,7 @@ private object ModelAttributeHelper {
 // MLHandler is a utility to group all ML operations
 private[connect] object MLHandler extends Logging {
 
-  val threadLocalSessionHolder = new java.lang.ThreadLocal[SessionHolder] {
+  val currentSessionHolder = new java.lang.ThreadLocal[SessionHolder] {
     override def initialValue: SessionHolder = null
   }
 
@@ -130,7 +130,7 @@ private[connect] object MLHandler extends Logging {
       )
 
     (className: String) => {
-      val sessionHolder = threadLocalSessionHolder.get()
+      val sessionHolder = currentSessionHolder.get()
       assert(sessionHolder != null)
       val name = MLUtils.replaceOperator(sessionHolder, className)
       whitelistedClasses(name)
@@ -143,7 +143,7 @@ private[connect] object MLHandler extends Logging {
 
     val mlCache = sessionHolder.mlCache
     val memoryControlEnabled = sessionHolder.mlCache.getMemoryControlEnabled
-    threadLocalSessionHolder.set(sessionHolder)
+    currentSessionHolder.set(sessionHolder)
 
     if (memoryControlEnabled) {
       val maxModelSize = sessionHolder.mlCache.getModelMaxSize
