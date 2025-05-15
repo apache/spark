@@ -15,26 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.parser
+package org.apache.spark.sql.catalyst.analysis
 
 import java.net.URI
 
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.{
-  AnalysisTest,
-  Analyzer,
-  FunctionRegistry,
-  TableFunctionRegistry,
-  TestRelations,
-  UnresolvedRelation,
-  UnresolvedStar,
-  UnresolvedTableValuedFunction
-}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{Project, SubqueryAlias}
 
-class StreamRelationParserSuite extends AnalysisTest {
+class StreamRelationSuite extends AnalysisTest {
   import CatalystSqlParser._
 
   override protected def getAnalyzer: Analyzer = {
