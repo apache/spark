@@ -107,7 +107,7 @@ org.apache.spark.SparkException
   "errorClass" : "RECURSION_LEVEL_LIMIT_EXCEEDED",
   "sqlState" : "42836",
   "messageParameters" : {
-    "levelLimit" : "100"
+    "levelLimit" : "25"
   }
 }
 
@@ -139,7 +139,7 @@ org.apache.spark.SparkException
   "errorClass" : "RECURSION_ROW_LIMIT_EXCEEDED",
   "sqlState" : "42836",
   "messageParameters" : {
-    "rowLimit" : "1000000"
+    "rowLimit" : "50"
   }
 }
 
@@ -236,7 +236,7 @@ org.apache.spark.SparkException
   "errorClass" : "RECURSION_LEVEL_LIMIT_EXCEEDED",
   "sqlState" : "42836",
   "messageParameters" : {
-    "levelLimit" : "100"
+    "levelLimit" : "25"
   }
 }
 
@@ -259,7 +259,7 @@ WITH RECURSIVE t(n) AS (
     UNION ALL
     SELECT next FROM t LEFT JOIN ZeroAndOne ON n = current
     )
-SELECT * FROM t LIMIT 30
+SELECT * FROM t LIMIT 60
 -- !query schema
 struct<n:int>
 -- !query output
@@ -277,6 +277,36 @@ struct<n:int>
 0
 0
 0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
 1
 1
 1
@@ -388,7 +418,7 @@ org.apache.spark.SparkException
   "errorClass" : "RECURSION_LEVEL_LIMIT_EXCEEDED",
   "sqlState" : "42836",
   "messageParameters" : {
-    "levelLimit" : "100"
+    "levelLimit" : "25"
   }
 }
 
