@@ -708,7 +708,7 @@ class DataSourceV2DataFrameSuite
       column: UpdateColumnDefaultValue,
       expectedDefault: DefaultValue): Unit = {
     assert(
-      column.newModelDefaultValue() == expectedDefault,
+      column.newCurrentDefault() == expectedDefault,
         s"Default value mismatch for column '${column.toString}': " +
         s"expected $expectedDefault but found ${column.newDefaultValue()}")
   }

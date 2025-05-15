@@ -729,11 +729,11 @@ public interface TableChange {
    */
   final class UpdateColumnDefaultValue implements ColumnChange {
     private final String[] fieldNames;
-    private final DefaultValue newDefaultValue;
+    private final DefaultValue newCurrentDefault;
 
-    private UpdateColumnDefaultValue(String[] fieldNames, DefaultValue newDefaultValue) {
+    private UpdateColumnDefaultValue(String[] fieldNames, DefaultValue newCurrentDefault) {
       this.fieldNames = fieldNames;
-      this.newDefaultValue = newDefaultValue;
+      this.newCurrentDefault = newCurrentDefault;
     }
 
     @Override
@@ -747,7 +747,7 @@ public interface TableChange {
      * Empty string means dropping the column default value.
      */
     public String newDefaultValue() {
-      return newDefaultValue == null ? "" : newDefaultValue.getSql();
+      return newCurrentDefault == null ? "" : newCurrentDefault.getSql();
     }
 
     /**
@@ -755,22 +755,19 @@ public interface TableChange {
      * is not provided as updating column default values does not need to back-fill existing data.
      * Empty string and Null literal means dropping the column default value.
      */
-    public DefaultValue newModelDefaultValue() { return newDefaultValue; }
+    public DefaultValue newCurrentDefault() { return newCurrentDefault; }
 
     @Override
     public boolean equals(Object o) {
-      if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       UpdateColumnDefaultValue that = (UpdateColumnDefaultValue) o;
-      return Arrays.equals(fieldNames, that.fieldNames) &&
-        newDefaultValue.equals(that.newDefaultValue());
+      return Objects.deepEquals(fieldNames, that.fieldNames) &&
+        Objects.equals(newCurrentDefault, that.newCurrentDefault);
     }
 
     @Override
     public int hashCode() {
-      int result = Objects.hash(newDefaultValue);
-      result = 31 * result + Arrays.hashCode(fieldNames);
-      return result;
+      return Objects.hash(Arrays.hashCode(fieldNames), newCurrentDefault);
     }
   }
 
