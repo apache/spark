@@ -219,7 +219,7 @@ class MemoryProfiler2TestsMixin:
         finally:
             sys.stdout = old_stdout
 
-    def assert_udf_memory_profile_present(self, udf_id, dump_dir):
+    def assert_udf_memory_profile_present(self, udf_id, dump_dir=None):
         """
         Assert that a memory profile for the given UDF ID exists, has expected content,
         and is associated with the source file of `_do_computation`.
