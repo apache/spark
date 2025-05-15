@@ -21,7 +21,7 @@ You can find the latest Spark documentation, including a programming
 guide, on the [project web page](https://spark.apache.org/documentation.html).
 This README file only contains basic setup instructions.
 
-# Daily Build Pipeline Status
+## Daily Build Pipeline Status
 
 | Branch     | Status                                                                                                                                                                                                          | Desc |
 |------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------|
