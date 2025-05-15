@@ -200,7 +200,7 @@ class MapStateClient:
         key_row, value_row = data_batch[index]
         return (tuple(key_row), tuple(value_row), is_last_row_from_iterator)
 
-    def get_row(self, state_name: str, iterator_id: str, is_key: bool) -> Tuple:
+    def get_row(self, state_name: str, iterator_id: str, is_key: bool) -> Tuple[Tuple, bool]:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if iterator_id in self.user_key_or_value_iterator_cursors:
