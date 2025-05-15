@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, CheckInvariant, Expressio
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, V2WriteCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Table}
 import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 
@@ -34,22 +34,33 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
       if v2Write.table.resolved && v2Write.query.resolved &&
         !containsCheckInvariant(v2Write.query) && v2Write.outputResolved =>
       v2Write.table match {
-        case r: DataSourceV2Relation
-          if r.table.constraints != null && r.table.constraints.nonEmpty =>
-          // Check constraint is the only enforced constraint for DSV2 tables.
-          val checkInvariants = r.table.constraints.collect {
-            case c: Check =>
-              val unresolvedExpr = buildCatalystExpression(c)
-              val columnExtractors = mutable.Map[String, Expression]()
-              buildColumnExtractors(unresolvedExpr, columnExtractors)
-              CheckInvariant(unresolvedExpr, columnExtractors.toSeq, c.name, c.predicateSql)
-          }
-          // Combine the check invariants into a single expression using conjunctive AND.
-          checkInvariants.reduceOption(And).fold(v2Write)(
-            condition => v2Write.withNewQuery(Filter(condition, v2Write.query)))
+        case r: DataSourceV2Relation =>
+          buildCheckCondition(r.table).map { condition =>
+            v2Write.withNewQuery(Filter(condition, v2Write.query))
+          }.getOrElse(v2Write)
         case _ =>
           v2Write
       }
+  }
+
+  // Constructs an optional check condition based on the table's check constraints.
+  // This condition validates data during write operations.
+  // Returns None if no check constraints exist; otherwise, combines all constraints using
+  // logical AND.
+  private def buildCheckCondition(table: Table): Option[Expression] = {
+    if (table.constraints == null || table.constraints.isEmpty) {
+      None
+    } else {
+      val checkInvariants = table.constraints.collect {
+        // Check constraint is the only enforced constraint for DSV2 tables.
+        case c: Check =>
+          val unresolvedExpr = buildCatalystExpression(c)
+          val columnExtractors = mutable.Map[String, Expression]()
+          buildColumnExtractors(unresolvedExpr, columnExtractors)
+          CheckInvariant(unresolvedExpr, columnExtractors.toSeq, c.name, c.predicateSql)
+      }
+      checkInvariants.reduceOption(And)
+    }
   }
 
   private def containsCheckInvariant(plan: LogicalPlan): Boolean = {

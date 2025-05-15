@@ -400,8 +400,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
       ResolveOutputRelation ::
-      RewriteUpdateTable ::
-      RewriteMergeIntoTable ::
       new ResolveTableConstraints(catalogManager) ::
       new ResolveDataFrameDropColumns(catalogManager) ::
       new ResolveSetVariable(catalogManager) ::
@@ -458,7 +456,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       RewriteUpdateTable,
       RewriteMergeIntoTable,
       // Ensures columns of an output table are correctly resolved from the data in a logical plan.
-      ResolveOutputRelation),
+      ResolveOutputRelation,
+      // Apply table check constraints to validate data during write operations.
+      new ResolveTableConstraints(catalogManager),
+      // Resolve any new expressions introduced by the applied check constraints.
+      new ResolveReferences(catalogManager)),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
