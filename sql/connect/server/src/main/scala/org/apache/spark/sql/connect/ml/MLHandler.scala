@@ -125,9 +125,9 @@ private[connect] object MLHandler extends Logging {
     val whitelistedClasses = (
       transformerClasses ++ estimatorClasses ++ evaluatorClasses
         ++ Map(
-        "org.apache.spark.ml.clustering.PowerIterationClustering" ->
-          classOf[org.apache.spark.ml.clustering.PowerIterationClustering])
-      )
+          "org.apache.spark.ml.clustering.PowerIterationClustering" ->
+            classOf[org.apache.spark.ml.clustering.PowerIterationClustering])
+    )
 
     (className: String) => {
       val sessionHolder = currentSessionHolder.get()
