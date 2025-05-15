@@ -26,7 +26,7 @@ import scala.util.control.NoStackTrace
 import org.apache.spark.internal.Logging
 
 case class UnresolvedFlowFailureException(name: String, cause: Throwable)
-  extends Exception(s"Failed to resolve flow '$name'", cause)
+    extends Exception(s"Failed to resolve flow '$name'", cause)
     with NoStackTrace
 
 /**
@@ -81,12 +81,12 @@ object ConstructPipelineEvent extends Logging {
    * Returns a new event with the current or provided timestamp and the given message.
    */
   def apply(
-     origin: Origin,
-     message: String,
-     details: EventDetails,
-     exception: Throwable = null,
-     eventTimestamp: Option[Timestamp] = None
-   ): PipelineEvent = {
+  origin: Origin,
+   message: String,
+   details: EventDetails,
+   exception: Throwable = null,
+   eventTimestamp: Option[Timestamp] = None
+  ): PipelineEvent = {
     ConstructPipelineEvent(
       origin = origin,
       message = message,
@@ -103,12 +103,12 @@ object ConstructPipelineEvent extends Logging {
    *                       from event UUID is used instead.
    */
   def apply(
-     origin: Origin,
-     message: String,
-     details: EventDetails,
-     errorDetails: Option[ErrorDetail],
-     eventTimestamp: Option[Timestamp]
-    ): PipelineEvent = synchronized {
+  origin: Origin,
+   message: String,
+   details: EventDetails,
+   errorDetails: Option[ErrorDetail],
+   eventTimestamp: Option[Timestamp]
+  ): PipelineEvent = synchronized {
 
     val eventUUID = UUID.randomUUID()
     val timestamp = Timestamp.from(Instant.now())

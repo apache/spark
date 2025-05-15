@@ -28,13 +28,13 @@ import org.apache.spark.sql.pipelines.common.FlowStatus
  * @param error An error that occurred during the event
  */
 case class PipelineEvent(
-                          id: String,
-                          timestamp: String,
-                          origin: Origin,
-                          message: String,
-                          details: EventDetails,
-                          error: Option[ErrorDetail]
-                        )
+    id: String,
+    timestamp: String,
+    origin: Origin,
+    message: String,
+    details: EventDetails,
+    error: Option[ErrorDetail]
+)
 
 /**
  * Describes where the event originated from
@@ -43,10 +43,10 @@ case class PipelineEvent(
  * @param sourceCodeLocation The location of the source code
  */
 case class Origin(
-                   datasetName: Option[String],
-                   flowName: Option[String],
-                   sourceCodeLocation: Option[SourceCodeLocation]
-                 )
+    datasetName: Option[String],
+    flowName: Option[String],
+    sourceCodeLocation: Option[SourceCodeLocation]
+)
 
 /**
  * Describes the location of the source code
@@ -57,12 +57,12 @@ case class Origin(
  * @param endingColumnNumber The ending column number of the source code
  */
 case class SourceCodeLocation(
-                               path: Option[String],
-                               lineNumber: Option[Int],
-                               columnNumber: Option[Int],
-                               endingLineNumber: Option[Int],
-                               endingColumnNumber: Option[Int]
-                             )
+    path: Option[String],
+    lineNumber: Option[Int],
+    columnNumber: Option[Int],
+    endingLineNumber: Option[Int],
+    endingColumnNumber: Option[Int]
+)
 
 // Additional details about the PipelineEvent
 trait EventDetails
