@@ -76,6 +76,31 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
   }
 }
 
+
+/**
+ * Rewrite exists subquery with project all column to use scalar project
+ *   WHERE EXISTS (SELECT * FROM TABLE B WHERE COL1 > 10)
+ * will be rewritten to
+ *   WHERE EXISTS (SELECT 1 FROM TABLE B WHERE COL1 > 10)
+ */
+object RewriteExistsWithFullTableProject extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+    _.containsPattern(EXISTS_SUBQUERY)) {
+    case exists: Exists =>
+      exists.plan match {
+        case Project(projectList, child) =>
+          val tableColumns = child.output
+          val isFullTableProject = projectList.map(_.toAttribute).toSet == tableColumns.toSet
+          if (isFullTableProject) {
+            exists.copy(plan = Project(Seq(Alias(Literal(1), "col")()), child))
+          } else {
+            exists
+          }
+        case _ => exists
+      }
+  }
+}
+
 /**
  * Computes expressions in inline tables. This rule is supposed to be called at the very end
  * of the analysis phase, given that all the expressions need to be fully resolved/replaced
