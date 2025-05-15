@@ -1352,6 +1352,7 @@ class RocksDB(
         // Close the DB instance and throw the exception if any
         db.closeE()
       }
+      logInfo(log"Setting db to null")
       db = null
     }
   }

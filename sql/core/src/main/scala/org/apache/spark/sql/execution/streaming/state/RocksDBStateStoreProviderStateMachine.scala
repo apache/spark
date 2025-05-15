@@ -159,8 +159,7 @@ class RocksDBStateStoreProviderStateMachine(
     }
     logInfo(log"Transitioned state from ${MDC(LogKeys.STATE_STORE_STATE, oldState)} " +
       log"to ${MDC(LogKeys.STATE_STORE_STATE, newState)} " +
-      log"for StateStoreId ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)} " +
-      log"with stamp: ${currentValidStamp.get()}")
+      log"for StateStoreId ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)}")
     (oldState, newState)
   }
 
