@@ -274,7 +274,7 @@ class MemoryProfiler2TestsMixin:
         self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
 
         for id in self.profile_results:
-            self.assert_udf_memory_profile_present(udf_id=id, dump_dir=d)
+            self.assert_udf_memory_profile_present(udf_id=id)
 
     def test_memory_profiler_udf_multiple_actions(self):
         def action(df):
