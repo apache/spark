@@ -361,6 +361,11 @@ class SparkSqlAstBuilder extends AstBuilder {
         invalidStatement("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
       }
 
+      if (ctx.tableProvider != null
+        && conf.getConf(SQLConf.BLOCK_CREATE_TEMP_TABLE_WITH_PROVIDER)) {
+        throw invalidStatement("CREATE TEMPORARY TABLE ... USING", ctx)
+      }
+
       val (_, _, _, _, options, location, _, _, _, _) =
         visitCreateTableClauses(ctx.createTableClauses())
       val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(
