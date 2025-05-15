@@ -21,8 +21,8 @@ import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, Unresol
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
 import org.apache.spark.sql.catalyst.expressions.{CheckConstraint, Expression, TableConstraint, Unevaluable}
-import org.apache.spark.sql.catalyst.util.{TypeUtils}
-import org.apache.spark.sql.connector.catalog.{TableCatalog, TableChange}
+import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.connector.catalog.{DefaultValue, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
@@ -203,13 +203,24 @@ case class RenameColumn(
     copy(table = newChild)
 }
 
+/**
+ * The spec of the ALTER TABLE ... ALTER COLUMN command.
+ * @param column column to alter
+ * @param newDataType new data type of column if set
+ * @param newNullability new nullability of column if set
+ * @param newComment new comment of column if set
+ * @param newPosition new position of column if set
+ * @param newDefaultExpression new default expression if set
+ * @param dropDefault whether to drop the default expression
+ */
 case class AlterColumnSpec(
     column: FieldName,
     newDataType: Option[DataType],
     newNullability: Option[Boolean],
     newComment: Option[String],
     newPosition: Option[FieldPosition],
-    newDefaultExpression: Option[DefaultValueExpression]) extends Expression with Unevaluable {
+    newDefaultExpression: Option[DefaultValueExpression],
+    dropDefault: Boolean = false) extends Expression with Unevaluable {
 
   override def children: Seq[Expression] = Seq(column) ++ newPosition.toSeq ++
     newDefaultExpression.toSeq
@@ -263,8 +274,14 @@ case class AlterColumns(
         TableChange.updateColumnDefaultValue(colName,
           newDefault.toV2CurrentDefault("ALTER TABLE", column.name.quoted))
       }
+      val dropDefaultValue = if (spec.dropDefault) {
+        Some(TableChange.updateColumnDefaultValue(colName, null: DefaultValue))
+      } else {
+        None
+      }
 
-      typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange ++ defaultValueChange
+      typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange ++
+        defaultValueChange ++ dropDefaultValue
     }
   }
 

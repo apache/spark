@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, ReplaceTableExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, IntegerType, NullType, StringType}
+import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, IntegerType, StringType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -552,12 +552,26 @@ class DataSourceV2DataFrameSuite
       val alterExecCol = executeAndKeepPhysicalPlan[AlterTableExec] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN salary DROP DEFAULT")
       }
-      checkDefaultValue(
-        alterExecCol.changes.collect {
+      checkDropDefaultValue(alterExecCol.changes.collect {
           case u: UpdateColumnDefaultValue => u
-        }.head,
-        new DefaultValue(
-          "", LiteralValue(null, NullType)))
+      }.head)
+    }
+  }
+
+  test("alter table alter column should not produce default value if unchanged") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (
+           |  salary INT DEFAULT (100 + 23)
+           |) USING foo
+           |""".stripMargin)
+
+      val alterExecCol = executeAndKeepPhysicalPlan[AlterTableExec] {
+        sql(s"ALTER TABLE $tableName ALTER COLUMN salary COMMENT 'new comment'")
+      }
+      assert(!alterExecCol.changes.exists(_.isInstanceOf[UpdateColumnDefaultValue]))
     }
   }
 
@@ -710,6 +724,23 @@ class DataSourceV2DataFrameSuite
     assert(
       column.newCurrentDefault() == expectedDefault,
         s"Default value mismatch for column '${column.toString}': " +
-        s"expected $expectedDefault but found ${column.newDefaultValue()}")
+        s"expected $expectedDefault but found ${column.newCurrentDefault()}")
+    assert(
+      column.newDefaultValue() == expectedDefault.getSql,
+      s"Default value mismatch for column '${column.toString}': " +
+        s"expected ${expectedDefault.getSql} but found ${column.newDefaultValue()}")
+  }
+
+  private def checkDropDefaultValue(
+      column: UpdateColumnDefaultValue): Unit = {
+    assert(
+      column.newCurrentDefault() == null,
+      s"Default value mismatch for column '${column.toString}': " +
+        s"expected empty but found ${column.newCurrentDefault()}")
+
+    assert(
+      column.newDefaultValue() == "",
+      s"Default value mismatch for column '${column.toString}': " +
+        s"expected empty but found ${column.newDefaultValue()}")
   }
 }

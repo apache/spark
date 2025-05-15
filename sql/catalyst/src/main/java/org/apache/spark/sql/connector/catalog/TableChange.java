@@ -751,9 +751,10 @@ public interface TableChange {
     }
 
     /**
-     * Returns the column default value as {@link DefaultValue}. The default value literal
+     * Returns the column default value as {@link DefaultValue} with a
+     * {@link org.apache.spark.sql.connector.expressions.Expression}.  The default value literal
      * is not provided as updating column default values does not need to back-fill existing data.
-     * Empty string and Null literal means dropping the column default value.
+     * Null means dropping the column default value.
      */
     public DefaultValue newCurrentDefault() { return newCurrentDefault; }
 

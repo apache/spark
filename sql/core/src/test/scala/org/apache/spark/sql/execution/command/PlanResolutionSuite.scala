@@ -1391,7 +1391,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                   None,
                   None,
                   None,
-                  None))) =>
+                  None,
+                  false))) =>
               assert(column.name == Seq("i"))
             case _ => fail("expect AlterColumns")
           }
@@ -1405,7 +1406,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                   None,
                   Some("new comment"),
                   None,
-                  None))) =>
+                  None,
+                  false))) =>
               assert(column.name == Seq("i"))
             case _ => fail("expect AlterColumns")
           }
@@ -1421,14 +1423,16 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                     None,
                     None,
                     None,
-                    None),
+                    None,
+                    false),
                   AlterColumnSpec(
                     column2: ResolvedFieldName,
                     None,
                     None,
                     None,
                     None,
-                    Some(DefaultValueExpression(_, _, _))))) =>
+                    Some(DefaultValueExpression(_, _, _)),
+                    false))) =>
               assert(column1.name == Seq("i"))
               assert(column2.name == Seq("s"))
             case _ => fail("expect AlterColumns")
@@ -1515,7 +1519,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               None,
               Some(comment),
               None,
-              None))) =>
+              None,
+              false))) =>
           assert(comment == "an index")
         case _ => fail("expect AlterTableAlterColumn with comment change only")
       }
@@ -1529,7 +1534,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               None,
               Some(comment),
               None,
-              None))) =>
+              None,
+              false))) =>
           assert(comment == "an index")
           assert(dataType == LongType)
         case _ => fail("expect AlterTableAlterColumn with type and comment changes")
