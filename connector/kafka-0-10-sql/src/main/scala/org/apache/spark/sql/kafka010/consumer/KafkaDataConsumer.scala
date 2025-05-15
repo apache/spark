@@ -26,8 +26,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaConsumer, OffsetOutOfRangeException}
-import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.config.ConfigException
+import org.apache.kafka.common.{KafkaException, TopicPartition}
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
@@ -145,11 +144,9 @@ private[kafka010] class InternalKafkaConsumer(
       try {
         return createConsumer()
       } catch {
-        // Catches a known transient ConfigException:
+        // Retry due to a known transient ConfigException:
         // "No resolvable bootstrap urls given in bootstrap.servers"
-        case e: ConfigException
-          if e.getMessage.contains("No resolvable bootstrap urls given in bootstrap.servers") => {
-
+        case e: KafkaException =>
           val delay = math.min(initialDelayMillis * math.pow(2, attempt).toLong, maxDelayMillis)
 
           logWarning(
@@ -167,7 +164,6 @@ private[kafka010] class InternalKafkaConsumer(
           logWarning(s"Retrying in $delay milliseconds.")
           attempt += 1
           Thread.sleep(delay)
-          }
       }
     }
 
