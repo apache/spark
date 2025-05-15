@@ -260,7 +260,7 @@ class Resolver(
    */
   private def resolveWith(unresolvedWith: UnresolvedWith): LogicalPlan = {
     for (cteRelation <- unresolvedWith.cteRelations) {
-      val (cteName, ctePlan) = cteRelation
+      val (cteName, ctePlan, _) = cteRelation
 
       val resolvedCtePlan = scopes.withNewScope() {
         expressionIdAssigner.withNewMapping() {

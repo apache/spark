@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ResolvedFieldName, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
-import org.apache.spark.sql.catalyst.expressions.{Expression, TableConstraint, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{CheckConstraint, Expression, TableConstraint, Unevaluable}
 import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{TableCatalog, TableChange}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -123,7 +123,7 @@ case class AddColumns(
         col.nullable,
         col.comment.orNull,
         col.position.map(_.position).orNull,
-        col.getV2Default)
+        col.getV2Default("ALTER TABLE"))
     }
   }
 
@@ -159,7 +159,7 @@ case class ReplaceColumns(
         col.nullable,
         col.comment.orNull,
         null,
-        col.getV2Default)
+        col.getV2Default("ALTER TABLE"))
     }
     (deleteChanges ++ addChanges).toImmutableArraySeq
   }
@@ -290,14 +290,34 @@ case class AlterTableCollation(
 }
 
 /**
- * The logical plan of the ALTER TABLE ... ADD CONSTRAINT command.
+ * The logical plan of the ALTER TABLE ... ADD CONSTRAINT command for Primary Key, Foreign Key,
+ * and Unique constraints.
  */
 case class AddConstraint(
     table: LogicalPlan,
     tableConstraint: TableConstraint) extends AlterTableCommand {
-  override def changes: Seq[TableChange] = Seq.empty
 
-  protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
+  override def changes: Seq[TableChange] = {
+    val constraint = tableConstraint.toV2Constraint
+    // The table version is null because the constraint is not enforced.
+    Seq(TableChange.addConstraint(constraint, null))
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... ADD CONSTRAINT command for Check constraints.
+ * It doesn't extend [[AlterTableCommand]] because its child is a filtered table scan rather than
+ * a table reference.
+ */
+case class AddCheckConstraint(
+    child: LogicalPlan,
+    checkConstraint: CheckConstraint) extends UnaryCommand {
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
 }
 
 /**
@@ -308,7 +328,8 @@ case class DropConstraint(
     name: String,
     ifExists: Boolean,
     cascade: Boolean) extends AlterTableCommand {
-  override def changes: Seq[TableChange] = Seq.empty
+  override def changes: Seq[TableChange] =
+    Seq(TableChange.dropConstraint(name, ifExists, cascade))
 
   protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
 }

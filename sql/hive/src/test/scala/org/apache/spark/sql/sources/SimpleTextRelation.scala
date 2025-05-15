@@ -80,7 +80,7 @@ case class SimpleTextSource() extends TextBasedFileFormat with DataSourceRegiste
     }
 
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
 
     (file: PartitionedFile) => {
       val predicate = {

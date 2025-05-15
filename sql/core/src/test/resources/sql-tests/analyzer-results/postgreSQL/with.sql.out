@@ -1260,18 +1260,25 @@ WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM x
                           WHERE n IN (SELECT * FROM x))
   SELECT * FROM x
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 134,
-    "fragment" : "WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM x\n                          WHERE n IN (SELECT * FROM x))\n  SELECT * FROM x"
-  } ]
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias x
+:     +- Project [1#x AS n#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [(n#x + 1) AS (n + 1)#x]
+:              +- Filter n#x IN (list#x [])
+:                 :  +- Project [n#x]
+:                 :     +- SubqueryAlias x
+:                 :        +- Project [1#x AS n#x]
+:                 :           +- UnionLoopRef xxxx, [1#x], false
+:                 +- SubqueryAlias x
+:                    +- Project [1#x AS n#x]
+:                       +- UnionLoopRef xxxx, [1#x], false
++- Project [n#x]
+   +- SubqueryAlias x
+      +- CTERelationRef xxxx, true, [n#x], false, false
 
 
 -- !query
@@ -1324,18 +1331,24 @@ WITH RECURSIVE x(id) AS (values (1)
     SELECT (SELECT * FROM x) FROM x WHERE id < 5
 ) SELECT * FROM x
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 116,
-    "fragment" : "WITH RECURSIVE x(id) AS (values (1)\n    UNION ALL\n    SELECT (SELECT * FROM x) FROM x WHERE id < 5\n) SELECT * FROM x"
-  } ]
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias x
+:     +- Project [col1#x AS id#x]
+:        +- UnionLoop xxxx
+:           :- LocalRelation [col1#x]
+:           +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
+:              :  +- Project [id#x]
+:              :     +- SubqueryAlias x
+:              :        +- Project [col1#x AS id#x]
+:              :           +- UnionLoopRef xxxx, [col1#x], false
+:              +- Filter (id#x < 5)
+:                 +- SubqueryAlias x
+:                    +- Project [col1#x AS id#x]
+:                       +- UnionLoopRef xxxx, [col1#x], false
++- Project [id#x]
+   +- SubqueryAlias x
+      +- CTERelationRef xxxx, true, [id#x], false, false
 
 
 -- !query
@@ -1370,18 +1383,26 @@ WITH RECURSIVE foo(i) AS
        SELECT i+1 FROM foo WHERE i < 5)
 ) SELECT * FROM foo
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 175,
-    "fragment" : "WITH RECURSIVE foo(i) AS\n    (values (1)\n    UNION ALL\n       (SELECT i+1 FROM foo WHERE i < 10\n          UNION ALL\n       SELECT i+1 FROM foo WHERE i < 5)\n) SELECT * FROM foo"
-  } ]
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias foo
+:     +- Project [col1#x AS i#x]
+:        +- UnionLoop xxxx
+:           :- LocalRelation [col1#x]
+:           +- Union false, false
+:              :- Project [(i#x + 1) AS (i + 1)#x]
+:              :  +- Filter (i#x < 10)
+:              :     +- SubqueryAlias foo
+:              :        +- Project [col1#x AS i#x]
+:              :           +- UnionLoopRef xxxx, [col1#x], false
+:              +- Project [(i#x + 1) AS (i + 1)#x]
+:                 +- Filter (i#x < 5)
+:                    +- SubqueryAlias foo
+:                       +- Project [col1#x AS i#x]
+:                          +- UnionLoopRef xxxx, [col1#x], false
++- Project [i#x]
+   +- SubqueryAlias foo
+      +- CTERelationRef xxxx, true, [i#x], false, false
 
 
 -- !query
@@ -1394,18 +1415,28 @@ WITH RECURSIVE foo(i) AS
        SELECT i+1 FROM foo WHERE i < 5) AS t
 ) SELECT * FROM foo
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 198,
-    "fragment" : "WITH RECURSIVE foo(i) AS\n    (values (1)\n    UNION ALL\n\t   SELECT * FROM\n       (SELECT i+1 FROM foo WHERE i < 10\n          UNION ALL\n       SELECT i+1 FROM foo WHERE i < 5) AS t\n) SELECT * FROM foo"
-  } ]
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias foo
+:     +- Project [col1#x AS i#x]
+:        +- UnionLoop xxxx
+:           :- LocalRelation [col1#x]
+:           +- Project [(i + 1)#x]
+:              +- SubqueryAlias t
+:                 +- Union false, false
+:                    :- Project [(i#x + 1) AS (i + 1)#x]
+:                    :  +- Filter (i#x < 10)
+:                    :     +- SubqueryAlias foo
+:                    :        +- Project [col1#x AS i#x]
+:                    :           +- UnionLoopRef xxxx, [col1#x], false
+:                    +- Project [(i#x + 1) AS (i + 1)#x]
+:                       +- Filter (i#x < 5)
+:                          +- SubqueryAlias foo
+:                             +- Project [col1#x AS i#x]
+:                                +- UnionLoopRef xxxx, [col1#x], false
++- Project [i#x]
+   +- SubqueryAlias foo
+      +- CTERelationRef xxxx, true, [i#x], false, false
 
 
 -- !query
@@ -1417,18 +1448,26 @@ WITH RECURSIVE foo(i) AS
        SELECT i+1 FROM foo WHERE i < 5)
 ) SELECT * FROM foo
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 172,
-    "fragment" : "WITH RECURSIVE foo(i) AS\n    (values (1)\n    UNION ALL\n       (SELECT i+1 FROM foo WHERE i < 10\n          EXCEPT\n       SELECT i+1 FROM foo WHERE i < 5)\n) SELECT * FROM foo"
-  } ]
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias foo
+:     +- Project [col1#x AS i#x]
+:        +- UnionLoop xxxx
+:           :- LocalRelation [col1#x]
+:           +- Except false
+:              :- Project [(i#x + 1) AS (i + 1)#x]
+:              :  +- Filter (i#x < 10)
+:              :     +- SubqueryAlias foo
+:              :        +- Project [col1#x AS i#x]
+:              :           +- UnionLoopRef xxxx, [col1#x], false
+:              +- Project [(i#x + 1) AS (i + 1)#x]
+:                 +- Filter (i#x < 5)
+:                    +- SubqueryAlias foo
+:                       +- Project [col1#x AS i#x]
+:                          +- UnionLoopRef xxxx, [col1#x], false
++- Project [i#x]
+   +- SubqueryAlias foo
+      +- CTERelationRef xxxx, true, [i#x], false, false
 
 
 -- !query
@@ -1440,18 +1479,26 @@ WITH RECURSIVE foo(i) AS
        SELECT i+1 FROM foo WHERE i < 5)
 ) SELECT * FROM foo
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 175,
-    "fragment" : "WITH RECURSIVE foo(i) AS\n    (values (1)\n    UNION ALL\n       (SELECT i+1 FROM foo WHERE i < 10\n          INTERSECT\n       SELECT i+1 FROM foo WHERE i < 5)\n) SELECT * FROM foo"
-  } ]
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias foo
+:     +- Project [col1#x AS i#x]
+:        +- UnionLoop xxxx
+:           :- LocalRelation [col1#x]
+:           +- Intersect false
+:              :- Project [(i#x + 1) AS (i + 1)#x]
+:              :  +- Filter (i#x < 10)
+:              :     +- SubqueryAlias foo
+:              :        +- Project [col1#x AS i#x]
+:              :           +- UnionLoopRef xxxx, [col1#x], false
+:              +- Project [(i#x + 1) AS (i + 1)#x]
+:                 +- Filter (i#x < 5)
+:                    +- SubqueryAlias foo
+:                       +- Project [col1#x AS i#x]
+:                          +- UnionLoopRef xxxx, [col1#x], false
++- Project [i#x]
+   +- SubqueryAlias foo
+      +- CTERelationRef xxxx, true, [i#x], false, false
 
 
 -- !query
@@ -1623,7 +1670,7 @@ SELECT * FROM outermost ORDER BY 1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
+  "errorClass" : "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
   "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",

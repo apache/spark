@@ -114,6 +114,12 @@ except Exception as e:
 
 have_pyarrow = pyarrow_requirement_message is None
 
+is_ansi_mode_test = True
+if os.environ.get("SPARK_ANSI_SQL_MODE") == "false":
+    is_ansi_mode_test = False
+
+ansi_mode_not_supported_message = "ANSI mode is not supported" if is_ansi_mode_test else None
+
 
 def read_int(b):
     return struct.unpack("!i", b)[0]

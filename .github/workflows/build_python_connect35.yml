@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: Build / Spark Connect Python-only (master-server, 35-client, Python 3.11)
+name: Build / Python-only, Connect-only (master-server, branch-3.5-client, Python 3.11)
 
 on:
   schedule:
