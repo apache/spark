@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.util
 
-import java.io.{File, IOException}
+import java.io.{DataInputStream, DataOutputStream, File, IOException}
 import java.nio.file.{Files, Paths}
 import java.util.{Locale, ServiceLoader}
 
@@ -41,6 +41,9 @@ import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
 import org.apache.spark.ml.feature.RFormulaModel
+import org.apache.spark.ml.linalg.{
+  DenseMatrix, DenseVector, Matrices, Matrix, SparseMatrix, SparseVector, Vector, Vectors
+}
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.ml.tuning.ValidatorParams
 import org.apache.spark.sql.{SparkSession, SQLContext}
@@ -823,6 +826,108 @@ private[spark] object ReadWriteUtils {
 
   val localSavingModeState = new ThreadLocal[Boolean]() {
     override def initialValue: Boolean = false
+  }
+
+  def serializeIntArray(array: Array[Int], dos: DataOutputStream): Unit = {
+    dos.writeInt(array.length)
+    for (i <- 0 until array.length) {
+      dos.writeInt(array(i))
+    }
+  }
+
+  def deserializeIntArray(dis: DataInputStream): Array[Int] = {
+    val len = dis.readInt()
+    val data = new Array[Int](len)
+    for (i <- 0 until len) {
+      data(i) = dis.readInt()
+    }
+    data
+  }
+
+  def serializeDoubleArray(array: Array[Double], dos: DataOutputStream): Unit = {
+    dos.writeInt(array.length)
+    for (i <- 0 until array.length) {
+      dos.writeDouble(array(i))
+    }
+  }
+
+  def deserializeDoubleArray(dis: DataInputStream): Array[Double] = {
+    val len = dis.readInt()
+    val data = new Array[Double](len)
+    for (i <- 0 until len) {
+      data(i) = dis.readDouble()
+    }
+    data
+  }
+
+  def serializeVector(vector: Vector, dos: DataOutputStream): Unit = {
+    if (vector.isInstanceOf[DenseVector]) {
+      dos.writeBoolean(false)
+      serializeDoubleArray(vector.toArray, dos)
+    } else {
+      val sparseVec = vector.asInstanceOf[SparseVector]
+      dos.writeBoolean(true)
+      dos.writeInt(sparseVec.size)
+      serializeIntArray(sparseVec.indices, dos)
+      serializeDoubleArray(sparseVec.values, dos)
+    }
+  }
+
+  def deserializeVector(dis: DataInputStream): Vector = {
+    val isSparse = dis.readBoolean()
+    if (isSparse) {
+      val len = dis.readInt()
+      val indices = deserializeIntArray(dis)
+      val values = deserializeDoubleArray(dis)
+      new SparseVector(len, indices, values)
+    } else {
+      val values = deserializeDoubleArray(dis)
+      new DenseVector(values)
+    }
+  }
+
+  def serializeMatrix(matrix: Matrix, dos: DataOutputStream): Unit = {
+    def serializeCommon(): Unit = {
+      dos.writeInt(matrix.numRows)
+      dos.writeInt(matrix.numCols)
+      dos.writeBoolean(matrix.isTransposed)
+    }
+
+    if (matrix.isInstanceOf[DenseMatrix]) {
+      val denseMatrix = matrix.asInstanceOf[DenseMatrix]
+      dos.writeBoolean(false)
+      serializeCommon()
+      serializeDoubleArray(denseMatrix.values, dos)
+    } else {
+      val sparseMatrix = matrix.asInstanceOf[SparseMatrix]
+      dos.writeBoolean(true)
+      serializeCommon()
+      serializeIntArray(sparseMatrix.colPtrs, dos)
+      serializeIntArray(sparseMatrix.rowIndices, dos)
+      serializeDoubleArray(sparseMatrix.values, dos)
+    }
+  }
+
+  def deserializeMatrix(dis: DataInputStream): Matrix = {
+    def deserializeCommon(): (Int, Int, Boolean) = {
+      val numRows = dis.readInt()
+      val numCols = dis.readInt()
+      val transposed = dis.readBoolean()
+      (numRows, numCols, transposed)
+    }
+
+    val isSparse = dis.readBoolean()
+    if (isSparse) {
+      val (numRows, numCols, transposed) = deserializeCommon()
+      val colPtrs = deserializeIntArray(dis)
+      val rowIndices = deserializeIntArray(dis)
+      val values = deserializeDoubleArray(dis)
+      new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, transposed)
+    } else {
+      val (numRows, numCols, transposed) = deserializeCommon()
+      val values = deserializeDoubleArray(dis)
+      new DenseMatrix(numRows, numCols, values, transposed)
+    }
   }
 
   def saveText(path: String, data: String, spark: SparkSession): Unit = {
