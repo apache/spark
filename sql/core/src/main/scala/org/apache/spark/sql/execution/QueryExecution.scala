@@ -94,7 +94,7 @@ class QueryExecution(
   }
 
   private val lazyAnalyzed = LazyTry {
-    logical match {
+    val withScriptExecuted = logical match {
       // Execute the SQL script. Script doesn't need to go through the analyzer as Spark will run
       // each statement as individual query.
       case NameParameterizedQuery(compoundBody: CompoundBody, argNames, argValues) =>
@@ -102,19 +102,19 @@ class QueryExecution(
         SqlScriptingExecution.executeSqlScript(sparkSession, compoundBody, args)
       case compoundBody: CompoundBody =>
         SqlScriptingExecution.executeSqlScript(sparkSession, compoundBody)
-      case _ =>
-        try {
-          val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
-            // We can't clone `logical` here, which will reset the `_analyzed` flag.
-            sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
-          }
-          tracker.setAnalyzed(plan)
-          plan
-        } catch {
-          case NonFatal(e) =>
-            tracker.setAnalysisFailed(logical)
-            throw e
-        }
+      case _ => logical
+    }
+    try {
+      val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
+        // We can't clone `logical` here, which will reset the `_analyzed` flag.
+        sparkSession.sessionState.analyzer.executeAndCheck(withScriptExecuted, tracker)
+      }
+      tracker.setAnalyzed(plan)
+      plan
+    } catch {
+      case NonFatal(e) =>
+        tracker.setAnalysisFailed(withScriptExecuted)
+        throw e
     }
   }
 
