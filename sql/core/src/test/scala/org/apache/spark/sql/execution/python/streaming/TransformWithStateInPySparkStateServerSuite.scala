@@ -499,9 +499,9 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     stateServer.handleMapStateRequest(message)
     verify(mapState, times(0)).values()
     // 1 for proto response
-    verify(outputStream, times(2)).writeInt(any)
+    verify(outputStream, times(1)).writeInt(any)
     // 1 for sending proto message
-    verify(outputStream, times(2)).write(any[Array[Byte]])
+    verify(outputStream, times(1)).write(any[Array[Byte]])
   }
 
   test("map state values - iterator not in map") {
