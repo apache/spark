@@ -23,6 +23,7 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import is_ansi_mode_test, ansi_mode_not_supported_message
 
 
 # This file contains test cases for 'Binary operator functions'
@@ -109,6 +110,22 @@ class FrameBinaryOpsMixin:
 
         psdf = ps.DataFrame({"a": ["x"], "b": ["y"]})
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] - psdf["b"])
+
+    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
+    def test_divide_by_zero_behavior(self):
+        pdf = pd.DataFrame(
+            {
+                "a": [1.0, -1.0, 0.0, np.nan],
+                "b": [0.0, 0.0, 0.0, 0.0],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        # a / b: .. divide by zero
+        self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
+
+        # b / a: 0 divided by ..
+        self.assert_eq(psdf["b"] / psdf["a"], pdf["b"] / pdf["a"])
 
     def test_binary_operator_truediv(self):
         # Positive
