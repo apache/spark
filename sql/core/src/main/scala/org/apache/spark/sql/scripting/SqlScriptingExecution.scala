@@ -189,8 +189,7 @@ object SqlScriptingExecution {
    * If script contains no queries, an empty `DataFrame` is returned.
    *
    * @param script A SQL script to execute.
-   * @param args A map of parameter names to SQL literal expressions.
-   *
+   * @param args   A map of parameter names to SQL literal expressions.
    * @return The result as a `DataFrame`.
    */
   def executeSqlScript(
@@ -218,13 +217,13 @@ object SqlScriptingExecution {
 
       if (result.isEmpty) {
         // Return empty LocalRelation.
-        LocalRelation.fromExternalRows(Seq.empty, Seq.empty, isSqlScript = true)
+        LocalRelation.fromExternalRows(Seq.empty, Seq.empty)
       } else {
         // If `result` is defined, then `resultSchema` must be defined as well.
         assert(resultSchema.isDefined)
 
         val attributes = DataTypeUtils.toAttributes(resultSchema.get)
-        LocalRelation.fromExternalRows(attributes, result.get, isSqlScript = true)
+        LocalRelation.fromExternalRows(attributes, result.get)
       }
     }
   }

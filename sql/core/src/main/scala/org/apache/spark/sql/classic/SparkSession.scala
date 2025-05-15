@@ -450,31 +450,17 @@ class SparkSession private(
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        parsedPlan match {
-          case compoundBody: CompoundBody =>
-            if (args.nonEmpty) {
-              // Positional parameters are not supported for SQL scripting.
-              throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
-            }
-            compoundBody
-          case logicalPlan: LogicalPlan =>
-            if (args.nonEmpty) {
-              PosParameterizedQuery(logicalPlan, args.map(lit(_).expr).toImmutableArraySeq)
-            } else {
-              logicalPlan
-            }
+        if (args.nonEmpty) {
+          if (parsedPlan.isInstanceOf[CompoundBody]) {
+            // Positional parameters are not supported for SQL scripting.
+            throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+          }
+          PosParameterizedQuery(parsedPlan, args.map(lit(_).expr).toImmutableArraySeq)
+        } else {
+          parsedPlan
         }
       }
-
-      plan match {
-        case compoundBody: CompoundBody =>
-          // Execute the SQL script.
-          val result = SqlScriptingExecution.executeSqlScript(this, compoundBody)
-          Dataset.ofRows(self, result)
-        case logicalPlan: LogicalPlan =>
-          // Execute the standalone SQL statement.
-          Dataset.ofRows(self, logicalPlan, tracker)
-      }
+      Dataset.ofRows(self, plan, tracker)
     }
 
   /** @inheritdoc */
@@ -505,28 +491,13 @@ class SparkSession private(
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        parsedPlan match {
-          case compoundBody: CompoundBody =>
-            compoundBody
-          case logicalPlan: LogicalPlan =>
-            if (args.nonEmpty) {
-              NameParameterizedQuery(logicalPlan, args.transform((_, v) => lit(v).expr))
-            } else {
-              logicalPlan
-            }
+        if (args.nonEmpty) {
+          NameParameterizedQuery(parsedPlan, args.transform((_, v) => lit(v).expr))
+        } else {
+          parsedPlan
         }
       }
-
-      plan match {
-        case compoundBody: CompoundBody =>
-          // Execute the SQL script.
-          val result = SqlScriptingExecution.executeSqlScript(
-            this, compoundBody, args.transform((_, v) => lit(v).expr))
-          Dataset.ofRows(self, result)
-        case logicalPlan: LogicalPlan =>
-          // Execute the standalone SQL statement.
-          Dataset.ofRows(self, logicalPlan, tracker)
-      }
+      Dataset.ofRows(self, plan, tracker)
     }
 
   /** @inheritdoc */
