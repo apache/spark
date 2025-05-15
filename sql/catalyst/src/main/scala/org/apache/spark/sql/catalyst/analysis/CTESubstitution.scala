@@ -65,6 +65,10 @@ object CTESubstitution extends Rule[LogicalPlan] {
       case p => p.children.flatMap(collectCommands)
     }
     val commands = collectCommands(plan)
+    val isRecursive = plan match {
+      case u: UnresolvedWith =>
+        u.allowRecursion
+    }
     val forceInline = if (commands.length == 1) {
       if (conf.getConf(SQLConf.LEGACY_INLINE_CTE_IN_COMMANDS)) {
         // The legacy behavior always inlines the CTE relations for queries in commands.
@@ -72,12 +76,22 @@ object CTESubstitution extends Rule[LogicalPlan] {
       } else {
         // If there is only one command and it's `CTEInChildren`, we can resolve
         // CTE normally and don't need to force inline.
-        !commands.head.isInstanceOf[CTEInChildren]
+        if (isRecursive) {
+          false
+        } else {
+          !commands.head.isInstanceOf[CTEInChildren]
+        }
       }
     } else if (commands.length > 1) {
       // This can happen with the multi-insert statement. We should fall back to
       // the legacy behavior.
-      true
+      if (isRecursive) {
+        plan.failAnalysis(
+          errorClass = "RECURSIVE_CTE_WITH_MULTI_COMMAND",
+          messageParameters = Map.empty)
+      } else {
+        true
+      }
     } else {
       false
     }
@@ -156,11 +170,6 @@ object CTESubstitution extends Rule[LogicalPlan] {
       cteDefs: ArrayBuffer[CTERelationDef]): LogicalPlan = {
     plan.resolveOperatorsUp {
       case cte @ UnresolvedWith(child, relations, allowRecursion) =>
-        if (allowRecursion) {
-          cte.failAnalysis(
-            errorClass = "RECURSIVE_CTE_IN_LEGACY_MODE",
-            messageParameters = Map.empty)
-        }
         val resolvedCTERelations = resolveCTERelations(relations, isLegacy = true,
           forceInline = false, Seq.empty, cteDefs, None, allowRecursion)
         substituteCTE(child, alwaysInline = true, resolvedCTERelations, None)
