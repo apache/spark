@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
+import java.sql.{SQLException, Types}
 import java.util.Locale
 
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -61,6 +61,11 @@ private case class DerbyDialect() extends JdbcDialect with NoLegacyJDBCError {
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  // See https://db.apache.org/derby/docs/10.15/ref/rrefexcept71493.html
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    exception.getSQLState.startsWith("42")
+  }
 
   // See https://db.apache.org/derby/docs/10.15/ref/rrefsqljrenametablestatement.html
   override def renameTable(oldTable: Identifier, newTable: Identifier): String = {

@@ -61,7 +61,9 @@ import org.apache.spark.tags.DockerTest
  * and with Oracle Express Edition versions 18.4.0 and 21.4.0
  */
 @DockerTest
-class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkSession {
+class OracleIntegrationSuite extends DockerJDBCIntegrationSuite
+  with SharedSparkSession
+  with SharedJDBCIntegrationTests {
   import testImplicits._
 
   override val db = new OracleDatabaseOnDocker

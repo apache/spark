@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
+import java.sql.{SQLException, Types}
 import java.util.Locale
 
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -48,6 +48,13 @@ private case class TeradataDialect() extends JdbcDialect with NoLegacyJDBCError 
 
   // Teradata does not support cascading a truncation
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  // scalastyle:off line.size.limit
+  // See https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/SQL-Stored-Procedures-and-Embedded-SQL/SQLSTATE-Mappings/SQLSTATE-Codes
+  // scalastyle:on line.size.limit
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    exception.getSQLState.startsWith("42")
+  }
 
   /**
    * The SQL query used to truncate a table. Teradata does not support the 'TRUNCATE' syntax that
