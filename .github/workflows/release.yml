@@ -1,0 +1,95 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+name: Release Apache Spark
+
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: Release Apache Spark
+    runs-on: ubuntu-latest
+    if: github.repository == 'apache/spark'
+    steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Release Apache Spark
+        env:
+          ASF_USERNAME: gurwls223
+          GIT_NAME: HyukjinKwon
+          GPG_PASSPHRASE: not_used
+          SKIP_TAG: 1
+          ANSWER: y
+          DEBUG_MODE: 1
+        run: |
+          gpg --batch --gen-key <<EOF
+          Key-Type: RSA
+          Key-Length: 4096
+          Name-Real: Test CI User
+          Name-Email: gurwls223@apache.org
+          Expire-Date: 1
+          %no-protection
+          %commit
+          EOF
+
+          # Paths
+          RELEASE_DIR=~/spark-release
+          OUTPUT_DIR="$RELEASE_DIR/output"
+          
+          # Ensure release dir exists
+          mkdir "$RELEASE_DIR"
+          
+          # Start the release script in the background
+          dev/create-release/do-release-docker.sh -d "$RELEASE_DIR" -n &
+          RELEASE_PID=$!
+          
+          echo "Started release script with PID $RELEASE_PID"
+          
+          # Start tailing docker-build.log
+          sleep 3
+          tail -F "$RELEASE_DIR/docker-build.log" &
+          TAIL_PID1=$!
+          
+          # Start a background job to watch for new *.log files and tail them
+          (
+            LOGGED_FILES=()
+            while true; do
+              for file in "$OUTPUT_DIR"/*.log; do
+                [[ -f "$file" ]] || continue
+                # Check if we are already tailing this file
+                if [[ ! " ${LOGGED_FILES[@]} " =~ " ${file} " ]]; then
+                  echo "Tailing new log file: $file"
+                  tail -F "$file" &
+                  LOGGED_FILES+=("$file")
+                fi
+              done
+              sleep 3
+            done
+          ) &
+          TAIL_PID2=$!
+          
+          # Wait for the release script to finish
+          wait $RELEASE_PID
+          
+          # Once release is done, kill the tail processes
+          kill $TAIL_PID1 $TAIL_PID2   
