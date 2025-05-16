@@ -31,10 +31,10 @@ import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{LazyExpression, UnsupportedOperationChecker}
+import org.apache.spark.sql.catalyst.analysis.{LazyExpression, NameParameterizedQuery, UnsupportedOperationChecker}
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -46,6 +46,7 @@ import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata, WatermarkPropagator}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.scripting.SqlScriptingExecution
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{LazyTry, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -93,16 +94,26 @@ class QueryExecution(
   }
 
   private val lazyAnalyzed = LazyTry {
+    val withScriptExecuted = logical match {
+      // Execute the SQL script. Script doesn't need to go through the analyzer as Spark will run
+      // each statement as individual query.
+      case NameParameterizedQuery(compoundBody: CompoundBody, argNames, argValues) =>
+        val args = argNames.zip(argValues).toMap
+        SqlScriptingExecution.executeSqlScript(sparkSession, compoundBody, args)
+      case compoundBody: CompoundBody =>
+        SqlScriptingExecution.executeSqlScript(sparkSession, compoundBody)
+      case _ => logical
+    }
     try {
       val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
         // We can't clone `logical` here, which will reset the `_analyzed` flag.
-        sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+        sparkSession.sessionState.analyzer.executeAndCheck(withScriptExecuted, tracker)
       }
       tracker.setAnalyzed(plan)
       plan
     } catch {
       case NonFatal(e) =>
-        tracker.setAnalysisFailed(logical)
+        tracker.setAnalysisFailed(withScriptExecuted)
         throw e
     }
   }
