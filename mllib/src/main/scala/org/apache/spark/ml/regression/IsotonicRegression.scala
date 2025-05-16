@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.regression
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -289,6 +291,21 @@ object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
     boundaries: Array[Double],
     predictions: Array[Double],
     isotonic: Boolean)
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeDoubleArray(data.boundaries, dos)
+    serializeDoubleArray(data.predictions, dos)
+    dos.writeBoolean(data.isotonic)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val boundaries = deserializeDoubleArray(dis)
+    val predictions = deserializeDoubleArray(dis)
+    val isotonic = dis.readBoolean()
+    Data(boundaries, predictions, isotonic)
+  }
 
   @Since("1.6.0")
   override def read: MLReader[IsotonicRegressionModel] = new IsotonicRegressionModelReader

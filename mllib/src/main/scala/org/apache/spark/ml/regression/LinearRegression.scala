@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.regression
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
@@ -802,6 +804,23 @@ class LinearRegressionModel private[ml] (
 
 private[ml] case class LinearModelData(intercept: Double, coefficients: Vector, scale: Double)
 
+private[ml] object LinearModelData {
+  private[ml] def serializeData(data: LinearModelData, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    dos.writeDouble(data.intercept)
+    serializeVector(data.coefficients, dos)
+    dos.writeDouble(data.scale)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): LinearModelData = {
+    import ReadWriteUtils._
+    val intercept = dis.readDouble()
+    val coefficients = deserializeVector(dis)
+    val scale = dis.readDouble()
+    LinearModelData(intercept, coefficients, scale)
+  }
+}
+
 /** A writer for LinearRegression that handles the "internal" (or default) format */
 private class InternalLinearRegressionModelWriter
   extends MLWriterFormat with MLFormatRegister {
@@ -818,7 +837,9 @@ private class InternalLinearRegressionModelWriter
     // Save model data: intercept, coefficients, scale
     val data = LinearModelData(instance.intercept, instance.coefficients, instance.scale)
     val dataPath = new Path(path, "data").toString
-    ReadWriteUtils.saveObject[LinearModelData](dataPath, data, sparkSession)
+    ReadWriteUtils.saveObject[LinearModelData](
+      dataPath, data, sparkSession, LinearModelData.serializeData
+    )
   }
 }
 
@@ -871,7 +892,9 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
             .head()
         new LinearRegressionModel(metadata.uid, coefficients, intercept)
       } else {
-        val data = ReadWriteUtils.loadObject[LinearModelData](dataPath, sparkSession)
+        val data = ReadWriteUtils.loadObject[LinearModelData](
+          dataPath, sparkSession, LinearModelData.deserializeData
+        )
         new LinearRegressionModel(
           metadata.uid, data.coefficients, data.intercept, data.scale
         )
