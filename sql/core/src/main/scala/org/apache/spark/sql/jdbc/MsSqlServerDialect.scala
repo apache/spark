@@ -38,12 +38,8 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")
 
-  override def isTableNotFoundException(e: java.sql.SQLException): Boolean = {
-    e match {
-      case sqlException: java.sql.SQLException =>
-        sqlException.getErrorCode == 208
-      case _ => false
-    }
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getErrorCode == 208
   }
 
   // Microsoft SQL Server does not have the boolean type.

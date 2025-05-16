@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
+import java.sql.{SQLException, Types}
 import java.util.Locale
 
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -39,12 +39,8 @@ private case class TeradataDialect() extends JdbcDialect with NoLegacyJDBCError 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
-  override def isTableNotFoundException(e: java.sql.SQLException): Boolean = {
-    e match {
-      case sqlException: java.sql.SQLException =>
-        sqlException.getErrorCode == 3807
-      case _ => false
-    }
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getErrorCode == 3807
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {

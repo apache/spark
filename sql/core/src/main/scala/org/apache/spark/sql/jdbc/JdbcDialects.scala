@@ -759,7 +759,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   @Since("4.1.0")
-  def isTableNotFoundException(e: SQLException): Boolean = true
+  def isObjectNotFoundException(e: SQLException): Boolean = true
 
   /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.

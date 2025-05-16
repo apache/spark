@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.sql.SQLException
 import java.util.Locale
 
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
@@ -26,12 +27,8 @@ private case class SnowflakeDialect() extends JdbcDialect with NoLegacyJDBCError
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:snowflake")
 
-  override def isTableNotFoundException(e: java.sql.SQLException): Boolean = {
-    e match {
-      case sqlException: java.sql.SQLException =>
-        sqlException.getSQLState == "002003"
-      case _ => false
-    }
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getSQLState == "002003"
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {

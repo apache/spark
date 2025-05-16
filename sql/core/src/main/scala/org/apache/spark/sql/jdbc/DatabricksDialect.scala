@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Connection
+import java.sql.{Connection, SQLException}
 
 import scala.collection.mutable.ArrayBuilder
 
@@ -31,12 +31,8 @@ private case class DatabricksDialect() extends JdbcDialect with NoLegacyJDBCErro
     url.startsWith("jdbc:databricks")
   }
 
-  override def isTableNotFoundException(e: java.sql.SQLException): Boolean = {
-    e match {
-      case sqlException: java.sql.SQLException =>
-        sqlException.getSQLState == "42P01"
-      case _ => false
-    }
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getSQLState == "42P01" || e.getSQLState == "42704"
   }
 
   override def getCatalystType(

@@ -57,12 +57,8 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
-  override def isTableNotFoundException(e: java.sql.SQLException): Boolean = {
-    e match {
-      case sqlException: java.sql.SQLException =>
-        Set(42102, 42013, 42014).contains(sqlException.getErrorCode)
-      case _ => false
-    }
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    Set(42102, 42103, 42104, 90079).contains(e.getErrorCode)
   }
 
   override def getCatalystType(
