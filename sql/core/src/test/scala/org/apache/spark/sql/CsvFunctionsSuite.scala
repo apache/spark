@@ -764,9 +764,26 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkUnsupportedOperationException] {
         df.select(from_csv(lit("data"), valueSchema, Map.empty[String, String])).collect()
       },
+<<<<<<< HEAD
       condition = "UNSUPPORTED_DATATYPE",
       parameters = Map("typeName" -> "\"VARIANT\"")
     )
+=======
+      condition = "INVALID_SINGLE_VARIANT_COLUMN",
+      parameters = Map("schema" -> "\"STRUCT<a: VARIANT, b: VARIANT>\""))
+
+    // In singleVariantColumn mode, from_csv normally treats all inputs as valid. The only exception
+    // case is the input exceeds the variant size limit (128MiB).
+    val largeInput = "a" * (128 * 1024 * 1024)
+    checkAnswer(
+      Seq(largeInput).toDF("value").select(
+        from_csv(
+          $"value",
+          StructType.fromDDL("v variant, _corrupt_record string"),
+          Map("singleVariantColumn" -> "v")
+        ).cast("string")),
+      Seq(Row(s"""{null, $largeInput}""")))
+>>>>>>> af6499fd199 ([SPARK-52181] Increase variant size limit to 128MiB)
   }
 
   test("SPARK-47497: the input of to_csv must be StructType") {

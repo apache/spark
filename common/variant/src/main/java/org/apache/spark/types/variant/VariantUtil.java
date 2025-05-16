@@ -137,8 +137,8 @@ public class VariantUtil {
   public static final int U24_SIZE = 3;
   public static final int U32_SIZE = 4;
 
-  // Both variant value and variant metadata need to be no longer than 16MiB.
-  public static final int SIZE_LIMIT = U24_MAX + 1;
+  // Both variant value and variant metadata need to be no longer than 128MiB.
+  public static final int SIZE_LIMIT = 128 * 1024 * 1024;
 
   public static final int MAX_DECIMAL4_PRECISION = 9;
   public static final int MAX_DECIMAL8_PRECISION = 18;
