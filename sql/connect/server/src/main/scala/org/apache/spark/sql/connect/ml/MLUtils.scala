@@ -56,7 +56,7 @@ private[ml] object MLUtils {
    * @return
    *   a Map with name and class
    */
-  private def loadOperators(mlCls: Class[_]): Map[String, Class[_]] = {
+  private[spark] def loadOperators(mlCls: Class[_]): Map[String, Class[_]] = {
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoader = ServiceLoader.load(mlCls, loader)
     // Instead of using the iterator, we use the "stream()" method that allows
@@ -287,7 +287,7 @@ private[ml] object MLUtils {
   /**
    * Replace the operator with the value provided by the backend.
    */
-  private def replaceOperator(sessionHolder: SessionHolder, name: String): String = {
+  private[spark] def replaceOperator(sessionHolder: SessionHolder, name: String): String = {
     SparkConnectPluginRegistry
       .mlBackendRegistry(sessionHolder.session.sessionState.conf)
       .view

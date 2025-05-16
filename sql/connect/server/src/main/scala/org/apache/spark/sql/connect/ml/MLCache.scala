@@ -60,7 +60,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE) / 1024
   }
 
-  private def getOffloadingTimeoutMinute: Long = {
+  private[ml] def getOffloadingTimeoutMinute: Long = {
     sessionHolder.session.conf.get(
       Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_OFFLOADING_TIMEOUT)
   }
