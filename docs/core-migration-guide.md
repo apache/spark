@@ -25,6 +25,7 @@ license: |
 ## Upgrading from Core 4.0 to 4.1
 
 - Since Spark 4.1, Spark Master deamon provides REST API by default. To restore the behavior before Spark 4.1, you can set `spark.master.rest.enabled` to `false`.
+- Since Spark 4.1, Spark will compress RDD checkpoints by default. To restore the behavior before Spark 4.1, you can set `spark.checkpoint.compress` to `false`.
 
 ## Upgrading from Core 3.5 to 4.0
 
