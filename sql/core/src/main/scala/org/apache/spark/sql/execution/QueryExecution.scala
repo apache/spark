@@ -164,6 +164,8 @@ class QueryExecution(
     p transformDown {
       case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) =>
         eagerlyExecute(u, "multi-commands", CommandExecutionMode.SKIP)
+      case w @ WithCTE(u @ Union(children, _, _), _) if children.forall(_.isInstanceOf[Command]) =>
+        eagerlyExecute(w, "multi-commands", CommandExecutionMode.SKIP)
       case c: Command =>
         val name = commandExecutionName(c)
         eagerlyExecute(c, name, CommandExecutionMode.NON_ROOT)

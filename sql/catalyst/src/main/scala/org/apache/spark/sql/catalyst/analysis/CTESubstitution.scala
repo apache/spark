@@ -86,9 +86,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       // This can happen with the multi-insert statement. We should fall back to
       // the legacy behavior.
       if (hasRecursiveCTE) {
-        plan.failAnalysis(
-          errorClass = "RECURSIVE_CTE_WITH_MULTI_COMMAND",
-          messageParameters = Map.empty)
+        false
       } else {
         true
       }
@@ -169,7 +167,12 @@ object CTESubstitution extends Rule[LogicalPlan] {
       plan: LogicalPlan,
       cteDefs: ArrayBuffer[CTERelationDef]): LogicalPlan = {
     plan.resolveOperatorsUp {
-      case _ @ UnresolvedWith(child, relations, allowRecursion) =>
+      case cte @ UnresolvedWith(child, relations, allowRecursion) =>
+        if (allowRecursion) {
+          cte.failAnalysis(
+            errorClass = "RECURSIVE_CTE_IN_LEGACY_MODE",
+            messageParameters = Map.empty)
+        }
         val resolvedCTERelations = resolveCTERelations(relations, isLegacy = true,
           forceInline = false, Seq.empty, cteDefs, None, allowRecursion)
         substituteCTE(child, alwaysInline = true, resolvedCTERelations, None)
