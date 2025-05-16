@@ -1319,7 +1319,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
         throw new SparkException(
           errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR",
-          messageParameters = Map("errorMessage" -> e.getMessage, "source" -> source),
+          messageParameters = Map("source" -> source),
           cause = e)
     }
   }

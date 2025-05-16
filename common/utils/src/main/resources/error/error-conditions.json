@@ -3875,7 +3875,7 @@
   },
   "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
     "message" : [
-      "JDBC external engine syntax error in <source> : <errorMessage>"
+      "JDBC external engine syntax error in <source>."
     ],
     "sqlState" : "42000"
   },
