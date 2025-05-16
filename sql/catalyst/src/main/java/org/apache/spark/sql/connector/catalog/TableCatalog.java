@@ -118,6 +118,7 @@ public interface TableCatalog extends CatalogPlugin {
    * @param namespace a multi-part namespace
    * @return an array of Identifiers for tables
    * @throws NoSuchNamespaceException If the namespace does not exist (optional).
+   * @throws NoSuchTableException If certain table listed by listTables API does not exist.
    */
   default TableSummary[] listTableSummaries(String[] namespace)
           throws NoSuchNamespaceException, NoSuchTableException {
@@ -126,7 +127,7 @@ public interface TableCatalog extends CatalogPlugin {
     for (Identifier identifier : tableIdentifiers) {
       Table table = this.loadTable(identifier);
 
-      // If table type property is not present, we assume that table type is `MANAGED`.
+      // If table type property is not present, we assume that table type is `FOREIGN`.
       String tableType = table.properties().getOrDefault(
               TableCatalog.PROP_TABLE_TYPE,
               TableSummary.FOREIGN_TABLE_TYPE);
