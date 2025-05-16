@@ -24,7 +24,6 @@
         <version>4.1.0-SNAPSHOT</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
-
     <artifactId>spark-pipelines_2.13</artifactId>
     <properties>
         <sbt.project.name>pipelines</sbt.project.name>
