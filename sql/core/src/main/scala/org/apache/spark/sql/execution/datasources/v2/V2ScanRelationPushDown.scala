@@ -18,20 +18,21 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
+import scala.jdk.OptionConverters._
 
 import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, GROUP_BY_EXPRS, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
 import org.apache.spark.internal.MDC
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, ExprId, IntegerLiteral, JoinColumnReference, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.{fromAttributes, toAttributes}
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StructType}
@@ -46,9 +47,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       createScanBuilder,
       pushDownSample,
       pushDownFilters,
+      pushDownJoin,
       pushDownAggregates,
       pushDownLimitAndOffset,
       buildScanWithPushedAggregate,
+      buildScanWithPushedJoin,
       pruneColumns)
 
     pushdownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
@@ -58,7 +61,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   private def createScanBuilder(plan: LogicalPlan) = plan.transform {
     case r: DataSourceV2Relation =>
-      ScanBuilderHolder(r.output, r, r.table.asReadable.newScanBuilder(r.options))
+      val sHolder = ScanBuilderHolder(r.output, r, r.table.asReadable.newScanBuilder(r.options))
+      sHolder.output.foreach{ e =>
+        // join column names change when joins are pushed down. At the end, we need to keep
+        // original names of the plan, so we are storing original names for each of the exprIDs.
+        sHolder.exprIdToOriginalName.put(e.exprId, e.name)
+      }
+
+      sHolder
   }
 
   private def pushDownFilters(plan: LogicalPlan) = plan.transform {
@@ -98,6 +108,89 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       filterCondition.map(Filter(_, sHolder)).getOrElse(sHolder)
   }
 
+  def pushDownJoin(plan: LogicalPlan): LogicalPlan = plan.transformUp {
+    // Join can be attempted to be pushed down only if left and right side of join are
+    // compatible (same data source, for example). Also, another requirement is that if
+    // there are projections between Join and ScanBuilderHolder, these projec
+    case node @ Join(
+    PhysicalOperation(
+    leftProjections,
+    Nil,
+    leftHolder @ ScanBuilderHolder(_, _, lBuilder: SupportsPushDownJoin)
+    ),
+    PhysicalOperation(
+    rightProjections,
+    Nil,
+    rightHolder @ ScanBuilderHolder(_, _, rBuilder: SupportsPushDownJoin)
+    ),
+    joinType,
+    condition,
+    _) if conf.dataSourceV2JoinPushdown &&
+      // TODO: I think projections will always be Seq[AttributeReference] because
+      // When
+      // SELECT tbl1.col+2, tbl2.* FROM tbl1 JOIN tlb2
+      // is executed, col is pruned down, but col + 2 will be projected on top of join.
+      leftProjections.forall(_.isInstanceOf[AttributeReference]) &&
+      rightProjections.forall(_.isInstanceOf[AttributeReference]) &&
+      lBuilder.isRightSideCompatibleForJoin(rBuilder) =>
+      val normalizedLeftProjections = DataSourceStrategy.normalizeExprs(
+        leftProjections,
+        leftHolder.output
+      ).asInstanceOf[Seq[AttributeReference]]
+      val leftRequiredSchema = fromAttributes(normalizedLeftProjections)
+
+      val normalizedRightProjections = DataSourceStrategy.normalizeExprs(
+        rightProjections,
+        rightHolder.output
+      ).asInstanceOf[Seq[AttributeReference]]
+      val rightRequiredSchema = fromAttributes(normalizedRightProjections)
+
+      val normalizedCondition = condition.map { e =>
+        DataSourceStrategy.normalizeExprs(
+          Seq(e),
+          leftHolder.output ++ rightHolder.output
+        ).head
+      }
+
+      val conditionWithJoinColumns = normalizedCondition.map { cond =>
+        cond.transformUp {
+          case a: AttributeReference =>
+            val isInLeftSide = leftProjections.filter(_.exprId == a.exprId).nonEmpty
+            JoinColumnReference(a, isInLeftSide)
+        }
+      }
+
+      val translatedCondition =
+        conditionWithJoinColumns.flatMap(DataSourceV2Strategy.translateFilterV2(_))
+      val translatedJoinType = DataSourceStrategy.translateJoinType(joinType)
+
+      if (translatedCondition.isDefined == condition.isDefined &&
+        translatedJoinType.isDefined &&
+        lBuilder.pushJoin(
+          rBuilder,
+          translatedJoinType.get,
+          translatedCondition.toJava,
+          leftRequiredSchema,
+          rightRequiredSchema
+        )) {
+        leftHolder.joinedRelations = leftHolder.joinedRelations :+ rightHolder.relation
+
+        val newSchema = leftHolder.builder.build().readSchema()
+        val newOutput = (leftProjections ++ rightProjections).asInstanceOf[Seq[AttributeReference]]
+          .zip(newSchema.fields)
+          .map { case (attr, schemaField) =>
+            attr.withName(schemaField.name)
+          }
+
+        leftHolder.exprIdToOriginalName ++= rightHolder.exprIdToOriginalName
+        leftHolder.output = newOutput
+        leftHolder.isJoinPushed = true
+        leftHolder
+      } else {
+        node
+      }
+  }
+
   def pushDownAggregates(plan: LogicalPlan): LogicalPlan = plan.transform {
     // update the scan builder with agg pushdown and return a new plan with agg pushed
     case agg: Aggregate => rewriteAggregate(agg)
@@ -113,10 +206,19 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
       val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
       val aggregates = collectAggregates(actualResultExprs, aggExprToOutputOrdinal)
-      val normalizedAggExprs = DataSourceStrategy.normalizeExprs(
-        aggregates, holder.relation.output).asInstanceOf[Seq[AggregateExpression]]
-      val normalizedGroupingExpr = DataSourceStrategy.normalizeExprs(
-        actualGroupExprs, holder.relation.output)
+      val normalizedAggExprs = if (holder.isJoinPushed) {
+        DataSourceStrategy.normalizeExprs(aggregates, holder.output)
+          .asInstanceOf[Seq[AggregateExpression]]
+      } else {
+        DataSourceStrategy.normalizeExprs(aggregates, holder.relation.output)
+          .asInstanceOf[Seq[AggregateExpression]]
+      }
+      val normalizedGroupingExpr =
+        if (holder.isJoinPushed) {
+          DataSourceStrategy.normalizeExprs(actualGroupExprs, holder.output)
+        } else {
+          DataSourceStrategy.normalizeExprs(actualGroupExprs, holder.relation.output)
+        }
       val translatedAggOpt = DataSourceStrategy.translateAggregation(
         normalizedAggExprs, normalizedGroupingExpr)
       if (translatedAggOpt.isEmpty) {
@@ -356,6 +458,26 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       Project(projectList, scanRelation)
   }
 
+  def buildScanWithPushedJoin(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case holder: ScanBuilderHolder if holder.isJoinPushed && !holder.isStreaming =>
+      val scan = holder.builder.build()
+      val realOutput = toAttributes(scan.readSchema())
+      assert(realOutput.length == holder.output.length,
+        "The data source returns unexpected number of columns")
+      val wrappedScan = getWrappedScan(scan, holder)
+      val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
+
+      // When join is pushed down, the output of ScanBuilderHolder is going to be, for example,
+      // subquery_2_col_0#0, subquery_2_col_1#1, subquery_2_col_2#2.
+      // We should revert these names back to original names. For example,
+      // SALARY#0, NAME#1, DEPT#1. This is done by adding projection with appropriate aliases.
+      val projectList = realOutput.zip(holder.output).map { case (a1, a2) =>
+        val originalName = holder.exprIdToOriginalName(a2.exprId)
+        Alias(a1, originalName)(a2.exprId)
+      }
+      Project(projectList, scanRelation)
+  }
+
   def pruneColumns(plan: LogicalPlan): LogicalPlan = plan.transform {
     case ScanOperation(project, filtersStayUp, filtersPushDown, sHolder: ScanBuilderHolder) =>
       // column pruning
@@ -441,8 +563,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         aliasReplacedOrder.asInstanceOf[Seq[SortOrder]]
       }
-      val normalizedOrders = DataSourceStrategy.normalizeExprs(
-        newOrder, sHolder.relation.output).asInstanceOf[Seq[SortOrder]]
+      val normalizedOrders = if (sHolder.isJoinPushed) {
+        DataSourceStrategy.normalizeExprs(
+          newOrder, sHolder.output).asInstanceOf[Seq[SortOrder]]
+      } else {
+        DataSourceStrategy.normalizeExprs(
+          newOrder, sHolder.relation.output).asInstanceOf[Seq[SortOrder]]
+      }
       val orders = DataSourceStrategy.translateSortOrders(normalizedOrders)
       if (orders.length == order.length) {
         val (isPushed, isPartiallyPushed) =
@@ -549,7 +676,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           case _ => Array.empty[sources.Filter]
         }
         val pushedDownOperators = PushedDownOperators(sHolder.pushedAggregate, sHolder.pushedSample,
-          sHolder.pushedLimit, sHolder.pushedOffset, sHolder.sortOrders, sHolder.pushedPredicates)
+          sHolder.pushedLimit, sHolder.pushedOffset, sHolder.sortOrders, sHolder.pushedPredicates,
+          sHolder.joinedRelations.map(_.name))
         V1ScanWrapper(v1, pushedFilters.toImmutableArraySeq, pushedDownOperators)
       case _ => scan
     }
@@ -573,6 +701,13 @@ case class ScanBuilderHolder(
   var pushedAggregate: Option[Aggregation] = None
 
   var pushedAggOutputMap: AttributeMap[Expression] = AttributeMap.empty[Expression]
+
+  var joinedRelations: Seq[DataSourceV2RelationBase] = Seq()
+
+  var isJoinPushed: Boolean = false
+
+  var exprIdToOriginalName: scala.collection.mutable.Map[ExprId, String] =
+    scala.collection.mutable.Map.empty[ExprId, String]
 }
 
 // A wrapper for v1 scan to carry the translated filters and the handled ones, along with
