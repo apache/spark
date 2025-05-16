@@ -4649,15 +4649,9 @@
     ],
     "sqlState" : "42836"
   },
-  "RECURSIVE_CTE_WHEN_INLINING_IS_FORCED" : {
+  "RECURSIVE_CTE_IN_LEGACY_MODE" : {
     "message" : [
-      "Recursive definitions cannot be used when CTE inlining is forced."
-    ],
-    "sqlState" : "42836"
-  },
-  "RECURSIVE_CTE_WITH_MULTI_COMMAND" : {
-    "message" : [
-      "Recursive definitions cannot be used with multi-command operations."
+      "Recursive definitions cannot be used in legacy CTE precedence mode (spark.sql.legacy.ctePrecedencePolicy=LEGACY)."
     ],
     "sqlState" : "42836"
   },
