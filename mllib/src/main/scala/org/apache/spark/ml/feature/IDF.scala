@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -197,13 +199,28 @@ class IDFModel private[ml] (
 object IDFModel extends MLReadable[IDFModel] {
   private[ml] case class Data(idf: Vector, docFreq: Array[Long], numDocs: Long)
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeVector(data.idf, dos)
+    serializeLongArray(data.docFreq, dos)
+    dos.writeLong(data.numDocs)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val idf = deserializeVector(dis)
+    val docFreq = deserializeLongArray(dis)
+    val numDocs = dis.readLong()
+    Data(idf, docFreq, numDocs)
+  }
+
   private[IDFModel] class IDFModelWriter(instance: IDFModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.idf, instance.docFreq, instance.numDocs)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -217,7 +234,7 @@ object IDFModel extends MLReadable[IDFModel] {
       val data = sparkSession.read.parquet(dataPath)
 
       val model = if (majorVersion(metadata.sparkVersion) >= 3) {
-        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
         new IDFModel(
           metadata.uid,
           new feature.IDFModel(OldVectors.fromML(data.idf), data.docFreq, data.numDocs)

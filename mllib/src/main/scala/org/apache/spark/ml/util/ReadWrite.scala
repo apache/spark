@@ -845,6 +845,38 @@ private[spark] object ReadWriteUtils {
     data
   }
 
+  def serializeLongArray(array: Array[Long], dos: DataOutputStream): Unit = {
+    dos.writeInt(array.length)
+    for (i <- 0 until array.length) {
+      dos.writeLong(array(i))
+    }
+  }
+
+  def deserializeLongArray(dis: DataInputStream): Array[Long] = {
+    val len = dis.readInt()
+    val data = new Array[Long](len)
+    for (i <- 0 until len) {
+      data(i) = dis.readLong()
+    }
+    data
+  }
+
+  def serializeFloatArray(array: Array[Float], dos: DataOutputStream): Unit = {
+    dos.writeInt(array.length)
+    for (i <- 0 until array.length) {
+      dos.writeFloat(array(i))
+    }
+  }
+
+  def deserializeFloatArray(dis: DataInputStream): Array[Float] = {
+    val len = dis.readInt()
+    val data = new Array[Float](len)
+    for (i <- 0 until len) {
+      data(i) = dis.readFloat()
+    }
+    data
+  }
+
   def serializeDoubleArray(array: Array[Double], dos: DataOutputStream): Unit = {
     dos.writeInt(array.length)
     for (i <- 0 until array.length) {
@@ -859,6 +891,41 @@ private[spark] object ReadWriteUtils {
       data(i) = dis.readDouble()
     }
     data
+  }
+
+  def serializeStringArray(array: Array[String], dos: DataOutputStream): Unit = {
+    serializeGenericArray[String](array, dos, (s, dos) => dos.writeUTF(s))
+  }
+
+  def deserializeStringArray(dis: DataInputStream): Array[String] = {
+    deserializeGenericArray[String](dis, dis => dis.readUTF())
+  }
+
+  def serializeMap[K, V](
+      map: Map[K, V], dos: DataOutputStream,
+      keySerializer: (K, DataOutputStream) => Unit,
+      valueSerializer: (V, DataOutputStream) => Unit
+  ): Unit = {
+    dos.writeInt(map.size)
+    map.foreach { case (k, v) =>
+      keySerializer(k, dos)
+      valueSerializer(v, dos)
+    }
+  }
+
+  def deserializeMap[K, V](
+      dis: DataInputStream,
+      keyDeserializer: DataInputStream => K,
+      valueDeserializer: DataInputStream => V
+  ): Map[K, V] = {
+    val len = dis.readInt()
+    val kvList = new Array[(K, V)](len)
+    for (i <- 0 until len) {
+      val key = keyDeserializer(dis)
+      val value = valueDeserializer(dis)
+      kvList(i) = (key, value)
+    }
+    kvList.toMap
   }
 
   def serializeVector(vector: Vector, dos: DataOutputStream): Unit = {

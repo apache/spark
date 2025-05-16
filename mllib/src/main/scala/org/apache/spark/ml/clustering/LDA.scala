@@ -682,7 +682,7 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
         oldModel.topicConcentration, oldModel.gammaShape
       )
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[LocalModelData](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[LocalModelData](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -694,7 +694,9 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
 
-      val data = ReadWriteUtils.loadObject[LocalModelData](dataPath, sparkSession)
+      val data = ReadWriteUtils.loadObject[LocalModelData](
+        dataPath, sparkSession, deserializeData
+      )
       val oldModel = new OldLocalLDAModel(
         data.topicsMatrix,
         data.docConcentration,
