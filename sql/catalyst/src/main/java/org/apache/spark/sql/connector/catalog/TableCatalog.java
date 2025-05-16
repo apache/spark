@@ -137,7 +137,7 @@ public interface TableCatalog extends CatalogPlugin {
               TableCatalog.PROP_TABLE_TYPE,
               TableSummary.FOREIGN_TABLE_TYPE);
 
-      return new TableSummary(identifier, tableType);
+      return TableSummary.of(identifier, tableType);
     });
 
     return tableSummaryStream.toArray(TableSummary[]::new);

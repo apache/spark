@@ -87,7 +87,7 @@ class JDBCTableCatalog extends TableCatalog
   override def listTableSummaries(namespace: Array[String]): Array[TableSummary] = {
     // Each table from remote database system is treated as foreign table.
     this.listTables(namespace)
-        .map(identifier => new TableSummary(identifier, TableSummary.FOREIGN_TABLE_TYPE))
+        .map(identifier => TableSummary.of(identifier, TableSummary.FOREIGN_TABLE_TYPE))
   }
 
   override def tableExists(ident: Identifier): Boolean = {

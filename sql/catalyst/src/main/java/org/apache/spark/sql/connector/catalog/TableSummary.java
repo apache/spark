@@ -22,13 +22,22 @@ import org.apache.spark.annotation.Evolving;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 @Evolving
-public record TableSummary(Identifier identifier, String tableType) {
-    public static final String MANAGED_TABLE_TYPE = "MANAGED";
-    public static final String EXTERNAL_TABLE_TYPE = "EXTERNAL";
-    public static final String VIEW_TABLE_TYPE = "VIEW";
-    public static final String FOREIGN_TABLE_TYPE = "FOREIGN";
+public interface TableSummary {
+    String MANAGED_TABLE_TYPE = "MANAGED";
+    String EXTERNAL_TABLE_TYPE = "EXTERNAL";
+    String VIEW_TABLE_TYPE = "VIEW";
+    String FOREIGN_TABLE_TYPE = "FOREIGN";
 
-    public TableSummary {
+    Identifier identifier();
+    String tableType();
+
+    static TableSummary of(Identifier identifier, String tableType) {
+        return new TableSummaryImpl(identifier, tableType);
+    }
+}
+
+record TableSummaryImpl(Identifier identifier, String tableType) implements TableSummary {
+    public TableSummaryImpl {
         checkNotNull(identifier, "Identifier of a table summary object cannot be null");
         checkNotNull(tableType, "Table type of a table summary object cannot be null");
     }

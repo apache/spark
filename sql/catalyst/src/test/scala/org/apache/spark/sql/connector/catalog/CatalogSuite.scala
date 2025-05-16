@@ -124,15 +124,15 @@ class CatalogSuite extends SparkFunSuite {
     catalog.createTable(ident1, tableInfo)
 
     assertResult(
-      Set(new TableSummary(ident1, TableSummary.FOREIGN_TABLE_TYPE))
+      Set(TableSummary.of(ident1, TableSummary.FOREIGN_TABLE_TYPE))
     )(catalog.listTableSummaries(Array("ns")).toSet)
 
     catalog.createTable(ident2, columns, emptyTrans, emptyProps)
 
     assertResult(
       Set(
-        new TableSummary(ident1, TableSummary.FOREIGN_TABLE_TYPE),
-        new TableSummary(ident2, TableSummary.FOREIGN_TABLE_TYPE)
+        TableSummary.of(ident1, TableSummary.FOREIGN_TABLE_TYPE),
+        TableSummary.of(ident2, TableSummary.FOREIGN_TABLE_TYPE)
       )
     )(catalog.listTableSummaries(Array("ns")).toSet)
   }

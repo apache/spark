@@ -168,7 +168,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   test("list table summary") {
     val tableSummaries = tableCatalog.listTableSummaries(Array("test"))
-    val expectedTable = new TableSummary(
+    val expectedTable = TableSummary.of(
       Identifier.of(Array("test"), "people"),
       TableSummary.FOREIGN_TABLE_TYPE
     )
