@@ -31,7 +31,7 @@ import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{LazyExpression, UnsupportedOperationChecker}
+import org.apache.spark.sql.catalyst.analysis.{LazyExpression, NameParameterizedQuery, UnsupportedOperationChecker}
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union, WithCTE}
@@ -167,6 +167,9 @@ class QueryExecution(
       case c: Command =>
         val name = commandExecutionName(c)
         eagerlyExecute(c, name, CommandExecutionMode.NON_ROOT)
+      case w @ WithCTE(c: Command, _) =>
+        val name = commandExecutionName(c)
+        eagerlyExecute(w, name, CommandExecutionMode.SKIP)
     }
   }
 
