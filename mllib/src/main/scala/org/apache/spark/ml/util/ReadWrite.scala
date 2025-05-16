@@ -17,7 +17,10 @@
 
 package org.apache.spark.ml.util
 
-import java.io.{DataInputStream, DataOutputStream, File, IOException}
+import java.io.{
+  BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream,
+  File, FileInputStream, FileOutputStream, IOException
+}
 import java.nio.file.{Files, Paths}
 import java.util.{Locale, ServiceLoader}
 
@@ -25,7 +28,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success, Try, Using}
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.Path
@@ -41,9 +44,7 @@ import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
 import org.apache.spark.ml.feature.RFormulaModel
-import org.apache.spark.ml.linalg.{
-  DenseMatrix, DenseVector, Matrices, Matrix, SparseMatrix, SparseVector, Vector, Vectors
-}
+import org.apache.spark.ml.linalg.{DenseMatrix, DenseVector, Matrix, SparseMatrix, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.ml.tuning.ValidatorParams
 import org.apache.spark.sql.{SparkSession, SQLContext}
@@ -949,38 +950,44 @@ private[spark] object ReadWriteUtils {
     }
   }
 
-  def saveObjectToLocal[T <: Product: ClassTag: TypeTag](path: String, data: T): Unit = {
-    val serializer = SparkEnv.get.serializer.newInstance()
-    val dataBuffer = serializer.serialize(data)
-    val dataBytes = new Array[Byte](dataBuffer.limit)
-    dataBuffer.get(dataBytes)
-
+  def saveObjectToLocal[T <: Product: ClassTag: TypeTag](
+      path: String, data: T, serializer: (T, DataOutputStream) => Unit
+    ): Unit = {
     val filePath = Paths.get(path)
-
     Files.createDirectories(filePath.getParent)
-    Files.write(filePath, dataBytes)
+
+    Using.resource(
+      new DataOutputStream(new BufferedOutputStream(new FileOutputStream(filePath.toFile)))
+    ) { dos =>
+      serializer(data, dos)
+    }
   }
 
   def saveObject[T <: Product: ClassTag: TypeTag](
-      path: String, data: T, spark: SparkSession
+      path: String, data: T, spark: SparkSession, localSerializer: (T, DataOutputStream) => Unit
   ): Unit = {
     if (localSavingModeState.get()) {
-      saveObjectToLocal(path, data)
+      saveObjectToLocal(path, data, localSerializer)
     } else {
       spark.createDataFrame[T](Seq(data)).write.parquet(path)
     }
   }
 
-  def loadObjectFromLocal[T <: Product: ClassTag: TypeTag](path: String): T = {
-    val serializer = SparkEnv.get.serializer.newInstance()
-
-    val dataBytes = Files.readAllBytes(Paths.get(path))
-    serializer.deserialize[T](java.nio.ByteBuffer.wrap(dataBytes))
+  def loadObjectFromLocal[T <: Product: ClassTag: TypeTag](
+      path: String, deserializer: DataInputStream => T
+    ): T = {
+    Using.resource(
+      new DataInputStream(new BufferedInputStream(new FileInputStream(path)))
+    ) { dis =>
+      deserializer(dis)
+    }
   }
 
-  def loadObject[T <: Product: ClassTag: TypeTag](path: String, spark: SparkSession): T = {
+  def loadObject[T <: Product: ClassTag: TypeTag](
+    path: String, spark: SparkSession, localDeserializer: DataInputStream => T
+  ): T = {
     if (localSavingModeState.get()) {
-      loadObjectFromLocal(path)
+      loadObjectFromLocal(path, localDeserializer)
     } else {
       import spark.implicits._
       spark.read.parquet(path).as[T].head()
@@ -989,18 +996,21 @@ private[spark] object ReadWriteUtils {
 
   def saveArray[T <: Product: ClassTag: TypeTag](
       path: String, data: Array[T], spark: SparkSession,
-      numDataParts: Int = -1
+      localSerializer: (T, DataOutputStream) => Unit,
+      numDataParts: Int = -1,
   ): Unit = {
     if (localSavingModeState.get()) {
-      val serializer = SparkEnv.get.serializer.newInstance()
-      val dataBuffer = serializer.serialize(data)
-      val dataBytes = new Array[Byte](dataBuffer.limit)
-      dataBuffer.get(dataBytes)
-
       val filePath = Paths.get(path)
-
       Files.createDirectories(filePath.getParent)
-      Files.write(filePath, dataBytes)
+
+      Using.resource(
+        new DataOutputStream(new BufferedOutputStream(new FileOutputStream(filePath.toFile)))
+      ) { dos =>
+        dos.writeInt(data.length)
+        for (item <- data) {
+          localSerializer(item, dos)
+        }
+      }
     } else {
       import org.apache.spark.util.ArrayImplicits._
       val df = spark.createDataFrame[T](data.toImmutableArraySeq)
@@ -1012,12 +1022,20 @@ private[spark] object ReadWriteUtils {
     }
   }
 
-  def loadArray[T <: Product: ClassTag: TypeTag](path: String, spark: SparkSession): Array[T] = {
+  def loadArray[T <: Product: ClassTag: TypeTag](
+      path: String, spark: SparkSession, localDeserializer: DataInputStream => T
+    ): Array[T] = {
     if (localSavingModeState.get()) {
-      val serializer = SparkEnv.get.serializer.newInstance()
-
-      val dataBytes = Files.readAllBytes(Paths.get(path))
-      serializer.deserialize[Array[T]](java.nio.ByteBuffer.wrap(dataBytes))
+      Using.resource(
+        new DataInputStream(new BufferedInputStream(new FileInputStream(path)))
+      ) { dis =>
+        val len = dis.readInt()
+        val data = new Array[T](len)
+        for (i <- 0 until len) {
+          data(i) = localDeserializer(dis)
+        }
+        data
+      }
     } else {
       import spark.implicits._
       spark.read.parquet(path).as[T].collect()
