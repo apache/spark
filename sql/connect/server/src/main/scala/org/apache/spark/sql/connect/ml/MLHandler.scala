@@ -121,23 +121,22 @@ private[connect] object MLHandler extends Logging {
     override def initialValue: SessionHolder = null
   }
 
-  val safeMLClassLoader: String => Class[_] = {
+  private val allowlistedMLClasses = {
     val transformerClasses = MLUtils.loadOperators(classOf[Transformer])
     val estimatorClasses = MLUtils.loadOperators(classOf[Estimator[_]])
     val evaluatorClasses = MLUtils.loadOperators(classOf[Evaluator])
-    val allowlistedClasses = (
-      transformerClasses ++ estimatorClasses ++ evaluatorClasses
-        ++ Map(
-          "org.apache.spark.ml.clustering.PowerIterationClustering" ->
-            classOf[org.apache.spark.ml.clustering.PowerIterationClustering])
-    )
+    transformerClasses ++ estimatorClasses ++ evaluatorClasses ++ Map(
+      "org.apache.spark.ml.clustering.PowerIterationClustering" ->
+        classOf[org.apache.spark.ml.clustering.PowerIterationClustering])
+  }
 
-    (className: String) => {
+  val safeMLClassLoader: String => Class[_] = { (className: String) =>
+    {
       val sessionHolder = currentSessionHolder.get()
       if (sessionHolder != null) {
         val name = MLUtils.replaceOperator(sessionHolder, className)
         try {
-          allowlistedClasses(name)
+          allowlistedMLClasses(name)
         } catch {
           case _: NoSuchElementException =>
             throw MlUnsupportedException(
