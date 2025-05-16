@@ -1552,10 +1552,16 @@ private[spark] class DAGScheduler(
     // `findMissingPartitions()` returns all partitions every time.
     stage match {
       case sms: ShuffleMapStage if stage.isIndeterminate && !sms.isAvailable =>
-        // already executed atleast once
+        // already executed at least once
         if (sms.getNextAttemptId > 0) {
+          // While we previously validated possible rollbacks during the handling of a FetchFailure,
+          // where we were fetching from an indeterminate source map stages, this later check
+          // covers additional cases like recalculating an indeterminate stage after an executor
+          // loss. Moreover, because this check occurs later in the process, if a result stage task
+          // has successfully completed, we can detect this and abort the job, as rolling back a
+          // result stage is not possible.
           val stagesToRollback = collectSucceedingStages(sms)
-          rollBackStages(stagesToRollback)
+          validateStageRollBacks(stagesToRollback)
           // stages which cannot be rolled back were aborted which leads to removing the
           // the dependant job(s) from the active jobs set
           val numActiveJobsWithStageAfterRollback =
@@ -2144,7 +2150,7 @@ private[spark] class DAGScheduler(
               // even if the map tasks are re-tried.
               if (mapStage.isIndeterminate) {
                 val stagesToRollback = collectSucceedingStages(mapStage)
-                val rollingBackStages = rollBackStages(stagesToRollback)
+                val rollingBackStages = validateStageRollBacks(stagesToRollback)
                 logInfo(log"The shuffle map stage ${MDC(SHUFFLE_ID, mapStage)} with indeterminate output was failed, " +
                   log"we will roll back and rerun below stages which include itself and all its " +
                   log"indeterminate child stages: ${MDC(STAGES, rollingBackStages)}")
@@ -2335,7 +2341,7 @@ private[spark] class DAGScheduler(
    * @param stagesToRollback stages to roll back
    * @return Shuffle map stages which need and can be rolled back
    */
-  private def rollBackStages(stagesToRollback: HashSet[Stage]): HashSet[Stage] = {
+  private def validateStageRollBacks(stagesToRollback: HashSet[Stage]): HashSet[Stage] = {
 
     def generateErrorMessage(stage: Stage): String = {
       "A shuffle map stage with indeterminate output was failed and retried. " +
