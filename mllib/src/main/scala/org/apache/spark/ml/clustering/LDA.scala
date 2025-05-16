@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.clustering
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import java.util.Locale
 
 import breeze.linalg.normalize
@@ -649,6 +651,25 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
     docConcentration: Vector,
     topicConcentration: Double,
     gammaShape: Double)
+
+  private[ml] def serializeData(data: LocalModelData, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    dos.writeInt(data.vocabSize)
+    serializeMatrix(data.topicsMatrix, dos)
+    serializeVector(data.docConcentration, dos)
+    dos.writeDouble(data.topicConcentration)
+    dos.writeDouble(data.gammaShape)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): LocalModelData = {
+    import ReadWriteUtils._
+    val vocabSize = dis.readInt()
+    val topicsMatrix = deserializeMatrix(dis)
+    val docConcentration = deserializeVector(dis)
+    val topicConcentration = dis.readDouble()
+    val gammaShape = dis.readDouble()
+    LocalModelData(vocabSize, topicsMatrix, docConcentration, topicConcentration, gammaShape)
+  }
 
   private[LocalLDAModel]
   class LocalLDAModelWriter(instance: LocalLDAModel) extends MLWriter {
