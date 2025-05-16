@@ -140,7 +140,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val tableSummaries = catalog.listTableSummaries(namespace).toSet
     val expectedTableSummaries = Set(
       TableSummary.of(identManaged, TableSummary.MANAGED_TABLE_TYPE),
-      TableSummary.of(identExternal, TableSummary.EXTERNAL_TABLE_TYPE),
+      TableSummary.of(identExternal, TableSummary.EXTERNAL_TABLE_TYPE)
     )
     assertResult(expectedTableSummaries)(tableSummaries)
 
