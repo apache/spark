@@ -17,17 +17,21 @@
 
 package org.apache.spark.sql.connect.ml
 
+import java.lang.ThreadLocal
+
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.Model
+import org.apache.spark.ml.{Estimator, Model, Transformer}
+import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.util.{MLWritable, Summary}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.ml.Serializer.deserializeMethodArguments
 import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.util.Utils
 
 private case class Method(
     name: String,
@@ -110,11 +114,46 @@ private object ModelAttributeHelper {
 
 // MLHandler is a utility to group all ML operations
 private[connect] object MLHandler extends Logging {
+
+  val currentSessionHolder = new ThreadLocal[SessionHolder] {
+    override def initialValue: SessionHolder = null
+  }
+
+  private val allowlistedMLClasses = {
+    val transformerClasses = MLUtils.loadOperators(classOf[Transformer])
+    val estimatorClasses = MLUtils.loadOperators(classOf[Estimator[_]])
+    val evaluatorClasses = MLUtils.loadOperators(classOf[Evaluator])
+    transformerClasses ++ estimatorClasses ++ evaluatorClasses ++ Map(
+      "org.apache.spark.ml.clustering.PowerIterationClustering" ->
+        classOf[org.apache.spark.ml.clustering.PowerIterationClustering])
+  }
+
+  val safeMLClassLoader: String => Class[_] = { (className: String) =>
+    {
+      val sessionHolder = currentSessionHolder.get()
+      if (sessionHolder != null) {
+        val name = MLUtils.replaceOperator(sessionHolder, className)
+        try {
+          allowlistedMLClasses(name)
+        } catch {
+          case _: NoSuchElementException =>
+            throw MlUnsupportedException(
+              s"The class $className to be loaded is not in the allowlist.")
+        }
+      } else {
+        // If sessionHolder is null, it means currently it is not running in a
+        // Spark Connect server, fallback to the default unsafe class loader.
+        Utils.classForName(className)
+      }
+    }
+  }
+
   def handleMlCommand(
       sessionHolder: SessionHolder,
       mlCommand: proto.MlCommand): proto.MlCommandResult = {
 
     val mlCache = sessionHolder.mlCache
+    currentSessionHolder.set(sessionHolder)
 
     mlCommand.getCommandCase match {
       case proto.MlCommand.CommandCase.FIT =>
