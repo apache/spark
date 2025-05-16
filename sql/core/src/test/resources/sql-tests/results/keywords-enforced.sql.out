@@ -188,6 +188,7 @@ LAZY	false
 LEADING	true
 LEAVE	false
 LEFT	true
+LEVEL	false
 LIKE	false
 LIMIT	false
 LINES	false
@@ -203,6 +204,7 @@ LOOP	false
 MACRO	false
 MAP	false
 MATCHED	false
+MAX	false
 MERGE	false
 MICROSECOND	false
 MICROSECONDS	false
@@ -265,6 +267,7 @@ REAL	false
 RECORDREADER	false
 RECORDWRITER	false
 RECOVER	false
+RECURSION	false
 RECURSIVE	true
 REDUCE	false
 REFERENCES	true

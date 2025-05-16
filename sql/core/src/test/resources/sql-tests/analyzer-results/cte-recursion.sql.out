@@ -170,6 +170,78 @@ DropTempViewCommand ZeroAndOne
 
 
 -- !query
+WITH RECURSIVE r(level) MAX RECURSION LEVEL 35 AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 30
+  )
+SELECT * FROM r
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false, 35
+:  +- SubqueryAlias r
+:     +- Project [col1#x AS level#x]
+:        +- UnionLoop xxxx, 35
+:           :- LocalRelation [col1#x]
+:           +- Project [(level#x + 1) AS (level + 1)#x]
+:              +- Filter (level#x < 30)
+:                 +- SubqueryAlias r
+:                    +- Project [col1#x AS level#x]
+:                       +- UnionLoopRef xxxx, [col1#x], false
++- Project [level#x]
+   +- SubqueryAlias r
+      +- CTERelationRef xxxx, true, [level#x], false, false
+
+
+-- !query
+WITH r(level) MAX RECURSION LEVEL 35 AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 30
+)
+SELECT * FROM r
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "Cannot specify MAX RECURSION LEVEL when the CTE is not marked as RECURSIVE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 125,
+    "fragment" : "WITH r(level) MAX RECURSION LEVEL 35 AS (\n  VALUES 0\n  UNION ALL\n  SELECT level + 1 FROM r WHERE level < 30\n)\nSELECT * FROM r"
+  } ]
+}
+
+
+-- !query
+WITH RECURSIVE r(level) AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 150
+)
+SELECT * FROM r
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias r
+:     +- Project [col1#x AS level#x]
+:        +- UnionLoop xxxx
+:           :- LocalRelation [col1#x]
+:           +- Project [(level#x + 1) AS (level + 1)#x]
+:              +- Filter (level#x < 150)
+:                 +- SubqueryAlias r
+:                    +- Project [col1#x AS level#x]
+:                       +- UnionLoopRef xxxx, [col1#x], false
++- Project [level#x]
+   +- SubqueryAlias r
+      +- CTERelationRef xxxx, true, [level#x], false, false
+
+
+-- !query
 CREATE TEMPORARY VIEW ZeroAndOne(current, next) AS VALUES
     (0,0),
     (0,1),
@@ -185,18 +257,12 @@ CreateViewCommand `ZeroAndOne`, [(current,None), (next,None)], VALUES
 
 
 -- !query
-SET spark.sql.cteRecursionRowLimit=25
--- !query analysis
-SetCommand (spark.sql.cteRecursionRowLimit,Some(25))
-
-
--- !query
 WITH RECURSIVE t(n) AS (
     SELECT 1
     UNION ALL
     SELECT next FROM t LEFT JOIN ZeroAndOne ON n = current
     )
-SELECT * FROM t LIMIT 30
+SELECT * FROM t LIMIT 60
 -- !query analysis
 WithCTE
 :- CTERelationDef xxxx, false
@@ -214,17 +280,11 @@ WithCTE
 :                    +- View (`ZeroAndOne`, [current#x, next#x])
 :                       +- Project [cast(col1#x as int) AS current#x, cast(col2#x as int) AS next#x]
 :                          +- LocalRelation [col1#x, col2#x]
-+- GlobalLimit 30
-   +- LocalLimit 30
++- GlobalLimit 60
+   +- LocalLimit 60
       +- Project [n#x]
          +- SubqueryAlias t
             +- CTERelationRef xxxx, true, [n#x], false, false
-
-
--- !query
-RESET spark.sql.cteRecursionRowLimit
--- !query analysis
-ResetCommand spark.sql.cteRecursionRowLimit
 
 
 -- !query
@@ -1275,7 +1335,7 @@ WithCTE
 
 
 -- !query
-CREATE TABLE tb (next INT)
+CREATE TABLE tb (next INT) USING json
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`tb`, false
 
@@ -1283,7 +1343,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`tb`, false
 -- !query
 INSERT INTO tb VALUES (0), (1)
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/tb, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/tb], Append, `spark_catalog`.`default`.`tb`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/tb), [next]
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/tb, false, JSON, [path=file:[not included in comparison]/{warehouse_dir}/tb], Append, `spark_catalog`.`default`.`tb`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/tb), [next]
 +- Project [cast(col1#x as int) AS next#x]
    +- LocalRelation [col1#x]
 
@@ -1309,7 +1369,7 @@ WithCTE
 :                 :  +- Project [1#x AS n#x]
 :                 :     +- UnionLoopRef xxxx, [1#x], false
 :                 +- SubqueryAlias spark_catalog.default.tb
-:                    +- Relation spark_catalog.default.tb[next#x] parquet
+:                    +- Relation spark_catalog.default.tb[next#x] json
 +- GlobalLimit 63
    +- LocalLimit 63
       +- Project [n#x]

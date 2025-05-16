@@ -67,7 +67,7 @@ class PlanParserSuite extends AnalysisTest {
         } else {
           UnresolvedSubqueryColumnAliases(columnAliases, cte)
         }
-        name -> SubqueryAlias(name, subquery)
+        (name, SubqueryAlias(name, subquery), None)
     }
     UnresolvedWith(plan, ctes, allowRecursion)
   }

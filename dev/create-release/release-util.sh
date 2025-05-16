@@ -16,6 +16,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+if [[ $DEBUG_MODE = 1 ]]; then
+  # Fail fast and print out commands it runs.
+  set -o pipefail
+  set -e
+  set -x
+fi
 
 DRY_RUN=${DRY_RUN:-0}
 GPG="gpg --no-tty --batch"
@@ -138,9 +144,11 @@ function get_release_info {
 
   # Check if the RC already exists, and if re-creating the RC, skip tag creation.
   RELEASE_TAG="v${RELEASE_VERSION}-rc${RC_COUNT}"
-  SKIP_TAG=0
-  if check_for_tag "$RELEASE_TAG"; then
-    read -p "$RELEASE_TAG already exists. Continue anyway [y/n]? " ANSWER
+  SKIP_TAG="${SKIP_TAG:-0}"
+  if check_for_tag "$RELEASE_TAG" && [[ $SKIP_TAG = 0 ]]; then
+    if [ -z "$ANSWER" ]; then
+      read -p "$RELEASE_TAG already exists. Continue anyway [y/n]? " ANSWER
+    fi
     if [ "$ANSWER" != "y" ]; then
       error "Exiting."
     fi
@@ -153,7 +161,7 @@ function get_release_info {
   GIT_REF="$RELEASE_TAG"
   if is_dry_run; then
     echo "This is a dry run. Please confirm the ref that will be built for testing."
-    if [[ $SKIP_TAG = 0 ]]; then
+    if [[ $SKIP_TAG = 1 ]]; then
       GIT_REF="$GIT_BRANCH"
     fi
     GIT_REF=$(read_config "Ref" "$GIT_REF")
@@ -189,7 +197,9 @@ E-MAIL:     $GIT_EMAIL
 ================
 EOF
 
-  read -p "Is this info correct [y/n]? " ANSWER
+  if [ -z "$ANSWER" ]; then
+    read -p "Is this info correct [y/n]? " ANSWER
+  fi
   if [ "$ANSWER" != "y" ]; then
     echo "Exiting."
     exit 1
