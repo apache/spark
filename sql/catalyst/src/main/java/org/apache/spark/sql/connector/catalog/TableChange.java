@@ -233,8 +233,7 @@ public interface TableChange {
    * @param newDefaultValue the new default value SQL string (Spark SQL dialect).
    * @return a TableChange for the update
    *
-   * @deprecated This is deprecated. Please use {@link #updateColumnDefaultValue(
-   * String[],DefaultValue)} instead.
+   * @deprecated Please use {@link #updateColumnDefaultValue(String[], DefaultValue)} instead.
    */
   @Deprecated(since = "4.1.0")
   static TableChange updateColumnDefaultValue(String[] fieldNames, String newDefaultValue) {
@@ -251,6 +250,7 @@ public interface TableChange {
    * @param fieldNames field names of the column to update
    * @param newDefaultValue the new default value SQL (Spark SQL dialect and
    *                        V2 expression representation if it can be converted).
+   *                        Null indicates dropping column default value
    * @return a TableChange for the update
    */
   static TableChange updateColumnDefaultValue(String[] fieldNames, DefaultValue newDefaultValue) {
