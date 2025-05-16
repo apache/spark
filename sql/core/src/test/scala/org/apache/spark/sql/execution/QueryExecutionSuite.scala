@@ -432,9 +432,9 @@ class QueryExecutionSuite extends SharedSparkSession {
           spark.sql("CREATE TABLE output USING csv AS SELECT * FROM s")
         }
         assert(
-          ex.getMessage.contains("SQL streaming queries must be executed with a Spark " +
-            "Declarative Pipeline. Either remove the streaming source from your statement, or " +
-            "run your statement in a Spark Declarative Pipeline")
+          ex.getMessage.contains("Queries with streaming sources must be executed with " +
+            "writeStream.start(), or from a streaming table or flow definition within a Spark " +
+            "Declarative Pipeline.")
         )
       }
     }

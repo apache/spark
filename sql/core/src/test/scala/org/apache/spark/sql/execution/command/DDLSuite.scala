@@ -2521,9 +2521,9 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         },
         condition = "_LEGACY_ERROR_TEMP_3102",
         sqlState = None,
-        parameters = Map("msg" -> ("SQL streaming queries must be executed with a Spark " +
-          "Declarative Pipeline. Either remove the streaming source from your statement, or run " +
-          "your statement in a Spark Declarative Pipeline"))
+        parameters = Map("msg" -> ("Queries with streaming sources must be executed with " +
+          "writeStream.start(), or from a streaming table or flow definition within a Spark " +
+          "Declarative Pipeline."))
       )
     }
   }

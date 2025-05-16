@@ -1960,6 +1960,7 @@ ansiNonReserved
     | STRATIFY
     | STRING
     | STRUCT
+    | STREAM
     | STREAMING
     | SUBSTR
     | SUBSTRING
@@ -2173,6 +2174,7 @@ nonReserved
     | FILEFORMAT
     | FIRST
     | FLOAT
+    | FLOW
     | FOLLOWING
     | FOR
     | FOREIGN
@@ -2240,6 +2242,7 @@ nonReserved
     | MACRO
     | MAP
     | MATCHED
+    | MATERIALIZED
     | MAX
     | MERGE
     | MICROSECOND
@@ -2353,6 +2356,8 @@ nonReserved
     | STATISTICS
     | STORED
     | STRATIFY
+    | STREAM
+    | STREAMING
     | STRING
     | STRUCT
     | SUBSTR

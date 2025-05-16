@@ -89,10 +89,7 @@ class QueryExecution(
 
   def assertSupported(): Unit = {
     if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
-      UnsupportedOperationChecker.checkForBatch(
-        plan = analyzed,
-        isSqlContext = Option(
-          sparkSession.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).isDefined)
+      UnsupportedOperationChecker.checkForBatch(analyzed)
     }
   }
 
