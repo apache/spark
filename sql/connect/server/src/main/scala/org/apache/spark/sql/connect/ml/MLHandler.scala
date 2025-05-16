@@ -136,7 +136,13 @@ private[connect] object MLHandler extends Logging {
       val sessionHolder = currentSessionHolder.get()
       if (sessionHolder != null) {
         val name = MLUtils.replaceOperator(sessionHolder, className)
-        allowlistedClasses(name)
+        try {
+          allowlistedClasses(name)
+        } catch {
+          case _: NoSuchElementException =>
+            throw MlUnsupportedException(
+              s"The class $className to be loaded is not in the allowlist.")
+        }
       } else {
         // If sessionHolder is null, it means currently it is not running in a
         // Spark Connect server, fallback to the default unsafe class loader.

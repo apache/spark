@@ -554,20 +554,23 @@ private[ml] object DefaultParamsWriter {
 
 private[ml] object MLAllowListedLoader {
 
-  def load(className: String): Class[_] = {
+  val safeMLClassLoader: String => Class[_] = {
     try {
-      // Only loads allow-listed classes. This is for preventing RCE in Spark Connect mode.
+      // Use Spark Connect ML safe class loader if it is available.
       val MLHandlerClazz = Utils.classForName("org.apache.spark.sql.connect.ml.MLHandler")
-      val safeMLClassLoader = MLHandlerClazz.getMethod("safeMLClassLoader").invoke(null)
+      MLHandlerClazz.getMethod("safeMLClassLoader").invoke(null)
         .asInstanceOf[String => Class[_]]
-      safeMLClassLoader(className)
     } catch {
-      case _: ClassNotFoundException =>
-        Utils.classForName(className)
-      case _: NoSuchElementException =>
-        throw SparkException.internalError(
-          s"The class $className to be loaded is not in the allowlist."
-        )
+      case _: ClassNotFoundException => null
+    }
+  }
+
+  def load(className: String): Class[_] = {
+    if (safeMLClassLoader == null) {
+      Utils.classForName(className)
+    } else {
+      // Only loads allow-listed classes. This is for preventing RCE in Spark Connect mode.
+      safeMLClassLoader(className)
     }
   }
 }
