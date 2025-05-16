@@ -31,10 +31,12 @@ private[spark] case class MLAttributeNotAllowedException(className: String, attr
       messageParameters = Map("className" -> className, "attribute" -> attribute),
       cause = null)
 
-private[spark] case class MLCacheInvalidException(objectName: String)
+private[spark] case class MLCacheInvalidException(objectName: String, evictTimeoutInMinutes: Long)
     extends SparkException(
       errorClass = "CONNECT_ML.CACHE_INVALID",
-      messageParameters = Map("objectName" -> objectName),
+      messageParameters = Map(
+        "objectName" -> objectName,
+        "evictTimeoutInMinutes" -> evictTimeoutInMinutes.toString),
       cause = null)
 
 private[spark] case class MLModelSizeOverflowException(modelSize: Long, modelMaxSize: Long)

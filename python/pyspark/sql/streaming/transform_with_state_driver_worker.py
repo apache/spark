@@ -31,7 +31,7 @@ from pyspark.util import handle_worker_exception
 from typing import IO
 from pyspark.worker_util import check_python_version
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
-from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPySparkFuncMode
+from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
@@ -51,7 +51,7 @@ def main(infile: IO, outfile: IO) -> None:
 
     def process(
         processor: StatefulProcessorApiClient,
-        mode: TransformWithStateInPySparkFuncMode,
+        mode: TransformWithStateInPandasFuncMode,
         key: Any,
         input: Iterator["PandasDataFrameLike"],
     ) -> None:
@@ -83,7 +83,7 @@ def main(infile: IO, outfile: IO) -> None:
         stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
         process(
             stateful_processor_api_client,
-            TransformWithStateInPySparkFuncMode.PRE_INIT,
+            TransformWithStateInPandasFuncMode.PRE_INIT,
             None,
             iter([]),
         )

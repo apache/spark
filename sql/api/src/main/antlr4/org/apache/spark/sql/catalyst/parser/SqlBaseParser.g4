@@ -48,11 +48,11 @@ compoundOrSingleStatement
     ;
 
 singleCompoundStatement
-    : BEGIN compoundBody? END SEMICOLON? EOF
+    : BEGIN (NOT ATOMIC)? compoundBody? END SEMICOLON? EOF
     ;
 
 beginEndCompoundBlock
-    : beginLabel? BEGIN compoundBody? END endLabel?
+    : beginLabel? BEGIN (NOT ATOMIC)? compoundBody? END endLabel?
     ;
 
 compoundBody
@@ -60,10 +60,10 @@ compoundBody
     ;
 
 compoundStatement
-    : statement
-    | setStatementWithOptionalVarKeyword
+    : declareConditionStatement
+    | statement
+    | setStatementInsideSqlScript
     | beginEndCompoundBlock
-    | declareConditionStatement
     | declareHandlerStatement
     | ifElseStatement
     | caseStatement
@@ -75,10 +75,10 @@ compoundStatement
     | forStatement
     ;
 
-setStatementWithOptionalVarKeyword
-    : SET variable? assignmentList                              #setVariableWithOptionalKeyword
-    | SET variable? LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
-        LEFT_PAREN query RIGHT_PAREN                            #setVariableWithOptionalKeyword
+setStatementInsideSqlScript
+    : SET assignmentList                              #setVariableInsideSqlScript
+    | SET LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
+        LEFT_PAREN query RIGHT_PAREN                  #setVariableInsideSqlScript
     ;
 
 sqlStateValue
@@ -101,7 +101,7 @@ conditionValues
     ;
 
 declareHandlerStatement
-    : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValues (beginEndCompoundBlock | statement | setStatementWithOptionalVarKeyword)
+    : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValues (beginEndCompoundBlock | statement | setStatementInsideSqlScript)
     ;
 
 whileStatement
@@ -550,7 +550,7 @@ ctes
     ;
 
 namedQuery
-    : name=errorCapturingIdentifier (columnAliases=identifierList)? AS? LEFT_PAREN query RIGHT_PAREN
+    : name=errorCapturingIdentifier (columnAliases=identifierList)? (MAX RECURSION LEVEL INTEGER_VALUE)? AS? LEFT_PAREN query RIGHT_PAREN
     ;
 
 tableProvider
@@ -1681,6 +1681,7 @@ ansiNonReserved
     | ARRAY
     | ASC
     | AT
+    | ATOMIC
     | BEGIN
     | BETWEEN
     | BIGINT
@@ -1807,6 +1808,7 @@ ansiNonReserved
     | LAST
     | LAZY
     | LEAVE
+    | LEVEL
     | LIKE
     | ILIKE
     | LIMIT
@@ -1823,6 +1825,7 @@ ansiNonReserved
     | MACRO
     | MAP
     | MATCHED
+    | MAX
     | MERGE
     | MICROSECOND
     | MICROSECONDS
@@ -1873,6 +1876,7 @@ ansiNonReserved
     | RECORDREADER
     | RECORDWRITER
     | RECOVER
+    | RECURSION
     | REDUCE
     | REFRESH
     | RELY
@@ -2024,6 +2028,7 @@ nonReserved
     | AS
     | ASC
     | AT
+    | ATOMIC
     | AUTHORIZATION
     | BEGIN
     | BETWEEN
@@ -2183,6 +2188,7 @@ nonReserved
     | LAZY
     | LEADING
     | LEAVE
+    | LEVEL
     | LIKE
     | LONG
     | ILIKE
@@ -2200,6 +2206,7 @@ nonReserved
     | MACRO
     | MAP
     | MATCHED
+    | MAX
     | MERGE
     | MICROSECOND
     | MICROSECONDS
@@ -2259,6 +2266,7 @@ nonReserved
     | RECORDREADER
     | RECORDWRITER
     | RECOVER
+    | RECURSION
     | RECURSIVE
     | REDUCE
     | REFERENCES

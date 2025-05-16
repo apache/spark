@@ -163,12 +163,12 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("conditionName" -> toSQLStmt(conditionName)))
   }
 
-  def conditionDeclarationOnlyAtBeginning(
+  def conditionDeclarationNotAtStartOfCompound(
       origin: Origin,
       conditionName: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
-      errorClass = "INVALID_ERROR_CONDITION_DECLARATION.ONLY_AT_BEGINNING",
+      errorClass = "INVALID_ERROR_CONDITION_DECLARATION.NOT_AT_START_OF_COMPOUND_STATEMENT",
       cause = null,
       messageParameters = Map("conditionName" -> toSQLId(conditionName)))
   }
@@ -188,7 +188,7 @@ private[sql] object SqlScriptingErrors {
       origin = origin,
       errorClass = "DUPLICATE_CONDITION_IN_SCOPE",
       cause = null,
-      messageParameters = Map("condition" -> condition))
+      messageParameters = Map("condition" -> toSQLId(condition)))
   }
 
   def handlerDeclarationInWrongPlace(origin: Origin): Throwable = {
