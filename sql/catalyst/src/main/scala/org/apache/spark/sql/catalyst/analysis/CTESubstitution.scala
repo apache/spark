@@ -68,6 +68,8 @@ object CTESubstitution extends Rule[LogicalPlan] {
     val isRecursive = plan match {
       case u: UnresolvedWith =>
         u.allowRecursion
+      case _ =>
+        false
     }
     val forceInline = if (commands.length == 1) {
       if (conf.getConf(SQLConf.LEGACY_INLINE_CTE_IN_COMMANDS)) {
