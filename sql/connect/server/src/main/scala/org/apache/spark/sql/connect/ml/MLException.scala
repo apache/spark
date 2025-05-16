@@ -35,8 +35,8 @@ private[spark] case class MLCacheInvalidException(objectName: String, evictTimeo
     extends SparkException(
       errorClass = "CONNECT_ML.CACHE_INVALID",
       messageParameters = Map(
-            "objectName" -> objectName, "evictTimeoutInMinutes" -> evictTimeoutInMinutes.toString
-      ),
+        "objectName" -> objectName,
+        "evictTimeoutInMinutes" -> evictTimeoutInMinutes.toString),
       cause = null)
 
 private[spark] case class MLModelSizeOverflowException(modelSize: Long, modelMaxSize: Long)
