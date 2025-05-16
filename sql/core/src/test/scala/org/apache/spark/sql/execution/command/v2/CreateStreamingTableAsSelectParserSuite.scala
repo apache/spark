@@ -23,8 +23,4 @@ package org.apache.spark.sql.execution.command
 class CreateStreamingTableAsSelectParserSuite
   extends CreatePipelineDatasetAsSelectParserSuiteBase {
   override val datasetSqlSyntax: String = "STREAMING TABLE"
-
-  test("debug reserved keyword") {
-    parser.parsePlan("CREATE TABLE materialized AS SELECT t")
-  }
 }
