@@ -522,6 +522,30 @@ private[ml] object DefaultParamsWriter {
     getMetadataToSave(instance, spark, None, None)
 }
 
+
+private[ml] object MLAllowListedLoader {
+
+  val safeMLClassLoader: String => Class[_] = {
+    try {
+      // Use Spark Connect ML safe class loader if it is available.
+      val MLHandlerClazz = Utils.classForName("org.apache.spark.sql.connect.ml.MLHandler")
+      MLHandlerClazz.getMethod("safeMLClassLoader").invoke(null)
+        .asInstanceOf[String => Class[_]]
+    } catch {
+      case _: ClassNotFoundException => null
+    }
+  }
+
+  def load(className: String): Class[_] = {
+    if (safeMLClassLoader == null) {
+      Utils.classForName(className)
+    } else {
+      // Only loads allow-listed classes. This is for preventing RCE in Spark Connect mode.
+      safeMLClassLoader(className)
+    }
+  }
+}
+
 /**
  * Default `MLReader` implementation for transformers and estimators that contain basic
  * (json4s-serializable) params and no data. This will not handle more complex params or types with
@@ -534,7 +558,7 @@ private[ml] class DefaultParamsReader[T] extends MLReader[T] {
 
   override def load(path: String): T = {
     val metadata = DefaultParamsReader.loadMetadata(path, sparkSession)
-    val cls = Utils.classForName(metadata.className)
+    val cls = MLAllowListedLoader.load(metadata.className)
     val instance =
       cls.getConstructor(classOf[String]).newInstance(metadata.uid).asInstanceOf[Params]
     metadata.getAndSetParams(instance)
