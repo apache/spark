@@ -26,11 +26,10 @@ import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.StructType;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * Catalog methods for working with Tables.
@@ -120,27 +119,22 @@ public interface TableCatalog extends CatalogPlugin {
    * @return an array of Identifiers for tables
    * @throws NoSuchNamespaceException If the namespace does not exist (optional).
    */
-  default TableSummary[] listTableSummaries(String[] namespace) throws NoSuchNamespaceException {
+  default TableSummary[] listTableSummaries(String[] namespace)
+          throws NoSuchNamespaceException, NoSuchTableException {
     Identifier[] tableIdentifiers = this.listTables(namespace);
-    Stream<TableSummary> tableSummaryStream = Arrays.stream(tableIdentifiers).map(identifier -> {
-      Table table = null;
-      try {
-        table = this.loadTable(identifier);
-      } catch (NoSuchTableException e) {
-        // Exception should not be thrown if `loadTable` and `listTables` are properly implemented.
-        // Only valid case is where a table is dropped between `listTables` and `loadTable` operations.
-        throw new RuntimeException(e);
-      }
+    ArrayList<TableSummary> tableSummaries = new ArrayList<>(tableIdentifiers.length);
+    for (Identifier identifier : tableIdentifiers) {
+      Table table = this.loadTable(identifier);
 
       // If table type property is not present, we assume that table type is `MANAGED`.
       String tableType = table.properties().getOrDefault(
               TableCatalog.PROP_TABLE_TYPE,
               TableSummary.FOREIGN_TABLE_TYPE);
 
-      return TableSummary.of(identifier, tableType);
-    });
+      tableSummaries.add(TableSummary.of(identifier, tableType));
+    };
 
-    return tableSummaryStream.toArray(TableSummary[]::new);
+    return tableSummaries.toArray(TableSummary[]::new);
   }
 
   /**

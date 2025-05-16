@@ -37,7 +37,7 @@ public interface TableSummary {
 }
 
 record TableSummaryImpl(Identifier identifier, String tableType) implements TableSummary {
-    public TableSummaryImpl {
+    TableSummaryImpl {
         checkNotNull(identifier, "Identifier of a table summary object cannot be null");
         checkNotNull(tableType, "Table type of a table summary object cannot be null");
     }
