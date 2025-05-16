@@ -175,7 +175,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
 
   // See https://docs.oracle.com/cd/E11882_01/appdev.112/e10827/appd.htm#g642406
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    exception.getSQLState.equals("42000")
+    "42000".equals(exception.getSQLState)
   }
 
   /**

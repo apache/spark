@@ -222,7 +222,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
 
   // See https://dev.mysql.com/doc/mysql-errors/8.0/en/server-error-reference.html
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    exception.getSQLState.equals("42000")
+    "42000".equals(exception.getSQLState)
   }
 
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html

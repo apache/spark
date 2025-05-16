@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, PreparedStatement, ResultSet}
+import java.sql.{Connection, PreparedStatement, ResultSet, SQLException}
 
 import scala.util.Using
 import scala.util.control.NonFatal
 
-import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
+import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.SQL_TEXT
 import org.apache.spark.rdd.RDD
@@ -59,8 +59,15 @@ object JDBCRDD extends Logging {
     val prepareQuery = options.prepareQuery
     val table = options.tableOrQuery
     val dialect = JdbcDialects.get(url)
-    JdbcUtils.withWrapExternalEngineError(dialect, "output schema resolution") {
+
+    try {
       getQueryOutputSchema(prepareQuery + dialect.getSchemaQuery(table), options, dialect)
+    } catch {
+      case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
+        throw new SparkException(
+          errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
+          messageParameters = Map.empty,
+          cause = e)
     }
   }
 
@@ -213,7 +220,6 @@ class JDBCRDD(
 
   /**
    * Runs the SQL query against the JDBC driver.
-   *
    */
   override def compute(thePart: Partition, context: TaskContext): Iterator[InternalRow] = {
     var closed = false
@@ -286,7 +292,15 @@ class JDBCRDD(
     stmt.setQueryTimeout(options.queryTimeout)
 
     val startTime = System.nanoTime
-    rs = JdbcUtils.withWrapExternalEngineError(dialect, "query execution") {stmt.executeQuery()}
+    rs = try {
+      stmt.executeQuery()
+    } catch {
+      case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
+        throw new SparkException(
+          errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
+          messageParameters = Map.empty,
+          cause = e)
+    }
     val endTime = System.nanoTime
 
     val executionTime = endTime - startTime

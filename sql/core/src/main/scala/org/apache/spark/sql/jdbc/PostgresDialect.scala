@@ -245,7 +245,7 @@ private case class PostgresDialect()
 
   // See https://www.postgresql.org/docs/current/errcodes-appendix.html
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    exception.getSQLState.startsWith("42")
+    Option(exception.getSQLState).exists(_.startsWith("42"))
   }
 
   // SHOW INDEX syntax

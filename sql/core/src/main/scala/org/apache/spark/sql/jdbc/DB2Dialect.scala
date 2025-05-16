@@ -124,7 +124,7 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
 
   // See https://www.ibm.com/docs/en/db2-for-zos/12.0.0?topic=codes-sqlstate-values-common-error
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    exception.getSQLState.startsWith("42")
+    Option(exception.getSQLState).exists(_.startsWith("42"))
   }
 
   // scalastyle:off line.size.limit

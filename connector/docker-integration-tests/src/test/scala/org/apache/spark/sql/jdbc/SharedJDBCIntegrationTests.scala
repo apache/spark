@@ -29,6 +29,6 @@ trait SharedJDBCIntegrationTests extends QueryTest {
         .option("url", jdbcUrl)
         .option("query", "THIS IS NOT VALID SQL").load()
     }
-    assert(e.getCondition === "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR")
+    assert(e.getCondition.startsWith("JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR"))
   }
 }
