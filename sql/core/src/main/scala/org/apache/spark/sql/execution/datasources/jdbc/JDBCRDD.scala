@@ -59,7 +59,7 @@ object JDBCRDD extends Logging {
     val prepareQuery = options.prepareQuery
     val table = options.tableOrQuery
     val dialect = JdbcDialects.get(url)
-    JdbcUtils.withWrapExternalEngineError(dialect, "output schema resolution") {
+    JdbcUtils.withWrapExternalEngineSyntaxError(dialect, "output schema resolution") {
       getQueryOutputSchema(prepareQuery + dialect.getSchemaQuery(table), options, dialect)
     }
   }
@@ -213,7 +213,6 @@ class JDBCRDD(
 
   /**
    * Runs the SQL query against the JDBC driver.
-   *
    */
   override def compute(thePart: Partition, context: TaskContext): Iterator[InternalRow] = {
     var closed = false
@@ -286,7 +285,9 @@ class JDBCRDD(
     stmt.setQueryTimeout(options.queryTimeout)
 
     val startTime = System.nanoTime
-    rs = JdbcUtils.withWrapExternalEngineError(dialect, "query execution") {stmt.executeQuery()}
+    rs = JdbcUtils.withWrapExternalEngineSyntaxError(dialect, "query execution") {
+      stmt.executeQuery()
+    }
     val endTime = System.nanoTime
 
     val executionTime = endTime - startTime

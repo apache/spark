@@ -2290,4 +2290,13 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         parameters = Map("jdbcDialect" -> dialect.getClass.getSimpleName))
     }
   }
+
+  test("SPARK-52184: Wrap external engine syntax error") {
+    val e = intercept[SparkException] {
+      spark.read.format("jdbc")
+        .option("url", urlWithUserAndPass)
+        .option("query", "THIS IS NOT VALID SQL").load()
+    }
+    assert(e.getCondition === "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR")
+  }
 }

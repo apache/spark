@@ -1302,11 +1302,17 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   /**
-   * Wraps the external engine error in a SparkException.
-   * This is used to wrap the syntax error from the external engine
-   * to provide a better error message to the user.
+   * Wraps the external engine syntax error [[SQLException]] in a [[SparkException]]. This is used
+   * to provide a unified error message to the user across all dialects.
+   *
+   * @param dialect
+   *   The [[JdbcDialect]] used to help identify if the [[SQLException]] represents a syntax error
+   *   from the external engine.
+   * @param source
+   *   A descriptive string indicating the source of the operation, such as "output schema
+   *   resolution" or "query execution".
    */
-  def withWrapExternalEngineError[T](dialect: JdbcDialect, source: String)(f: => T): T = {
+  def withWrapExternalEngineSyntaxError[T](dialect: JdbcDialect, source: String)(f: => T): T = {
     try {
       f
     } catch {
@@ -1314,8 +1320,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         throw new SparkException(
           errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR",
           messageParameters = Map("errorMessage" -> e.getMessage, "source" -> source),
-          cause = e
-        )
+          cause = e)
     }
   }
 }
