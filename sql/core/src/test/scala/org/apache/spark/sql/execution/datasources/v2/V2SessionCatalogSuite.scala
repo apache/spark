@@ -131,7 +131,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     val externalTableProperties = Map(
       TableCatalog.PROP_EXTERNAL -> "1",
-      TableCatalog.PROP_LOCATION -> "s3://"
+      TableCatalog.PROP_LOCATION -> "file://"
     )
 
     catalog.createTable(identManaged, columns, emptyTrans, emptyProps)

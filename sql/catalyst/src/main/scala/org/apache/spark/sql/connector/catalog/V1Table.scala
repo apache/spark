@@ -79,9 +79,8 @@ private[sql] object V1Table {
   def addV2TableProperties(v1Table: CatalogTable): Map[String, String] = {
     val external = v1Table.tableType == CatalogTableType.EXTERNAL
     val managed = v1Table.tableType == CatalogTableType.MANAGED
-    val tableTypeProperties: Map[String, String] = getV2TableType(v1Table)
-        .map(tableType => Map(TableCatalog.PROP_TABLE_TYPE -> tableType))
-        .getOrElse(Map())
+    val tableTypeProperties: Option[(String, String)] = getV2TableType(v1Table)
+        .map(tableType => TableCatalog.PROP_TABLE_TYPE -> tableType)
 
     v1Table.properties ++
       v1Table.storage.properties.map { case (key, value) =>
