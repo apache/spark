@@ -18,7 +18,6 @@
 package org.apache.spark.ml.clustering
 
 import java.io.{DataInputStream, DataOutputStream}
-
 import java.util.Locale
 
 import breeze.linalg.normalize

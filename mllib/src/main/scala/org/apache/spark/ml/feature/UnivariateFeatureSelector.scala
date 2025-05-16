@@ -349,7 +349,7 @@ object UnivariateFeatureSelectorModel extends MLReadable[UnivariateFeatureSelect
 
   private[ml] def deserializeData(dis: DataInputStream): Data = {
     import ReadWriteUtils._
-    val selectedFeatures = deserializeIntArray(dis)
+    val selectedFeatures = deserializeIntArray(dis).toSeq
     Data(selectedFeatures)
   }
 

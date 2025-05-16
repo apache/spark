@@ -18,7 +18,6 @@
 package org.apache.spark.ml.feature
 
 import java.io.{DataInputStream, DataOutputStream}
-
 import java.lang.{Double => JDouble, Integer => JInt}
 import java.util.{Map => JMap, NoSuchElementException}
 

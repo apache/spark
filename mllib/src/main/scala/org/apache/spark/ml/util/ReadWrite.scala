@@ -37,14 +37,14 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{SparkContext, SparkEnv, SparkException}
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
 import org.apache.spark.ml.feature.RFormulaModel
-import org.apache.spark.ml.linalg.{DenseMatrix, DenseVector, Matrix, SparseMatrix, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.linalg.{DenseMatrix, DenseVector, Matrix, SparseMatrix, SparseVector, Vector}
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.ml.tuning.ValidatorParams
 import org.apache.spark.sql.{SparkSession, SQLContext}
@@ -1021,7 +1021,7 @@ private[spark] object ReadWriteUtils {
     }
   }
 
-  def serializeGenericArray[T](
+  def serializeGenericArray[T: ClassTag](
     array: Array[T], dos: DataOutputStream, serializer: (T, DataOutputStream) => Unit
   ): Unit = {
     dos.writeInt(array.length)
@@ -1030,7 +1030,7 @@ private[spark] object ReadWriteUtils {
     }
   }
 
-  def deserializeGenericArray[T](
+  def deserializeGenericArray[T: ClassTag](
     dis: DataInputStream, deserializer: DataInputStream => T
   ): Array[T] = {
     val len = dis.readInt()
@@ -1107,7 +1107,7 @@ private[spark] object ReadWriteUtils {
   def saveArray[T <: Product: ClassTag: TypeTag](
       path: String, data: Array[T], spark: SparkSession,
       localSerializer: (T, DataOutputStream) => Unit,
-      numDataParts: Int = -1,
+      numDataParts: Int = -1
   ): Unit = {
     if (localSavingModeState.get()) {
       val filePath = Paths.get(path)

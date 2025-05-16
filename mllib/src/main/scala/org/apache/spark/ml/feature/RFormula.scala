@@ -443,7 +443,10 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       // Save model data: resolvedFormula
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[ResolvedRFormula](dataPath, instance.resolvedFormula, sparkSession)
+      ReadWriteUtils.saveObject[ResolvedRFormula](
+        dataPath, instance.resolvedFormula, sparkSession,
+        ResolvedRFormula.serializeData
+      )
       // Save pipeline model
       val pmPath = new Path(path, "pipelineModel").toString
       instance.pipelineModel.save(pmPath)
@@ -459,7 +462,9 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val resolvedRFormula = ReadWriteUtils.loadObject[ResolvedRFormula](dataPath, sparkSession)
+      val resolvedRFormula = ReadWriteUtils.loadObject[ResolvedRFormula](
+        dataPath, sparkSession, ResolvedRFormula.deserializeData
+      )
 
       val pmPath = new Path(path, "pipelineModel").toString
       val pipelineModel = PipelineModel.load(pmPath)

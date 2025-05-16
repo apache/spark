@@ -217,7 +217,7 @@ class KMeansModel private[ml] (
 /** Helper class for storing model data */
 private[ml] case class ClusterData(clusterIdx: Int, clusterCenter: Vector)
 
-private[ml] object ClusterDataIO {
+private[ml] object ClusterData {
   private[ml] def serializeData(data: ClusterData, dos: DataOutputStream): Unit = {
     import ReadWriteUtils._
     dos.writeInt(data.clusterIdx)
@@ -250,7 +250,7 @@ private class InternalKMeansModelWriter extends MLWriterFormat with MLFormatRegi
     }
     val dataPath = new Path(path, "data").toString
     ReadWriteUtils.saveArray[ClusterData](
-      dataPath, data, sparkSession, ClusterDataIO.serializeData
+      dataPath, data, sparkSession, ClusterData.serializeData
     )
   }
 }
@@ -300,7 +300,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
 
       val clusterCenters = if (majorVersion(metadata.sparkVersion) >= 2) {
         val data = ReadWriteUtils.loadArray[ClusterData](
-          dataPath, sparkSession, ClusterDataIO.deserializeData
+          dataPath, sparkSession, ClusterData.deserializeData
         )
         data.sortBy(_.clusterIdx).map(_.clusterCenter).map(OldVectors.fromML)
       } else {

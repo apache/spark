@@ -545,7 +545,7 @@ private[ml] object EnsembleModelReadWrite {
         dos.writeInt(v._1)
         dos.writeUTF(v._2)
         dos.writeDouble(v._3)
-      }, numDataParts = 1,
+      }, numDataParts = 1
     )
 
     val dataPath = new Path(path, "data").toString

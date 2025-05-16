@@ -187,7 +187,7 @@ object VarianceThresholdSelectorModel extends MLReadable[VarianceThresholdSelect
 
   private[ml] def deserializeData(dis: DataInputStream): Data = {
     import ReadWriteUtils._
-    val selectedFeatures = deserializeIntArray(dis)
+    val selectedFeatures = deserializeIntArray(dis).toSeq
     Data(selectedFeatures)
   }
 
