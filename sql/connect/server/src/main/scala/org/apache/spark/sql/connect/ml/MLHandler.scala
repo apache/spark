@@ -50,7 +50,7 @@ private class AttributeHelper(
   protected def instance(): Object = {
     val obj = sessionHolder.mlCache.get(objRef)
     if (obj == null) {
-      throw MLCacheInvalidException(s"object $objRef")
+      throw MLCacheInvalidException(objRef, sessionHolder.mlCache.getOffloadingTimeoutMinute)
     }
     obj
   }

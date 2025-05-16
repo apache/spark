@@ -37,7 +37,7 @@ import org.apache.spark.sql.connect.service.SessionHolder
  * MLCache is for caching ML objects, typically for models and summaries evaluated by a model.
  */
 private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
-  private val helper = new ConnectHelper()
+  private val helper = new ConnectHelper(sessionHolder.session)
   private val helperID = "______ML_CONNECT_HELPER______"
   private val modelClassNameFile = "__model_class_name__"
 
@@ -60,7 +60,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE) / 1024
   }
 
-  private def getOffloadingTimeoutMinute: Long = {
+  private[ml] def getOffloadingTimeoutMinute: Long = {
     sessionHolder.session.conf.get(
       Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_OFFLOADING_TIMEOUT)
   }

@@ -161,6 +161,10 @@ object ColumnDefinition {
           col.defaultValue.foreach { default =>
             checkDefaultColumnConflicts(col)
             validateDefaultValueExpr(default, statement, col.name, col.dataType)
+            if (!default.deterministic) {
+              throw QueryCompilationErrors.defaultValueNonDeterministicError(
+                "CREATE TABLE", col.name, default.originalSQL)
+            }
           }
         }
 
@@ -173,6 +177,10 @@ object ColumnDefinition {
                 "ALTER TABLE", c.colName, d.originalSQL, null)
             }
             validateDefaultValueExpr(d, "ALTER TABLE", c.colName, c.dataType)
+            if (!d.deterministic) {
+              throw QueryCompilationErrors.defaultValueNonDeterministicError(
+                "ALTER TABLE", c.colName, d.originalSQL)
+            }
           }
         }
 
