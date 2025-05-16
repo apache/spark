@@ -251,9 +251,10 @@ object SQLConf {
     .createWithDefault(true)
 
   val BLOCK_CREATE_TEMP_TABLE_USING_PROVIDER =
-    buildConf("spark.sql.blockCreateTempTableUsingProvider")
-      .doc("If enabled, we fail CREATE TEMPORARY TABLE ... USING provider during parsing.")
+    buildConf("spark.sql.legacy.blockCreateTempTableUsingProvider")
+      .doc("If enabled, we fail legacy CREATE TEMPORARY TABLE ... USING provider during parsing.")
       .internal()
+      .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
 
