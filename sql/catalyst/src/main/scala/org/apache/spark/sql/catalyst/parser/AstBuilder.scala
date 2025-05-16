@@ -2392,7 +2392,7 @@ class AstBuilder extends DataTypeAstBuilder
     val tableStreamingRelation = createUnresolvedRelation(
       ctx = ctx,
       ident = ident,
-      optionsClause = None,
+      optionsClause = Option(ctx.optionsClause),
       writePrivileges = Seq.empty,
       isStreaming = true)
     mayApplyAliasPlan(ctx.tableAlias, tableStreamingRelation)

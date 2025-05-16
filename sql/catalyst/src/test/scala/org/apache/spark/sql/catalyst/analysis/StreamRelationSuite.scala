@@ -19,11 +19,14 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.net.URI
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{Project, SubqueryAlias}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class StreamRelationSuite extends AnalysisTest {
   import CatalystSqlParser._
@@ -176,6 +179,27 @@ class StreamRelationSuite extends AnalysisTest {
       expectedErrorCondition = "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
       expectedMessageParameters = Map("name" -> "`some_func`"),
       queryContext = Array(ExpectedContext("some_func('arg')", 21, 36))
+    )
+  }
+
+  test("STREAM options are parsed correctly for streaming by identifier") {
+    val plan = parsePlan("SELECT * FROM STREAM table1 AS t WITH ('key'='value')")
+    comparePlans(
+      plan,
+      Project(
+        projectList = Seq(UnresolvedStar(None)),
+        child = SubqueryAlias(
+          identifier = AliasIdentifier(
+            name = "t",
+            qualifier = Seq.empty
+          ),
+          child = UnresolvedRelation(
+            multipartIdentifier = Seq("table1"),
+            isStreaming = true,
+            options = new CaseInsensitiveStringMap(Map("key" -> "value").asJava)
+          )
+        )
+      )
     )
   }
 }
