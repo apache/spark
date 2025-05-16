@@ -25,13 +25,12 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange, TableSummary, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
@@ -119,6 +118,33 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(catalog.listTables(Array("ns2")).toSet == Set(ident3))
 
     catalog.dropTable(ident3)
+  }
+
+  test("listTableSummaries") {
+    val namespace = Array("ns")
+    val catalog = newCatalog()
+    val identManaged = Identifier.of(namespace, "managed_table")
+    val identExternal = Identifier.of(namespace, "external_table")
+
+    assert(catalog.listTableSummaries(namespace).isEmpty)
+
+    val externalTableProperties = Map(
+      TableCatalog.PROP_EXTERNAL -> "1",
+      TableCatalog.PROP_LOCATION -> "s3://"
+    )
+
+    catalog.createTable(identManaged, columns, emptyTrans, emptyProps)
+    catalog.createTable(identExternal, columns, emptyTrans, externalTableProperties.asJava)
+
+    val tableSummaries = catalog.listTableSummaries(namespace).toSet
+    val expectedTableSummaries = Set(
+      new TableSummary(identManaged, TableSummary.MANAGED_TABLE_TYPE),
+      new TableSummary(identExternal, TableSummary.EXTERNAL_TABLE_TYPE),
+    )
+    assertResult(expectedTableSummaries)(tableSummaries)
+
+    catalog.dropTable(identManaged)
+    catalog.dropTable(identExternal)
   }
 
   test("createTable") {

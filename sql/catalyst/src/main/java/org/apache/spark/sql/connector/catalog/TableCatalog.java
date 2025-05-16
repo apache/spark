@@ -135,7 +135,7 @@ public interface TableCatalog extends CatalogPlugin {
       // If table type property is not present, we assume that table type is `MANAGED`.
       String tableType = table.properties().getOrDefault(
               TableCatalog.PROP_TABLE_TYPE,
-              TableSummary.MANAGED_TABLE_TYPE);
+              TableSummary.FOREIGN_TABLE_TYPE);
 
       return new TableSummary(identifier, tableType);
     });
