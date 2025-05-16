@@ -250,6 +250,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val BLOCK_CREATE_TEMP_TABLE_USING_PROVIDER =
+    buildConf("spark.sql.legacy.blockCreateTempTableUsingProvider")
+      .doc("If enabled, we fail legacy CREATE TEMPORARY TABLE ... USING provider during parsing.")
+      .internal()
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
     .internal()
     .doc("The max number of iterations the analyzer runs.")
