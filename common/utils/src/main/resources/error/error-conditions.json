@@ -4645,12 +4645,6 @@
     ],
     "sqlState" : "42836"
   },
-  "RECURSIVE_CTE_WHEN_INLINING_IS_FORCED" : {
-    "message" : [
-      "Recursive definitions cannot be used when CTE inlining is forced."
-    ],
-    "sqlState" : "42836"
-  },
   "RECURSIVE_CTE_WITH_MULTI_COMMAND" : {
     "message" : [
       "Recursive definitions cannot be used with multi-command operations."

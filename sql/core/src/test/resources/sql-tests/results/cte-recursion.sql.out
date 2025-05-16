@@ -884,7 +884,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "RECURSIVE_CTE_WHEN_INLINING_IS_FORCED",
+  "errorClass" : "RECURSIVE_CTE_WITH_MULTI_COMMAND",
   "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",

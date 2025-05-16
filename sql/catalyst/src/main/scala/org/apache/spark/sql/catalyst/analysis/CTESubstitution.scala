@@ -228,11 +228,6 @@ object CTESubstitution extends Rule[LogicalPlan] {
         _.containsAnyPattern(UNRESOLVED_WITH, PLAN_EXPRESSION)) {
       // allowRecursion flag is set to `True` by the parser if the `RECURSIVE` keyword is used.
       case cte @ UnresolvedWith(child: LogicalPlan, relations, allowRecursion) =>
-        if (allowRecursion && forceInline) {
-          cte.failAnalysis(
-            errorClass = "RECURSIVE_CTE_WHEN_INLINING_IS_FORCED",
-            messageParameters = Map.empty)
-        }
 
         val tempCteDefs = ArrayBuffer.empty[CTERelationDef]
         val resolvedCTERelations = if (recursiveCTERelationAncestor.isDefined) {
