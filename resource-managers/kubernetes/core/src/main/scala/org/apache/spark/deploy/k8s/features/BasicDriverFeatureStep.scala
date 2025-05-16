@@ -99,9 +99,8 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       conf.sparkConf.getInt(BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
     )
     val driverUIPort = SparkUI.getUIPort(conf.sparkConf)
-    // To avoid a new compile dependency, we use the string config name and default value.
     val driverSparkConnectServerPort =
-      conf.sparkConf.getInt("spark.connect.grpc.binding.port", DEFAULT_SPARK_CONNECT_SERVER_PORT)
+      conf.sparkConf.getInt(CONNECT_GRPC_BINDING_PORT, DEFAULT_SPARK_CONNECT_SERVER_PORT)
     val driverContainer = new ContainerBuilder(pod.container)
       .withName(Option(pod.container.getName).getOrElse(DEFAULT_DRIVER_CONTAINER_NAME))
       .withImage(driverContainerImage)

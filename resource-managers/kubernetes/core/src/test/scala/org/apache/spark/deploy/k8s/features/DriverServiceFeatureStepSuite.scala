@@ -49,7 +49,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
       .set(DRIVER_PORT, 9000)
       .set(DRIVER_BLOCK_MANAGER_PORT, 8080)
       .set(UI_PORT, 4080)
-      .set("spark.connect.grpc.binding.port", "15003")
+      .set(CONNECT_GRPC_BINDING_PORT, "15003")
     val kconf = KubernetesTestConf.createDriverConf(
       sparkConf = sparkConf,
       labels = DRIVER_LABELS,

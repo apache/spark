@@ -48,9 +48,8 @@ private[spark] class DriverServiceFeatureStep(
   private val driverBlockManagerPort = kubernetesConf.sparkConf.getInt(
     config.DRIVER_BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
   private val  driverUIPort = kubernetesConf.get(config.UI.UI_PORT)
-  // To avoid a new compile dependency, we use the string config name.
   private val driverSparkConnectServerPort = kubernetesConf.sparkConf.getInt(
-    "spark.connect.grpc.binding.port", DEFAULT_SPARK_CONNECT_SERVER_PORT)
+    CONNECT_GRPC_BINDING_PORT, DEFAULT_SPARK_CONNECT_SERVER_PORT)
 
   override def configurePod(pod: SparkPod): SparkPod = pod
 
