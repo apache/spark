@@ -246,7 +246,7 @@ jobs:
           - >-
             api, catalyst, hive-thriftserver
           - >-
-            mllib-local, mllib, graphx, profiler, pipelines
+            mllib-local, mllib, graphx, profiler
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
             kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect
