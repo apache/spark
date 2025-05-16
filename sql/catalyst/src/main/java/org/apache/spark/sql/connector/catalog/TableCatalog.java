@@ -65,6 +65,11 @@ public interface TableCatalog extends CatalogPlugin {
   String PROP_EXTERNAL = "external";
 
   /**
+   * A reserved property that indicates table entity type (external, managed, view, etc.).
+   */
+  String PROP_TABLE_TYPE = "table_type";
+
+  /**
    * A reserved property to specify the description of the table.
    */
   String PROP_COMMENT = "comment";
@@ -116,10 +121,26 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws NoSuchNamespaceException If the namespace does not exist (optional).
    */
   default TableSummary[] listTableSummaries(String[] namespace) throws NoSuchNamespaceException {
-    // By default, we assume that all tables have standard table type.
-    return Arrays.stream(this.listTables(namespace))
-      .map(identifier -> new TableSummary(identifier, TableSummary.REGULAR_TABLE_TYPE))
-      .toArray(TableSummary[]::new);
+    Identifier[] tableIdentifiers = this.listTables(namespace);
+    Stream<TableSummary> tableSummaryStream = Arrays.stream(tableIdentifiers).map(identifier -> {
+      Table table = null;
+      try {
+        table = this.loadTable(identifier);
+      } catch (NoSuchTableException e) {
+        // Exception should not be thrown if `loadTable` and `listTables` are properly implemented.
+        // Only valid case is where a table is dropped between `listTables` and `loadTable` operations.
+        throw new RuntimeException(e);
+      }
+
+      // If table type property is not present, we assume that table type is `MANAGED`.
+      String tableType = table.properties().getOrDefault(
+              TableCatalog.PROP_TABLE_TYPE,
+              TableSummary.MANAGED_TABLE_TYPE);
+
+      return new TableSummary(identifier, tableType);
+    });
+
+    return tableSummaryStream.toArray(TableSummary[]::new);
   }
 
   /**

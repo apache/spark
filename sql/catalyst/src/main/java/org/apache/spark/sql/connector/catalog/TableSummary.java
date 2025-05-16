@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import org.apache.spark.annotation.Evolving;
+
 import static com.google.common.base.Preconditions.checkNotNull;
 
+@Evolving
 public record TableSummary(Identifier identifier, String tableType) {
-    public static final String REGULAR_TABLE_TYPE = "TABLE";
-    public static final String REGULAR_VIEW_TABLE_TYPE = "VIEW";
+    public static final String MANAGED_TABLE_TYPE = "MANAGED";
+    public static final String EXTERNAL_TABLE_TYPE = "EXTERNAL";
+    public static final String VIEW_TABLE_TYPE = "VIEW";
+    public static final String FOREIGN_TABLE_TYPE = "FOREIGN";
 
     public TableSummary {
         checkNotNull(identifier, "Identifier of a table summary object cannot be null");
