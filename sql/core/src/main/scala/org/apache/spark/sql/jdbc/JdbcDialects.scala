@@ -43,7 +43,8 @@ import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
+import org.apache.spark.sql.connector.join.{JoinColumn, JoinType}
+import org.apache.spark.sql.connector.util.{JoinTypeSQLBuilder, V2ExpressionSQLBuilder}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
@@ -405,6 +406,10 @@ abstract class JdbcDialect extends Serializable with Logging {
       quoteIdentifier(namedRef.fieldNames.head)
     }
 
+    override def visitJoinColumn(column: JoinColumn): String = {
+      (column.qualifier.toSeq ++ Seq(column.name)).map(quoteIdentifier(_)).mkString(".")
+    }
+
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
       val databaseTypeDefinition =
         getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
@@ -491,6 +496,8 @@ abstract class JdbcDialect extends Serializable with Logging {
     }
   }
 
+  private[jdbc] class JDBCJoinTypeSQLBuilder extends JoinTypeSQLBuilder {}
+
   /**
    * Returns whether the database supports function.
    * @param funcName Upper-cased function name
@@ -512,6 +519,18 @@ abstract class JdbcDialect extends Serializable with Logging {
     } catch {
       case NonFatal(e) =>
         logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
+  }
+
+  @Since("4.0.0")
+  def compileJoinType(joinType: JoinType): Option[String] = {
+    val joinTypeBuilder = new JDBCJoinTypeSQLBuilder()
+    try {
+      Some(joinTypeBuilder.build(joinType))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling join type ", e)
         None
     }
   }
@@ -852,6 +871,21 @@ abstract class JdbcDialect extends Serializable with Logging {
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3183")
 
   def supportsHint: Boolean = false
+
+  /**
+   * Returns true if dialect supports JOIN operator.
+   */
+  def supportsJoin: Boolean = false
+
+  /**
+   * If true, left/right subquery of JOIN needs to have AS keywords before alias.
+   * For example,
+   * SELECT * FROM (subquery1) AS alias1 JOIN ...
+   *
+   * If false, SQL query wouldn't have AS keyword, so the query would look like
+   * SELECT * FROM (subquery1) alias1 JOIN ...
+   */
+  def needsASKeywordForJoinSubquery: Boolean = true
 
   /**
    * Return the DB-specific quoted and fully qualified table name
