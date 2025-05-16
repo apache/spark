@@ -243,6 +243,11 @@ private case class PostgresDialect()
       s" $indexType (${columnList.mkString(", ")}) $indexProperties"
   }
 
+  // See https://www.postgresql.org/docs/current/errcodes-appendix.html
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    exception.getSQLState.startsWith("42")
+  }
+
   // SHOW INDEX syntax
   // https://www.postgresql.org/docs/14/view-pg-indexes.html
   override def indexExists(
