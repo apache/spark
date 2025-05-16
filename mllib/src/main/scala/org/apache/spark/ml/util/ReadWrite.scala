@@ -931,6 +931,26 @@ private[spark] object ReadWriteUtils {
     }
   }
 
+  def serializeGenericArray[T](
+    array: Array[T], dos: DataOutputStream, serializer: (T, DataOutputStream) => Unit
+  ): Unit = {
+    dos.writeInt(array.length)
+    for (item <- array) {
+      serializer(item, dos)
+    }
+  }
+
+  def deserializeGenericArray[T](
+    dis: DataInputStream, deserializer: DataInputStream => T
+  ): Array[T] = {
+    val len = dis.readInt()
+    val data = new Array[T](len)
+    for (i <- 0 until len) {
+      data(i) = deserializer(dis)
+    }
+    data
+  }
+
   def saveText(path: String, data: String, spark: SparkSession): Unit = {
     if (localSavingModeState.get()) {
       val filePath = Paths.get(path)
@@ -1006,10 +1026,7 @@ private[spark] object ReadWriteUtils {
       Using.resource(
         new DataOutputStream(new BufferedOutputStream(new FileOutputStream(filePath.toFile)))
       ) { dos =>
-        dos.writeInt(data.length)
-        for (item <- data) {
-          localSerializer(item, dos)
-        }
+        serializeGenericArray(data, dos, localSerializer)
       }
     } else {
       import org.apache.spark.util.ArrayImplicits._
@@ -1029,12 +1046,7 @@ private[spark] object ReadWriteUtils {
       Using.resource(
         new DataInputStream(new BufferedInputStream(new FileInputStream(path)))
       ) { dis =>
-        val len = dis.readInt()
-        val data = new Array[T](len)
-        for (i <- 0 until len) {
-          data(i) = localDeserializer(dis)
-        }
-        data
+        deserializeGenericArray(dis, localDeserializer)
       }
     } else {
       import spark.implicits._
