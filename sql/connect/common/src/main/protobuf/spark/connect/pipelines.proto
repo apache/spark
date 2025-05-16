@@ -1,0 +1,142 @@
+syntax = "proto3";
+
+package spark.connect;
+
+import "spark/connect/relations.proto";
+import "spark/connect/types.proto";
+
+option java_multiple_files = true;
+option java_package = "org.apache.spark.connect.proto";
+
+// Dispatch object for pipelines commands.
+message PipelineCommand {
+  oneof command_type {
+    CreateDataflowGraph create_dataflow_graph = 1;
+    DefineDataset define_dataset = 2;
+    DefineFlow define_flow = 3;
+    DropDataflowGraph drop_dataflow_graph = 4;
+    StartRun start_run = 5;
+    StopRun stop_run = 6;
+    DefineSqlGraphElements define_sql_graph_elements = 7;
+  }
+
+  message DefineSqlGraphElements {
+    optional string dataflow_graph_id = 1;
+    optional string sql_file_name = 2;
+    optional string sql_text = 3;
+  }
+
+  // Request to create a new pipeline.
+  message CreateDataflowGraph {
+    // The default catalog.
+    optional string default_catalog = 1;
+
+    // The default database.
+    optional string default_database = 2;
+
+    // Default SQL configurations for all flows in this graph.
+    map<string, string> sql_conf = 5;
+
+    message Response {
+      // The ID of the created graph.
+      string dataflow_graph_id = 1;
+    }
+  }
+
+  // Drops the graph and stops any running attached flows.
+  message DropDataflowGraph {
+    // The graph to drop.
+    string dataflow_graph_id = 1;
+  }
+
+  // Request to define a dataset: a table, a materialized view, or a temporary view.
+  message DefineDataset {
+    // The graph to attach this dataset to.
+    string dataflow_graph_id = 1;
+
+    // Name of the dataset.
+    string dataset_name = 2;
+
+    // Table or view.
+    DatasetType dataset_type = 3;
+
+    // Optional comment for the dataset.
+    optional string comment = 4;
+
+    // Optional table properties.
+    map<string, string> table_properties = 5;
+
+    // Optional partition columns for the dataset (if applicable).
+    repeated string partition_cols = 6;
+
+    // Schema for the dataset. If unset, this will be inferred.
+    optional spark.connect.DataType schema = 7;
+
+    // The output table format of the dataset.
+    optional string format = 8;
+  }
+
+  // Request to define a flow targeting a dataset.
+  message DefineFlow {
+    // The graph to attach this dataset to.
+    string dataflow_graph_id = 1;
+
+    // Name of the dataset.
+    string flow_name = 2;
+
+    string target_dataset_name = 3;
+
+    // An unresolved relation that defines the dataset's flow.
+    spark.connect.Relation plan = 4;
+
+    // Default SQL configurations set when running this flow.
+    map<string, string> sql_conf = 5;
+
+    // If true, this flow will only be run once per execution.
+    bool once = 6;
+  }
+
+  // Resolves all datasets and flows and start a pipeline update. Should be called after all
+  // graph elements are registered.
+  message StartRun {
+    // The graph to start.
+    string dataflow_graph_id = 1;
+  }
+  message StopRun {
+    // The ID of the graph to stop..
+    string dataflow_graph_id = 1;
+  }
+}
+
+// Dispatch object for pipelines command results.
+message PipelineCommandResult {
+  oneof result_type {
+    CreateDataflowGraphResult create_dataflow_graph_result = 1;
+  }
+  message CreateDataflowGraphResult {
+    // The ID of the created graph.
+    string dataflow_graph_id = 1;
+  }
+}
+
+enum DatasetType {
+  DATASET_UNSPECIFIED = 0;
+  // A materialized view dataset which is published to the catalog
+  MATERIALIZED_VIEW = 1;
+  // A table which is published to the catalog
+  TABLE = 2;
+  // A view which is not published to the catalog
+  TEMPORARY_VIEW = 3;
+}
+
+// A response containing events emitted during the run of a pipeline.
+message PipelineEventsResult {
+  repeated PipelineEvent events = 1;
+}
+
+message PipelineEvent {
+  // The time of the event.
+  optional string timestamp = 1;
+  // The message that should be displayed to users.
+  optional string message = 2;
+}
