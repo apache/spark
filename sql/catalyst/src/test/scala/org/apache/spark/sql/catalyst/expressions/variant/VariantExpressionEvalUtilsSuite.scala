@@ -134,9 +134,9 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
         Map("badRecord" -> json, "failFastMode" -> "FAILFAST"))
     }
     for (json <- Seq("\"" + "a" * (16 * 1024 * 1024) + "\"",
-      (0 to 4 * 1024 * 1024).mkString("[", ",", "]"))) {
+      (0 to 40 * 1024 * 1024).mkString("[", ",", "]"))) {
       checkException(json, "VARIANT_SIZE_LIMIT",
-        Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`parse_json`"))
+        Map("sizeLimit" -> "128.0 MiB", "functionName" -> "`parse_json`"))
     }
   }
 
