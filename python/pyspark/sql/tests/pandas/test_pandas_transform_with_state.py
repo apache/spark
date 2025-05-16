@@ -801,7 +801,6 @@ class TransformWithStateTestsMixin:
 
         if with_extra_transformation:
             from pyspark.sql import functions as fn
-            import json
 
             tws_df = tws_df.select(
                 fn.col("id").cast("string").alias("key"),
