@@ -27,6 +27,7 @@ jobs:
   release:
     name: Release Apache Spark
     runs-on: ubuntu-latest
+    if: github.repository == 'apache/spark'
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v4
