@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.ml
 
+import java.lang.ThreadLocal
+
 import scala.collection.mutable
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 
@@ -115,7 +117,7 @@ private object ModelAttributeHelper {
 // MLHandler is a utility to group all ML operations
 private[connect] object MLHandler extends Logging {
 
-  val currentSessionHolder = new java.lang.ThreadLocal[SessionHolder] {
+  val currentSessionHolder = new ThreadLocal[SessionHolder] {
     override def initialValue: SessionHolder = null
   }
 
@@ -123,7 +125,7 @@ private[connect] object MLHandler extends Logging {
     val transformerClasses = MLUtils.loadOperators(classOf[Transformer])
     val estimatorClasses = MLUtils.loadOperators(classOf[Estimator[_]])
     val evaluatorClasses = MLUtils.loadOperators(classOf[Evaluator])
-    val whitelistedClasses = (
+    val allowlistedClasses = (
       transformerClasses ++ estimatorClasses ++ evaluatorClasses
         ++ Map(
           "org.apache.spark.ml.clustering.PowerIterationClustering" ->
@@ -134,7 +136,7 @@ private[connect] object MLHandler extends Logging {
       val sessionHolder = currentSessionHolder.get()
       if (sessionHolder != null) {
         val name = MLUtils.replaceOperator(sessionHolder, className)
-        whitelistedClasses(name)
+        allowlistedClasses(name)
       } else {
         // If sessionHolder is null, it means currently it is not running in a
         // Spark Connect server, fallback to the default unsafe class loader.
