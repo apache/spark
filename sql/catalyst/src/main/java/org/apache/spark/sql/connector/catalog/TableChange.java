@@ -745,14 +745,16 @@ public interface TableChange {
      * Returns the column default value SQL string (Spark SQL dialect). The default value literal
      * is not provided as updating column default values does not need to back-fill existing data.
      * Empty string means dropping the column default value.
+     *
+     * @deprecated Use {@link #newCurrentDefault()} instead.
      */
+    @Deprecated(since = "4.1.0")
     public String newDefaultValue() {
       return newCurrentDefault == null ? "" : newCurrentDefault.getSql();
     }
 
     /**
-     * Returns the column default value as {@link DefaultValue} with a
-     * {@link org.apache.spark.sql.connector.expressions.Expression}.  The default value literal
+     * Returns the column default value as {@link DefaultValue}.  The default value literal
      * is not provided as updating column default values does not need to back-fill existing data.
      * Null means dropping the column default value.
      */
@@ -762,13 +764,15 @@ public interface TableChange {
     public boolean equals(Object o) {
       if (o == null || getClass() != o.getClass()) return false;
       UpdateColumnDefaultValue that = (UpdateColumnDefaultValue) o;
-      return Objects.deepEquals(fieldNames, that.fieldNames) &&
+      return Arrays.equals(fieldNames, that.fieldNames) &&
         Objects.equals(newCurrentDefault, that.newCurrentDefault);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(Arrays.hashCode(fieldNames), newCurrentDefault);
+      int result = Arrays.hashCode(fieldNames);
+      result = 31 * result + Objects.hashCode(newCurrentDefault);
+      return result;
     }
   }
 

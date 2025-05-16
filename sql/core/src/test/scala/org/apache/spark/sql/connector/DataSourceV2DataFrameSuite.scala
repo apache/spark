@@ -725,10 +725,6 @@ class DataSourceV2DataFrameSuite
       column.newCurrentDefault() == expectedDefault,
         s"Default value mismatch for column '${column.toString}': " +
         s"expected $expectedDefault but found ${column.newCurrentDefault()}")
-    assert(
-      column.newDefaultValue() == expectedDefault.getSql,
-      s"Default value mismatch for column '${column.toString}': " +
-        s"expected ${expectedDefault.getSql} but found ${column.newDefaultValue()}")
   }
 
   private def checkDropDefaultValue(
@@ -737,10 +733,5 @@ class DataSourceV2DataFrameSuite
       column.newCurrentDefault() == null,
       s"Default value mismatch for column '${column.toString}': " +
         s"expected empty but found ${column.newCurrentDefault()}")
-
-    assert(
-      column.newDefaultValue() == "",
-      s"Default value mismatch for column '${column.toString}': " +
-        s"expected empty but found ${column.newDefaultValue()}")
   }
 }
