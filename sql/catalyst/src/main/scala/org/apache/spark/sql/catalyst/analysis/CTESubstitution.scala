@@ -60,7 +60,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       case c @ (_: Command | _: ParsedStatement | _: InsertIntoDir) => Seq(c)
       case u: UnresolvedWith =>
         collectCommands(u.child) ++ u.cteRelations.flatMap {
-          case (_, relation) => collectCommands(relation)
+          case (_, relation, _) => collectCommands(relation)
         }
       case p => p.children.flatMap(collectCommands)
     }
@@ -133,7 +133,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
         val newNames = ArrayBuffer.empty[String]
         newNames ++= outerCTERelationNames
         relations.foreach {
-          case (name, relation) =>
+          case (name, relation, _) =>
             if (startOfQuery && outerCTERelationNames.exists(resolver(_, name))) {
               throw QueryCompilationErrors.ambiguousRelationAliasNameInNestedCTEError(name)
             }
@@ -259,7 +259,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
   }
 
   private def resolveCTERelations(
-      relations: Seq[(String, SubqueryAlias)],
+      relations: Seq[(String, SubqueryAlias, Option[Int])],
       isLegacy: Boolean,
       forceInline: Boolean,
       outerCTEDefs: Seq[(String, CTERelationDef)],
@@ -272,7 +272,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
     } else {
       outerCTEDefs
     }
-    for ((name, relation) <- relations) {
+    for ((name, relation, maxDepth) <- relations) {
       // If recursion is allowed (RECURSIVE keyword specified)
       // then it has higher priority than outer or previous relations.
       // Therefore, we construct a `CTERelationDef` for the current relation.
@@ -280,7 +280,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       // referencing to, we first check if it is a reference to this one. If yes, then we set the
       // reference as being recursive.
       val recursiveCTERelation = if (allowRecursion) {
-        Some(name -> CTERelationDef(relation))
+        Some(name -> CTERelationDef(relation, maxDepth = maxDepth))
       } else {
         // If there is an outer recursive CTE relative to this one, and this one isn't recursive,
         // then the self reference with the first-check priority is going to be the CteRelationDef
@@ -348,7 +348,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       val cteRelation = if (allowRecursion) {
         recursiveCTERelation
         .map(_._2.copy(child = substituted))
-        .getOrElse(CTERelationDef(substituted))
+        .getOrElse(CTERelationDef(substituted, maxDepth = maxDepth))
       } else {
         CTERelationDef(substituted)
       }

@@ -134,21 +134,20 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       val constraint = getCheckConstraint(table)
       assert(constraint.name() == "c1")
       assert(constraint.toDDL ==
-        "CONSTRAINT c1 CHECK (from_json(j, 'a INT').a > 1) ENFORCED UNVALIDATED NORELY")
+        "CONSTRAINT c1 CHECK (from_json(j, 'a INT').a > 1) ENFORCED VALID NORELY")
       assert(constraint.predicateSql() == "from_json(j, 'a INT').a > 1")
       assert(constraint.predicate() == null)
     }
   }
 
   def getConstraintCharacteristics(): Seq[(String, String)] = {
-    val validStatus = "UNVALIDATED"
     Seq(
-      ("", s"ENFORCED $validStatus NORELY"),
-      ("NORELY", s"ENFORCED $validStatus NORELY"),
-      ("RELY", s"ENFORCED $validStatus RELY"),
-      ("ENFORCED", s"ENFORCED $validStatus NORELY"),
-      ("ENFORCED NORELY", s"ENFORCED $validStatus NORELY"),
-      ("ENFORCED RELY", s"ENFORCED $validStatus RELY")
+      ("", s"ENFORCED VALID NORELY"),
+      ("NORELY", s"ENFORCED VALID NORELY"),
+      ("RELY", s"ENFORCED VALID RELY"),
+      ("ENFORCED", s"ENFORCED VALID NORELY"),
+      ("ENFORCED NORELY", s"ENFORCED VALID NORELY"),
+      ("ENFORCED RELY", s"ENFORCED VALID RELY")
     )
   }
 
@@ -177,7 +176,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
             val constraint = getCheckConstraint(table)
             assert(constraint.name() == "c1")
             assert(constraint.toDDL ==
-              s"CONSTRAINT c1 CHECK (LENGTH(name) > 0) ENFORCED UNVALIDATED NORELY")
+              s"CONSTRAINT c1 CHECK (LENGTH(name) > 0) ENFORCED VALID NORELY")
             assert(constraint.predicateSql() == "LENGTH(name) > 0")
           }
         }
@@ -204,15 +203,120 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
         sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
         assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
-
+        sql(s"INSERT INTO $t VALUES (1, 'a'), (null, 'b')")
         sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (id > 0) $characteristic")
         val table = loadTable(nonPartitionCatalog, "ns", "tbl")
-        assert(table.currentVersion() == "1")
-        assert(table.validatedVersion() == "0")
+        assert(table.currentVersion() == "2")
+        assert(table.validatedVersion() == "1")
         val constraint = getCheckConstraint(table)
         assert(constraint.name() == "c1")
         assert(constraint.toDDL == s"CONSTRAINT c1 CHECK (id > 0) $expectedDDL")
       }
+    }
+  }
+
+  test("Alter table add new check constraint with violation") {
+    getConstraintCharacteristics().foreach { case (characteristic, expectedDDL) =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
+        assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
+        sql(s"INSERT INTO $t VALUES (-1, 'a'), (2, 'b')")
+        val error = intercept[SparkRuntimeException] {
+          sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (id > 0) $characteristic")
+        }
+        checkError(
+          exception = error,
+          condition = "NEW_CHECK_CONSTRAINT_VIOLATION",
+          parameters = Map("expression" -> "id > 0", "tableName" -> "non_part_test_catalog.ns.tbl")
+        )
+        assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
+      }
+    }
+  }
+
+  test("Alter table add new check constraint with nested column") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, s STRUCT<num INT, str STRING>) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, struct(-1, 'test')), (2, struct(5, 'valid'))")
+
+      // Add an invalid check constraint
+      val error = intercept[SparkRuntimeException] {
+        sql(s"ALTER TABLE $t ADD CONSTRAINT positive_num CHECK (s.num > 0)")
+      }
+      checkError(
+        exception = error,
+        condition = "NEW_CHECK_CONSTRAINT_VIOLATION",
+        parameters = Map("expression" -> "s.num > 0", "tableName" -> "non_part_test_catalog.ns.tbl")
+      )
+      assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
+
+      // Add a valid check constraint
+      sql(s"ALTER TABLE $t ADD CONSTRAINT valid_positive_num CHECK (s.num >= -1)")
+      val table = loadTable(nonPartitionCatalog, "ns", "tbl")
+      assert(table.currentVersion() == "2")
+      assert(table.validatedVersion() == "1")
+      val constraint = getCheckConstraint(table)
+      assert(constraint.name() == "valid_positive_num")
+      assert(constraint.toDDL ==
+        "CONSTRAINT valid_positive_num CHECK (s.num >= -1) ENFORCED VALID NORELY")
+    }
+  }
+
+  test("Alter table add new check constraint with violation - map type column") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, m MAP<STRING, INT>) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, map('a', -1, 'b', 2)), (2, map('a', 5))")
+
+      // Add an invalid check constraint
+      val error = intercept[SparkRuntimeException] {
+        sql(s"ALTER TABLE $t ADD CONSTRAINT positive_map_val CHECK (m['a'] > 0)")
+      }
+      checkError(
+        exception = error,
+        condition = "NEW_CHECK_CONSTRAINT_VIOLATION",
+        parameters = Map(
+          "expression" -> "m['a'] > 0",
+          "tableName" -> "non_part_test_catalog.ns.tbl")
+      )
+      assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
+
+      // Add a valid check constraint
+      sql(s"ALTER TABLE $t ADD CONSTRAINT valid_map_val CHECK (m['a'] >= -1)")
+      val table = loadTable(nonPartitionCatalog, "ns", "tbl")
+      assert(table.currentVersion() == "2")
+      assert(table.validatedVersion() == "1")
+      val constraint = getCheckConstraint(table)
+      assert(constraint.name() == "valid_map_val")
+      assert(constraint.toDDL ==
+        "CONSTRAINT valid_map_val CHECK (m['a'] >= -1) ENFORCED VALID NORELY")
+    }
+  }
+
+  test("Alter table add new check constraint with violation - array type column") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, a ARRAY<INT>) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, array(1, -2, 3)), (2, array(5, 6, 7))")
+
+      // Add an invalid check constraint
+      val error = intercept[SparkRuntimeException] {
+        sql(s"ALTER TABLE $t ADD CONSTRAINT positive_array CHECK (a[1] > 0)")
+      }
+      checkError(
+        exception = error,
+        condition = "NEW_CHECK_CONSTRAINT_VIOLATION",
+        parameters = Map("expression" -> "a[1] > 0", "tableName" -> "non_part_test_catalog.ns.tbl")
+      )
+      assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
+
+      // Add a valid check constraint
+      sql(s"ALTER TABLE $t ADD CONSTRAINT valid_array CHECK (a[1] >= -2)")
+      val table = loadTable(nonPartitionCatalog, "ns", "tbl")
+      assert(table.currentVersion() == "2")
+      assert(table.validatedVersion() == "1")
+      val constraint = getCheckConstraint(table)
+      assert(constraint.name() == "valid_array")
+      assert(constraint.toDDL ==
+        "CONSTRAINT valid_array CHECK (a[1] >= -2) ENFORCED VALID NORELY")
     }
   }
 
@@ -232,7 +336,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           condition = "CONSTRAINT_ALREADY_EXISTS",
           sqlState = "42710",
           parameters = Map("constraintName" -> "abc",
-            "oldConstraint" -> "CONSTRAINT abc CHECK (id > 0) ENFORCED UNVALIDATED NORELY")
+            "oldConstraint" -> "CONSTRAINT abc CHECK (id > 0) ENFORCED VALID NORELY")
         )
       }
     }

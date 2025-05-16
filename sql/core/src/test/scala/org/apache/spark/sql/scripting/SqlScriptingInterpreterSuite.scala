@@ -177,23 +177,6 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected)
   }
 
-  test("session vars - set and read (SET VAR)") {
-    val sqlScript =
-      """
-        |BEGIN
-        |DECLARE var = 1;
-        |SET VAR var = var + 1;
-        |SELECT var;
-        |END
-        |""".stripMargin
-    val expected = Seq(
-      Seq.empty[Row], // declare var
-      Seq.empty[Row], // set var
-      Seq(Row(2)) // select
-    )
-    verifySqlScriptResult(sqlScript, expected)
-  }
-
   test("session vars - set and read (SET)") {
     val sqlScript =
       """
@@ -225,7 +208,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | END;
         | BEGIN
         |   DECLARE var = 3;
-        |   SET VAR var = var + 1;
+        |   SET var = var + 1;
         |   SELECT var;
         | END;
         |END
@@ -1114,7 +1097,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | DECLARE i = 0;
         | WHILE i < 3 DO
         |   SELECT i;
-        |   SET VAR i = i + 1;
+        |   SET i = i + 1;
         | END WHILE;
         |END
         |""".stripMargin
@@ -1138,7 +1121,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | DECLARE i = 3;
         | WHILE i < 3 DO
         |   SELECT i;
-        |   SET VAR i = i + 1;
+        |   SET i = i + 1;
         | END WHILE;
         |END
         |""".stripMargin
@@ -1156,12 +1139,12 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | DECLARE i = 0;
         | DECLARE j = 0;
         | WHILE i < 2 DO
-        |   SET VAR j = 0;
+        |   SET j = 0;
         |   WHILE j < 2 DO
         |     SELECT i, j;
-        |     SET VAR j = j + 1;
+        |     SET j = j + 1;
         |   END WHILE;
-        |   SET VAR i = i + 1;
+        |   SET i = i + 1;
         | END WHILE;
         |END
         |""".stripMargin
@@ -1216,7 +1199,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | DECLARE i = 0;
         | REPEAT
         |   SELECT i;
-        |   SET VAR i = i + 1;
+        |   SET i = i + 1;
         | UNTIL
         |   i = 3
         | END REPEAT;
@@ -1242,7 +1225,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | DECLARE i = 3;
         | REPEAT
         |   SELECT i;
-        |   SET VAR i = i + 1;
+        |   SET i = i + 1;
         | UNTIL
         |   1 = 1
         | END REPEAT;
@@ -1300,13 +1283,13 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | DECLARE i = 0;
         | DECLARE j = 0;
         | REPEAT
-        |   SET VAR j = 0;
+        |   SET j = 0;
         |   REPEAT
         |     SELECT i, j;
-        |     SET VAR j = j + 1;
+        |     SET j = j + 1;
         |   UNTIL j >= 2
         |   END REPEAT;
-        |   SET VAR i = i + 1;
+        |   SET i = i + 1;
         | UNTIL i >= 2
         | END REPEAT;
         |END
@@ -1363,7 +1346,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | DECLARE i = 0;
         | REPEAT
         |   SELECT i;
-        |   SET VAR i = i + 1;
+        |   SET i = i + 1;
         | UNTIL
         |   1
         | END REPEAT;
@@ -1737,15 +1720,15 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | DECLARE x = 0;
         | DECLARE y = 0;
         | lbl1: LOOP
-        |   SET VAR y = 0;
+        |   SET y = 0;
         |   lbl2: LOOP
         |     SELECT x, y;
-        |     SET VAR y = y + 1;
+        |     SET y = y + 1;
         |     IF y >= 2 THEN
         |       LEAVE lbl2;
         |     END IF;
         |   END LOOP;
-        |   SET VAR x = x + 1;
+        |   SET x = x + 1;
         |   IF x >= 2 THEN
         |     LEAVE lbl1;
         |   END IF;

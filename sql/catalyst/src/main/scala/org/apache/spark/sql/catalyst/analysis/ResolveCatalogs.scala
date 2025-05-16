@@ -44,13 +44,12 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       // From scripts we can only create local variables, which must be unqualified,
       // and must not be DECLARE OR REPLACE.
       val resolved = if (withinSqlScript) {
-        // TODO [SPARK-50785]: Uncomment this when For Statement starts properly using local vars.
-//        if (c.replace) {
-//          throw new AnalysisException(
-//            "INVALID_VARIABLE_DECLARATION.REPLACE_LOCAL_VARIABLE",
-//            Map("varName" -> toSQLId(nameParts))
-//          )
-//        }
+        if (c.replace) {
+          throw new AnalysisException(
+            "INVALID_VARIABLE_DECLARATION.REPLACE_LOCAL_VARIABLE",
+            Map("varName" -> toSQLId(nameParts))
+          )
+        }
 
         if (nameParts.length != 1) {
           throw new AnalysisException(

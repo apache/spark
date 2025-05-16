@@ -437,6 +437,30 @@ class StatefulProcessorApiClient:
 
         return message.statusCode, message.errorMessage, message.value, message.requireNextFetch
 
+    # The third return type is RepeatedScalarFieldContainer[bytes], which is protobuf's container
+    # type. We simplify it to Any here to avoid unnecessary complexity.
+    def _receive_proto_message_with_map_keys_values(self) -> Tuple[int, str, Any, bool]:
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
+
+        length = read_int(self.sockfile)
+        bytes = self.sockfile.read(length)
+        message = stateMessage.StateResponseWithMapKeysOrValues()
+        message.ParseFromString(bytes)
+
+        return message.statusCode, message.errorMessage, message.value, message.requireNextFetch
+
+    # The third return type is RepeatedScalarFieldContainer[KeyAndValuePair], which is protobuf's
+    # container type. We simplify it to Any here to avoid unnecessary complexity.
+    def _receive_proto_message_with_map_pairs(self) -> Tuple[int, str, Any, bool]:
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
+
+        length = read_int(self.sockfile)
+        bytes = self.sockfile.read(length)
+        message = stateMessage.StateResponseWithMapIterator()
+        message.ParseFromString(bytes)
+
+        return message.statusCode, message.errorMessage, message.kvPair, message.requireNextFetch
+
     def _receive_str(self) -> str:
         return self.utf8_deserializer.loads(self.sockfile)
 

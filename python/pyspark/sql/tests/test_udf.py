@@ -1369,6 +1369,16 @@ class BaseUDFTestsMixin(object):
             with self.subTest(chain=chain):
                 assertDataFrameEqual(actual=actual, expected=expected)
 
+    def test_udf_empty_frame(self):
+        empty_df = self.spark.createDataFrame([], "id long")
+
+        @udf("long")
+        def add1(x):
+            return x + 1
+
+        result = empty_df.select(add1("id"))
+        self.assertEqual(result.collect(), [])
+
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     @classmethod

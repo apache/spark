@@ -86,7 +86,8 @@ case class UnionLoopExec(
     @transient anchor: LogicalPlan,
     @transient recursion: LogicalPlan,
     override val output: Seq[Attribute],
-    limit: Option[Int] = None) extends LeafExecNode {
+    limit: Option[Int] = None,
+    maxDepth: Option[Int] = None) extends LeafExecNode {
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(anchor, recursion)
 
@@ -155,14 +156,17 @@ case class UnionLoopExec(
     val numOutputRows = longMetric("numOutputRows")
     val numIterations = longMetric("numIterations")
     val numAnchorOutputRows = longMetric("numAnchorOutputRows")
-    val levelLimit = conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT)
+    val levelLimit = maxDepth.getOrElse(conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT))
     val rowLimit = conf.getConf(SQLConf.CTE_RECURSION_ROW_LIMIT)
 
     // currentLimit is initialized from the limit argument, and in each step it is decreased by
     // the number of rows generated in that step.
-    // If limit is not passed down, currentLimit is set to be zero and won't be considered in the
-    // condition of while loop down (limit.isEmpty will be true).
-    var currentLimit = limit.getOrElse(-1)
+    // If limit is not passed down, currentLimit is set to be the row limit set by the
+    // spark.sql.cteRecursionRowLimit flag. If we breach this limit, then we report an error so that
+    // the user knows they aren't getting all the rows they requested.
+    var currentLimit = limit.getOrElse(rowLimit)
+
+    val userSpecifiedLimit = limit.isDefined
 
     val unionChildren = mutable.ArrayBuffer.empty[LogicalPlan]
 
@@ -171,8 +175,6 @@ case class UnionLoopExec(
     numAnchorOutputRows += prevCount
 
     var currentLevel = 1
-
-    var currentNumRows: Long = 0
 
     var limitReached: Boolean = false
 
@@ -221,20 +223,18 @@ case class UnionLoopExec(
 
       unionChildren += prevPlan
 
-      currentNumRows += prevCount
-
-      if (limit.isDefined) {
+      if (rowLimit != -1) {
         currentLimit -= prevCount.toInt
         if (currentLimit <= 0) {
-          limitReached = true
+          if (userSpecifiedLimit) {
+            limitReached = true
+          } else {
+            throw new SparkException(
+              errorClass = "RECURSION_ROW_LIMIT_EXCEEDED",
+              messageParameters = Map("rowLimit" -> rowLimit.toString),
+              cause = null)
+          }
         }
-      }
-
-      if (rowLimit != -1 && currentNumRows > rowLimit) {
-        throw new SparkException(
-          errorClass = "RECURSION_ROW_LIMIT_EXCEEDED",
-          messageParameters = Map("rowLimit" -> rowLimit.toString),
-          cause = null)
       }
 
       // Update metrics

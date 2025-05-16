@@ -374,10 +374,10 @@ class GroupedData:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
         from pyspark.sql.streaming.stateful_processor_util import (
-            TransformWithStateInPySparkUdfUtils,
+            TransformWithStateInPandasUdfUtils,
         )
 
-        udf_util = TransformWithStateInPySparkUdfUtils(statefulProcessor, timeMode)
+        udf_util = TransformWithStateInPandasUdfUtils(statefulProcessor, timeMode)
         if initialState is None:
             udf_obj = UserDefinedFunction(
                 udf_util.transformWithStateUDF,
@@ -426,10 +426,10 @@ class GroupedData:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
         from pyspark.sql.streaming.stateful_processor_util import (
-            TransformWithStateInPySparkUdfUtils,
+            TransformWithStateInPandasUdfUtils,
         )
 
-        udf_util = TransformWithStateInPySparkUdfUtils(statefulProcessor, timeMode)
+        udf_util = TransformWithStateInPandasUdfUtils(statefulProcessor, timeMode)
         if initialState is None:
             udf_obj = UserDefinedFunction(
                 udf_util.transformWithStateUDF,

@@ -25,14 +25,12 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.connector.catalog.MetadataColumn
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{MetadataBuilder, NumericType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SparkErrorUtils, Utils}
 
-package object util extends Logging with SQLConfHelper {
+package object util extends Logging {
 
   /** Silences output to stderr or stdout for the duration of f */
   def quietly[A](f: => A): A = {
@@ -93,67 +91,24 @@ package object util extends Logging with SQLConfHelper {
 
   def stackTraceToString(t: Throwable): String = SparkErrorUtils.stackTraceToString(t)
 
-  /**
-   * Replaces attributes, string literals, complex type extractors, casts and python functions with
-   * their pretty form so that generated column names don't contain back-ticks or double-quotes.
-   *
-   * In case provided expression is [[AggregateExpression]] that contains a [[OuterReference]],
-   * pull out the outer reference and compute the name to maintain compatibility with single-pass
-   * analyzer.
-   */
-  private def usePrettyExpression(e: Expression, stripOuterReference: Boolean = true): Expression =
-    e transform {
-      case aggregateExpression: AggregateExpression
-        if stripOuterReference && conf.getConf(
-          SQLConf.PRETTY_ALIAS_NAME_FOR_CORRELATED_AGGREGATE_FUNCTION
-        ) && SubExprUtils.containsOuter(aggregateExpression) =>
-        val strippedAggregateExpression = SubExprUtils.stripOuterReference(aggregateExpression)
-        OuterReference(
-          new PrettyAttribute(
-            Alias(
-              strippedAggregateExpression,
-              toPrettySQL(strippedAggregateExpression, stripOuterReference)
-            )().toAttribute
-          )
-        )
-      case _ @ OuterReference(aggregateExpression: AggregateExpression)
-        if conf.getConf(
-          SQLConf.PRETTY_ALIAS_NAME_FOR_CORRELATED_AGGREGATE_FUNCTION
-        ) =>
-        OuterReference(
-          new PrettyAttribute(
-            Alias(
-              aggregateExpression,
-              toPrettySQL(aggregateExpression, stripOuterReference)
-            )().toAttribute
-          )
-        )
-      case a: Attribute => new PrettyAttribute(a)
-      case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
-      case Literal(v, t: NumericType) if v != null => PrettyAttribute(v.toString, t)
-      case Literal(null, dataType) => PrettyAttribute("NULL", dataType)
-      case e: GetStructField =>
-        val name = e.name.getOrElse(e.childSchema(e.ordinal).name)
-        PrettyAttribute(
-          usePrettyExpression(e.child, stripOuterReference).sql + "." + name,
-          e.dataType
-        )
-      case e: GetArrayStructFields =>
-        PrettyAttribute(
-          s"${usePrettyExpression(e.child, stripOuterReference)}.${e.field.name}",
-          e.dataType
-        )
-      case r: InheritAnalysisRules =>
-        PrettyAttribute(
-          r.makeSQLString(
-            r.parameters.map(parameter => toPrettySQL(parameter, stripOuterReference))
-          ),
-          r.dataType
-        )
-      case c: Cast if c.getTagValue(Cast.USER_SPECIFIED_CAST).isEmpty =>
-        PrettyAttribute(usePrettyExpression(c.child, stripOuterReference).sql, c.dataType)
-      case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
-    }
+  // Replaces attributes, string literals, complex type extractors with their pretty form so that
+  // generated column names don't contain back-ticks or double-quotes.
+  def usePrettyExpression(e: Expression): Expression = e transform {
+    case a: Attribute => new PrettyAttribute(a)
+    case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
+    case Literal(v, t: NumericType) if v != null => PrettyAttribute(v.toString, t)
+    case Literal(null, dataType) => PrettyAttribute("NULL", dataType)
+    case e: GetStructField =>
+      val name = e.name.getOrElse(e.childSchema(e.ordinal).name)
+      PrettyAttribute(usePrettyExpression(e.child).sql + "." + name, e.dataType)
+    case e: GetArrayStructFields =>
+      PrettyAttribute(s"${usePrettyExpression(e.child)}.${e.field.name}", e.dataType)
+    case r: InheritAnalysisRules =>
+      PrettyAttribute(r.makeSQLString(r.parameters.map(toPrettySQL)), r.dataType)
+    case c: Cast if c.getTagValue(Cast.USER_SPECIFIED_CAST).isEmpty =>
+      PrettyAttribute(usePrettyExpression(c.child).sql, c.dataType)
+    case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
+  }
 
   def quoteIdentifier(name: String): String = {
     QuotingUtils.quoteIdentifier(name)
@@ -167,8 +122,7 @@ package object util extends Logging with SQLConfHelper {
     QuotingUtils.quoteIfNeeded(part)
   }
 
-  def toPrettySQL(e: Expression, stripOuterReference: Boolean = true): String =
-    usePrettyExpression(e, stripOuterReference).sql
+  def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
 
   def escapeSingleQuotedString(str: String): String = {
     QuotingUtils.escapeSingleQuotedString(str)
