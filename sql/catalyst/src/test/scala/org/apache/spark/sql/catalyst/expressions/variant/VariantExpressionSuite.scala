@@ -422,6 +422,13 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     testVariantGet("null", "$", DateType, null)
   }
 
+  test("Test variant_get sql") {
+    assert(variantGet("1", "$", IntegerType).sql ==
+      "variant_get(PARSE_JSON('1'), '$', 'INT')")
+    assert(tryVariantGet("1", "$", IntegerType).sql ==
+      "try_variant_get(PARSE_JSON('1'), '$', 'INT')")
+  }
+
   test("SPARK-49985: Disable support for interval types in the variant spec") {
     val emptyMetadata = Array[Byte](VERSION, 0, 0)
 
