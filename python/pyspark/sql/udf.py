@@ -652,6 +652,7 @@ class UDFRegistration:
                 PythonEvalType.SQL_BATCHED_UDF,
                 PythonEvalType.SQL_ARROW_BATCHED_UDF,
                 PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                PythonEvalType.SQL_SCALAR_ARROW_UDF,
                 PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                 PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
             ]:
