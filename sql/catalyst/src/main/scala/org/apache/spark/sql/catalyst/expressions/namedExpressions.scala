@@ -111,6 +111,7 @@ abstract class Attribute extends LeafExpression with NamedExpression {
   @transient
   override lazy val references: AttributeSet = AttributeSet(this)
 
+  override def hasIndeterminism: Boolean = false
   def withNullability(newNullability: Boolean): Attribute
   def withQualifier(newQualifier: Seq[String]): Attribute
   def withName(newName: String): Attribute
@@ -202,7 +203,8 @@ case class Alias(child: Expression, name: String)(
 
   override def toAttribute: Attribute = {
     if (resolved) {
-      AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifier)
+      AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifier,
+        this.hasIndeterminism)
     } else {
       UnresolvedAttribute.quoted(name)
     }
@@ -282,7 +284,8 @@ case class AttributeReference(
     nullable: Boolean = true,
     override val metadata: Metadata = Metadata.empty)(
     val exprId: ExprId = NamedExpression.newExprId,
-    val qualifier: Seq[String] = Seq.empty[String])
+    val qualifier: Seq[String] = Seq.empty[String],
+    override val hasIndeterminism: Boolean = false)
   extends Attribute with Unevaluable {
 
   override lazy val treePatternBits: BitSet = AttributeReferenceTreeBits.bits
@@ -320,7 +323,8 @@ case class AttributeReference(
   }
 
   override def newInstance(): AttributeReference =
-    AttributeReference(name, dataType, nullable, metadata)(qualifier = qualifier)
+    AttributeReference(name, dataType, nullable, metadata)(qualifier = qualifier,
+      hasIndeterminism = hasIndeterminism)
 
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
@@ -329,7 +333,8 @@ case class AttributeReference(
     if (nullable == newNullability) {
       this
     } else {
-      AttributeReference(name, dataType, newNullability, metadata)(exprId, qualifier)
+      AttributeReference(name, dataType, newNullability, metadata)(exprId, qualifier,
+        hasIndeterminism)
     }
   }
 
@@ -337,7 +342,7 @@ case class AttributeReference(
     if (name == newName) {
       this
     } else {
-      AttributeReference(newName, dataType, nullable, metadata)(exprId, qualifier)
+      AttributeReference(newName, dataType, nullable, metadata)(exprId, qualifier, hasIndeterminism)
     }
   }
 
@@ -348,7 +353,7 @@ case class AttributeReference(
     if (newQualifier == qualifier) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata)(exprId, newQualifier)
+      AttributeReference(name, dataType, nullable, metadata)(exprId, newQualifier, hasIndeterminism)
     }
   }
 
@@ -356,12 +361,12 @@ case class AttributeReference(
     if (exprId == newExprId) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata)(newExprId, qualifier)
+      AttributeReference(name, dataType, nullable, metadata)(newExprId, qualifier, hasIndeterminism)
     }
   }
 
   override def withMetadata(newMetadata: Metadata): AttributeReference = {
-    AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier)
+    AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier, hasIndeterminism)
   }
 
   override def withDataType(newType: DataType): AttributeReference = {
@@ -369,7 +374,7 @@ case class AttributeReference(
   }
 
   override protected final def otherCopyArgs: Seq[AnyRef] = {
-    exprId :: qualifier :: Nil
+    exprId :: qualifier :: Boolean.box(hasIndeterminism) :: Nil
   }
 
   /** Used to signal the column used to calculate an eventTime watermark (e.g. a#1-T{delayMs}) */
