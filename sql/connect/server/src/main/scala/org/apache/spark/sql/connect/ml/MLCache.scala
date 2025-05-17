@@ -27,6 +27,7 @@ import scala.collection.mutable
 import com.google.common.cache.{CacheBuilder, RemovalNotification}
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.util.{ConnectHelper, MLWritable, Summary}
@@ -137,6 +138,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       cachedModel.put(objectId, CacheItem(obj, sizeBytes))
       if (getMemoryControlEnabled) {
         val savePath = offloadedModelsDir.resolve(objectId)
+        require(savePath.startsWith(offloadedModelsDir))
         obj.asInstanceOf[MLWritable].write.saveToLocal(savePath.toString)
         Files.writeString(savePath.resolve(modelClassNameFile), obj.getClass.getName)
         totalMLCacheInMemorySizeBytes.addAndGet(sizeBytes)
@@ -159,9 +161,21 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     if (refId == helperID) {
       helper
     } else {
+      // Verify the `refId` is a valid UUID.
+      // This is for preventing client to send a malicious `refId` which might
+      // cause Spark Server security issue.
+      try {
+        UUID.fromString(refId)
+      } catch {
+        case _: IllegalArgumentException => throw SparkException.internalError(
+          s"The MLCache key $refId is invalid."
+        )
+      }
+
       var obj: Object = Option(cachedModel.get(refId)).map(_.obj).getOrElse(null)
       if (obj == null && getMemoryControlEnabled) {
         val loadPath = offloadedModelsDir.resolve(refId)
+        require(loadPath.startsWith(offloadedModelsDir))
         if (Files.isDirectory(loadPath)) {
           val className = Files.readString(loadPath.resolve(modelClassNameFile))
           obj = MLUtils.loadTransformer(
