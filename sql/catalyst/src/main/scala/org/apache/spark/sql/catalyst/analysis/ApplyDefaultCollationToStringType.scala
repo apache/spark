@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateTable, CreateTempView, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateTable, CreateTempView, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, TableSpec, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.TableCatalog
+import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_COLLATION
 import org.apache.spark.sql.types.{DataType, StringType}
 
 /**
@@ -32,10 +33,12 @@ import org.apache.spark.sql.types.{DataType, StringType}
  */
 object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    fetchDefaultCollation(plan) match {
+    val planWithResolvedDefaultCollation = resolveDefaultCollation(plan)
+
+    fetchDefaultCollation(planWithResolvedDefaultCollation) match {
       case Some(collation) =>
-        transform(plan, StringType(collation))
-      case None => plan
+        transform(planWithResolvedDefaultCollation, StringType(collation))
+      case None => planWithResolvedDefaultCollation
     }
   }
 
@@ -44,8 +47,8 @@ object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
    */
   private def fetchDefaultCollation(plan: LogicalPlan): Option[String] = {
     plan match {
-      case createTable: CreateTable =>
-        createTable.tableSpec.collation
+      case CreateTable(_: ResolvedIdentifier, _, _, tableSpec: TableSpec, _) =>
+        tableSpec.collation
 
       // CreateView also handles CREATE OR REPLACE VIEW
       // Unlike for tables, CreateView also handles CREATE OR REPLACE VIEW
@@ -57,8 +60,8 @@ object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
       case createTempView: CreateTempView =>
         createTempView.collation
 
-      case replaceTable: ReplaceTable =>
-        replaceTable.tableSpec.collation
+      case ReplaceTable(_: ResolvedIdentifier, _, _, tableSpec: TableSpec, _) =>
+        tableSpec.collation
 
       // In `transform` we handle these 3 ALTER TABLE commands.
       case cmd: AddColumns => getCollationFromTableProps(cmd.table)
@@ -89,6 +92,50 @@ object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
         Some(resolvedTbl.table.properties.get(TableCatalog.PROP_COLLATION))
       case _ => None
     }
+  }
+
+  /**
+   * Determines the default collation for an object in the following order:
+   * 1. Use the object's explicitly defined default collation, if available.
+   * 2. Otherwise, use the default collation defined by the object's schema.
+   * 3. If not defined in the schema, use the default collation from the object's catalog.
+   *
+   * If none of these collations are specified, None will be persisted as the default collation,
+   * which means the system default collation `UTF8_BINARY` will be used and the plan will not be
+   * changed.
+   * This function applies to DDL commands. An object's default collation is persisted at the moment
+   * of its creation, and altering the schema or catalog collation will not affect existing objects.
+   */
+  def resolveDefaultCollation(plan: LogicalPlan): LogicalPlan = {
+    try {
+      plan match {
+        case createTable@CreateTable(ResolvedIdentifier(
+        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _)
+          if tableSpec.collation.isEmpty =>
+          createTable.copy(tableSpec = tableSpec.copy(
+            collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
+        case replaceTable@ReplaceTable(
+        ResolvedIdentifier(catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _)
+          if tableSpec.collation.isEmpty =>
+          replaceTable.copy(tableSpec = tableSpec.copy(
+            collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
+        case other =>
+          other
+      }
+    } catch {
+      case _: NoSuchNamespaceException =>
+        plan
+    }
+  }
+
+  /**
+   Retrieves the schema's default collation from the metadata of the given catalog and schema
+   name. Returns None if the default collation is not specified for the schema.
+   */
+  private def getCollationFromSchemaMetadata(
+      catalog: SupportsNamespaces, schemaName: Array[String]): Option[String] = {
+    val metadata = catalog.loadNamespaceMetadata(schemaName)
+    Option(metadata.get(PROP_COLLATION))
   }
 
   private def isCreateOrAlterPlan(plan: LogicalPlan): Boolean = plan match {

@@ -18,12 +18,24 @@
 package org.apache.spark.sql.collation
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.DatasourceV2SQLBase
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
 
 abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSession {
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    spark.conf.set(SQLConf.SCHEMA_LEVEL_COLLATIONS_ENABLED, true)
+  }
+
+  override def afterEach(): Unit = {
+    spark.conf.set(SQLConf.SCHEMA_LEVEL_COLLATIONS_ENABLED, false)
+    super.afterEach()
+  }
 
   val defaultStringProducingExpressions: Seq[String] = Seq(
     "current_timezone()", "current_database()", "md5('Spark' collate unicode)",
@@ -33,6 +45,7 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
   )
 
   def dataSource: String = "parquet"
+  def testSchema: String = "test_schema"
   def testTable: String = "test_tbl"
   def testView: String = "test_view"
   protected val fullyQualifiedPrefix = s"${CollationFactory.CATALOG}.${CollationFactory.SCHEMA}."
@@ -127,6 +140,91 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
       assertTableColumnCollation(testTable, "c7", "SR_CI_AI")
       assertTableColumnCollation(testTable, "c8", "UTF8_BINARY")
     }
+  }
+
+  Seq(
+    // (schemaDefaultCollation, tableDefaultCollation)
+    ("UTF8_BINARY", None),
+    ("UTF8_LCASE", None),
+    ("UNICODE", None),
+    ("DE", None),
+    ("UTF8_BINARY", Some("UTF8_BINARY")),
+    ("UTF8_BINARY", Some("UTF8_LCASE")),
+    ("UTF8_BINARY", Some("DE")),
+    ("UTF8_LCASE", Some("UTF8_BINARY")),
+    ("UTF8_LCASE", Some("UTF8_LCASE")),
+    ("UTF8_LCASE", Some("DE"))
+  ).foreach {
+    case (schemaDefaultCollation, tableDefaultCollation) =>
+      test(
+        s"""CREATE table with schema level collation
+          | (schema default collation = $schemaDefaultCollation,
+          | table default collation = $tableDefaultCollation)""".stripMargin) {
+        testCreateTableWithSchemaLevelCollation(
+          schemaDefaultCollation, tableDefaultCollation)
+      }
+
+      test(
+        s"""ALTER table with schema level collation
+          | (schema default collation = $schemaDefaultCollation,
+          | table default collation = $tableDefaultCollation)""".stripMargin) {
+        testAlterTableWithSchemaLevelCollation(
+         schemaDefaultCollation, tableDefaultCollation)
+      }
+  }
+
+  Seq(
+    // (schemaOldCollation, schemaNewCollation)
+    (None, "UTF8_BINARY"),
+    (None, "UTF8_LCASE"),
+    (None, "DE"),
+    (Some("UTF8_BINARY"), "UTF8_BINARY"),
+    (Some("UTF8_BINARY"), "UTF8_LCASE"),
+    (Some("UTF8_BINARY"), "DE"),
+    (Some("UTF8_LCASE"), "UTF8_BINARY"),
+    (Some("UTF8_LCASE"), "UTF8_LCASE"),
+    (Some("UTF8_LCASE"), "DE")
+  ).foreach {
+    case (schemaOldCollation, schemaNewCollation) =>
+      val schemaOldCollationDefaultClause =
+        if (schemaOldCollation.isDefined) {
+          s"DEFAULT COLLATION ${schemaOldCollation.get}"
+        } else {
+          ""
+        }
+
+      test(
+        s"""ALTER schema default collation (old schema default collation = $schemaOldCollation,
+          | new schema default collation = $schemaNewCollation)""".stripMargin) {
+        withDatabase(testSchema) {
+          sql(s"CREATE SCHEMA $testSchema $schemaOldCollationDefaultClause")
+          sql(s"USE $testSchema")
+
+          withTable(testTable) {
+            sql(s"CREATE TABLE $testTable (c1 STRING, c2 STRING COLLATE SR_AI)")
+            val tableDefaultCollation =
+              if (schemaOldCollation.isDefined) {
+                schemaOldCollation.get
+              } else {
+                "UTF8_BINARY"
+              }
+
+            // ALTER SCHEMA
+            sql(s"ALTER SCHEMA $testSchema DEFAULT COLLATION $schemaNewCollation")
+
+            // Altering schema default collation should not affect existing objects.
+            addAndAlterColumns(tableDefaultCollation = tableDefaultCollation)
+          }
+
+          withTable(testTable) {
+            sql(s"CREATE TABLE $testTable " +
+              s"(c1 STRING, c2 STRING COLLATE SR_AI, c3 STRING COLLATE UTF8_BINARY)")
+            assertTableColumnCollation(testTable, "c1", schemaNewCollation)
+            assertTableColumnCollation(testTable, "c2", "SR_AI")
+            assertTableColumnCollation(testTable, "c3", "UTF8_BINARY")
+          }
+        }
+      }
   }
 
   test("create table as select") {
@@ -263,6 +361,72 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
   }
 
   // endregion
+
+  protected def testCreateTableWithSchemaLevelCollation(
+      schemaDefaultCollation: String,
+      tableDefaultCollation: Option[String] = None,
+      replaceTable: Boolean = false): Unit = {
+    val (tableDefaultCollationClause, resolvedDefaultCollation) =
+      if (tableDefaultCollation.isDefined) {
+        (s"DEFAULT COLLATION ${tableDefaultCollation.get}", tableDefaultCollation.get)
+      } else {
+        ("", schemaDefaultCollation)
+      }
+    val replace = if (replaceTable) "OR REPLACE" else ""
+
+    withDatabase(testSchema) {
+      sql(s"CREATE SCHEMA $testSchema DEFAULT COLLATION $schemaDefaultCollation")
+      sql(s"USE $testSchema")
+      withTable(testTable) {
+        sql(s"CREATE $replace TABLE $testTable " +
+          s"(c1 STRING, c2 STRING COLLATE SR_AI, c3 STRING COLLATE UTF8_BINARY) " +
+          s"$tableDefaultCollationClause")
+        assertTableColumnCollation(testTable, "c1", resolvedDefaultCollation)
+        assertTableColumnCollation(testTable, "c2", "SR_AI")
+        assertTableColumnCollation(testTable, "c3", "UTF8_BINARY")
+      }
+    }
+  }
+
+  def testAlterTableWithSchemaLevelCollation(
+      schemaDefaultCollation: String, tableDefaultCollation: Option[String] = None): Unit = {
+    val (tableDefaultCollationClause, resolvedDefaultCollation) =
+      if (tableDefaultCollation.isDefined) {
+        (s"DEFAULT COLLATION ${tableDefaultCollation.get}", tableDefaultCollation.get)
+      } else {
+        ("", schemaDefaultCollation)
+      }
+
+    withDatabase(testSchema) {
+      sql(s"CREATE SCHEMA $testSchema DEFAULT COLLATION $schemaDefaultCollation")
+      sql(s"USE $testSchema")
+
+      withTable(testTable) {
+        sql(s"CREATE TABLE $testTable (c1 STRING, c2 STRING COLLATE SR_AI) " +
+          s"$tableDefaultCollationClause")
+
+        addAndAlterColumns(tableDefaultCollation = resolvedDefaultCollation)
+      }
+    }
+  }
+
+  private def addAndAlterColumns(tableDefaultCollation: String): Unit = {
+    // ADD COLUMN
+    sql(s"ALTER TABLE $testTable ADD COLUMN c3 STRING")
+    sql(s"ALTER TABLE $testTable ADD COLUMN c4 STRING COLLATE SR_AI")
+    sql(s"ALTER TABLE $testTable ADD COLUMN c5 STRING COLLATE UTF8_BINARY")
+    assertTableColumnCollation(testTable, "c3", tableDefaultCollation)
+    assertTableColumnCollation(testTable, "c4", "SR_AI")
+    assertTableColumnCollation(testTable, "c5", "UTF8_BINARY")
+
+    // ALTER COLUMN
+    sql(s"ALTER TABLE $testTable ALTER COLUMN c1 TYPE STRING COLLATE UNICODE")
+    sql(s"ALTER TABLE $testTable ALTER COLUMN c2 TYPE STRING")
+    sql(s"ALTER TABLE $testTable ALTER COLUMN c3 TYPE STRING COLLATE UTF8_BINARY")
+    assertTableColumnCollation(testTable, "c1", "UNICODE")
+    assertTableColumnCollation(testTable, "c2", tableDefaultCollation)
+    assertTableColumnCollation(testTable, "c3", "UTF8_BINARY")
+  }
 }
 
 class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
@@ -391,8 +555,14 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
 }
 
 class DefaultCollationTestSuiteV2 extends DefaultCollationTestSuite with DatasourceV2SQLBase {
-  override def testTable: String = s"testcat.${super.testTable}"
-  override def testView: String = s"testcat.${super.testView}"
+  override def testSchema: String = s"testcat.${super.testSchema}"
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    sql("USE testcat")
+    sql(s"CREATE SCHEMA IF NOT EXISTS $DEFAULT_DATABASE")
+    sql(s"USE testcat.$DEFAULT_DATABASE")
+  }
 
   test("inline table in RTAS") {
     withTable(testTable) {
@@ -425,6 +595,63 @@ class DefaultCollationTestSuiteV2 extends DefaultCollationTestSuite with Datasou
       val prefix = "SYSTEM.BUILTIN"
       checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $testTable"), Row(s"$prefix.sr_AI"))
       checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $testTable"), Row(s"$prefix.UTF8_LCASE"))
+    }
+  }
+
+  Seq(
+    // (schemaDefaultCollation, tableDefaultCollation)
+    ("UTF8_BINARY", None),
+    ("UTF8_LCASE", None),
+    ("UNICODE", None),
+    ("DE", None),
+    ("UTF8_BINARY", Some("UTF8_BINARY")),
+    ("UTF8_BINARY", Some("UTF8_LCASE")),
+    ("UTF8_BINARY", Some("DE")),
+    ("UTF8_LCASE", Some("UTF8_BINARY")),
+    ("UTF8_LCASE", Some("UTF8_LCASE")),
+    ("UTF8_LCASE", Some("DE"))
+  ).foreach {
+    case (schemaDefaultCollation, tableDefaultCollation) =>
+      test(
+        s"""CREATE OR REPLACE table with schema level collation
+          | (schema default collation = $schemaDefaultCollation,
+          | table default collation = $tableDefaultCollation)""".stripMargin) {
+        testCreateTableWithSchemaLevelCollation(
+          schemaDefaultCollation, tableDefaultCollation, replaceTable = true)
+      }
+
+      test(
+        s"""REPLACE COLUMNS with schema level collation
+          | (schema default collation = $schemaDefaultCollation,
+          | table default collation = $tableDefaultCollation""".stripMargin) {
+        testReplaceColumns(
+          schemaDefaultCollation, tableDefaultCollation)
+      }
+  }
+
+  private def testReplaceColumns(
+      schemaDefaultCollation: String, tableDefaultCollation: Option[String] = None): Unit = {
+    val (tableDefaultCollationClause, resolvedDefaultCollation) =
+      if (tableDefaultCollation.isDefined) {
+        (s"DEFAULT COLLATION ${tableDefaultCollation.get}", tableDefaultCollation.get)
+      } else {
+        ("", schemaDefaultCollation)
+      }
+
+    withDatabase(testSchema) {
+      sql(s"CREATE SCHEMA $testSchema DEFAULT COLLATION $schemaDefaultCollation")
+      sql(s"USE $testSchema")
+
+      withTable(testTable) {
+        sql(s"CREATE TABLE $testTable (c1 STRING, c2 STRING COLLATE SR_AI) " +
+          s"$tableDefaultCollationClause")
+
+        sql(s"ALTER TABLE $testTable REPLACE COLUMNS " +
+          "(c1 STRING COLLATE UNICODE, c2 STRING, c3 STRING COLLATE UTF8_BINARY)")
+        assertTableColumnCollation(testTable, "c1", "UNICODE")
+        assertTableColumnCollation(testTable, "c2", resolvedDefaultCollation)
+        assertTableColumnCollation(testTable, "c3", "UTF8_BINARY")
+      }
     }
   }
 }
