@@ -159,6 +159,7 @@ class PySparkException(Exception):
         if context:
             if context.contextType().name == "DataFrame":
                 logger = PySparkLogger.getLogger("DataFrameQueryContextLogger")
+                logger.propagate = False
                 call_site = context.callSite().split(":")
                 line = call_site[1] if len(call_site) == 2 else ""
                 logger.exception(
@@ -170,6 +171,7 @@ class PySparkException(Exception):
                 )
             else:
                 logger = PySparkLogger.getLogger("SQLQueryContextLogger")
+                logger.propagate = False
                 logger.exception(
                     self.getMessage(),
                     errorClass=self.getCondition(),
