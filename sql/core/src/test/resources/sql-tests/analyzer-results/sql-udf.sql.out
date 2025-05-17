@@ -1832,10 +1832,10 @@ Filter (spark_catalog.default.foo3_1b(sum(c2))#x > 0)
 SELECT c1, COUNT(*), foo3_1b(SUM(c2)) FROM t1 GROUP BY c1 HAVING SUM(foo3_1b(c2)) > 0
 -- !query analysis
 Project [c1#x, count(1)#xL, spark_catalog.default.foo3_1b(sum(c2))#x]
-+- Filter (sum(spark_catalog.default.foo3_1b(c2))#xL > cast(0 as bigint))
-   +- Project [c1#x, count(1)#xL, spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b(sum(c2))#x, sum(spark_catalog.default.foo3_1b(c2))#xL]
-      +- Project [c1#x, count(1)#xL, sum(c2)#xL, sum(spark_catalog.default.foo3_1b(c2))#xL, cast(sum(c2)#xL as int) AS x#x]
-         +- Aggregate [c1#x], [c1#x, count(1) AS count(1)#xL, sum(c2#x) AS sum(c2)#xL, sum(spark_catalog.default.foo3_1b(x#x)) AS sum(spark_catalog.default.foo3_1b(c2))#xL]
++- Filter (sum(spark_catalog.default.foo3_1b(c2#x))#xL > cast(0 as bigint))
+   +- Project [c1#x, count(1)#xL, spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b(sum(c2))#x, sum(spark_catalog.default.foo3_1b(c2#x))#xL]
+      +- Project [c1#x, count(1)#xL, sum(c2)#xL, sum(spark_catalog.default.foo3_1b(c2#x))#xL, cast(sum(c2)#xL as int) AS x#x]
+         +- Aggregate [c1#x], [c1#x, count(1) AS count(1)#xL, sum(c2#x) AS sum(c2)#xL, sum(spark_catalog.default.foo3_1b(x#x)) AS sum(spark_catalog.default.foo3_1b(c2#x))#xL]
             +- Project [c1#x, c2#x, cast(c2#x as int) AS x#x]
                +- SubqueryAlias spark_catalog.default.t1
                   +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
@@ -2141,9 +2141,9 @@ Project [spark_catalog.default.foo3_1b(c1)#x, sum(c2)#xL]
 -- !query
 SELECT foo3_1b(c1), c2, GROUPING(foo3_1b(c1)), SUM(c1) FROM t1 GROUP BY ROLLUP(foo3_1b(c1), c2)
 -- !query analysis
-Aggregate [spark_catalog.default.foo3_1b(c1)#x, c2#x, spark_grouping_id#xL], [spark_catalog.default.foo3_1b(c1)#x AS spark_catalog.default.foo3_1b(c1)#x, c2#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(spark_catalog.default.foo3_1b(c1))#x, sum(c1#x) AS sum(c1)#xL]
-+- Expand [[c1#x, c2#x, spark_catalog.default.foo3_1b(c1)#x, c2#x, 0], [c1#x, c2#x, spark_catalog.default.foo3_1b(c1)#x, null, 1], [c1#x, c2#x, null, null, 3]], [c1#x, c2#x, spark_catalog.default.foo3_1b(c1)#x, c2#x, spark_grouping_id#xL]
-   +- Project [c1#x, c2#x, spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b(c1)#x, c2#x AS c2#x]
+Aggregate [spark_catalog.default.foo3_1b(c1#x)#x, c2#x, spark_grouping_id#xL], [spark_catalog.default.foo3_1b(c1#x)#x AS spark_catalog.default.foo3_1b(c1)#x, c2#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(spark_catalog.default.foo3_1b(c1))#x, sum(c1#x) AS sum(c1)#xL]
++- Expand [[c1#x, c2#x, spark_catalog.default.foo3_1b(c1#x)#x, c2#x, 0], [c1#x, c2#x, spark_catalog.default.foo3_1b(c1#x)#x, null, 1], [c1#x, c2#x, null, null, 3]], [c1#x, c2#x, spark_catalog.default.foo3_1b(c1#x)#x, c2#x, spark_grouping_id#xL]
+   +- Project [c1#x, c2#x, spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b(c1#x)#x, c2#x AS c2#x]
       +- Project [c1#x, c2#x, cast(c1#x as int) AS x#x]
          +- SubqueryAlias spark_catalog.default.t1
             +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
@@ -2932,7 +2932,7 @@ Project [spark_catalog.default.foo3_2e1(occurrences#x, instance_start_time#x) AS
 :     :        +- OneRowRelation
 :     +- Project [CASE WHEN (isnull(outer(occurrences#x)) OR (size(outer(occurrences#x), false) = 0)) THEN cast(null as string) ELSE sort_array(diffs#x, true)[0].id END AS id#x]
 :        +- SubqueryAlias t
-:           +- CTERelationRef xxxx, true, [diffs#x], false, false, 1
+:           +- CTERelationRef xxxx, true, [diffs#x], false, false
 +- Project [cast(array(struct(col1, 2022-01-01 10:11:12, col2, 1), struct(col1, 2022-01-01 10:11:15, col2, 2)) as array<struct<start_time:timestamp,occurrence_id:string>>) AS occurrences#x, cast(2022-01-01 as timestamp) AS instance_start_time#x]
    +- OneRowRelation
 
