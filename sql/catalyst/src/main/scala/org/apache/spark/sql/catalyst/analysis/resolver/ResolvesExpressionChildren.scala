@@ -81,6 +81,9 @@ trait ResolvesExpressionChildren {
 
   /**
    * Resolves generic [[Expression]] children and returns its copy with children resolved.
+   *
+   * We avoid extra method calls here, because `resolveChild` usually recurses deeply into
+   * resolution, and expression trees may be quite deep.
    */
   protected def withResolvedChildren(
       unresolvedExpression: Expression,
@@ -94,19 +97,13 @@ trait ResolvesExpressionChildren {
     case quaternaryExpression: QuaternaryExpression =>
       withResolvedChildren(quaternaryExpression, resolveChild)
     case _ =>
-      withResolvedChildrenImpl(unresolvedExpression, resolveChild)
-  }
+      val newChildren = new mutable.ArrayBuffer[Expression](unresolvedExpression.children.size)
 
-  private def withResolvedChildrenImpl(
-      unresolvedExpression: Expression,
-      resolveChild: Expression => Expression): Expression = {
-    val newChildren = new mutable.ArrayBuffer[Expression](unresolvedExpression.children.size)
+      val childrenIterator = unresolvedExpression.children.iterator
+      while (childrenIterator.hasNext) {
+        newChildren += resolveChild(childrenIterator.next())
+      }
 
-    val childrenIterator = unresolvedExpression.children.iterator
-    while (childrenIterator.hasNext) {
-      newChildren += resolveChild(childrenIterator.next())
-    }
-
-    unresolvedExpression.withNewChildren(newChildren.toSeq)
+      unresolvedExpression.withNewChildren(newChildren.toSeq)
   }
 }

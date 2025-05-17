@@ -22,13 +22,11 @@ import java.util.{HashSet, LinkedHashMap}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.analysis.{
-  withPosition,
   AnalysisErrorAt,
   NondeterministicExpressionCollection,
   UnresolvedAttribute
 }
 import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
   AttributeReference,
   Expression,
   ExprId,
@@ -37,9 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Literal,
   NamedExpression
 }
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
-import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 
 /**
  * Resolves an [[Aggregate]] by resolving its child, aggregate expressions and grouping
@@ -47,35 +43,47 @@ import org.apache.spark.sql.types.IntegerType
  * related to [[Aggregate]] resolution.
  */
 class AggregateResolver(operatorResolver: Resolver, expressionResolver: ExpressionResolver)
-    extends TreeNodeResolver[Aggregate, Aggregate] {
+    extends TreeNodeResolver[Aggregate, LogicalPlan] {
   private val scopes = operatorResolver.getNameScopes
+  private val lcaResolver = expressionResolver.getLcaResolver
 
   /**
    * Resolve [[Aggregate]] operator.
    *
    * 1. Resolve the child (inline table).
-   * 2. Resolve aggregate expressions using [[ExpressionResolver.resolveAggregateExpressions]].
+   * 2. Resolve aggregate expressions using [[ExpressionResolver.resolveAggregateExpressions]] and
+   *    set [[NameScope.ordinalReplacementExpressions]] for grouping expressions resolution.
    * 3. If there's just one [[UnresolvedAttribute]] with a single-part name "ALL", expand it using
    *    aggregate expressions which don't contain aggregate functions. There should not exist a
    *    column with that name in the lower operator's output, otherwise it takes precedence.
    * 4. Resolve grouping expressions using [[ExpressionResolver.resolveGroupingExpressions]]. This
    *    includes alias references to aggregate expressions, which is done in
-   *    [[NameScope.resolveMultipartName]].
-   * 5. Substitute ordinals with aggregate expressions in appropriate places.
-   * 6. Substitute non-deterministic expressions with derived attribute references to an
+   *    [[NameScope.resolveMultipartName]] and replacing [[UnresolvedOrdinals]] with corresponding
+   *    expressions from aggregate list, done in [[OrdinalResolver]].
+   * 5. Substitute non-deterministic expressions with derived attribute references to an
    *    artificial [[Project]] list.
    *
-   * At the end of resolution we validate the [[Aggregate]] using the
-   * [[ExprUtils.assertValidAggregation]], update the `scopes` with the output of [[Aggregate]] and
-   * return the result.
+   * If the resulting [[Aggregate]] contains lateral columns references, delegate the resolution of
+   * these columns to [[LateralColumnAliasResolver.handleLcaInAggregate]]. Otherwise, validate the
+   * [[Aggregate]] using the [[ExprUtils.assertValidAggregation]], update the `scopes` with the
+   * output of [[Aggregate]] and return the result.
    */
-  def resolve(unresolvedAggregate: Aggregate): Aggregate = {
+  def resolve(unresolvedAggregate: Aggregate): LogicalPlan = {
     val resolvedAggregate = scopes.withNewScope() {
       val resolvedChild = operatorResolver.resolve(unresolvedAggregate.child)
 
       val resolvedAggregateExpressions = expressionResolver.resolveAggregateExpressions(
         unresolvedAggregate.aggregateExpressions,
         unresolvedAggregate
+      )
+
+      scopes.current.setOrdinalReplacementExpressions(
+        OrdinalReplacementGroupingExpressions(
+          expressions = resolvedAggregateExpressions.expressions.toIndexedSeq,
+          hasStar = resolvedAggregateExpressions.hasStar,
+          expressionIndexesWithAggregateFunctions =
+            resolvedAggregateExpressions.expressionIndexesWithAggregateFunctions
+        )
       )
 
       val resolvedGroupingExpressions =
@@ -85,126 +93,49 @@ class AggregateResolver(operatorResolver: Resolver, expressionResolver: Expressi
             unresolvedAggregate
           )
         } else {
-          val partiallyResolvedGroupingExpressions = expressionResolver.resolveGroupingExpressions(
+          expressionResolver.resolveGroupingExpressions(
             unresolvedAggregate.groupingExpressions,
             unresolvedAggregate
           )
-          withPosition(unresolvedAggregate) {
-            tryReplaceOrdinalsInGroupingExpressions(
-              partiallyResolvedGroupingExpressions,
-              resolvedAggregateExpressions
-            )
-          }
         }
 
-      val resolvedAggregate = unresolvedAggregate.copy(
+      val partiallyResolvedAggregate = unresolvedAggregate.copy(
         groupingExpressions = resolvedGroupingExpressions,
         aggregateExpressions = resolvedAggregateExpressions.expressions,
         child = resolvedChild
       )
 
-      tryPullOutNondeterministic(resolvedAggregate)
-    }
+      val resolvedAggregate = tryPullOutNondeterministic(partiallyResolvedAggregate)
 
-    // TODO: This validation function does a post-traversal. This is discouraged in single-pass
-    //       Analyzer.
-    ExprUtils.assertValidAggregation(resolvedAggregate)
-
-    scopes.overwriteOutputAndExtendHiddenOutput(
-      output = resolvedAggregate.aggregateExpressions.map(_.toAttribute),
-      groupingAttributeIds = Some(getGroupingAttributeIds(resolvedAggregate))
-    )
-
-    resolvedAggregate
-  }
-
-  /**
-   * Replaces the ordinals with the actual expressions from the resolved aggregate expression list
-   * or throws if any of aggregate expression are irregular.
-   * There are three cases:
-   *  - If the aggregate expression referenced by the ordinal is a [[Literal]] with the Integer
-   *    data type - preserve the ordinal literal in order to pass logical plan comparison.
-   *  - If [[SQLConf.groupByOrdinal]] flag is set to false, treat the grouping expression as
-   *    a [[Literal]] instead of ordinal.
-   *  - If aggregate expression is an [[Alias]] return [[Alias.child]].
-   *  - Otherwise, replace the ordinal with the aggregate expression.
-   * Remove all the leftover [[Alias]]es at the end of resolution.
-   * For the query:
-   *
-   * {{{ SELECT col1 + 1, col1, col2 FROM VALUES(1, 2) GROUP BY 2, col2, 3; }}}
-   *
-   * It would replace `2` with the `col1` and `3` with `col2` so the final grouping expression list
-   * would be: [col1, col2, col2].
-   *
-   * In case of having an integer [[Literal]] in the aggregate expressions which is referenced by an
-   * ordinal, example and final grouping expression list are the following:
-   *  - Example:
-   *    {{{ SELECT col1 + 1, col1, 10 FROM VALUES(1, 2) GROUP BY 2, col2, 3; }}}
-   *  - Grouping expressions:
-   *    [col1, col2, 3] // we preserve the ordinal instead of replacing it.
-   */
-  private def tryReplaceOrdinalsInGroupingExpressions(
-      groupingExpressions: Seq[Expression],
-      aggregateExpressions: ResolvedAggregateExpressions): Seq[Expression] = {
-    val aggregateExpressionsArray = aggregateExpressions.expressions.toArray
-    val groupByOrdinal = conf.groupByOrdinal
-    groupingExpressions.map { expression =>
-      val maybeGroupByOrdinal = if (groupByOrdinal) {
-        tryReplaceOrdinalInGroupingExpression(
-          expression,
-          aggregateExpressionsArray,
-          aggregateExpressions
+      if (resolvedAggregateExpressions.hasLateralColumnAlias) {
+        val aggregateWithLcaResolutionResult = lcaResolver.handleLcaInAggregate(resolvedAggregate)
+        AggregateResolutionResult(
+          operator = aggregateWithLcaResolutionResult.resolvedOperator,
+          outputList = aggregateWithLcaResolutionResult.outputList,
+          groupingAttributeIds = None,
+          aggregateListAliases = aggregateWithLcaResolutionResult.aggregateListAliases
         )
       } else {
-        expression
-      }
-      maybeGroupByOrdinal match {
-        case alias: Alias =>
-          alias.child
-        case other => other
+        // TODO: This validation function does a post-traversal. This is discouraged in single-pass
+        //       Analyzer.
+        ExprUtils.assertValidAggregation(resolvedAggregate)
+
+        AggregateResolutionResult(
+          operator = resolvedAggregate,
+          outputList = resolvedAggregate.aggregateExpressions,
+          groupingAttributeIds = Some(getGroupingAttributeIds(resolvedAggregate)),
+          aggregateListAliases = scopes.current.getAggregateListAliases
+        )
       }
     }
-  }
 
-  private def tryReplaceOrdinalInGroupingExpression(
-      groupingExpression: Expression,
-      aggregateExpressionsArray: Array[NamedExpression],
-      resolvedAggregateExpressions: ResolvedAggregateExpressions): Expression = {
-    TryExtractOrdinal(groupingExpression) match {
-      case Some(ordinal) =>
-        if (ordinal > aggregateExpressionsArray.length) {
-          throw QueryCompilationErrors.groupByPositionRangeError(
-            ordinal,
-            aggregateExpressionsArray.length
-          )
-        }
+    scopes.overwriteOutputAndExtendHiddenOutput(
+      output = resolvedAggregate.outputList.map(_.toAttribute),
+      groupingAttributeIds = resolvedAggregate.groupingAttributeIds,
+      aggregateListAliases = resolvedAggregate.aggregateListAliases
+    )
 
-        if (resolvedAggregateExpressions.hasStar) {
-          throw QueryCompilationErrors.starNotAllowedWhenGroupByOrdinalPositionUsedError()
-        }
-
-        if (resolvedAggregateExpressions.expressionIndexesWithAggregateFunctions
-            .contains(ordinal - 1)) {
-          throw QueryCompilationErrors.groupByPositionRefersToAggregateFunctionError(
-            ordinal,
-            aggregateExpressionsArray(ordinal - 1)
-          )
-        }
-
-        val resolvedOrdinalAggregateExpression =
-          aggregateExpressionsArray(ordinal - 1) match {
-            case alias: Alias =>
-              alias.child
-            case other => other
-          }
-
-        resolvedOrdinalAggregateExpression match {
-          case Literal(_: Int, IntegerType) =>
-            Literal(ordinal)
-          case other => other
-        }
-      case None => groupingExpression
-    }
+    resolvedAggregate.operator
   }
 
   /**
@@ -328,7 +259,10 @@ class AggregateResolver(operatorResolver: Resolver, expressionResolver: Expressi
       case _ => false
     }
     isOrderByAll && scopes.current
-      .resolveMultipartName(Seq("ALL"))
+      .resolveMultipartName(
+        Seq("ALL"),
+        canReferenceAggregateExpressionAliases = true
+      )
       .candidates
       .isEmpty
   }

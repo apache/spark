@@ -18,7 +18,7 @@
 package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{FunctionResolution, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.analysis.resolver.{MetadataResolver, Resolver, ResolverRunner}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class ViewResolverSuite extends QueryTest with SharedSparkSession {
   private val catalogName =
@@ -110,63 +109,48 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Max nested view depth exceeded") {
-    try {
-      spark.sql("CREATE VIEW v0 AS SELECT * FROM VALUES (1);")
-      for (i <- 0 until conf.maxNestedViewDepth) {
-        spark.sql(s"CREATE VIEW v${i + 1} AS SELECT * FROM v$i;")
-      }
+    withSQLConf("spark.sql.view.maxNestedViewDepth" -> "10") {
+      try {
+        spark.sql("CREATE VIEW v0 AS SELECT * FROM VALUES (1);")
+        for (i <- 0 until conf.maxNestedViewDepth) {
+          spark.sql(s"CREATE VIEW v${i + 1} AS SELECT * FROM v$i;")
+        }
 
-      checkError(
-        exception = intercept[AnalysisException] {
-          checkViewResolution(s"SELECT * FROM v${conf.maxNestedViewDepth}")
-        },
-        condition = "VIEW_EXCEED_MAX_NESTED_DEPTH",
-        parameters = Map(
-          "viewName" -> s"`$catalogName`.`default`.`v0`",
-          "maxNestedDepth" -> conf.maxNestedViewDepth.toString
-        )
-      )
-    } finally {
-      for (i <- 0 until (conf.maxNestedViewDepth + 1)) {
-        spark.sql(s"DROP VIEW v${conf.maxNestedViewDepth - i};")
-      }
-    }
-  }
-
-  test("View with options") {
-    withView("v1") {
-      spark.sql("CREATE VIEW v1 AS SELECT col1, col2 FROM VALUES (1, 'a')")
-
-      val options = new java.util.HashMap[String, String]
-      options.put("foo", "bar")
-      checkViewResolution(
-        "SELECT * FROM v1 WITH ('foo' = 'bar')",
-        expectedChild = testTable
-          .select(col1Integer, col2String)
-          .select(
-            cast(
-              col1Integer,
-              IntegerType,
-              ansiEnabled = conf.ansiEnabled || conf.viewSchemaCompensation
-            ).as("col1"),
-            cast(
-              col2String,
-              StringType,
-              ansiEnabled = conf.ansiEnabled || conf.viewSchemaCompensation
-            ).as("col2")
+        checkError(
+          exception = intercept[AnalysisException] {
+            checkViewResolution(s"SELECT * FROM v${conf.maxNestedViewDepth}")
+          },
+          condition = "VIEW_EXCEED_MAX_NESTED_DEPTH",
+          parameters = Map(
+            "viewName" -> s"`$catalogName`.`default`.`v0`",
+            "maxNestedDepth" -> conf.maxNestedViewDepth.toString
           ),
-        expectedOptions = new CaseInsensitiveStringMap(options)
-      )
+          queryContext = Array(
+            ExpectedContext(
+              objectType = "VIEW",
+              objectName = s"$catalogName.default.v1",
+              startIndex = 14,
+              stopIndex = 15,
+              fragment = "v0"
+            )
+          )
+        )
+      } finally {
+        for (i <- 0 until (conf.maxNestedViewDepth + 1)) {
+          spark.sql(s"DROP VIEW v${conf.maxNestedViewDepth - i};")
+        }
+      }
     }
   }
 
   private def checkViewResolution(
       sqlText: String,
-      expectedChild: LogicalPlan = OneRowRelation(),
-      expectedOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()) = {
+      expectedChild: LogicalPlan = OneRowRelation()) = {
+    val relationResolution = Resolver.createRelationResolution(spark.sessionState.catalogManager)
     val metadataResolver = new MetadataResolver(
       spark.sessionState.catalogManager,
-      Resolver.createRelationResolution(spark.sessionState.catalogManager)
+      relationResolution,
+      new FunctionResolution(spark.sessionState.catalogManager, relationResolution)
     )
 
     val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(sqlText)
@@ -198,7 +182,6 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
     assert(
       normalizeExprIds(resolvedView.child).prettyJson == normalizeExprIds(expectedChild).prettyJson
     )
-    assert(resolvedView.options == expectedOptions)
   }
 
   private def cast(

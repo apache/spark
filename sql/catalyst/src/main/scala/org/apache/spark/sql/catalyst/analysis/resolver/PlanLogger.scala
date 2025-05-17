@@ -30,6 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
 class PlanLogger extends Logging {
   private val planChangeLogLevel = SQLConf.get.planChangeLogLevel
   private val expressionTreeChangeLogLevel = SQLConf.get.expressionTreeChangeLogLevel
+  private val nameResolutionLogLevel = SQLConf.get.nameResolutionLogLevel
 
   def logPlanResolutionEvent(plan: LogicalPlan, event: String): Unit = {
     logBasedOnLevel(planChangeLogLevel) {
@@ -71,5 +72,23 @@ class PlanLogger extends Logging {
          |${MDC(QUERY_PLAN, sideBySide(unresolved, resolved).mkString("\n"))}
          """.stripMargin
     }
+  }
+
+  def logNameResolutionEvent(
+      multipartName: Seq[String],
+      candidates: Seq[Expression],
+      event: String): Unit = {
+    logBasedOnLevel(nameResolutionLogLevel) {
+      log"""
+         |=== Name resolution: ${MDC(MESSAGE, event)} ===
+         |${MDC(QUERY_PLAN, formatMultipartNameToCandidates(multipartName, candidates))}
+         """.stripMargin
+    }
+  }
+
+  private def formatMultipartNameToCandidates(
+      multipartName: Seq[String],
+      candidates: Seq[Expression]): String = {
+    s"${multipartName.mkString(".")} -> ${candidates.map(_.treeString).mkString(", ")}"
   }
 }

@@ -17,20 +17,17 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, NamedExpression}
+import java.util.HashSet
+
+import org.apache.spark.sql.catalyst.expressions.{Alias, ExprId, NamedExpression}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
- * Structure used to return results of the resolved project list.
- *  - expressions: The resolved expressions. It is resolved using the
- *                 `resolveExpressionTreeInOperator`.
- *  - hasAggregateExpressions: True if the resolved project list contains any aggregate
- *                             expressions.
- *  - hasLateralColumnAlias: True if the resolved project list contains any lateral column aliases.
- *  - aggregateListAliases: List of aliases in aggregate list if there are aggregate expressions in
- *                          the [[Project]].
+ * Stores the resulting operator, output list, grouping attributes and list of aliases from
+ * aggregate list, obtained by resolving an [[Aggregate]] operator.
  */
-case class ResolvedProjectList(
-    expressions: Seq[NamedExpression],
-    hasAggregateExpressions: Boolean,
-    hasLateralColumnAlias: Boolean,
+case class AggregateResolutionResult(
+    operator: LogicalPlan,
+    outputList: Seq[NamedExpression],
+    groupingAttributeIds: Option[HashSet[ExprId]],
     aggregateListAliases: Seq[Alias])

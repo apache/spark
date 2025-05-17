@@ -83,20 +83,17 @@ import org.apache.spark.sql.types.{DateType, StringType}
  * resolving it. Finally, after resolving the subtree, we need to resolve the top-most node itself,
  * which in this case means applying a timezone, if necessary.
  */
-class BinaryArithmeticResolver(
-    expressionResolver: ExpressionResolver,
-    timezoneAwareExpressionResolver: TimezoneAwareExpressionResolver)
+class BinaryArithmeticResolver(expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[BinaryArithmetic, Expression]
-    with ProducesUnresolvedSubtree {
+    with ProducesUnresolvedSubtree
+    with CoercesExpressionTypes {
 
-  private val typeCoercionTransformations: Seq[Expression => Expression] =
-    if (conf.ansiEnabled) {
-      BinaryArithmeticResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
-    } else {
-      BinaryArithmeticResolver.TYPE_COERCION_TRANSFORMATIONS
-    }
-  private val typeCoercionResolver: TypeCoercionResolver =
-    new TypeCoercionResolver(timezoneAwareExpressionResolver, typeCoercionTransformations)
+  private val traversals = expressionResolver.getExpressionTreeTraversals
+
+  protected override val ansiTransformations: CoercesExpressionTypes.Transformations =
+    BinaryArithmeticResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
+  protected override val nonAnsiTransformations: CoercesExpressionTypes.Transformations =
+    BinaryArithmeticResolver.TYPE_COERCION_TRANSFORMATIONS
 
   override def resolve(unresolvedBinaryArithmetic: BinaryArithmetic): Expression = {
     val binaryArithmeticWithResolvedChildren: BinaryArithmetic =
@@ -108,9 +105,9 @@ class BinaryArithmeticResolver(
         transformBinaryArithmeticNode(binaryArithmeticWithResolvedChildren)
       }
 
-    timezoneAwareExpressionResolver.withResolvedTimezone(
+    TimezoneAwareExpressionResolver.resolveTimezone(
       binaryArithmeticWithResolvedSubtree,
-      conf.sessionLocalTimeZone
+      traversals.current.sessionLocalTimeZone
     )
   }
 
@@ -123,7 +120,10 @@ class BinaryArithmeticResolver(
     val binaryArithmeticWithDateTypeReplaced: Expression =
       replaceDateType(binaryArithmetic)
     val binaryArithmeticWithTypeCoercion: Expression =
-      typeCoercionResolver.resolve(binaryArithmeticWithDateTypeReplaced)
+      coerceExpressionTypes(
+        expression = binaryArithmeticWithDateTypeReplaced,
+        expressionTreeTraversal = traversals.current
+      )
     // In case that original expression's children types are DateType and StringType, fixed-point
     // fails to resolve the expression with a single application of
     // [[BinaryArithmeticWithDatetimeResolver]]. Therefore, single-pass resolver needs to invoke

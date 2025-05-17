@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, View}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * The [[ViewResolver]] resolves view plans that were already reconstructed by [[SessionCatalog]]
@@ -94,13 +93,8 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
         }
       }
     }
-    val options = if (sourceUnresolvedRelationStack.isEmpty()) {
-      CaseInsensitiveStringMap.empty()
-    } else {
-      sourceUnresolvedRelationStack.peek().options
-    }
 
-    unresolvedView.copy(child = resolvedChild, options = options)
+    unresolvedView.copy(child = resolvedChild)
   }
 
   /**
@@ -111,6 +105,8 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
   private def withViewResolutionContext(unresolvedView: View)(
       body: => LogicalPlan): (LogicalPlan, ViewResolutionContext) = {
     AnalysisContext.withAnalysisContext(unresolvedView.desc) {
+      val currentAnalysisContext = AnalysisContext.get
+
       val prevContext = if (viewResolutionContextStack.isEmpty()) {
         ViewResolutionContext(
           nestedViewDepth = 0,

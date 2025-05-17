@@ -26,7 +26,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   UnresolvedWith
 }
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION, UNRESOLVED_RELATION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{
+  PLAN_EXPRESSION,
+  UNRESOLVED_RELATION,
+  UNRESOLVED_WITH
+}
 
 /**
  * The [[IdentifierAndCteSubstitutor]] is responsible for substituting the IDENTIFIERs (not yet
@@ -180,5 +184,5 @@ class IdentifierAndCteSubstitutor {
 }
 
 object IdentifierAndCteSubstitutor {
-  val NODES_OF_INTEREST = Seq(CTE, UNRESOLVED_RELATION)
+  val NODES_OF_INTEREST = Seq(UNRESOLVED_RELATION, UNRESOLVED_WITH)
 }

@@ -32,18 +32,17 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedAlias,
   UnresolvedAttribute,
   UnresolvedFunction,
+  UnresolvedOrdinal,
   UnresolvedStar,
   UpCastResolution
 }
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Sort}
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.MetadataBuilder
 
 /**
  * The [[ExpressionResolver]] is used by the [[Resolver]] during the analysis to resolve
@@ -70,7 +69,8 @@ class ExpressionResolver(
     planLogger: PlanLogger)
     extends TreeNodeResolver[Expression, Expression]
     with ProducesUnresolvedSubtree
-    with ResolvesExpressionChildren {
+    with ResolvesExpressionChildren
+    with CoercesExpressionTypes {
 
   /**
    * This field stores referenced attributes from the most recently resolved expression tree. It is
@@ -134,28 +134,21 @@ class ExpressionResolver(
 
   private val aliasResolver = new AliasResolver(this)
   private val timezoneAwareExpressionResolver = new TimezoneAwareExpressionResolver(this)
-  private val conditionalExpressionResolver =
-    new ConditionalExpressionResolver(this, timezoneAwareExpressionResolver)
-  private val predicateResolver =
-    new PredicateResolver(this, timezoneAwareExpressionResolver)
-  private val binaryArithmeticResolver = new BinaryArithmeticResolver(
-    this,
-    timezoneAwareExpressionResolver
-  )
+  private val conditionalExpressionResolver = new ConditionalExpressionResolver(this)
+  private val binaryArithmeticResolver = new BinaryArithmeticResolver(this)
   private val limitLikeExpressionValidator = new LimitLikeExpressionValidator
-  private val typeCoercionResolver = new TypeCoercionResolver(timezoneAwareExpressionResolver)
-  private val aggregateExpressionResolver =
-    new AggregateExpressionResolver(resolver, this, timezoneAwareExpressionResolver)
+  private val aggregateExpressionResolver = new AggregateExpressionResolver(resolver, this)
   private val functionResolver = new FunctionResolver(
     this,
-    timezoneAwareExpressionResolver,
     functionResolution,
     aggregateExpressionResolver,
     binaryArithmeticResolver
   )
-  private val timeAddResolver = new TimeAddResolver(this, timezoneAwareExpressionResolver)
-  private val unaryMinusResolver = new UnaryMinusResolver(this, timezoneAwareExpressionResolver)
+  private val timeAddResolver = new TimeAddResolver(this)
+  private val unaryMinusResolver = new UnaryMinusResolver(this)
   private val subqueryExpressionResolver = new SubqueryExpressionResolver(this, resolver)
+  private val ordinalResolver = new OrdinalResolver(this)
+  private val lcaResolver = new LateralColumnAliasResolver(this)
 
   /**
    * Get the expression tree traversal stack.
@@ -176,9 +169,15 @@ class ExpressionResolver(
   def getNameScopes: NameScopeStack = scopes
 
   /**
-   * Get the [[TypeCoercionResolver]] which contains all the transformations for generic coercion.
+   * Get the [[TimezoneAwareExpressionResolver]] to resolve timezone-aware expressions.
    */
-  def getGenericTypeCoercionResolver: TypeCoercionResolver = typeCoercionResolver
+  def getTimezoneAwareExpressionResolver: TimezoneAwareExpressionResolver =
+    timezoneAwareExpressionResolver
+
+  /**
+   * Get the [[LateralColumnAliasResolver]] to resolve lateral column references.
+   */
+  def getLcaResolver: LateralColumnAliasResolver = lcaResolver
 
   /**
    * Returns all attributes that have been referenced during the most recent expression tree
@@ -234,9 +233,15 @@ class ExpressionResolver(
    *
    * In this case `IN` is an expression and `SELECT 1` is a nested operator tree for which
    * the [[ExpressionResolver]] would invoke the [[Resolver]].
+   *
+   * This function avoids wrappers like [[CurrentOrigin.withOrigin]] to avoid deep recursion stacks,
+   * because expression trees may be quite deep.
    */
-  override def resolve(unresolvedExpression: Expression): Expression =
-    withOrigin(unresolvedExpression.origin) {
+  override def resolve(unresolvedExpression: Expression): Expression = {
+    val previousOrigin = CurrentOrigin.get
+    CurrentOrigin.set(unresolvedExpression.origin)
+
+    try {
       planLogger.logExpressionTreeResolutionEvent(
         unresolvedExpression,
         "Unresolved expression tree"
@@ -248,6 +253,10 @@ class ExpressionResolver(
         pushResolutionContext()
 
         val resolvedExpression = unresolvedExpression match {
+          case unresolvedAggregateExpression: AggregateExpression =>
+            aggregateExpressionResolver.resolve(unresolvedAggregateExpression)
+          case unresolvedAggregateFunction: AggregateFunction =>
+            resolveExpressionGenericallyWithTypeCoercion(unresolvedAggregateFunction)
           case unresolvedBinaryArithmetic: BinaryArithmetic =>
             binaryArithmeticResolver.resolve(unresolvedBinaryArithmetic)
           case unresolvedDateAddYMInterval: DateAddYMInterval =>
@@ -260,6 +269,8 @@ class ExpressionResolver(
             functionResolver.resolve(unresolvedFunction)
           case unresolvedLiteral: Literal =>
             resolveLiteral(unresolvedLiteral)
+          case unresolvedOrdinal: UnresolvedOrdinal =>
+            ordinalResolver.resolve(unresolvedOrdinal)
           case unresolvedPredicate: Predicate =>
             resolvePredicate(unresolvedPredicate)
           case unresolvedScalarSubquery: ScalarSubquery =>
@@ -272,6 +283,8 @@ class ExpressionResolver(
             unaryMinusResolver.resolve(unresolvedUnaryMinus)
           case createNamedStruct: CreateNamedStruct =>
             resolveExpressionGenerically(createNamedStruct)
+          case sortOrder: SortOrder =>
+            resolveExpressionGenerically(sortOrder)
           case unresolvedConditionalExpression: ConditionalExpression =>
             conditionalExpressionResolver.resolve(unresolvedConditionalExpression)
           case getViewColumnByNameAndOrdinal: GetViewColumnByNameAndOrdinal =>
@@ -302,7 +315,10 @@ class ExpressionResolver(
         planLogger.logExpressionTreeResolution(unresolvedExpression, resolvedExpression)
         resolvedExpression
       }
+    } finally {
+      CurrentOrigin.set(previousOrigin)
     }
+  }
 
   /**
    * Resolve and validate the limit like expressions from either [[LocalLimit]], [[GlobalLimit]],
@@ -343,6 +359,7 @@ class ExpressionResolver(
    * ResolvedProjectList(
    *   expressions = [count(col1) as count(col1), 2 AS 2],
    *   hasAggregateExpressions = true, // because it contains `count(col1)` in the project list
+   *   hasLateralColumnAlias = false // because there are no lateral column aliases
    * )
    */
   def resolveProjectList(
@@ -377,7 +394,8 @@ class ExpressionResolver(
     ResolvedProjectList(
       expressions = resolvedProjectList,
       hasAggregateExpressions = hasAggregateExpressions,
-      hasLateralColumnAlias = hasLateralColumnAlias
+      hasLateralColumnAlias = hasLateralColumnAlias,
+      aggregateListAliases = Seq.empty
     )
   }
 
@@ -432,6 +450,7 @@ class ExpressionResolver(
     val expressionIndexesWithAggregateFunctions = new HashSet[Int]
     var hasAttributeOutsideOfAggregateExpressions = false
     var hasStar = false
+    var hasLateralColumnAlias = false
 
     val unresolvedAggregateExpressionsWithStarsExpanded = unresolvedAggregateExpressions.flatMap {
       case unresolvedStar: UnresolvedStar =>
@@ -448,6 +467,8 @@ class ExpressionResolver(
             unresolvedAggregate,
             inProjectList = true
           )
+
+          hasLateralColumnAlias |= resolvedElementContext.hasLateralColumnAlias
 
           resolvedElement match {
             case alias: Alias =>
@@ -466,17 +487,13 @@ class ExpressionResolver(
           Seq(resolvedElement.asInstanceOf[NamedExpression])
       }
 
-    val isLcaEnabled = conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)
-    if (isLcaEnabled && scopes.current.lcaRegistry.getAliasDependencyLevels().size() > 1) {
-      throw new ExplicitlyUnsupportedResolverFeature("LateralColumnAlias in aggregate expressions")
-    }
-
     ResolvedAggregateExpressions(
       expressions = resolvedAggregateExpressions,
       resolvedExpressionsWithoutAggregates = expressionsWithoutAggregates.toSeq,
       hasAttributeOutsideOfAggregateExpressions = hasAttributeOutsideOfAggregateExpressions,
       hasStar = hasStar,
-      expressionIndexesWithAggregateFunctions = expressionIndexesWithAggregateFunctions
+      expressionIndexesWithAggregateFunctions = expressionIndexesWithAggregateFunctions,
+      hasLateralColumnAlias = hasLateralColumnAlias
     )
   }
 
@@ -497,6 +514,8 @@ class ExpressionResolver(
    *    {{{ SELECT concat_ws(' ', 'a', 'b') GROUP BY `concat_ws( , a, b)`; }}}
    *    2. Group by explicit alias
    *    {{{ SELECT col1 AS column_1 FROM VALUES(1) GROUP BY column_1; }}}
+   *
+   * After resolving the expression, remove the top level [[Alias]] if it exists.
    */
   def resolveGroupingExpressions(
       sourceUnresolvedGroupingExpressions: Seq[Expression],
@@ -510,7 +529,11 @@ class ExpressionResolver(
         resolvingGroupingExpressions = true
       )
 
-      resolvedExpression
+      resolvedExpression match {
+        case alias: Alias =>
+          alias.child
+        case other => other
+      }
     }
   }
 
@@ -640,23 +663,22 @@ class ExpressionResolver(
    */
   private def resolveAttribute(unresolvedAttribute: UnresolvedAttribute): Expression =
     withPosition(unresolvedAttribute) {
-      val isLcaEnabled = conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)
       val expressionResolutionContext = expressionResolutionContextStack.peek()
 
       val nameTarget: NameTarget = scopes.resolveMultipartName(
         multipartName = unresolvedAttribute.nameParts,
-        canLaterallyReferenceColumn = canLaterallyReferenceColumn(isLcaEnabled),
+        canLaterallyReferenceColumn = canLaterallyReferenceColumn,
         canReferenceAggregateExpressionAliases = (
             expressionResolutionContextStack
               .peek()
-              .resolvingGroupingExpressions && conf.groupByAliases
+              .resolvingGroupingExpressions && traversals.current.groupByAliases
         ),
         canResolveNameByHiddenOutput = canResolveNameByHiddenOutput,
-        canReferenceAggregatedAccessOnlyAttributes = (
-            expressionResolutionContextStack
-              .peek()
-              .resolvingTreeUnderAggregateExpression
-        )
+        shouldPreferTableColumnsOverAliases = shouldPreferTableColumnsOverAliases,
+        canReferenceAggregatedAccessOnlyAttributes =
+          expressionResolutionContextStack.peek().resolvingTreeUnderAggregateExpression,
+        shouldReplaceHiddenOutputCandidatesWitAggregateListAliases =
+          shouldReplaceHiddenOutputCandidatesWitAggregateListAliases
       )
 
       val candidate = nameTarget.pickCandidate(unresolvedAttribute)
@@ -668,7 +690,7 @@ class ExpressionResolver(
         expressionResolutionContext.hasLocalReferences = true
       }
 
-      if (isLcaEnabled) {
+      if (traversals.current.lcaEnabled) {
         nameTarget.lateralAttributeReference match {
           case Some(lateralAttributeReference) =>
             scopes.current.lcaRegistry
@@ -707,6 +729,17 @@ class ExpressionResolver(
     case other => false
   }
 
+  private def shouldPreferTableColumnsOverAliases = traversals.current.parentOperator match {
+    case _: Sort => true
+    case _ => false
+  }
+
+  private def shouldReplaceHiddenOutputCandidatesWitAggregateListAliases =
+    traversals.current.parentOperator match {
+      case _: Sort => true
+      case _ => false
+    }
+
   /**
    * [[AttributeReference]] is already resolved if it's passed to us from DataFrame `col(...)`
    * function, for example.
@@ -737,16 +770,14 @@ class ExpressionResolver(
 
     expressionResolutionContext.hasAttributeOutsideOfAggregateExpressions = true
 
-    val strippedAttributeReference = tryStripAmbiguousSelfJoinMetadata(attributeReference)
-
     val resultAttribute = if (!inOuterReferenceSubtree) {
       expressionResolutionContext.hasLocalReferences = true
 
-      expressionIdAssigner.mapExpression(strippedAttributeReference)
+      expressionIdAssigner.mapExpression(attributeReference)
     } else {
       expressionResolutionContext.hasOuterReferences = true
 
-      expressionIdAssigner.mapOuterReference(strippedAttributeReference)
+      expressionIdAssigner.mapOuterReference(attributeReference)
     }
 
     val existingAttributeWithId = scopes.current.getAttributeById(resultAttribute.exprId)
@@ -782,8 +813,8 @@ class ExpressionResolver(
   private def resolveLiteral(literal: Literal): Expression = literal
 
   /**
-   * Resolve [[Predicate]] expression using [[PredicateResolver]]. Subquery expressions are a
-   * special case and require special resolution logic.
+   * [[SubqueryExpression]]s are special case of [[Predicate and require special resolution logic.
+   * Otherwise, default to generic resolution with type coercion.
    */
   private def resolvePredicate(unresolvedPredicate: Predicate): Expression = {
     unresolvedPredicate match {
@@ -792,7 +823,7 @@ class ExpressionResolver(
       case unresolvedExists: Exists =>
         subqueryExpressionResolver.resolveExists(unresolvedExists)
       case _ =>
-        predicateResolver.resolve(unresolvedPredicate)
+        resolveExpressionGenericallyWithTypeCoercion(unresolvedPredicate)
     }
   }
 
@@ -921,8 +952,8 @@ class ExpressionResolver(
    * because of a generated column and current expression is a grouping one (grouping expressions)
    * can't reference an LCA.
    */
-  private def canLaterallyReferenceColumn(isLcaEnabled: Boolean): Boolean = {
-    isLcaEnabled &&
+  private def canLaterallyReferenceColumn: Boolean = {
+    traversals.current.lcaEnabled &&
     !expressionResolutionContextStack.peek().resolvingGroupingExpressions
   }
 
@@ -944,24 +975,6 @@ class ExpressionResolver(
   }
 
   /**
-   * [[DetectAmbiguousSelfJoin]] rule in the fixed-point Analyzer detects ambiguous references in
-   * self-joins based on special metadata added by [[Dataset]] code (see SPARK-27547). Just strip
-   * this for now since we don't support joins yet.
-   */
-  private def tryStripAmbiguousSelfJoinMetadata(attributeReference: AttributeReference) = {
-    val metadata = attributeReference.metadata
-    if (ExpressionResolver.AMBIGUOUS_SELF_JOIN_METADATA.exists(metadata.contains(_))) {
-      val metadataBuilder = new MetadataBuilder().withMetadata(metadata)
-      for (metadataKey <- ExpressionResolver.AMBIGUOUS_SELF_JOIN_METADATA) {
-        metadataBuilder.remove(metadataKey)
-      }
-      attributeReference.withMetadata(metadataBuilder.build())
-    } else {
-      attributeReference
-    }
-  }
-
-  /**
    * Resolves [[Expression]] only by resolving its children. This resolution method is used for
    * nodes that don't require any special resolution other than resolving its children.
    */
@@ -975,7 +988,10 @@ class ExpressionResolver(
    */
   private def resolveExpressionGenericallyWithTypeCoercion(expression: Expression): Expression = {
     val expressionWithResolvedChildren = withResolvedChildren(expression, resolve _)
-    typeCoercionResolver.resolve(expressionWithResolvedChildren)
+    coerceExpressionTypes(
+      expression = expressionWithResolvedChildren,
+      expressionTreeTraversal = traversals.current
+    )
   }
 
   /**
@@ -986,7 +1002,10 @@ class ExpressionResolver(
   private def resolveExpressionGenericallyWithTimezoneWithTypeCoercion(
       timezoneAwareExpression: TimeZoneAwareExpression): Expression = {
     val expressionWithTimezone = timezoneAwareExpressionResolver.resolve(timezoneAwareExpression)
-    typeCoercionResolver.resolve(expressionWithTimezone)
+    coerceExpressionTypes(
+      expression = expressionWithTimezone,
+      expressionTreeTraversal = traversals.current
+    )
   }
 
   private def validateResolvedExpressionGenerically(resolvedExpression: Expression): Unit = {

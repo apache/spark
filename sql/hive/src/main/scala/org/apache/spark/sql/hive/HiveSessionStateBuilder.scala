@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.streaming.ResolveWriteToStream
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.execution.PruneHiveTablePartitions
-import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState, SparkUDFExpressionBuilder}
+import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState, SparkUDFExpressionBuilder, SQLConf}
 import org.apache.spark.util.Utils
 
 /**
@@ -87,12 +87,37 @@ class HiveSessionStateBuilder(
    */
   override protected def analyzer: Analyzer = new Analyzer(catalogManager) {
     override val singlePassResolverExtensions: Seq[ResolverExtension] = Seq(
-      new DataSourceWithHiveResolver(session, catalog)
+      new LogicalRelationResolver,
+      new HiveTableRelationResolver(catalog)
     )
 
     override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] = Seq(
+      new DataSourceResolver(session),
       new FileResolver(session)
     )
+
+    override val singlePassPostHocResolutionRules: Seq[Rule[LogicalPlan]] =
+      DetectAmbiguousSelfJoin +:
+      ApplyCharTypePadding +:
+      singlePassCustomPostHocResolutionRules
+
+    override val singlePassExtendedResolutionChecks: Seq[LogicalPlan => Unit] = {
+      val heavyChecks = if (session.conf.get(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_RUN_HEAVY_EXTENDED_RESOLUTION_CHECKS
+        )) {
+        Seq(
+          // [[ViewSyncSchemaToMetaStore]] calls `alterTable` if the view schema needs to be
+          // updated.
+          ViewSyncSchemaToMetaStore
+        )
+      } else {
+        Nil
+      }
+
+      PreReadCheck +:
+      heavyChecks ++:
+      singlePassCustomResolutionChecks
+    }
 
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new ResolveHiveSerdeTable(session) +:

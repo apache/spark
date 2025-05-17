@@ -326,13 +326,15 @@ class ExpressionIdAssigner {
    * Create new mapping in current scope based on collected child mappings. The calling code
    * must pass `collectChildMapping = true` to all the [[withNewMapping]] calls beforehand.
    *
-   * Since nodes are resolved from left to right (the Analyzer is guaranteed to resolve left
-   * branches first), we know that by calling [[childMappings.pop]] we get the mappings from right
-   * to left. This approach leads to duplicate expression IDs from right mapping keys being
-   * overwritten by the left ones. This order is very important, because in case of duplicate
-   * DataFrame subtrees like self-joins, expression IDs from right duplicate branch cannot be
-   * accessed:
+   * In case branches of a multi-child operator that is being resolved contain duplicate IDs, the
+   * child mappings will have collisions during this merge operation. We need to decide which of
+   * the new IDs get the priority for the old ID. This is done based on the IDs that are actually
+   * outputted into the multi-child operator. This information is provided with `newOutputIds`.
+   * If the new ID is present in that set, we treat it as a P0 over the IDs that are hidden in the
+   * branch. Also, we iterate over child mappings from right to left, prioritizing IDs from the
+   * left, because that's how operators like [[Union]] propagate IDs upwards.
    *
+   * Example 1:
    * {{{
    * val df1 = spark.range(0, 10)
    * val df2 = df1.select(($"id" + 1).as("id"))
@@ -348,11 +350,30 @@ class ExpressionIdAssigner {
    * df3.where(df1("id") === 1)
    * }}}
    *
+   * Example 2:
+   * {{{
+   * val df1 = spark.range(10).withColumn("a", lit(0))
+   *
+   * // "a" is aliased to "b" and gets a new expression ID.
+   * val df2 = df1.withColumnRenamed("a", "b")
+   *
+   * // Both types of self-join work, despite the fact that they contain duplicate IDs for "a".
+   * // This is because ExpressionIdAssigner knows that "a" is outputted from the "df1" branch,
+   * // and therefore that mapping is the priority one.
+   * df1.join(df2, df1("a") === df2("b"))
+   * df2.join(df1, df2("b") === df1("a"))
+   * }}}
+   *
    * This is used by multi child operators like [[Join]] or [[Union]] to propagate mapped
    * expression IDs upwards.
+   *
+   * When `mergeIntoExisting` is true, we merge child mappings into an existing mapping entry
+   * instead of creating a new one. This setting is used when resolving [[LateralJoin]]s.
    */
-  def createMappingFromChildMappings(): Unit = {
-    if (mappingStack.peek().mapping.isDefined) {
+  def createMappingFromChildMappings(
+      newOutputIds: Set[ExprId],
+      mergeIntoExisting: Boolean = false): Unit = {
+    if (!mergeIntoExisting && mappingStack.peek().mapping.isDefined) {
       throw SparkException.internalError(
         "Attempt to overwrite existing mapping with child mappings"
       )
@@ -363,11 +384,31 @@ class ExpressionIdAssigner {
       throw SparkException.internalError("No child mappings to create new current mapping")
     }
 
-    val newMapping = new ExpressionIdAssigner.Mapping
+    val priorityMapping = new ExpressionIdAssigner.PriorityMapping(newOutputIds.size)
+
     while (!currentStackEntry.childMappings.isEmpty) {
       val nextMapping = currentStackEntry.childMappings.pop()
 
-      newMapping.putAll(nextMapping)
+      nextMapping.forEach {
+        case (oldId, remappedId) =>
+          updatePriorityMapping(
+            priorityMapping = priorityMapping,
+            oldId = oldId,
+            remappedId = remappedId,
+            newOutputIds = newOutputIds
+          )
+      }
+    }
+
+    val newMapping = if (mergeIntoExisting) {
+      currentStackEntry.mapping.get
+    } else {
+      new ExpressionIdAssigner.Mapping
+    }
+
+    priorityMapping.forEach {
+      case (oldId, priority) =>
+        newMapping.put(oldId, priority.pick())
     }
 
     setCurrentMapping(newMapping)
@@ -379,14 +420,17 @@ class ExpressionIdAssigner {
    * reallocated and is present in the current [[mappingStack]] entry.
    *
    * For [[Alias]]es: Try to preserve it if the alias ID doesn't conflict with
-   * `globalExpressionIds`. Conflicting [[Alias]] IDs are never acceptable.
-   * Otherwise, reallocate with a new ID and return that instance.
+   * `globalExpressionIds`. Conflicting [[Alias]] IDs are never acceptable. In case of such
+   * a conflict, or if `alwaysUpdateAlias` is true, we reallocate with a new ID and return
+   * that instance.
    *
    * For [[AttributeReference]]s: If the attribute is present in the current [[mappingStack]] entry,
    * return that instance, otherwise reallocate with a new ID and return that instance. The mapping
    * is done both from the original expression ID _and_ from the new expression ID - this way we are
    * able to replace old references to that attribute in the current operator branch, and preserve
    * already reallocated attributes to make this call idempotent.
+   * Dangling attribute reference results in an exception, unless `addDanglingAttributeReference`
+   * is true.
    *
    * When remapping the provided expressions, we don't replace them with the previously seen
    * attributes, but replace their IDs ([[NamedExpression.withExprId]]). This is done to preserve
@@ -411,9 +455,34 @@ class ExpressionIdAssigner {
    * val df =
    *   spark.sql("SELECT col1 FROM VALUES (1)").select(col("col1").as("a", metadata1)).to(schema)
    * }}}
+   *
+   * When resolving partially resolved DataFrame plans, we sometimes may meet a duplicate
+   * [[Alias]]. Every [[Alias]] in the logical plan has to have a unique expression ID. If those
+   * aliases are not in the same mapping (different logical plan branches or different subqueries),
+   * we can reallocate both and create mappings for each of those IDs, because those won't conflict
+   * (the mappings are isolated). However, if we meet a duplicate alias in the same logical plan
+   * branch, we need to decide which expression ID takes over, because there's a key clash in the
+   * mapping (old -> new1, old -> new2). Usually we need the latter one, because, as in the example
+   * from the class doc about a duplicate alias in different [[Project]]s, that is the one that
+   * is referenced above. However, some parts of the logical plan do not leak any references
+   * outside (nothing can be referenced from those parts). One example is grouping expression
+   * in [[Aggregate]]. If groping expressions are created from a DataFrame API, they may contain
+   * [[Alias]]es with the same IDs as in the related aggregate expressions. Since grouping
+   * expressions are resolved after the aggregate expressions, we don't want the latter alias IDs
+   * to take over. Hence, we set `prioritizeOldDuplicateAliasId` to `true` when resolving grouping
+   * expressions and do not track the new alias, since it cannot be referenced again. And if this
+   * alias is referenced for some reason, we will throw a "dangling attribute reference" error.
+   *
+   * In the following example Spark Connect DataFrames produce a duplicate alias mentioned above:
+   * {{{
+   * df.groupBy($"a", $"b".as("sum_d")).agg(Map.empty[String, String])
+   * }}}
    */
   def mapExpression[NamedExpressionType <: NamedExpression](
-      originalExpression: NamedExpressionType): NamedExpressionType = {
+      originalExpression: NamedExpressionType,
+      alwaysUpdateAlias: Boolean = false,
+      addDanglingAttributeReference: Boolean = false,
+      prioritizeOldDuplicateAliasId: Boolean = false): NamedExpressionType = {
     if (mappingStack.peek().mapping.isEmpty) {
       throw SparkException.internalError(
         "Expression ID mapping doesn't exist. Please first call " +
@@ -425,26 +494,33 @@ class ExpressionIdAssigner {
     val currentMapping = mappingStack.peek().mapping.get
 
     val resultExpression = originalExpression match {
-      case alias: Alias =>
-        val resultAlias = if (globalExpressionIds.contains(alias.exprId)) {
-          val newAlias = newAliasInstance(alias)
+      case alias: Alias if (globalExpressionIds.contains(alias.exprId) || alwaysUpdateAlias) =>
+        val newAlias = newAliasInstance(alias)
+
+        if (!prioritizeOldDuplicateAliasId || !currentMapping.containsKey(alias.exprId)) {
           currentMapping.put(alias.exprId, newAlias.exprId)
-          newAlias
-        } else {
-          alias
+          currentMapping.put(newAlias.exprId, newAlias.exprId)
         }
+        globalExpressionIds.add(newAlias.exprId)
+        newAlias
+      case alias: Alias =>
+        currentMapping.put(alias.exprId, alias.exprId)
+        globalExpressionIds.add(alias.exprId)
 
-        currentMapping.put(resultAlias.exprId, resultAlias.exprId)
-
-        globalExpressionIds.add(resultAlias.exprId)
-
-        resultAlias
+        alias
       case attributeReference: AttributeReference =>
         currentMapping.get(attributeReference.exprId) match {
           case null =>
-            throw SparkException.internalError(
-              s"Encountered a dangling attribute reference $attributeReference"
-            )
+            if (addDanglingAttributeReference) {
+              val newAttribute = attributeReference.newInstance()
+              currentMapping.put(attributeReference.exprId, newAttribute.exprId)
+              currentMapping.put(newAttribute.exprId, newAttribute.exprId)
+              globalExpressionIds.add(newAttribute.exprId)
+              newAttribute
+            } else {
+              throw SparkException.internalError(
+                s"Encountered a dangling attribute reference $attributeReference")
+            }
           case mappedExpressionId =>
             attributeReference.withExprId(mappedExpressionId)
         }
@@ -462,23 +538,33 @@ class ExpressionIdAssigner {
    * meets an attribute under a resolved [[OuterReference]], it remaps it using the outer
    * mapping passed from the parent plan of the [[SubqueryExpression]] that is currently being
    * re-analyzed. This mapping must exist, as well as a mapped expression ID. Otherwise we met a
-   * danging outer reference, which is an internal error.
+   * danging outer reference, which is an internal error, unless `ignoreAbsent` is true (in which
+   * case we return the input without changes).
    */
-  def mapOuterReference(attributeReference: AttributeReference): AttributeReference = {
+  def mapOuterReference(
+      attributeReference: AttributeReference,
+      ignoreAbsent: Boolean = false): AttributeReference = {
     if (mappingStack.peek().outerMapping.isEmpty) {
-      throw SparkException.internalError(
-        "Outer expression ID mapping doesn't exist while remapping outer reference " +
-        s"$attributeReference"
-      )
-    }
-
-    mappingStack.peek().outerMapping.get.get(attributeReference.exprId) match {
-      case null =>
+      if (ignoreAbsent) {
+        attributeReference
+      } else {
         throw SparkException.internalError(
-          s"No mapped expression ID for outer reference $attributeReference"
+          "Outer expression ID mapping doesn't exist while remapping outer reference " +
+            s"$attributeReference"
         )
-      case mappedExpressionId =>
-        attributeReference.withExprId(mappedExpressionId)
+      }
+    } else {
+      mappingStack.peek().outerMapping.get.get(attributeReference.exprId) match {
+        case null =>
+          if (!ignoreAbsent) {
+            throw SparkException.internalError(
+              s"No mapped expression ID for outer reference $attributeReference"
+            )
+          }
+          attributeReference
+        case mappedExpressionId =>
+          attributeReference.withExprId(mappedExpressionId)
+      }
     }
   }
 
@@ -521,6 +607,31 @@ class ExpressionIdAssigner {
       cteRelationRefOutputIds.add(attribute.exprId)
     }
   }
+
+  /**
+   * Update the priority mapping for the given `oldId` and `remappedId`. If the `remappedId` is
+   * contained in the `newOutputIds`, we treat it as a P0 over the IDs that are not exposed from
+   * the operator branch. Otherwise, we treat it as a P1.
+   */
+  private def updatePriorityMapping(
+      priorityMapping: ExpressionIdAssigner.PriorityMapping,
+      oldId: ExprId,
+      remappedId: ExprId,
+      newOutputIds: Set[ExprId]): Unit = {
+    if (newOutputIds.contains(remappedId)) {
+      priorityMapping.merge(
+        oldId,
+        ExpressionIdPriority(p0 = Some(remappedId)),
+        (priority, _) => priority.copy(p0 = Some(remappedId))
+      )
+    } else {
+      priorityMapping.merge(
+        oldId,
+        ExpressionIdPriority(p1 = Some(remappedId)),
+        (priority, _) => priority.copy(p1 = Some(remappedId))
+      )
+    }
+  }
 }
 
 object ExpressionIdAssigner {
@@ -532,6 +643,8 @@ object ExpressionIdAssigner {
       childMappings: ArrayDeque[Mapping] = new ArrayDeque[Mapping])
 
   type Stack = ArrayDeque[StackEntry]
+
+  type PriorityMapping = HashMap[ExprId, ExpressionIdPriority]
 
   /**
    * Assert that `outputs` don't have conflicting expression IDs.
@@ -583,6 +696,18 @@ object ExpressionIdAssigner {
 
         hasConflicting
       }
+    }
+  }
+}
+
+/**
+ * [[ExpressionIdPriority]] is used by the [[ExpressionIdAssigner]] when merging child mappings
+ * of a multi-child operator to determine which new ID gets picked in case of an old ID collision.
+ */
+case class ExpressionIdPriority(p0: Option[ExprId] = None, p1: Option[ExprId] = None) {
+  def pick(): ExprId = p0.getOrElse {
+    p1.getOrElse {
+      throw SparkException.internalError("No expression ID to pick")
     }
   }
 }

@@ -30,7 +30,8 @@ import org.apache.spark.sql.internal.SQLConf
  */
 class ResolverRunner(
     resolver: Resolver,
-    extendedResolutionChecks: Seq[LogicalPlan => Unit] = Seq.empty
+    extendedResolutionChecks: Seq[LogicalPlan => Unit] = Seq.empty,
+    extendedRewriteRules: Seq[Rule[LogicalPlan]] = Seq.empty
 ) extends ResolverMetricTracker
     with SQLConfHelper {
 
@@ -47,7 +48,7 @@ class ResolverRunner(
    * `planRewriter` is used to rewrite the plan and the subqueries inside by applying
    * `planRewriteRules`.
    */
-  private val planRewriter = new PlanRewriter(planRewriteRules)
+  private val planRewriter = new PlanRewriter(planRewriteRules, extendedRewriteRules)
 
   /**
    * Entry point for the resolver. This method performs following 4 steps:
@@ -59,7 +60,7 @@ class ResolverRunner(
   def resolve(
       plan: LogicalPlan,
       analyzerBridgeState: Option[AnalyzerBridgeState] = None,
-      tracker: QueryPlanningTracker = new QueryPlanningTracker): LogicalPlan =
+      tracker: QueryPlanningTracker = new QueryPlanningTracker): LogicalPlan = {
     recordMetrics(tracker) {
       AnalysisContext.withNewAnalysisContext {
         val resolvedPlan = resolver.lookupMetadataAndResolve(plan, analyzerBridgeState)
@@ -71,11 +72,27 @@ class ResolverRunner(
           validator.validatePlan(rewrittenPlan)
         }
 
-        for (rule <- extendedResolutionChecks) {
-          rule(rewrittenPlan)
-        }
+        runValidator(rewrittenPlan)
+
+        runExtendedResolutionChecks(rewrittenPlan)
 
         rewrittenPlan
       }
     }
+  }
+
+  private def runValidator(plan: LogicalPlan): Unit = {
+    if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED)) {
+      val validator = new ResolutionValidator
+      validator.validatePlan(plan)
+    }
+  }
+
+  private def runExtendedResolutionChecks(plan: LogicalPlan): Unit = {
+    if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_RUN_EXTENDED_RESOLUTION_CHECKS)) {
+      for (check <- extendedResolutionChecks) {
+        check(plan)
+      }
+    }
+  }
 }
