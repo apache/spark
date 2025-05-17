@@ -587,6 +587,45 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     }
   }
 
+
+  test("delete from table with recursive CTE") {
+    withTempView("source") {
+      sql(
+        s"""CREATE TABLE $tableNameAsString (
+           | val INT)
+           |""".stripMargin)
+
+      append("val INT",
+        """{ "val": 1 }
+          |{ "val": 9 }
+          |{ "val": 8 }
+          |{ "val": 4 }
+          |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1),
+          Row(9),
+          Row(8),
+          Row(4)))
+
+      sql(
+        s"""WITH RECURSIVE s(val) AS (
+           |  SELECT 1
+           |  UNION ALL
+           |  SELECT val + 1 FROM s WHERE val < 5
+           |) DELETE FROM $tableNameAsString WHERE val IN (SELECT val FROM s)
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(9),
+          Row(8)))
+    }
+  }
+
   private def executeDeleteWithFilters(query: String): Unit = {
     val executedPlan = executeAndKeepPlan {
       sql(query)

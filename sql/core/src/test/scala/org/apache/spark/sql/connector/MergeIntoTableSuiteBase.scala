@@ -1675,6 +1675,57 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
     }
   }
 
+  test("merge into table with recursive CTE") {
+    withTempView("source") {
+      sql(
+        s"""CREATE TABLE $tableNameAsString (
+           | val INT)
+           |""".stripMargin)
+
+      append("val INT",
+        """{ "val": 1 }
+          |{ "val": 9 }
+          |{ "val": 8 }
+          |{ "val": 4 }
+          |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1),
+          Row(9),
+          Row(8),
+          Row(4)))
+
+      sql(
+        s"""WITH RECURSIVE s(val) AS (
+           |  SELECT 1
+           |  UNION ALL
+           |  SELECT val + 1 FROM s WHERE val < 5
+           |) MERGE INTO $tableNameAsString t
+           |USING s
+           |ON t.val = s.val
+           |WHEN MATCHED THEN
+           | UPDATE SET t.val = t.val - 1
+           |WHEN NOT MATCHED THEN
+           | INSERT (val) VALUES (-s.val)
+           |WHEN NOT MATCHED BY SOURCE THEN
+           | UPDATE SET t.val = t.val + 1
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(0),
+          Row(10),
+          Row(9),
+          Row(3),
+          Row(-2),
+          Row(-3),
+          Row(-5)))
+    }
+  }
+
   private def assertNoLeftBroadcastOrReplication(query: String): Unit = {
     val plan = executeAndKeepPlan {
       sql(query)
