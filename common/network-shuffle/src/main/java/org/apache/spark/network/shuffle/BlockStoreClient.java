@@ -24,8 +24,14 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 import com.codahale.metrics.MetricSet;
+import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.Uninterruptibles;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
@@ -35,8 +41,10 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
+import org.apache.spark.network.sasl.SaslTimeoutException;
 import org.apache.spark.network.shuffle.checksum.Cause;
 import org.apache.spark.network.shuffle.protocol.*;
+import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -45,6 +53,9 @@ import org.apache.spark.network.util.TransportConf;
  */
 public abstract class BlockStoreClient implements Closeable {
   protected final SparkLogger logger = SparkLoggerFactory.getLogger(this.getClass());
+
+  private static final ExecutorService executorService = Executors.newCachedThreadPool(
+          NettyUtils.createThreadFactory("Block Store Client Retry"));
 
   protected volatile TransportClientFactory clientFactory;
   protected String appId;
@@ -161,6 +172,18 @@ public abstract class BlockStoreClient implements Closeable {
       String[] execIds,
       CompletableFuture<Map<String, String[]>> hostLocalDirsCompletable) {
     checkInit();
+    int maxRetries = transportConf.maxIORetries();
+    int retryWaitTime = transportConf.ioRetryWaitTimeMs();
+    boolean enableSaslRetries = transportConf.enableSaslRetries();
+    retry(0, 0, maxRetries, enableSaslRetries, retryWaitTime,
+      () -> getHostLocalDirsInternal(host, port, execIds), hostLocalDirsCompletable);
+  }
+
+  private CompletableFuture<Map<String, String[]>> getHostLocalDirsInternal(
+      String host,
+      int port,
+      String[] execIds) {
+    CompletableFuture<Map<String, String[]>> result = new CompletableFuture<>();
     GetLocalDirsForExecutors getLocalDirsMessage = new GetLocalDirsForExecutors(appId, execIds);
     try {
       TransportClient client = clientFactory.createClient(host, port);
@@ -169,12 +192,12 @@ public abstract class BlockStoreClient implements Closeable {
         public void onSuccess(ByteBuffer response) {
           try {
             BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response);
-            hostLocalDirsCompletable.complete(
+            result.complete(
               ((LocalDirsForExecutors) msgObj).getLocalDirsByExec());
           } catch (Throwable t) {
             logger.warn("Error while trying to get the host local dirs for {}", t.getCause(),
               MDC.of(LogKeys.EXECUTOR_IDS$.MODULE$, Arrays.toString(getLocalDirsMessage.execIds)));
-            hostLocalDirsCompletable.completeExceptionally(t);
+            result.completeExceptionally(t);
           }
         }
 
@@ -182,12 +205,63 @@ public abstract class BlockStoreClient implements Closeable {
         public void onFailure(Throwable t) {
           logger.warn("Error while trying to get the host local dirs for {}", t.getCause(),
             MDC.of(LogKeys.EXECUTOR_IDS$.MODULE$, Arrays.toString(getLocalDirsMessage.execIds)));
-          hostLocalDirsCompletable.completeExceptionally(t);
+          result.completeExceptionally(t);
         }
       });
     } catch (IOException | InterruptedException e) {
-      hostLocalDirsCompletable.completeExceptionally(e);
+      result.completeExceptionally(e);
     }
+    return result;
+  }
+
+  private <T> void retry(
+      final int retryCountValue,
+      final int saslRetryCountValue,
+      final int maxRetries,
+      final boolean enableSaslRetries,
+      int delayMs,
+      Supplier<CompletableFuture<T>> action,
+      CompletableFuture<T> future) {
+    action.get()
+            .thenAccept(future::complete)
+            .exceptionally(e -> {
+              int retryCount = retryCountValue;
+              int saslRetryCount = saslRetryCountValue;
+              boolean isIOException = e instanceof IOException ||
+                      e.getCause() instanceof IOException;
+              boolean isSaslTimeout = enableSaslRetries && e instanceof SaslTimeoutException;
+              if (!isSaslTimeout && saslRetryCount > 0) {
+                Preconditions.checkState(retryCount >= saslRetryCount,
+                        "retryCount must be greater than or equal to saslRetryCount");
+                // Consistent with the retry logic of the RetryingBlockTransferor.shouldRetry method
+                retryCount -= saslRetryCount;
+                saslRetryCount = 0;
+              }
+              boolean hasRemainingRetries = retryCount < maxRetries;
+              boolean shouldRetry = (isSaslTimeout || isIOException) &&
+                      hasRemainingRetries;
+              if (!shouldRetry) {
+                future.completeExceptionally(e);
+              } else {
+                if (isSaslTimeout) {
+                  saslRetryCount += 1;
+                }
+                retryCount += 1;
+                final int finalRetryCount = retryCount;
+                final int finalSaslRetryCount = saslRetryCount;
+                logger.info("Retrying ({}/{}) for getting host local dirs after {} ms",
+                        e,
+                        MDC.of(LogKeys.NUM_RETRY$.MODULE$, finalRetryCount),
+                        MDC.of(LogKeys.MAX_ATTEMPTS$.MODULE$, maxRetries),
+                        MDC.of(LogKeys.RETRY_WAIT_TIME$.MODULE$, delayMs));
+                executorService.execute(() ->{
+                        Uninterruptibles.sleepUninterruptibly(delayMs, TimeUnit.MILLISECONDS);
+                        retry(finalRetryCount, finalSaslRetryCount, maxRetries, enableSaslRetries,
+                        delayMs, action, future);
+                });
+              }
+              return null;
+            });
   }
 
   /**
