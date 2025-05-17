@@ -26,34 +26,28 @@ import org.apache.spark.sql.types.StructType
 
 
 /**
- * Python UDF Runner for cogrouped udfs. It sends Arrow bathes from two different DataFrames,
- * groups them in Python, and receive it back in JVM as batches of single DataFrame.
+ * Python UDF Runner for grouped udfs.
  */
-class CoGroupedArrowPythonRunner(
+class GroupedArrowPythonRunner(
     funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argOffsets: Array[Array[Int]],
-    leftSchema: StructType,
-    rightSchema: StructType,
+    schema: StructType,
     timeZoneId: String,
     largeVarTypes: Boolean,
     arrowMaxRecordsPerBatch: Int,
     conf: Map[String, String],
-    override val pythonMetrics: Map[String, SQLMetric],
+    pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     profiler: Option[String])
-  extends BaseGroupedArrowPythonRunner[(Iterator[InternalRow], Iterator[InternalRow])](
+  extends BaseGroupedArrowPythonRunner[Iterator[InternalRow]](
     funcs, evalType, argOffsets, timeZoneId, largeVarTypes, arrowMaxRecordsPerBatch, conf,
     pythonMetrics, jobArtifactUUID, profiler) {
 
   override protected def writeNextGroup(
-      group: (Iterator[InternalRow], Iterator[InternalRow]),
+      group: Iterator[InternalRow],
       dataOut: DataOutputStream): Unit = {
-    val (leftGroup, rightGroup) = group
-
-    dataOut.writeInt(2)
-    writeSingleStream(leftGroup, leftSchema, dataOut, Some("left"))
-    writeSingleStream(rightGroup, rightSchema, dataOut, Some("right"))
+    dataOut.writeInt(1)
+    writeSingleStream(group, schema, dataOut)
   }
 }
-
