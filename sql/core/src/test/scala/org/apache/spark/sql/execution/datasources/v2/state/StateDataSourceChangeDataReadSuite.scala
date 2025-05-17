@@ -102,7 +102,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
     withTempDir { tempDir =>
       val exc = intercept[StateDataSourceInvalidOptionValueIsNegative] {
         spark.read.format("statestore")
-          .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+          .option(StateSourceOptions.READ_CHANGE_LOG, value = true)
           .option(StateSourceOptions.CHANGE_START_BATCH_ID, -1)
           .option(StateSourceOptions.CHANGE_END_BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
@@ -115,7 +115,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
     withTempDir { tempDir =>
       val exc = intercept[StateDataSourceInvalidOptionValue] {
         spark.read.format("statestore")
-          .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+          .option(StateSourceOptions.READ_CHANGE_LOG, value = true)
           .option(StateSourceOptions.CHANGE_START_BATCH_ID, 1)
           .option(StateSourceOptions.CHANGE_END_BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
@@ -124,11 +124,11 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
     }
   }
 
-  test("ERROR: joinSide option is used together with readChangeFeed") {
+  test("ERROR: joinSide option is used together with readChangeLog") {
     withTempDir { tempDir =>
       val exc = intercept[StateDataSourceConflictOptions] {
         spark.read.format("statestore")
-          .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+          .option(StateSourceOptions.READ_CHANGE_LOG, value = true)
           .option(StateSourceOptions.JOIN_SIDE, "left")
           .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
           .option(StateSourceOptions.CHANGE_END_BATCH_ID, 0)
@@ -184,7 +184,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
       )
 
       val stateDf = spark.read.format("statestore")
-        .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+        .option(StateSourceOptions.READ_CHANGE_LOG, value = true)
         .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
         .option(StateSourceOptions.CHANGE_END_BATCH_ID, 2)
         .load(tempDir.getAbsolutePath)
@@ -214,7 +214,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
       )
 
       val stateDf = spark.read.format("statestore")
-        .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+        .option(StateSourceOptions.READ_CHANGE_LOG, value = true)
         .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
         .option(StateSourceOptions.CHANGE_END_BATCH_ID, 2)
         .load(tempDir.getAbsolutePath)
@@ -253,7 +253,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
       )
 
       val stateDf = spark.read.format("statestore")
-        .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+        .option(StateSourceOptions.READ_CHANGE_LOG, value = true)
         .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
         .option(StateSourceOptions.CHANGE_END_BATCH_ID, 2)
         .load(tempDir.getAbsolutePath)
@@ -290,7 +290,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
 
       val keyWithIndexToValueDf = spark.read.format("statestore")
         .option(StateSourceOptions.STORE_NAME, "left-keyWithIndexToValue")
-        .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+        .option(StateSourceOptions.READ_CHANGE_LOG, value = true)
         .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
         .option(StateSourceOptions.CHANGE_END_BATCH_ID, 1)
         .load(tempDir.getAbsolutePath)
@@ -307,7 +307,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
 
       val keyToNumValuesDf = spark.read.format("statestore")
         .option(StateSourceOptions.STORE_NAME, "left-keyToNumValues")
-        .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+        .option(StateSourceOptions.READ_CHANGE_LOG, value = true)
         .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
         .option(StateSourceOptions.CHANGE_END_BATCH_ID, 1)
         .load(tempDir.getAbsolutePath)
