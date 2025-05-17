@@ -22,6 +22,7 @@ import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 
 case class PythonInputPartition(index: Int, pickedPartition: Array[Byte]) extends InputPartition
@@ -55,6 +56,39 @@ class PythonPartitionReaderFactory(
       override def next(): Boolean = outputIter.hasNext
 
       override def get(): InternalRow = outputIter.next()
+
+      override def close(): Unit = {}
+
+      override def currentMetricsValues(): Array[CustomTaskMetric] = {
+        source.createPythonTaskMetrics(metrics.map { case (k, v) => k -> v.value})
+      }
+    }
+  }
+
+  override def supportColumnarReads(partition: InputPartition): Boolean = true
+
+  override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
+    new PartitionReader[ColumnarBatch] {
+
+      private[this] val metrics: Map[String, SQLMetric] = PythonCustomMetric.pythonMetrics
+
+      private val outputIter = {
+        val evaluatorFactory = source.createMapInBatchColumnarEvaluatorFactory(
+          pickledReadFunc,
+          "read_from_data_source",
+          UserDefinedPythonDataSource.readInputSchema,
+          outputSchema,
+          metrics,
+          jobArtifactUUID)
+
+        val part = partition.asInstanceOf[PythonInputPartition]
+        evaluatorFactory.createEvaluator().eval(
+          part.index, Iterator.single(InternalRow(part.pickedPartition)))
+      }
+
+      override def next(): Boolean = outputIter.hasNext
+
+      override def get(): ColumnarBatch = outputIter.next()
 
       override def close(): Unit = {}
 
