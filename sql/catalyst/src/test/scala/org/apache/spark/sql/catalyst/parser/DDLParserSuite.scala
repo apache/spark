@@ -2735,7 +2735,7 @@ class DDLParserSuite extends AnalysisTest {
           None,
           None,
           None,
-          Some("42")))))
+          Some(DefaultValueExpression(Literal(42), "42"))))))
     // It is possible to pass an empty string default value using quotes.
     comparePlans(
       parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT ''"),
@@ -2747,7 +2747,7 @@ class DDLParserSuite extends AnalysisTest {
           None,
           None,
           None,
-          Some("''")))))
+          Some(DefaultValueExpression(Literal(""), "''"))))))
     // It is not possible to pass an empty string default value without using quotes.
     // This results in a parsing error.
     val sql1 = "ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT "
@@ -2773,7 +2773,8 @@ class DDLParserSuite extends AnalysisTest {
           None,
           None,
           None,
-          Some("")))))
+          None,
+          dropDefault = true))))
     // Make sure that the parser returns an exception when the feature is disabled.
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
       val sql = "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet"

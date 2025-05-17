@@ -5252,20 +5252,17 @@ class AstBuilder extends DataTypeAstBuilder
       } else {
         None
       }
-      val setDefaultExpression: Option[String] =
-        if (action.defaultExpression != null) {
-          Option(action.defaultExpression()).map(visitDefaultExpression).map(_.originalSQL)
-        } else if (action.dropDefault != null) {
-          Some("")
-        } else {
-          None
-        }
+      val setDefaultExpression: Option[DefaultValueExpression] =
+        Option(action.defaultExpression()).map(visitDefaultExpression)
+
       if (setDefaultExpression.isDefined && !conf.getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)) {
         throw QueryParsingErrors.defaultColumnNotEnabledError(ctx)
       }
 
+      val dropDefault = action.dropDefault != null
+
       assert(Seq(dataType, nullable, comment, position, setDefaultExpression)
-        .count(_.nonEmpty) == 1)
+        .count(_.nonEmpty) == 1 || dropDefault)
 
       AlterColumnSpec(
         UnresolvedFieldName(typedVisit[Seq[String]](spec.column)),
@@ -5273,7 +5270,8 @@ class AstBuilder extends DataTypeAstBuilder
         nullable,
         comment,
         position,
-        setDefaultExpression)
+        setDefaultExpression,
+        dropDefault)
     }
     AlterColumns(
       createUnresolvedTable(ctx.table, s"ALTER TABLE ... $verb COLUMN"),
