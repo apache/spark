@@ -811,7 +811,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           isStreaming = true,
           hasInitialState,
           planLater(initialState),
-          t.rightAttributes,
+          t.rightAttributes(),
           initialStateSchema
         )
 
@@ -982,7 +982,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         hasInitialState, initialState, _, initialStateSchema) =>
         TransformWithStateInPySparkExec.generateSparkPlanForBatchQueries(func,
           t.leftAttributes, outputAttrs, outputMode, timeMode, userFacingDataType,
-          planLater(child), hasInitialState, planLater(initialState), t.rightAttributes,
+          planLater(child), hasInitialState, planLater(initialState), t.rightAttributes(),
           initialStateSchema) :: Nil
 
       case _: FlatMapGroupsInPandasWithState =>
