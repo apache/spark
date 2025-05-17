@@ -123,6 +123,12 @@ public class VariantUtil {
   // Long string value. The content is (4-byte little-endian unsigned integer representing the
   // string size) + (size bytes of string content).
   public static final int LONG_STR = 16;
+  // Similar to TIMESTAMP, but the 8-byte value represents the number of nanoseconds since the
+  // epoch.
+  public static final int TIMESTAMP_NANOS = 18;
+  // Similar to TIMESTAMP_NTZ, but the 8-byte value represents the number of nanoseconds since the
+  // epoch.
+  public static final int TIMESTAMP_NANOS_NTZ  = 19;
 
   // UUID, 16-byte big-endian.
   public static final int UUID = 20;
@@ -243,6 +249,8 @@ public class VariantUtil {
     DATE,
     TIMESTAMP,
     TIMESTAMP_NTZ,
+    TIMESTAMP_NANOS,
+    TIMESTAMP_NANOS_NTZ,
     FLOAT,
     BINARY,
     UUID,
@@ -292,6 +300,10 @@ public class VariantUtil {
             return Type.TIMESTAMP;
           case TIMESTAMP_NTZ:
             return Type.TIMESTAMP_NTZ;
+          case TIMESTAMP_NANOS:
+            return Type.TIMESTAMP_NANOS;
+          case TIMESTAMP_NANOS_NTZ:
+            return Type.TIMESTAMP_NANOS_NTZ;
           case FLOAT:
             return Type.FLOAT;
           case BINARY:
@@ -341,6 +353,8 @@ public class VariantUtil {
           case DOUBLE:
           case TIMESTAMP:
           case TIMESTAMP_NTZ:
+          case TIMESTAMP_NANOS:
+          case TIMESTAMP_NANOS_NTZ:
             return 9;
           case DECIMAL4:
             return 6;
@@ -377,9 +391,12 @@ public class VariantUtil {
 
   // Get a long value from variant value `value[pos...]`.
   // It is only legal to call it if `getType` returns one of `Type.LONG/DATE/TIMESTAMP/
-  // TIMESTAMP_NTZ`. If the type is `DATE`, the return value is guaranteed to fit into an int and
-  // represents the number of days from the Unix epoch.
+  // TIMESTAMP_NTZ/TIMESTAMP_NANOS/TIMESTAMP_NANOS_NTZ/TIME`.
+  // If the type is `DATE`, the return value is guaranteed to fit into an int and represents the
+  // number of days from the Unix epoch.
   // If the type is `TIMESTAMP/TIMESTAMP_NTZ`, the return value represents the number of
+  // microseconds from the Unix epoch.
+  // If the type is `TIMESTAMP_NANOS/TIMESTAMP_NANOS_NTZ`, the return value represents the number of
   // microseconds from the Unix epoch.
   // Throw `MALFORMED_VARIANT` if the variant is malformed.
   public static long getLong(byte[] value, int pos) {
@@ -399,6 +416,8 @@ public class VariantUtil {
       case INT8:
       case TIMESTAMP:
       case TIMESTAMP_NTZ:
+      case TIMESTAMP_NANOS:
+      case TIMESTAMP_NANOS_NTZ:
         return readLong(value, pos + 1, 8);
       default:
         throw new IllegalStateException(exceptionMessage);
