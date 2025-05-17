@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Dist
  */
 trait ShuffledJoin extends JoinCodegenSupport {
   def isSkewJoin: Boolean
+  def maybeSkewJoin: Boolean
 
   override def nodeName: String = {
     if (isSkewJoin) super.nodeName + "(skew=true)" else super.nodeName
