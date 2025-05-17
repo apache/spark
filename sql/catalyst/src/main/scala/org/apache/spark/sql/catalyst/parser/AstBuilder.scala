@@ -1132,7 +1132,7 @@ class AstBuilder extends DataTypeAstBuilder
         matchedActions, notMatchedActions, notMatchedBySourceActions))
     val targetTableAlias = getTableAliasWithoutColumnAlias(ctx.targetAlias, "MERGE")
     val aliasedTarget = targetTableAlias.map(SubqueryAlias(_, targetTable)).getOrElse(targetTable)
-    MergeIntoTable(
+    val plan: LogicalPlan = MergeIntoTable(
       aliasedTarget,
       aliasedSource,
       mergeCondition,
@@ -1140,6 +1140,7 @@ class AstBuilder extends DataTypeAstBuilder
       notMatchedActions,
       notMatchedBySourceActions,
       withSchemaEvolution)
+    ctx.hints.asScala.foldRight(plan)(withHints)
   }
 
   /**
