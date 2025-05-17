@@ -131,4 +131,6 @@ private[scheduler] abstract class Stage(
   def isIndeterminate: Boolean = {
     rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
   }
+
+  def shouldDiscardResult(attemptId: Int): Boolean = false
 }
