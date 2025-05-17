@@ -58,7 +58,7 @@ import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
-import org.apache.spark.util.{CallSite, SparkFileUtils, ThreadUtils, Utils}
+import org.apache.spark.util.{CallSite, SparkFileUtils, ThreadUtils, Utils, WebUrlUtils}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -163,6 +163,9 @@ class SparkSession private(
 
   /** @inheritdoc */
   def version: String = SPARK_VERSION
+
+  /** @inheritdoc */
+  def webUrl: Option[String] = WebUrlUtils.getSparkWebUrl(sparkContext)
 
   /* ----------------------- *
    |  Session-related state  |

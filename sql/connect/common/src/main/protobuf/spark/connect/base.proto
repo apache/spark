@@ -96,6 +96,7 @@ message AnalyzePlanRequest {
     Unpersist unpersist = 15;
     GetStorageLevel get_storage_level = 16;
     JsonToDDL json_to_ddl = 18;
+    SparkWebUrl spark_web_url = 19;
   }
 
   message Schema {
@@ -160,6 +161,8 @@ message AnalyzePlanRequest {
   }
 
   message SparkVersion { }
+
+  message SparkWebUrl { }
 
   message DDLParse {
     // (Required) The DDL formatted string to be parsed.
@@ -232,6 +235,7 @@ message AnalyzePlanResponse {
     Unpersist unpersist = 13;
     GetStorageLevel get_storage_level = 14;
     JsonToDDL json_to_ddl = 16;
+    SparkWebUrl spark_web_url = 17;
   }
 
   message Schema {
@@ -261,6 +265,10 @@ message AnalyzePlanResponse {
 
   message SparkVersion {
     string version = 1;
+  }
+
+  message SparkWebUrl {
+    optional string web_url = 1;
   }
 
   message DDLParse {
