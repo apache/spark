@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{FunctionResolution, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   AnalyzerBridgeState,
   BridgedRelationId,
@@ -124,6 +124,22 @@ class MetadataResolverSuite extends QueryTest with SharedSparkSession with SQLTe
         sqlText = """
           WITH cte AS (SELECT key FROM src)
           SELECT * FROM cte
+          """,
+        expectedTableData = Seq(createTableData("src"))
+      )
+    }
+  }
+
+  test("Relation inside a CTE definition without CTE references") {
+    withTable("src") {
+      spark.sql("CREATE TABLE src (key INT, value STRING) USING PARQUET;").collect()
+
+      checkResolveUnresolvedCatalogRelation(
+        sqlText = """
+          SELECT * FROM (
+            WITH cte AS (SELECT key FROM src)
+            SELECT 1
+          )
           """,
         expectedTableData = Seq(createTableData("src"))
       )
@@ -252,9 +268,12 @@ class MetadataResolverSuite extends QueryTest with SharedSparkSession with SQLTe
           new ViewResolver(resolver = resolver, catalogManager = spark.sessionState.catalogManager)
         )
       case None =>
+        val relationResolution =
+          Resolver.createRelationResolution(spark.sessionState.catalogManager)
         new MetadataResolver(
           spark.sessionState.catalogManager,
-          Resolver.createRelationResolution(spark.sessionState.catalogManager),
+          relationResolution,
+          new FunctionResolution(spark.sessionState.catalogManager, relationResolution),
           Seq(new FileResolver(spark))
         )
     }

@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
+import java.util.HashSet
+
 import org.apache.spark.sql.catalyst.analysis.NaturalAndUsingJoinResolution
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, ExprId}
 import org.apache.spark.sql.catalyst.plans.{JoinType, NaturalJoin, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util._
@@ -61,7 +63,9 @@ class JoinResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
       Seq(leftNameScope.output, rightNameScope.output)
     )
 
-    expressionIdAssigner.createMappingFromChildMappings()
+    expressionIdAssigner.createMappingFromChildMappings(
+      newOutputIds = leftNameScope.getOutputIds ++ rightNameScope.getOutputIds
+    )
 
     val partiallyResolvedJoin = unresolvedJoin.copy(
       left = resolvedLeftOperator,
@@ -152,9 +156,9 @@ class JoinResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
    *    - New project list becomes output list.
    *    - If [[Join]] was not a top level operator, append current hidden output to the project
    *    list.
-   *    - Add new hidden output as a tag to project node in order to stay compatible with
-   *    fixed-point. This should never be used in single-pass, but it can happen that fixed-point
-   *    uses the single-pass result, therefore we need to set the tag.
+   *    - Add qualified access only attributes from new hidden output as a tag to project node in
+   *    order to stay compatible with fixed-point. This should never be used in single-pass, but it
+   *    can happen that fixed-point uses the single-pass result, therefore we need to set the tag.
    */
   private def commonNaturalJoinProcessing(
       unresolvedJoin: Join,
@@ -178,33 +182,69 @@ class JoinResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
         resolveName = conf.resolver
       )
 
-    val newOutputList = outputList.map(expressionIdAssigner.mapExpression)
+    val newOutputList = outputList.map { attribute =>
+      expressionIdAssigner.mapExpression(attribute)
+    }
 
     val resolvedCondition =
       resolveJoinCondition(unresolvedJoin, newCondition, leftNameScope, rightNameScope)
 
-    val hiddenListWithQualifiedAccess = hiddenList.map(_.markAsQualifiedAccessOnly())
-
-    val newHiddenOutput = hiddenListWithQualifiedAccess ++ scopes.current.hiddenOutput
-
     scopes.overwriteCurrent(
       output = Some(newOutputList.map(_.toAttribute)),
-      hiddenOutput = Some(newHiddenOutput)
+      hiddenOutput = Some(
+        computeHiddenOutputForNaturelAndUsingJoin(
+          newHiddenOutput = hiddenList,
+          oldHiddenOutput = scopes.current.hiddenOutput
+        )
+      )
     )
+
+    val qualifiedAccessOnlyColumnsFromHiddenOutput =
+      scopes.current.hiddenOutput.filter(_.qualifiedAccessOnly)
 
     val newProjectList =
       if (unresolvedJoin.getTagValue(Resolver.TOP_LEVEL_OPERATOR).isEmpty) {
-        newOutputList ++ scopes.current.hiddenOutput
-          .filter(attribute => attribute.qualifiedAccessOnly)
+        newOutputList ++ qualifiedAccessOnlyColumnsFromHiddenOutput
       } else {
         newOutputList
       }
 
     val project = Project(newProjectList, Join(left, right, joinType, resolvedCondition, hint))
 
-    project.setTagValue(Project.hiddenOutputTag, newHiddenOutput)
+    project.setTagValue(Project.hiddenOutputTag, qualifiedAccessOnlyColumnsFromHiddenOutput)
 
     project
+  }
+
+  /**
+   * Compute new hidden output for the resolved NATURAL and USING joins. This new output must
+   * contain unique attributes, and new versions of attributes from
+   * [[NaturalAndUsingJoinResolution.computeJoinOutputsAndNewCondition]] must take precedence.
+   * Consider the following query:
+   *
+   * {{{
+   * SELECT COUNT(DISTINCT col1) FROM v1 NATURAL JOIN v2 GROUP BY col1 ORDER BY MAX(col1);
+   * }}}
+   *
+   * Since ORDER BY references `col1` under aggregate expression `MAX`, both `v1.col1` and `v2.col2`
+   * will be considered as name resolution candidates. But `v2.col1` will have
+   * `QUALIFIED_ACCESS_ONLY` access metadata, so we must disambiguate in favor of `v1.col1`. For
+   * that disambiguation to work, new hidden output must be constructed from `newHiddenOutput`
+   * which has correct access qualifiers, and old versions of these attributes without new
+   * qualifiers must be thrown away.
+   */
+  private def computeHiddenOutputForNaturelAndUsingJoin(
+      newHiddenOutput: Seq[Attribute],
+      oldHiddenOutput: Seq[Attribute]
+  ): Seq[Attribute] = {
+    val newHiddenOutputLookup = new HashSet[ExprId](newHiddenOutput.size)
+    newHiddenOutput.foreach { attribute =>
+      newHiddenOutputLookup.add(attribute.exprId)
+    }
+
+    newHiddenOutput.map(_.markAsQualifiedAccessOnly()) ++ oldHiddenOutput.filter(
+      attribute => !newHiddenOutputLookup.contains(attribute.exprId)
+    )
   }
 
   /**

@@ -20,13 +20,21 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import java.util.{ArrayDeque, ArrayList, HashMap}
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Properties of a current expression tree traversal.
+ * Properties of a current expression tree traversal. Settings like `ansiMode`, `lcaEnabled` or
+ * `groupByAliases` are set once per expression tree traversal as an optimization to avoid
+ * frequent [[SQLConf]] lookups. These settings may be different for different views.
  *
  * @param parentOperator The parent operator of the current expression tree.
+ * @param ansiMode Whether the current expression tree being resolved is in ANSI mode.
+ * @param lcaEnabled Whether lateral column alias resolution is enabled.
+ * @param groupByAliases Whether the group by aliases resolution is enabled.
+ * @param sessionLocalTimeZone The session local time zone.
  * @param invalidExpressionsInTheContextOfOperator The expressions that are invalid in the context
  *   of the current expression tree and its parent operator.
  * @param referencedAttributes All attributes that are referenced during the resolution of
@@ -36,6 +44,10 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  */
 case class ExpressionTreeTraversal(
     parentOperator: LogicalPlan,
+    ansiMode: Boolean,
+    lcaEnabled: Boolean,
+    groupByAliases: Boolean,
+    sessionLocalTimeZone: String,
     invalidExpressionsInTheContextOfOperator: ArrayList[Expression] = new ArrayList[Expression],
     referencedAttributes: HashMap[ExprId, Attribute] = new HashMap[ExprId, Attribute],
     extractedAggregateExpressionAliases: ArrayList[Alias] = new ArrayList[Alias]
@@ -68,7 +80,7 @@ case class ExpressionTreeTraversal(
  * We would have 3 nested stack entries for while resolving the lower scalar subquery (with the `t3`
  * table).
  */
-class ExpressionTreeTraversalStack {
+class ExpressionTreeTraversalStack extends SQLConfHelper {
   private val stack = new ArrayDeque[ExpressionTreeTraversal]
 
   /**
@@ -86,7 +98,15 @@ class ExpressionTreeTraversalStack {
    * traversal from the stack.
    */
   def withNewTraversal[R](parentOperator: LogicalPlan)(body: => R): R = {
-    stack.push(ExpressionTreeTraversal(parentOperator = parentOperator))
+    stack.push(
+      ExpressionTreeTraversal(
+        parentOperator = parentOperator,
+        ansiMode = conf.ansiEnabled,
+        lcaEnabled = conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED),
+        groupByAliases = conf.groupByAliases,
+        sessionLocalTimeZone = conf.sessionLocalTimeZone
+      )
+    )
     try {
       body
     } finally {
