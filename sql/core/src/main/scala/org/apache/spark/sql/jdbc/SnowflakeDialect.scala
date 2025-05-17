@@ -39,6 +39,6 @@ private case class SnowflakeDialect() extends JdbcDialect with NoLegacyJDBCError
     // There is no official documentation for SQL state in Snowflake, but they follow ANSI standard
     // where 42000 SQLState is used for syntax errors.
     // Manual tests also show that this is the error state for syntax error
-    exception.getSQLState.equals("42000")
+    "42000".equals(exception.getSQLState)
   }
 }

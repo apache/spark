@@ -29,7 +29,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{DEFAULT_ISOLATION_LEVEL, ISOLATION_LEVEL}
@@ -1298,29 +1298,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
       f(conn)
     } finally {
       conn.close()
-    }
-  }
-
-  /**
-   * Wraps the external engine syntax error [[SQLException]] in a [[SparkException]]. This is used
-   * to provide a unified error message to the user across all dialects.
-   *
-   * @param dialect
-   *   The [[JdbcDialect]] used to help identify if the [[SQLException]] represents a syntax error
-   *   from the external engine.
-   * @param source
-   *   A descriptive string indicating the source of the operation, such as "output schema
-   *   resolution" or "query execution".
-   */
-  def withWrapExternalEngineSyntaxError[T](dialect: JdbcDialect, source: String)(f: => T): T = {
-    try {
-      f
-    } catch {
-      case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
-        throw new SparkException(
-          errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR",
-          messageParameters = Map("source" -> source),
-          cause = e)
     }
   }
 }

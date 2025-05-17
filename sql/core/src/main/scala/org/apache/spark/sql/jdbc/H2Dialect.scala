@@ -59,7 +59,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
 
   // See https://www.h2database.com/javadoc/org/h2/api/ErrorCode.html
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    exception.getSQLState.startsWith("42")
+    Option(exception.getSQLState).exists(_.startsWith("42"))
   }
 
   override def getCatalystType(

@@ -270,7 +270,9 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
     new MsSqlServerSQLQueryBuilder(this, options)
 
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    val exceptionMessage = exception.getMessage.toLowerCase(Locale.ROOT)
+    val exceptionMessage = Option(exception.getMessage)
+      .map(_.toLowerCase(Locale.ROOT))
+      .getOrElse("")
     // scalastyle:off line.size.limit
     // All errors are shown here, but there is no consistent error code to identify
     // most syntax errors so we have to base off the exception message.
