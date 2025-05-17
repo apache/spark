@@ -45,7 +45,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       details = null,
       physicalPlanDescription = null,
       modifiedConfigs = normal.modifiedConfigs,
-      metrics = Seq(SQLPlanMetric(null, 0, null)),
+      metrics = Seq(SQLPlanMetric(null, 0, null, 0L)),
       submissionTime = normal.submissionTime,
       completionTime = normal.completionTime,
       errorMessage = normal.errorMessage,
@@ -126,12 +126,14 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
           SQLPlanMetric(
             name = "name_13",
             accumulatorId = 13,
-            metricType = "metric_13"
+            metricType = "metric_13",
+            initValue = 0L
           ),
           SQLPlanMetric(
             name = "name_14",
             accumulatorId = 14,
-            metricType = "metric_14"
+            metricType = "metric_14",
+            initValue = 0L
           )
         )
       ),
@@ -147,7 +149,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
           SQLPlanMetric(
             name = null,
             accumulatorId = 13,
-            metricType = null
+            metricType = null,
+            initValue = 0L
           )
         )
       ),
@@ -174,12 +177,14 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         SQLPlanMetric(
           name = "name_6",
           accumulatorId = 6,
-          metricType = "metric_6"
+          metricType = "metric_6",
+          initValue = 0L
         ),
         SQLPlanMetric(
           name = "name_7 d",
           accumulatorId = 7,
-          metricType = "metric_7"
+          metricType = "metric_7",
+          initValue = 0L
         )
       )
     )
