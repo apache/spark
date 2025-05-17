@@ -903,16 +903,22 @@ case class CollapseCodegenStages(
     codegenStageCounter: AtomicInteger = new AtomicInteger(0))
   extends Rule[SparkPlan] {
 
-  private def supportCodegen(e: Expression): Boolean = e match {
+  private def supportCodegen(e: Expression, conf: SQLConf): Boolean = e match {
     case e: LeafExpression => true
     // CodegenFallback requires the input to be an InternalRow
     case e: CodegenFallback => false
-    case _ => true
+    case _ =>
+      var nonLeafCount = 0
+      e foreach {
+        case _: LeafExpression =>
+        case _ => nonLeafCount += 1
+      }
+      nonLeafCount < conf.wholeStageComplexExpressionThreshold
   }
 
   private def supportCodegen(plan: SparkPlan): Boolean = plan match {
     case plan: CodegenSupport if plan.supportCodegen =>
-      val willFallback = plan.expressions.exists(_.exists(e => !supportCodegen(e)))
+      val willFallback = plan.expressions.exists(_.exists(e => !supportCodegen(e, conf)))
       // the generated code will be huge if there are too many columns
       val hasTooManyOutputFields =
         WholeStageCodegenExec.isTooManyFields(conf, plan.schema)
