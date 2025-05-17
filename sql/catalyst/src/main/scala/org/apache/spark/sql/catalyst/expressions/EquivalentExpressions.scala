@@ -146,9 +146,13 @@ class EquivalentExpressions(
   // There are some special expressions that we should not recurse into all of its children.
   //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
   //   2. ConditionalExpression: use its children that will always be evaluated.
+  //   3. HigherOrderFunction: lambda functions operate in the context of local lambdas and can't
+  //        be called outside of that scope, only the arguments can be evaluated ahead of
+  //        time.
   private def childrenToRecurse(expr: Expression): Seq[Expression] = expr match {
     case _: CodegenFallback => Nil
     case c: ConditionalExpression => c.alwaysEvaluatedInputs.map(skipForShortcut)
+    case h: HigherOrderFunction => h.arguments
     case other => skipForShortcut(other).children
   }
 
