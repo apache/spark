@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -351,6 +353,19 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
 
   private[Word2VecModel] case class Data(word: String, vector: Array[Float])
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    dos.writeUTF(data.word)
+    serializeFloatArray(data.vector, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val word = dis.readUTF()
+    val vector = deserializeFloatArray(dis)
+    Data(word, vector)
+  }
+
   private[Word2VecModel]
   class Word2VecModelWriter(instance: Word2VecModel) extends MLWriter {
 
@@ -364,7 +379,7 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       val numPartitions = Word2VecModelWriter.calculateNumberOfPartitions(
         bufferSizeInBytes, instance.wordVectors.wordIndex.size, instance.getVectorSize)
       val datum = wordVectors.toArray.map { case (word, vector) => Data(word, vector) }
-      ReadWriteUtils.saveArray[Data](dataPath, datum, sparkSession, numPartitions)
+      ReadWriteUtils.saveArray[Data](dataPath, datum, sparkSession, serializeData, numPartitions)
     }
   }
 
@@ -416,7 +431,7 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
         val wordVectors = data.getAs[Seq[Float]](1).toArray
         new feature.Word2VecModel(wordIndex, wordVectors)
       } else {
-        val datum = ReadWriteUtils.loadArray[Data](dataPath, sparkSession)
+        val datum = ReadWriteUtils.loadArray[Data](dataPath, sparkSession, deserializeData)
         val wordVectorsMap = datum.map(wordVector => (wordVector.word, wordVector.vector)).toMap
         new feature.Word2VecModel(wordVectorsMap)
       }

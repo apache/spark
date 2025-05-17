@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
@@ -449,6 +451,19 @@ class LinearSVCModel private[classification] (
 object LinearSVCModel extends MLReadable[LinearSVCModel] {
   private[ml] case class Data(coefficients: Vector, intercept: Double)
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeVector(data.coefficients, dos)
+    dos.writeDouble(data.intercept)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val coefficients = deserializeVector(dis)
+    val intercept = dis.readDouble()
+    Data(coefficients, intercept)
+  }
+
   @Since("2.2.0")
   override def read: MLReader[LinearSVCModel] = new LinearSVCReader
 
@@ -465,7 +480,7 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.coefficients, instance.intercept)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -477,7 +492,7 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
     override def load(path: String): LinearSVCModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
       val model = new LinearSVCModel(metadata.uid, data.coefficients, data.intercept)
       metadata.getAndSetParams(model)
       model

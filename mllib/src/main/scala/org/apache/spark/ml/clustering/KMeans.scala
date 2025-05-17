@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.clustering
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -215,6 +217,20 @@ class KMeansModel private[ml] (
 /** Helper class for storing model data */
 private[ml] case class ClusterData(clusterIdx: Int, clusterCenter: Vector)
 
+private[ml] object ClusterData {
+  private[ml] def serializeData(data: ClusterData, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    dos.writeInt(data.clusterIdx)
+    serializeVector(data.clusterCenter, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): ClusterData = {
+    import ReadWriteUtils._
+    val clusterIdx = dis.readInt()
+    val clusterCenter = deserializeVector(dis)
+    ClusterData(clusterIdx, clusterCenter)
+  }
+}
 
 /** A writer for KMeans that handles the "internal" (or default) format */
 private class InternalKMeansModelWriter extends MLWriterFormat with MLFormatRegister {
@@ -233,7 +249,9 @@ private class InternalKMeansModelWriter extends MLWriterFormat with MLFormatRegi
         ClusterData(idx, center)
     }
     val dataPath = new Path(path, "data").toString
-    ReadWriteUtils.saveArray[ClusterData](dataPath, data, sparkSession)
+    ReadWriteUtils.saveArray[ClusterData](
+      dataPath, data, sparkSession, ClusterData.serializeData
+    )
   }
 }
 
@@ -281,7 +299,9 @@ object KMeansModel extends MLReadable[KMeansModel] {
       val dataPath = new Path(path, "data").toString
 
       val clusterCenters = if (majorVersion(metadata.sparkVersion) >= 2) {
-        val data = ReadWriteUtils.loadArray[ClusterData](dataPath, sparkSession)
+        val data = ReadWriteUtils.loadArray[ClusterData](
+          dataPath, sparkSession, ClusterData.deserializeData
+        )
         data.sortBy(_.clusterIdx).map(_.clusterCenter).map(OldVectors.fromML)
       } else {
         // Loads KMeansModel stored with the old format used by Spark 1.6 and earlier.

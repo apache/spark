@@ -311,11 +311,16 @@ object ImputerModel extends MLReadable[ImputerModel] {
   private[ImputerModel] class ImputerModelWriter(instance: ImputerModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
+      import org.apache.spark.ml.util.ReadWriteUtils._
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val dataPath = new Path(path, "data").toString
       if (ReadWriteUtils.localSavingModeState.get()) {
         ReadWriteUtils.saveObjectToLocal[(Array[String], Array[Double])](
-          dataPath, (instance.columnNames, instance.surrogates)
+          dataPath, (instance.columnNames, instance.surrogates),
+          (v, dos) => {
+            serializeStringArray(v._1, dos)
+            serializeDoubleArray(v._2, dos)
+          }
         )
       } else {
         instance.surrogateDF.repartition(1).write.parquet(dataPath)
@@ -328,10 +333,18 @@ object ImputerModel extends MLReadable[ImputerModel] {
     private val className = classOf[ImputerModel].getName
 
     override def load(path: String): ImputerModel = {
+      import org.apache.spark.ml.util.ReadWriteUtils._
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
       val model = if (ReadWriteUtils.localSavingModeState.get()) {
-        val data = ReadWriteUtils.loadObjectFromLocal[(Array[String], Array[Double])](dataPath)
+        val data = ReadWriteUtils.loadObjectFromLocal[(Array[String], Array[Double])](
+          dataPath,
+          dis => {
+            val v1 = deserializeStringArray(dis)
+            val v2 = deserializeDoubleArray(dis)
+            (v1, v2)
+          }
+        )
         new ImputerModel(metadata.uid, data._1, data._2)
       } else {
         val row = sparkSession.read.parquet(dataPath).head()

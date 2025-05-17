@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.classification
 
+import java.io.{DataInputStream, DataOutputStream}
 import java.util.Locale
 
 import scala.collection.mutable
@@ -1325,6 +1326,25 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
     coefficientMatrix: Matrix,
     isMultinomial: Boolean)
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    dos.writeInt(data.numClasses)
+    dos.writeInt(data.numFeatures)
+    serializeVector(data.interceptVector, dos)
+    serializeMatrix(data.coefficientMatrix, dos)
+    dos.writeBoolean(data.isMultinomial)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val numClasses = dis.readInt()
+    val numFeatures = dis.readInt()
+    val interceptVector = deserializeVector(dis)
+    val coefficientMatrix = deserializeMatrix(dis)
+    val isMultinomial = dis.readBoolean()
+    Data(numClasses, numFeatures, interceptVector, coefficientMatrix, isMultinomial)
+  }
+
   @Since("1.6.0")
   override def read: MLReader[LogisticRegressionModel] = new LogisticRegressionModelReader
 
@@ -1343,7 +1363,7 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
       val data = Data(instance.numClasses, instance.numFeatures, instance.interceptVector,
         instance.coefficientMatrix, instance.isMultinomial)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -1372,7 +1392,7 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
           interceptVector, numClasses, isMultinomial = false)
       } else {
         // 2.1+
-        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
         new LogisticRegressionModel(metadata.uid, data.coefficientMatrix, data.interceptVector,
           data.numClasses, data.isMultinomial)
       }

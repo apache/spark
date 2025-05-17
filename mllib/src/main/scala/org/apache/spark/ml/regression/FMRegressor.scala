@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.regression
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import scala.util.Random
 
 import breeze.linalg.{axpy => brzAxpy, norm => brzNorm, Vector => BV}
@@ -515,6 +517,21 @@ object FMRegressionModel extends MLReadable[FMRegressionModel] {
      linear: Vector,
      factors: Matrix)
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    dos.writeDouble(data.intercept)
+    serializeVector(data.linear, dos)
+    serializeMatrix(data.factors, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val intercept = dis.readDouble()
+    val linear = deserializeVector(dis)
+    val factors = deserializeMatrix(dis)
+    Data(intercept, linear, factors)
+  }
+
   @Since("3.0.0")
   override def read: MLReader[FMRegressionModel] = new FMRegressionModelReader
 
@@ -529,7 +546,7 @@ object FMRegressionModel extends MLReadable[FMRegressionModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.intercept, instance.linear, instance.factors)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -540,7 +557,7 @@ object FMRegressionModel extends MLReadable[FMRegressionModel] {
     override def load(path: String): FMRegressionModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
       val model = new FMRegressionModel(metadata.uid, data.intercept, data.linear, data.factors)
       metadata.getAndSetParams(model)
       model
