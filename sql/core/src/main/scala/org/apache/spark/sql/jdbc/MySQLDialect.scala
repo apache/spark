@@ -50,6 +50,10 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getErrorCode == 1146
+  }
+
   class MySQLSQLBuilder extends JDBCSQLBuilder {
 
     override def visitExtract(extract: Extract): String = {

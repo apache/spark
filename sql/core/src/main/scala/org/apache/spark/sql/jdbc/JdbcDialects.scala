@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Driver, ResultSetMetaData, Statement, Timestamp}
+import java.sql.{Connection, Date, Driver, ResultSetMetaData, SQLException, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
 import java.util.ServiceLoader
@@ -757,6 +757,9 @@ abstract class JdbcDialect extends Serializable with Logging {
       options: JDBCOptions): Array[TableIndex] = {
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3182")
   }
+
+  @Since("4.1.0")
+  def isObjectNotFoundException(e: SQLException): Boolean = true
 
   /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
