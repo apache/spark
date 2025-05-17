@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
-import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.util.control.NonFatal
@@ -795,12 +794,8 @@ object RocksDBStateStoreProvider {
 
   private def getRunId(hadoopConf: Configuration): String = {
     val runId = hadoopConf.get(StreamExecution.RUN_ID_KEY)
-    if (runId != null) {
-      runId
-    } else {
-      assert(Utils.isTesting, "Failed to find query id/batch Id in task context")
-      UUID.randomUUID().toString
-    }
+    assert(runId != null)
+    runId
   }
 
   // Native operation latencies report as latency in microseconds
