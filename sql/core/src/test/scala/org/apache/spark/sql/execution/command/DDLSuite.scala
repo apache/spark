@@ -2511,6 +2511,22 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         sql("select 1, null, timestamp_ntz'2018-11-17 13:33:33'"))
     }
   }
+
+  test("Executing relation with STREAM fails") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 AS SELECT 1")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("CREATE TABLE t2 AS SELECT * FROM STREAM t1")
+        },
+        condition = "_LEGACY_ERROR_TEMP_3102",
+        sqlState = None,
+        parameters = Map("msg" -> ("Queries with streaming sources must be executed with " +
+          "writeStream.start(), or from a streaming table or flow definition within a Spark " +
+          "Declarative Pipeline."))
+      )
+    }
+  }
 }
 
 object FakeLocalFsFileSystem {

@@ -433,7 +433,8 @@ class QueryExecutionSuite extends SharedSparkSession {
         }
         assert(
           ex.getMessage.contains("Queries with streaming sources must be executed with " +
-            "writeStream.start()")
+            "writeStream.start(), or from a streaming table or flow definition within a Spark " +
+            "Declarative Pipeline.")
         )
       }
     }

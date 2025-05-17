@@ -862,7 +862,7 @@ class AstBuilder extends DataTypeAstBuilder
    * }}}
    * operation to logical plan
    */
-  private def withInsertInto(
+  protected def withInsertInto(
       ctx: InsertIntoContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     ctx match {
@@ -878,7 +878,8 @@ class AstBuilder extends DataTypeAstBuilder
               ctx = insertParams.relationCtx,
               ident = ident,
               optionsClause = insertParams.options,
-              writePrivileges = Seq(TableWritePrivilege.INSERT)),
+              writePrivileges = Seq(TableWritePrivilege.INSERT),
+              isStreaming = false),
             partitionSpec = insertParams.partitionSpec,
             userSpecifiedCols = insertParams.userSpecifiedCols,
             query = otherPlans.head,
@@ -894,7 +895,8 @@ class AstBuilder extends DataTypeAstBuilder
               ctx = insertParams.relationCtx,
               ident = ident,
               optionsClause = insertParams.options,
-              writePrivileges = Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)),
+              writePrivileges = Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
+              isStreaming = false),
             partitionSpec = insertParams.partitionSpec,
             userSpecifiedCols = insertParams.userSpecifiedCols,
             query = otherPlans.head,
@@ -907,7 +909,7 @@ class AstBuilder extends DataTypeAstBuilder
         withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
           OverwriteByExpression.byPosition(
             createUnresolvedRelation(ctx.identifierReference, ident, options,
-              Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)),
+              Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false),
             otherPlans.head,
             expression(ctx.whereClause().booleanExpression()))
         })
@@ -2355,34 +2357,54 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitTableValuedFunction(ctx: TableValuedFunctionContext)
       : LogicalPlan = withOrigin(ctx) {
-    val func = ctx.functionTable
-    val aliases = if (func.tableAlias.identifierList != null) {
-      visitIdentifierList(func.tableAlias.identifierList)
-    } else {
-      Seq.empty
+    visitFunctionTable(ctx.functionTable, isStreaming = false)
+  }
+
+  override def visitStreamTableValuedFunction(ctx: StreamTableValuedFunctionContext): LogicalPlan =
+    withOrigin(ctx) {
+      visitFunctionTable(ctx.functionTable, isStreaming = true)
     }
 
-    withFuncIdentClause(
-      func.functionName,
-      Nil,
-      (ident, _) => {
-        if (ident.length > 1) {
-          throw QueryParsingErrors.invalidTableValuedFunctionNameError(ident, ctx)
-        }
-        val funcName = func.functionName.getText
-        val args = func.functionTableArgument.asScala.map { e =>
-          Option(e.functionArgument).map(extractNamedArgument(_, funcName))
-            .getOrElse {
-              extractFunctionTableNamedArgument(e.functionTableReferenceArgument, funcName)
-            }
-        }.toSeq
+  private def visitFunctionTable(ctx: FunctionTableContext, isStreaming: Boolean) : LogicalPlan =
+    withOrigin(ctx) {
+      val aliases = if (ctx.tableAlias.identifierList != null) {
+        visitIdentifierList(ctx.tableAlias.identifierList)
+      } else {
+        Seq.empty
+      }
 
-        val tvf = UnresolvedTableValuedFunction(ident, args)
+      withFuncIdentClause(
+        ctx.functionName,
+        Nil,
+        (ident, _) => {
+          if (ident.length > 1) {
+            throw QueryParsingErrors.invalidTableValuedFunctionNameError(ident, ctx)
+          }
+          val funcName = ctx.functionName.getText
+          val args = ctx.functionTableArgument.asScala.map { e =>
+            Option(e.functionArgument).map(extractNamedArgument(_, funcName))
+              .getOrElse {
+                extractFunctionTableNamedArgument(e.functionTableReferenceArgument, funcName)
+              }
+          }.toSeq
 
-        val tvfAliases = if (aliases.nonEmpty) UnresolvedTVFAliases(ident, tvf, aliases) else tvf
+          val tvf = UnresolvedTableValuedFunction(ident, args, isStreaming)
 
-        tvfAliases.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
-      })
+          val tvfAliases = if (aliases.nonEmpty) UnresolvedTVFAliases(ident, tvf, aliases) else tvf
+
+          tvfAliases.optionalMap(ctx.tableAlias.strictIdentifier)(aliasPlan)
+        })
+    }
+
+  override def visitStreamTableName(ctx: StreamTableNameContext): LogicalPlan = {
+    val ident = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val tableStreamingRelation = createUnresolvedRelation(
+      ctx = ctx,
+      ident = ident,
+      optionsClause = Option(ctx.optionsClause),
+      writePrivileges = Seq.empty,
+      isStreaming = true)
+    mayApplyAliasPlan(ctx.tableAlias, tableStreamingRelation)
   }
 
   /**
@@ -3635,9 +3657,10 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: ParserRuleContext,
       ident: Seq[String],
       optionsClause: Option[OptionsClauseContext],
-      writePrivileges: Seq[TableWritePrivilege]): UnresolvedRelation = withOrigin(ctx) {
+      writePrivileges: Seq[TableWritePrivilege],
+      isStreaming: Boolean): UnresolvedRelation = withOrigin(ctx) {
     val options = resolveOptions(optionsClause)
-    val relation = new UnresolvedRelation(ident, options, isStreaming = false)
+    val relation = new UnresolvedRelation(ident, options, isStreaming)
     relation.requireWritePrivileges(writePrivileges)
   }
 
@@ -4791,7 +4814,7 @@ class AstBuilder extends DataTypeAstBuilder
     (fileFormatSerdeInfo ++ rowFormatSerdeInfo).reduceLeftOption((l, r) => l.merge(r))
   }
 
-  private def partitionExpressions(
+  protected[sql] def partitionExpressions(
       partTransforms: Seq[Transform],
       partCols: Seq[ColumnDefinition],
       ctx: ParserRuleContext): Seq[Transform] = {
@@ -5781,7 +5804,12 @@ class AstBuilder extends DataTypeAstBuilder
         CacheTableAsSelect(ident.head, children.head, source(ctx.query()), isLazy, options)
       } else {
         CacheTable(
-          createUnresolvedRelation(ctx.identifierReference, ident, None, writePrivileges = Nil),
+          createUnresolvedRelation(
+            ctx.identifierReference,
+            ident,
+            None,
+            writePrivileges = Nil,
+            isStreaming = false),
           ident, isLazy, options)
       }
     })

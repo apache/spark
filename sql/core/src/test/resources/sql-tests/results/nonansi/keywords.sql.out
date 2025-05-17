@@ -132,6 +132,7 @@ FILEFORMAT	false
 FILTER	false
 FIRST	false
 FLOAT	false
+FLOW	false
 FOLLOWING	false
 FOR	false
 FOREIGN	false
@@ -204,6 +205,7 @@ LOOP	false
 MACRO	false
 MAP	false
 MATCHED	false
+MATERIALIZED	false
 MAX	false
 MERGE	false
 MICROSECOND	false
@@ -321,6 +323,8 @@ START	false
 STATISTICS	false
 STORED	false
 STRATIFY	false
+STREAM	false
+STREAMING	false
 STRING	false
 STRUCT	false
 SUBSTR	false

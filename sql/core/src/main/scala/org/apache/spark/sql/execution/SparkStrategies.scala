@@ -875,6 +875,20 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  object Pipelines extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case cf: CreateFlowCommand =>
+        throw QueryCompilationErrors.unsupportedCreatePipelineFlowQueryExecutionError()
+      case cmv: CreateMaterializedViewAsSelect =>
+        throw QueryCompilationErrors.unsupportedCreatePipelineDatasetQueryExecutionError(
+            pipelineDatasetType = "MATERIALIZED VIEW")
+      case cst: CreateStreamingTableAsSelect =>
+        throw QueryCompilationErrors.unsupportedCreatePipelineDatasetQueryExecutionError(
+            pipelineDatasetType = "STREAMING TABLE")
+      case _ => Nil
+    }
+  }
+
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case d: DataWritingCommand => DataWritingCommandExec(d, planLater(d.query)) :: Nil
