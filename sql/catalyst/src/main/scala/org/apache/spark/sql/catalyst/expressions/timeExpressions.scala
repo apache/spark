@@ -27,10 +27,10 @@ import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimeFormatter
-import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber}
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, DataType, DecimalType, IntegerType, ObjectType, TimeType, TypeCollection}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, DecimalType, IntegerType, ObjectType, StringType, TimeType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -351,7 +351,7 @@ case class SecondsOfTime(child: Expression)
   )
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*))
+    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType: _*))
 
   override def children: Seq[Expression] = Seq(child)
 
@@ -547,4 +547,78 @@ case class MakeTime(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): MakeTime =
     copy(hours = newChildren(0), minutes = newChildren(1), secsAndMicros = newChildren(2))
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(unit, expr) - Returns a TIME value representing `expr` truncated to the specified time unit.
+  """,
+  arguments = """
+    Arguments:
+      * unit - A STRING literal (case-insensitive) indicating the unit to truncate to.
+               Valid values are 'HOUR', 'MINUTE', 'SECOND', 'MILLISECOND', and 'MICROSECOND'.
+               If the unit is not recognized, the function returns NULL.
+      * expr - A TIME value, or a STRING that can be cast to TIME.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('HOUR', '09:32:05.359');
+       09:00:00
+      > SELECT _FUNC_('MILLISECOND', '09:32:05.123456');
+       09:32:05.123
+      > SELECT _FUNC_('MS', '09:32:05.123456');
+      NULL
+  """,
+  since = "4.1.0",
+  group = "datetime_funcs")
+// scalastyle:on line.size.limit
+case class TruncateTime(unit: Expression, timeExpr: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes with RuntimeReplaceable {
+
+  override def nullable: Boolean = true
+  override def left: Expression = unit
+  override def right: Expression = timeExpr
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      StringType,
+      TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType: _*)
+    )
+
+  override def dataType: DataType = timeExpr.dataType
+  override def prettyName: String = "time_trunc"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression,
+    newRight: Expression): TruncateTime =
+    copy(unit = newLeft, timeExpr = newRight)
+
+  private def truncCall(u: Expression, t: Expression): Expression =
+    StaticInvoke(
+      classOf[DateTimeUtils.type],
+      timeExpr.dataType,
+      "truncateTime",
+      Seq(u, t),
+      Seq(StringType, t.dataType))
+
+  override lazy val replacement: Expression = {
+    if (unit.foldable) {
+      val v = unit.eval()
+      if (v == null) {
+        Literal.create(null, dataType)
+      } else {
+        val lvl = DateTimeUtils.parseTruncLevelForTime(v.asInstanceOf[UTF8String])
+        if (lvl < DateTimeUtils.MIN_LEVEL_OF_TIME_TRUNC) {
+          Literal.create(null, dataType)
+        } else {
+          truncCall(unit, timeExpr)
+        }
+      }
+    } else {
+      val call = truncCall(unit, timeExpr)
+      val isBad = LessThan(call, Literal.create(0L, dataType))
+      If(isBad, Literal.create(null, dataType), call)
+    }
+  }
 }
