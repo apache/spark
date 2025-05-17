@@ -110,6 +110,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         LimitPushDown,
         LimitPushDownThroughWindow,
         ColumnPruning,
+        RecursiveCTEColumnPruning,
         GenerateOptimization,
         // Operator combine
         CollapseRepartition,
@@ -264,6 +265,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       PushPredicateThroughJoin,
       LimitPushDown,
       ColumnPruning,
+      RecursiveCTEColumnPruning,
       CollapseProject,
       RemoveRedundantAliases,
       RemoveNoopOperators),
@@ -454,6 +456,41 @@ abstract class Optimizer(catalogManager: CatalogManager)
           }
       case _ => plan
     }
+  }
+
+  object RecursiveCTEColumnPruning extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = ColumnPruning.removeProjectBeforeFilter(
+      plan.transformWithPruning(AlwaysProcess.fn, ruleId) {
+        case p @ Project(_, ul: UnionLoop) =>
+          if (!ul.outputSet.subsetOf(p.references)) {
+            val output = ColumnPruning.prunedChild(ul.anchor, p.references).output
+            val selected = ul.recursion.output.zipWithIndex.filter { case (a, i) =>
+              output.contains(ul.anchor.output(i))
+            }.map(_._1)
+            val newRecursion = Project(selected, ul.recursion)
+            val optimizedNewRecursion = Optimizer.this.execute(newRecursion)
+            val remainingIndices = optimizedNewRecursion.collect {
+              case p @ Project(_, ulr: UnionLoopRef) =>
+                ulr.output.zipWithIndex.filter {case (a, _) =>
+                  p.references.contains(a)
+                }.map(_._2)
+              case p @ Project(_, f @ Filter(_, ulr: UnionLoopRef)) =>
+                ulr.output.zipWithIndex.filter {case (a, _) =>
+                  (p.references ++ f.references).contains(a)
+                }.map(_._2)
+            }.head
+            val newChildren = ul.children.map { p =>
+              val selected = p.output.zipWithIndex.filter { case (_, i) =>
+                remainingIndices.contains(i)
+              }.map(_._1)
+              Project(selected, p)
+            }
+            p.copy(child = ul.withNewChildren(newChildren))
+          } else {
+            p
+          }
+      }
+    )
   }
 
   /**
@@ -1041,8 +1078,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
         p
       }
 
-    // TODO: Pruning `UnionLoop`s needs to take into account both the outer `Project` and the inner
-    //  `UnionLoopRef` nodes.
+    // Recursive CTE column pruning is handled in a separate rule. We catch it here because the
+    // default fallback will fail.
     case p @ Project(_, _: UnionLoop) => p
 
     // Prune unnecessary window expressions
@@ -1080,7 +1117,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
   })
 
   /** Applies a projection only when the child is producing unnecessary attributes */
-  private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =
+  def prunedChild(c: LogicalPlan, allReferences: AttributeSet): LogicalPlan =
     if (!c.outputSet.subsetOf(allReferences)) {
       Project(c.output.filter(allReferences.contains), c)
     } else {
@@ -1092,7 +1129,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
    * so remove it. Since the Projects have been added top-down, we need to remove in bottom-up
    * order, otherwise lower Projects can be missed.
    */
-  private def removeProjectBeforeFilter(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  def removeProjectBeforeFilter(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p1 @ Project(_, f @ Filter(e, p2 @ Project(_, child)))
       if p2.outputSet.subsetOf(child.outputSet) &&
         // We only remove attribute-only project.
