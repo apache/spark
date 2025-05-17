@@ -3377,7 +3377,7 @@ object SparkContext extends Logging {
     }
   }
 
-  private def getClusterManager(url: String): Option[ExternalClusterManager] = {
+  private[spark] def getClusterManager(url: String): Option[ExternalClusterManager] = {
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoaders =
       ServiceLoader.load(classOf[ExternalClusterManager], loader).asScala.filter(_.canCreate(url))
