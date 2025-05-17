@@ -477,12 +477,13 @@ object Union {
     childOutputs.transpose.map { attrs =>
       val firstAttr = attrs.head
       val nullable = attrs.exists(_.nullable)
+      val hasIndeterminism = attrs.exists(_.hasIndeterminism)
       val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
-      if (firstAttr.dataType == newDt) {
+      if (firstAttr.dataType == newDt && !hasIndeterminism) {
         firstAttr.withNullability(nullable)
       } else {
         AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
-          firstAttr.exprId, firstAttr.qualifier)
+          firstAttr.exprId, firstAttr.qualifier, hasIndeterminism)
       }
     }
   }
