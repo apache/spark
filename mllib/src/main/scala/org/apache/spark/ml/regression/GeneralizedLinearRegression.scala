@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.regression
 
+import java.io.{DataInputStream, DataOutputStream}
 import java.util.Locale
 
 import breeze.stats.{distributions => dist}
@@ -1145,6 +1146,19 @@ class GeneralizedLinearRegressionModel private[ml] (
 object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegressionModel] {
   private[ml] case class Data(intercept: Double, coefficients: Vector)
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    dos.writeDouble(data.intercept)
+    serializeVector(data.coefficients, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val intercept = dis.readDouble()
+    val coefficients = deserializeVector(dis)
+    Data(intercept, coefficients)
+  }
+
   @Since("2.0.0")
   override def read: MLReader[GeneralizedLinearRegressionModel] =
     new GeneralizedLinearRegressionModelReader
@@ -1163,7 +1177,7 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
       // Save model data: intercept, coefficients
       val data = Data(instance.intercept, instance.coefficients)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -1177,7 +1191,7 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
 
       val model = new GeneralizedLinearRegressionModel(
         metadata.uid, data.coefficients, data.intercept
