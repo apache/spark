@@ -226,7 +226,8 @@ case class TransformWithStateInPySpark(
     }
   }
 
-  def rightReferences: Seq[Attribute] = {
+  // Include the initial state columns in the references to avoid being column pruned.
+  private def rightReferences: Seq[Attribute] = {
     assert(resolved, "This method is expected to be called after resolution.")
     if (hasInitialState) {
       right.output
