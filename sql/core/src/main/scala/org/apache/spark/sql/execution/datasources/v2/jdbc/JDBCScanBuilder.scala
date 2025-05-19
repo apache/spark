@@ -16,6 +16,9 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
+import java.util.Optional
+
+import scala.jdk.OptionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
@@ -23,7 +26,8 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownAggregates, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.join.{JoinColumn, JoinType}
+import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -33,7 +37,7 @@ import org.apache.spark.sql.types.StructType
 case class JDBCScanBuilder(
     session: SparkSession,
     schema: StructType,
-    jdbcOptions: JDBCOptions)
+    var jdbcOptions: JDBCOptions)
   extends ScanBuilder
     with SupportsPushDownV2Filters
     with SupportsPushDownRequiredColumns
@@ -42,6 +46,7 @@ case class JDBCScanBuilder(
     with SupportsPushDownOffset
     with SupportsPushDownTableSample
     with SupportsPushDownTopN
+    with SupportsPushDownJoin
     with Logging {
 
   private val dialect = JdbcDialects.get(jdbcOptions.url)
@@ -121,6 +126,128 @@ case class JDBCScanBuilder(
     }
   }
 
+  override def isRightSideCompatibleForJoin(other: SupportsPushDownJoin): Boolean = {
+    other.isInstanceOf[JDBCScanBuilder] &&
+      jdbcOptions.url == other.asInstanceOf[JDBCScanBuilder].jdbcOptions.url
+  };
+
+  override def pushJoin(
+    other: SupportsPushDownJoin,
+    joinType: JoinType,
+    condition: Optional[Predicate],
+    leftRequiredSchema: StructType,
+    rightRequiredSchema: StructType
+  ): Boolean = {
+    if (!jdbcOptions.pushDownJoin || !dialect.supportsJoin) return false
+
+    val leftNodeSQLQuery = buildSQLQuery()
+    val rightNodeSQLQuery = other.asInstanceOf[JDBCScanBuilder].buildSQLQuery()
+
+    val leftSideQualifier = JoinOutputAliasIterator.get
+    val rightSideQualifier = JoinOutputAliasIterator.get
+
+    val leftProjections: Seq[JoinColumn] = leftRequiredSchema.fields.map { e =>
+      new JoinColumn(Array(leftSideQualifier), e.name, true)
+    }.toSeq
+    val rightProjections: Seq[JoinColumn] = rightRequiredSchema.fields.map { e =>
+      new JoinColumn(Array(rightSideQualifier), e.name, false)
+    }.toSeq
+
+    var aliasedLeftSchema = StructType(Seq())
+    var aliasedRightSchema = StructType(Seq())
+    val outputAliasPrefix = JoinOutputAliasIterator.get
+
+    val aliasedOutput = (leftProjections ++ rightProjections)
+      .zipWithIndex
+      .map { case (proj, i) =>
+        val name = s"${outputAliasPrefix}_col_$i"
+        val output = FieldReference(name)
+        if (i < leftProjections.length) {
+          val field = leftRequiredSchema.fields(i)
+          aliasedLeftSchema =
+            aliasedLeftSchema.add(name, field.dataType, field.nullable, field.metadata)
+        } else {
+          val field = rightRequiredSchema.fields(i - leftRequiredSchema.fields.length)
+          aliasedRightSchema =
+            aliasedRightSchema.add(name, field.dataType, field.nullable, field.metadata)
+        }
+
+        s"""${dialect.compileExpression(proj).get} AS ${dialect.compileExpression(output).get}"""
+      }.mkString(",")
+
+    val compiledJoinType = dialect.compileJoinType(joinType)
+    if (!compiledJoinType.isDefined) return false
+
+    val conditionString = condition.toScala match {
+      case Some(cond) =>
+        qualifyCondition(cond, leftSideQualifier, rightSideQualifier)
+        s"ON ${dialect.compileExpression(cond).get}"
+      case _ => ""
+    }
+
+    val subqueryASKeyword = if (dialect.needsASKeywordForJoinSubquery) {
+      " AS "
+    } else {
+      ""
+    }
+
+    val compiledLeftSideQualifier =
+      dialect.compileExpression(FieldReference(leftSideQualifier)).get
+    val compiledRightSideQualifier =
+      dialect.compileExpression(FieldReference(rightSideQualifier)).get
+
+    val joinQuery =
+      s"""
+         |SELECT $aliasedOutput FROM
+         |($leftNodeSQLQuery)$subqueryASKeyword$compiledLeftSideQualifier
+         |${compiledJoinType.get}
+         |($rightNodeSQLQuery)$subqueryASKeyword$compiledRightSideQualifier
+         |$conditionString
+         |""".stripMargin
+
+    val newMap = jdbcOptions.parameters.originalMap +
+      (JDBCOptions.JDBC_QUERY_STRING -> joinQuery) - (JDBCOptions.JDBC_TABLE_NAME)
+
+    jdbcOptions = new JDBCOptions(newMap)
+    jdbcOptions.containsJoinInQuery = true
+
+    // We can merge schemas since there are no fields with duplicate names
+    finalSchema = aliasedLeftSchema.merge(aliasedRightSchema)
+    pushedPredicate = Array.empty[Predicate]
+    pushedAggregateList = Array()
+    pushedGroupBys = None
+    tableSample = None
+    pushedLimit = 0
+    sortOrders = Array.empty[String]
+    pushedOffset = 0
+
+    true
+  }
+
+  def buildSQLQuery(): String = {
+    build()
+      .toV1TableScan(session.sqlContext).asInstanceOf[JDBCV1RelationFromV2Scan]
+      .buildScan().asInstanceOf[JDBCRDD]
+      .getExternalEngineQuery
+  }
+
+  // Fully qualify the condition. For example:
+  // DEPT=SALARY turns into leftSideQualifier.DEPT = rightSideQualifier=SALARY
+  def qualifyCondition(condition: Predicate, leftSideQualifier: String, rightSideQualifier: String)
+  : Unit = {
+    condition.references()
+      .filter(_.isInstanceOf[JoinColumn])
+      .foreach { e =>
+        val qualifier = if (e.asInstanceOf[JoinColumn].isInLeftSideOfJoin) {
+          leftSideQualifier
+        } else {
+          rightSideQualifier
+        }
+
+        e.asInstanceOf[JoinColumn].qualifier = Array(qualifier)
+      }
+  }
+
   override def pushTableSample(
       lowerBound: Double,
       upperBound: Double,
@@ -193,5 +320,17 @@ case class JDBCScanBuilder(
     // be used in sql string.
     JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedPredicate,
       pushedAggregateList, pushedGroupBys, tableSample, pushedLimit, sortOrders, pushedOffset)
+  }
+}
+
+object JoinOutputAliasIterator {
+  private var curId = new java.util.concurrent.atomic.AtomicLong()
+
+  def get: String = {
+    "subquery_" + curId.getAndIncrement()
+  }
+
+  def reset(): Unit = {
+    curId = new java.util.concurrent.atomic.AtomicLong()
   }
 }
