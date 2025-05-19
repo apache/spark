@@ -27,6 +27,7 @@ import scala.collection.mutable
 import com.google.common.cache.{CacheBuilder, RemovalNotification}
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.util.{ConnectHelper, MLWritable, Summary}
@@ -137,6 +138,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       cachedModel.put(objectId, CacheItem(obj, sizeBytes))
       if (getMemoryControlEnabled) {
         val savePath = offloadedModelsDir.resolve(objectId)
+        require(savePath.startsWith(offloadedModelsDir))
         obj.asInstanceOf[MLWritable].write.saveToLocal(savePath.toString)
         Files.writeString(savePath.resolve(modelClassNameFile), obj.getClass.getName)
         totalMLCacheInMemorySizeBytes.addAndGet(sizeBytes)
@@ -146,6 +148,18 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       throw new RuntimeException("'MLCache.register' only accepts model or summary objects.")
     }
     objectId
+  }
+
+  private[spark] def verifyObjectId(refId: String): Unit = {
+    // Verify the `refId` is a valid UUID.
+    // This is for preventing client to send a malicious `refId` which might
+    // cause Spark Server security issue.
+    try {
+      UUID.fromString(refId)
+    } catch {
+      case _: IllegalArgumentException =>
+        throw SparkException.internalError(s"The MLCache key $refId is invalid.")
+    }
   }
 
   /**
@@ -159,9 +173,11 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     if (refId == helperID) {
       helper
     } else {
+      verifyObjectId(refId)
       var obj: Object = Option(cachedModel.get(refId)).map(_.obj).getOrElse(null)
       if (obj == null && getMemoryControlEnabled) {
         val loadPath = offloadedModelsDir.resolve(refId)
+        require(loadPath.startsWith(offloadedModelsDir))
         if (Files.isDirectory(loadPath)) {
           val className = Files.readString(loadPath.resolve(modelClassNameFile))
           obj = MLUtils.loadTransformer(
@@ -179,11 +195,14 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   }
 
   def _removeModel(refId: String): Boolean = {
+    verifyObjectId(refId)
     val removedModel = cachedModel.remove(refId)
     val removedFromMem = removedModel != null
-    val removedFromDisk = if (getMemoryControlEnabled) {
+    val removedFromDisk = if (removedModel != null && getMemoryControlEnabled) {
       totalMLCacheSizeBytes.addAndGet(-removedModel.sizeBytes)
-      val offloadingPath = new File(offloadedModelsDir.resolve(refId).toString)
+      val removePath = offloadedModelsDir.resolve(refId)
+      require(removePath.startsWith(offloadedModelsDir))
+      val offloadingPath = new File(removePath.toString)
       if (offloadingPath.exists()) {
         FileUtils.deleteDirectory(offloadingPath)
         true
