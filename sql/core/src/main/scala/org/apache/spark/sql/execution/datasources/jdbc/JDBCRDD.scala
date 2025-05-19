@@ -59,14 +59,15 @@ object JDBCRDD extends Logging {
     val prepareQuery = options.prepareQuery
     val table = options.tableOrQuery
     val dialect = JdbcDialects.get(url)
+    val fullQuery = prepareQuery + dialect.getSchemaQuery(table)
 
     try {
-      getQueryOutputSchema(prepareQuery + dialect.getSchemaQuery(table), options, dialect)
+      getQueryOutputSchema(fullQuery, options, dialect)
     } catch {
       case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
         throw new SparkException(
           errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
-          messageParameters = Map.empty,
+          messageParameters = Map("jdbcQuery" -> fullQuery),
           cause = e)
     }
   }
@@ -298,7 +299,7 @@ class JDBCRDD(
       case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
         throw new SparkException(
           errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
-          messageParameters = Map.empty,
+          messageParameters = Map("jdbcQuery" -> sqlText),
           cause = e)
     }
     val endTime = System.nanoTime

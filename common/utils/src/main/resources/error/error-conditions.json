@@ -3878,7 +3878,7 @@
   },
   "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
     "message" : [
-      "JDBC external engine syntax error."
+      "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>."
     ],
     "subClass" : {
       "DURING_OUTPUT_SCHEMA_RESOLUTION" : {
