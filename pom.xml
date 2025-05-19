@@ -764,7 +764,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>10.0.1</version>
+        <version>10.2.1</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
