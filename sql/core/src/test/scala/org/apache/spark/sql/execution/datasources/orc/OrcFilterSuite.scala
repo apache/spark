@@ -826,43 +826,22 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       )
       val df = spark.createDataFrame(data).toDF("id", "name", "email")
 
-      // Write data in both ORC and Parquet formats
+      // Write data in ORC format
       val orcPath = s"${dir.getCanonicalPath}/orc"
-      val parquetPath = s"${dir.getCanonicalPath}/parquet"
-
       df.write.mode("overwrite").orc(orcPath)
-      df.write.mode("overwrite").parquet(parquetPath)
 
-      // Read data back
-      val orcDf = spark.read.orc(orcPath)
-      val parquetDf = spark.read.parquet(parquetPath)
+      // Read data back and check for both enabled/disabled filter-pushdown
+      Seq(true, false).foreach { filterPushdown =>
+        withSQLConf("spark.sql.orc.filterPushdown" -> filterPushdown.toString) {
+          // Apply filter with null-safe equality operator
+          val df = spark.read.orc(orcPath).filter(!(col("name") <=> "dummy"))
 
-      // Apply filter with null-safe equality operator
-      val filteredOrcDf = orcDf.filter(!(col("name") <=> "dummy"))
-      val filteredParquetDf = parquetDf.filter(!(col("name") <=> "dummy"))
-
-      // Check results
-      // Both ORC and Parquet should correctly include both rows
-      checkAnswer(filteredOrcDf, Seq(
-        Row(1, "John", "john@example.com"),
-        Row(3, null, "bob@example.com")
-      ))
-
-      // Parquet should also correctly include both rows
-      checkAnswer(filteredParquetDf, Seq(
-        Row(1, "John", "john@example.com"),
-        Row(3, null, "bob@example.com")
-      ))
-
-      // Verify that disabling ORC filter pushdown fixes the issue
-      withSQLConf("spark.sql.orc.filterPushdown" -> "false") {
-        val orcDfNoPushdown = spark.read.orc(orcPath)
-        val filteredOrcDfNoPushdown = orcDfNoPushdown.filter(!(col("name") <=> "dummy"))
-
-        checkAnswer(filteredOrcDfNoPushdown, Seq(
-          Row(1, "John", "john@example.com"),
-          Row(3, null, "bob@example.com")
-        ))
+          // Check results
+          checkAnswer(df, Seq(
+            Row(1, "John", "john@example.com"),
+            Row(3, null, "bob@example.com")
+          ))
+        }
       }
     }
   }
