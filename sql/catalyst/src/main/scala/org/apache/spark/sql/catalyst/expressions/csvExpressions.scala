@@ -160,19 +160,22 @@ case class SchemaOfCsv(
   private lazy val csv = child.eval().asInstanceOf[UTF8String]
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.foldable && csv != null) {
-      super.checkInputDataTypes()
-    } else if (!child.foldable) {
-      DataTypeMismatch(
-        errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map(
-          "inputName" -> toSQLId("csv"),
-          "inputType" -> toSQLType(child.dataType),
-          "inputExpr" -> toSQLExpr(child)))
+    def err(sub: String, kv: (String, String)*): DataTypeMismatch =
+      DataTypeMismatch(errorSubClass = sub, messageParameters = kv.toMap)
+
+    if (!child.foldable) {
+      err("NON_FOLDABLE_INPUT",
+        "inputName" -> toSQLId("csv"),
+        "inputType" -> toSQLType(child.dataType),
+        "inputExpr" -> toSQLExpr(child))
+    } else if (child.dataType != StringType) {
+      err("NON_STRING_LITERAL",
+        "inputType" -> toSQLType(child.dataType),
+        "inputExpr" -> toSQLExpr(child))
+    } else if (child.eval() == null) {
+      err("UNEXPECTED_NULL", "exprName" -> "csv")
     } else {
-      DataTypeMismatch(
-        errorSubClass = "UNEXPECTED_NULL",
-        messageParameters = Map("exprName" -> "csv"))
+      super.checkInputDataTypes()
     }
   }
 
