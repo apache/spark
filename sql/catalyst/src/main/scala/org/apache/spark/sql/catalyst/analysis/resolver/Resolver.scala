@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
+import java.util.HashSet
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.EvaluateUnresolvedInlineTable
@@ -31,7 +33,13 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedRelation,
   UnresolvedSubqueryColumnAliases
 }
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Expression}
+import org.apache.spark.sql.catalyst.expressions.{
+  Alias,
+  Attribute,
+  AttributeSet,
+  Expression,
+  ExprId
+}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -58,19 +66,23 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  *   operators.
  * @param metadataResolverExtensions A list of [[ResolverExtension]]s that will be used to resolve
  *   relation operators in [[MetadataResolver]].
+ * @param externalRelationResolution An optional [[RelationResolution]] with to override the default
+ *   one. The default is constructed using [[Resolver.createRelationResolution]].
  */
 class Resolver(
     catalogManager: CatalogManager,
     override val extensions: Seq[ResolverExtension] = Seq.empty,
-    metadataResolverExtensions: Seq[ResolverExtension] = Seq.empty)
+    metadataResolverExtensions: Seq[ResolverExtension] = Seq.empty,
+    externalRelationResolution: Option[RelationResolution] = None)
     extends LogicalPlanResolver
     with DelegatesResolutionToExtensions {
-  private val scopes = new NameScopeStack
+  private val planLogger = new PlanLogger
+  private val scopes = new NameScopeStack(planLogger)
   private val cteRegistry = new CteRegistry
   private val subqueryRegistry = new SubqueryRegistry
-  private val planLogger = new PlanLogger
   private val identifierAndCteSubstitutor = new IdentifierAndCteSubstitutor
-  private val relationResolution = Resolver.createRelationResolution(catalogManager)
+  private val relationResolution =
+    externalRelationResolution.getOrElse(Resolver.createRelationResolution(catalogManager))
   private val functionResolution = new FunctionResolution(catalogManager, relationResolution)
   private val expressionResolver = new ExpressionResolver(this, functionResolution, planLogger)
   private val aggregateResolver = new AggregateResolver(this, expressionResolver)
@@ -98,6 +110,7 @@ class Resolver(
   private var relationMetadataProvider: RelationMetadataProvider = new MetadataResolver(
     catalogManager,
     relationResolution,
+    functionResolution,
     metadataResolverExtensions
   )
 
@@ -228,6 +241,10 @@ class Resolver(
             handleLeafOperator(unresolvedOneRowRelation)
           case unresolvedRange: Range =>
             handleLeafOperator(unresolvedRange)
+          case supervisingCommand: SupervisingCommand =>
+            resolveSupervisingCommand(supervisingCommand)
+          case repartition: Repartition =>
+            resolveRepartition(repartition)
           case _ =>
             tryDelegateResolutionToExtension(unresolvedPlan).getOrElse {
               handleUnmatchedOperator(unresolvedPlan)
@@ -347,9 +364,9 @@ class Resolver(
    *
    *  1. SQL
    *  {{{
-   *  -- Hidden output will be reset at [[SubqueryAlias]] and therefore both `output` and
-   *  -- `hiddenOutput` will be [`col2`]. Because of that, `UNRESOLVED_COLUMN` is thrown
-   *  -- when resolving `col1`
+   *  -- `hiddenOutput` and `availableAliases` will be reset at [[SubqueryAlias]]. Therefore both
+   *  -- `output` and `hiddenOutput` will be [`col2`]. Because of that, `UNRESOLVED_COLUMN` is
+   *  -- thrown when resolving `col1`
    *  SELECT col1 FROM (SELECT col2 FROM VALUES (1, 2));
    *  }}}
    *
@@ -362,7 +379,11 @@ class Resolver(
 
     val qualifier = resolvedSubqueryAlias.identifier.qualifier :+ resolvedSubqueryAlias.alias
     val output = scopes.current.output.map(attribute => attribute.withQualifier(qualifier))
-    scopes.overwriteCurrent(output = Some(output), hiddenOutput = Some(output))
+    scopes.overwriteCurrent(
+      output = Some(output),
+      hiddenOutput = Some(output),
+      availableAliases = Some(new HashSet[ExprId])
+    )
 
     resolvedSubqueryAlias
   }
@@ -430,11 +451,15 @@ class Resolver(
   /**
    * [[Distinct]] operator doesn't require any special resolution.
    *
-   * Hidden output is reset when [[Distinct]] is reached during tree traversal.
+   * `hiddenOutput` and `availableAliases` are reset when [[Distinct]] is reached during tree
+   * traversal.
    */
   private def resolveDistinct(unresolvedDistinct: Distinct): LogicalPlan = {
     val resolvedDistinct = unresolvedDistinct.copy(child = resolve(unresolvedDistinct.child))
-    scopes.overwriteCurrent(hiddenOutput = Some(scopes.current.output))
+    scopes.overwriteCurrent(
+      hiddenOutput = Some(scopes.current.output),
+      availableAliases = Some(new HashSet[ExprId])
+    )
     resolvedDistinct
   }
 
@@ -587,6 +612,22 @@ class Resolver(
     scopes.overwriteCurrent(output = Some(output), hiddenOutput = Some(output))
 
     leafOperatorWithAssignedExpressionIds
+  }
+
+  /**
+   * [[SupervisingCommand]] is an [[ExplainCommand]] or [[DescribeQueryCommand]] that doesn't
+   * require any resolution.
+   */
+  private def resolveSupervisingCommand(supervisingCommand: SupervisingCommand): LogicalPlan = {
+    supervisingCommand
+  }
+
+  /**
+   * Resolve [[Repartition]] operator. Its resolution doesn't require any specific logic (besides
+   * child resolution).
+   */
+  private def resolveRepartition(repartition: Repartition): LogicalPlan = {
+    repartition.copy(child = resolve(repartition.child))
   }
 
   private def createCteRelationRef(name: String, cteRelationDef: CTERelationDef): LogicalPlan = {

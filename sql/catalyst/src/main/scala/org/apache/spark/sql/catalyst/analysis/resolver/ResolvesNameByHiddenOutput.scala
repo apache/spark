@@ -17,8 +17,25 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
+import java.util.HashSet
+
+import scala.collection.mutable
+
+import org.apache.spark.sql.catalyst.expressions.{
+  Attribute,
+  AttributeReference,
+  ExprId,
+  NamedExpression,
+  PipeOperator
+}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  Aggregate,
+  Distinct,
+  LogicalPlan,
+  Project,
+  SubqueryAlias,
+  UnaryNode
+}
 import org.apache.spark.sql.catalyst.util._
 
 /**
@@ -120,66 +137,194 @@ import org.apache.spark.sql.catalyst.util._
  *   +- Sort [sum(col1)#... ASC NULLS FIRST], true
  *     +- Aggregate [col1], [col1, sum(col1) AS sum(col1)#...]
  *       +- LocalRelation [col1]
+ *
+ * In case of Dataframe programs we can have multiple [[Sort]] operators nested inside each other.
+ * For example:
+ *
+ * {{{
+ *   df.select("col1").orderBy("col2").orderBy("col1").orderBy("col2")
+ * }}}
+ *
+ * Unresolved plan would be:
+ *
+ * {{{
+ * Sort [col2 ASC NULLS FIRST], true
+ *   +- Sort [col1 ASC NULLS FIRST], true
+ *     +- Project [col1]
+ *       +- Sort [col2 ASC NULLS FIRST], true
+ *         +- Project [col1, col2]
+ *           +- Project [col1, col2, col3]
+ *             +- LocalRelation [col1, col2, col3]
+ * }}}
+ *
+ * As it can be seen, `col2` ([[Sort]] order expression) needs to be resolved using the hidden
+ * output. Because of that it must be added to all the [[Project]]s and [[Aggregate]]s below the
+ * [[Sort]] operator.
+ * Resolved plan would be:
+ *
+ * {{{
+ * Project [col1]
+ *   +- Sort [col2 ASC NULLS FIRST], true
+ *     +- Sort [col1 ASC NULLS FIRST], true
+ *       +- Project [col1, col2]
+ *         +- Sort [col2 ASC NULLS FIRST], true
+ *           +- Project [col1, col2]
+ *             +- Project [col1, col2, col3]
+ *               +- LocalRelation [col1, col2, col3]
+ * }}}
+ *
+ * In the plan you can see that `col2` is added to the lower [[Project.projectList]].
  */
 trait ResolvesNameByHiddenOutput {
-  protected val scopes: NameScopeStack
 
   /**
-   * If the child of an operator is a [[Project]] or an [[Aggregate]] and that operator has missing
-   * expressions, insert the missing expressions in the output list of the operator.
+   * Insert the missing expressions in the output list of the operator. Recursively call
+   * `expandOperatorsOutputList` to expand the output lists of [[Project]]s and [[Aggregate]]s
+   * below the current one.
    * In order to stay compatible with fixed-point, missing expressions are inserted after the
    * original output list, but before any qualified access only columns that have been added as
    * part of resolution from hidden output.
+   *
+   * Only [[AttributeReference]]s are propagated recursively in `expandOperatorsOutputList`.
+   * [[Alias]]es are meant to be inserted in the topmost operator. For example, [[SortResolver]]
+   * may push down aliased aggregate and grouping expression trees to the immediate [[Aggregate]]
+   * below, but it does not make sense to push them down further:
+   *
+   * {{{
+   * -- The MAX(v2.col1) aggregate has to be pushed down to [[Aggregate]], but not to [[Project]]
+   * -- below it.
+   * SELECT COUNT(col1) FROM v1 NATURAL JOIN v2 GROUP BY col1 ORDER BY MAX(v2.col1);
+   * }}}
+   *
+   * ->
+   *
+   * {{{
+   * Project [count(col1)#23L]
+   * +- Sort [max(col1)#25 ASC NULLS FIRST], true
+   *   +- Aggregate [col1#21], [count(col1#21) AS count(col1)#23L, max(col1#20) AS max(col1)#25]
+   *     +- Project [col1#21, col1#20]
+   *       ...
+   * }}}
    */
   def insertMissingExpressions(
       operator: LogicalPlan,
       missingExpressions: Seq[NamedExpression]): LogicalPlan =
     operator match {
-      case operator @ (_: Project | _: Aggregate) if missingExpressions.nonEmpty =>
-        expandOperatorsOutputList(operator, missingExpressions)
+      case expandableOperator: UnaryNode
+          if shouldExtendOperatorOutput(expandableOperator, missingExpressions) =>
+        expandableOperator match {
+          case project: Project =>
+            expandOperatorsOutputList(
+              operator = project,
+              operatorOutput = project.projectList,
+              missingExpressions = missingExpressions
+            )
+          case aggregate: Aggregate =>
+            expandOperatorsOutputList(
+              operator = aggregate,
+              operatorOutput = aggregate.aggregateExpressions,
+              missingExpressions = missingExpressions
+            )
+          case other =>
+            other.withNewChildren(
+              Seq(insertMissingExpressions(expandableOperator.child, missingExpressions))
+            )
+        }
       case other => other
     }
 
   private def expandOperatorsOutputList(
-      operator: LogicalPlan,
+      operator: UnaryNode,
+      operatorOutput: Seq[NamedExpression],
       missingExpressions: Seq[NamedExpression]): LogicalPlan = {
-    val (metadataCols, nonMetadataCols) = operator match {
-      case project: Project =>
-        project.projectList.partition(_.toAttribute.qualifiedAccessOnly)
-      case aggregate: Aggregate =>
-        aggregate.aggregateExpressions.partition(_.toAttribute.qualifiedAccessOnly)
+    val filteredMissingExpressions = filterMissingExpressions(
+      operatorOutput = operatorOutput,
+      missingExpressions = missingExpressions
+    )
+
+    val missingAttributes = filteredMissingExpressions.collect {
+      case attribute: AttributeReference => attribute
     }
 
-    val newOutputList = nonMetadataCols ++ missingExpressions ++ metadataCols
+    val expandedChild = insertMissingExpressions(operator.child, missingAttributes)
+
+    val (metadataCols, nonMetadataCols) =
+      operatorOutput.partition(_.toAttribute.qualifiedAccessOnly)
+
+    val newOutputList = nonMetadataCols ++ filteredMissingExpressions ++ metadataCols
     val newOperator = operator match {
       case aggregate: Aggregate =>
-        aggregate.copy(aggregateExpressions = newOutputList)
+        aggregate.copy(aggregateExpressions = newOutputList, child = expandedChild)
       case project: Project =>
-        project.copy(projectList = newOutputList)
+        project.copy(projectList = newOutputList, child = expandedChild)
     }
 
     newOperator
+  }
+
+  private def filterMissingExpressions(
+      operatorOutput: Seq[NamedExpression],
+      missingExpressions: Seq[NamedExpression]): Seq[NamedExpression] = {
+    val operatorOutputExpressionIdSet = new HashSet[ExprId]
+
+    operatorOutput.foreach { element =>
+      operatorOutputExpressionIdSet.add(element.exprId)
+    }
+
+    val filteredMissingExpressions = new mutable.ArrayBuffer[NamedExpression]()
+
+    missingExpressions.foreach { element =>
+      if (!operatorOutputExpressionIdSet.contains(element.exprId)) {
+        filteredMissingExpressions += element
+      }
+    }
+
+    filteredMissingExpressions.toSeq
+  }
+
+  private def shouldExtendOperatorOutput(
+      unaryNode: UnaryNode,
+      missingExpressions: Seq[NamedExpression]): Boolean = {
+    val isOperatorExtendable = unaryNode match {
+      case _ @(_: PipeOperator | _: Distinct | _: SubqueryAlias) => false
+      case _ => true
+    }
+    isOperatorExtendable && missingExpressions.nonEmpty
   }
 
   /**
    * If [[missingExpressions]] is not empty, output of an operator has been changed by
    * [[insertMissingExpressions]]. Therefore, we need to restore the original output, by placing a
    * [[Project]] on top of an original node, with original's node output. Additionally, we append
-   * all qualified access only columns from hidden output, because they may be needed in upper
-   * operators (if not, they will be pruned away in [[PruneMetadataColumns]]).
+   * all qualified access only columns from hidden output that were inserted as missing attributes,
+   * because they may be needed in upper operators (if not, they will be pruned away in
+   * [[PruneMetadataColumns]]). Other hidden attributes are thrown away, because we cannot
+   * reference them from the new [[Project]] (they are not outputted from below).
    */
   def retainOriginalOutput(
       operator: LogicalPlan,
-      missingExpressions: Seq[NamedExpression]): LogicalPlan = {
+      missingExpressions: Seq[NamedExpression],
+      output: Seq[Attribute],
+      hiddenOutput: Seq[Attribute]): LogicalPlan = {
     if (missingExpressions.isEmpty) {
       operator
     } else {
+      val missingExpressionIds = new HashSet[ExprId](missingExpressions.size)
+      missingExpressions.foreach { expression =>
+        missingExpressionIds.add(expression.exprId)
+      }
+
+      val hiddenOutputToPreserve = hiddenOutput.filter { hiddenAttribute =>
+        hiddenAttribute.qualifiedAccessOnly && missingExpressionIds.contains(
+          hiddenAttribute.exprId
+        )
+      }
+
       val project = Project(
-        scopes.current.output.map(_.asInstanceOf[NamedExpression]) ++ scopes.current.hiddenOutput
-          .filter(_.qualifiedAccessOnly),
-        operator
+        projectList = output ++ hiddenOutputToPreserve,
+        child = operator
       )
-      scopes.overwriteCurrent(output = Some(project.projectList.map(_.toAttribute)))
+
       project
     }
   }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -370,6 +372,17 @@ object MultilayerPerceptronClassificationModel
   extends MLReadable[MultilayerPerceptronClassificationModel] {
   private[ml] case class Data(weights: Vector)
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeVector(data.weights, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val weights = deserializeVector(dis)
+    Data(weights)
+  }
+
   @Since("2.0.0")
   override def read: MLReader[MultilayerPerceptronClassificationModel] =
     new MultilayerPerceptronClassificationModelReader
@@ -388,7 +401,7 @@ object MultilayerPerceptronClassificationModel
       // Save model data: weights
       val data = Data(instance.weights)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -411,7 +424,7 @@ object MultilayerPerceptronClassificationModel
         val model = new MultilayerPerceptronClassificationModel(metadata.uid, weights)
         model.set("layers", layers)
       } else {
-        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
         new MultilayerPerceptronClassificationModel(metadata.uid, data.weights)
       }
       metadata.getAndSetParams(model)

@@ -18,7 +18,7 @@
 package org.apache.spark.ml.recommendation
 
 import java.{util => ju}
-import java.io.IOException
+import java.io.{DataInputStream, DataOutputStream, IOException}
 import java.util.Locale
 
 import scala.collection.mutable
@@ -552,6 +552,19 @@ private[ml] case class FeatureData(id: Int, features: Array[Float])
 @Since("1.6.0")
 object ALSModel extends MLReadable[ALSModel] {
 
+  private[ml] def serializeData(data: FeatureData, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    dos.writeInt(data.id)
+    serializeFloatArray(data.features, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): FeatureData = {
+    import ReadWriteUtils._
+    val id = dis.readInt()
+    val features = deserializeFloatArray(dis)
+    FeatureData(id, features)
+  }
+
   private val NaN = "nan"
   private val Drop = "drop"
   private[recommendation] final val supportedColdStartStrategies = Array(NaN, Drop)
@@ -579,9 +592,9 @@ object ALSModel extends MLReadable[ALSModel] {
         import sparkSession.implicits._
 
         val userFactorsData = instance.userFactors.as[FeatureData].collect()
-        ReadWriteUtils.saveArray(userPath, userFactorsData, sparkSession)
+        ReadWriteUtils.saveArray(userPath, userFactorsData, sparkSession, serializeData)
         val itemFactorsData = instance.itemFactors.as[FeatureData].collect()
-        ReadWriteUtils.saveArray(itemPath, itemFactorsData, sparkSession)
+        ReadWriteUtils.saveArray(itemPath, itemFactorsData, sparkSession, serializeData)
       } else {
         instance.userFactors.write.format("parquet").save(userPath)
         instance.itemFactors.write.format("parquet").save(itemPath)
@@ -603,9 +616,13 @@ object ALSModel extends MLReadable[ALSModel] {
 
       val (userFactors, itemFactors) = if (ReadWriteUtils.localSavingModeState.get()) {
         import org.apache.spark.util.ArrayImplicits._
-        val userFactorsData = ReadWriteUtils.loadArray[FeatureData](userPath, sparkSession)
+        val userFactorsData = ReadWriteUtils.loadArray[FeatureData](
+          userPath, sparkSession, deserializeData
+        )
         val userFactors = sparkSession.createDataFrame(userFactorsData.toImmutableArraySeq)
-        val itemFactorsData = ReadWriteUtils.loadArray[FeatureData](itemPath, sparkSession)
+        val itemFactorsData = ReadWriteUtils.loadArray[FeatureData](
+          itemPath, sparkSession, deserializeData
+        )
         val itemFactors = sparkSession.createDataFrame(itemFactorsData.toImmutableArraySeq)
         (userFactors, itemFactors)
       } else {

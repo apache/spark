@@ -38,6 +38,10 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")
 
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getErrorCode == 208
+  }
+
   // Microsoft SQL Server does not have the boolean type.
   // Compile the boolean value to the bit data type instead.
   // scalastyle:off line.size.limit

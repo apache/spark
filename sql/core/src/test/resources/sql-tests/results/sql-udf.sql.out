@@ -1207,6 +1207,1541 @@ struct<>
 
 
 -- !query
+CREATE VIEW ts(x) AS VALUES NAMED_STRUCT('a', 1, 'b', 2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE VIEW tm(x) AS VALUES MAP('a', 1, 'b', 2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE VIEW ta(x) AS VALUES ARRAY(1, 2, 3)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_1a(a DOUBLE, b DOUBLE) RETURNS DOUBLE RETURN a * b
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_1b(x INT) RETURNS INT RETURN x
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_1c(x INT) RETURNS INT RETURN SELECT x
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_1d(x INT) RETURNS INT RETURN (SELECT SUM(c2) FROM t2 WHERE c1 = x)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_1e() RETURNS INT RETURN foo3_1d(0)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_1f() RETURNS INT RETURN SELECT SUM(c2) FROM t2 WHERE c1 = 0
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_1g(x INT) RETURNS INT RETURN SELECT (SELECT x)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT a, b, foo3_1a(a + 1, b + 1) FROM t1 AS t(a, b)
+-- !query schema
+struct<a:int,b:int,spark_catalog.default.foo3_1a((a + 1), (b + 1)):double>
+-- !query output
+0	1	2.0
+0	2	3.0
+1	2	6.0
+
+
+-- !query
+SELECT x, foo3_1c(x) FROM t1 AS t(x, y)
+-- !query schema
+struct<x:int,spark_catalog.default.foo3_1c(x):int>
+-- !query output
+0	0
+0	0
+1	1
+
+
+-- !query
+SELECT c1, foo3_1d(c1) FROM t1
+-- !query schema
+struct<c1:int,spark_catalog.default.foo3_1d(c1):int>
+-- !query output
+0	5
+0	5
+1	NULL
+
+
+-- !query
+SELECT c1, foo3_1a(foo3_1b(c1), foo3_1b(c1)) FROM t1
+-- !query schema
+struct<c1:int,spark_catalog.default.foo3_1a(spark_catalog.default.foo3_1b(c1), spark_catalog.default.foo3_1b(c1)):double>
+-- !query output
+0	0.0
+0	0.0
+1	1.0
+
+
+-- !query
+SELECT c1, foo3_1d(foo3_1c(foo3_1b(c1))) FROM t1
+-- !query schema
+struct<c1:int,spark_catalog.default.foo3_1d(spark_catalog.default.foo3_1c(spark_catalog.default.foo3_1b(c1))):int>
+-- !query output
+0	5
+0	5
+1	NULL
+
+
+-- !query
+SELECT c1, foo3_1a(foo3_1c(foo3_1b(c1)), foo3_1d(foo3_1b(c1))) FROM t1
+-- !query schema
+struct<c1:int,spark_catalog.default.foo3_1a(spark_catalog.default.foo3_1c(spark_catalog.default.foo3_1b(c1)), spark_catalog.default.foo3_1d(spark_catalog.default.foo3_1b(c1))):double>
+-- !query output
+0	0.0
+0	0.0
+1	NULL
+
+
+-- !query
+SELECT foo3_1c(foo3_1e()) FROM t1
+-- !query schema
+struct<spark_catalog.default.foo3_1c(spark_catalog.default.foo3_1e()):int>
+-- !query output
+5
+5
+5
+
+
+-- !query
+SELECT foo3_1a(MAX(c1), MAX(c2)) FROM t1
+-- !query schema
+struct<spark_catalog.default.foo3_1a(max(c1), max(c2)):double>
+-- !query output
+2.0
+
+
+-- !query
+SELECT foo3_1a(MAX(c1), c2) FROM t1 GROUP BY c2
+-- !query schema
+struct<spark_catalog.default.foo3_1a(max(c1), c2):double>
+-- !query output
+0.0
+2.0
+
+
+-- !query
+SELECT foo3_1a(c1, c2) FROM t1 GROUP BY c1, c2
+-- !query schema
+struct<spark_catalog.default.foo3_1a(c1, c2):double>
+-- !query output
+0.0
+0.0
+2.0
+
+
+-- !query
+SELECT MAX(foo3_1a(c1, c2)) FROM t1 GROUP BY c1, c2
+-- !query schema
+struct<max(spark_catalog.default.foo3_1a(c1, c2)):double>
+-- !query output
+0.0
+0.0
+2.0
+
+
+-- !query
+SELECT MAX(c1) + foo3_1b(MAX(c1)) FROM t1 GROUP BY c2
+-- !query schema
+struct<(max(c1) + spark_catalog.default.foo3_1b(max(c1))):int>
+-- !query output
+0
+2
+
+
+-- !query
+SELECT c1, SUM(foo3_1c(c2)) FROM t1 GROUP BY c1
+-- !query schema
+struct<c1:int,sum(spark_catalog.default.foo3_1c(c2)):bigint>
+-- !query output
+0	3
+1	2
+
+
+-- !query
+SELECT c1, SUM(foo3_1d(c2)) FROM t1 GROUP BY c1
+-- !query schema
+struct<c1:int,sum(spark_catalog.default.foo3_1d(c2)):bigint>
+-- !query output
+0	NULL
+1	NULL
+
+
+-- !query
+SELECT foo3_1c(c1), foo3_1d(c1) FROM t1 GROUP BY c1
+-- !query schema
+struct<spark_catalog.default.foo3_1c(c1):int,spark_catalog.default.foo3_1d(c1):int>
+-- !query output
+0	5
+1	NULL
+
+
+-- !query
+SELECT foo3_1a(SUM(c1), rand(0) * 0) FROM t1
+-- !query schema
+struct<spark_catalog.default.foo3_1a(sum(c1), (rand(0) * 0)):double>
+-- !query output
+0.0
+
+
+-- !query
+SELECT foo3_1a(SUM(c1) + rand(0) * 0, SUM(c2)) FROM t1
+-- !query schema
+struct<spark_catalog.default.foo3_1a((sum(c1) + (rand(0) * 0)), sum(c2)):double>
+-- !query output
+5.0
+
+
+-- !query
+SELECT foo3_1b(SUM(c1) + rand(0) * 0) FROM t1
+-- !query schema
+struct<spark_catalog.default.foo3_1b((sum(c1) + (rand(0) * 0))):int>
+-- !query output
+1
+
+
+-- !query
+SELECT foo3_1b(SUM(1) + rand(0) * 0) FROM t1 GROUP BY c2
+-- !query schema
+struct<spark_catalog.default.foo3_1b((sum(1) + (rand(0) * 0))):int>
+-- !query output
+1
+2
+
+
+-- !query
+SELECT foo3_1c(SUM(c2) + rand(0) * 0) FROM t1 GROUP by c1
+-- !query schema
+struct<spark_catalog.default.foo3_1c((sum(c2) + (rand(0) * 0))):int>
+-- !query output
+2
+3
+
+
+-- !query
+SELECT foo3_1b(foo3_1b(MAX(c2))) FROM t1
+-- !query schema
+struct<spark_catalog.default.foo3_1b(spark_catalog.default.foo3_1b(max(c2))):int>
+-- !query output
+2
+
+
+-- !query
+SELECT foo3_1b(MAX(foo3_1b(c2))) FROM t1
+-- !query schema
+struct<spark_catalog.default.foo3_1b(max(spark_catalog.default.foo3_1b(c2))):int>
+-- !query output
+2
+
+
+-- !query
+SELECT foo3_1a(foo3_1b(c1), MAX(c2)) FROM t1 GROUP BY c1
+-- !query schema
+struct<spark_catalog.default.foo3_1a(spark_catalog.default.foo3_1b(c1), max(c2)):double>
+-- !query output
+0.0
+2.0
+
+
+-- !query
+SELECT c1, foo3_1b(c1) FROM t1 GROUP BY c1
+-- !query schema
+struct<c1:int,spark_catalog.default.foo3_1b(c1):int>
+-- !query output
+0	0
+1	1
+
+
+-- !query
+SELECT c1, foo3_1b(c1 + 1) FROM t1 GROUP BY c1
+-- !query schema
+struct<c1:int,spark_catalog.default.foo3_1b((c1 + 1)):int>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+SELECT c1, foo3_1b(c1 + rand(0) * 0) FROM t1 GROUP BY c1
+-- !query schema
+struct<c1:int,spark_catalog.default.foo3_1b((c1 + (rand(0) * 0))):int>
+-- !query output
+0	0
+1	1
+
+
+-- !query
+SELECT c1, foo3_1a(c1, MIN(c2)) FROM t1 GROUP BY c1
+-- !query schema
+struct<c1:int,spark_catalog.default.foo3_1a(c1, min(c2)):double>
+-- !query output
+0	0.0
+1	2.0
+
+
+-- !query
+SELECT c1, foo3_1a(c1 + 1, MIN(c2 + 1)) FROM t1 GROUP BY c1
+-- !query schema
+struct<c1:int,spark_catalog.default.foo3_1a((c1 + 1), min((c2 + 1))):double>
+-- !query output
+0	2.0
+1	6.0
+
+
+-- !query
+SELECT c1, c2, foo3_1a(c1, c2) FROM t1 GROUP BY c1, c2
+-- !query schema
+struct<c1:int,c2:int,spark_catalog.default.foo3_1a(c1, c2):double>
+-- !query output
+0	1	0.0
+0	2	0.0
+1	2	2.0
+
+
+-- !query
+SELECT c1, c2, foo3_1a(1, 2) FROM t1 GROUP BY c1, c2
+-- !query schema
+struct<c1:int,c2:int,spark_catalog.default.foo3_1a(1, 2):double>
+-- !query output
+0	1	2.0
+0	2	2.0
+1	2	2.0
+
+
+-- !query
+SELECT c1 + c2, foo3_1b(c1 + c2 + 1) FROM t1 GROUP BY c1 + c2
+-- !query schema
+struct<(c1 + c2):int,spark_catalog.default.foo3_1b(((c1 + c2) + 1)):int>
+-- !query output
+1	2
+2	3
+3	4
+
+
+-- !query
+SELECT COUNT(*) + foo3_1b(c1) + foo3_1b(SUM(c2)) + SUM(foo3_1b(c2)) FROM t1 GROUP BY c1
+-- !query schema
+struct<(((count(1) + spark_catalog.default.foo3_1b(c1)) + spark_catalog.default.foo3_1b(sum(c2))) + sum(spark_catalog.default.foo3_1b(c2))):bigint>
+-- !query output
+6
+8
+
+
+-- !query
+SELECT c1, COUNT(*), foo3_1b(SUM(c2)) FROM t1 GROUP BY c1 HAVING COUNT(*) > 0
+-- !query schema
+struct<c1:int,count(1):bigint,spark_catalog.default.foo3_1b(sum(c2)):int>
+-- !query output
+0	2	3
+1	1	2
+
+
+-- !query
+SELECT c1, COUNT(*), foo3_1b(SUM(c2)) FROM t1 GROUP BY c1 HAVING foo3_1b(SUM(c2)) > 0
+-- !query schema
+struct<c1:int,count(1):bigint,spark_catalog.default.foo3_1b(sum(c2)):int>
+-- !query output
+0	2	3
+1	1	2
+
+
+-- !query
+SELECT c1, COUNT(*), foo3_1b(SUM(c2)) FROM t1 GROUP BY c1 HAVING SUM(foo3_1b(c2)) > 0
+-- !query schema
+struct<c1:int,count(1):bigint,spark_catalog.default.foo3_1b(sum(c2)):int>
+-- !query output
+0	2	3
+1	1	2
+
+
+-- !query
+SELECT foo3_1b(c1), MIN(c2) FROM t1 GROUP BY 1
+-- !query schema
+struct<spark_catalog.default.foo3_1b(c1):int,min(c2):int>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+SELECT foo3_1a(c1 + rand(0) * 0, c2) FROM t1 GROUP BY 1
+-- !query schema
+struct<spark_catalog.default.foo3_1a((c1 + (rand(0) * 0)), c2):double>
+-- !query output
+0.0
+2.0
+
+
+-- !query
+SELECT c1, c2, foo3_1a(c1, c2) FROM t1 GROUP BY c1, c2, 3
+-- !query schema
+struct<c1:int,c2:int,spark_catalog.default.foo3_1a(c1, c2):double>
+-- !query output
+0	1	0.0
+0	2	0.0
+1	2	2.0
+
+
+-- !query
+SELECT c1, (SELECT c1), (SELECT foo3_1b(c1)), SUM(c2) FROM t1 GROUP BY 1, 2, 3
+-- !query schema
+struct<c1:int,scalarsubquery(c1):int,scalarsubquery(c1):int,sum(c2):bigint>
+-- !query output
+0	0	0	3
+1	1	1	2
+
+
+-- !query
+SELECT c1, SUM(c2) + foo3_1a(MIN(c2), MAX(c2)) + (SELECT SUM(c2)) FROM t1 GROUP BY c1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"sum(c2) AS `sum(outer(spark_catalog.default.t1.c2))`\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 51,
+    "stopIndex" : 64,
+    "fragment" : "SELECT SUM(c2)"
+  } ]
+}
+
+
+-- !query
+SELECT foo3_1b(SUM(c1)) + (SELECT foo3_1b(SUM(c1))) FROM t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"sum(c1) AS `sum(outer(spark_catalog.default.t1.c1))`\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 27,
+    "stopIndex" : 51,
+    "fragment" : "(SELECT foo3_1b(SUM(c1)))"
+  } ]
+}
+
+
+-- !query
+SELECT SUM(foo3_1b(SUM(c1))) FROM t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NESTED_AGGREGATE_FUNCTION",
+  "sqlState" : "42607",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 27,
+    "fragment" : "foo3_1b(SUM(c1))"
+  } ]
+}
+
+
+-- !query
+SELECT foo3_1b(SUM(c1)) + (SELECT SUM(SUM(c1))) FROM t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "NESTED_AGGREGATE_FUNCTION",
+  "sqlState" : "42607",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 45,
+    "fragment" : "SUM(c1)"
+  } ]
+}
+
+
+-- !query
+SELECT foo3_1b(SUM(c1) + SUM(SUM(c1))) FROM t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "NESTED_AGGREGATE_FUNCTION",
+  "sqlState" : "42607",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 30,
+    "stopIndex" : 36,
+    "fragment" : "SUM(c1)"
+  } ]
+}
+
+
+-- !query
+SELECT foo3_1b(SUM(c1 + rand(0) * 0)) FROM t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
+  "sqlState" : "42845",
+  "messageParameters" : {
+    "sqlExpr" : "\"sum((c1 + (rand(0) * 0)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 20,
+    "stopIndex" : 35,
+    "fragment" : "c1 + rand(0) * 0"
+  } ]
+}
+
+
+-- !query
+SELECT SUM(foo3_1b(c1) + rand(0) * 0) FROM t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
+  "sqlState" : "42845",
+  "messageParameters" : {
+    "sqlExpr" : "\"sum((spark_catalog.default.foo3_1b(foo3_1b.x) + (rand(0) * 0)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 36,
+    "fragment" : "foo3_1b(c1) + rand(0) * 0"
+  } ]
+}
+
+
+-- !query
+SELECT SUM(foo3_1b(c1 + rand(0) * 0)) FROM t1
+-- !query schema
+struct<sum(spark_catalog.default.foo3_1b((c1 + (rand(0) * 0)))):bigint>
+-- !query output
+1
+
+
+-- !query
+SELECT foo3_1b(SUM(c1) + foo3_1b(SUM(c1))) FROM t1
+-- !query schema
+struct<spark_catalog.default.foo3_1b((sum(c1) + spark_catalog.default.foo3_1b(sum(c1)))):int>
+-- !query output
+2
+
+
+-- !query
+SELECT foo3_1b(SUM(c2) + foo3_1b(SUM(c1))) AS foo FROM t1 HAVING foo > 0
+-- !query schema
+struct<foo:int>
+-- !query output
+6
+
+
+-- !query
+SELECT c1, COUNT(*), foo3_1b(SUM(c2) + foo3_1b(SUM(c2))) FROM t1 GROUP BY c1 HAVING COUNT(*) > 0
+-- !query schema
+struct<c1:int,count(1):bigint,spark_catalog.default.foo3_1b((sum(c2) + spark_catalog.default.foo3_1b(sum(c2)))):int>
+-- !query output
+0	2	6
+1	1	4
+
+
+-- !query
+SELECT foo3_1a(c1, MAX(c2)) FROM t1 GROUP BY c1, 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "GROUP_BY_POS_AGGREGATE",
+  "sqlState" : "42903",
+  "messageParameters" : {
+    "aggExpr" : "spark_catalog.default.foo3_1a(spark_catalog.default.t1.c1, max(spark_catalog.default.t1.c2)) AS `spark_catalog.default.foo3_1a(c1, max(c2))`",
+    "index" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 50,
+    "stopIndex" : 50,
+    "fragment" : "1"
+  } ]
+}
+
+
+-- !query
+WITH cte AS (SELECT foo3_1a(c1, c2) FROM t1)
+SELECT * FROM cte
+-- !query schema
+struct<spark_catalog.default.foo3_1a(c1, c2):double>
+-- !query output
+0.0
+0.0
+2.0
+
+
+-- !query
+SELECT SUM(c2) FROM t1 GROUP BY foo3_1b(c1)
+-- !query schema
+struct<sum(c2):bigint>
+-- !query output
+2
+3
+
+
+-- !query
+SELECT foo3_1b(c1), SUM(c2) FROM t1 GROUP BY 1
+-- !query schema
+struct<spark_catalog.default.foo3_1b(c1):int,sum(c2):bigint>
+-- !query output
+0	3
+1	2
+
+
+-- !query
+SELECT foo3_1b(c1), c2, GROUPING(foo3_1b(c1)), SUM(c1) FROM t1 GROUP BY ROLLUP(foo3_1b(c1), c2)
+-- !query schema
+struct<spark_catalog.default.foo3_1b(c1):int,c2:int,grouping(spark_catalog.default.foo3_1b(c1)):tinyint,sum(c1):bigint>
+-- !query output
+0	1	0	0
+0	2	0	0
+0	NULL	0	0
+1	2	0	1
+1	NULL	0	1
+NULL	NULL	1	1
+
+
+-- !query
+SELECT c1, SUM(c2) FROM t1 GROUP BY c1 HAVING foo3_1b(SUM(c2)) > 1
+-- !query schema
+struct<c1:int,sum(c2):bigint>
+-- !query output
+0	3
+1	2
+
+
+-- !query
+SELECT c1, SUM(c2) FROM t1 GROUP BY CUBE(c1) HAVING foo3_1b(GROUPING(c1)) = 0
+-- !query schema
+struct<c1:int,sum(c2):bigint>
+-- !query output
+0	3
+1	2
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1a(t1.c1, t2.c2) >= 2
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int>
+-- !query output
+1	2	0	2
+1	2	0	3
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1b(t1.c2) = foo3_1b(t2.c2)
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int>
+-- !query output
+0	2	0	2
+1	2	0	2
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1b(t1.c1 + t2.c1 + 2) > 2
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int>
+-- !query output
+1	2	0	2
+1	2	0	3
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1a(foo3_1b(t1.c1), t2.c2) >= 2
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int>
+-- !query output
+1	2	0	2
+1	2	0	3
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1f() > 0
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int>
+-- !query output
+0	1	0	2
+0	1	0	3
+0	2	0	2
+0	2	0	3
+1	2	0	2
+1	2	0	3
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1b(t1.c1 + rand(0) * 0) > 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "sqlExprs" : "\"(spark_catalog.default.foo3_1b(foo3_1b.x) > 1)\""
+  }
+}
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1c(t1.c1) = 2
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1g(t1.c1) = 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Join Inner, (spark_catalog.default.foo3_1g(x#x) = 2)\n:  +- Project [outer(x#x)]\n:     +- OneRowRelation\n:- SubqueryAlias spark_catalog.default.t1\n:  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])\n:     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n:        +- LocalRelation [col1#x, col2#x]\n+- SubqueryAlias spark_catalog.default.t2\n   +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
+  }
+}
+
+
+-- !query
+SELECT * FROM t1 ORDER BY foo3_1b(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SQL_UDF_USAGE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "functionName" : "`spark_catalog`.`default`.`foo3_1b`",
+    "nodeName" : "Sort"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 27,
+    "stopIndex" : 37,
+    "fragment" : "foo3_1b(c1)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t1 LIMIT foo3_1b(1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SQL_UDF_USAGE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "functionName" : "`spark_catalog`.`default`.`foo3_1b`",
+    "nodeName" : "GlobalLimit"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 33,
+    "fragment" : "foo3_1b(1)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM ta LATERAL VIEW EXPLODE(ARRAY(foo3_1b(x[0]), foo3_1b(x[1]))) AS t
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SQL_UDF_USAGE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "functionName" : "`spark_catalog`.`default`.`foo3_1b`",
+    "nodeName" : "Generate"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 45,
+    "stopIndex" : 57,
+    "fragment" : "foo3_1b(x[0])"
+  } ]
+}
+
+
+-- !query
+SELECT CASE WHEN foo3_1b(rand(0) * 0 < 1 THEN 1 ELSE -1 END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'foo3_1b'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT (SELECT SUM(c2) FROM t2 WHERE c1 = foo3_1b(t1.c1)) FROM t1
+-- !query schema
+struct<scalarsubquery(c1):bigint>
+-- !query output
+5
+5
+NULL
+
+
+-- !query
+SELECT foo3_1b((SELECT SUM(c1) FROM t1))
+-- !query schema
+struct<spark_catalog.default.foo3_1b(scalarsubquery()):int>
+-- !query output
+1
+
+
+-- !query
+SELECT foo3_1a(c1, (SELECT MIN(c1) FROM t1)) FROM t1
+-- !query schema
+struct<spark_catalog.default.foo3_1a(c1, scalarsubquery()):double>
+-- !query output
+0.0
+0.0
+0.0
+
+
+-- !query
+SELECT foo3_1b((SELECT SUM(c1))) FROM t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"sum(c1) AS `sum(outer(spark_catalog.default.t1.c1))`\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 17,
+    "stopIndex" : 30,
+    "fragment" : "SELECT SUM(c1)"
+  } ]
+}
+
+
+-- !query
+SELECT foo3_1b((SELECT SUM(c1) FROM t1 WHERE c2 = t2.c2)) FROM t2
+-- !query schema
+struct<spark_catalog.default.foo3_1b(scalarsubquery(c2)):int>
+-- !query output
+1
+NULL
+
+
+-- !query
+SELECT c2, AVG(foo3_1b((SELECT COUNT(*) FROM t1 WHERE c2 = t2.c2))) OVER (PARTITION BY c1) AS r FROM t2
+-- !query schema
+struct<c2:int,r:double>
+-- !query output
+2	1.0
+3	1.0
+
+
+-- !query
+CREATE FUNCTION foo3_1x(x STRUCT<a: INT, b: INT>) RETURNS INT RETURN x.a + x.b
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_1y(x ARRAY<INT>) RETURNS INT RETURN aggregate(x, BIGINT(0), (x, y) -> x + y)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo3_1a(x.a, x.b) FROM ts
+-- !query schema
+struct<spark_catalog.default.foo3_1a(x.a, x.b):double>
+-- !query output
+2.0
+
+
+-- !query
+SELECT foo3_1x(x) FROM ts
+-- !query schema
+struct<spark_catalog.default.foo3_1x(x):int>
+-- !query output
+3
+
+
+-- !query
+SELECT foo3_1a(x['a'], x['b']) FROM tm
+-- !query schema
+struct<spark_catalog.default.foo3_1a(x[a], x[b]):double>
+-- !query output
+2.0
+
+
+-- !query
+SELECT foo3_1a(x[0], x[1]) FROM ta
+-- !query schema
+struct<spark_catalog.default.foo3_1a(x[0], x[1]):double>
+-- !query output
+2.0
+
+
+-- !query
+SELECT foo3_1y(x) FROM ta
+-- !query schema
+struct<spark_catalog.default.foo3_1y(x):int>
+-- !query output
+6
+
+
+-- !query
+CREATE FUNCTION foo3_2a() RETURNS INT RETURN FLOOR(RAND() * 6) + 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT CASE WHEN foo3_2a() > 6 THEN FALSE ELSE TRUE END
+-- !query schema
+struct<CASE WHEN (spark_catalog.default.foo3_2a() > 6) THEN false ELSE true END:boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_2a() = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "sqlExprs" : "\"(spark_catalog.default.foo3_2a() = 1)\""
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_2b1(x INT) RETURNS BOOLEAN RETURN x IN (SELECT 1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM t1 WHERE foo3_2b1(c1)
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	2
+
+
+-- !query
+CREATE FUNCTION foo3_2b2(x INT) RETURNS INT RETURN IF(x IN (SELECT 1), 1, 0)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM t1 WHERE foo3_2b2(c1) = 0
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+0	1
+0	2
+
+
+-- !query
+SELECT foo3_2b2(c1) FROM t1
+-- !query schema
+struct<spark_catalog.default.foo3_2b2(c1):int>
+-- !query output
+0
+0
+1
+
+
+-- !query
+CREATE FUNCTION foo3_2b3(x INT) RETURNS BOOLEAN RETURN x IN (SELECT c1 FROM t2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM t1 WHERE foo3_2b3(c1)
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+0	1
+0	2
+
+
+-- !query
+CREATE FUNCTION foo3_2b4(x INT) RETURNS BOOLEAN RETURN x NOT IN (SELECT c2 FROM t2 WHERE x = c1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM t1 WHERE foo3_2b4(c1)
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+0	1
+0	2
+1	2
+
+
+-- !query
+CREATE FUNCTION foo3_2b5(x INT) RETURNS BOOLEAN RETURN SUM(1) + IF(x IN (SELECT 1), 1, 0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "USER_DEFINED_FUNCTIONS.CANNOT_CONTAIN_COMPLEX_FUNCTIONS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "queryText" : "SUM(1) + IF(x IN (SELECT 1), 1, 0)"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_2b5(x INT) RETURNS BOOLEAN RETURN y IN (SELECT 1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 1,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+CREATE FUNCTION foo3_2b5(x INT) RETURNS BOOLEAN RETURN x IN (SELECT x WHERE x = 1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_2c1(x INT) RETURNS BOOLEAN RETURN EXISTS(SELECT 1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM t1 WHERE foo3_2c1(c1)
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+0	1
+0	2
+1	2
+
+
+-- !query
+CREATE FUNCTION foo3_2c2(x INT) RETURNS BOOLEAN RETURN NOT EXISTS(SELECT * FROM t2 WHERE c1 = x)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM t1 WHERE foo3_2c2(c1)
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	2
+
+
+-- !query
+CREATE FUNCTION foo3_2d1(x INT) RETURNS INT RETURN SELECT (SELECT x)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_2d2(x INT) RETURNS INT RETURN SELECT (SELECT 1 WHERE EXISTS (SELECT * FROM t2 WHERE c1 = x))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`x`",
+    "proposal" : "`c1`, `c2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 60,
+    "stopIndex" : 60,
+    "fragment" : "x"
+  } ]
+}
+
+
+-- !query
+CREATE FUNCTION foo3_2e1(
+    occurrences ARRAY<STRUCT<start_time: TIMESTAMP, occurrence_id: STRING>>,
+    instance_start_time TIMESTAMP
+) RETURNS STRING RETURN
+WITH t AS (
+    SELECT transform(occurrences, x -> named_struct(
+        'diff', abs(unix_millis(x.start_time) - unix_millis(instance_start_time)),
+        'id', x.occurrence_id
+    )) AS diffs
+)
+SELECT CASE WHEN occurrences IS NULL OR size(occurrences) = 0
+       THEN NULL
+       ELSE sort_array(diffs)[0].id END AS id
+FROM t
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo3_2e1(
+    ARRAY(STRUCT('2022-01-01 10:11:12', '1'), STRUCT('2022-01-01 10:11:15', '2')),
+    '2022-01-01')
+-- !query schema
+struct<spark_catalog.default.foo3_2e1(array(struct(2022-01-01 10:11:12, 1), struct(2022-01-01 10:11:15, 2)), 2022-01-01):string>
+-- !query output
+1
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	true
+
+
+-- !query
+CREATE FUNCTION foo3_3a(x INT) RETURNS DOUBLE RETURN 1 / x
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_3at(x INT) RETURNS TABLE (a DOUBLE) RETURN SELECT 1 / x
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION foo3_3b(x INT) RETURNS DOUBLE RETURN 1 / x
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	false
+
+
+-- !query
+SELECT foo3_3a(0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 5,
+    "fragment" : "1 / x"
+  } ]
+}
+
+
+-- !query
+SELECT foo3_3b(0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 5,
+    "fragment" : "1 / x"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM foo3_3at(0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 12,
+    "fragment" : "1 / x"
+  } ]
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo3_3a(x INT) RETURNS DOUBLE RETURN 1 / x
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo3_3at(x INT) RETURNS TABLE (a DOUBLE) RETURN SELECT 1 / x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_3at`"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY FUNCTION foo3_3b(x INT) RETURNS DOUBLE RETURN 1 / x
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo3_3a(0)
+-- !query schema
+struct<spark_catalog.default.foo3_3a(0):double>
+-- !query output
+NULL
+
+
+-- !query
+SELECT foo3_3b(0)
+-- !query schema
+struct<foo3_3b(0):double>
+-- !query output
+NULL
+
+
+-- !query
+SELECT * FROM foo3_3at(0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 12,
+    "fragment" : "1 / x"
+  } ]
+}
+
+
+-- !query
+CREATE FUNCTION foo3_3c() RETURNS INT RETURN CAST('a' AS INT)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_3ct() RETURNS TABLE (a INT) RETURN SELECT CAST('a' AS INT)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_3d() RETURNS INT RETURN 'a' + 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_3dt() RETURNS TABLE (a INT) RETURN SELECT 'a' + 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo3_3c()
+-- !query schema
+struct<spark_catalog.default.foo3_3c():int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT foo3_3d()
+-- !query schema
+struct<spark_catalog.default.foo3_3d():int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT * FROM foo3_3ct()
+-- !query schema
+struct<a:int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT * FROM foo3_3dt()
+-- !query schema
+struct<a:int>
+-- !query output
+NULL
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	true
+
+
+-- !query
+SELECT foo3_3c()
+-- !query schema
+struct<spark_catalog.default.foo3_3c():int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT foo3_3d()
+-- !query schema
+struct<spark_catalog.default.foo3_3d():int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT * FROM foo3_3ct()
+-- !query schema
+struct<a:int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT * FROM foo3_3dt()
+-- !query schema
+struct<a:int>
+-- !query output
+NULL
+
+
+-- !query
+RESET spark.sql.ansi.enabled
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 CREATE FUNCTION foo4_0() RETURNS TABLE (x INT) RETURN SELECT 1
 -- !query schema
 struct<>

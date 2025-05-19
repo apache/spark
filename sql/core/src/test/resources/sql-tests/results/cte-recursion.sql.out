@@ -985,18 +985,34 @@ INSERT INTO rt2 SELECT *
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "RECURSIVE_CTE_WHEN_INLINING_IS_FORCED",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 160,
-    "fragment" : "WITH RECURSIVE r(level) AS (\n    VALUES (0)\n    UNION ALL\n    SELECT level + 1 FROM r WHERE level < 9\n)\nFROM r\nINSERT INTO rt2 SELECT *\nINSERT INTO rt2 SELECT *"
-  } ]
-}
+
+
+
+-- !query
+SELECT * FROM rt2
+-- !query schema
+struct<level:int>
+-- !query output
+0
+0
+1
+1
+2
+2
+3
+3
+4
+4
+5
+5
+6
+6
+7
+7
+8
+8
+9
+9
 
 
 -- !query

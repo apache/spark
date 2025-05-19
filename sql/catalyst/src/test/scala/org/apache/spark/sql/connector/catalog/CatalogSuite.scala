@@ -110,6 +110,33 @@ class CatalogSuite extends SparkFunSuite {
     assert(catalog.listTables(Array("ns2")).toSet == Set(ident3))
   }
 
+  test("listTableSummaries") {
+    val catalog = newCatalog()
+    val ident1 = Identifier.of(Array("ns"), "test_table_1")
+    val ident2 = Identifier.of(Array("ns"), "test_table_2")
+
+    intercept[NoSuchNamespaceException](catalog.listTables(Array("ns")))
+
+    val tableInfo = new TableInfo.Builder()
+        .withColumns(columns)
+        .withPartitions(emptyTrans)
+        .withProperties(emptyProps).build()
+    catalog.createTable(ident1, tableInfo)
+
+    assertResult(
+      Set(TableSummary.of(ident1, TableSummary.FOREIGN_TABLE_TYPE))
+    )(catalog.listTableSummaries(Array("ns")).toSet)
+
+    catalog.createTable(ident2, columns, emptyTrans, emptyProps)
+
+    assertResult(
+      Set(
+        TableSummary.of(ident1, TableSummary.FOREIGN_TABLE_TYPE),
+        TableSummary.of(ident2, TableSummary.FOREIGN_TABLE_TYPE)
+      )
+    )(catalog.listTableSummaries(Array("ns")).toSet)
+  }
+
   test("createTable: non-partitioned table") {
     val catalog = newCatalog()
 

@@ -96,8 +96,6 @@ class AggregateResolverSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  // Disabling following tests until SPARK-51820 is handled in single-pass analyzer.
-  /*
   test("Valid group by ordinal") {
     val resolverRunner = createResolverRunner()
     val query = table.groupBy(intToLiteral(1))(intToLiteral(1))
@@ -140,7 +138,6 @@ class AggregateResolverSuite extends QueryTest with SharedSparkSession {
       parameters = Map.empty
     )
   }
- */
 
   private def createResolverRunner(): ResolverRunner = {
     val resolver = new Resolver(
