@@ -4655,6 +4655,12 @@
     ],
     "sqlState" : "42836"
   },
+  "RECURSIVE_CTE_WITH_LEGACY_INLINE_FLAG" : {
+    "message" : [
+      "Recursive definitions cannot be used when legacy inline flag is set to true (spark.sql.legacy.inlineCTEInCommands=true)."
+    ],
+    "sqlState" : "42836"
+  },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
       "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 1 to 10. Going beyond 10 levels of recursion is not allowed."

@@ -69,27 +69,25 @@ object CTESubstitution extends Rule[LogicalPlan] {
       case UnresolvedWith(_, _, true) =>
         true
     }.getOrElse(false)
+
+    // If the CTE is recursive we can't inline it as it has a self reference.
     val forceInline = if (commands.length == 1) {
       if (conf.getConf(SQLConf.LEGACY_INLINE_CTE_IN_COMMANDS)) {
         // The legacy behavior always inlines the CTE relations for queries in commands.
+        if(hasRecursiveCTE) {
+          plan.failAnalysis(errorClass =  "RECURSIVE_CTE_WITH_LEGACY_INLINE_FLAG",
+            messageParameters = Map.empty)
+        }
         true
       } else {
         // If there is only one command and it's `CTEInChildren`, we can resolve
         // CTE normally and don't need to force inline.
-        if (hasRecursiveCTE) {
-          false
-        } else {
-          !commands.head.isInstanceOf[CTEInChildren]
-        }
+        !hasRecursiveCTE && !commands.head.isInstanceOf[CTEInChildren]
       }
     } else if (commands.length > 1) {
       // This can happen with the multi-insert statement. We should fall back to
-      // the legacy behavior.
-      if (hasRecursiveCTE) {
-        false
-      } else {
-        true
-      }
+      // the legacy behavior, unless the CTE is recursive.
+      !hasRecursiveCTE
     } else {
       false
     }
