@@ -150,6 +150,19 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     objectId
   }
 
+  private[spark] def verifyObjectId(refId: String): Unit = {
+    // Verify the `refId` is a valid UUID.
+    // This is for preventing client to send a malicious `refId` which might
+    // cause Spark Server security issue.
+    try {
+      UUID.fromString(refId)
+    } catch {
+      case _: IllegalArgumentException => throw SparkException.internalError(
+        s"The MLCache key $refId is invalid."
+      )
+    }
+  }
+
   /**
    * Get the object by the key
    * @param refId
@@ -161,17 +174,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     if (refId == helperID) {
       helper
     } else {
-      // Verify the `refId` is a valid UUID.
-      // This is for preventing client to send a malicious `refId` which might
-      // cause Spark Server security issue.
-      try {
-        UUID.fromString(refId)
-      } catch {
-        case _: IllegalArgumentException => throw SparkException.internalError(
-          s"The MLCache key $refId is invalid."
-        )
-      }
-
+      verifyObjectId(refId)
       var obj: Object = Option(cachedModel.get(refId)).map(_.obj).getOrElse(null)
       if (obj == null && getMemoryControlEnabled) {
         val loadPath = offloadedModelsDir.resolve(refId)
@@ -193,11 +196,14 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   }
 
   def _removeModel(refId: String): Boolean = {
+    verifyObjectId(refId)
     val removedModel = cachedModel.remove(refId)
     val removedFromMem = removedModel != null
     val removedFromDisk = if (getMemoryControlEnabled) {
       totalMLCacheSizeBytes.addAndGet(-removedModel.sizeBytes)
-      val offloadingPath = new File(offloadedModelsDir.resolve(refId).toString)
+      val removePath = offloadedModelsDir.resolve(refId)
+      require(removePath.startsWith(offloadedModelsDir))
+      val offloadingPath = new File(removePath.toString)
       if (offloadingPath.exists()) {
         FileUtils.deleteDirectory(offloadingPath)
         true
