@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.{
   FunctionIdentifier,
   SQLConfHelper,
-  SqlScriptingLocalVariableManager
+  SqlScriptingContextManager
 }
 import org.apache.spark.sql.catalyst.analysis.{
   FunctionRegistry,
@@ -457,7 +457,7 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
     catalogManager.tempVariableManager.isEmpty
 
   private def checkScriptingVariables() =
-    SqlScriptingLocalVariableManager.get().forall(_.isEmpty)
+    SqlScriptingContextManager.get().map(_.getVariableManager).forall(_.isEmpty)
 
   private def tryThrowUnsupportedSinglePassAnalyzerFeature(operator: LogicalPlan): Unit = {
     tryThrowUnsupportedSinglePassAnalyzerFeature(s"${operator.getClass} operator resolution")

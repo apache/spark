@@ -15,11 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
+package org.apache.spark.sql.scripting
 
-import org.apache.spark.sql.catalyst.catalog.VariableManager
-import org.apache.spark.util.LexicalThreadLocal
+import org.apache.spark.sql.catalyst.catalog.{
+  SqlScriptingContextManager,
+  SqlScriptingExecutionContextExtension,
+  VariableManager
+}
 
-object SqlScriptingLocalVariableManager extends LexicalThreadLocal[VariableManager] {
-  def create(variableManager: VariableManager): Handle = createHandle(Option(variableManager))
+class SqlScriptingContextManagerImpl(context: SqlScriptingExecutionContext)
+  extends SqlScriptingContextManager {
+
+  private val variableManager = new SqlScriptingLocalVariableManager(context)
+
+  override def getContext: SqlScriptingExecutionContextExtension = {
+    context
+  }
+
+  override def getVariableManager: VariableManager = {
+    variableManager
+  }
 }
