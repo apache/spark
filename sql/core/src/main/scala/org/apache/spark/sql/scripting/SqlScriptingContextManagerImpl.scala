@@ -28,11 +28,7 @@ class SqlScriptingContextManagerImpl(context: SqlScriptingExecutionContext)
 
   private val variableManager = new SqlScriptingLocalVariableManager(context)
 
-  override def getContext: SqlScriptingExecutionContextExtension = {
-    context
-  }
+  override def getContext: SqlScriptingExecutionContextExtension = context
 
-  override def getVariableManager: VariableManager = {
-    variableManager
-  }
+  override def getVariableManager: VariableManager = variableManager
 }
