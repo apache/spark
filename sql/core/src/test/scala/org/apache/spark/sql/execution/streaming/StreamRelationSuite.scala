@@ -17,23 +17,56 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.AnalysisTest
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.plans.logical.{Project, SubqueryAlias}
+import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.IntegerType
 
-class StreamRelationSuite extends SharedSparkSession {
+class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
+
   test("STREAM with options is correctly propagated to datasource in V1") {
-    sql("CREATE TABLE t AS SELECT 1")
+    sql("CREATE TABLE t (id INT) USING PARQUET")
+    sql("INSERT INTO t VALUES (1), (2)")
 
-    val analyzedPlan = sql("SELECT * FROM STREAM t WITH ('readOptionKey'='readOptionValue')")
-      .queryExecution.analyzed
-    assert(analyzedPlan.isStreaming)
+    val actualAnalyzedPlan = sql(
+      """
+        |SELECT id FROM STREAM t
+        |WITH ('readOptionKey'='readOptionValue')""".stripMargin
+    ).queryExecution.analyzed
 
-    val areOptionsPropagatedToDatasource = analyzedPlan.exists {
-      case StreamingRelation(datasource, _, _)
-        if datasource.catalogTable.map(_.identifier.table).contains("t") =>
-          datasource.options.get("readOptionKey").contains("readOptionValue")
-      case _ =>
-        false
-    }
-    assert(areOptionsPropagatedToDatasource)
+    val catalogTable = spark.sessionState.catalog.getTableMetadata(
+      TableIdentifier("t")
+    )
+    val idAttr = AttributeReference(name = "id", dataType = IntegerType)()
+
+    val expectedAnalyzedPlan = Project(
+      projectList = Seq(idAttr),
+      child = SubqueryAlias(
+        identifier = AliasIdentifier(name = "t", qualifier = Seq("spark_catalog", "default")),
+        child = StreamingRelation(
+          dataSource = DataSource(
+            sparkSession = spark,
+            className = catalogTable.provider.get,
+            options = Map(
+              "readOptionKey" -> "readOptionValue",
+              "path" -> catalogTable.location.toString
+            ),
+            userSpecifiedSchema = Option(catalogTable.schema),
+            catalogTable = Option(catalogTable)
+          ),
+          sourceName = s"FileSource[${catalogTable.location.toString}]",
+          output = Seq(idAttr)
+        )
+      )
+    )
+
+    comparePlans(
+      expectedAnalyzedPlan,
+      actualAnalyzedPlan,
+      checkAnalysis = true
+    )
   }
 }

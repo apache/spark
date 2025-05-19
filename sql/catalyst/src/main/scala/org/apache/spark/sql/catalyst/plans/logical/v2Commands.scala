@@ -581,7 +581,7 @@ trait CreatePipelineDatasetAsSelect extends BinaryCommand
 /**
  * Command parsed from `CREATE MATERIALIZED VIEW ... AS ...` SQL syntax. This command serves as a
  * logical representation of the matching SQL syntax and cannot be executed. Instead, it is
- * interpreted by the pipelines submodule during a pipeline execution.
+ * interpreted by the pipeline submodule during a pipeline execution.
  */
 case class CreateMaterializedViewAsSelect(
     name: LogicalPlan,
@@ -600,7 +600,7 @@ case class CreateMaterializedViewAsSelect(
 /**
  * Command parsed from `CREATE STREAMING TABLE ... AS ...` SQL syntax. This command serves as a
  * logical representation of the matching SQL syntax and cannot be executed. Instead, it is
- * interpreted by the pipelines submodule during a pipeline execution.
+ * interpreted by the pipeline submodule during a pipeline execution.
  */
 case class CreateStreamingTableAsSelect(
     name: LogicalPlan,
@@ -619,7 +619,7 @@ case class CreateStreamingTableAsSelect(
 /**
  * Command parsed from `CREATE STREAMING TABLE ...` SQL syntax. This command serves as a logical
  * representation of the matching SQL syntac and cannot be executed. It is instead interpreted by
- * the pipelines submodule during a pipeline execution.
+ * the pipeline submodule during a pipeline execution.
  *
  * Differs from [[CreateStreamingTableAsSelect]] in that the AS [subquery] clause is not provided
  * in this statement. This is allowed for streaming tables, where it is valid for a streaming table

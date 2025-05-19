@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.CreateStreamingTable
+import org.apache.spark.sql.catalyst.plans.logical.{CreateStreamingTable, TableSpec}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.command.v1.CommandSuiteBase
 
@@ -29,12 +29,29 @@ class CreateStreamingTableParserSuite extends CommandSuiteBase {
   protected lazy val parser = new SparkSqlParser()
 
   test("CREATE STREAMING TABLE without subquery is parsed correctly") {
-    val plan = parser.parsePlan("CREATE STREAMING TABLE st COMMENT 'populate with flow later'")
-    val cmd = plan.asInstanceOf[CreateStreamingTable]
-
-    val name = cmd.name.asInstanceOf[UnresolvedIdentifier]
-
-    assert(name.nameParts == Seq("st"))
-    assert(cmd.tableSpec.comment.contains("populate with flow later"))
+    comparePlans(
+      parser
+        .parsePlan("CREATE STREAMING TABLE st COMMENT 'populate with flow later'"),
+      CreateStreamingTable(
+        name = UnresolvedIdentifier(
+          nameParts = Seq("st")
+        ),
+        columns = Seq.empty,
+        partitioning = Seq.empty,
+        tableSpec = TableSpec(
+          properties = Map.empty,
+          provider = None,
+          options = Map.empty,
+          location = None,
+          comment = Option("populate with flow later"),
+          collation = None,
+          serde = None,
+          external = false,
+          constraints = Seq.empty
+        ),
+        ifNotExists = false
+      ),
+      checkAnalysis = false
+    )
   }
 }

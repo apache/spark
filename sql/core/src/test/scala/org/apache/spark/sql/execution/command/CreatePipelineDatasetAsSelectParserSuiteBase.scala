@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{QueryContext, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreatePipelineDatasetAsSelect}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
@@ -103,15 +103,28 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
         s"""CREATE $datasetSqlSyntax table1 LOCATION 'dbfs:/path/to/table'
            |AS SELECT * FROM input""".stripMargin)
     }
-    assert(ex.getMessage.contains("Specifying location is not supported for " +
-      s"CREATE $datasetSqlSyntax statements."))
+    checkError(
+      exception = ex,
+      condition = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> ("Specifying location is not supported for " +
+        s"CREATE $datasetSqlSyntax statements. The storage location for a pipeline dataset is " +
+        "managed by the pipeline itself.")),
+      queryContext = ex.getQueryContext.map(toExpectedContext)
+    )
   }
 
   test("Column constraints are unsupported") {
     val ex = intercept[ParseException] {
       parser.parsePlan(s"CREATE $datasetSqlSyntax table1 (id INT CHECK(id > 0)) AS SELECT 1")
     }
-    assert(ex.getMessage.contains("Pipeline datasets do not currently support column constraints"))
+    checkError(
+      exception = ex,
+      condition = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> ("Pipeline datasets do not currently support column " +
+        "constraints. Please remove and CHECK, UNIQUE, PK, and FK constraints specified on the " +
+        "pipeline dataset.")),
+      queryContext = ex.getQueryContext.map(toExpectedContext)
+    )
   }
 
   test("Comment is correctly parsed") {
@@ -130,8 +143,14 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
     val ex = intercept[ParseException] {
       parser.parsePlan(s"CREATE $datasetSqlSyntax table1 STORED AS TEXTFILE AS SELECT * FROM input")
     }
-    assert(ex.getMessage.contains("The STORED AS syntax is not supported for CREATE " +
-      s"$datasetSqlSyntax statements. Consider using the Data Source based USING clause instead."))
+    checkError(
+      exception = ex,
+      condition = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> ("The STORED AS syntax is not supported for CREATE " +
+        s"$datasetSqlSyntax statements. Consider using the Data Source based USING clause " +
+        "instead.")),
+      queryContext = ex.getQueryContext.map(toExpectedContext)
+    )
   }
 
   test("SerDe information is unsupported") {
@@ -143,8 +162,13 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
                           |AS SELECT * FROM input
        """.stripMargin)
     }
-    assert(ex.getMessage.contains(s"Hive SerDe format options are not supported for " +
-      s"CREATE $datasetSqlSyntax statements."))
+    checkError(
+      exception = ex,
+      condition = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> ("Hive SerDe format options are not supported for CREATE " +
+        s"$datasetSqlSyntax statements.")),
+      queryContext = ex.getQueryContext.map(toExpectedContext)
+    )
   }
 
   test("USING clause is parsed correctly") {
@@ -187,7 +211,13 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
         s"""CREATE $datasetSqlSyntax table1 CLUSTERED BY (a) INTO 5 BUCKETS
            |AS SELECT * FROM input""".stripMargin)
     }
-    assert(ex.getMessage.contains("Bucketing is not supported"))
+    checkError(
+      exception = ex,
+      condition = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> (s"Bucketing is not supported for CREATE $datasetSqlSyntax " +
+        "statements. Please remove any bucket spec specified in the statement.")),
+      queryContext = ex.getQueryContext.map(toExpectedContext)
+    )
   }
 
   test("Options is unsupported") {
@@ -196,7 +226,13 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
         s"""CREATE $datasetSqlSyntax table1 OPTIONS ('key' = 'value')
            |AS SELECT * FROM input""".stripMargin)
     }
-    assert(ex.getMessage.contains("Options are not supported"))
+    checkError(
+      exception = ex,
+      condition = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> (s"Options are not supported for CREATE $datasetSqlSyntax " +
+        "statements. Please remove any OPTIONS lists specified in the statement.")),
+      queryContext = ex.getQueryContext.map(toExpectedContext)
+    )
   }
 
   test("CTAS subquery is parsed into plan correctly") {
@@ -236,4 +272,14 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
       assert(cmd.tableSpec.collation == collationOpt)
     }
   }
+
+  /** Return an ExpectedContext that is equivalent to the passed QueryContext. Used to no-op
+   * queryContext checks on error validation */
+  def toExpectedContext(actualQueryContext: QueryContext): ExpectedContext = ExpectedContext(
+    objectType = actualQueryContext.objectType(),
+    objectName = actualQueryContext.objectName(),
+    startIndex = actualQueryContext.startIndex(),
+    stopIndex = actualQueryContext.stopIndex(),
+    fragment = actualQueryContext.fragment()
+  )
 }
