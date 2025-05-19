@@ -373,8 +373,6 @@ createPipelineDatasetHeader
 streamRelationPrimary
     : STREAM multipartIdentifier tableAlias optionsClause?                           #streamTableName
     | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN tableAlias optionsClause?    #streamTableName
-    | STREAM functionTable                                            #streamTableValuedFunction
-    | STREAM LEFT_PAREN functionTable RIGHT_PAREN                     #streamTableValuedFunction
     ;
 
 setResetStatement

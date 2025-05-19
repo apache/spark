@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedRelation, UnresolvedStar, UnresolvedTableValuedFunction}
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.plans.logical.{Project, SubqueryAlias}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -63,26 +62,6 @@ class StreamRelationParserSuite extends AnalysisTest {
               multipartIdentifier = Seq("t"),
               isStreaming = true
             )
-          )
-        )
-      )
-    }
-  }
-
-  test("STREAM parses correctly on table valued functions") {
-    Seq(
-      "SELECT * FROM STREAM(range(1, 10))",
-      "SELECT * FROM STREAM range(1, 10)"
-    ).foreach { query =>
-      val plan = parsePlan(query)
-      comparePlans(
-        plan,
-        Project(
-          projectList = Seq(UnresolvedStar(None)),
-          child = UnresolvedTableValuedFunction(
-            name = Seq("range"),
-            functionArgs = Seq(Literal(1), Literal(10)),
-            isStreaming = true
           )
         )
       )

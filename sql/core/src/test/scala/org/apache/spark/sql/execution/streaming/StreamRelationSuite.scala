@@ -76,30 +76,6 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
     )
   }
 
-  test("Analysis Exception: UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION") {
-    assertAnalysisErrorCondition(
-      inputPlan = parsePlan("SELECT * FROM STREAM RANGE(1, 100)"),
-      expectedErrorCondition = "UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION",
-      expectedMessageParameters = Map("funcName" -> "`RANGE`"),
-      queryContext = Array(ExpectedContext("RANGE(1, 100)", 21, 33))
-    )
-  }
-
-  test("Analysis Exception: could not resolve `<funcName>` to a table-valued function") {
-    assertAnalysisErrorCondition(
-      inputPlan = parsePlan("SELECT * FROM STREAM some_func('arg')"),
-      expectedErrorCondition = "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
-      expectedMessageParameters = Map("name" -> "`some_func`"),
-      queryContext = Array(ExpectedContext("some_func('arg')", 21, 36))
-    )
-    assertAnalysisErrorCondition(
-      inputPlan = parsePlan("SELECT * FROM STREAM(some_func('arg'))"),
-      expectedErrorCondition = "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
-      expectedMessageParameters = Map("name" -> "`some_func`"),
-      queryContext = Array(ExpectedContext("some_func('arg')", 21, 36))
-    )
-  }
-
   test("STREAM options are parsed correctly for streaming by identifier") {
     val plan = parsePlan("SELECT * FROM STREAM table1 AS t WITH ('key'='value')")
     comparePlans(

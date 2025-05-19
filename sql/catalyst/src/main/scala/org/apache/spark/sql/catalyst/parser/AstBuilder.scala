@@ -2357,44 +2357,35 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitTableValuedFunction(ctx: TableValuedFunctionContext)
       : LogicalPlan = withOrigin(ctx) {
-    visitFunctionTable(ctx.functionTable, isStreaming = false)
+    val func = ctx.functionTable
+    val aliases = if (func.tableAlias.identifierList != null) {
+      visitIdentifierList(func.tableAlias.identifierList)
+    } else {
+      Seq.empty
+    }
+
+    withFuncIdentClause(
+      func.functionName,
+      Nil,
+      (ident, _) => {
+        if (ident.length > 1) {
+          throw QueryParsingErrors.invalidTableValuedFunctionNameError(ident, ctx)
+        }
+        val funcName = func.functionName.getText
+        val args = func.functionTableArgument.asScala.map { e =>
+          Option(e.functionArgument).map(extractNamedArgument(_, funcName))
+            .getOrElse {
+              extractFunctionTableNamedArgument(e.functionTableReferenceArgument, funcName)
+            }
+        }.toSeq
+
+        val tvf = UnresolvedTableValuedFunction(ident, args)
+
+        val tvfAliases = if (aliases.nonEmpty) UnresolvedTVFAliases(ident, tvf, aliases) else tvf
+
+        tvfAliases.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
+      })
   }
-
-  override def visitStreamTableValuedFunction(ctx: StreamTableValuedFunctionContext): LogicalPlan =
-    withOrigin(ctx) {
-      visitFunctionTable(ctx.functionTable, isStreaming = true)
-    }
-
-  private def visitFunctionTable(ctx: FunctionTableContext, isStreaming: Boolean) : LogicalPlan =
-    withOrigin(ctx) {
-      val aliases = if (ctx.tableAlias.identifierList != null) {
-        visitIdentifierList(ctx.tableAlias.identifierList)
-      } else {
-        Seq.empty
-      }
-
-      withFuncIdentClause(
-        ctx.functionName,
-        Nil,
-        (ident, _) => {
-          if (ident.length > 1) {
-            throw QueryParsingErrors.invalidTableValuedFunctionNameError(ident, ctx)
-          }
-          val funcName = ctx.functionName.getText
-          val args = ctx.functionTableArgument.asScala.map { e =>
-            Option(e.functionArgument).map(extractNamedArgument(_, funcName))
-              .getOrElse {
-                extractFunctionTableNamedArgument(e.functionTableReferenceArgument, funcName)
-              }
-          }.toSeq
-
-          val tvf = UnresolvedTableValuedFunction(ident, args, isStreaming)
-
-          val tvfAliases = if (aliases.nonEmpty) UnresolvedTVFAliases(ident, tvf, aliases) else tvf
-
-          tvfAliases.optionalMap(ctx.tableAlias.strictIdentifier)(aliasPlan)
-        })
-    }
 
   override def visitStreamTableName(ctx: StreamTableNameContext): LogicalPlan = {
     val ident = visitMultipartIdentifier(ctx.multipartIdentifier)
