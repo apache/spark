@@ -51,14 +51,16 @@ public class TestSparkBloomFilter {
     }
 
     @BeforeEach
-    public void beforeEach() {
+    public void beforeEach(TestInfo testInfo) {
         start = Instant.now();
+        System.err.println("---");
+        System.err.println(testInfo.getTestMethod().get().getName() + " " + testInfo.getDisplayName());
     }
 
     @AfterEach
     public void afterEach(TestInfo testInfo) {
         Duration duration = Duration.between(start, Instant.now());
-        System.err.println(duration + " " + testInfo.getDisplayName());
+        System.err.println(duration );
     }
 
     /**
@@ -236,6 +238,7 @@ public class TestSparkBloomFilter {
 
         long mightContainEvenIndexed = 0;
         long mightContainOddIndexed = 0;
+        long discardedOddIndexed = 0;
 
         pseudoRandom.setSeed(deterministicSeed);
         for (long i = 0; i < iterationCount; i++) {
@@ -255,6 +258,8 @@ public class TestSparkBloomFilter {
                     // (mitigating duplicates in input sequence)
                     if (!bloomFilterSecondary.mightContainLong(candidate)) {
                         mightContainOddIndexed++;
+                    } else {
+                        discardedOddIndexed++;
                     }
                 }
             }
@@ -266,9 +271,11 @@ public class TestSparkBloomFilter {
                 "mightContainLong must return true for all inserted numbers"
         );
 
-        double actualFpp = (double) mightContainOddIndexed / numItems;
+        double actualFpp = (double) mightContainOddIndexed / (numItems - discardedOddIndexed);
         double acceptableFpp = expectedFpp * (1 + FPP_RANDOM_ERROR_FACTOR);
 
+        System.err.printf("numItems:            %10d\n", numItems);
+        System.err.printf("discardedOddIndexed: %10d\n", discardedOddIndexed);
         System.err.printf("expectedFpp:   %f %%\n", 100 * expectedFpp);
         System.err.printf("acceptableFpp: %f %%\n", 100 * acceptableFpp);
         System.err.printf("actualFpp:     %f %%\n", 100 * actualFpp);
