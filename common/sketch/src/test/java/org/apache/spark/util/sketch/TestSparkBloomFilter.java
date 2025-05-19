@@ -18,16 +18,12 @@
 package org.apache.spark.util.sketch;
 
 import org.junit.jupiter.api.*;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.junitpioneer.jupiter.cartesian.CartesianTest;
 import org.junitpioneer.jupiter.cartesian.CartesianTest.Values;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Random;
-import java.util.stream.Stream;
 
 @Disabled
 public class TestSparkBloomFilter {
@@ -38,6 +34,7 @@ public class TestSparkBloomFilter {
     final double FPP_RANDOM_ERROR_FACTOR = 0.04;
 
     final long ONE_GB = 1024L * 1024L * 1024L;
+    final long REQUIRED_HEAP_UPPER_BOUND_IN_BYTES = 4 * ONE_GB;
 
     private static Instant START;
     private Instant start;
@@ -64,6 +61,18 @@ public class TestSparkBloomFilter {
         System.err.println(duration + " " + testInfo.getDisplayName());
     }
 
+    /**
+     * This test, in N number of iterations, inserts N even numbers (2*i) int,
+     * and leaves out N odd numbers (2*i+1) from the tested BloomFilter instance.
+     *
+     * It checks the 100% accuracy of mightContain=true on all of the even items,
+     * and measures the mightContain=true (false positive) rate on the not-inserted odd numbers.
+     *
+     * @param numItems the number of items to be inserted
+     * @param expectedFpp the expected fpp rate of the tested BloomFilter instance
+     * @param deterministicSeed the deterministic seed to use to initialize
+     *                          the primary BloomFilter instance.
+     */
     @CartesianTest
     public void testAccuracyEvenOdd(
       @Values(longs = {1_000_000L, 1_000_000_000L, 5_000_000_000L}) long numItems,
@@ -77,8 +86,10 @@ public class TestSparkBloomFilter {
                 optimalNumOfBits / Byte.SIZE / 1024 / 1024
         );
         Assumptions.assumeTrue(
-                optimalNumOfBits / Byte.SIZE < 4 * ONE_GB,
-            "this testcase would require allocating more than 4GB of heap mem (" + optimalNumOfBits + " bits)"
+            optimalNumOfBits / Byte.SIZE < REQUIRED_HEAP_UPPER_BOUND_IN_BYTES,
+            "this testcase would require allocating more than 4GB of heap mem ("
+            + optimalNumOfBits
+            + " bits)"
         );
 
         BloomFilter bloomFilter = BloomFilter.create(numItems, optimalNumOfBits, deterministicSeed);
@@ -152,6 +163,25 @@ public class TestSparkBloomFilter {
         );
     }
 
+    /**
+     * This test inserts N pseudorandomly generated numbers in 2N number of iterations in two
+     * differently seeded (theoretically independent) BloomFilter instances. All the random
+     * numbers generated in an even-iteration will be inserted into both filters, all the
+     * random numbers generated in an odd-iteration will be left out from both.
+     *
+     * The test checks the 100% accuracy of 'mightContain=true' for all the items inserted
+     * in an even-loop. It counts the false positives as the number of odd-loop items for
+     * which the primary filter reports 'mightContain=true', but secondary reports
+     * 'mightContain=false'. Since we inserted the same elements into both instances,
+     * and the secondary reports non-insertion, the 'mightContain=true' from the primary
+     * can only be a false positive.
+     *
+     * @param numItems the number of items to be inserted
+     * @param expectedFpp the expected fpp rate of the tested BloomFilter instance
+     * @param deterministicSeed the deterministic seed to use to initialize
+     *                          the primary BloomFilter instance. (The secondary will be
+     *                          initialized with the constant seed of 0xCAFEBABE)
+     */
     @CartesianTest
     public void testAccuracyRandom(
             @Values(longs = {1_000_000L, 1_000_000_000L}) long numItems,
@@ -165,12 +195,17 @@ public class TestSparkBloomFilter {
                 optimalNumOfBits / Byte.SIZE / 1024 / 1024
         );
         Assumptions.assumeTrue(
-                2 * optimalNumOfBits / Byte.SIZE < 4 * ONE_GB,
-                "this testcase would require allocating more than 4GB of heap mem (2x " + optimalNumOfBits + " bits)"
+            2 * optimalNumOfBits / Byte.SIZE < REQUIRED_HEAP_UPPER_BOUND_IN_BYTES,
+            "this testcase would require allocating more than 4GB of heap mem (2x "
+            + optimalNumOfBits
+            + " bits)"
         );
 
-        BloomFilter bloomFilterPrimary = BloomFilter.create(numItems, optimalNumOfBits, deterministicSeed);
-        BloomFilter bloomFilterSecondary = BloomFilter.create(numItems, optimalNumOfBits, 0xCAFEBABE);
+        BloomFilter bloomFilterPrimary =
+                BloomFilter.create(numItems, optimalNumOfBits, deterministicSeed);
+        BloomFilter bloomFilterSecondary =
+                BloomFilter.create(numItems, optimalNumOfBits, 0xCAFEBABE);
+
         System.err.printf(
                 "allocated bitArray: %d (%d MB)\n",
                 bloomFilterPrimary.bitSize(),
@@ -199,8 +234,8 @@ public class TestSparkBloomFilter {
             }
         }
 
-        long mightContainEven = 0;
-        long mightContainOdd = 0;
+        long mightContainEvenIndexed = 0;
+        long mightContainOddIndexed = 0;
 
         pseudoRandom.setSeed(deterministicSeed);
         for (long i = 0; i < iterationCount; i++) {
@@ -212,14 +247,14 @@ public class TestSparkBloomFilter {
             long candidate = pseudoRandom.nextLong();
             if (bloomFilterPrimary.mightContainLong(candidate)) {
                 if (i % 2 == 0) {
-                    mightContainEven++;
+                    mightContainEvenIndexed++;
                 } else {
                     // only count those cases as false positives,
                     // where the secondary has confirmed,
                     // that we haven't inserted before
                     // (mitigating duplicates in input sequence)
                     if (!bloomFilterSecondary.mightContainLong(candidate)) {
-                        mightContainOdd++;
+                        mightContainOddIndexed++;
                     }
                 }
             }
@@ -227,11 +262,11 @@ public class TestSparkBloomFilter {
         System.err.println();
 
         Assertions.assertEquals(
-                numItems, mightContainEven,
+                numItems, mightContainEvenIndexed,
                 "mightContainLong must return true for all inserted numbers"
         );
 
-        double actualFpp = (double) mightContainOdd / numItems;
+        double actualFpp = (double) mightContainOddIndexed / numItems;
         double acceptableFpp = expectedFpp * (1 + FPP_RANDOM_ERROR_FACTOR);
 
         System.err.printf("expectedFpp:   %f %%\n", 100 * expectedFpp);
