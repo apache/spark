@@ -157,9 +157,8 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     try {
       UUID.fromString(refId)
     } catch {
-      case _: IllegalArgumentException => throw SparkException.internalError(
-        s"The MLCache key $refId is invalid."
-      )
+      case _: IllegalArgumentException =>
+        throw SparkException.internalError(s"The MLCache key $refId is invalid.")
     }
   }
 
