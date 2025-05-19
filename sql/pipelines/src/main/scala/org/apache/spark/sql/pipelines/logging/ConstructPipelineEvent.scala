@@ -103,11 +103,11 @@ object ConstructPipelineEvent extends Logging {
    *                       from event UUID is used instead.
    */
   def apply(
-  origin: Origin,
-   message: String,
-   details: EventDetails,
-   errorDetails: Option[ErrorDetail],
-   eventTimestamp: Option[Timestamp]
+     origin: Origin,
+     message: String,
+     details: EventDetails,
+     errorDetails: Option[ErrorDetail],
+     eventTimestamp: Option[Timestamp]
   ): PipelineEvent = synchronized {
 
     val eventUUID = UUID.randomUUID()
