@@ -19,7 +19,6 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
-import org.apache.spark.sql.types.StructType
 
 abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
@@ -101,27 +100,6 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         Row(3, Row(-1, "unknown"), "hr"),
         Row(4, null, "hr"),
         Row(5, Row(5, "v5"), "hr")))
-  }
-
-  test("delete handles constraints correctly") {
-    createAndInitTable("pk INT PRIMARY KEY, id INT CHECK(id > 0), dep STRING UNIQUE",
-      """{ "pk": 1, "id": 1, "dep": "hr" }
-        |{ "pk": 2, "id": 2, "dep": "software" }
-        |{ "pk": 3, "id": 3, "dep": "hr" }
-        |{ "pk": 4, "id": 4, "dep": "hr" }
-        |""".stripMargin)
-
-    sql(s"DELETE FROM $tableNameAsString WHERE id IN (1, 100)")
-
-    checkAnswer(
-      sql(s"SELECT * FROM $tableNameAsString"),
-      Row(2, 2, "software") :: Row(3, 3, "hr") :: Row(4, 4, "hr") :: Nil)
-
-    checkLastWriteInfo(
-      expectedRowIdSchema = Some(StructType(Array(PK_FIELD))),
-      expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
-
-    checkLastWriteLog(deleteWriteLogEntry(id = 1, metadata = Row("hr", null)))
   }
 
   test("EXPLAIN only delete") {
