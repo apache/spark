@@ -238,7 +238,7 @@ public class TestSparkBloomFilter {
 
         long mightContainEvenIndexed = 0;
         long mightContainOddIndexed = 0;
-        long discardedOddIndexed = 0;
+        long confirmedAsNotInserted = 0;
 
         pseudoRandom.setSeed(deterministicSeed);
         for (long i = 0; i < iterationCount; i++) {
@@ -248,19 +248,26 @@ public class TestSparkBloomFilter {
             }
 
             long candidate = pseudoRandom.nextLong();
-            if (bloomFilterPrimary.mightContainLong(candidate)) {
-                if (i % 2 == 0) {
-                    mightContainEvenIndexed++;
-                } else {
-                    // only count those cases as false positives,
-                    // where the secondary has confirmed,
-                    // that we haven't inserted before
-                    // (mitigating duplicates in input sequence)
-                    if (!bloomFilterSecondary.mightContainLong(candidate)) {
+
+            if (i % 2 == 0) { // EVEN
+                mightContainEvenIndexed++;
+            } else { // ODD
+                // for fpp estimation, only consider the odd indexes
+                // (to avoid querying the secondary with elements known to be inserted)
+
+                // since here we avoided all the even indexes,
+                // most of these secondary queries will return false
+                if (!bloomFilterSecondary.mightContainLong(candidate)) {
+                    // from the odd indexes, we consider only those items
+                    // where the secondary confirms the non-insertion
+
+                    // anything on which the primary and the secondary
+                    // disagrees here is a false positive
+                    if (bloomFilterPrimary.mightContainLong(candidate)) {
                         mightContainOddIndexed++;
-                    } else {
-                        discardedOddIndexed++;
                     }
+                    // count the total number of considered items for a baseline
+                    confirmedAsNotInserted++;
                 }
             }
         }
@@ -271,11 +278,12 @@ public class TestSparkBloomFilter {
                 "mightContainLong must return true for all inserted numbers"
         );
 
-        double actualFpp = (double) mightContainOddIndexed / (numItems - discardedOddIndexed);
+        double actualFpp = (double) mightContainOddIndexed / confirmedAsNotInserted;
         double acceptableFpp = expectedFpp * (1 + FPP_RANDOM_ERROR_FACTOR);
 
-        System.err.printf("numItems:            %10d\n", numItems);
-        System.err.printf("discardedOddIndexed: %10d\n", discardedOddIndexed);
+        System.err.printf("mightContainOddIndexed: %10d\n", mightContainOddIndexed);
+        System.err.printf("confirmedAsNotInserted: %10d\n", confirmedAsNotInserted);
+        System.err.printf("numItems:               %10d\n", numItems);
         System.err.printf("expectedFpp:   %f %%\n", 100 * expectedFpp);
         System.err.printf("acceptableFpp: %f %%\n", 100 * acceptableFpp);
         System.err.printf("actualFpp:     %f %%\n", 100 * actualFpp);
