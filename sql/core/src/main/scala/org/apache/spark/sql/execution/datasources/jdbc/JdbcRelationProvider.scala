@@ -68,7 +68,11 @@ class JdbcRelationProvider extends CreatableRelationProvider
 
           case SaveMode.Append =>
             val tableSchema = JdbcUtils.getSchemaOption(conn, options)
-            saveTable(df, tableSchema, isCaseSensitive, options)
+            if (options.isUpsert) {
+              upsertTable(df, tableSchema, isCaseSensitive, options)
+            } else {
+              saveTable(df, tableSchema, isCaseSensitive, options)
+            }
 
           case SaveMode.ErrorIfExists =>
             throw QueryCompilationErrors.tableOrViewAlreadyExistsError(options.table)

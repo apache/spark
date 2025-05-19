@@ -39,7 +39,7 @@ import org.apache.spark.sql.types._
 
 
 private case class PostgresDialect()
-  extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
+  extends JdbcDialect with MergeByTempTable with SQLConfHelper with NoLegacyJDBCError {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql")
