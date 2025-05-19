@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{
   CreateFlowCommand,
@@ -32,19 +31,6 @@ import org.apache.spark.sql.execution.command.v1.CommandSuiteBase
  */
 class CreateFlowCommandSuite extends CommandSuiteBase with AnalysisTest {
   protected lazy val parser = new SparkSqlParser()
-
-  test(s"CREATE FLOW statement cannot be directly executed") {
-    sql("CREATE TABLE table1 AS SELECT 1")
-    sql("CREATE TABLE table2 AS SELECT 2")
-    checkError(
-      exception = intercept[SparkUnsupportedOperationException] {
-        sql("CREATE FLOW f AS INSERT INTO table2 SELECT * FROM table1")
-      },
-      condition = "UNSUPPORTED_FEATURE.CREATE_FLOW_QUERY_EXECUTION",
-      sqlState = "0A000",
-      parameters = Map.empty
-    )
-  }
 
   test("comment is correctly parsed") {
     Seq(

@@ -210,8 +210,6 @@ case class UnresolvedTableValuedFunction(
     override val isStreaming: Boolean = false)
   extends UnresolvedLeafNode {
 
-  def funcName: String = name.last
-
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_TABLE_VALUED_FUNCTION)
 }
 

@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedRelation, UnresolvedStar, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{Project, SubqueryAlias}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class StreamRelationParserSuite extends AnalysisTest {
   import CatalystSqlParser._
@@ -95,18 +98,17 @@ class StreamRelationParserSuite extends AnalysisTest {
     )(None)
   }
 
-  test("Analysis Exception: TABLE_OR_VIEW_NOT_FOUND") {
-    assertAnalysisErrorCondition(
-      inputPlan = parsePlan("SELECT * FROM STREAM(`stream`)"),
-      expectedErrorCondition = "TABLE_OR_VIEW_NOT_FOUND",
-      expectedMessageParameters = Map("relationName" -> "`stream`"),
-      queryContext = Array(ExpectedContext("STREAM(`stream`)", 14, 29))
-    )
-    assertAnalysisErrorCondition(
-      inputPlan = parsePlan("SELECT * FROM STREAM `stream`"),
-      expectedErrorCondition = "TABLE_OR_VIEW_NOT_FOUND",
-      expectedMessageParameters = Map("relationName" -> "`stream`"),
-      queryContext = Array(ExpectedContext("STREAM `stream`", 14, 28))
+  test("STREAM parses WITH options") {
+    comparePlans(
+      parsePlan("SELECT * FROM STREAM table WITH ('key'='value')"),
+      Project(
+        projectList = Seq(UnresolvedStar(None)),
+        child = UnresolvedRelation(
+          multipartIdentifier = Seq("table"),
+          options = new CaseInsensitiveStringMap(Map("key" -> "value").asJava),
+          isStreaming = true
+        )
+      )
     )
   }
 }

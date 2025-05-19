@@ -1063,7 +1063,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   /** Assert that the logical plan is supported as a batch plan */
   def assertSupportedInBatchPlan(name: String, plan: LogicalPlan): Unit = {
     test(s"batch plan - $name: supported") {
-      UnsupportedOperationChecker.checkForBatch(plan = plan)
+      UnsupportedOperationChecker.checkForBatch(plan)
     }
   }
 
@@ -1073,7 +1073,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       plan: LogicalPlan,
       expectedMsgs: Seq[String]): Unit = {
     testError(s"batch plan - $name: not supported", expectedMsgs) {
-      UnsupportedOperationChecker.checkForBatch(plan = plan)
+      UnsupportedOperationChecker.checkForBatch(plan)
     }
   }
 

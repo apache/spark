@@ -24,7 +24,7 @@ import java.util.Locale
 import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
 import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
 
-import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFiles, SparkRuntimeException}
+import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFiles, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
@@ -2526,6 +2526,41 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           "Declarative Pipeline."))
       )
     }
+  }
+
+  test("CREATE MATERIALIZED VIEW cannot be directly executed") {
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sql(s"CREATE MATERIALIZED VIEW table1 AS SELECT 1")
+      },
+      condition = "UNSUPPORTED_FEATURE.CREATE_PIPELINE_DATASET_QUERY_EXECUTION",
+      sqlState = "0A000",
+      parameters = Map("pipelineDatasetType" -> "MATERIALIZED VIEW")
+    )
+  }
+
+  test("CREATE STREAMING TABLE cannot be directly executed") {
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sql(s"CREATE STREAMING TABLE table1 AS SELECT 1")
+      },
+      condition = "UNSUPPORTED_FEATURE.CREATE_PIPELINE_DATASET_QUERY_EXECUTION",
+      sqlState = "0A000",
+      parameters = Map("pipelineDatasetType" -> "STREAMING TABLE")
+    )
+  }
+
+  test(s"CREATE FLOW statement cannot be directly executed") {
+    sql("CREATE TABLE table1 AS SELECT 1")
+    sql("CREATE TABLE table2 AS SELECT 2")
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sql("CREATE FLOW f AS INSERT INTO table2 SELECT * FROM table1")
+      },
+      condition = "UNSUPPORTED_FEATURE.CREATE_FLOW_QUERY_EXECUTION",
+      sqlState = "0A000",
+      parameters = Map.empty
+    )
   }
 }
 

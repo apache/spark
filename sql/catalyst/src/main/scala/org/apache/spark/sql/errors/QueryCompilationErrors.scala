@@ -4384,7 +4384,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def unsupportedStreamingTVF(funcName: String): Throwable = {
+  def unsupportedStreamingTVF(funcName: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION",
       messageParameters = Map("funcName" -> toSQLId(funcName)))

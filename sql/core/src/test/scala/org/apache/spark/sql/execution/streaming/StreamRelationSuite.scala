@@ -121,6 +121,21 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
     )
   }
 
+  test("Analysis Exception: TABLE_OR_VIEW_NOT_FOUND") {
+    assertAnalysisErrorCondition(
+      inputPlan = parsePlan("SELECT * FROM STREAM(`stream`)"),
+      expectedErrorCondition = "TABLE_OR_VIEW_NOT_FOUND",
+      expectedMessageParameters = Map("relationName" -> "`stream`"),
+      queryContext = Array(ExpectedContext("STREAM(`stream`)", 14, 29))
+    )
+    assertAnalysisErrorCondition(
+      inputPlan = parsePlan("SELECT * FROM STREAM `stream`"),
+      expectedErrorCondition = "TABLE_OR_VIEW_NOT_FOUND",
+      expectedMessageParameters = Map("relationName" -> "`stream`"),
+      queryContext = Array(ExpectedContext("STREAM `stream`", 14, 28))
+    )
+  }
+
   test("STREAM with options is correctly propagated to datasource in V1") {
     sql("CREATE TABLE t (id INT) USING PARQUET")
     sql("INSERT INTO t VALUES (1), (2)")

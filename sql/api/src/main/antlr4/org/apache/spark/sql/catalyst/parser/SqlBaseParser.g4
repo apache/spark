@@ -541,7 +541,7 @@ partitionVal
     ;
 
 createPipelineFlowHeader
-    : CREATE FLOW flowName=multipartIdentifier (commentSpec)? AS
+    : CREATE FLOW flowName=identifierReference (commentSpec)? AS
     ;
 
 namespace

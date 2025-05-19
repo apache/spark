@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.{QueryContext, SparkUnsupportedOperationException}
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreatePipelineDatasetAsSelect}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
@@ -28,17 +28,6 @@ import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, Str
 trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
   protected lazy val parser = new SparkSqlParser()
   protected val datasetSqlSyntax: String
-
-  test(s"CREATE query cannot be directly executed") {
-    checkError(
-      exception = intercept[SparkUnsupportedOperationException] {
-        sql(s"CREATE $datasetSqlSyntax table1 AS SELECT 1")
-      },
-      condition = "UNSUPPORTED_FEATURE.CREATE_PIPELINE_DATASET_QUERY_EXECUTION",
-      sqlState = "0A000",
-      parameters = Map("pipelineDatasetType" -> datasetSqlSyntax)
-    )
-  }
 
   test("Column definitions are correctly parsed") {
     Seq(

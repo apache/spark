@@ -1219,7 +1219,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitCreatePipelineInsertIntoFlow(
       ctx: CreatePipelineInsertIntoFlowContext): LogicalPlan = withOrigin(ctx) {
     val createPipelineFlowHeaderCtx = ctx.createPipelineFlowHeader()
-    val ident = UnresolvedIdentifier(visitMultipartIdentifier(createPipelineFlowHeaderCtx.flowName))
+    val ident = withIdentClause(createPipelineFlowHeaderCtx.flowName, UnresolvedIdentifier(_))
     val commentOpt = Option(createPipelineFlowHeaderCtx.commentSpec()).map(visitCommentSpec)
     val flowOperation = withInsertInto(ctx.insertInto(), visitQuery(ctx.query()))
     CreateFlowCommand(
@@ -1298,46 +1298,49 @@ class SparkSqlAstBuilder extends AstBuilder {
       constraints = Seq.empty
     )
 
-    withIdentClause(createPipelineDatasetHeaderCtx.identifierReference, ident => {
-      if (createPipelineDatasetHeaderCtx.materializedView() != null) {
-        val query: ParserRuleContext = Option(ctx.query).getOrElse(
-          throw operationNotAllowed(
-            s"Unable to find query for CREATE $syntaxTypeErrorStr statement.", ctx)
-        )
-        CreateMaterializedViewAsSelect(
-          name = UnresolvedIdentifier(ident),
-          columns = colDefs,
-          partitioning = partitioning,
-          tableSpec = spec,
-          query = plan(query),
-          originalText = source(query),
-          ifNotExists = ifNotExists
-        )
-      } else if (createPipelineDatasetHeaderCtx.streamingTable() != null) {
-        Option(ctx.query) match {
-          case Some(query) =>
-            CreateStreamingTableAsSelect(
-              name = UnresolvedIdentifier(ident),
-              columns = colDefs,
-              partitioning = partitioning,
-              tableSpec = spec,
-              query = plan(query),
-              originalText = source(query),
-              ifNotExists = ifNotExists
-            )
-          case None =>
-            CreateStreamingTable(
-              name = UnresolvedIdentifier(ident),
-              columns = colDefs,
-              partitioning = partitioning,
-              tableSpec = spec,
-              ifNotExists = ifNotExists
-            )
-        }
-      } else {
-        // Should never be possible based on grammar definition.
-        throw invalidStatement(ctx.getText, ctx)
+    val datasetIdentifier = withIdentClause(
+      createPipelineDatasetHeaderCtx.identifierReference,
+      UnresolvedIdentifier(_)
+    )
+
+    if (createPipelineDatasetHeaderCtx.materializedView() != null) {
+      val query: ParserRuleContext = Option(ctx.query).getOrElse(
+        throw operationNotAllowed(
+          s"Unable to find query for CREATE $syntaxTypeErrorStr statement.", ctx)
+      )
+      CreateMaterializedViewAsSelect(
+        name = datasetIdentifier,
+        columns = colDefs,
+        partitioning = partitioning,
+        tableSpec = spec,
+        query = plan(query),
+        originalText = source(query),
+        ifNotExists = ifNotExists
+      )
+    } else if (createPipelineDatasetHeaderCtx.streamingTable() != null) {
+      Option(ctx.query) match {
+        case Some(query) =>
+          CreateStreamingTableAsSelect(
+            name = datasetIdentifier,
+            columns = colDefs,
+            partitioning = partitioning,
+            tableSpec = spec,
+            query = plan(query),
+            originalText = source(query),
+            ifNotExists = ifNotExists
+          )
+        case None =>
+          CreateStreamingTable(
+            name = datasetIdentifier,
+            columns = colDefs,
+            partitioning = partitioning,
+            tableSpec = spec,
+            ifNotExists = ifNotExists
+          )
       }
-    })
+    } else {
+      // Should never be possible based on grammar definition.
+      throw invalidStatement(ctx.getText, ctx)
+    }
   }
 }
