@@ -267,9 +267,9 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     DataOutputStream dos = new DataOutputStream(out);
 
     dos.writeInt(Version.V1.getVersionNumber());
-    dos.writeInt(seed);
     dos.writeInt(numHashFunctions);
     bits.writeTo(dos);
+    dos.writeInt(seed);
   }
 
   private void readFrom0(InputStream in) throws IOException {
@@ -280,9 +280,15 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
       throw new IOException("Unexpected Bloom filter version number (" + version + ")");
     }
 
-    this.seed = dis.readInt();
     this.numHashFunctions = dis.readInt();
     this.bits = BitArray.readFrom(dis);
+
+    // compatibility with "seedless" serialization streams.
+    try {
+      this.seed = dis.readInt();
+    } catch (EOFException e) {
+      this.seed = DEFAULT_SEED;
+    }
   }
 
   public static BloomFilterImpl readFrom(InputStream in) throws IOException {
