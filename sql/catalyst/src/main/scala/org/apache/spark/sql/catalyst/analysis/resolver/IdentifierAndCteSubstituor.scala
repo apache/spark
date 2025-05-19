@@ -90,7 +90,7 @@ class IdentifierAndCteSubstitutor {
    */
   private def handleWith(unresolvedWith: UnresolvedWith): LogicalPlan = {
     val cteRelationsAfterSubstitution = unresolvedWith.cteRelations.map { cteRelation =>
-      val (cteName, ctePlan) = cteRelation
+      val (cteName, ctePlan, maxDepth) = cteRelation
 
       val ctePlanAfter = cteRegistry.withNewScope() {
         substitute(ctePlan).asInstanceOf[SubqueryAlias]
@@ -98,7 +98,7 @@ class IdentifierAndCteSubstitutor {
 
       cteRegistry.currentScope.registerCte(cteName, CTERelationDef(ctePlanAfter))
 
-      (cteName, ctePlanAfter)
+      (cteName, ctePlanAfter, maxDepth)
     }
 
     val childAfterSubstitution = cteRegistry.withNewScope() {

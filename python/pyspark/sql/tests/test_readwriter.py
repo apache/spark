@@ -238,6 +238,13 @@ class ReadwriterTestsMixin:
 
                 self.assertEqual(join2.columns, ["id", "value_1", "index", "value_2"])
 
+    # "[SPARK-51182]: DataFrameWriter should throw dataPathNotSpecifiedError when path is not
+    # specified"
+    def test_save(self):
+        writer = self.df.write
+        with self.assertRaisesRegex(Exception, "'path' is not specified."):
+            writer.save()
+
 
 class ReadwriterV2TestsMixin:
     def test_api(self):

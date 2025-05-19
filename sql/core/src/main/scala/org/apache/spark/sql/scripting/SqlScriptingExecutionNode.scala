@@ -1067,7 +1067,7 @@ class ForStatementExec(
     val declareVariable = CreateVariable(
       UnresolvedIdentifier(Seq(varName)),
       defaultExpression,
-      replace = true
+      replace = false
     )
     new SingleStatementExec(declareVariable, Origin(), Map.empty, isInternal = true, context)
   }

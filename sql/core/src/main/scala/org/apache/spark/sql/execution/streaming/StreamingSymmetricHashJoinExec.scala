@@ -190,9 +190,10 @@ case class StreamingSymmetricHashJoinExec(
     "Join keys from two sides should have same length and types")
 
   private val storeConf = new StateStoreConf(conf)
-  private val hadoopConfBcast = sparkContext.broadcast(
-    new SerializableConfiguration(SessionState.newHadoopConf(
-      sparkContext.hadoopConfiguration, conf)))
+  private val hadoopConfBcast =
+    SerializableConfiguration.broadcast(
+      sparkContext,
+      SessionState.newHadoopConf(sparkContext.hadoopConfiguration, conf))
   private val allowMultipleStatefulOperators =
     conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
 

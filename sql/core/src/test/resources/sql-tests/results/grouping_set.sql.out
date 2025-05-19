@@ -40,6 +40,37 @@ NULL	NULL	9	1
 
 
 -- !query
+SELECT a, b, c, d FROM grouping GROUP BY GROUPING SETS (a, b, c, d)
+-- !query schema
+struct<a:string,b:string,c:string,d:int>
+-- !query output
+1	NULL	NULL	NULL
+4	NULL	NULL	NULL
+7	NULL	NULL	NULL
+NULL	2	NULL	NULL
+NULL	5	NULL	NULL
+NULL	8	NULL	NULL
+NULL	NULL	3	NULL
+NULL	NULL	6	NULL
+NULL	NULL	9	NULL
+NULL	NULL	NULL	1
+
+
+-- !query
+SELECT a, b FROM grouping GROUP BY GROUPING SETS (a, b, d + 1) ORDER BY `(d + 1)`
+-- !query schema
+struct<a:string,b:string>
+-- !query output
+NULL	2
+1	NULL
+NULL	5
+NULL	8
+4	NULL
+7	NULL
+NULL	NULL
+
+
+-- !query
 SELECT c1, sum(c2) FROM (VALUES ('x', 10, 0), ('y', 20, 0)) AS t (c1, c2, c3) GROUP BY GROUPING SETS (c1)
 -- !query schema
 struct<c1:string,sum(c2):bigint>

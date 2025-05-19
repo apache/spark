@@ -1064,22 +1064,52 @@ DropTable true, false
 -- !query
 DROP TABLE IF EXISTS ts
 -- !query analysis
-DropTable true, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.ts
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_COMMAND_FOR_OBJECT_TYPE",
+  "sqlState" : "42809",
+  "messageParameters" : {
+    "alternative" : "DROP VIEW",
+    "foundType" : "VIEW",
+    "objectName" : "spark_catalog.default.ts",
+    "operation" : "DROP TABLE",
+    "requiredType" : "EXTERNAL or MANAGED"
+  }
+}
 
 
 -- !query
 DROP TABLE IF EXISTS tm
 -- !query analysis
-DropTable true, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tm
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_COMMAND_FOR_OBJECT_TYPE",
+  "sqlState" : "42809",
+  "messageParameters" : {
+    "alternative" : "DROP VIEW",
+    "foundType" : "VIEW",
+    "objectName" : "spark_catalog.default.tm",
+    "operation" : "DROP TABLE",
+    "requiredType" : "EXTERNAL or MANAGED"
+  }
+}
 
 
 -- !query
 DROP TABLE IF EXISTS ta
 -- !query analysis
-DropTable true, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.ta
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_COMMAND_FOR_OBJECT_TYPE",
+  "sqlState" : "42809",
+  "messageParameters" : {
+    "alternative" : "DROP VIEW",
+    "foundType" : "VIEW",
+    "objectName" : "spark_catalog.default.ta",
+    "operation" : "DROP TABLE",
+    "requiredType" : "EXTERNAL or MANAGED"
+  }
+}
 
 
 -- !query
@@ -1286,6 +1316,1927 @@ CREATE VIEW t2(c1, c2) AS VALUES (0, 2), (0, 3)
 -- !query analysis
 CreateViewCommand `spark_catalog`.`default`.`t2`, [(c1,None), (c2,None)], VALUES (0, 2), (0, 3), false, false, PersistedView, COMPENSATION, true
    +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+CREATE VIEW ts(x) AS VALUES NAMED_STRUCT('a', 1, 'b', 2)
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`ts`, [(x,None)], VALUES NAMED_STRUCT('a', 1, 'b', 2), false, false, PersistedView, COMPENSATION, true
+   +- LocalRelation [col1#x]
+
+
+-- !query
+CREATE VIEW tm(x) AS VALUES MAP('a', 1, 'b', 2)
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`tm`, [(x,None)], VALUES MAP('a', 1, 'b', 2), false, false, PersistedView, COMPENSATION, true
+   +- LocalRelation [col1#x]
+
+
+-- !query
+CREATE VIEW ta(x) AS VALUES ARRAY(1, 2, 3)
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`ta`, [(x,None)], VALUES ARRAY(1, 2, 3), false, false, PersistedView, COMPENSATION, true
+   +- LocalRelation [col1#x]
+
+
+-- !query
+CREATE FUNCTION foo3_1a(a DOUBLE, b DOUBLE) RETURNS DOUBLE RETURN a * b
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_1a`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_1b(x INT) RETURNS INT RETURN x
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_1b`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_1c(x INT) RETURNS INT RETURN SELECT x
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_1c`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_1d(x INT) RETURNS INT RETURN (SELECT SUM(c2) FROM t2 WHERE c1 = x)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_1d`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_1e() RETURNS INT RETURN foo3_1d(0)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_1e`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_1f() RETURNS INT RETURN SELECT SUM(c2) FROM t2 WHERE c1 = 0
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_1f`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_1g(x INT) RETURNS INT RETURN SELECT (SELECT x)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_1g`"
+  }
+}
+
+
+-- !query
+SELECT a, b, foo3_1a(a + 1, b + 1) FROM t1 AS t(a, b)
+-- !query analysis
+Project [a#x, b#x, spark_catalog.default.foo3_1a(a#x, b#x) AS spark_catalog.default.foo3_1a((a + 1), (b + 1))#x]
++- Project [a#x, b#x, cast((a#x + 1) as double) AS a#x, cast((b#x + 1) as double) AS b#x]
+   +- SubqueryAlias t
+      +- Project [c1#x AS a#x, c2#x AS b#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT x, foo3_1c(x) FROM t1 AS t(x, y)
+-- !query analysis
+Project [x#x, spark_catalog.default.foo3_1c(x#x) AS spark_catalog.default.foo3_1c(x)#x]
++- Project [x#x, y#x, cast(x#x as int) AS x#x]
+   +- SubqueryAlias t
+      +- Project [c1#x AS x#x, c2#x AS y#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, foo3_1d(c1) FROM t1
+-- !query analysis
+Project [c1#x, spark_catalog.default.foo3_1d(x#x) AS spark_catalog.default.foo3_1d(c1)#x]
+:  +- Aggregate [sum(c2#x) AS sum(c2)#xL]
+:     +- Filter (c1#x = outer(x#x))
+:        +- SubqueryAlias spark_catalog.default.t2
+:           +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+:              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+:                 +- LocalRelation [col1#x, col2#x]
++- Project [c1#x, c2#x, cast(c1#x as int) AS x#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, foo3_1a(foo3_1b(c1), foo3_1b(c1)) FROM t1
+-- !query analysis
+Project [c1#x, spark_catalog.default.foo3_1a(a#x, b#x) AS spark_catalog.default.foo3_1a(spark_catalog.default.foo3_1b(c1), spark_catalog.default.foo3_1b(c1))#x]
++- Project [c1#x, c2#x, x#x, x#x, cast(spark_catalog.default.foo3_1b(x#x) as double) AS a#x, cast(spark_catalog.default.foo3_1b(x#x) as double) AS b#x]
+   +- Project [c1#x, c2#x, cast(c1#x as int) AS x#x, cast(c1#x as int) AS x#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, foo3_1d(foo3_1c(foo3_1b(c1))) FROM t1
+-- !query analysis
+Project [c1#x, spark_catalog.default.foo3_1d(x#x) AS spark_catalog.default.foo3_1d(spark_catalog.default.foo3_1c(spark_catalog.default.foo3_1b(c1)))#x]
+:  +- Aggregate [sum(c2#x) AS sum(c2)#xL]
+:     +- Filter (c1#x = outer(x#x))
+:        +- SubqueryAlias spark_catalog.default.t2
+:           +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+:              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+:                 +- LocalRelation [col1#x, col2#x]
++- Project [c1#x, c2#x, x#x, x#x, cast(spark_catalog.default.foo3_1c(x#x) as int) AS x#x]
+   +- Project [c1#x, c2#x, x#x, cast(spark_catalog.default.foo3_1b(x#x) as int) AS x#x]
+      +- Project [c1#x, c2#x, cast(c1#x as int) AS x#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, foo3_1a(foo3_1c(foo3_1b(c1)), foo3_1d(foo3_1b(c1))) FROM t1
+-- !query analysis
+Project [c1#x, spark_catalog.default.foo3_1a(a#x, b#x) AS spark_catalog.default.foo3_1a(spark_catalog.default.foo3_1c(spark_catalog.default.foo3_1b(c1)), spark_catalog.default.foo3_1d(spark_catalog.default.foo3_1b(c1)))#x]
++- Project [c1#x, c2#x, x#x, x#x, x#x, x#x, cast(spark_catalog.default.foo3_1c(x#x) as double) AS a#x, cast(spark_catalog.default.foo3_1d(x#x) as double) AS b#x]
+   :  +- Aggregate [sum(c2#x) AS sum(c2)#xL]
+   :     +- Filter (c1#x = outer(x#x))
+   :        +- SubqueryAlias spark_catalog.default.t2
+   :           +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+   :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :                 +- LocalRelation [col1#x, col2#x]
+   +- Project [c1#x, c2#x, x#x, x#x, cast(spark_catalog.default.foo3_1b(x#x) as int) AS x#x, cast(spark_catalog.default.foo3_1b(x#x) as int) AS x#x]
+      +- Project [c1#x, c2#x, cast(c1#x as int) AS x#x, cast(c1#x as int) AS x#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT foo3_1c(foo3_1e()) FROM t1
+-- !query analysis
+Project [spark_catalog.default.foo3_1c(x#x) AS spark_catalog.default.foo3_1c(spark_catalog.default.foo3_1e())#x]
++- Project [c1#x, c2#x, x#x, cast(spark_catalog.default.foo3_1e() as int) AS x#x]
+   :  +- Aggregate [sum(c2#x) AS sum(c2)#xL]
+   :     +- Filter (c1#x = outer(x#x))
+   :        +- SubqueryAlias spark_catalog.default.t2
+   :           +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+   :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :                 +- LocalRelation [col1#x, col2#x]
+   +- Project [c1#x, c2#x, cast(0 as int) AS x#x]
+      +- Project [c1#x, c2#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT foo3_1a(MAX(c1), MAX(c2)) FROM t1
+-- !query analysis
+Project [spark_catalog.default.foo3_1a(a#x, b#x) AS spark_catalog.default.foo3_1a(max(c1), max(c2))#x]
++- Project [max(c1)#x, max(c2)#x, cast(max(c1)#x as double) AS a#x, cast(max(c2)#x as double) AS b#x]
+   +- Aggregate [max(c1#x) AS max(c1)#x, max(c2#x) AS max(c2)#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT foo3_1a(MAX(c1), c2) FROM t1 GROUP BY c2
+-- !query analysis
+Project [spark_catalog.default.foo3_1a(a#x, b#x) AS spark_catalog.default.foo3_1a(max(c1), c2)#x]
++- Project [max(c1)#x, c2#x, cast(max(c1)#x as double) AS a#x, cast(c2#x as double) AS b#x]
+   +- Aggregate [c2#x], [max(c1#x) AS max(c1)#x, c2#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT foo3_1a(c1, c2) FROM t1 GROUP BY c1, c2
+-- !query analysis
+Project [spark_catalog.default.foo3_1a(a#x, b#x) AS spark_catalog.default.foo3_1a(c1, c2)#x]
++- Project [c1#x, c2#x, cast(c1#x as double) AS a#x, cast(c2#x as double) AS b#x]
+   +- Aggregate [c1#x, c2#x], [c1#x, c2#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT MAX(foo3_1a(c1, c2)) FROM t1 GROUP BY c1, c2
+-- !query analysis
+Project [max(spark_catalog.default.foo3_1a(c1, c2))#x]
++- Aggregate [c1#x, c2#x], [max(spark_catalog.default.foo3_1a(a#x, b#x)) AS max(spark_catalog.default.foo3_1a(c1, c2))#x]
+   +- Project [c1#x, c2#x, cast(c1#x as double) AS a#x, cast(c2#x as double) AS b#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT MAX(c1) + foo3_1b(MAX(c1)) FROM t1 GROUP BY c2
+-- !query analysis
+Project [(max(c1)#x + spark_catalog.default.foo3_1b(x#x)) AS (max(c1) + spark_catalog.default.foo3_1b(max(c1)))#x]
++- Project [max(c1)#x, max(c1)#x, cast(max(c1)#x as int) AS x#x]
+   +- Aggregate [c2#x], [max(c1#x) AS max(c1)#x, max(c1#x) AS max(c1)#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, SUM(foo3_1c(c2)) FROM t1 GROUP BY c1
+-- !query analysis
+Project [c1#x, sum(spark_catalog.default.foo3_1c(c2))#xL]
++- Aggregate [c1#x], [c1#x, sum(spark_catalog.default.foo3_1c(x#x)) AS sum(spark_catalog.default.foo3_1c(c2))#xL]
+   +- Project [c1#x, c2#x, cast(c2#x as int) AS x#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, SUM(foo3_1d(c2)) FROM t1 GROUP BY c1
+-- !query analysis
+Project [c1#x, sum(spark_catalog.default.foo3_1d(c2))#xL]
++- Aggregate [c1#x], [c1#x, sum(spark_catalog.default.foo3_1d(x#x)) AS sum(spark_catalog.default.foo3_1d(c2))#xL]
+   :  +- Aggregate [sum(c2#x) AS sum(c2)#xL]
+   :     +- Filter (c1#x = outer(x#x))
+   :        +- SubqueryAlias spark_catalog.default.t2
+   :           +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+   :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :                 +- LocalRelation [col1#x, col2#x]
+   +- Project [c1#x, c2#x, cast(c2#x as int) AS x#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT foo3_1c(c1), foo3_1d(c1) FROM t1 GROUP BY c1
+-- !query analysis
+Project [spark_catalog.default.foo3_1c(x#x) AS spark_catalog.default.foo3_1c(c1)#x, spark_catalog.default.foo3_1d(x#x) AS spark_catalog.default.foo3_1d(c1)#x]
+:  +- Aggregate [sum(c2#x) AS sum(c2)#xL]
+:     +- Filter (c1#x = outer(x#x))
+:        +- SubqueryAlias spark_catalog.default.t2
+:           +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+:              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+:                 +- LocalRelation [col1#x, col2#x]
++- Project [c1#x, c1#x, cast(c1#x as int) AS x#x, cast(c1#x as int) AS x#x]
+   +- Aggregate [c1#x], [c1#x, c1#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT foo3_1a(SUM(c1), rand(0) * 0) FROM t1
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT foo3_1a(SUM(c1) + rand(0) * 0, SUM(c2)) FROM t1
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT foo3_1b(SUM(c1) + rand(0) * 0) FROM t1
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT foo3_1b(SUM(1) + rand(0) * 0) FROM t1 GROUP BY c2
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT foo3_1c(SUM(c2) + rand(0) * 0) FROM t1 GROUP by c1
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT foo3_1b(foo3_1b(MAX(c2))) FROM t1
+-- !query analysis
+Project [spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b(spark_catalog.default.foo3_1b(max(c2)))#x]
++- Project [max(c2)#x, x#x, cast(spark_catalog.default.foo3_1b(x#x) as int) AS x#x]
+   +- Project [max(c2)#x, cast(max(c2)#x as int) AS x#x]
+      +- Aggregate [max(c2#x) AS max(c2)#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT foo3_1b(MAX(foo3_1b(c2))) FROM t1
+-- !query analysis
+Project [spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b(max(spark_catalog.default.foo3_1b(c2)))#x]
++- Project [max(spark_catalog.default.foo3_1b(c2))#x, cast(max(spark_catalog.default.foo3_1b(c2))#x as int) AS x#x]
+   +- Aggregate [max(spark_catalog.default.foo3_1b(x#x)) AS max(spark_catalog.default.foo3_1b(c2))#x]
+      +- Project [c1#x, c2#x, cast(c2#x as int) AS x#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT foo3_1a(foo3_1b(c1), MAX(c2)) FROM t1 GROUP BY c1
+-- !query analysis
+Project [spark_catalog.default.foo3_1a(a#x, b#x) AS spark_catalog.default.foo3_1a(spark_catalog.default.foo3_1b(c1), max(c2))#x]
++- Project [c1#x, max(c2)#x, x#x, cast(spark_catalog.default.foo3_1b(x#x) as double) AS a#x, cast(max(c2)#x as double) AS b#x]
+   +- Project [c1#x, max(c2)#x, cast(c1#x as int) AS x#x]
+      +- Aggregate [c1#x], [c1#x, max(c2#x) AS max(c2)#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, foo3_1b(c1) FROM t1 GROUP BY c1
+-- !query analysis
+Project [c1#x, spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b(c1)#x]
++- Project [c1#x, c1#x, cast(c1#x as int) AS x#x]
+   +- Aggregate [c1#x], [c1#x, c1#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, foo3_1b(c1 + 1) FROM t1 GROUP BY c1
+-- !query analysis
+Project [c1#x, spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b((c1 + 1))#x]
++- Project [c1#x, (c1 + 1)#x, cast((c1 + 1)#x as int) AS x#x]
+   +- Aggregate [c1#x], [c1#x, (c1#x + 1) AS (c1 + 1)#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, foo3_1b(c1 + rand(0) * 0) FROM t1 GROUP BY c1
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT c1, foo3_1a(c1, MIN(c2)) FROM t1 GROUP BY c1
+-- !query analysis
+Project [c1#x, spark_catalog.default.foo3_1a(a#x, b#x) AS spark_catalog.default.foo3_1a(c1, min(c2))#x]
++- Project [c1#x, c1#x, min(c2)#x, cast(c1#x as double) AS a#x, cast(min(c2)#x as double) AS b#x]
+   +- Aggregate [c1#x], [c1#x, c1#x, min(c2#x) AS min(c2)#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, foo3_1a(c1 + 1, MIN(c2 + 1)) FROM t1 GROUP BY c1
+-- !query analysis
+Project [c1#x, spark_catalog.default.foo3_1a(a#x, b#x) AS spark_catalog.default.foo3_1a((c1 + 1), min((c2 + 1)))#x]
++- Project [c1#x, (c1 + 1)#x, min((c2 + 1))#x, cast((c1 + 1)#x as double) AS a#x, cast(min((c2 + 1))#x as double) AS b#x]
+   +- Aggregate [c1#x], [c1#x, (c1#x + 1) AS (c1 + 1)#x, min((c2#x + 1)) AS min((c2 + 1))#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, c2, foo3_1a(c1, c2) FROM t1 GROUP BY c1, c2
+-- !query analysis
+Project [c1#x, c2#x, spark_catalog.default.foo3_1a(a#x, b#x) AS spark_catalog.default.foo3_1a(c1, c2)#x]
++- Project [c1#x, c2#x, c1#x, c2#x, cast(c1#x as double) AS a#x, cast(c2#x as double) AS b#x]
+   +- Aggregate [c1#x, c2#x], [c1#x, c2#x, c1#x, c2#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, c2, foo3_1a(1, 2) FROM t1 GROUP BY c1, c2
+-- !query analysis
+Project [c1#x, c2#x, spark_catalog.default.foo3_1a(a#x, b#x) AS spark_catalog.default.foo3_1a(1, 2)#x]
++- Project [c1#x, c2#x, 1#x, 2#x, cast(1#x as double) AS a#x, cast(2#x as double) AS b#x]
+   +- Aggregate [c1#x, c2#x], [c1#x, c2#x, 1 AS 1#x, 2 AS 2#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1 + c2, foo3_1b(c1 + c2 + 1) FROM t1 GROUP BY c1 + c2
+-- !query analysis
+Project [(c1 + c2)#x, spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b(((c1 + c2) + 1))#x]
++- Project [(c1 + c2)#x, ((c1 + c2) + 1)#x, cast(((c1 + c2) + 1)#x as int) AS x#x]
+   +- Aggregate [(c1#x + c2#x)], [(c1#x + c2#x) AS (c1 + c2)#x, ((c1#x + c2#x) + 1) AS ((c1 + c2) + 1)#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT COUNT(*) + foo3_1b(c1) + foo3_1b(SUM(c2)) + SUM(foo3_1b(c2)) FROM t1 GROUP BY c1
+-- !query analysis
+Project [(((count(1)#xL + cast(spark_catalog.default.foo3_1b(x#x) as bigint)) + cast(spark_catalog.default.foo3_1b(x#x) as bigint)) + sum(spark_catalog.default.foo3_1b(c2))#xL) AS (((count(1) + spark_catalog.default.foo3_1b(c1)) + spark_catalog.default.foo3_1b(sum(c2))) + sum(spark_catalog.default.foo3_1b(c2)))#xL]
++- Project [count(1)#xL, c1#x, sum(c2)#xL, sum(spark_catalog.default.foo3_1b(c2))#xL, cast(c1#x as int) AS x#x, cast(sum(c2)#xL as int) AS x#x]
+   +- Aggregate [c1#x], [count(1) AS count(1)#xL, c1#x, sum(c2#x) AS sum(c2)#xL, sum(spark_catalog.default.foo3_1b(x#x)) AS sum(spark_catalog.default.foo3_1b(c2))#xL]
+      +- Project [c1#x, c2#x, cast(c2#x as int) AS x#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, COUNT(*), foo3_1b(SUM(c2)) FROM t1 GROUP BY c1 HAVING COUNT(*) > 0
+-- !query analysis
+Filter (count(1)#xL > cast(0 as bigint))
++- Project [c1#x, count(1)#xL, spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b(sum(c2))#x]
+   +- Project [c1#x, count(1)#xL, sum(c2)#xL, cast(sum(c2)#xL as int) AS x#x]
+      +- Aggregate [c1#x], [c1#x, count(1) AS count(1)#xL, sum(c2#x) AS sum(c2)#xL]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, COUNT(*), foo3_1b(SUM(c2)) FROM t1 GROUP BY c1 HAVING foo3_1b(SUM(c2)) > 0
+-- !query analysis
+Filter (spark_catalog.default.foo3_1b(sum(c2))#x > 0)
++- Project [c1#x, count(1)#xL, spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b(sum(c2))#x]
+   +- Project [c1#x, count(1)#xL, sum(c2)#xL, cast(sum(c2)#xL as int) AS x#x]
+      +- Aggregate [c1#x], [c1#x, count(1) AS count(1)#xL, sum(c2#x) AS sum(c2)#xL]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, COUNT(*), foo3_1b(SUM(c2)) FROM t1 GROUP BY c1 HAVING SUM(foo3_1b(c2)) > 0
+-- !query analysis
+Project [c1#x, count(1)#xL, spark_catalog.default.foo3_1b(sum(c2))#x]
++- Filter (sum(spark_catalog.default.foo3_1b(c2))#xL > cast(0 as bigint))
+   +- Project [c1#x, count(1)#xL, spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b(sum(c2))#x, sum(spark_catalog.default.foo3_1b(c2))#xL]
+      +- Project [c1#x, count(1)#xL, sum(c2)#xL, sum(spark_catalog.default.foo3_1b(c2))#xL, cast(sum(c2)#xL as int) AS x#x]
+         +- Aggregate [c1#x], [c1#x, count(1) AS count(1)#xL, sum(c2#x) AS sum(c2)#xL, sum(spark_catalog.default.foo3_1b(x#x)) AS sum(spark_catalog.default.foo3_1b(c2))#xL]
+            +- Project [c1#x, c2#x, cast(c2#x as int) AS x#x]
+               +- SubqueryAlias spark_catalog.default.t1
+                  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+                     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                        +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT foo3_1b(c1), MIN(c2) FROM t1 GROUP BY 1
+-- !query analysis
+Project [spark_catalog.default.foo3_1b(c1)#x, min(c2)#x]
++- Aggregate [spark_catalog.default.foo3_1b#x], [spark_catalog.default.foo3_1b#x AS spark_catalog.default.foo3_1b(c1)#x, min(c2#x) AS min(c2)#x]
+   +- Project [c1#x, c2#x, spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b#x]
+      +- Project [c1#x, c2#x, cast(c1#x as int) AS x#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT foo3_1a(c1 + rand(0) * 0, c2) FROM t1 GROUP BY 1
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT c1, c2, foo3_1a(c1, c2) FROM t1 GROUP BY c1, c2, 3
+-- !query analysis
+Project [c1#x, c2#x, spark_catalog.default.foo3_1a(c1, c2)#x]
++- Aggregate [c1#x, c2#x, spark_catalog.default.foo3_1a#x], [c1#x, c2#x, spark_catalog.default.foo3_1a#x AS spark_catalog.default.foo3_1a(c1, c2)#x]
+   +- Project [c1#x, c2#x, spark_catalog.default.foo3_1a(a#x, b#x) AS spark_catalog.default.foo3_1a#x]
+      +- Project [c1#x, c2#x, cast(c1#x as double) AS a#x, cast(c2#x as double) AS b#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, (SELECT c1), (SELECT foo3_1b(c1)), SUM(c2) FROM t1 GROUP BY 1, 2, 3
+-- !query analysis
+Aggregate [c1#x, scalar-subquery#x [c1#x], scalar-subquery#x [c1#x]], [c1#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#x, sum(c2#x) AS sum(c2)#xL]
+:  :- Project [outer(c1#x)]
+:  :  +- OneRowRelation
+:  :- Project [spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b(outer(spark_catalog.default.t1.c1))#x]
+:  :  +- Project [cast(outer(c1#x) as int) AS x#x]
+:  :     +- OneRowRelation
+:  :- Project [outer(c1#x)]
+:  :  +- OneRowRelation
+:  +- Project [spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b(outer(spark_catalog.default.t1.c1))#x]
+:     +- Project [cast(outer(c1#x) as int) AS x#x]
+:        +- OneRowRelation
++- SubqueryAlias spark_catalog.default.t1
+   +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, SUM(c2) + foo3_1a(MIN(c2), MAX(c2)) + (SELECT SUM(c2)) FROM t1 GROUP BY c1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"sum(c2) AS `sum(outer(spark_catalog.default.t1.c2))`\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 51,
+    "stopIndex" : 64,
+    "fragment" : "SELECT SUM(c2)"
+  } ]
+}
+
+
+-- !query
+SELECT foo3_1b(SUM(c1)) + (SELECT foo3_1b(SUM(c1))) FROM t1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"sum(c1) AS `sum(outer(spark_catalog.default.t1.c1))`\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 27,
+    "stopIndex" : 51,
+    "fragment" : "(SELECT foo3_1b(SUM(c1)))"
+  } ]
+}
+
+
+-- !query
+SELECT SUM(foo3_1b(SUM(c1))) FROM t1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NESTED_AGGREGATE_FUNCTION",
+  "sqlState" : "42607",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 27,
+    "fragment" : "foo3_1b(SUM(c1))"
+  } ]
+}
+
+
+-- !query
+SELECT foo3_1b(SUM(c1)) + (SELECT SUM(SUM(c1))) FROM t1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "NESTED_AGGREGATE_FUNCTION",
+  "sqlState" : "42607",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 45,
+    "fragment" : "SUM(c1)"
+  } ]
+}
+
+
+-- !query
+SELECT foo3_1b(SUM(c1) + SUM(SUM(c1))) FROM t1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "NESTED_AGGREGATE_FUNCTION",
+  "sqlState" : "42607",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 30,
+    "stopIndex" : 36,
+    "fragment" : "SUM(c1)"
+  } ]
+}
+
+
+-- !query
+SELECT foo3_1b(SUM(c1 + rand(0) * 0)) FROM t1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
+  "sqlState" : "42845",
+  "messageParameters" : {
+    "sqlExpr" : "\"sum((c1 + (rand(0) * 0)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 20,
+    "stopIndex" : 35,
+    "fragment" : "c1 + rand(0) * 0"
+  } ]
+}
+
+
+-- !query
+SELECT SUM(foo3_1b(c1) + rand(0) * 0) FROM t1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
+  "sqlState" : "42845",
+  "messageParameters" : {
+    "sqlExpr" : "\"sum((spark_catalog.default.foo3_1b(foo3_1b.x) + (rand(0) * 0)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 36,
+    "fragment" : "foo3_1b(c1) + rand(0) * 0"
+  } ]
+}
+
+
+-- !query
+SELECT SUM(foo3_1b(c1 + rand(0) * 0)) FROM t1
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT foo3_1b(SUM(c1) + foo3_1b(SUM(c1))) FROM t1
+-- !query analysis
+Project [spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b((sum(c1) + spark_catalog.default.foo3_1b(sum(c1))))#x]
++- Project [sum(c1)#xL, sum(c1)#xL, x#x, cast((sum(c1)#xL + cast(spark_catalog.default.foo3_1b(x#x) as bigint)) as int) AS x#x]
+   +- Project [sum(c1)#xL, sum(c1)#xL, cast(sum(c1)#xL as int) AS x#x]
+      +- Aggregate [sum(c1#x) AS sum(c1)#xL, sum(c1#x) AS sum(c1)#xL]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT foo3_1b(SUM(c2) + foo3_1b(SUM(c1))) AS foo FROM t1 HAVING foo > 0
+-- !query analysis
+Filter (foo#x > 0)
++- Project [spark_catalog.default.foo3_1b(x#x) AS foo#x]
+   +- Project [sum(c2)#xL, sum(c1)#xL, x#x, cast((sum(c2)#xL + cast(spark_catalog.default.foo3_1b(x#x) as bigint)) as int) AS x#x]
+      +- Project [sum(c2)#xL, sum(c1)#xL, cast(sum(c1)#xL as int) AS x#x]
+         +- Aggregate [sum(c2#x) AS sum(c2)#xL, sum(c1#x) AS sum(c1)#xL]
+            +- SubqueryAlias spark_catalog.default.t1
+               +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+                  +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                     +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, COUNT(*), foo3_1b(SUM(c2) + foo3_1b(SUM(c2))) FROM t1 GROUP BY c1 HAVING COUNT(*) > 0
+-- !query analysis
+Filter (count(1)#xL > cast(0 as bigint))
++- Project [c1#x, count(1)#xL, spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b((sum(c2) + spark_catalog.default.foo3_1b(sum(c2))))#x]
+   +- Project [c1#x, count(1)#xL, sum(c2)#xL, sum(c2)#xL, x#x, cast((sum(c2)#xL + cast(spark_catalog.default.foo3_1b(x#x) as bigint)) as int) AS x#x]
+      +- Project [c1#x, count(1)#xL, sum(c2)#xL, sum(c2)#xL, cast(sum(c2)#xL as int) AS x#x]
+         +- Aggregate [c1#x], [c1#x, count(1) AS count(1)#xL, sum(c2#x) AS sum(c2)#xL, sum(c2#x) AS sum(c2)#xL]
+            +- SubqueryAlias spark_catalog.default.t1
+               +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+                  +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                     +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT foo3_1a(c1, MAX(c2)) FROM t1 GROUP BY c1, 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "GROUP_BY_POS_AGGREGATE",
+  "sqlState" : "42903",
+  "messageParameters" : {
+    "aggExpr" : "spark_catalog.default.foo3_1a(spark_catalog.default.t1.c1, max(spark_catalog.default.t1.c2)) AS `spark_catalog.default.foo3_1a(c1, max(c2))`",
+    "index" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 50,
+    "stopIndex" : 50,
+    "fragment" : "1"
+  } ]
+}
+
+
+-- !query
+WITH cte AS (SELECT foo3_1a(c1, c2) FROM t1)
+SELECT * FROM cte
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias cte
+:     +- Project [spark_catalog.default.foo3_1a(a#x, b#x) AS spark_catalog.default.foo3_1a(c1, c2)#x]
+:        +- Project [c1#x, c2#x, cast(c1#x as double) AS a#x, cast(c2#x as double) AS b#x]
+:           +- SubqueryAlias spark_catalog.default.t1
+:              +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+:                 +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+:                    +- LocalRelation [col1#x, col2#x]
++- Project [spark_catalog.default.foo3_1a(c1, c2)#x]
+   +- SubqueryAlias cte
+      +- CTERelationRef xxxx, true, [spark_catalog.default.foo3_1a(c1, c2)#x], false, false
+
+
+-- !query
+SELECT SUM(c2) FROM t1 GROUP BY foo3_1b(c1)
+-- !query analysis
+Project [sum(c2)#xL]
++- Aggregate [spark_catalog.default.foo3_1b#x], [sum(c2#x) AS sum(c2)#xL]
+   +- Project [c1#x, c2#x, spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b#x]
+      +- Project [c1#x, c2#x, cast(c1#x as int) AS x#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT foo3_1b(c1), SUM(c2) FROM t1 GROUP BY 1
+-- !query analysis
+Project [spark_catalog.default.foo3_1b(c1)#x, sum(c2)#xL]
++- Aggregate [spark_catalog.default.foo3_1b#x], [spark_catalog.default.foo3_1b#x AS spark_catalog.default.foo3_1b(c1)#x, sum(c2#x) AS sum(c2)#xL]
+   +- Project [c1#x, c2#x, spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b#x]
+      +- Project [c1#x, c2#x, cast(c1#x as int) AS x#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT foo3_1b(c1), c2, GROUPING(foo3_1b(c1)), SUM(c1) FROM t1 GROUP BY ROLLUP(foo3_1b(c1), c2)
+-- !query analysis
+Aggregate [spark_catalog.default.foo3_1b(c1)#x, c2#x, spark_grouping_id#xL], [spark_catalog.default.foo3_1b(c1)#x AS spark_catalog.default.foo3_1b(c1)#x, c2#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(spark_catalog.default.foo3_1b(c1))#x, sum(c1#x) AS sum(c1)#xL]
++- Expand [[c1#x, c2#x, spark_catalog.default.foo3_1b(c1)#x, c2#x, 0], [c1#x, c2#x, spark_catalog.default.foo3_1b(c1)#x, null, 1], [c1#x, c2#x, null, null, 3]], [c1#x, c2#x, spark_catalog.default.foo3_1b(c1)#x, c2#x, spark_grouping_id#xL]
+   +- Project [c1#x, c2#x, spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b(c1)#x, c2#x AS c2#x]
+      +- Project [c1#x, c2#x, cast(c1#x as int) AS x#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, SUM(c2) FROM t1 GROUP BY c1 HAVING foo3_1b(SUM(c2)) > 1
+-- !query analysis
+Project [c1#x, sum(c2)#xL]
++- Filter (spark_catalog.default.foo3_1b(x#x) > 1)
+   +- Project [c1#x, sum(c2)#xL, cast(sum(c2)#xL as int) AS x#x]
+      +- Aggregate [c1#x], [c1#x, sum(c2#x) AS sum(c2)#xL]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c1, SUM(c2) FROM t1 GROUP BY CUBE(c1) HAVING foo3_1b(GROUPING(c1)) = 0
+-- !query analysis
+Project [c1#x, sum(c2)#xL]
++- Project [c1#x, sum(c2)#xL, spark_grouping_id#xL]
+   +- Filter (spark_catalog.default.foo3_1b(x#x) = 0)
+      +- Project [c1#x, sum(c2)#xL, spark_grouping_id#xL, cast(cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) as int) AS x#x]
+         +- Aggregate [c1#x, spark_grouping_id#xL], [c1#x, sum(c2#x) AS sum(c2)#xL, spark_grouping_id#xL]
+            +- Expand [[c1#x, c2#x, c1#x, 0], [c1#x, c2#x, null, 1]], [c1#x, c2#x, c1#x, spark_grouping_id#xL]
+               +- Project [c1#x, c2#x, c1#x AS c1#x]
+                  +- SubqueryAlias spark_catalog.default.t1
+                     +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+                        +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                           +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1a(t1.c1, t2.c2) >= 2
+-- !query analysis
+Project [c1#x, c2#x, c1#x, c2#x]
++- Join Inner, (spark_catalog.default.foo3_1a(a#x, b#x) >= cast(2 as double))
+   :- SubqueryAlias spark_catalog.default.t1
+   :  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+   :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :        +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t2
+      +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1b(t1.c2) = foo3_1b(t2.c2)
+-- !query analysis
+Project [c1#x, c2#x, c1#x, c2#x]
++- Join Inner, (spark_catalog.default.foo3_1b(x#x) = spark_catalog.default.foo3_1b(x#x))
+   :- SubqueryAlias spark_catalog.default.t1
+   :  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+   :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :        +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t2
+      +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1b(t1.c1 + t2.c1 + 2) > 2
+-- !query analysis
+Project [c1#x, c2#x, c1#x, c2#x]
++- Join Inner, (spark_catalog.default.foo3_1b(x#x) > 2)
+   :- SubqueryAlias spark_catalog.default.t1
+   :  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+   :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :        +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t2
+      +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1a(foo3_1b(t1.c1), t2.c2) >= 2
+-- !query analysis
+Project [c1#x, c2#x, c1#x, c2#x]
++- Join Inner, (spark_catalog.default.foo3_1a(a#x, b#x) >= cast(2 as double))
+   :- SubqueryAlias spark_catalog.default.t1
+   :  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+   :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :        +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t2
+      +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1f() > 0
+-- !query analysis
+Project [c1#x, c2#x, c1#x, c2#x]
++- Join Inner, (spark_catalog.default.foo3_1f() > 0)
+   :  +- Aggregate [sum(c2#x) AS sum(c2)#xL]
+   :     +- Filter (c1#x = 0)
+   :        +- SubqueryAlias spark_catalog.default.t2
+   :           +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+   :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :                 +- LocalRelation [col1#x, col2#x]
+   :- SubqueryAlias spark_catalog.default.t1
+   :  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+   :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :        +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t2
+      +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1b(t1.c1 + rand(0) * 0) > 1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "sqlExprs" : "\"(spark_catalog.default.foo3_1b(foo3_1b.x) > 1)\""
+  }
+}
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1c(t1.c1) = 2
+-- !query analysis
+Project [c1#x, c2#x, c1#x, c2#x]
++- Join Inner, (spark_catalog.default.foo3_1c(x#x) = 2)
+   :- SubqueryAlias spark_catalog.default.t1
+   :  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+   :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :        +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t2
+      +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1g(t1.c1) = 2
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Join Inner, (spark_catalog.default.foo3_1g(x#x) = 2)\n:  +- Project [outer(x#x)]\n:     +- OneRowRelation\n:- SubqueryAlias spark_catalog.default.t1\n:  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])\n:     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n:        +- LocalRelation [col1#x, col2#x]\n+- SubqueryAlias spark_catalog.default.t2\n   +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
+  }
+}
+
+
+-- !query
+SELECT * FROM t1 ORDER BY foo3_1b(c1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SQL_UDF_USAGE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "functionName" : "`spark_catalog`.`default`.`foo3_1b`",
+    "nodeName" : "Sort"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 27,
+    "stopIndex" : 37,
+    "fragment" : "foo3_1b(c1)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t1 LIMIT foo3_1b(1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SQL_UDF_USAGE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "functionName" : "`spark_catalog`.`default`.`foo3_1b`",
+    "nodeName" : "GlobalLimit"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 33,
+    "fragment" : "foo3_1b(1)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM ta LATERAL VIEW EXPLODE(ARRAY(foo3_1b(x[0]), foo3_1b(x[1]))) AS t
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SQL_UDF_USAGE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "functionName" : "`spark_catalog`.`default`.`foo3_1b`",
+    "nodeName" : "Generate"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 45,
+    "stopIndex" : 57,
+    "fragment" : "foo3_1b(x[0])"
+  } ]
+}
+
+
+-- !query
+SELECT CASE WHEN foo3_1b(rand(0) * 0 < 1 THEN 1 ELSE -1 END
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'foo3_1b'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT (SELECT SUM(c2) FROM t2 WHERE c1 = foo3_1b(t1.c1)) FROM t1
+-- !query analysis
+Project [scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
+:  +- Aggregate [sum(c2#x) AS sum(c2)#xL]
+:     +- Project [c1#x, c2#x]
+:        +- Filter (c1#x = spark_catalog.default.foo3_1b(x#x))
+:           +- Project [c1#x, c2#x, cast(outer(c1#x) as int) AS x#x]
+:              +- SubqueryAlias spark_catalog.default.t2
+:                 +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+:                    +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+:                       +- LocalRelation [col1#x, col2#x]
++- SubqueryAlias spark_catalog.default.t1
+   +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT foo3_1b((SELECT SUM(c1) FROM t1))
+-- !query analysis
+Project [spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b(scalarsubquery())#x]
++- Project [cast(scalar-subquery#x [] as int) AS x#x]
+   :  +- Aggregate [sum(c1#x) AS sum(c1)#xL]
+   :     +- SubqueryAlias spark_catalog.default.t1
+   :        +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+   :           +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :              +- LocalRelation [col1#x, col2#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo3_1a(c1, (SELECT MIN(c1) FROM t1)) FROM t1
+-- !query analysis
+Project [spark_catalog.default.foo3_1a(a#x, b#x) AS spark_catalog.default.foo3_1a(c1, scalarsubquery())#x]
++- Project [c1#x, c2#x, cast(c1#x as double) AS a#x, cast(scalar-subquery#x [] as double) AS b#x]
+   :  +- Aggregate [min(c1#x) AS min(c1)#x]
+   :     +- SubqueryAlias spark_catalog.default.t1
+   :        +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+   :           +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :              +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT foo3_1b((SELECT SUM(c1))) FROM t1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"sum(c1) AS `sum(outer(spark_catalog.default.t1.c1))`\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 17,
+    "stopIndex" : 30,
+    "fragment" : "SELECT SUM(c1)"
+  } ]
+}
+
+
+-- !query
+SELECT foo3_1b((SELECT SUM(c1) FROM t1 WHERE c2 = t2.c2)) FROM t2
+-- !query analysis
+Project [spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b(scalarsubquery(c2))#x]
++- Project [c1#x, c2#x, cast(scalar-subquery#x [c2#x] as int) AS x#x]
+   :  +- Aggregate [sum(c1#x) AS sum(c1)#xL]
+   :     +- Filter (c2#x = outer(c2#x))
+   :        +- SubqueryAlias spark_catalog.default.t1
+   :           +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+   :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :                 +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t2
+      +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT c2, AVG(foo3_1b((SELECT COUNT(*) FROM t1 WHERE c2 = t2.c2))) OVER (PARTITION BY c1) AS r FROM t2
+-- !query analysis
+Project [c2#x, r#x]
++- Project [c2#x, _w0#x, c1#x, r#x, r#x]
+   +- Window [avg(_w0#x) windowspecdefinition(c1#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS r#x], [c1#x]
+      +- Project [c2#x, spark_catalog.default.foo3_1b(x#x) AS _w0#x, c1#x]
+         +- Project [c1#x, c2#x, cast(scalar-subquery#x [c2#x] as int) AS x#x]
+            :  +- Aggregate [count(1) AS count(1)#xL]
+            :     +- Filter (c2#x = outer(c2#x))
+            :        +- SubqueryAlias spark_catalog.default.t1
+            :           +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+            :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            :                 +- LocalRelation [col1#x, col2#x]
+            +- SubqueryAlias spark_catalog.default.t2
+               +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+                  +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                     +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+CREATE FUNCTION foo3_1x(x STRUCT<a: INT, b: INT>) RETURNS INT RETURN x.a + x.b
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_1x`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_1y(x ARRAY<INT>) RETURNS INT RETURN aggregate(x, BIGINT(0), (x, y) -> x + y)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_1y`"
+  }
+}
+
+
+-- !query
+SELECT foo3_1a(x.a, x.b) FROM ts
+-- !query analysis
+Project [spark_catalog.default.foo3_1a(a#x, b#x) AS spark_catalog.default.foo3_1a(x.a, x.b)#x]
++- Project [x#x, cast(x#x.a as double) AS a#x, cast(x#x.b as double) AS b#x]
+   +- SubqueryAlias spark_catalog.default.ts
+      +- View (`spark_catalog`.`default`.`ts`, [x#x])
+         +- Project [cast(col1#x as struct<a:int,b:int>) AS x#x]
+            +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT foo3_1x(x) FROM ts
+-- !query analysis
+Project [spark_catalog.default.foo3_1x(x#x) AS spark_catalog.default.foo3_1x(x)#x]
++- Project [x#x, cast(x#x as struct<a:int,b:int>) AS x#x]
+   +- SubqueryAlias spark_catalog.default.ts
+      +- View (`spark_catalog`.`default`.`ts`, [x#x])
+         +- Project [cast(col1#x as struct<a:int,b:int>) AS x#x]
+            +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT foo3_1a(x['a'], x['b']) FROM tm
+-- !query analysis
+Project [spark_catalog.default.foo3_1a(a#x, b#x) AS spark_catalog.default.foo3_1a(x[a], x[b])#x]
++- Project [x#x, cast(x#x[a] as double) AS a#x, cast(x#x[b] as double) AS b#x]
+   +- SubqueryAlias spark_catalog.default.tm
+      +- View (`spark_catalog`.`default`.`tm`, [x#x])
+         +- Project [cast(col1#x as map<string,int>) AS x#x]
+            +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT foo3_1a(x[0], x[1]) FROM ta
+-- !query analysis
+Project [spark_catalog.default.foo3_1a(a#x, b#x) AS spark_catalog.default.foo3_1a(x[0], x[1])#x]
++- Project [x#x, cast(x#x[0] as double) AS a#x, cast(x#x[1] as double) AS b#x]
+   +- SubqueryAlias spark_catalog.default.ta
+      +- View (`spark_catalog`.`default`.`ta`, [x#x])
+         +- Project [cast(col1#x as array<int>) AS x#x]
+            +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT foo3_1y(x) FROM ta
+-- !query analysis
+Project [spark_catalog.default.foo3_1y(x#x) AS spark_catalog.default.foo3_1y(x)#x]
++- Project [x#x, cast(x#x as array<int>) AS x#x]
+   +- SubqueryAlias spark_catalog.default.ta
+      +- View (`spark_catalog`.`default`.`ta`, [x#x])
+         +- Project [cast(col1#x as array<int>) AS x#x]
+            +- LocalRelation [col1#x]
+
+
+-- !query
+CREATE FUNCTION foo3_2a() RETURNS INT RETURN FLOOR(RAND() * 6) + 1
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_2a`"
+  }
+}
+
+
+-- !query
+SELECT CASE WHEN foo3_2a() > 6 THEN FALSE ELSE TRUE END
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_2a() = 1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "sqlExprs" : "\"(spark_catalog.default.foo3_2a() = 1)\""
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_2b1(x INT) RETURNS BOOLEAN RETURN x IN (SELECT 1)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_2b1`"
+  }
+}
+
+
+-- !query
+SELECT * FROM t1 WHERE foo3_2b1(c1)
+-- !query analysis
+Project [c1#x, c2#x]
++- Project [c1#x, c2#x]
+   +- Filter spark_catalog.default.foo3_2b1(x#x)
+      :  +- Project [1 AS 1#x]
+      :     +- OneRowRelation
+      +- Project [c1#x, c2#x, cast(c1#x as int) AS x#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+CREATE FUNCTION foo3_2b2(x INT) RETURNS INT RETURN IF(x IN (SELECT 1), 1, 0)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_2b2`"
+  }
+}
+
+
+-- !query
+SELECT * FROM t1 WHERE foo3_2b2(c1) = 0
+-- !query analysis
+Project [c1#x, c2#x]
++- Project [c1#x, c2#x]
+   +- Filter (spark_catalog.default.foo3_2b2(x#x) = 0)
+      :  +- Project [1 AS 1#x]
+      :     +- OneRowRelation
+      +- Project [c1#x, c2#x, cast(c1#x as int) AS x#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT foo3_2b2(c1) FROM t1
+-- !query analysis
+Project [spark_catalog.default.foo3_2b2(x#x) AS spark_catalog.default.foo3_2b2(c1)#x]
+:  +- Project [1 AS 1#x]
+:     +- OneRowRelation
++- Project [c1#x, c2#x, cast(c1#x as int) AS x#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+CREATE FUNCTION foo3_2b3(x INT) RETURNS BOOLEAN RETURN x IN (SELECT c1 FROM t2)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_2b3`"
+  }
+}
+
+
+-- !query
+SELECT * FROM t1 WHERE foo3_2b3(c1)
+-- !query analysis
+Project [c1#x, c2#x]
++- Project [c1#x, c2#x]
+   +- Filter spark_catalog.default.foo3_2b3(x#x)
+      :  +- Project [c1#x]
+      :     +- SubqueryAlias spark_catalog.default.t2
+      :        +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+      :           +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+      :              +- LocalRelation [col1#x, col2#x]
+      +- Project [c1#x, c2#x, cast(c1#x as int) AS x#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+CREATE FUNCTION foo3_2b4(x INT) RETURNS BOOLEAN RETURN x NOT IN (SELECT c2 FROM t2 WHERE x = c1)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_2b4`"
+  }
+}
+
+
+-- !query
+SELECT * FROM t1 WHERE foo3_2b4(c1)
+-- !query analysis
+Project [c1#x, c2#x]
++- Project [c1#x, c2#x]
+   +- Filter spark_catalog.default.foo3_2b4(x#x)
+      :  +- Project [c2#x]
+      :     +- Filter (outer(x#x) = c1#x)
+      :        +- SubqueryAlias spark_catalog.default.t2
+      :           +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+      :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+      :                 +- LocalRelation [col1#x, col2#x]
+      +- Project [c1#x, c2#x, cast(c1#x as int) AS x#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+CREATE FUNCTION foo3_2b5(x INT) RETURNS BOOLEAN RETURN SUM(1) + IF(x IN (SELECT 1), 1, 0)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "USER_DEFINED_FUNCTIONS.CANNOT_CONTAIN_COMPLEX_FUNCTIONS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "queryText" : "SUM(1) + IF(x IN (SELECT 1), 1, 0)"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_2b5(x INT) RETURNS BOOLEAN RETURN y IN (SELECT 1)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 1,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+CREATE FUNCTION foo3_2b5(x INT) RETURNS BOOLEAN RETURN x IN (SELECT x WHERE x = 1)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_2b5`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_2c1(x INT) RETURNS BOOLEAN RETURN EXISTS(SELECT 1)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_2c1`"
+  }
+}
+
+
+-- !query
+SELECT * FROM t1 WHERE foo3_2c1(c1)
+-- !query analysis
+Project [c1#x, c2#x]
++- Project [c1#x, c2#x]
+   +- Filter spark_catalog.default.foo3_2c1(x#x)
+      :  +- Project [1 AS 1#x]
+      :     +- OneRowRelation
+      +- Project [c1#x, c2#x, cast(c1#x as int) AS x#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+CREATE FUNCTION foo3_2c2(x INT) RETURNS BOOLEAN RETURN NOT EXISTS(SELECT * FROM t2 WHERE c1 = x)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_2c2`"
+  }
+}
+
+
+-- !query
+SELECT * FROM t1 WHERE foo3_2c2(c1)
+-- !query analysis
+Project [c1#x, c2#x]
++- Project [c1#x, c2#x]
+   +- Filter spark_catalog.default.foo3_2c2(x#x)
+      :  +- Project [c1#x, c2#x]
+      :     +- Filter (c1#x = outer(x#x))
+      :        +- SubqueryAlias spark_catalog.default.t2
+      :           +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+      :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+      :                 +- LocalRelation [col1#x, col2#x]
+      +- Project [c1#x, c2#x, cast(c1#x as int) AS x#x]
+         +- SubqueryAlias spark_catalog.default.t1
+            +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+CREATE FUNCTION foo3_2d1(x INT) RETURNS INT RETURN SELECT (SELECT x)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_2d1`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_2d2(x INT) RETURNS INT RETURN SELECT (SELECT 1 WHERE EXISTS (SELECT * FROM t2 WHERE c1 = x))
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`x`",
+    "proposal" : "`c1`, `c2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 60,
+    "stopIndex" : 60,
+    "fragment" : "x"
+  } ]
+}
+
+
+-- !query
+CREATE FUNCTION foo3_2e1(
+    occurrences ARRAY<STRUCT<start_time: TIMESTAMP, occurrence_id: STRING>>,
+    instance_start_time TIMESTAMP
+) RETURNS STRING RETURN
+WITH t AS (
+    SELECT transform(occurrences, x -> named_struct(
+        'diff', abs(unix_millis(x.start_time) - unix_millis(instance_start_time)),
+        'id', x.occurrence_id
+    )) AS diffs
+)
+SELECT CASE WHEN occurrences IS NULL OR size(occurrences) = 0
+       THEN NULL
+       ELSE sort_array(diffs)[0].id END AS id
+FROM t
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_2e1`"
+  }
+}
+
+
+-- !query
+SELECT foo3_2e1(
+    ARRAY(STRUCT('2022-01-01 10:11:12', '1'), STRUCT('2022-01-01 10:11:15', '2')),
+    '2022-01-01')
+-- !query analysis
+Project [spark_catalog.default.foo3_2e1(occurrences#x, instance_start_time#x) AS spark_catalog.default.foo3_2e1(array(struct(2022-01-01 10:11:12, 1), struct(2022-01-01 10:11:15, 2)), 2022-01-01)#x]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias t
+:     :     +- Project [transform(outer(occurrences#x), lambdafunction(named_struct(diff, abs((unix_millis(lambda x#x.start_time) - unix_millis(outer(instance_start_time#x)))), id, lambda x#x.occurrence_id), lambda x#x, false)) AS diffs#x]
+:     :        +- OneRowRelation
+:     +- Project [CASE WHEN (isnull(outer(occurrences#x)) OR (size(outer(occurrences#x), false) = 0)) THEN cast(null as string) ELSE sort_array(diffs#x, true)[0].id END AS id#x]
+:        +- SubqueryAlias t
+:           +- CTERelationRef xxxx, true, [diffs#x], false, false, 1
++- Project [cast(array(struct(col1, 2022-01-01 10:11:12, col2, 1), struct(col1, 2022-01-01 10:11:15, col2, 2)) as array<struct<start_time:timestamp,occurrence_id:string>>) AS occurrences#x, cast(2022-01-01 as timestamp) AS instance_start_time#x]
+   +- OneRowRelation
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(true))
+
+
+-- !query
+CREATE FUNCTION foo3_3a(x INT) RETURNS DOUBLE RETURN 1 / x
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_3a`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_3at(x INT) RETURNS TABLE (a DOUBLE) RETURN SELECT 1 / x
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_3at, x INT, a DOUBLE, SELECT 1 / x, true, false, false, false
+
+
+-- !query
+CREATE TEMPORARY FUNCTION foo3_3b(x INT) RETURNS DOUBLE RETURN 1 / x
+-- !query analysis
+CreateSQLFunctionCommand foo3_3b, x INT, DOUBLE, 1 / x, false, true, false, false
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(false))
+
+
+-- !query
+SELECT foo3_3a(0)
+-- !query analysis
+Project [spark_catalog.default.foo3_3a(x#x) AS spark_catalog.default.foo3_3a(0)#x]
++- Project [cast(0 as int) AS x#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo3_3b(0)
+-- !query analysis
+Project [foo3_3b(x#x) AS foo3_3b(0)#x]
++- Project [cast(0 as int) AS x#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT * FROM foo3_3at(0)
+-- !query analysis
+Project [a#x]
++- SQLFunctionNode spark_catalog.default.foo3_3at
+   +- SubqueryAlias foo3_3at
+      +- Project [cast((1 / outer(foo3_3at.x))#x as double) AS a#x]
+         +- Project [(cast(1 as double) / cast(cast(0 as int) as double)) AS (1 / outer(foo3_3at.x))#x]
+            +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo3_3a(x INT) RETURNS DOUBLE RETURN 1 / x
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_3a, x INT, DOUBLE, 1 / x, false, false, false, true
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo3_3at(x INT) RETURNS TABLE (a DOUBLE) RETURN SELECT 1 / x
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_3at`"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY FUNCTION foo3_3b(x INT) RETURNS DOUBLE RETURN 1 / x
+-- !query analysis
+CreateSQLFunctionCommand foo3_3b, x INT, DOUBLE, 1 / x, false, true, false, true
+
+
+-- !query
+SELECT foo3_3a(0)
+-- !query analysis
+Project [spark_catalog.default.foo3_3a(x#x) AS spark_catalog.default.foo3_3a(0)#x]
++- Project [cast(0 as int) AS x#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo3_3b(0)
+-- !query analysis
+Project [foo3_3b(x#x) AS foo3_3b(0)#x]
++- Project [cast(0 as int) AS x#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT * FROM foo3_3at(0)
+-- !query analysis
+Project [a#x]
++- SQLFunctionNode spark_catalog.default.foo3_3at
+   +- SubqueryAlias foo3_3at
+      +- Project [cast((1 / outer(foo3_3at.x))#x as double) AS a#x]
+         +- Project [(cast(1 as double) / cast(cast(0 as int) as double)) AS (1 / outer(foo3_3at.x))#x]
+            +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo3_3c() RETURNS INT RETURN CAST('a' AS INT)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_3c`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_3ct() RETURNS TABLE (a INT) RETURN SELECT CAST('a' AS INT)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_3ct`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_3d() RETURNS INT RETURN 'a' + 1
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_3d`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_3dt() RETURNS TABLE (a INT) RETURN SELECT 'a' + 1
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_3dt`"
+  }
+}
+
+
+-- !query
+SELECT foo3_3c()
+-- !query analysis
+Project [spark_catalog.default.foo3_3c() AS spark_catalog.default.foo3_3c()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo3_3d()
+-- !query analysis
+Project [spark_catalog.default.foo3_3d() AS spark_catalog.default.foo3_3d()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+SELECT * FROM foo3_3ct()
+-- !query analysis
+Project [a#x]
++- SQLFunctionNode spark_catalog.default.foo3_3ct
+   +- SubqueryAlias foo3_3ct
+      +- Project [cast(CAST(a AS INT)#x as int) AS a#x]
+         +- Project [cast(a as int) AS CAST(a AS INT)#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT * FROM foo3_3dt()
+-- !query analysis
+Project [a#x]
++- SQLFunctionNode spark_catalog.default.foo3_3dt
+   +- SubqueryAlias foo3_3dt
+      +- Project [cast((a + 1)#x as int) AS a#x]
+         +- Project [(cast(a as double) + cast(1 as double)) AS (a + 1)#x]
+            +- OneRowRelation
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(true))
+
+
+-- !query
+SELECT foo3_3c()
+-- !query analysis
+Project [spark_catalog.default.foo3_3c() AS spark_catalog.default.foo3_3c()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo3_3d()
+-- !query analysis
+Project [spark_catalog.default.foo3_3d() AS spark_catalog.default.foo3_3d()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+SELECT * FROM foo3_3ct()
+-- !query analysis
+Project [a#x]
++- SQLFunctionNode spark_catalog.default.foo3_3ct
+   +- SubqueryAlias foo3_3ct
+      +- Project [cast(CAST(a AS INT)#x as int) AS a#x]
+         +- Project [cast(a as int) AS CAST(a AS INT)#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT * FROM foo3_3dt()
+-- !query analysis
+Project [a#x]
++- SQLFunctionNode spark_catalog.default.foo3_3dt
+   +- SubqueryAlias foo3_3dt
+      +- Project [cast((a + 1)#x as int) AS a#x]
+         +- Project [(cast(a as double) + cast(1 as double)) AS (a + 1)#x]
+            +- OneRowRelation
+
+
+-- !query
+RESET spark.sql.ansi.enabled
+-- !query analysis
+ResetCommand spark.sql.ansi.enabled
 
 
 -- !query

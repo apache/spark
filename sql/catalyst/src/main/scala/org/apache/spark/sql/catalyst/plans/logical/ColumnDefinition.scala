@@ -161,6 +161,26 @@ object ColumnDefinition {
           col.defaultValue.foreach { default =>
             checkDefaultColumnConflicts(col)
             validateDefaultValueExpr(default, statement, col.name, col.dataType)
+            if (!default.deterministic) {
+              throw QueryCompilationErrors.defaultValueNonDeterministicError(
+                "CREATE TABLE", col.name, default.originalSQL)
+            }
+          }
+        }
+
+      case cmd: AddColumns if cmd.columnsToAdd.exists(_.default.isDefined) =>
+        // Wrap analysis errors for default values in a more user-friendly message.
+        cmd.columnsToAdd.foreach { c =>
+          c.default.foreach { d =>
+            if (!d.resolved) {
+              throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+                "ALTER TABLE", c.colName, d.originalSQL, null)
+            }
+            validateDefaultValueExpr(d, "ALTER TABLE", c.colName, c.dataType)
+            if (!d.deterministic) {
+              throw QueryCompilationErrors.defaultValueNonDeterministicError(
+                "ALTER TABLE", c.colName, d.originalSQL)
+            }
           }
         }
 

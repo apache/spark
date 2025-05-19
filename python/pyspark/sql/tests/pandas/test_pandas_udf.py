@@ -391,6 +391,18 @@ class PandasUDFTestsMixin:
             PythonException, "Invalid return type", df.select(upper("s")).collect
         )
 
+    def test_pandas_udf_empty_frame(self):
+        import pandas as pd
+
+        empty_df = self.spark.createDataFrame([], "id long")
+
+        @pandas_udf("long")
+        def add1(x: pd.Series) -> pd.Series:
+            return x + 1
+
+        result = empty_df.select(add1("id"))
+        self.assertEqual(result.collect(), [])
+
 
 class PandasUDFTests(PandasUDFTestsMixin, ReusedSQLTestCase):
     pass

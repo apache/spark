@@ -651,7 +651,12 @@ class ExpressionResolver(
               .peek()
               .resolvingGroupingExpressions && conf.groupByAliases
         ),
-        canResolveNameByHiddenOutput = canResolveNameByHiddenOutput
+        canResolveNameByHiddenOutput = canResolveNameByHiddenOutput,
+        canReferenceAggregatedAccessOnlyAttributes = (
+            expressionResolutionContextStack
+              .peek()
+              .resolvingTreeUnderAggregateExpression
+        )
       )
 
       val candidate = nameTarget.pickCandidate(unresolvedAttribute)

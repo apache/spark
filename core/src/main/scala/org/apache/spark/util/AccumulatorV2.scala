@@ -45,6 +45,8 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   private[spark] var metadata: AccumulatorMetadata = _
   private[this] var atDriverSide = true
 
+  def excludeFromHeartbeat: Boolean = false
+
   private[spark] def register(
       sc: SparkContext,
       name: Option[String] = None,

@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -160,6 +162,17 @@ class MaxAbsScalerModel private[ml] (
 object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
   private[ml] case class Data(maxAbs: Vector)
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeVector(data.maxAbs, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val maxAbs = deserializeVector(dis)
+    Data(maxAbs)
+  }
+
   private[MaxAbsScalerModel]
   class MaxAbsScalerModelWriter(instance: MaxAbsScalerModel) extends MLWriter {
 
@@ -167,7 +180,7 @@ object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = new Data(instance.maxAbs)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -178,7 +191,7 @@ object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
     override def load(path: String): MaxAbsScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
       val model = new MaxAbsScalerModel(metadata.uid, data.maxAbs)
       metadata.getAndSetParams(model)
       model
