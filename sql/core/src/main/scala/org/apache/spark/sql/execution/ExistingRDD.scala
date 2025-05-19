@@ -321,14 +321,12 @@ case class RDDScanExec(
 }
 
 /**
- * A special case of RDDScanExec that is used to represent a scan without a `FROM` clause.
- * For example, 'select version()'.
+ * A physical plan node for `OneRowRelation` for scans with no 'FROM' clause.
  *
  * We do not extend `RDDScanExec` in order to avoid complexity due to `TreeNode.makeCopy` and
  * `TreeNode`'s general use of reflection.
  */
 case class OneRowRelationExec() extends LeafExecNode
-  with StreamSourceAwareSparkPlan
   with InputRDDCodegen {
 
   override val nodeName: String = s"Scan OneRowRelation"
@@ -341,20 +339,17 @@ case class OneRowRelationExec() extends LeafExecNode
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
+    val outputRow = InternalRow.empty
     val numOutputRows = longMetric("numOutputRows")
     rdd.mapPartitionsWithIndexInternal { (index, iter) =>
-      val proj = UnsafeProjection.create(schema)
-      proj.initialize(index)
       iter.map { r =>
         numOutputRows += 1
-        proj(r)
+        outputRow
       }
     }
   }
 
-  override def simpleString(maxFields: Int): String = {
-    s"$nodeName${truncatedString(output, "[", ",", "]", maxFields)}"
-  }
+  override def simpleString(maxFields: Int): String = s"$nodeName[]"
 
   override def inputRDD: RDD[InternalRow] = rdd
 
@@ -365,5 +360,5 @@ case class OneRowRelationExec() extends LeafExecNode
     super.doCanonicalize().asInstanceOf[OneRowRelationExec].copy()
   }
 
-  override def getStream: Option[SparkDataStream] = None
+  // override def getStream: Option[SparkDataStream] = None
 }
