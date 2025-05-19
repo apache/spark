@@ -35,13 +35,13 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * [[SubqueryExpressionResolver]] resolves specific [[SubqueryExpression]]s, such as
  * [[ScalarSubquery]], [[ListQuery]], and [[Exists]].
  */
-class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolver: Resolver) {
+class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolver: Resolver)
+    extends CoercesExpressionTypes {
   private val scopes = resolver.getNameScopes
   private val traversals = expressionResolver.getExpressionTreeTraversals
   private val cteRegistry = resolver.getCteRegistry
   private val subqueryRegistry = resolver.getSubqueryRegistry
   private val expressionIdAssigner = expressionResolver.getExpressionIdAssigner
-  private val typeCoercionResolver = expressionResolver.getGenericTypeCoercionResolver
 
   /**
    * Resolve [[ScalarSubquery]]:
@@ -66,8 +66,10 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
       outerAttrs = resolvedSubqueryExpressionPlan.outerExpressions
     )
 
-    val coercedScalarSubquery =
-      typeCoercionResolver.resolve(resolvedScalarSubquery).asInstanceOf[ScalarSubquery]
+    val coercedScalarSubquery = coerceExpressionTypes(
+      expression = resolvedScalarSubquery,
+      expressionTreeTraversal = traversals.current
+    ).asInstanceOf[ScalarSubquery]
 
     validateSubqueryExpression(coercedScalarSubquery)
 
@@ -92,8 +94,10 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
     val resolvedInSubquery =
       unresolvedInSubquery.copy(values = resolvedValues, query = resolvedQuery)
 
-    val coercedInSubquery =
-      typeCoercionResolver.resolve(resolvedInSubquery).asInstanceOf[InSubquery]
+    val coercedInSubquery = coerceExpressionTypes(
+      expression = resolvedInSubquery,
+      expressionTreeTraversal = traversals.current
+    ).asInstanceOf[InSubquery]
 
     validateSubqueryExpression(coercedInSubquery.query)
 
@@ -128,7 +132,10 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
       outerAttrs = resolvedSubqueryExpressionPlan.outerExpressions
     )
 
-    val coercedExists = typeCoercionResolver.resolve(resolvedExists).asInstanceOf[Exists]
+    val coercedExists = coerceExpressionTypes(
+      expression = resolvedExists,
+      expressionTreeTraversal = traversals.current
+    ).asInstanceOf[Exists]
 
     validateSubqueryExpression(coercedExists)
 

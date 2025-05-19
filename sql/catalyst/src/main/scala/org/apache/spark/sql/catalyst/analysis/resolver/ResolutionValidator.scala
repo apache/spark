@@ -22,14 +22,12 @@ import java.util.HashSet
 import org.apache.spark.sql.catalyst.analysis.{
   GetViewColumnByNameAndOrdinal,
   MultiInstanceRelation,
-  ResolvedInlineTable,
-  SchemaBinding
+  ResolvedInlineTable
 }
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StructType}
+import org.apache.spark.sql.types.BooleanType
 
 /**
  * The [[ResolutionValidator]] performs the validation work after the logical plan tree is
@@ -108,6 +106,8 @@ class ResolutionValidator {
       // [[MultiInstanceRelation]] instead.
       case multiInstanceRelation: MultiInstanceRelation =>
         validateRelation(multiInstanceRelation)
+      case supervisingCommand: SupervisingCommand =>
+        validateSupervisingCommand(supervisingCommand)
     }
 
     operator match {
@@ -182,13 +182,6 @@ class ResolutionValidator {
   private def validateView(view: View): Unit = {
     validate(view.child)
 
-    if (view.desc.viewSchemaMode == SchemaBinding) {
-      assert(
-        schemaWithExplicitMetadata(view.schema) == schemaWithExplicitMetadata(view.desc.schema),
-        "View output schema does not match the view description schema. " +
-        s"View schema: ${view.schema}, description schema: ${view.desc.schema}"
-      )
-    }
     view.child match {
       case project: Project =>
         assert(
@@ -289,6 +282,8 @@ class ResolutionValidator {
     handleOperatorOutput(join)
   }
 
+  private def validateSupervisingCommand(supervisingCommand: SupervisingCommand): Unit = {}
+
   private def handleOperatorOutput(operator: LogicalPlan): Unit = {
     attributeScopeStack.overwriteCurrent(operator.output)
 
@@ -299,16 +294,6 @@ class ResolutionValidator {
         s"${attribute.getClass.getSimpleName}"
       )
       expressionResolutionValidator.validate(attribute)
-    })
-  }
-
-  private def schemaWithExplicitMetadata(schema: StructType): StructType = {
-    StructType(schema.map { structField =>
-      val metadataBuilder = new MetadataBuilder().withMetadata(structField.metadata)
-      metadataBuilder.remove(AUTO_GENERATED_ALIAS)
-      structField.copy(
-        metadata = metadataBuilder.build()
-      )
     })
   }
 

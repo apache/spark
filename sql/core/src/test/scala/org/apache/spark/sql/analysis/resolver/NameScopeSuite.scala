@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.analysis.resolver
 
+import java.util.HashSet
+
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.UnresolvedStar
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedStar}
 import org.apache.spark.sql.catalyst.analysis.resolver.{NameScope, NameScopeStack, NameTarget}
 import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
   AttributeReference,
+  ExprId,
   GetArrayItem,
   GetArrayStructFields,
   GetMapValue,
@@ -723,6 +726,37 @@ class NameScopeSuite extends PlanTest {
 
     assert(output == Seq(col2Integer))
     assert(stack.current.output == Seq(col1Integer))
+  }
+
+  test(
+    "Name resolution should prefer table columns over aliases with same name when " +
+    "shouldPreferTableColumnsOverAliases is set or throw AMBIGUOUS_REFERENCE otherwise"
+  ) {
+    val stack = new NameScopeStack
+    val output = Seq(col1Integer, col1IntegerOther)
+    val availableAliases = new HashSet[ExprId](1)
+    availableAliases.add(col1IntegerOther.exprId)
+
+    stack.overwriteCurrent(output = Some(output), availableAliases = Some(availableAliases))
+
+    assert(
+      stack.resolveMultipartName(
+        multipartName = Seq("col1"),
+        shouldPreferTableColumnsOverAliases = true
+      ) == NameTarget(
+        candidates = Seq(col1Integer),
+        output = output
+      )
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        val nameTarget = stack.resolveMultipartName(multipartName = Seq("col1"))
+        nameTarget.pickCandidate(UnresolvedAttribute(nameParts = Seq("col1")))
+      },
+      condition = "AMBIGUOUS_REFERENCE",
+      parameters = Map("name" -> "`col1`", "referenceNames" -> "[`col1`, `col1`]")
+    )
   }
 
   /**
