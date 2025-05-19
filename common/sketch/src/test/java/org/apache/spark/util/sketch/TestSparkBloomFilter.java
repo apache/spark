@@ -54,7 +54,10 @@ public class TestSparkBloomFilter {
     public void beforeEach(TestInfo testInfo) {
         start = Instant.now();
         System.err.println("---");
-        System.err.println(testInfo.getTestMethod().get().getName() + " " + testInfo.getDisplayName());
+        System.err.println(
+            testInfo.getTestMethod().get().getName()
+            + " "
+            + testInfo.getDisplayName());
     }
 
     @AfterEach
