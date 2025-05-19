@@ -270,7 +270,13 @@ private[spark] class DAGScheduler(
   private val messageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
 
-  private[spark] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
+  private[spark] var eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
+  // Used for test only. Some tests uses the same thread of the event poster to
+  // process the events to ensure the deterministic behavior during the test.
+  private[spark] def setEventProcessLoop(loop: DAGSchedulerEventProcessLoop): Unit = {
+    eventProcessLoop = loop
+  }
+
   taskScheduler.setDAGScheduler(this)
 
   private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(sc.getConf, isDriver = true)

@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 
 import scala.annotation.meta.param
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 
@@ -53,12 +53,30 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, Clock
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
 
+  dagScheduler.setEventProcessLoop(this)
+
+  private var isProcessing = false
+  private val eventQueue = new ListBuffer[DAGSchedulerEvent]()
+
+
   override def post(event: DAGSchedulerEvent): Unit = {
-    try {
-      // Forward event to `onReceive` directly to avoid processing event asynchronously.
-      onReceive(event)
-    } catch {
-      case NonFatal(e) => onError(e)
+    if (isProcessing) {
+      // `DAGSchedulerEventProcessLoop` is guaranteed to process events sequentially. So we should
+      // buffer events for sequent processing later instead of processing them recursively.
+      eventQueue += event
+    } else {
+      try {
+        isProcessing = true
+        // Forward event to `onReceive` directly to avoid processing event asynchronously.
+        onReceive(event)
+      } catch {
+        case NonFatal(e) => onError(e)
+      } finally {
+        isProcessing = false
+      }
+      if (eventQueue.nonEmpty) {
+        post(eventQueue.remove(0))
+      }
     }
   }
 
