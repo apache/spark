@@ -199,7 +199,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     verifyObjectId(refId)
     val removedModel = cachedModel.remove(refId)
     val removedFromMem = removedModel != null
-    val removedFromDisk = if (getMemoryControlEnabled) {
+    val removedFromDisk = if (removedModel != null && getMemoryControlEnabled) {
       totalMLCacheSizeBytes.addAndGet(-removedModel.sizeBytes)
       val removePath = offloadedModelsDir.resolve(refId)
       require(removePath.startsWith(offloadedModelsDir))
