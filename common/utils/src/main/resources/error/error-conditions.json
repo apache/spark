@@ -4660,9 +4660,9 @@
     ],
     "sqlState" : "42836"
   },
-  "RECURSIVE_CTE_WHEN_INLINING_IS_FORCED" : {
+  "RECURSIVE_CTE_WITH_LEGACY_INLINE_FLAG" : {
     "message" : [
-      "Recursive definitions cannot be used when CTE inlining is forced."
+      "Recursive definitions cannot be used when legacy inline flag is set to true (spark.sql.legacy.inlineCTEInCommands=true)."
     ],
     "sqlState" : "42836"
   },
