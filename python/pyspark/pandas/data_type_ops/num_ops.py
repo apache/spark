@@ -248,13 +248,16 @@ class IntegralOps(NumericOps):
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("True division can not be applied to given types.")
 
+        right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
+
         def truediv(left: PySparkColumn, right: Any) -> PySparkColumn:
             return F.when(
-                F.lit(right != 0) | F.lit(right).isNull(),
-                left.__div__(right),
-            ).otherwise(F.lit(np.inf).__div__(left))
+                right_col == 0,
+                F.when(left_col < 0, F.lit(float("-inf")))
+                .when(left_col > 0, F.lit(float("inf")))
+                .otherwise(F.lit(np.nan)),
+            ).otherwise(left_col / right_col)
 
-        right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         return numpy_column_op(truediv)(left, right)
 
     def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -333,14 +336,14 @@ class FractionalOps(NumericOps):
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("True division can not be applied to given types.")
 
-        def truediv(left: PySparkColumn, right: Any) -> PySparkColumn:
+        def truediv(left_col: PySparkColumn, right_val: Any) -> PySparkColumn:
             return F.when(
-                F.lit(right != 0) | F.lit(right).isNull(),
-                left.__div__(right),
+                F.lit(right_val != 0) | F.lit(right_val).isNull(),
+                left_col / right_val,
             ).otherwise(
-                F.when(F.lit(left == np.inf) | F.lit(left == -np.inf), left).otherwise(
-                    F.lit(np.inf).__div__(left)
-                )
+                F.when(
+                    (left_col == float("inf")) | (left_col == float("-inf")), left_col
+                ).otherwise(float("inf") / left_col)
             )
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
