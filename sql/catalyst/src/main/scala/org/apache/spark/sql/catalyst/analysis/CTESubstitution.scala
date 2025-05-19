@@ -75,7 +75,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       if (conf.getConf(SQLConf.LEGACY_INLINE_CTE_IN_COMMANDS)) {
         // The legacy behavior always inlines the CTE relations for queries in commands.
         if (hasRecursiveCTE) {
-          plan.failAnalysis(errorClass =  "RECURSIVE_CTE_WITH_LEGACY_INLINE_FLAG",
+          plan.failAnalysis(errorClass = "RECURSIVE_CTE_WITH_LEGACY_INLINE_FLAG",
             messageParameters = Map.empty)
         }
         true
