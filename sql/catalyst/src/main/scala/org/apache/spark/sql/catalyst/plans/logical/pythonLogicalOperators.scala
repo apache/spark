@@ -204,8 +204,7 @@ case class TransformWithStateInPySpark(
   override def producedAttributes: AttributeSet = AttributeSet(outputAttrs)
 
   override lazy val references: AttributeSet =
-    AttributeSet(leftAttributes ++ rightAttributes(true) ++ functionExpr.references) --
-      producedAttributes
+    AttributeSet(leftAttributes ++ rightReferences ++ functionExpr.references) -- producedAttributes
 
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): TransformWithStateInPySpark =
@@ -216,15 +215,21 @@ case class TransformWithStateInPySpark(
     left.output.take(groupingAttributesLen)
   }
 
-  def rightAttributes(includesInitialStateColumns: Boolean = false): Seq[Attribute] = {
+  def rightAttributes: Seq[Attribute] = {
     assert(resolved, "This method is expected to be called after resolution.")
     if (hasInitialState) {
-      if (includesInitialStateColumns) {
-        // Include the initial state columns in the references to avoid being column pruned.
-        right.output
-      } else {
-        right.output.take(initGroupingAttrsLen)
-      }
+      right.output.take(initGroupingAttrsLen)
+    } else {
+      // Dummy variables for passing the distribution & ordering check
+      // in physical operators.
+      left.output.take(groupingAttributesLen)
+    }
+  }
+
+  def rightReferences: Seq[Attribute] = {
+    assert(resolved, "This method is expected to be called after resolution.")
+    if (hasInitialState) {
+      right.output
     } else {
       // Dummy variables for passing the distribution & ordering check
       // in physical operators.
