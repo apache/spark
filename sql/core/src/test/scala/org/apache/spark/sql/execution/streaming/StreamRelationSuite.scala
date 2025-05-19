@@ -17,15 +17,109 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.net.URI
+
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.AnalysisTest
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, FunctionRegistry, TableFunctionRegistry, TestRelations, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.{Project, SubqueryAlias}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
+
+  override protected def getAnalyzer: Analyzer = {
+    val catalog = new SessionCatalog(
+      new InMemoryCatalog, FunctionRegistry.builtin, TableFunctionRegistry.builtin)
+    catalog.createDatabase(
+      CatalogDatabase("default", "", new URI("loc"), Map.empty),
+      ignoreIfExists = false)
+    createTempView(catalog, "table", TestRelations.testRelation, overrideIfExists = true)
+    createTempView(catalog, "table2", TestRelations.testRelation2, overrideIfExists = true)
+    createTempView(catalog, "streamingTable", TestRelations.streamingRelation,
+      overrideIfExists = true)
+    createTempView(catalog, "streamingTable2", TestRelations.streamingRelation,
+      overrideIfExists = true)
+    new Analyzer(catalog) {
+      override val extendedResolutionRules = extendedAnalysisRules
+    }
+  }
+
+  test("Queries with valid STREAM table joins are successfully analyzed") {
+    Seq(
+      "SELECT * FROM STREAM streamingTable JOIN STREAM streamingTable2",
+      "SELECT * FROM table JOIN STREAM streamingTable2",
+      "SELECT * FROM STREAM streamingTable JOIN table",
+      "SELECT * FROM STREAM streamingTable JOIN ( SELECT * FROM table )",
+      "SELECT * FROM STREAM streamingTable JOIN LATERAL ( SELECT * FROM table )",
+      """SELECT * FROM STREAM streamingTable, LATERAL
+        |(SELECT a FROM table WHERE streamingTable.a < table.a)""".stripMargin
+    ).foreach { query =>
+      val plan = parsePlan(query)
+      assert(plan.isStreaming)
+      assertAnalysisSuccess(plan)
+    }
+  }
+
+  test("Analysis Exception: non-streaming Relation within STREAM keyword") {
+    // Entity within STREAM keyword must be a streaming relation
+    // "table" here is a temp view with a batch relation, so it should throw.
+    assertAnalysisError(
+      inputPlan = parsePlan("SELECT * FROM STREAM table"),
+      expectedErrors = Seq("is not a temp view of streaming logical plan")
+    )
+  }
+
+  test("Analysis Exception: UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION") {
+    assertAnalysisErrorCondition(
+      inputPlan = parsePlan("SELECT * FROM STREAM RANGE(1, 100)"),
+      expectedErrorCondition = "UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION",
+      expectedMessageParameters = Map("funcName" -> "`RANGE`"),
+      queryContext = Array(ExpectedContext("RANGE(1, 100)", 21, 33))
+    )
+  }
+
+  test("Analysis Exception: could not resolve `<funcName>` to a table-valued function") {
+    assertAnalysisErrorCondition(
+      inputPlan = parsePlan("SELECT * FROM STREAM some_func('arg')"),
+      expectedErrorCondition = "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
+      expectedMessageParameters = Map("name" -> "`some_func`"),
+      queryContext = Array(ExpectedContext("some_func('arg')", 21, 36))
+    )
+    assertAnalysisErrorCondition(
+      inputPlan = parsePlan("SELECT * FROM STREAM(some_func('arg'))"),
+      expectedErrorCondition = "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
+      expectedMessageParameters = Map("name" -> "`some_func`"),
+      queryContext = Array(ExpectedContext("some_func('arg')", 21, 36))
+    )
+  }
+
+  test("STREAM options are parsed correctly for streaming by identifier") {
+    val plan = parsePlan("SELECT * FROM STREAM table1 AS t WITH ('key'='value')")
+    comparePlans(
+      plan,
+      Project(
+        projectList = Seq(UnresolvedStar(None)),
+        child = SubqueryAlias(
+          identifier = AliasIdentifier(
+            name = "t",
+            qualifier = Seq.empty
+          ),
+          child = UnresolvedRelation(
+            multipartIdentifier = Seq("table1"),
+            isStreaming = true,
+            options = new CaseInsensitiveStringMap(Map("key" -> "value").asJava)
+          )
+        )
+      )
+    )
+  }
 
   test("STREAM with options is correctly propagated to datasource in V1") {
     sql("CREATE TABLE t (id INT) USING PARQUET")
