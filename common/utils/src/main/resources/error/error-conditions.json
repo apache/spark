@@ -3530,6 +3530,11 @@
           "CREATE TEMPORARY FUNCTION with IF NOT EXISTS is not allowed."
         ]
       },
+      "CREATE_TEMP_TABLE_USING_PROVIDER" : {
+        "message" : [
+          "CREATE TEMPORARY TABLE ... USING ... is a deprecated syntax. To overcome the issue, please use CREATE TEMPORARY VIEW instead."
+        ]
+      },
       "EMPTY_PARTITION_VALUE" : {
         "message" : [
           "Partition key <partKey> must set value."

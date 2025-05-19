@@ -135,7 +135,8 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("{1:2}", null)
     check("{\"a\":1", null)
     check("{\"a\":[a,b,c]}", null)
-    check("\"" + "a" * (16 * 1024 * 1024) + "\"", null)
+    check("\"" + "a" * (16 * 1024 * 1024) + "\"")
+    check("\"" + "a" * (128 * 1024 * 1024) + "\"", null)
   }
 
   test("to_json with nested variant") {
