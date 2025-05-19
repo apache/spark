@@ -95,7 +95,7 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
-    <module>sql/pipelines/core</module>
+    <module>sql/pipelines</module>
     <module>sql/connect/server</module>
     <module>sql/connect/common</module>
     <module>sql/connect/client/jvm</module>
@@ -874,7 +874,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.6-10</version>
+        <version>1.5.7-3</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>

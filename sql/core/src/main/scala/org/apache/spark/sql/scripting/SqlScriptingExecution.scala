@@ -18,10 +18,13 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.SqlScriptingLocalVariableManager
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
+import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
+import org.apache.spark.sql.types.StructType
 
 /**
  * SQL scripting executor - executes script and returns result statements.
@@ -175,6 +178,53 @@ class SqlScriptingExecution(
         handleException(sparkThrowable)
       case throwable: Throwable =>
         throw throwable
+    }
+  }
+}
+
+object SqlScriptingExecution {
+
+  /**
+   * Executes given script and return the result of the last statement.
+   * If script contains no queries, an empty `DataFrame` is returned.
+   *
+   * @param script A SQL script to execute.
+   * @param args   A map of parameter names to SQL literal expressions.
+   * @return The result as a `DataFrame`.
+   */
+  def executeSqlScript(
+      session: SparkSession,
+      script: CompoundBody,
+      args: Map[String, Expression] = Map.empty): LogicalPlan = {
+    val sse = new SqlScriptingExecution(script, session, args)
+    sse.withLocalVariableManager {
+      var result: Option[Seq[Row]] = None
+
+      // We must execute returned df before calling sse.getNextResult again because sse.hasNext
+      // advances the script execution and executes all statements until the next result. We must
+      // collect results immediately to maintain execution order.
+      // This ensures we respect the contract of SqlScriptingExecution API.
+      var df: Option[DataFrame] = sse.getNextResult
+      var resultSchema: Option[StructType] = None
+      while (df.isDefined) {
+        sse.withErrorHandling {
+          // Collect results from the current DataFrame.
+          result = Some(df.get.collect().toSeq)
+          resultSchema = Some(df.get.schema)
+        }
+        df = sse.getNextResult
+      }
+
+      if (result.isEmpty) {
+        // Return empty LocalRelation.
+        LocalRelation.fromExternalRows(Seq.empty, Seq.empty)
+      } else {
+        // If `result` is defined, then `resultSchema` must be defined as well.
+        assert(resultSchema.isDefined)
+
+        val attributes = DataTypeUtils.toAttributes(resultSchema.get)
+        LocalRelation.fromExternalRows(attributes, result.get)
+      }
     }
   }
 }

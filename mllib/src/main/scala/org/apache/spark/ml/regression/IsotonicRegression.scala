@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.regression
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -290,6 +292,21 @@ object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
     predictions: Array[Double],
     isotonic: Boolean)
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeDoubleArray(data.boundaries, dos)
+    serializeDoubleArray(data.predictions, dos)
+    dos.writeBoolean(data.isotonic)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val boundaries = deserializeDoubleArray(dis)
+    val predictions = deserializeDoubleArray(dis)
+    val isotonic = dis.readBoolean()
+    Data(boundaries, predictions, isotonic)
+  }
+
   @Since("1.6.0")
   override def read: MLReader[IsotonicRegressionModel] = new IsotonicRegressionModelReader
 
@@ -308,7 +325,7 @@ object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
       val data = Data(
         instance.oldModel.boundaries, instance.oldModel.predictions, instance.oldModel.isotonic)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -321,7 +338,7 @@ object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
       val model = new IsotonicRegressionModel(
         metadata.uid,
         new MLlibIsotonicRegressionModel(data.boundaries, data.predictions, data.isotonic)

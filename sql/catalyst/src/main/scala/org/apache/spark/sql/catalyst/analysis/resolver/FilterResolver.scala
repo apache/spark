@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.BooleanType
 class FilterResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[Filter, LogicalPlan]
     with ResolvesNameByHiddenOutput {
-  override protected val scopes: NameScopeStack = resolver.getNameScopes
+  private val scopes: NameScopeStack = resolver.getNameScopes
 
   /**
    * Resolve [[Filter]] by resolving its child and its condition. If an attribute that is used in
@@ -60,7 +60,12 @@ class FilterResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
       insertMissingExpressions(resolvedChild, missingAttributes)
     val finalFilter = resolvedFilter.copy(child = resolvedChildWithMissingAttributes)
 
-    retainOriginalOutput(finalFilter, missingAttributes)
+    retainOriginalOutput(
+      operator = finalFilter,
+      missingExpressions = missingAttributes,
+      output = scopes.current.output,
+      hiddenOutput = scopes.current.hiddenOutput
+    )
   }
 
   private def checkValidFilter(unresolvedFilter: Filter, resolvedFilter: Filter): Unit = {

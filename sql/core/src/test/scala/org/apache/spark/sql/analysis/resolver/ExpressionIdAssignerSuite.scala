@@ -78,7 +78,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
         }
 
         intercept[SparkException] {
-          assigner.createMappingFromChildMappings()
+          assigner.createMappingFromChildMappings(newOutputIds = Set.empty[ExprId])
         }
       }
 
@@ -89,7 +89,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       }
 
       intercept[SparkException] {
-        assigner.createMappingFromChildMappings()
+        assigner.createMappingFromChildMappings(newOutputIds = Set.empty[ExprId])
       }
     }
   }
@@ -130,7 +130,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
     }
 
     intercept[SparkException] {
-      assigner.createMappingFromChildMappings()
+      assigner.createMappingFromChildMappings(newOutputIds = Set.empty[ExprId])
     }
   }
 
@@ -156,6 +156,10 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       intercept[SparkException] {
         assigner.mapExpression(col2Integer)
       }
+      // Adds the expression instead of throwing an error.
+      val mappedMissingColumn =
+        assigner.mapExpression(col2Integer, addDanglingAttributeReference = true)
+      assert(mappedMissingColumn.exprId != col2Integer.exprId)
     }
   }
 
@@ -216,6 +220,11 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
 
       val col1IntegerAliasMapped = assigner.mapExpression(col1IntegerAlias)
       assert(col1IntegerAliasMapped.exprId == col1IntegerAlias.exprId)
+      // Assign new alias ID.
+      val newAlias = Alias(col1Integer, "abc")()
+      val col1IntegerAliasMappedWithNewId =
+        assigner.mapExpression(newAlias, alwaysUpdateAlias = true)
+      assert(col1IntegerAliasMappedWithNewId.exprId != newAlias.exprId)
 
       val col1IntegerAliasReferenced = assigner.mapExpression(col1IntegerAlias.toAttribute)
       assert(col1IntegerAliasReferenced.exprId == col1IntegerAliasMapped.exprId)
@@ -251,6 +260,67 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       val col1IntegerAliasMappedAgain = assigner.mapExpression(col1IntegerAlias)
       assert(col1IntegerAliasMappedAgain.exprId != col1IntegerAlias.exprId)
       assert(col1IntegerAliasMappedAgain.exprId != col1IntegerAliasMapped.exprId)
+    }
+  }
+
+  test("Duplicate Alias") {
+    val assigner = new ExpressionIdAssigner
+
+    assigner.withNewMapping() {
+      val oldOperator = LocalRelation(output = Seq(col1Integer))
+
+      assert(assigner.shouldPreserveLeafOperatorIds(oldOperator))
+      assigner.createMappingForLeafOperator(
+        newOperator = oldOperator
+      )
+
+      val col1IntegerAliasMapped = assigner.mapExpression(col1IntegerAlias)
+      assert(col1IntegerAliasMapped.exprId == col1IntegerAlias.exprId)
+
+      val col1IntegerAliasMapped2 = assigner.mapExpression(col1IntegerAlias)
+      assert(col1IntegerAliasMapped2.exprId != col1IntegerAlias.exprId)
+      assert(col1IntegerAliasMapped2.exprId != col1IntegerAliasMapped.exprId)
+
+      val col1IntegerAliasAttributeMapped = assigner.mapExpression(col1IntegerAlias.toAttribute)
+      assert(col1IntegerAliasAttributeMapped.exprId != col1IntegerAlias.exprId)
+      assert(col1IntegerAliasAttributeMapped.exprId != col1IntegerAliasMapped.exprId)
+      assert(col1IntegerAliasAttributeMapped.exprId == col1IntegerAliasMapped2.exprId)
+
+      val col1IntegerAliasAttributeMapped2 =
+        assigner.mapExpression(col1IntegerAliasMapped2.toAttribute)
+      assert(col1IntegerAliasAttributeMapped2.exprId != col1IntegerAlias.exprId)
+      assert(col1IntegerAliasAttributeMapped2.exprId != col1IntegerAliasMapped.exprId)
+      assert(col1IntegerAliasAttributeMapped2.exprId == col1IntegerAliasMapped2.exprId)
+    }
+  }
+
+  test("Duplicate Alias deprioritized") {
+    val assigner = new ExpressionIdAssigner
+
+    assigner.withNewMapping() {
+      val oldOperator = LocalRelation(output = Seq(col1Integer))
+
+      assert(assigner.shouldPreserveLeafOperatorIds(oldOperator))
+      assigner.createMappingForLeafOperator(
+        newOperator = oldOperator
+      )
+
+      val col1IntegerAliasMapped = assigner.mapExpression(col1IntegerAlias)
+      assert(col1IntegerAliasMapped.exprId == col1IntegerAlias.exprId)
+
+      val col1IntegerAliasMapped2 =
+        assigner.mapExpression(col1IntegerAlias, prioritizeOldDuplicateAliasId = true)
+      assert(col1IntegerAliasMapped2.exprId != col1IntegerAlias.exprId)
+      assert(col1IntegerAliasMapped2.exprId != col1IntegerAliasMapped.exprId)
+
+      val col1IntegerAliasAttributeMapped = assigner.mapExpression(col1IntegerAlias.toAttribute)
+      assert(col1IntegerAliasAttributeMapped.exprId == col1IntegerAlias.exprId)
+      assert(col1IntegerAliasAttributeMapped.exprId == col1IntegerAliasMapped.exprId)
+      assert(col1IntegerAliasAttributeMapped.exprId != col1IntegerAliasMapped2.exprId)
+
+      intercept[SparkException] {
+        assigner.mapExpression(col1IntegerAliasMapped2.toAttribute)
+      }
     }
   }
 
@@ -385,7 +455,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       )
     }
 
-    assigner.createMappingFromChildMappings()
+    assigner.createMappingFromChildMappings(newOutputIds = Set.empty[ExprId])
 
     val col1IntegerMapped = assigner.mapExpression(col1Integer)
     assert(col1IntegerMapped.exprId == col1Integer.exprId)
@@ -425,6 +495,87 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
 
     val col5IntegerNewMapped = assigner.mapExpression(col5IntegerNew)
     assert(col5IntegerNewMapped.exprId == col5IntegerNew.exprId)
+  }
+
+  test("Outputted IDs take priority") {
+    val assigner = new ExpressionIdAssigner
+
+    val col1IntegerNew = col1Integer.newInstance()
+    val col2IntegerNew = col2Integer.newInstance()
+
+    assigner.withNewMapping(collectChildMapping = true) {
+      val oldOperator = LocalRelation(output = Seq(col1Integer, col2Integer))
+
+      assert(assigner.shouldPreserveLeafOperatorIds(oldOperator))
+      assigner.createMappingForLeafOperator(
+        newOperator = oldOperator
+      )
+    }
+
+    val (col1IntegerAliasMapped, col2IntegerAliasMapped) =
+      assigner.withNewMapping(collectChildMapping = true) {
+        val oldOperator = LocalRelation(output = Seq(col1Integer, col2Integer))
+
+        assert(!assigner.shouldPreserveLeafOperatorIds(oldOperator))
+        assigner.createMappingForLeafOperator(
+          newOperator = LocalRelation(output = Seq(col1IntegerNew, col2IntegerNew)),
+          oldOperator = Some(oldOperator)
+        )
+
+        (assigner.mapExpression(col1IntegerAlias), assigner.mapExpression(col2IntegerAlias))
+      }
+
+    assigner.createMappingFromChildMappings(
+      newOutputIds = Set(
+        col1Integer.exprId,
+        col2Integer.exprId,
+        col1IntegerAliasMapped.exprId,
+        col2IntegerAliasMapped.exprId
+      )
+    )
+
+    val col1IntegerMapped = assigner.mapExpression(col1Integer)
+    assert(col1IntegerMapped.exprId == col1Integer.exprId)
+
+    val col2IntegerMapped = assigner.mapExpression(col2Integer)
+    assert(col2IntegerMapped.exprId == col2Integer.exprId)
+
+    val col1IntegerAliasMapped2 = assigner.mapExpression(col1IntegerAlias.toAttribute)
+    assert(col1IntegerAliasMapped2.exprId == col1IntegerAliasMapped.exprId)
+
+    val col2IntegerAliasMapped2 = assigner.mapExpression(col2IntegerAlias.toAttribute)
+    assert(col2IntegerAliasMapped2.exprId == col2IntegerAliasMapped.exprId)
+  }
+
+  test("Update existing mapping") {
+    // The usage pattern in the test corresponds to how we would apply Assigner for LateralJoins.
+    val assigner = new ExpressionIdAssigner
+    assigner.withNewMapping(collectChildMapping = true) {
+      val oldOperator = LocalRelation(output = Seq(col1Integer, col2Integer))
+      assigner.createMappingForLeafOperator(
+        newOperator = oldOperator
+      )
+    }
+    assigner.createMappingFromChildMappings(newOutputIds = Set.empty[ExprId])
+
+    assigner.withNewMapping(collectChildMapping = true) {
+      val oldOperator = LocalRelation(output = Seq(col3Integer, col4Integer))
+      assigner.createMappingForLeafOperator(
+        newOperator = oldOperator
+      )
+    }
+    assigner.createMappingFromChildMappings(
+      newOutputIds = Set.empty[ExprId],
+      mergeIntoExisting = true
+    )
+    val col1IntegerMapped = assigner.mapExpression(col1Integer)
+    assert(col1IntegerMapped.exprId == col1Integer.exprId)
+    val col2IntegerMapped = assigner.mapExpression(col2Integer)
+    assert(col2IntegerMapped.exprId == col2Integer.exprId)
+    val col3IntegerMapped = assigner.mapExpression(col3Integer)
+    assert(col3IntegerMapped.exprId == col3Integer.exprId)
+    val col4IntegerMapped = assigner.mapExpression(col4Integer)
+    assert(col4IntegerMapped.exprId == col4Integer.exprId)
   }
 
   test("Several layers") {
@@ -484,7 +635,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
           assert(attribute1.exprId != attribute2.exprId)
       }
 
-      assigner.createMappingFromChildMappings()
+      assigner.createMappingFromChildMappings(newOutputIds = Set.empty[ExprId])
 
       val literalAlias1Remapped = assigner.mapExpression(literalAlias1)
       assert(literalAlias1Remapped.exprId == literalAlias1.exprId)
@@ -512,7 +663,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
         assert(aliasReference1.exprId != aliasReference2.exprId)
     }
 
-    assigner.createMappingFromChildMappings()
+    assigner.createMappingFromChildMappings(newOutputIds = Set.empty[ExprId])
 
     val aliasReferences = output1.map { aliasReference =>
       assigner.mapExpression(aliasReference)
@@ -631,6 +782,21 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       val col2IntegerRemapped = assigner.mapOuterReference(col2Integer)
       assert(col2IntegerRemapped.exprId == col2IntegerNew.exprId)
     }
+  }
+
+  test("Outer reference: ignore absent") {
+    val assigner = new ExpressionIdAssigner
+    val oldOperator = LocalRelation(output = Seq(col1Integer))
+
+    val col1IntegerNew = col1Integer.newInstance()
+    assert(col1IntegerNew.exprId != col1Integer.exprId)
+
+    assigner.createMappingForLeafOperator(
+      newOperator = LocalRelation(output = Seq(col1IntegerNew)),
+      oldOperator = Some(oldOperator)
+    )
+    val outerRefResult = assigner.mapOuterReference(col2Integer, ignoreAbsent = true)
+    assert(outerRefResult.exprId == col2Integer.exprId)
   }
 
   test("First CTE reference preserves its IDs") {
@@ -1044,7 +1210,10 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
     withTable("t1") {
       spark.sql("CREATE TABLE t1 (col1 INT, col2 INT, col3 INT)")
 
-      val result = withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      val result = withSQLConf(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true",
+        SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "false"
+      ) {
         val df1 = spark.sql("SELECT col1, 1 AS a, col2, 2 AS b, col3, 3 AS c FROM t1")
         val df2 = df1
           .join(df1, df1("col1") === 0)
@@ -1057,6 +1226,27 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
           .select(df3("col1"), df3("a"), df3("col2"), df3("b"), df3("col3"), df3("c"))
       }
       checkExpressionIdAssignment(result.queryExecution.analyzed)
+    }
+  }
+
+  test("DataFrame self-join") {
+    withTable("t1") {
+      spark.sql("CREATE TABLE t1 (col1 INT, col2 INT)")
+      spark.sql("INSERT INTO t1 VALUES (0, 1), (2, 3)")
+
+      var result = withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+        val df1 = spark.table("t1")
+        val df2 = df1.select(col("col1").as("col3"))
+        df1.join(df2, df1("col1") === df2("col3"))
+      }
+      checkAnswer(result, Array(Row(0, 1, 0), Row(2, 3, 2)))
+
+      result = withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+        val df1 = spark.table("t1")
+        val df2 = df1.select(col("col1").as("col3"))
+        df2.join(df1, df2("col3") === df1("col1"))
+      }
+      checkAnswer(result, Array(Row(0, 0, 1), Row(2, 2, 3)))
     }
   }
 

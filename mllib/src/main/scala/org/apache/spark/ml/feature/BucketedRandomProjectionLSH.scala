@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import scala.util.Random
 
 import org.apache.hadoop.fs.Path
@@ -215,6 +217,17 @@ object BucketedRandomProjectionLSHModel extends MLReadable[BucketedRandomProject
   // TODO: Save using the existing format of Array[Vector] once SPARK-12878 is resolved.
   private[ml] case class Data(randUnitVectors: Matrix)
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeMatrix(data.randUnitVectors, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val randUnitVectors = deserializeMatrix(dis)
+    Data(randUnitVectors)
+  }
+
   @Since("2.1.0")
   override def read: MLReader[BucketedRandomProjectionLSHModel] = {
     new BucketedRandomProjectionLSHModelReader
@@ -230,7 +243,7 @@ object BucketedRandomProjectionLSHModel extends MLReadable[BucketedRandomProject
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.randMatrix)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -244,7 +257,7 @@ object BucketedRandomProjectionLSHModel extends MLReadable[BucketedRandomProject
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
       val model = new BucketedRandomProjectionLSHModel(metadata.uid, data.randUnitVectors)
 
       metadata.getAndSetParams(model)
