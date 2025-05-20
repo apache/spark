@@ -3876,6 +3876,24 @@
     },
     "sqlState" : "42000"
   },
+  "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
+    "message" : [
+      "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>."
+    ],
+    "subClass" : {
+      "DURING_OUTPUT_SCHEMA_RESOLUTION" : {
+        "message" : [
+          "The error occurred during output schema resolution."
+        ]
+      },
+      "DURING_QUERY_EXECUTION" : {
+        "message" : [
+          "The error occurred during query execution."
+        ]
+      }
+    },
+    "sqlState" : "42000"
+  },
   "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE" : {
     "message" : [
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."

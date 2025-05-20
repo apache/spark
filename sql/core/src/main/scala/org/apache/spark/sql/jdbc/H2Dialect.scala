@@ -61,6 +61,11 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
     Set(42102, 42103, 42104, 90079).contains(e.getErrorCode)
   }
 
+  // See https://www.h2database.com/javadoc/org/h2/api/ErrorCode.html
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    Option(exception.getSQLState).exists(_.startsWith("42"))
+  }
+
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     sqlType match {

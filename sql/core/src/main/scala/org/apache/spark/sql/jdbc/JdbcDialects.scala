@@ -579,6 +579,19 @@ abstract class JdbcDialect extends Serializable with Logging {
   def isCascadingTruncateTable(): Option[Boolean] = None
 
   /**
+   * Attempts to determine if the given SQLException is a SQL syntax error.
+   *
+   * This check is best-effort: it may not detect all syntax errors across all JDBC dialects.
+   * However, if this method returns true, the exception is guaranteed to be a syntax error.
+   *
+   * This is used to decide whether to wrap the exception in a more appropriate Spark exception.
+   *
+   * @return true if the exception is confidently identified as a syntax error; false otherwise.
+   */
+  @Since("4.1.0")
+  def isSyntaxErrorBestEffort(exception: java.sql.SQLException): Boolean = false
+
+  /**
    * Rename an existing table.
    *
    * @param oldTable The existing table.

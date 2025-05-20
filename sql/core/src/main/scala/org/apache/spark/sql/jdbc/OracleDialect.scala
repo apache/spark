@@ -173,6 +173,11 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
+  // See https://docs.oracle.com/cd/E11882_01/appdev.112/e10827/appd.htm#g642406
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    "42000".equals(exception.getSQLState)
+  }
+
   /**
    * The SQL query used to truncate a table.
    * @param table The table to truncate

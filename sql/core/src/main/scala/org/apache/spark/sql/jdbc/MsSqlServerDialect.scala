@@ -273,6 +273,18 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
     new MsSqlServerSQLQueryBuilder(this, options)
 
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    val exceptionMessage = Option(exception.getMessage)
+      .map(_.toLowerCase(Locale.ROOT))
+      .getOrElse("")
+    // scalastyle:off line.size.limit
+    // All errors are shown here, but there is no consistent error code to identify
+    // most syntax errors so we have to base off the exception message.
+    // https://learn.microsoft.com/en-us/sql/relational-databases/errors-events/database-engine-events-and-errors?view=sql-server-ver16
+    // scalastyle:on line.size.limit
+    exceptionMessage.contains("incorrect syntax") || exceptionMessage.contains("syntax error")
+  }
+
   override def supportsLimit: Boolean = true
 }
 
