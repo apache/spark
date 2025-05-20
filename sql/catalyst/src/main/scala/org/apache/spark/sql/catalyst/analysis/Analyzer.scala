@@ -419,10 +419,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveRowLevelCommandAssignments ::
       MoveParameterizedQueriesDown ::
       BindParameters ::
-      ResolveEncodersInUDF ::
-      RewriteDeleteFromTable ::
-      RewriteUpdateTable ::
-      RewriteMergeIntoTable ::
       new SubstituteExecuteImmediate(
         catalogManager,
         resolveChild = executeSameContext,
@@ -449,6 +445,22 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // operators may need null handling as well, so we should run these two rules repeatedly.
       HandleNullInputsForUDF,
       UpdateAttributeNullability),
+    Batch("UDF", Once,
+      ResolveEncodersInUDF),
+    // The rewrite rules might move resolved query plan into subquery. Once the resolved plan
+    // contains ScalaUDF, their encoders won't be resolved if `ResolveEncodersInUDF` is not
+    // applied before the rewrite rules. So we need to apply the rewrite rules after
+    // `ResolveEncodersInUDF`
+    Batch("DML rewrite", fixedPoint,
+      RewriteDeleteFromTable,
+      RewriteUpdateTable,
+      RewriteMergeIntoTable,
+      // Ensures columns of an output table are correctly resolved from the data in a logical plan.
+      ResolveOutputRelation,
+      // Apply table check constraints to validate data during write operations.
+      new ResolveTableConstraints(catalogManager),
+      // Resolve any new expressions introduced by the applied check constraints.
+      new ResolveReferences(catalogManager)),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
