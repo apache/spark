@@ -339,8 +339,9 @@ case class OneRowRelationExec() extends LeafExecNode
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val outputRow = InternalRow.empty
     val numOutputRows = longMetric("numOutputRows")
+    val proj = UnsafeProjection.create(schema)
+    val outputRow = proj(InternalRow.empty)
     rdd.mapPartitionsWithIndexInternal { (index, iter) =>
       iter.map { r =>
         numOutputRows += 1
