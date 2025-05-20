@@ -333,30 +333,30 @@ case class OneRowRelationExec() extends LeafExecNode
 
   override val output: Seq[Attribute] = Nil
 
-  private val emptyRow: InternalRow = InternalRow.empty
-
-  private val rdd = session.sparkContext.parallelize(Seq(emptyRow), 1)
+  private val rdd: RDD[UnsafeRow] = {
+    val proj = UnsafeProjection.create(schema)
+    val emptyRow = proj(InternalRow.empty)
+    session.sparkContext.parallelize(Seq(emptyRow), 1)
+  }
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    val proj = UnsafeProjection.create(schema)
-    val outputRow = proj(emptyRow)
-    rdd.mapPartitionsWithIndexInternal { (index, iter) =>
+    rdd.mapPartitionsWithIndexInternal { (_, iter) =>
       iter.map { r =>
         numOutputRows += 1
-        outputRow
+        r
       }
     }
   }
 
   override def simpleString(maxFields: Int): String = s"$nodeName[]"
 
-  override def inputRDD: RDD[InternalRow] = rdd
+  override def inputRDD: RDD[InternalRow] = rdd.asInstanceOf[RDD[InternalRow]]
 
-  override protected val createUnsafeProjection: Boolean = true
+  override protected val createUnsafeProjection: Boolean = false
 
   override protected def doCanonicalize(): SparkPlan = {
     super.doCanonicalize().asInstanceOf[OneRowRelationExec].copy()
