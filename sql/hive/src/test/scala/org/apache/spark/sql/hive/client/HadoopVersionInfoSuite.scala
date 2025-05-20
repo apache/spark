@@ -45,7 +45,7 @@ class HadoopVersionInfoSuite extends SparkFunSuite {
 
       // Download jars for Hive 2.0
       val client = IsolatedClientLoader.forVersion(
-        hiveMetastoreVersion = "2.0",
+        hiveMetastoreVersion = "4.1.0",
         // 3.0.x is chosen because that HADOOP-14067 got fixed in 3.1.0
         hadoopVersion = "3.0.3",
         sparkConf = new SparkConf(),
@@ -58,7 +58,7 @@ class HadoopVersionInfoSuite extends SparkFunSuite {
         .filter(!_.getName.startsWith("org.apache.hadoop_hadoop-"))
 
       val sparkConf = new SparkConf()
-      sparkConf.set(HiveUtils.HIVE_METASTORE_VERSION, "2.0")
+      sparkConf.set(HiveUtils.HIVE_METASTORE_VERSION, "4.1.0")
       sparkConf.set(
         HiveUtils.HIVE_METASTORE_JARS,
         jars.map(_.getCanonicalPath).mkString(File.pathSeparator))

@@ -59,6 +59,7 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
     val env = builder.environment()
     if (isSparkTesting) {
       env.put("SPARK_TESTING", "1")
+      // env.put("DEFAULT_ARTIFACT_REPOSITORY", "file:///local/home/vrozov/.m2/repository/")
     } else {
       env.remove("SPARK_TESTING")
       env.remove("SPARK_SQL_TESTING")
