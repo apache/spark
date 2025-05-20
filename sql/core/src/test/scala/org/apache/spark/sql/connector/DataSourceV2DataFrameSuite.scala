@@ -23,8 +23,8 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, Identifier, InMemoryTableCatalog}
-import org.apache.spark.sql.connector.catalog.TableChange.AddColumn
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, GeneralScalarExpression, LiteralValue, Transform}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
@@ -441,7 +441,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("alter table with complex foldable default values") {
+  test("alter table add column with complex foldable default values") {
     val tableName = "testcat.ns1.ns2.tbl"
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       withTable(tableName) {
@@ -481,6 +481,97 @@ class DataSourceV2DataFrameSuite
               new V2Cast(LiteralValue(1, IntegerType), IntegerType, BooleanType),
               LiteralValue(true, BooleanType))))
       }
+    }
+  }
+
+  test("alter table alter column with complex foldable default values") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable(tableName) {
+        sql(
+          s"""
+             |CREATE TABLE $tableName (
+             |  salary INT DEFAULT (100 + 23),
+             |  dep STRING DEFAULT ('h' || 'r'),
+             |  active BOOLEAN DEFAULT CAST(1 AS BOOLEAN)
+             |) USING foo
+             |""".stripMargin)
+
+        val alterExecCol1 = executeAndKeepPhysicalPlan[AlterTableExec] {
+          sql(s"ALTER TABLE $tableName ALTER COLUMN salary SET DEFAULT (123 + 56)")
+        }
+        checkDefaultValue(
+          alterExecCol1.changes.collect {
+            case u: UpdateColumnDefaultValue => u
+          }.head,
+          new DefaultValue(
+            "(123 + 56)",
+            new GeneralScalarExpression(
+              "+",
+              Array(LiteralValue(123, IntegerType), LiteralValue(56, IntegerType)))))
+
+        val alterExecCol2 = executeAndKeepPhysicalPlan[AlterTableExec] {
+          sql(s"ALTER TABLE $tableName ALTER COLUMN salary SET DEFAULT ('r' || 'l')")
+        }
+        checkDefaultValue(
+          alterExecCol2.changes.collect {
+            case u: UpdateColumnDefaultValue => u
+          }.head,
+          new DefaultValue(
+            "('r' || 'l')",
+            new GeneralScalarExpression(
+              "CONCAT",
+              Array(
+                LiteralValue(UTF8String.fromString("r"), StringType),
+                LiteralValue(UTF8String.fromString("l"), StringType)))))
+
+        val alterExecCol3 = executeAndKeepPhysicalPlan[AlterTableExec] {
+          sql(s"ALTER TABLE $tableName ALTER COLUMN salary SET DEFAULT CAST(0 AS BOOLEAN)")
+        }
+        checkDefaultValue(
+          alterExecCol3.changes.collect {
+            case u: UpdateColumnDefaultValue => u
+          }.head,
+          new DefaultValue(
+            "CAST(0 AS BOOLEAN)",
+            new V2Cast(LiteralValue(0, IntegerType), IntegerType, BooleanType)))
+      }
+    }
+  }
+
+  test("alter table alter column drop default") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (
+           |  salary INT DEFAULT (100 + 23)
+           |) USING foo
+           |""".stripMargin)
+
+      val alterExecCol = executeAndKeepPhysicalPlan[AlterTableExec] {
+        sql(s"ALTER TABLE $tableName ALTER COLUMN salary DROP DEFAULT")
+      }
+      checkDropDefaultValue(alterExecCol.changes.collect {
+          case u: UpdateColumnDefaultValue => u
+      }.head)
+    }
+  }
+
+  test("alter table alter column should not produce default value if unchanged") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (
+           |  salary INT DEFAULT (100 + 23)
+           |) USING foo
+           |""".stripMargin)
+
+      val alterExecCol = executeAndKeepPhysicalPlan[AlterTableExec] {
+        sql(s"ALTER TABLE $tableName ALTER COLUMN salary COMMENT 'new comment'")
+      }
+      assert(!alterExecCol.changes.exists(_.isInstanceOf[UpdateColumnDefaultValue]))
     }
   }
 
@@ -529,7 +620,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("alter table with current like default values") {
+  test("alter table add columns with current like default values") {
     val tableName = "testcat.ns1.ns2.tbl"
     withTable(tableName) {
       sql(
@@ -550,6 +641,38 @@ class DataSourceV2DataFrameSuite
             "current_catalog()",
             null, /* no V2 expression */
             LiteralValue(UTF8String.fromString("spark_catalog"), StringType))))
+
+      val df1 = Seq(1).toDF("dummy")
+      df1.writeTo(tableName).append()
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableName"),
+        Seq(Row(1, "spark_catalog")))
+    }
+  }
+
+  test("alter table alter column with current like default values") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (
+           |  dummy INT,
+           |  cat STRING
+           |) USING foo
+           |""".stripMargin)
+
+      val alterExec = executeAndKeepPhysicalPlan[AlterTableExec] {
+        sql(s"ALTER TABLE $tableName ALTER COLUMN cat SET DEFAULT current_catalog()")
+      }
+
+      checkDefaultValue(
+        alterExec.changes.collect {
+          case u: UpdateColumnDefaultValue => u
+        }.head,
+        new DefaultValue(
+          "current_catalog()",
+          null /* No V2 Expression */))
 
       val df1 = Seq(1).toDF("dummy")
       df1.writeTo(tableName).append()
@@ -593,5 +716,22 @@ class DataSourceV2DataFrameSuite
           s"Default value mismatch for column '${column.toString}': " +
           s"expected $expectedDefault but found ${column.defaultValue}")
     }
+  }
+
+  private def checkDefaultValue(
+      column: UpdateColumnDefaultValue,
+      expectedDefault: DefaultValue): Unit = {
+    assert(
+      column.newCurrentDefault() == expectedDefault,
+        s"Default value mismatch for column '${column.toString}': " +
+        s"expected $expectedDefault but found ${column.newCurrentDefault()}")
+  }
+
+  private def checkDropDefaultValue(
+      column: UpdateColumnDefaultValue): Unit = {
+    assert(
+      column.newCurrentDefault() == null,
+      s"Default value mismatch for column '${column.toString}': " +
+        s"expected empty but found ${column.newCurrentDefault()}")
   }
 }

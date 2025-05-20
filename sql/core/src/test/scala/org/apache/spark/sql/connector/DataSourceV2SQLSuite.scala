@@ -3606,6 +3606,29 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-52116: alter column with default value which is not deterministic") {
+    val foldableExpressions = Seq("1", "2 + 1")
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> v2Source) {
+      withTable("tab") {
+        spark.sql(s"CREATE TABLE tab (col1 DOUBLE DEFAULT 0) USING $v2Source")
+        val exception = analysisException(
+          // Rand function is not deterministic
+          s"ALTER TABLE tab ALTER COLUMN col1 SET DEFAULT rand()")
+        assert(exception.getSqlState == "42623")
+        assert(exception.errorClass.get == "INVALID_DEFAULT_VALUE.NON_DETERMINISTIC")
+        assert(exception.messageParameters("statement") == "ALTER TABLE ALTER COLUMN")
+        assert(exception.messageParameters("colName") == "`col1`")
+        assert(exception.messageParameters("defaultValue") == "rand()")
+      }
+      foldableExpressions.foreach(expr => {
+        withTable("tab") {
+          spark.sql(s"CREATE TABLE tab (col1 INT DEFAULT 100) USING $v2Source")
+          spark.sql(s"ALTER TABLE tab ADD COLUMN col2 DOUBLE DEFAULT $expr")
+        }
+      })
+    }
+  }
+
   test("SPARK-49099: Switch current schema with custom spark_catalog") {
     // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
     // configure a new implementation.

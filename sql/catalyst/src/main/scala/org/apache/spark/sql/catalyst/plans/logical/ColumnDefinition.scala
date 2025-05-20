@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSIO
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, V2ExpressionBuilder}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.validateDefaultValueExpr
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
-import org.apache.spark.sql.connector.catalog.{Column => V2Column, ColumnDefaultValue, IdentityColumnSpec}
+import org.apache.spark.sql.connector.catalog.{Column => V2Column, ColumnDefaultValue, DefaultValue, IdentityColumnSpec}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.connector.ColumnImpl
@@ -184,6 +185,23 @@ object ColumnDefinition {
           }
         }
 
+      case cmd: AlterColumns if cmd.specs.exists(_.newDefaultExpression.isDefined) =>
+        // Wrap analysis errors for default values in a more user-friendly message.
+        cmd.specs.foreach { c =>
+          c.newDefaultExpression.foreach { d =>
+            if (!d.resolved) {
+              throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+                "ALTER TABLE ALTER COLUMN", c.column.name.quoted, d.originalSQL, null)
+            }
+            validateDefaultValueExpr(d, "ALTER TABLE ALTER COLUMN",
+              c.column.name.quoted, d.dataType)
+            if (!d.deterministic) {
+              throw QueryCompilationErrors.defaultValueNonDeterministicError(
+                "ALTER TABLE ALTER COLUMN", c.column.name.quoted, d.originalSQL)
+            }
+          }
+        }
+
       case _ =>
     }
   }
@@ -238,6 +256,15 @@ case class DefaultValueExpression(
       val currentDefault = analyzedChild.flatMap(new V2ExpressionBuilder(_).build())
       val existsDefault = LiteralValue(value, dataType)
       new ColumnDefaultValue(originalSQL, currentDefault.orNull, existsDefault)
+    case _ =>
+      throw QueryCompilationErrors.defaultValueNotConstantError(statement, colName, originalSQL)
+  }
+
+  // Convert the default expression to DefaultValue, which is required by DS v2 APIs.
+  def toV2CurrentDefault(statement: String, colName: String): DefaultValue = child match {
+    case Literal(_, _) =>
+      val currentDefault = analyzedChild.flatMap(new V2ExpressionBuilder(_).build())
+      new DefaultValue(originalSQL, currentDefault.orNull)
     case _ =>
       throw QueryCompilationErrors.defaultValueNotConstantError(statement, colName, originalSQL)
   }
