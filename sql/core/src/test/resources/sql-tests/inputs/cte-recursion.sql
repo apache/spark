@@ -587,3 +587,12 @@ WITH RECURSIVE t1 AS (
     UNION ALL
     SELECT n+1 FROM t2 WHERE n < 5)
 SELECT * FROM t1;
+
+-- Non-deterministic query with rand with seed
+WITH RECURSIVE randoms(val) AS (
+    SELECT CAST(floor(rand(82374) * 5 + 1) AS INT)
+    UNION ALL
+    SELECT CAST(floor(rand(237685) * 5 + 1) AS INT)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;

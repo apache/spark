@@ -1629,3 +1629,15 @@ WithCTE
 +- Project [n#x]
    +- SubqueryAlias t1
       +- CTERelationRef xxxx, true, [n#x], false, false
+
+
+-- !query
+WITH RECURSIVE randoms(val) AS (
+    SELECT CAST(floor(rand(82374) * 5 + 1) AS INT)
+    UNION ALL
+    SELECT CAST(floor(rand(237685) * 5 + 1) AS INT)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
