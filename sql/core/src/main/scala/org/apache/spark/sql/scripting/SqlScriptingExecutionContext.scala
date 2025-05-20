@@ -23,13 +23,13 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.catalog.VariableDefinition
+import org.apache.spark.sql.catalyst.catalog.{SqlScriptingExecutionContextExtension, VariableDefinition}
 import org.apache.spark.sql.scripting.SqlScriptingFrameType.SqlScriptingFrameType
 
 /**
  * SQL scripting execution context - keeps track of the current execution state.
  */
-class SqlScriptingExecutionContext {
+class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension {
   // List of frames that are currently active.
   private[scripting] val frames: ListBuffer[SqlScriptingExecutionFrame] = ListBuffer.empty
   private[scripting] var firstHandlerScopeLabel: Option[String] = None
