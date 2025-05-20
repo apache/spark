@@ -149,6 +149,7 @@ object ColumnDefinition {
       // Do not check anything if the children are not resolved yet.
       case _ if !plan.childrenResolved =>
 
+      // Wrap errors for default values in a more user-friendly message.
       case cmd: V2CreateTablePlan if cmd.columns.exists(_.defaultValue.isDefined) =>
         val statement = cmd match {
           case _: CreateTable => "CREATE TABLE"
@@ -161,43 +162,47 @@ object ColumnDefinition {
         cmd.columns.foreach { col =>
           col.defaultValue.foreach { default =>
             checkDefaultColumnConflicts(col)
+            if (!default.resolved) {
+              throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+                statement, col.name, default.originalSQL, null)
+            }
             validateDefaultValueExpr(default, statement, col.name, col.dataType)
             if (!default.deterministic) {
               throw QueryCompilationErrors.defaultValueNonDeterministicError(
-                "CREATE TABLE", col.name, default.originalSQL)
+                statement, col.name, default.originalSQL)
             }
           }
         }
 
       case cmd: AddColumns if cmd.columnsToAdd.exists(_.default.isDefined) =>
-        // Wrap analysis errors for default values in a more user-friendly message.
+        val statement = "ALTER TABLE ADD COLUMNS"
         cmd.columnsToAdd.foreach { c =>
           c.default.foreach { d =>
             if (!d.resolved) {
               throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
-                "ALTER TABLE", c.colName, d.originalSQL, null)
+                statement, c.colName, d.originalSQL, null)
             }
-            validateDefaultValueExpr(d, "ALTER TABLE", c.colName, c.dataType)
+            validateDefaultValueExpr(d, statement, c.colName, c.dataType)
             if (!d.deterministic) {
               throw QueryCompilationErrors.defaultValueNonDeterministicError(
-                "ALTER TABLE", c.colName, d.originalSQL)
+                statement, c.colName, d.originalSQL)
             }
           }
         }
 
       case cmd: AlterColumns if cmd.specs.exists(_.newDefaultExpression.isDefined) =>
-        // Wrap analysis errors for default values in a more user-friendly message.
+        val statement = "ALTER TABLE ALTER COLUMN"
         cmd.specs.foreach { c =>
           c.newDefaultExpression.foreach { d =>
             if (!d.resolved) {
               throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
-                "ALTER TABLE ALTER COLUMN", c.column.name.quoted, d.originalSQL, null)
+                statement, c.column.name.quoted, d.originalSQL, null)
             }
-            validateDefaultValueExpr(d, "ALTER TABLE ALTER COLUMN",
+            validateDefaultValueExpr(d, statement,
               c.column.name.quoted, d.dataType)
             if (!d.deterministic) {
               throw QueryCompilationErrors.defaultValueNonDeterministicError(
-                "ALTER TABLE ALTER COLUMN", c.column.name.quoted, d.originalSQL)
+                statement, c.column.name.quoted, d.originalSQL)
             }
           }
         }
