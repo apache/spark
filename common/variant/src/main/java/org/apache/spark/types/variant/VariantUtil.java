@@ -138,7 +138,9 @@ public class VariantUtil {
   public static final int U32_SIZE = 4;
 
   // Both variant value and variant metadata need to be no longer than 128MiB.
-  public static final int SIZE_LIMIT = 128 * 1024 * 1024;
+  // Note: to make tests more reliable, we set the max size to 16Mib to avoid OOM in tests.
+  public static final int SIZE_LIMIT =
+    System.getenv("SPARK_TESTING") != null ? U24_MAX + 1 : 128 * 1024 * 1024;
 
   public static final int MAX_DECIMAL4_PRECISION = 9;
   public static final int MAX_DECIMAL8_PRECISION = 18;
