@@ -70,7 +70,7 @@ class ClasspathDependenciesSuite extends SparkFunSuite {
   }
 
   test("hive-exec") {
-    assertLoads("org.apache.hadoop.hive.ql.CommandNeedRetryException")
+    assertLoads("org.apache.hadoop.hive.ql.processors.CommandProcessorException")
   }
 
   private val STD_INSTANTIATOR = "org.objenesis.strategy.StdInstantiatorStrategy"

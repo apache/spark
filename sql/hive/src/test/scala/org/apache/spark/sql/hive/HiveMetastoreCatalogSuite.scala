@@ -298,7 +298,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
 
       // It's not a bucketed table at Hive side
       val hiveSide = sparkSession.metadataHive.runSqlHive("DESC FORMATTED t")
-      assert(hiveSide.contains("Num Buckets:        \t-1                  \t "))
+      assert(hiveSide.contains("Num Buckets:        \t0                   \t "))
       assert(hiveSide.contains("Bucket Columns:     \t[]                  \t "))
       assert(hiveSide.contains("\tspark.sql.sources.schema.numBuckets\t2                   "))
       assert(hiveSide.contains("\tspark.sql.sources.schema.bucketCol.0\tc1                  "))

@@ -2116,7 +2116,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     }
   }
 
-  test(s"Support alter table command with CASE_SENSITIVE is true") {
+  test("Support alter table command with CASE_SENSITIVE is true") {
+    assume(isInstanceOf[InMemoryCatalogedDDLSuite], "Hive is no longer case preserving")
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"true") {
       withLocale("tr") {
         val dbName = "DaTaBaSe_I"

@@ -1750,6 +1750,7 @@ object TestSettings {
       }.getOrElse(Nil): _*),
     // Show full stack trace and duration in test cases.
     (Test / testOptions) += Tests.Argument("-oDF"),
+    (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-fG", "scalatest.txt"),
     // Slowpoke notifications: receive notifications every 5 minute of tests that have been running
     // longer than two minutes.
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),

@@ -33,6 +33,8 @@ import org.apache.hadoop.hive.common.HiveInterruptUtils
 import org.apache.hadoop.hive.common.io.SessionStream
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.exec.mr.HadoopJobExecHelper
+import org.apache.hadoop.hive.ql.exec.tez.TezJobExecHelper
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
@@ -47,7 +49,6 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
-import org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver.closeHiveSessionStateIfStarted
 import org.apache.spark.sql.internal.{SharedState, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.LEGACY_EMPTY_CURRENT_DB_IN_CLI
 import org.apache.spark.util.{SparkStringUtils, Utils}
@@ -105,12 +106,12 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       sessionState.err = new SessionStream(System.err, true, UTF_8.name())
     } catch {
       case e: UnsupportedEncodingException =>
-        closeHiveSessionStateIfStarted(sessionState)
+        sessionState.close()
         exit(ERROR_PATH_NOT_FOUND)
     }
 
     if (!oproc.process_stage2(sessionState)) {
-      closeHiveSessionStateIfStarted(sessionState)
+      sessionState.close()
       exit(ERROR_MISUSE_SHELL_BUILTIN)
     }
 
@@ -145,7 +146,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     // Clean up after we exit
     ShutdownHookManager.addShutdownHook { () =>
-      closeHiveSessionStateIfStarted(sessionState)
+      sessionState.close()
       SparkSQLEnv.stop(exitCode)
     }
 
@@ -220,6 +221,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     try {
       if (sessionState.fileName != null) {
         cli.processFile(sessionState.fileName)
+        exit(0)
       }
     } catch {
       case e: FileNotFoundException =>
@@ -298,8 +300,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
           try {
             cli.processLine(line, true)
           } catch {
-            case e: CommandProcessorException =>
-              exit(e.getErrorCode)
+            case _: CommandProcessorException | _: RuntimeException => None
           }
           prefix = ""
           currentPrompt = promptWithCurrentDB
@@ -311,7 +312,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       line = reader.readLine(currentPrompt + "> ")
     }
 
-    closeHiveSessionStateIfStarted(sessionState)
+    sessionState.close()
 
     exit(0)
   }
@@ -444,7 +445,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
     if (cmd_lower.equals("quit") ||
       cmd_lower.equals("exit")) {
-      closeHiveSessionStateIfStarted(sessionState)
+      sessionState.close()
       SparkSQLCLIDriver.exit(EXIT_SUCCESS)
     }
     if (tokens(0).toLowerCase(Locale.ROOT).equals("source") || cmd_trimmed.startsWith("!")) {
@@ -520,9 +521,9 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
                    |${Utils.stringifyException(e)}
                  """.stripMargin)
               throw new CommandProcessorException(e)
+          } finally {
+            driver.close()
           }
-
-          driver.close()
 
           var responseMsg = s"Time taken: $timeTaken seconds"
           if (counter != 0) {
@@ -544,6 +545,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   }
 
   // Adapted processLine from Hive 2.3's CliDriver.processLine.
+  // Updated for Hive 4.1
   override def processLine(line: String, allowInterrupting: Boolean): CommandProcessorResponse = {
     var oldSignal: SignalHandler = null
     var interruptSignal: Signal = null
@@ -569,35 +571,37 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           // to prompt
           console.printInfo("Interrupting... Be patient, this might take some time.")
           console.printInfo("Press Ctrl+C again to kill JVM")
-
+          // First, kill any running MR jobs
+          HadoopJobExecHelper.killRunningJobs()
+          TezJobExecHelper.killRunningJobs()
           HiveInterruptUtils.interrupt()
         }
       })
     }
 
     try {
-      val ignoreErrors =
-        HiveConf.getBoolVar(conf, HiveConf.getConfVars("hive.cli.errors.ignore"))
-      var ret: CommandProcessorResponse = null
-
+      var ret: CommandProcessorResponse = new CommandProcessorResponse
       // we can not use "split" function directly as ";" may be quoted
       val commands = splitSemiColon(line).asScala
-      var command: String = ""
+      val commandBuilder = new StringBuilder
       for (oneCmd <- commands) {
         if (oneCmd.endsWith("\\")) {
-          command += oneCmd.dropRight(1) + ";"
+          commandBuilder.append(oneCmd.dropRight(1) + ";")
         } else {
-          command += oneCmd
+          commandBuilder.append(oneCmd)
+          val command = commandBuilder.toString
           if (!SparkStringUtils.isBlank(command)) {
             try {
               ret = processCmd(command)
             } catch {
               case e: CommandProcessorException =>
+                val ignoreErrors = HiveConf.getBoolVar(conf, HiveConf.ConfVars.CLI_IGNORE_ERRORS)
                 if (!ignoreErrors) {
                   throw e
                 }
+            } finally {
+              commandBuilder.clear()
             }
-            command = ""
           }
         }
       }

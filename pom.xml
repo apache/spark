@@ -1655,6 +1655,10 @@
           </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
+            <artifactId>hive-standalone-metastore-server</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-service</artifactId>
           </exclusion>
           <exclusion>
@@ -2193,7 +2197,7 @@
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-service-rpc</artifactId>
-        <version>4.0.0</version>
+        <version>${hive.version}</version>
         <exclusions>
           <exclusion>
             <groupId>*</groupId>
@@ -2347,6 +2351,29 @@
           <exclusion>
             <groupId>org.antlr</groupId>
             <artifactId>antlr-runtime</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.orc</groupId>
+            <artifactId>orc-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.datasketches</groupId>
+            <artifactId>datasketches-hive</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.github.joshelser</groupId>
+            <artifactId>dropwizard-metrics-hadoop-metrics2-reporter</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.datasketches</groupId>
+        <artifactId>datasketches-hive</artifactId>
+        <version>2.0.0</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
           </exclusion>
         </exclusions>
       </dependency>

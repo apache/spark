@@ -70,7 +70,9 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
         .build()
       f(rs)
     } finally {
-      rs.close()
+      if (rs != null) {
+        rs.close()
+      }
       connection.close()
       transport.close()
       rawTransport.close()
