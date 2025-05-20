@@ -260,7 +260,7 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Non
 
   override def withNewSeed(seed: Long): Uuid = Uuid(Some(seed))
 
-  override def withNextSeed(): Uuid = Uuid(Some(randomSeed.get + 1))
+  override def withShiftedSeed(shift: Long): Uuid = Uuid(Some(randomSeed.get + shift))
 
   override lazy val resolved: Boolean = randomSeed.isDefined
 

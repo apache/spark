@@ -76,7 +76,7 @@ trait ExpressionWithRandomSeed extends Expression {
 
   def seedExpression: Expression
   def withNewSeed(seed: Long): Expression
-  def withNextSeed(): Expression
+  def withShiftedSeed(shift: Long): Expression
 }
 
 private[catalyst] object ExpressionWithRandomSeed {
@@ -115,7 +115,7 @@ case class Rand(child: Expression, hideSeed: Boolean = false) extends Nondetermi
 
   override def withNewSeed(seed: Long): Rand = Rand(Literal(seed, LongType), hideSeed)
 
-  override def withNextSeed(): Rand = Rand(Add(child, Literal(1)), hideSeed)
+  override def withShiftedSeed(shift: Long): Rand = Rand(Add(child, Literal(shift)), hideSeed)
 
   override protected def evalInternal(input: InternalRow): Double = rng.nextDouble()
 
@@ -168,7 +168,7 @@ case class Randn(child: Expression, hideSeed: Boolean = false) extends Nondeterm
 
   override def withNewSeed(seed: Long): Randn = Randn(Literal(seed, LongType), hideSeed)
 
-  override def withNextSeed(): Randn = Randn(Literal(seed, LongType), hideSeed)
+  override def withShiftedSeed(shift: Long): Randn = Randn(Add(child, Literal(shift)), hideSeed)
 
   override protected def evalInternal(input: InternalRow): Double = rng.nextGaussian()
 
@@ -273,8 +273,8 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression,
   override def withNewSeed(newSeed: Long): Expression =
     Uniform(min, max, Literal(newSeed, LongType), hideSeed)
 
-  override def withNextSeed(): Expression =
-    Uniform(min, max, Literal(seed + 1, LongType), hideSeed)
+  override def withShiftedSeed(shift: Long): Expression =
+    Uniform(min, max, Literal(seed + shift, LongType), hideSeed)
 
   override def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
@@ -357,8 +357,8 @@ case class RandStr(
   override def withNewSeed(newSeed: Long): Expression =
     RandStr(length, Literal(newSeed, LongType), hideSeed)
 
-  override def withNextSeed(): Expression =
-    RandStr(length, Literal(seed + 1, LongType), hideSeed)
+  override def withShiftedSeed(shift: Long): Expression =
+    RandStr(length, Literal(seed + shift, LongType), hideSeed)
 
   override def withNewChildrenInternal(newFirst: Expression, newSecond: Expression): Expression =
     RandStr(newFirst, newSecond, hideSeed)

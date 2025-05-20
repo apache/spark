@@ -180,8 +180,6 @@ case class UnionLoopExec(
 
     val numPartitions = prevDF.queryExecution.toRdd.partitions.length
 
-    var recursionReseeded = recursion
-
     // Main loop for obtaining the result of the recursive query.
     while (prevCount > 0 && !limitReached) {
       var prevPlan: LogicalPlan = null
@@ -189,12 +187,12 @@ case class UnionLoopExec(
       // If the recursive part contains non-deterministic expressions that depends on a seed, we
       // need to create a new seed since the seed for this expression is set in the analysis, and
       // we avoid re-triggering the analysis for every iterative step.
-      recursionReseeded = if (recursion.deterministic) {
-        recursionReseeded
+      val recursionReseeded = if (recursion.deterministic) {
+        recursion
       } else {
-        recursionReseeded.transformExpressionsDown {
+        recursion.transformExpressionsDown {
           case e: ExpressionWithRandomSeed =>
-            e.withNextSeed()
+            e.withShiftedSeed(currentLevel)
         }
       }
 

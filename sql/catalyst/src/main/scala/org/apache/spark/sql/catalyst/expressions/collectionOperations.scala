@@ -1267,7 +1267,8 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None) extends U
 
   override def withNewSeed(seed: Long): Shuffle = copy(randomSeed = Some(seed))
 
-  override def withNextSeed(): Shuffle = copy(randomSeed = Some(randomSeed.get + 1))
+  override def withShiftedSeed(shift: Long): Shuffle =
+    copy(randomSeed = Some(randomSeed.get + shift))
 
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && randomSeed.isDefined

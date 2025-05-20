@@ -1493,3 +1493,21 @@ struct<val:int>
 4
 4
 5
+
+
+-- !query
+WITH RECURSIVE randoms(val, step) AS (
+    SELECT CAST(UNIFORM(1, 6, 82374) AS INT), 1 AS step
+    UNION ALL
+    SELECT CAST(UNIFORM(1, 6, 237685) AS INT), step + 1
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5
+-- !query schema
+struct<val:int>
+-- !query output
+1
+4
+4
+4
+5
