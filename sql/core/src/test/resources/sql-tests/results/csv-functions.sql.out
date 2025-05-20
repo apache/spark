@@ -193,13 +193,24 @@ select schema_of_csv(42)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "message" : "Undefined error message parameter for error class: 'DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE', MessageTemplate: Cannot resolve <sqlExpr> due to data type mismatch: The <paramIndex> parameter requires the <requiredType> type, however <inputSql> has the type <inputType>., Parameters: Map(exprName -> csv, sqlExpr -> \"schema_of_csv(42)\")"
-  }
+    "inputSql" : "\"42\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"schema_of_csv(42)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "schema_of_csv(42)"
+  } ]
 }
 
 
