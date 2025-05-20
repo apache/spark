@@ -333,7 +333,9 @@ case class OneRowRelationExec() extends LeafExecNode
 
   override val output: Seq[Attribute] = Nil
 
-  val rdd = session.sparkContext.parallelize(Seq(InternalRow()), 1)
+  private val emptyRow: InternalRow = InternalRow.empty
+
+  private val rdd = session.sparkContext.parallelize(Seq(emptyRow), 1)
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -341,7 +343,7 @@ case class OneRowRelationExec() extends LeafExecNode
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val proj = UnsafeProjection.create(schema)
-    val outputRow = proj(InternalRow.empty)
+    val outputRow = proj(emptyRow)
     rdd.mapPartitionsWithIndexInternal { (index, iter) =>
       iter.map { r =>
         numOutputRows += 1
@@ -360,6 +362,4 @@ case class OneRowRelationExec() extends LeafExecNode
   override protected def doCanonicalize(): SparkPlan = {
     super.doCanonicalize().asInstanceOf[OneRowRelationExec].copy()
   }
-
-  // override def getStream: Option[SparkDataStream] = None
 }
