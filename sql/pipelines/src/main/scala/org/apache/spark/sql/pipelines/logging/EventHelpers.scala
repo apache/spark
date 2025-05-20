@@ -27,7 +27,6 @@ object EventHelpers {
   private val timestampFormat: String = "yyyy-MM-dd'T'HH:mm:ss.SSSXX"
   private val zoneId: ZoneId = ZoneId.of("UTC")
 
-  // DateTimeFormatter is thread-safe, so no synchronization is needed
   private val formatter: DateTimeFormatter = DateTimeFormatter
     .ofPattern(timestampFormat)
     .withZone(zoneId)

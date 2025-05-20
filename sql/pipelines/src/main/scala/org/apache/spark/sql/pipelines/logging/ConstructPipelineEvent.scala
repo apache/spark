@@ -43,14 +43,10 @@ object ConstructPipelineEvent extends Logging {
     Option(t.getCause).map(serializeException).getOrElse(Nil)
   }
 
-  def constructErrorDetails(t: Throwable): ErrorDetail = {
-    ErrorDetail(
-      serializeException(t)
-    )
-  }
+  def constructErrorDetails(t: Throwable): ErrorDetail = ErrorDetail(serializeException(t))
 
   /**
-   * Returns a new event with the current or provided timestamp and the given message.
+   * Returns a new event with the current or provided timestamp and the given origin/message.
    */
   def apply(
       origin: PipelineEventOrigin,
@@ -70,9 +66,6 @@ object ConstructPipelineEvent extends Logging {
 
   /**
    * Returns a new event with the current or given timestamp and the given origin / message.
-   *
-   * @param eventTimestamp Timestamp to use for events. If not provided, time extracted
-   *                       from event UUID is used instead.
    */
   def apply(
       origin: PipelineEventOrigin,
