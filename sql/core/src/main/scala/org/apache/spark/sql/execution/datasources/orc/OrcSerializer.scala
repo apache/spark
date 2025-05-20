@@ -137,7 +137,7 @@ class OrcSerializer(dataSchema: StructType) {
       new BytesWritable(getter.getBinary(ordinal))
 
     case DateType =>
-      OrcShimUtils.getDateWritableV2(reuseObj)
+      OrcShimUtils.getDateWritable(reuseObj)
 
     // The following cases are already expensive, reusing object or not doesn't matter.
 
