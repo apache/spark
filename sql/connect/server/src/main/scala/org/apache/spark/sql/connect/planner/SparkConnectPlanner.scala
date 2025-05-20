@@ -2457,11 +2457,13 @@ class SparkConnectPlanner(
         input
       }
 
-    val groupingExpressionsWithOrdinals = rel.getGroupingExpressionsList.asScala.toSeq
-      .map(transformGroupingExpressionAndReplaceOrdinals)
+    val groupingExpressions =
+      rel.getGroupingExpressionsList.asScala.toSeq.map(transformExpression)
+    val groupingExpressionsWithOrdinals =
+      groupingExpressions.map(replaceOrdinalsInGroupingExpressions)
     val aggExprs = rel.getAggregateExpressionsList.asScala.toSeq
       .map(expr => transformExpressionWithTypedReduceExpression(expr, logicalPlan))
-    val aliasedAgg = (groupingExpressionsWithOrdinals ++ aggExprs).map(toNamedExpression)
+    val aliasedAgg = (groupingExpressions ++ aggExprs).map(toNamedExpression)
 
     rel.getGroupType match {
       case proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY =>
@@ -2506,7 +2508,10 @@ class SparkConnectPlanner(
         val groupingSetsExpressionsWithOrdinals =
           rel.getGroupingSetsList.asScala.toSeq.map { getGroupingSets =>
             getGroupingSets.getGroupingSetList.asScala.toSeq
-              .map(transformGroupingExpressionAndReplaceOrdinals)
+              .map(groupingExpressions => {
+                val transformedGroupingExpression = transformExpression(groupingExpressions)
+                replaceOrdinalsInGroupingExpressions(transformedGroupingExpression)
+              })
           }
         logical.Aggregate(
           groupingExpressions = Seq(
@@ -2521,18 +2526,15 @@ class SparkConnectPlanner(
   }
 
   /**
-   * Transforms an input protobuf grouping expression into the Catalyst expression and converts
-   * top-level integer [[Literal]]s to [[UnresolvedOrdinal]]s, if `groupByOrdinal` is enabled.
+   * Replaces top-level integer [[Literal]]s to [[UnresolvedOrdinal]]s, if `groupByOrdinal` is
+   * enabled.
    */
-  private def transformGroupingExpressionAndReplaceOrdinals(
-      groupingExpression: proto.Expression) = {
-    val transformedGroupingExpression = transformExpression(groupingExpression)
+  private def replaceOrdinalsInGroupingExpressions(groupingExpression: Expression) =
     if (session.sessionState.conf.groupByOrdinal) {
-      replaceIntegerLiteralWithOrdinal(transformedGroupingExpression)
+      replaceIntegerLiteralWithOrdinal(groupingExpression)
     } else {
-      transformedGroupingExpression
+      groupingExpression
     }
-  }
 
   @deprecated("TypedReduce is now implemented using a normal UDAF aggregator.", "4.0.0")
   private def transformTypedReduceExpression(
