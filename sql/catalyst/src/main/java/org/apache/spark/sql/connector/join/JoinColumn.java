@@ -28,24 +28,24 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  */
 @Evolving
 public final class JoinColumn implements NamedReference {
-    public JoinColumn(String[] qualifier, String name, Boolean isInLeftSideOfJoin) {
-        this.qualifier = qualifier;
-        this.name = name;
-        this.isInLeftSideOfJoin = isInLeftSideOfJoin;
-    }
+  public JoinColumn(String[] qualifier, String name, Boolean isInLeftSideOfJoin) {
+    this.qualifier = qualifier;
+    this.name = name;
+    this.isInLeftSideOfJoin = isInLeftSideOfJoin;
+  }
 
-    public String[] qualifier;
-    public String name;
-    public Boolean isInLeftSideOfJoin;
+  public String[] qualifier;
+  public String name;
+  public Boolean isInLeftSideOfJoin;
 
-    @Override
-    public String[] fieldNames() {
-        String[] fullyQualified = new String[qualifier.length + 1];
-        System.arraycopy(qualifier, 0, fullyQualified, 0, qualifier.length);
-        fullyQualified[qualifier.length] = name;
-        return qualifier;
-    }
+  @Override
+  public String[] fieldNames() {
+    String[] fullyQualified = new String[qualifier.length + 1];
+    System.arraycopy(qualifier, 0, fullyQualified, 0, qualifier.length);
+    fullyQualified[qualifier.length] = name;
+    return qualifier;
+  }
 
-    @Override
-    public Expression[] children() { return EMPTY_EXPRESSION; }
+  @Override
+  public Expression[] children() { return EMPTY_EXPRESSION; }
 }
