@@ -329,10 +329,10 @@ private[hive] trait HiveInspectors {
           HiveDecimal.create(o.asInstanceOf[Decimal].toJavaBigDecimal))
       case _: JavaDateObjectInspector =>
         withNullSafe(o =>
-            DateTimeUtils.toJavaDate(o.asInstanceOf[Int]))
+            HiveDateTimeUtils.toHiveDate(o.asInstanceOf[Int]))
       case _: JavaTimestampObjectInspector =>
         withNullSafe(o =>
-            DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long]))
+            HiveDateTimeUtils.toHiveTimestamp(o.asInstanceOf[Long]))
       case _: HiveDecimalObjectInspector if x.preferWritable() =>
         withNullSafe(o => getDecimalWritable(o.asInstanceOf[Decimal]))
       case _: HiveDecimalObjectInspector =>

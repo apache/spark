@@ -83,6 +83,10 @@
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
+      <artifactId>hive-standalone-metastore-server</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
       <artifactId>hive-service-rpc</artifactId>
     </dependency>
     <dependency>
