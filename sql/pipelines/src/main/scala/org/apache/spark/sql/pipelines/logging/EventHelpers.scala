@@ -25,6 +25,9 @@ object EventHelpers {
 
   /** A format string that defines how timestamps are serialized in a [[PipelineEvent]]. */
   private val timestampFormat: String = "yyyy-MM-dd'T'HH:mm:ss.SSSXX"
+  // Currently only the UTC timezone is supported. Eventually we want to allow the user to specify
+  // the timezone as a pipeline level setting using the SESSION_LOCAL_TIMEZONE key, and it should
+  // not be possible to change this setting during a pipeline run.
   private val zoneId: ZoneId = ZoneId.of("UTC")
 
   private val formatter: DateTimeFormatter = DateTimeFormatter
