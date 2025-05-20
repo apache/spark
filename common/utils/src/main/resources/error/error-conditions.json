@@ -5853,12 +5853,12 @@
           "CONTINUE exception handler is not supported. Use EXIT handler."
         ]
       },
-      "CREATE_FLOW_QUERY_EXECUTION": {
+      "CREATE_FLOW_QUERY_EXECUTION" : {
         "message" : [
           "Direct execution of a CREATE FLOW statement is not supported. To create a flow, create and execute a pipeline with a SQL file containing your statement attached in the pipeline spec."
         ]
       },
-      "CREATE_PIPELINE_DATASET_QUERY_EXECUTION": {
+      "CREATE_PIPELINE_DATASET_QUERY_EXECUTION" : {
         "message" : [
           "Direct execution of a CREATE ... <pipelineDatasetType> query. To create a pipeline dataset, create and execute a pipeline with a SQL file containing your query attached in the pipeline definition."
         ]
