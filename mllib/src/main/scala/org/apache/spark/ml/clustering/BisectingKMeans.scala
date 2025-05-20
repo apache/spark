@@ -35,6 +35,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.SizeEstimator
 
 
 /**
@@ -177,6 +178,8 @@ class BisectingKMeansModel private[ml] (
    */
   @Since("2.1.0")
   override def summary: BisectingKMeansSummary = super.summary
+
+  override def estimatedSize: Long = SizeEstimator.estimate(parentModel)
 }
 
 object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {
