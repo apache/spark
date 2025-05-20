@@ -111,20 +111,32 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   def pushDownJoin(plan: LogicalPlan): LogicalPlan = plan.transformUp {
     // Join can be attempted to be pushed down only if left and right side of join are
     // compatible (same data source, for example). Also, another requirement is that if
-    // there are projections between Join and ScanBuilderHolder, these projec
+    // there are projections between Join and ScanBuilderHolder, these projections need to be
+    // AttributeReferences. We could probably support Alias as well, but this should be on
+    // TODO list.
+    // Alias can exist between Join and sHolder node because the query below is not valid:
+    // SELECT * FROM
+    // (SELECT * FROM tbl t1 JOIN tbl2 t2) p
+    // JOIN
+    // (SELECT * FROM tbl t3 JOIN tbl3 t4) q
+    // ON p.t1.col = q.t3.col (this is not possible)
+    // It's because there are 2 same tables in both sides of top level join and it not possible
+    // to fully qualified the column names in condition. Therefore, query should be rewritten so
+    // that each of the outputs of child joins are aliased, so there would be a projection
+    // with aliases between top level join and scanBuilderHolder (that has pushed child joins).
     case node @ Join(
-    PhysicalOperation(
-    leftProjections,
-    Nil,
-    leftHolder @ ScanBuilderHolder(_, _, lBuilder: SupportsPushDownJoin)
-    ),
-    PhysicalOperation(
-    rightProjections,
-    Nil,
-    rightHolder @ ScanBuilderHolder(_, _, rBuilder: SupportsPushDownJoin)
-    ),
-    joinType,
-    condition,
+      PhysicalOperation(
+        leftProjections,
+        Nil,
+        leftHolder @ ScanBuilderHolder(_, _, lBuilder: SupportsPushDownJoin)
+      ),
+      PhysicalOperation(
+        rightProjections,
+        Nil,
+        rightHolder @ ScanBuilderHolder(_, _, rBuilder: SupportsPushDownJoin)
+      ),
+      joinType,
+      condition,
     _) if conf.dataSourceV2JoinPushdown &&
       // TODO: I think projections will always be Seq[AttributeReference] because
       // When
@@ -184,7 +196,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
         leftHolder.exprIdToOriginalName ++= rightHolder.exprIdToOriginalName
         leftHolder.output = newOutput
-        leftHolder.isJoinPushed = true
         leftHolder
       } else {
         node
@@ -206,7 +217,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
       val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
       val aggregates = collectAggregates(actualResultExprs, aggExprToOutputOrdinal)
-      val normalizedAggExprs = if (holder.isJoinPushed) {
+      val normalizedAggExprs = if (holder.joinedRelations.nonEmpty) {
         DataSourceStrategy.normalizeExprs(aggregates, holder.output)
           .asInstanceOf[Seq[AggregateExpression]]
       } else {
@@ -214,7 +225,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           .asInstanceOf[Seq[AggregateExpression]]
       }
       val normalizedGroupingExpr =
-        if (holder.isJoinPushed) {
+        if (holder.joinedRelations.nonEmpty) {
           DataSourceStrategy.normalizeExprs(actualGroupExprs, holder.output)
         } else {
           DataSourceStrategy.normalizeExprs(actualGroupExprs, holder.relation.output)
@@ -459,7 +470,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def buildScanWithPushedJoin(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case holder: ScanBuilderHolder if holder.isJoinPushed && !holder.isStreaming =>
+    case holder: ScanBuilderHolder if holder.joinedRelations.nonEmpty && !holder.isStreaming =>
       val scan = holder.builder.build()
       val realOutput = toAttributes(scan.readSchema())
       assert(realOutput.length == holder.output.length,
@@ -563,7 +574,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         aliasReplacedOrder.asInstanceOf[Seq[SortOrder]]
       }
-      val normalizedOrders = if (sHolder.isJoinPushed) {
+      val normalizedOrders = if (sHolder.joinedRelations.nonEmpty) {
         DataSourceStrategy.normalizeExprs(
           newOrder, sHolder.output).asInstanceOf[Seq[SortOrder]]
       } else {
@@ -703,8 +714,6 @@ case class ScanBuilderHolder(
   var pushedAggOutputMap: AttributeMap[Expression] = AttributeMap.empty[Expression]
 
   var joinedRelations: Seq[DataSourceV2RelationBase] = Seq()
-
-  var isJoinPushed: Boolean = false
 
   var exprIdToOriginalName: scala.collection.mutable.Map[ExprId, String] =
     scala.collection.mutable.Map.empty[ExprId, String]

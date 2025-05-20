@@ -29,21 +29,21 @@ import java.util.Map;
  * @since 4.0.0
  */
 public class JoinTypeSQLBuilder {
-    public String build(JoinType joinType) {
-        if (joinType instanceof Inner inner) {
-            return visitInnerJoin(inner);
-        } else {
-            return visitUnexpectedJoinType(joinType);
-        }
+  public String build(JoinType joinType) {
+    if (joinType instanceof Inner inner) {
+        return visitInnerJoin(inner);
+    } else {
+        return visitUnexpectedJoinType(joinType);
     }
+  }
 
-    protected String visitInnerJoin(Inner inner) {
+  protected String visitInnerJoin(Inner inner) {
         return "INNER JOIN";
     }
 
-    protected String visitUnexpectedJoinType(JoinType joinType) throws IllegalArgumentException {
-        Map<String, String> params = new HashMap<>();
-        params.put("joinType", String.valueOf(joinType));
-        throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3209", params);
-    }
+  protected String visitUnexpectedJoinType(JoinType joinType) throws IllegalArgumentException {
+    Map<String, String> params = new HashMap<>();
+    params.put("joinType", String.valueOf(joinType));
+    throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3209", params);
+  }
 }

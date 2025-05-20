@@ -188,7 +188,7 @@ case class JDBCScanBuilder(
     val subqueryASKeyword = if (dialect.needsASKeywordForJoinSubquery) {
       " AS "
     } else {
-      ""
+      " "
     }
 
     val compiledLeftSideQualifier =
