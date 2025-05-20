@@ -824,8 +824,8 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map("schema" -> "\"STRUCT<a: VARIANT, b: VARIANT>\""))
 
     // In singleVariantColumn mode, from_csv normally treats all inputs as valid. The only exception
-    // case is the input exceeds the variant size limit (128MiB).
-    val largeInput = "a" * (128 * 1024 * 1024)
+    // case is the input exceeds the variant size limit (16MiB).
+    val largeInput = "a" * (16 * 1024 * 1024)
     checkAnswer(
       Seq(largeInput).toDF("value").select(
         from_csv(
