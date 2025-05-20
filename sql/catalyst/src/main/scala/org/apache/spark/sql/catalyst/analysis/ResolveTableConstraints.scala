@@ -64,7 +64,7 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
   }
 
   private def containsCheckInvariant(plan: LogicalPlan): Boolean = {
-    plan match {
+    plan exists {
       case Filter(condition, _) =>
         condition.exists(_.isInstanceOf[CheckInvariant])
 

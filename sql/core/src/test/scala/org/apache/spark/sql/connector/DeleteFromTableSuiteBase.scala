@@ -63,6 +63,31 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         Row(6, "hr", "new-text")))
   }
 
+  test("delete from table with table constraints") {
+    sql(
+      s"""
+         |CREATE TABLE $tableNameAsString (
+         | pk INT NOT NULL PRIMARY KEY,
+         | id INT UNIQUE,
+         | dep STRING,
+         | CONSTRAINT pk_check CHECK (pk > 0))
+         | PARTITIONED BY (dep)
+         |""".stripMargin)
+      append("pk INT NOT NULL, id INT, dep STRING",
+        """{ "pk": 1, "id": 2, "dep": "hr" }
+          |{ "pk": 2, "id": 4, "dep": "eng" }
+          |{ "pk": 3, "id": 6, "dep": "eng" }
+          |""".stripMargin)
+      sql(s"DELETE FROM $tableNameAsString WHERE pk < 2")
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(Row(2, 4, "eng"), Row(3, 6, "eng")))
+      sql(s"DELETE FROM $tableNameAsString WHERE pk >=3")
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(Row(2, 4, "eng")))
+  }
+
   test("delete from table containing struct column with default value") {
     sql(
       s"""CREATE TABLE $tableNameAsString (
