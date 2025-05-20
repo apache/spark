@@ -28,8 +28,6 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 
 class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[LogicalPlan] {
 
-  private val resolveReferencesInFilter = new ResolveReferencesInFilter(catalogManager)
-
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(COMMAND), ruleId) {
     case v2Write: V2WriteCommand
@@ -38,14 +36,7 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
       v2Write.table match {
         case r: DataSourceV2Relation =>
           buildCheckCondition(r.table).map { condition =>
-            val filter = Filter(condition, v2Write.query)
-            // Resolve attribute references in the filter condition only, not the entire query.
-            // We use a targeted resolver (ResolveReferencesInFilter) instead of the full
-            // `ResolveReferences` rule to avoid the creation of `TempResolvedColumn` nodes that
-            // would interfere with the analyzer's ability to correctly identify unresolved
-            // attributes.
-            val resolvedFilter = resolveReferencesInFilter(filter)
-            v2Write.withNewQuery(resolvedFilter)
+            v2Write.withNewQuery(Filter(condition, v2Write.query))
           }.getOrElse(v2Write)
         case _ =>
           v2Write
