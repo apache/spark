@@ -916,7 +916,7 @@ object SparkProtobuf {
     // Exclude `scala-library` from assembly.
     (assembly / assemblyPackageScala / assembleArtifact) := false,
 
-    // Include `spark-protobuf-*.jar`, `unused-*.jar`,`protobuf-*.jar`in assembly.
+    // SPARK-52227: Include `spark-protobuf-*.jar`, `unused-*.jar`,`protobuf-*.jar`in assembly.
     // This needs to be consistent with the content of `maven-shade-plugin`.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
