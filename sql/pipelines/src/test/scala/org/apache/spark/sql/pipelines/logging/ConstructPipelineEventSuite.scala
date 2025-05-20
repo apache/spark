@@ -45,18 +45,6 @@ class ConstructPipelineEventSuite extends SparkFunSuite with BeforeAndAfterEach 
     assert(serializedEx.head.stack.nonEmpty)
   }
 
-  test("serializing already serialized exceptions") {
-    val ex1 = new RuntimeException("exception 1")
-    val ex2 = new RuntimeException("exception 2", ex1)
-
-    val serializedEx1 = ConstructPipelineEvent.constructErrorDetails(ex2).exceptions
-
-    val ex3 = new SerializedExceptionWrapper(serializedEx1)
-    val serializedEx3 = ConstructPipelineEvent.constructErrorDetails(ex3).exceptions
-
-    assert(serializedEx1 == serializedEx3)
-  }
-
   test("multiple levels of causes") {
     val ex1 = new RuntimeException("exception 1")
     val ex2 = new RuntimeException("exception 2", ex1)
@@ -66,22 +54,6 @@ class ConstructPipelineEventSuite extends SparkFunSuite with BeforeAndAfterEach 
     assert(serializedEx.map(_.message) == Seq("exception 3", "exception 2", "exception 1"))
 
     assert(serializedEx.head.className == "java.lang.IllegalStateException")
-  }
-
-  test("Verify message for UnresolvedFlowFailureException") {
-    val ex1 = new RuntimeException("exception 1")
-    val ex2 = UnresolvedFlowFailureException("a", ex1)
-
-    val serializedEx = ConstructPipelineEvent.serializeException(ex2)
-    val flowFailureMessage =
-      s""""Failed to resolve flow 'a'
-         |${ex1.getMessage}"""".stripMargin
-    assert(
-      serializedEx.map(_.message) == Seq(flowFailureMessage))
-    assert(
-      serializedEx.head.className ==
-        "org.apache.spark.sql.pipelines.logging.UnresolvedFlowFailureException")
-    assert(serializedEx.head.stack.isEmpty)
   }
 
   test("serializing exception with stack traces") {
@@ -125,7 +97,7 @@ class ConstructPipelineEventSuite extends SparkFunSuite with BeforeAndAfterEach 
 
   test("Basic event construction") {
     val event = ConstructPipelineEvent(
-      origin = Origin(
+      origin = PipelineEventOrigin(
         datasetName = Some("dataset"),
         flowName = Some("flow"),
         sourceCodeLocation = Some(

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.pipelines.logging
 
-
 import java.sql.Timestamp
 import java.time.ZonedDateTime
 import java.time.format.{DateTimeFormatter, FormatStyle}
@@ -39,7 +38,6 @@ class PipelineEventSuite extends SparkFunSuite with Logging {
 
     val ts = new Timestamp(mtvLaunch.toInstant.toEpochMilli)
     val formatted = EventHelpers.formatTimestamp(ts)
-    logInfo(s"--- mtvLaunchTime: $formatted")
     // expect 4 hours later in UTC (5 time zones minus 1 hour daylight savings).
     assert(formatted == "1981-08-01T04:01:00.000Z")
   }
@@ -51,7 +49,8 @@ class PipelineEventSuite extends SparkFunSuite with Logging {
 
   private def makeEvent() = {
     ConstructPipelineEvent(
-      origin = Origin(flowName = Option("a"), datasetName = None, sourceCodeLocation = None),
+      origin =
+        PipelineEventOrigin(flowName = Option("a"), datasetName = None, sourceCodeLocation = None),
       message = "OK",
       details = FlowProgress(FlowStatus.STARTING)
     )
@@ -74,14 +73,13 @@ class PipelineEventSuite extends SparkFunSuite with Logging {
     // the two events, being created right after one another, should not be far apart
     assert(
       EventHelpers.parseTimestamp(event2.timestamp).getTime -
-        EventHelpers.parseTimestamp(event1.timestamp).getTime < 1000
+      EventHelpers.parseTimestamp(event1.timestamp).getTime < 1000
     )
   }
   test("formatTimestamp / parseTimestamp") {
     val ts = new Timestamp(1747338049615L)
     val expectedTsString = "2025-05-15T19:40:49.615Z"
-    assert(
-      EventHelpers.formatTimestamp(ts) == "2025-05-15T19:40:49.615Z")
+    assert(EventHelpers.formatTimestamp(ts) == "2025-05-15T19:40:49.615Z")
     assert(EventHelpers.parseTimestamp(expectedTsString) == ts)
     // Ensure parseTimestamp can handle an empty String
     assert(EventHelpers.parseTimestamp("") == new Timestamp(0L))
@@ -89,7 +87,8 @@ class PipelineEventSuite extends SparkFunSuite with Logging {
 
   test("basic flow progress event has expected fields set") {
     val event = ConstructPipelineEvent(
-      origin = Origin(flowName = Option("a"), datasetName = None, sourceCodeLocation = None),
+      origin =
+        PipelineEventOrigin(flowName = Option("a"), datasetName = None, sourceCodeLocation = None),
       message = "Flow 'a' has completed",
       details = FlowProgress(FlowStatus.COMPLETED)
     )

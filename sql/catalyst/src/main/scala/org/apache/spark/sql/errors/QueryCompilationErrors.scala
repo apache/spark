@@ -1405,6 +1405,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "paramType" -> toSQLType(paramType)))
   }
 
+  def unresolvedFlowError(flowName: String, cause: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "UNRESOLVED_FLOW",
+      messageParameters = Map("flowName" -> toSQLId(flowName)),
+      cause = Some(cause))
+  }
+
   def literalTypeUnsupportedForSourceTypeError(field: String, source: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_EXTRACT_FIELD",

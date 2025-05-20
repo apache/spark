@@ -21,21 +21,7 @@ import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 
-import scala.util.control.NoStackTrace
-
 import org.apache.spark.internal.Logging
-
-case class UnresolvedFlowFailureException(name: String, cause: Throwable)
-    extends Exception(s"Failed to resolve flow '$name'", cause)
-    with NoStackTrace
-
-/**
- * A wrapper for a serialized exception. When serialized, this wrapper object returns the original
- * serialized exception.
- */
-class SerializedExceptionWrapper(val exceptions: Seq[SerializedException])
-  extends Exception(exceptions.headOption.map(_.message).orNull)
-    with NoStackTrace
 
 /**
  * A factory object that is used to construct [[PipelineEvent]]s with common fields
@@ -45,30 +31,16 @@ class SerializedExceptionWrapper(val exceptions: Seq[SerializedException])
 object ConstructPipelineEvent extends Logging {
 
   /**
-   * Mix-in trait that enables exceptions to have custom class name when recorded to the event
-   * buffer i.e. a class name that is different from the actual runtime class name of the exception.
+   * Converts an exception that was thrown during a pipeline run to a more structured and standard
+   * internal representation.
    */
   private[pipelines] def serializeException(t: Throwable): Seq[SerializedException] = {
-    t match {
-      case serializedExceptionWrapper: SerializedExceptionWrapper =>
-        serializedExceptionWrapper.exceptions
-      case _ =>
-        val className = t.getClass.getName
-        t match {
-          case _: UnresolvedFlowFailureException =>
-            val message = s""""${t.getMessage}
-                             |${t.getCause.getMessage}"""".stripMargin
-            Seq(
-              SerializedException(className = className, message = message, stack = Seq()))
-          case _ =>
-            val stacks = Option(t.getStackTrace).map(_.toSeq).getOrElse(Nil).map { f =>
-              StackFrame(declaringClass = f.getClassName, methodName = f.getMethodName)
-            }
-            SerializedException(
-              className = className, message = t.getMessage, stack = stacks) +:
-              Option(t.getCause).map(serializeException).getOrElse(Nil)
-        }
+    val className = t.getClass.getName
+    val stacks = Option(t.getStackTrace).map(_.toSeq).getOrElse(Nil).map { f =>
+      StackFrame(declaringClass = f.getClassName, methodName = f.getMethodName)
     }
+    SerializedException(className = className, message = t.getMessage, stack = stacks) +:
+    Option(t.getCause).map(serializeException).getOrElse(Nil)
   }
 
   def constructErrorDetails(t: Throwable): ErrorDetail = {
@@ -81,11 +53,11 @@ object ConstructPipelineEvent extends Logging {
    * Returns a new event with the current or provided timestamp and the given message.
    */
   def apply(
-  origin: Origin,
-   message: String,
-   details: EventDetails,
-   exception: Throwable = null,
-   eventTimestamp: Option[Timestamp] = None
+      origin: PipelineEventOrigin,
+      message: String,
+      details: EventDetails,
+      exception: Throwable = null,
+      eventTimestamp: Option[Timestamp] = None
   ): PipelineEvent = {
     ConstructPipelineEvent(
       origin = origin,
@@ -103,11 +75,11 @@ object ConstructPipelineEvent extends Logging {
    *                       from event UUID is used instead.
    */
   def apply(
-     origin: Origin,
-     message: String,
-     details: EventDetails,
-     errorDetails: Option[ErrorDetail],
-     eventTimestamp: Option[Timestamp]
+      origin: PipelineEventOrigin,
+      message: String,
+      details: EventDetails,
+      errorDetails: Option[ErrorDetail],
+      eventTimestamp: Option[Timestamp]
   ): PipelineEvent = synchronized {
 
     val eventUUID = UUID.randomUUID()

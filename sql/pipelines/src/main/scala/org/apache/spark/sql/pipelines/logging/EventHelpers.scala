@@ -17,33 +17,34 @@
 package org.apache.spark.sql.pipelines.logging
 
 import java.sql.Timestamp
-import java.text.SimpleDateFormat
-import java.util.TimeZone
+import java.time.{Instant, ZoneId}
+import java.time.format.DateTimeFormatter
 
 /** Contains helpers and implicits for working with [[PipelineEvent]]s. */
 object EventHelpers {
 
   /** A format string that defines how timestamps are serialized in a [[PipelineEvent]]. */
   private val timestampFormat: String = "yyyy-MM-dd'T'HH:mm:ss.SSSXX"
-  private val tz: TimeZone = TimeZone.getTimeZone("UTC")
-  private val df = new SimpleDateFormat(timestampFormat)
-  df.setTimeZone(tz)
+  private val zoneId: ZoneId = ZoneId.of("UTC")
+
+  // DateTimeFormatter is thread-safe, so no synchronization is needed
+  private val formatter: DateTimeFormatter = DateTimeFormatter
+    .ofPattern(timestampFormat)
+    .withZone(zoneId)
 
   /** Converts a timestamp to a string in ISO 8601 format. */
-  def formatTimestamp(ts: Timestamp): String =
-    // this needs to be synchronized because SimpleDateFormat is not thread safe
-    df.synchronized {
-      df.format(ts)
-    }
+  def formatTimestamp(ts: Timestamp): String = {
+    val instant = Instant.ofEpochMilli(ts.getTime)
+    formatter.format(instant)
+  }
 
   /** Converts an ISO 8601 formatted timestamp to a java [[Timestamp]].  */
-  def parseTimestamp(timeString: String): Timestamp =
+  def parseTimestamp(timeString: String): Timestamp = {
     if (timeString.isEmpty) {
       new Timestamp(0L)
     } else {
-      // this needs to be synchronized because SimpleDateFormat is not thread safe
-      df.synchronized {
-        new Timestamp(df.parse(timeString).getTime)
-      }
+      val instant = Instant.from(formatter.parse(timeString))
+      new Timestamp(instant.toEpochMilli)
     }
+  }
 }

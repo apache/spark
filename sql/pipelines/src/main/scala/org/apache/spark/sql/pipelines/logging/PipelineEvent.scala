@@ -20,7 +20,7 @@ import org.apache.spark.sql.pipelines.common.FlowStatus
 
 /**
  * An internal event that is emitted during the run of a pipeline.
- * @param id A time based, globally unique id
+ * @param id A globally unique id
  * @param timestamp The time of the event
  * @param origin Where the event originated from
  * @param message A user friendly description of the event
@@ -30,7 +30,7 @@ import org.apache.spark.sql.pipelines.common.FlowStatus
 case class PipelineEvent(
     id: String,
     timestamp: String,
-    origin: Origin,
+    origin: PipelineEventOrigin,
     message: String,
     details: EventDetails,
     error: Option[ErrorDetail]
@@ -42,7 +42,7 @@ case class PipelineEvent(
  * @param flowName The name of the flow
  * @param sourceCodeLocation The location of the source code
  */
-case class Origin(
+case class PipelineEventOrigin(
     datasetName: Option[String],
     flowName: Option[String],
     sourceCodeLocation: Option[SourceCodeLocation]
@@ -70,10 +70,11 @@ trait EventDetails
 // An event indicating that a flow has made progress and transitioned to a different state
 case class FlowProgress(status: FlowStatus) extends EventDetails
 
-// Additional details about the error that occured during the event
+// Additional details about the error that occurred during the event
 case class ErrorDetail(exceptions: Seq[SerializedException])
 
+// An exception that was thrown during a pipeline run
 case class SerializedException(className: String, message: String, stack: Seq[StackFrame])
+
+// A stack frame of an exception
 case class StackFrame(declaringClass: String, methodName: String)
-
-
