@@ -588,7 +588,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    *
    * @return true if the exception is confidently identified as a syntax error; false otherwise.
    */
-  @Since("4.0.0")
+  @Since("4.1.0")
   def isSyntaxErrorBestEffort(exception: java.sql.SQLException): Boolean = false
 
   /**
