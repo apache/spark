@@ -32,13 +32,13 @@ import org.apache.spark.sql.types.StructType;
  */
 @Evolving
 public interface SupportsPushDownJoin extends ScanBuilder {
-    boolean isRightSideCompatibleForJoin(SupportsPushDownJoin other);
+  boolean isRightSideCompatibleForJoin(SupportsPushDownJoin other);
 
-    boolean pushJoin(
-            SupportsPushDownJoin other,
-            JoinType joinType,
-            Optional<Predicate> condition,
-            StructType leftRequiredSchema,
-            StructType rightRequiredSchema
+  boolean pushJoin(
+    SupportsPushDownJoin other,
+    JoinType joinType,
+    Optional<Predicate> condition,
+    StructType leftRequiredSchema,
+    StructType rightRequiredSchema
     );
 }

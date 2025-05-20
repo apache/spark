@@ -78,7 +78,7 @@ public class V2ExpressionSQLBuilder {
     if (expr instanceof Literal literal) {
       return visitLiteral(literal);
     } else if (expr instanceof JoinColumn column) {
-    return visitJoinColumn(column);
+      return visitJoinColumn(column);
     } else if (expr instanceof NamedReference namedReference) {
       return visitNamedReference(namedReference);
     } else if (expr instanceof Cast cast) {
