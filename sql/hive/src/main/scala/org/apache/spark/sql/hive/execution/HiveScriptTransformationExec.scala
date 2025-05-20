@@ -145,7 +145,8 @@ private[hive] case class HiveScriptTransformationExec(
 
     val (outputStream, proc, inputStream, stderrBuffer) = initProc
 
-    val (inputSerde, inputSoi) = initInputSerDe(ioschema, child.output).getOrElse((null, null))
+    val (inputSerde, inputSoi) =
+      initInputSerDe(hadoopConf, ioschema, child.output).getOrElse((null, null))
 
     // For HiveScriptTransformationExec, if inputSerde == null, but outputSerde != null
     // We will use StringBuffer to pass data, in this case, we should cast data as string too.
@@ -173,7 +174,7 @@ private[hive] case class HiveScriptTransformationExec(
     )
 
     val (outputSerde, outputSoi) = {
-      initOutputSerDe(ioschema, output).getOrElse((null, null))
+      initOutputSerDe(hadoopConf, ioschema, output).getOrElse((null, null))
     }
 
     val outputIterator = if (outputSerde == null) {
@@ -239,11 +240,12 @@ private[hive] case class HiveScriptTransformationWriterThread(
 object HiveScriptIOSchema extends HiveInspectors {
 
   def initInputSerDe(
+      hadoopConf: Configuration,
       ioschema: ScriptTransformationIOSchema,
       input: Seq[Expression]): Option[(AbstractSerDe, StructObjectInspector)] = {
     ioschema.inputSerdeClass.map { serdeClass =>
       val (columns, columnTypes) = parseAttrs(input)
-      val serde = initSerDe(serdeClass, columns, columnTypes, ioschema.inputSerdeProps)
+      val serde = initSerDe(hadoopConf, serdeClass, columns, columnTypes, ioschema.inputSerdeProps)
       val fieldObjectInspectors = columnTypes.map(toInspector)
       val objectInspector = ObjectInspectorFactory
         .getStandardStructObjectInspector(columns.asJava, fieldObjectInspectors.asJava)
@@ -252,11 +254,12 @@ object HiveScriptIOSchema extends HiveInspectors {
   }
 
   def initOutputSerDe(
+      hadoopConf: Configuration,
       ioschema: ScriptTransformationIOSchema,
       output: Seq[Attribute]): Option[(AbstractSerDe, StructObjectInspector)] = {
     ioschema.outputSerdeClass.map { serdeClass =>
       val (columns, columnTypes) = parseAttrs(output)
-      val serde = initSerDe(serdeClass, columns, columnTypes, ioschema.outputSerdeProps)
+      val serde = initSerDe(hadoopConf, serdeClass, columns, columnTypes, ioschema.outputSerdeProps)
       val structObjectInspector = serde.getObjectInspector().asInstanceOf[StructObjectInspector]
       (serde, structObjectInspector)
     }
@@ -269,6 +272,7 @@ object HiveScriptIOSchema extends HiveInspectors {
   }
 
   def initSerDe(
+      hadoopConf: Configuration,
       serdeClassName: String,
       columns: Seq[String],
       columnTypes: Seq[DataType],
@@ -284,7 +288,7 @@ object HiveScriptIOSchema extends HiveInspectors {
 
     val properties = new Properties()
     properties.putAll(propsMap.asJava)
-    serde.initialize(null, properties, null)
+    serde.initialize(hadoopConf, properties, null)
 
     serde
   }

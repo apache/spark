@@ -62,7 +62,7 @@ private[spark] object HiveUtils extends Logging {
         " Note that, this a read-only conf and only used to report the built-in hive version." +
         " If you want a different metastore client for Spark to call, please refer to" +
         " spark.sql.hive.metastore.version.")
-    .version("4.0.1")
+    .version("4.1.0")
     .stringConf
     .checkValue(_ == builtinHiveVersion,
       "The builtin Hive version is read-only, please use spark.sql.hive.metastore.version")

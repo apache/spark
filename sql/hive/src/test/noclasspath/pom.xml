@@ -37,8 +37,9 @@
   <properties>
     <maven.compiler.source>8</maven.compiler.source>
     <maven.compiler.target>8</maven.compiler.target>
+    <maven.release>8</maven.release>
     <hadoop.version>3.4.1</hadoop.version>
-    <hive.version>2.3.10</hive.version>
+    <hive.version>4.1.0-SNAPSHOT</hive.version>
   </properties>
 
   <build>
@@ -46,6 +47,7 @@
     <plugins>
       <plugin>
         <artifactId>maven-jar-plugin</artifactId>
+        <version>3.4.2</version>
         <configuration>
           <outputDirectory>${project.basedir}</outputDirectory>
         </configuration>
@@ -57,31 +59,15 @@
     <dependency>
       <groupId>org.apache.hive</groupId>
       <artifactId>hive-exec</artifactId>
-      <version>${hive.version}</version>
       <classifier>core</classifier>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hive</groupId>
-      <artifactId>hive-serde</artifactId>
       <version>${hive.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hive</groupId>
-      <artifactId>hive-storage-api</artifactId>
-      <version>2.4.0</version>
+      <artifactId>hive-udf</artifactId>
+      <version>${hive.version}</version>
       <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common</artifactId>
-      <version>${hadoop.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>commons-logging</groupId>
-      <artifactId>commons-logging</artifactId>
-      <version>1.1.3</version>
     </dependency>
   </dependencies>
 

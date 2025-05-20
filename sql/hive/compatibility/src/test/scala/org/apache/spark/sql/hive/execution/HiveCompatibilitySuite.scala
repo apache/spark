@@ -218,6 +218,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alter1",
     "input16",
 
+    // Hive 4 does not support DynamicSerDe
+    "input19",
+
     // No support for unpublished test udfs.
     "autogen_colalias",
 
@@ -748,7 +751,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "input12_hadoop20",
     "input14",
     "input15",
-    "input19",
     "input1_limit",
     "input2",
     "input21",

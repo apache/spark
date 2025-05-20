@@ -471,24 +471,9 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       val metaData = statement.getConnection.getMetaData
       Seq(
         () => metaData.allProceduresAreCallable,
-        () => metaData.getURL,
-        () => metaData.getUserName,
         () => metaData.isReadOnly,
-        () => metaData.nullsAreSortedHigh,
-        () => metaData.nullsAreSortedLow,
-        () => metaData.nullsAreSortedAtStart,
-        () => metaData.nullsAreSortedAtEnd,
         () => metaData.usesLocalFiles,
         () => metaData.usesLocalFilePerTable,
-        () => metaData.supportsMixedCaseIdentifiers,
-        () => metaData.supportsMixedCaseQuotedIdentifiers,
-        () => metaData.storesUpperCaseIdentifiers,
-        () => metaData.storesUpperCaseQuotedIdentifiers,
-        () => metaData.storesLowerCaseIdentifiers,
-        () => metaData.storesLowerCaseQuotedIdentifiers,
-        () => metaData.storesMixedCaseIdentifiers,
-        () => metaData.storesMixedCaseQuotedIdentifiers,
-        () => metaData.getSQLKeywords,
         () => metaData.nullPlusNonNullIsNull,
         () => metaData.supportsConvert,
         () => metaData.supportsTableCorrelationNames,
@@ -569,7 +554,6 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         () => metaData.getRowIdLifetime,
         () => metaData.supportsStoredFunctionsUsingCallSyntax,
         () => metaData.autoCommitFailureClosesAllResultSets,
-        () => metaData.getClientInfoProperties,
         () => metaData.getFunctionColumns("", "%", "%", "%"),
         () => metaData.getPseudoColumns("", "%", "%", "%"),
         () => metaData.generatedKeyAlwaysReturned).foreach { func =>
@@ -594,8 +578,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       assert(metaData.getDriverVersion === HiveVersionInfo.getVersion)
       assert(metaData.getDatabaseMajorVersion === VersionUtils.majorVersion(SPARK_VERSION))
       assert(metaData.getDatabaseMinorVersion === VersionUtils.minorVersion(SPARK_VERSION))
-      assert(metaData.getIdentifierQuoteString === " ",
-        "This method returns a space \" \" if identifier quoting is not supported")
+      assert(metaData.getIdentifierQuoteString === "`")
       assert(metaData.getNumericFunctions === "")
       assert(metaData.getStringFunctions === "")
       assert(metaData.getSystemFunctions === "")
@@ -658,6 +641,22 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       assert(metaData.getSQLStateType === DatabaseMetaData.sqlStateSQL)
       assert(metaData.getMaxLogicalLobSize === 0)
       assert(!metaData.supportsRefCursors)
+      assert(metaData.getURL.startsWith("jdbc:hive2://"))
+      assert(metaData.getUserName === System.getProperty("user.name"))
+      assert(metaData.nullsAreSortedHigh)
+      assert(!metaData.nullsAreSortedLow)
+      assert(!metaData.nullsAreSortedAtStart)
+      assert(!metaData.nullsAreSortedAtEnd)
+      assert(!metaData.supportsMixedCaseIdentifiers)
+      assert(!metaData.supportsMixedCaseQuotedIdentifiers)
+      assert(!metaData.storesUpperCaseIdentifiers)
+      assert(!metaData.storesUpperCaseQuotedIdentifiers)
+      assert(metaData.storesLowerCaseIdentifiers)
+      assert(metaData.storesLowerCaseQuotedIdentifiers)
+      assert(!metaData.storesMixedCaseIdentifiers)
+      assert(!metaData.storesMixedCaseQuotedIdentifiers)
+      assert(metaData.getSQLKeywords != "")
+      assert(metaData.getClientInfoProperties != null)
     }
   }
 

@@ -21,7 +21,8 @@ package org.apache.hadoop.hive.contrib.udf.example;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.hive.ql.exec.Description;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedExpressions;
-import org.apache.hadoop.hive.ql.exec.vector.expressions.StringTrim;
+import org.apache.hadoop.hive.ql.exec.vector.expressions.StringTrimCol;
+import org.apache.hadoop.hive.ql.exec.vector.expressions.StringTrimColScalar;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFBaseTrim;
 
 /**
@@ -32,15 +33,15 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDFBaseTrim;
     value = "_FUNC_(str) - Removes the leading and trailing space characters from str ",
     extended = "Example:\n"
         + "  > SELECT _FUNC_('   facebook  ') FROM src LIMIT 1;\n" + "  'facebook'")
-@VectorizedExpressions({ StringTrim.class })
+@VectorizedExpressions({ StringTrimCol.class, StringTrimColScalar.class })
 public class GenericUDFTrim2 extends GenericUDFBaseTrim {
   public GenericUDFTrim2() {
     super("generic_udf_trim2");
   }
 
   @Override
-  protected String performOp(String val) {
-    return StringUtils.strip(val, " ");
+  protected String performOp(String val, String trimChars) {
+    return StringUtils.strip(val, trimChars);
   }
 
 }

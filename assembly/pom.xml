@@ -264,11 +264,39 @@
     </profile>
     <profile>
       <id>hive-thriftserver</id>
+      <properties>
+        <hive.llap.scope>provided</hive.llap.scope>
+      </properties>
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
           <artifactId>spark-hive-thriftserver_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>org.eclipse.jetty</groupId>
+          <artifactId>jetty-server</artifactId>
+          <scope>runtime</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.eclipse.jetty</groupId>
+          <artifactId>jetty-security</artifactId>
+          <scope>runtime</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.eclipse.jetty</groupId>
+          <artifactId>jetty-servlet</artifactId>
+          <scope>runtime</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.datasketches</groupId>
+          <artifactId>datasketches-hive</artifactId>
+          <scope>runtime</scope>
+        </dependency>
+        <dependency>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-llap-common</artifactId>
+          <scope>runtime</scope>
         </dependency>
       </dependencies>
     </profile>

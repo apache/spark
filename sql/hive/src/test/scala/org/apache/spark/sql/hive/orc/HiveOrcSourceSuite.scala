@@ -19,6 +19,9 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.File
 
+import org.apache.hadoop.mapred.FileInputFormat
+import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
+
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT}
 import org.apache.spark.sql.execution.datasources.orc.OrcSuite
@@ -27,7 +30,8 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
+class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton
+  with ScalaCheckDrivenPropertyChecks {
 
   override val orcImp: String = "hive"
 
@@ -197,8 +201,10 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
   }
 
   test("SPARK-25993 CREATE EXTERNAL TABLE with subdirectories") {
-    Seq(true, false).foreach { convertMetastore =>
-      withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
+    forAll { (convertMetastore: Boolean, inputDirRecursive: Boolean) =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore",
+          // HIVE-19258 and MAPREDUCE-7086: Hive does not include subdirectories by default
+          FileInputFormat.INPUT_DIR_RECURSIVE -> s"$inputDirRecursive") {
         withTempDir { dir =>
           withTable("orc_tbl1", "orc_tbl2", "orc_tbl3") {
             val orcTblStatement1 =
@@ -254,7 +260,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
                    |LOCATION '${s"${dir.getCanonicalPath}"}'""".stripMargin
               sql(topDirStatement)
               val topDirSqlStatement = s"SELECT * FROM tbl1"
-              if (convertMetastore) {
+              if (convertMetastore || !inputDirRecursive) {
                 checkAnswer(sql(topDirSqlStatement), Nil)
               } else {
                 checkAnswer(sql(topDirSqlStatement), (1 to 6).map(i => Row(i, i, s"orc$i")))
@@ -270,7 +276,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
                    |LOCATION '${s"${dir.getCanonicalPath}/l1/"}'""".stripMargin
               sql(l1DirStatement)
               val l1DirSqlStatement = s"SELECT * FROM tbl2"
-              if (convertMetastore) {
+              if (convertMetastore || !inputDirRecursive) {
                 checkAnswer(sql(l1DirSqlStatement), (1 to 2).map(i => Row(i, i, s"orc$i")))
               } else {
                 checkAnswer(sql(l1DirSqlStatement), (1 to 6).map(i => Row(i, i, s"orc$i")))
@@ -286,7 +292,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
                    |LOCATION '${s"${dir.getCanonicalPath}/l1/l2/"}'""".stripMargin
               sql(l2DirStatement)
               val l2DirSqlStatement = s"SELECT * FROM tbl3"
-              if (convertMetastore) {
+              if (convertMetastore || !inputDirRecursive) {
                 checkAnswer(sql(l2DirSqlStatement), (3 to 4).map(i => Row(i, i, s"orc$i")))
               } else {
                 checkAnswer(sql(l2DirSqlStatement), (3 to 6).map(i => Row(i, i, s"orc$i")))
@@ -305,6 +311,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
               if (convertMetastore) {
                 checkAnswer(sql(wildcardTopDirSqlStatement), (1 to 2).map(i => Row(i, i, s"orc$i")))
               } else {
+                // * in the path never includes subdirectories
                 checkAnswer(sql(wildcardTopDirSqlStatement), Nil)
               }
 
@@ -321,6 +328,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
               if (convertMetastore) {
                 checkAnswer(sql(wildcardL1DirSqlStatement), (1 to 4).map(i => Row(i, i, s"orc$i")))
               } else {
+                // * in the path never includes subdirectories
                 checkAnswer(sql(wildcardL1DirSqlStatement), Nil)
               }
 
@@ -337,6 +345,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
               if (convertMetastore) {
                 checkAnswer(sql(wildcardL2SqlStatement), (3 to 6).map(i => Row(i, i, s"orc$i")))
               } else {
+                // * in the path never includes subdirectories
                 checkAnswer(sql(wildcardL2SqlStatement), Nil)
               }
             }

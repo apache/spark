@@ -28,6 +28,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.{Failure, Success, Try, Using}
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
@@ -40,6 +41,7 @@ import org.apache.hadoop.hive.metastore.conf.MetastoreConf
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf.ConfVars.{AUTO_CREATE_ALL, METASTORE_METADATA_TRANSFORMER_CLASS, SCHEMA_VERIFICATION, STATS_AUTO_GATHER}
 import org.apache.hadoop.hive.ql.IDriver
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.processors.CommandProcessorException
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.ql.util.DirectionUtils
 import org.apache.hadoop.hive.serde.serdeConstants
@@ -889,26 +891,12 @@ private[hive] class HiveClientImpl(
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
       // The remainder of the command.
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
-      val proc = shim.getCommandProcessor(tokens(0), conf)
-      proc match {
+      val results: Try[Seq[String]] = Using(shim.getCommandProcessor(tokens(0), conf)) {
         case driver: IDriver =>
-          try {
-            driver.run(cmd)
-            driver.setMaxRows(maxRows)
-            shim.getDriverResults(driver)
-          } catch {
-            case e @ (_: QueryExecutionException | _: SparkThrowable) =>
-              throw e
-            case e: Exception =>
-              // Wrap the original hive error with QueryExecutionException and throw it
-              // if there is an error in query processing.
-              // This works for hive 4.x and later versions.
-              throw new QueryExecutionException(ExceptionUtils.getStackTrace(e))
-          } finally {
-            driver.close
-          }
-
-        case _ =>
+          driver.run(cmd)
+          driver.setMaxRows(maxRows)
+          shim.getDriverResults(driver)
+        case proc =>
           val out = state.getClass.getField("out").get(state)
           if (out != null) {
             // scalastyle:off println
@@ -917,6 +905,20 @@ private[hive] class HiveClientImpl(
           }
           proc.run(cmd_1)
           Seq.empty
+      }
+      results match {
+        case Success(s) =>
+          s
+        case Failure(e) =>
+          e match {
+            case e@(_: QueryExecutionException | _: SparkThrowable) =>
+              throw e
+            case e: CommandProcessorException =>
+              // Wrap the original hive error with QueryExecutionException and throw it
+              // if there is an error in query processing.
+              // This works for hive 4.x and later versions.
+              throw new QueryExecutionException(ExceptionUtils.getStackTrace(e))
+          }
       }
     } catch {
       case e: Exception =>
@@ -1345,6 +1347,8 @@ private[hive] object HiveClientImpl extends Logging {
     SQLConf.get.redactOptions(confMap).foreach { case (k, v) =>
       logDebug(s"Applying Hadoop/Hive/Spark and extra properties to Hive Conf:$k=$v")
     }
+    // Since HIVE-17626(Hive 3.0.0), need to set hive.query.reexecution.enabled=false.
+    HiveConf.setBoolVar(hiveConf, HiveConf.ConfVars.HIVE_QUERY_REEXECUTION_ENABLED, false)
     // Disable CBO because we removed the Calcite dependency.
     hiveConf.setBoolean("hive.cbo.enable", false)
     // If this is true, SessionState.start will create a file to log hive job which will not be

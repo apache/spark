@@ -127,16 +127,15 @@ private[thriftserver] class SparkSQLOperationManager()
     operation
   }
 
-  def newGetFunctionsOperation(
+  override def newGetFunctionsOperation(
       parentSession: HiveSession,
-      operationManager: OperationManager,
       catalogName: String,
       schemaName: String,
       functionName: String): GetFunctionsOperation = synchronized {
     val session = sessionToContexts.get(parentSession.getSessionHandle)
     require(session != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
       " initialized or had already closed.")
-    val operation = new SparkGetFunctionsOperation(session, parentSession, operationManager,
+    val operation = new SparkGetFunctionsOperation(session, parentSession, this,
       catalogName, schemaName, functionName)
     handleToOperation.put(operation.getHandle, operation)
     logDebug(s"Created GetFunctionsOperation with session=$parentSession.")
