@@ -4644,7 +4644,7 @@
   },
   "RECURSION_LEVEL_LIMIT_EXCEEDED" : {
     "message" : [
-      "Recursion level limit <levelLimit> reached but query has not exhausted, try increasing it like 'WITH RECURSIVE t(col) MAX RECURSION DEPTH 200'."
+      "Recursion level limit <levelLimit> reached but query has not exhausted, try increasing it like 'WITH RECURSIVE t(col) MAX RECURSION LEVEL 200'."
     ],
     "sqlState" : "42836"
   },
