@@ -458,9 +458,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // Ensures columns of an output table are correctly resolved from the data in a logical plan.
       ResolveOutputRelation,
       // Apply table check constraints to validate data during write operations.
-      new ResolveTableConstraints(catalogManager),
-      // Resolve any new expressions introduced by the applied check constraints.
-      new ResolveReferences(catalogManager)),
+      new ResolveTableConstraints(catalogManager)),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
@@ -1441,6 +1439,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       new ResolveReferencesInUpdate(catalogManager)
     private val resolveReferencesInSort =
       new ResolveReferencesInSort(catalogManager)
+    private val resolveReferencesInFilter =
+      new ResolveReferencesInFilter(catalogManager)
 
     /**
      * Return true if there're conflicting attributes among children's outputs of a plan
@@ -1487,9 +1487,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           checkTrailingCommaInSelect(expanded, starRemoved = true)
         }
         expanded
-      // If the filter list contains Stars, expand it.
-      case p: Filter if containsStar(Seq(p.condition)) =>
-        p.copy(expandStarExpression(p.condition, p.child))
       // If the aggregate function argument contains Stars, expand it.
       case a: Aggregate if containsStar(a.aggregateExpressions) =>
         if (a.groupingExpressions.exists(_.isInstanceOf[UnresolvedOrdinal])) {
@@ -1715,23 +1712,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           Project(child.output, r.copy(resolvedFinal, newChild))
         }
 
-      // Filter can host both grouping expressions/aggregate functions and missing attributes.
-      // The grouping expressions/aggregate functions resolution takes precedence over missing
-      // attributes. See the classdoc of `ResolveReferences` for details.
-      case f @ Filter(cond, child) if !cond.resolved || f.missingInput.nonEmpty =>
-        val resolvedBasic = resolveExpressionByPlanChildren(cond, f)
-        val resolvedWithAgg = resolveColWithAgg(resolvedBasic, child)
-        val (newCond, newChild) = resolveExprsAndAddMissingAttrs(Seq(resolvedWithAgg), child)
-        // Missing columns should be resolved right after basic column resolution.
-        // See the doc of `ResolveReferences`.
-        val resolvedFinal = resolveColsLastResort(newCond.head)
-        if (child.output == newChild.output) {
-          f.copy(condition = resolvedFinal)
+      case f: Filter =>
+        // If the filter list contains Stars, expand it.
+        val afterStarExpansion = if (containsStar(Seq(f.condition))) {
+          f.copy(expandStarExpression(f.condition, f.child))
         } else {
-          // Add missing attributes and then project them away.
-          val newFilter = Filter(resolvedFinal, newChild)
-          Project(child.output, newFilter)
+          f
         }
+        resolveReferencesInFilter.apply(afterStarExpansion)
 
       case s: Sort if !s.resolved || s.missingInput.nonEmpty =>
         resolveReferencesInSort(s)
