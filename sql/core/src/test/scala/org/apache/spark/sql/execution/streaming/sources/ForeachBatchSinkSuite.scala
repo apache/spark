@@ -231,7 +231,8 @@ class ForeachBatchSinkSuite extends StreamTest {
           }
           assert(
             ex.getMessage.contains("Queries with streaming sources must be executed with " +
-              "writeStream.start()")
+              "writeStream.start(), or from a streaming table or flow definition within a Spark " +
+              "Declarative Pipeline.")
           )
 
           // Creates a table from batch source (materialized RDD plan of streaming query).
