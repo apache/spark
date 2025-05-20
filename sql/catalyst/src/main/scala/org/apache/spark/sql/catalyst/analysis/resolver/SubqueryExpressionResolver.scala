@@ -202,6 +202,10 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
    * logic is too sophisticated.
    */
   private def validateSubqueryExpression(subqueryExpression: SubqueryExpression): Unit = {
-    ValidateSubqueryExpression(traversals.current.parentOperator, subqueryExpression)
+    ValidateSubqueryExpression(
+      plan = traversals.current.parentOperator,
+      expr = subqueryExpression,
+      skipOuterReferenceValidationInFilter = true
+    )
   }
 }
