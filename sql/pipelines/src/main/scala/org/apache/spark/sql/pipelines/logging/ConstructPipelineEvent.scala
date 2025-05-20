@@ -21,14 +21,12 @@ import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 
-import org.apache.spark.internal.Logging
-
 /**
  * A factory object that is used to construct [[PipelineEvent]]s with common fields
  * automatically filled in. Developers should always use this factory rather than construct
  * an event directly from an empty proto.
  */
-object ConstructPipelineEvent extends Logging {
+object ConstructPipelineEvent {
 
   /**
    * Converts an exception that was thrown during a pipeline run to a more structured and standard
