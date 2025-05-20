@@ -827,23 +827,21 @@
       "CACHE_INVALID" : {
         "message" : [
           "Cannot retrieve Summary object <objectName> from the ML cache.",
-          "The Summary object is evicted if it hasn't been used a specified period of time.",
-          "You can configure the timeout by setting Spark cluster configure 'spark.connect.session.connectML.mlCache.memoryControl.offloadingTimeout'."
+          "Because the Summary object is evicted if you don't use it for more than <evictTimeoutInMinutes> minutes.",
+          "In this case, you can call `model.evaluate(dataset)` to create a new Summary object."
         ]
       },
       "ML_CACHE_SIZE_OVERFLOW_EXCEPTION" : {
         "message" : [
           "The model cache size in current session is about to exceed",
           "<mlCacheMaxSize> bytes.",
-          "Please delete existing cached model by executing 'del model' in python client before fitting new model or loading new model,",
-          "or increase Spark config 'spark.connect.session.connectML.mlCache.memoryControl.maxStorageSize'."
+          "Please delete existing cached model by executing 'del model' in python client before fitting new model or loading new model"
         ]
       },
       "MODEL_SIZE_OVERFLOW_EXCEPTION" : {
         "message" : [
           "The fitted or loaded model size is about <modelSize> bytes.",
-          "Please fit or load a model smaller than <modelMaxSize> bytes,",
-          "or increase Spark config 'spark.connect.session.connectML.mlCache.memoryControl.maxModelSize'."
+          "Please fit or load a model smaller than <modelMaxSize> bytes."
         ]
       },
       "UNSUPPORTED_EXCEPTION" : {
@@ -3532,6 +3530,11 @@
           "CREATE TEMPORARY FUNCTION with IF NOT EXISTS is not allowed."
         ]
       },
+      "CREATE_TEMP_TABLE_USING_PROVIDER" : {
+        "message" : [
+          "CREATE TEMPORARY TABLE ... USING ... is a deprecated syntax. To overcome the issue, please use CREATE TEMPORARY VIEW instead."
+        ]
+      },
       "EMPTY_PARTITION_VALUE" : {
         "message" : [
           "Partition key <partKey> must set value."
@@ -3868,6 +3871,24 @@
       "PARTITION_SIZE_WITH_UNSPECIFIED_DISTRIBUTION" : {
         "message" : [
           "The advisory partition size can't be specified with unspecified distribution."
+        ]
+      }
+    },
+    "sqlState" : "42000"
+  },
+  "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
+    "message" : [
+      "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>."
+    ],
+    "subClass" : {
+      "DURING_OUTPUT_SCHEMA_RESOLUTION" : {
+        "message" : [
+          "The error occurred during output schema resolution."
+        ]
+      },
+      "DURING_QUERY_EXECUTION" : {
+        "message" : [
+          "The error occurred during query execution."
         ]
       }
     },
@@ -4641,7 +4662,7 @@
   },
   "RECURSION_LEVEL_LIMIT_EXCEEDED" : {
     "message" : [
-      "Recursion level limit <levelLimit> reached but query has not exhausted, try increasing it like 'WITH RECURSIVE t(col) MAX RECURSION DEPTH 200'."
+      "Recursion level limit <levelLimit> reached but query has not exhausted, try increasing it like 'WITH RECURSIVE t(col) MAX RECURSION LEVEL 200'."
     ],
     "sqlState" : "42836"
   },
@@ -4657,9 +4678,9 @@
     ],
     "sqlState" : "42836"
   },
-  "RECURSIVE_CTE_WHEN_INLINING_IS_FORCED" : {
+  "RECURSIVE_CTE_WITH_LEGACY_INLINE_FLAG" : {
     "message" : [
-      "Recursive definitions cannot be used when CTE inlining is forced."
+      "Recursive definitions cannot be used when legacy inline flag is set to true (spark.sql.legacy.inlineCTEInCommands=true)."
     ],
     "sqlState" : "42836"
   },

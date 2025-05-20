@@ -813,6 +813,24 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
         stop = 63))
   }
 
+  test("CREATE TEMPORARY TABLE ... USING provider should be blocked under the flag") {
+    withSQLConf((SQLConf.BLOCK_CREATE_TEMP_TABLE_USING_PROVIDER.key, "true")) {
+      checkError(
+        exception = intercept[ParseException](
+          sql("CREATE TEMPORARY TABLE t (i int) USING parquet")
+        ),
+        condition = s"INVALID_SQL_SYNTAX.CREATE_TEMP_TABLE_USING_PROVIDER",
+        sqlState = Some("42000"),
+        parameters = Map(),
+        context = ExpectedContext(
+          fragment = "CREATE TEMPORARY TABLE t (i int) USING parquet",
+          start = 0,
+          stop = 45
+        )
+      )
+    }
+  }
+
   test("verify whitespace handling - standard whitespace") {
     parser.parsePlan("SELECT 1") // ASCII space
     parser.parsePlan("SELECT\r1") // ASCII carriage return

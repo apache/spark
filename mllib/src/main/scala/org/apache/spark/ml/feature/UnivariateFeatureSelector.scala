@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.hadoop.fs.Path
@@ -340,6 +342,17 @@ class UnivariateFeatureSelectorModel private[ml](
 object UnivariateFeatureSelectorModel extends MLReadable[UnivariateFeatureSelectorModel] {
   private[ml] case class Data(selectedFeatures: Seq[Int])
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeIntArray(data.selectedFeatures.toArray, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val selectedFeatures = deserializeIntArray(dis).toSeq
+    Data(selectedFeatures)
+  }
+
   @Since("3.1.1")
   override def read: MLReader[UnivariateFeatureSelectorModel] =
     new UnivariateFeatureSelectorModelReader
@@ -354,7 +367,7 @@ object UnivariateFeatureSelectorModel extends MLReadable[UnivariateFeatureSelect
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.selectedFeatures.toImmutableArraySeq)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -367,7 +380,7 @@ object UnivariateFeatureSelectorModel extends MLReadable[UnivariateFeatureSelect
     override def load(path: String): UnivariateFeatureSelectorModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
       val model = new UnivariateFeatureSelectorModel(metadata.uid, data.selectedFeatures.toArray)
       metadata.getAndSetParams(model)
       model

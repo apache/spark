@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
 import java.lang.{Double => JDouble, Integer => JInt}
 import java.util.{Map => JMap, NoSuchElementException}
 
@@ -530,6 +531,33 @@ class VectorIndexerModel private[ml] (
 object VectorIndexerModel extends MLReadable[VectorIndexerModel] {
   private[ml] case class Data(numFeatures: Int, categoryMaps: Map[Int, Map[Double, Int]])
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    dos.writeInt(data.numFeatures)
+    serializeMap[Int, Map[Double, Int]](
+      data.categoryMaps, dos,
+      (k, dos) => dos.writeInt(k),
+      (v, dos) => {
+        serializeMap[Double, Int](
+          v, dos,
+          (kk, dos) => dos.writeDouble(kk),
+          (vv, dos) => dos.writeInt(vv)
+        )
+      }
+    )
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val numFeatures = dis.readInt()
+    val categoryMaps = deserializeMap[Int, Map[Double, Int]](
+      dis,
+      dis => dis.readInt(),
+      dis => deserializeMap[Double, Int](dis, dis => dis.readDouble(), dis => dis.readInt())
+    )
+    Data(numFeatures, categoryMaps)
+  }
+
   private[VectorIndexerModel]
   class VectorIndexerModelWriter(instance: VectorIndexerModel) extends MLWriter {
 
@@ -537,7 +565,7 @@ object VectorIndexerModel extends MLReadable[VectorIndexerModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.numFeatures, instance.categoryMaps)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -548,7 +576,7 @@ object VectorIndexerModel extends MLReadable[VectorIndexerModel] {
     override def load(path: String): VectorIndexerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
       val model = new VectorIndexerModel(metadata.uid, data.numFeatures, data.categoryMaps)
       metadata.getAndSetParams(model)
       model

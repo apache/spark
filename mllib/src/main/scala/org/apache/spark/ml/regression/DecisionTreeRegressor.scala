@@ -311,7 +311,9 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
       val (nodeData, _) = NodeData.build(instance.rootNode, 0)
       val dataPath = new Path(path, "data").toString
       val numDataParts = NodeData.inferNumPartitions(instance.numNodes)
-      ReadWriteUtils.saveArray(dataPath, nodeData.toArray, sparkSession, numDataParts)
+      ReadWriteUtils.saveArray(
+        dataPath, nodeData.toArray, sparkSession, NodeData.serializeData, numDataParts
+      )
     }
   }
 

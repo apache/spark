@@ -250,6 +250,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val BLOCK_CREATE_TEMP_TABLE_USING_PROVIDER =
+    buildConf("spark.sql.legacy.blockCreateTempTableUsingProvider")
+      .doc("If enabled, we fail legacy CREATE TEMPORARY TABLE ... USING provider during parsing.")
+      .internal()
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
     .internal()
     .doc("The max number of iterations the analyzer runs.")
@@ -369,6 +377,26 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ANALYZER_SINGLE_PASS_RESOLVER_RUN_EXTENDED_RESOLUTION_CHECKS =
+    buildConf("spark.sql.analyzer.singlePassResolver.runExtendedResolutionChecks")
+      .internal()
+      .doc("When true, run `extendedResolutionChecks` after the main analysis.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_RUN_HEAVY_EXTENDED_RESOLUTION_CHECKS =
+    buildConf("spark.sql.analyzer.singlePassResolver.runHeavyExtendedResolutionChecks")
+      .internal()
+      .doc(
+        "When true, run heavy `extendedResolutionChecks` after the main analysis. Otherwise skip " +
+        "them. Heavy check either involves a network call changing external persistent storage, " +
+        "or changes a global state. For example, `ViewSyncSchemaToMetaStore` calls alter table."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
     buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
       .internal()
@@ -454,6 +482,14 @@ object SQLConf {
       "the resolved expression tree in the single-pass bottom-up Resolver. The value can be " +
       s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("4.0.0")
+    .enumConf(classOf[Level])
+    .createWithDefault(Level.TRACE)
+
+  val NAME_RESOLUTION_LOG_LEVEL = buildConf("spark.sql.nameResolutionLog.level")
+    .internal()
+    .doc("Configures the log level for logging the name resolution in the single-pass bottom-up " +
+      s"Resolver. The value can be ${VALID_LOG_LEVELS.mkString(", ")}.")
+    .version("4.1.0")
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
 
@@ -5987,6 +6023,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def planChangeBatches: Option[String] = getConf(PLAN_CHANGE_LOG_BATCHES)
 
   def expressionTreeChangeLogLevel: Level = getConf(EXPRESSION_TREE_CHANGE_LOG_LEVEL)
+
+  def nameResolutionLogLevel: Level = getConf(NAME_RESOLUTION_LOG_LEVEL)
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
 

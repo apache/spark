@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.clustering
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -39,6 +41,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 
 /**
  * Common params for GaussianMixture and GaussianMixtureModel
@@ -219,6 +222,7 @@ class GaussianMixtureModel private[ml] (
   @Since("2.0.0")
   override def summary: GaussianMixtureSummary = super.summary
 
+  override def estimatedSize: Long = SizeEstimator.estimate((weights, gaussians))
 }
 
 @Since("2.0.0")
@@ -228,6 +232,25 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
       mus: Array[OldVector],
       sigmas: Array[OldMatrix]
   )
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeDoubleArray(data.weights, dos)
+    serializeGenericArray[OldVector](data.mus, dos, (v, dos) => serializeVector(v.asML, dos))
+    serializeGenericArray[OldMatrix](data.sigmas, dos, (v, dos) => serializeMatrix(v.asML, dos))
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val weights = deserializeDoubleArray(dis)
+    val mus = deserializeGenericArray[OldVector](
+      dis, dis => OldVectors.fromML(deserializeVector(dis))
+    )
+    val sigmas = deserializeGenericArray[OldMatrix](
+      dis, dis => OldMatrices.fromML(deserializeMatrix(dis))
+    )
+    Data(weights, mus, sigmas)
+  }
 
   @Since("2.0.0")
   override def read: MLReader[GaussianMixtureModel] = new GaussianMixtureModelReader
@@ -249,7 +272,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
       val sigmas = gaussians.map(c => OldMatrices.fromML(c.cov))
       val data = Data(weights, mus, sigmas)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -264,7 +287,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
       val dataPath = new Path(path, "data").toString
 
       val data = if (ReadWriteUtils.localSavingModeState.get()) {
-        ReadWriteUtils.loadObjectFromLocal(dataPath)
+        ReadWriteUtils.loadObjectFromLocal(dataPath, deserializeData)
       } else {
         val row = sparkSession.read.parquet(dataPath).select("weights", "mus", "sigmas").head()
         Data(

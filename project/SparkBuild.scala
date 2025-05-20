@@ -58,10 +58,10 @@ object BuildCommons {
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
-    commonUtils, variant, _*
+    commonUtils, variant, pipelines, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "tags", "sketch", "kvstore", "common-utils", "variant"
+    "tags", "sketch", "kvstore", "common-utils", "variant", "pipelines"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ connectProjects
 
   val optionallyEnabledProjects@Seq(kubernetes, yarn,
@@ -372,8 +372,8 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient,
-      variant, connectShims, profiler
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, pipelines, connectCommon, connect,
+      connectClient, variant, connectShims, profiler
     ).contains(x)
   }
 
@@ -916,14 +916,13 @@ object SparkProtobuf {
     // Exclude `scala-library` from assembly.
     (assembly / assemblyPackageScala / assembleArtifact) := false,
 
-    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`,
-    // `spark-tags_*.jar`, "guava-*.jar" and `unused-1.0.0.jar` from assembly.
+    // SPARK-52227: Include `spark-protobuf-*.jar`, `unused-*.jar`,`protobuf-*.jar`in assembly.
+    // This needs to be consistent with the content of `maven-shade-plugin`.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
-      cp filter { v =>
-        val name = v.data.getName
-        name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
-          name.startsWith("spark-tags_") || name.startsWith("guava-") || name == "unused-1.0.0.jar"
+      val validPrefixes = Set("spark-protobuf", "protobuf-")
+      cp filterNot { v =>
+        validPrefixes.exists(v.data.getName.startsWith)
       }
     },
 

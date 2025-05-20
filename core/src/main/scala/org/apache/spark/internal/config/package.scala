@@ -1366,7 +1366,7 @@ package object config {
         "spark.io.compression.codec.")
       .version("2.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME =
     ConfigBuilder("spark.rdd.checkpoint.cachePreferredLocsExpireTime")

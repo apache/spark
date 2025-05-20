@@ -408,6 +408,15 @@ mllib = Module(
     ],
 )
 
+pipelines = Module(
+    name="pipelines",
+    dependencies=[],
+    source_file_regexes=["sql/pipelines"],
+    sbt_test_goals=[
+        "pipelines/test",
+    ],
+)
+
 connect = Module(
     name="connect",
     dependencies=[hive, avro, protobuf, mllib],

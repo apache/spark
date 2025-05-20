@@ -15,11 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
+package org.apache.spark.sql.jdbc
 
-import org.apache.spark.sql.catalyst.catalog.VariableManager
-import org.apache.spark.util.LexicalThreadLocal
+import org.apache.spark.SparkException
+import org.apache.spark.sql.QueryTest
 
-object SqlScriptingLocalVariableManager extends LexicalThreadLocal[VariableManager] {
-  def create(variableManager: VariableManager): Handle = createHandle(Option(variableManager))
+trait SharedJDBCIntegrationTests extends QueryTest {
+  protected def jdbcUrl: String
+
+  test("SPARK-52184: Wrap external engine syntax error") {
+    val e = intercept[SparkException] {
+      spark.read.format("jdbc")
+        .option("url", jdbcUrl)
+        .option("query", "THIS IS NOT VALID SQL").load()
+    }
+    assert(e.getCondition.startsWith("JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR"))
+  }
 }
