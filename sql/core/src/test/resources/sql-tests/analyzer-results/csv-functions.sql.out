@@ -171,6 +171,19 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select schema_of_csv(42)
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Undefined error message parameter for error class: 'DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE', MessageTemplate: Cannot resolve <sqlExpr> due to data type mismatch: The <paramIndex> parameter requires the <requiredType> type, however <inputSql> has the type <inputType>., Parameters: Map(exprName -> csv, sqlExpr -> \"schema_of_csv(42)\")"
+  }
+}
+
+
+-- !query
 CREATE TEMPORARY VIEW csvTable(csvField, a) AS SELECT * FROM VALUES ('1,abc', 'a')
 -- !query analysis
 CreateViewCommand `csvTable`, [(csvField,None), (a,None)], SELECT * FROM VALUES ('1,abc', 'a'), false, false, LocalTempView, UNSUPPORTED, true
