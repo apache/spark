@@ -59,13 +59,15 @@ PandasGroupedMapUDFTransformWithStateType = Literal[211]
 PandasGroupedMapUDFTransformWithStateInitStateType = Literal[212]
 GroupedMapUDFTransformWithStateType = Literal[213]
 GroupedMapUDFTransformWithStateInitStateType = Literal[214]
-ArrowScalarUDFType = Literal[215]
 
-class PandasVariadicScalarToScalarFunction(Protocol):
+# Arrow UDFs
+ArrowScalarUDFType = Literal[250]
+
+class ArrowVariadicScalarToScalarFunction(Protocol):
     def __call__(self, *_: pyarrow.Array) -> pyarrow.Array: ...
 
 ArrowScalarToScalarFunction = Union[
-    PandasVariadicScalarToScalarFunction,
+    ArrowVariadicScalarToScalarFunction,
     Callable[[pyarrow.Array], pyarrow.Array],
     Callable[[pyarrow.Array, pyarrow.Array], pyarrow.Array],
     Callable[[pyarrow.Array, pyarrow.Array, pyarrow.Array], pyarrow.Array],
@@ -133,7 +135,7 @@ ArrowScalarToScalarFunction = Union[
     ],
 ]
 
-class ArrowVariadicScalarToScalarFunction(Protocol):
+class PandasVariadicScalarToScalarFunction(Protocol):
     def __call__(self, *_: DataFrameOrSeriesLike_) -> DataFrameOrSeriesLike_: ...
 
 PandasScalarToScalarFunction = Union[
