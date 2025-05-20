@@ -8,7 +8,7 @@ import "spark/connect/types.proto";
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
 
-// Dispatch object for pipelines commands.
+// Dispatch object for pipelines commands. See each individual command for documentation.
 message PipelineCommand {
   oneof command_type {
     CreateDataflowGraph create_dataflow_graph = 1;
@@ -20,13 +20,7 @@ message PipelineCommand {
     DefineSqlGraphElements define_sql_graph_elements = 7;
   }
 
-  message DefineSqlGraphElements {
-    optional string dataflow_graph_id = 1;
-    optional string sql_file_name = 2;
-    optional string sql_text = 3;
-  }
-
-  // Request to create a new pipeline.
+  // Request to create a new dataflow graph.
   message CreateDataflowGraph {
     // The default catalog.
     optional string default_catalog = 1;
@@ -34,7 +28,7 @@ message PipelineCommand {
     // The default database.
     optional string default_database = 2;
 
-    // Default SQL configurations for all flows in this graph.
+    // SQL configurations for all flows in this graph.
     map<string, string> sql_conf = 5;
 
     message Response {
@@ -54,25 +48,27 @@ message PipelineCommand {
     // The graph to attach this dataset to.
     string dataflow_graph_id = 1;
 
-    // Name of the dataset.
+    // Name of the dataset. Can be partially or fully qualified.
     string dataset_name = 2;
 
-    // Table or view.
+    // The type of the dataset.
     DatasetType dataset_type = 3;
 
     // Optional comment for the dataset.
     optional string comment = 4;
 
-    // Optional table properties.
+    // Optional table properties. Only applies to dataset_type == TABLE and dataset_type == MATERIALIZED_VIEW.
     map<string, string> table_properties = 5;
 
-    // Optional partition columns for the dataset (if applicable).
+    // Optional partition columns for the dataset. Only applies to dataset_type == TABLE and
+    // dataset_type == MATERIALIZED_VIEW.
     repeated string partition_cols = 6;
 
-    // Schema for the dataset. If unset, this will be inferred.
+    // Schema for the dataset. If unset, this will be inferred from incoming flows.
     optional spark.connect.DataType schema = 7;
 
-    // The output table format of the dataset.
+    // The output table format of the dataset. Only applies to dataset_type == TABLE and
+    // dataset_type == MATERIALIZED_VIEW.
     optional string format = 8;
   }
 
@@ -81,9 +77,10 @@ message PipelineCommand {
     // The graph to attach this dataset to.
     string dataflow_graph_id = 1;
 
-    // Name of the dataset.
+    // Name of the flow. For standalone flows, this must be a single-part name.
     string flow_name = 2;
 
+    // Name of the dataset this flow writes to. Can be partially or fully qualified.
     string target_dataset_name = 3;
 
     // An unresolved relation that defines the dataset's flow.
@@ -102,10 +99,24 @@ message PipelineCommand {
     // The graph to start.
     string dataflow_graph_id = 1;
   }
+
+  // Stops all running flows in the graph. This is a no-op if the graph is not running.
   message StopRun {
-    // The ID of the graph to stop..
+    // The ID of the graph to stop.
     string dataflow_graph_id = 1;
   }
+}
+
+// Parses the SQL file and registers all datasets and flows.
+message DefineSqlGraphElements {
+  // The graph to attach this dataset to.
+  optional string dataflow_graph_id = 1;
+
+  // The full path to the SQL file. Can be relative or absolute.
+  optional string sql_file_path = 2;
+
+  // The contents of the SQL file.
+  optional string sql_text = 3;
 }
 
 // Dispatch object for pipelines command results.
@@ -119,7 +130,9 @@ message PipelineCommandResult {
   }
 }
 
+// The type of dataset.
 enum DatasetType {
+  // Safe default value. Should not be used.
   DATASET_UNSPECIFIED = 0;
   // A materialized view dataset which is published to the catalog
   MATERIALIZED_VIEW = 1;
@@ -134,6 +147,7 @@ message PipelineEventsResult {
   repeated PipelineEvent events = 1;
 }
 
+// An event emitted during the run of a graph.
 message PipelineEvent {
   // The time of the event.
   optional string timestamp = 1;
