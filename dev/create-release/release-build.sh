@@ -563,14 +563,18 @@ if [[ "$1" == "publish-release" ]]; then
   if ! is_dry_run; then
     nexus_upload=$NEXUS_ROOT/deployByRepositoryId/$staged_repo_id
     echo "Uploading files to $nexus_upload"
-    for file in $(find . -type f)
-    do
-      # strip leading ./
-      file_short=$(echo $file | sed -e "s/\.\///")
-      dest_url="$nexus_upload/org/apache/spark/$file_short"
-      echo "  Uploading $file_short"
-      curl --retry 3 --retry-all-errors -u $ASF_USERNAME:$ASF_PASSWORD --upload-file $file_short $dest_url
-    done
+    find . -type f | sed -e 's|^\./||' | \
+    xargs -P 8 -n 1 -I {} bash -c '
+      file_short="{}"
+      dest_url="'$NEXUS_ROOT'/deployByRepositoryId/'$staged_repo_id'/org/apache/spark/$file_short"
+      echo "[START] $file_short"
+      if curl --retry 3 --retry-all-errors -sS -u "$ASF_USERNAME:$ASF_PASSWORD" \
+          --upload-file "$file_short" "$dest_url"; then
+        echo "[ OK  ] $file_short"
+      else
+        echo "[FAIL ] $file_short"
+      fi
+    '
 
     echo "Closing nexus staging repository"
     repo_request="<promoteRequest><data><stagedRepositoryId>$staged_repo_id</stagedRepositoryId><description>Apache Spark $SPARK_VERSION (commit $git_hash)</description></data></promoteRequest>"
