@@ -943,10 +943,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
   /** Returns a string representation of the nodes in this tree */
   final def treeString: String = treeString(verbose = true)
 
-  final def treeStringWithOutputColumns: String = {
-    treeString(verbose = false, printOutputColumns = true)
-  }
-
   final def treeString(
       verbose: Boolean,
       addSuffix: Boolean = false,
@@ -1017,9 +1013,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    */
   def innerChildren: Seq[TreeNode[_]] = Seq.empty
 
-  def nodeWithOutputColumnsString(maxColumns: Int): String = {
-    throw new UnsupportedOperationException("TreeNode does not have output columns")
-  }
+  def nodeWithOutputColumnsString(maxColumns: Int): String = simpleString(maxColumns)
 
   /**
    * Appends the string representation of this node and its children to the given Writer.

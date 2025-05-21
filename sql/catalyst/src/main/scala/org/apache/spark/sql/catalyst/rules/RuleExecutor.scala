@@ -59,13 +59,15 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
     if (!newPlan.fastEquals(oldPlan)) {
       if (logRules.isEmpty || logRules.get.contains(ruleName)) {
         def message(): MessageWithContext = {
+          // scalastyle:off line.size.limit
           log"""
              |=== Applying Rule ${MDC(RULE_NAME, ruleName)} ===
              |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n"))}
              |
              |Output Information:
-             |${MDC(QUERY_PLAN, newPlan.treeStringWithOutputColumns)}
+             |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString(verbose = false, printOutputColumns = true), newPlan.treeString(verbose = false, printOutputColumns = true)))}
            """.stripMargin
+           // scalastyle:on line.size.limit
         }
 
         logBasedOnLevel(logLevel)(message())
@@ -77,13 +79,15 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
     if (logBatches.isEmpty || logBatches.get.contains(batchName)) {
       def message(): MessageWithContext = {
         if (!oldPlan.fastEquals(newPlan)) {
+          // scalastyle:off line.size.limit
           log"""
              |=== Result of Batch ${MDC(BATCH_NAME, batchName)} ===
              |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n"))}
              |
              |Output Information:
-             |${MDC(QUERY_PLAN, newPlan.treeStringWithOutputColumns)}
+             |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString(verbose = false, printOutputColumns = true), newPlan.treeString(verbose = false, printOutputColumns = true)))}
           """.stripMargin
+          // scalastyle:on line.size.limit
         } else {
           log"Batch ${MDC(BATCH_NAME, batchName)} has no effect."
         }
