@@ -252,11 +252,11 @@ class IntegralOps(NumericOps):
 
         def truediv(left: PySparkColumn, right: Any) -> PySparkColumn:
             return F.when(
-                right_col == 0,
-                F.when(left_col < 0, F.lit(float("-inf")))
-                .when(left_col > 0, F.lit(float("inf")))
+                right == 0,
+                F.when(left < 0, F.lit(float("-inf")))
+                .when(left > 0, F.lit(float("inf")))
                 .otherwise(F.lit(np.nan)),
-            ).otherwise(left_col / right_col)
+            ).otherwise(left / right)
 
         return numpy_column_op(truediv)(left, right)
 
@@ -336,15 +336,13 @@ class FractionalOps(NumericOps):
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("True division can not be applied to given types.")
 
-        def truediv(left_col: PySparkColumn, right_val: Any) -> PySparkColumn:
+        def truediv(left: PySparkColumn, right: Any) -> PySparkColumn:
             return F.when(
-                F.lit(right_val != 0) | F.lit(right_val).isNull(),
-                left_col / right_val,
-            ).otherwise(
-                F.when(
-                    (left_col == float("inf")) | (left_col == float("-inf")), left_col
-                ).otherwise(float("inf") / left_col)
-            )
+                right == 0,
+                F.when(left < 0, F.lit(float("-inf")))
+                .when(left > 0, F.lit(float("inf")))
+                .otherwise(F.lit(np.nan)),
+            ).otherwise(left / right)
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         return numpy_column_op(truediv)(left, right)
