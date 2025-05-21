@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{And, CheckInvariant, Expression, V2ExpressionUtils}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, V2WriteCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, UpdateTable, V2WriteCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Table}
@@ -33,14 +33,24 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
     case v2Write: V2WriteCommand
       if v2Write.table.resolved && v2Write.query.resolved &&
         !containsCheckInvariant(v2Write.query) && v2Write.outputResolved =>
-      v2Write.table match {
-        case r: DataSourceV2Relation =>
-          buildCheckCondition(r.table).map { condition =>
-            v2Write.withNewQuery(Filter(condition, v2Write.query))
-          }.getOrElse(v2Write)
-        case _ =>
-          v2Write
-      }
+      extractCheckCondition(v2Write.table).map { condition =>
+        v2Write.withNewQuery(Filter(condition, v2Write.query))
+      }.getOrElse(v2Write)
+
+    case u: UpdateTable if u.table.resolved && u.checkConstraint.isEmpty =>
+      extractCheckCondition(u.table).map { condition =>
+        u.copy(checkConstraint = Some(condition))
+      }.getOrElse(u)
+
+  }
+
+  private def extractCheckCondition(plan: LogicalPlan): Option[Expression] = {
+    val tables = plan collect {
+      case r: DataSourceV2Relation =>
+        r.table
+    }
+    assert(tables.size <= 1, "At most one table is expected in the plan.")
+    tables.headOption.flatMap(buildCheckCondition)
   }
 
   // Constructs an optional check condition based on the table's check constraints.

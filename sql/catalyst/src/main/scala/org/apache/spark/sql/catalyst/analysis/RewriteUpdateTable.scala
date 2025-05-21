@@ -43,13 +43,25 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
         case r @ DataSourceV2Relation(tbl: SupportsRowLevelOperations, _, _, _, _) =>
           val table = buildOperationTable(tbl, UPDATE, CaseInsensitiveStringMap.empty())
           val updateCond = cond.getOrElse(TrueLiteral)
-          table.operation match {
+          val v2Write = table.operation match {
             case _: SupportsDelta =>
               buildWriteDeltaPlan(r, table, assignments, updateCond)
             case _ if SubqueryExpression.hasSubquery(updateCond) =>
               buildReplaceDataWithUnionPlan(r, table, assignments, updateCond)
             case _ =>
               buildReplaceDataPlan(r, table, assignments, updateCond)
+          }
+          if (checkConstraint.isDefined) {
+            // After the table is rewritten, we need to resolve the check constraint to the new
+            // attributes in the rewritten plan.
+            val resolvedConstraint = checkConstraint.get.transform {
+              case attr: Attribute =>
+                v2Write.query.output.find(a => conf.resolver(a.name, attr.name)).getOrElse(attr)
+            }
+            v2Write.withNewQuery(
+              Filter(resolvedConstraint, v2Write.query))
+          } else {
+            v2Write
           }
 
         case _ =>
