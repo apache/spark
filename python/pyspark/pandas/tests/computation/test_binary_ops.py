@@ -111,7 +111,6 @@ class FrameBinaryOpsMixin:
         psdf = ps.DataFrame({"a": ["x"], "b": ["y"]})
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] - psdf["b"])
 
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_divide_by_zero_behavior(self):
         # float / float
         # np.float32
