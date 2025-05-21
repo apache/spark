@@ -1109,32 +1109,10 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
    */
   @transient private lazy val getKeysWithValueIndexes:
       (ArrayData, ArrayData) => mutable.Iterable[(Any, Array[Option[Int]])] = {
-    keyType match {
-      case properEqualsType if TypeUtils.typeWithProperEquals(properEqualsType) =>
-        getKeysWithIndexesFast
-      case FloatType | DoubleType =>
-        getKeysWithInexesForFloatingPoints
-      case _ =>
-        getKeysWithIndexesBruteForce
-    }
-  }
-
-  private def getKeysWithInexesForFloatingPoints(keys1: ArrayData, keys2: ArrayData) = {
-    val keysWithIndexes = getKeysWithIndexesFast(keys1, keys2)
-    val NaNKeys = keyType match {
-      case FloatType => keysWithIndexes.keySet.filter(v => v.asInstanceOf[Float].isNaN)
-      case DoubleType => keysWithIndexes.keySet.filter(v => v.asInstanceOf[Double].isNaN)
-      case _ => Seq.empty
-    }
-    if (NaNKeys.size == 2) {
-      val value1 = keysWithIndexes(NaNKeys.head).head
-      val value2 = keysWithIndexes(NaNKeys.last).last
-      keysWithIndexes.remove(NaNKeys.last)
-      keysWithIndexes.put(NaNKeys.head, Array(value1, value2))
-      keysWithIndexes
-    }
-    else {
-      keysWithIndexes
+    if (TypeUtils.typeWithProperEquals(keyType)) {
+      getKeysWithIndexesFast
+    } else {
+      getKeysWithIndexesBruteForce
     }
   }
 
@@ -1146,21 +1124,38 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 
   private def getKeysWithIndexesFast(keys1: ArrayData, keys2: ArrayData) = {
     val hashMap = new mutable.LinkedHashMap[Any, Array[Option[Int]]]
+    val NaNTracker = Array[Option[Int]](None, None)
     for ((z, array) <- Array((0, keys1), (1, keys2))) {
       var i = 0
       while (i < array.numElements()) {
         val key = array.get(i, keyType)
-        hashMap.get(key) match {
-          case Some(indexes) =>
-            if (indexes(z).isEmpty) {
-              indexes(z) = Some(i)
+        keyType match {
+          case FloatType if key.asInstanceOf[Float].isNaN =>
+            NaNTracker(z) = Some(i)
+          case DoubleType if key.asInstanceOf[Double].isNaN =>
+            NaNTracker(z) = Some(i)
+          case _ =>
+            hashMap.get(key) match {
+              case Some(indexes) =>
+                if (indexes(z).isEmpty) {
+                  indexes(z) = Some(i)
+                }
+              case None =>
+                val indexes = Array[Option[Int]](None, None)
+                indexes(z) = Some(i)
+                hashMap.put(key, indexes)
             }
-          case None =>
-            val indexes = Array[Option[Int]](None, None)
-            indexes(z) = Some(i)
-            hashMap.put(key, indexes)
         }
         i += 1
+      }
+    }
+    if (NaNTracker(0).isDefined || NaNTracker(1).isDefined) {
+      keyType match {
+        case FloatType =>
+          hashMap.put(Float.NaN, NaNTracker)
+        case DoubleType =>
+          hashMap.put(Double.NaN, NaNTracker)
+        case _ =>
       }
     }
     hashMap
