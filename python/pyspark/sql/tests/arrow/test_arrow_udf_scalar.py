@@ -549,6 +549,28 @@ class ScalarArrowUDFTestsMixin:
             )
             self.assertEqual(df.collect(), res.collect())
 
+    def test_register_arrow_udf_basic(self):
+        import pyarrow as pa
+
+        scalar_original_add = arrow_udf(
+            lambda x, y: pa.compute.add(x, y).cast(pa.int32()), IntegerType()
+        )
+        self.assertEqual(scalar_original_add.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
+        self.assertEqual(scalar_original_add.deterministic, True)
+
+        new_add = self.spark.catalog.registerFunction("add1", scalar_original_add)
+
+        df = self.spark.range(10).select(
+            F.col("id").cast("int").alias("a"), F.col("id").cast("int").alias("b")
+        )
+        res1 = df.select(new_add(F.col("a"), F.col("b")))
+        res2 = self.spark.sql(
+            "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
+        )
+        expected = df.select(F.expr("a + b"))
+        self.assertEqual(expected.collect(), res1.collect())
+        self.assertEqual(expected.collect(), res2.collect())
+
     def test_register_nondeterministic_arrow_udf(self):
         import pyarrow as pa
 
@@ -599,7 +621,6 @@ class ScalarArrowUDFTestsMixin:
                 with self.assertRaisesRegex(AnalysisException, "Non-deterministic"):
                     df.agg(F.sum(random_udf("id"))).collect()
 
-    # TODO: add tests for registering Arrow UDF
     # TODO: add tests for chained Arrow UDFs
     # TODO: add tests for named arguments
 
