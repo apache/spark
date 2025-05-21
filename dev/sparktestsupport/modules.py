@@ -555,7 +555,11 @@ pyspark_sql = Module(
         "pyspark.sql.tests.pandas.test_pandas_udf_typehints_with_future_annotations",
         "pyspark.sql.tests.pandas.test_pandas_udf_window",
         "pyspark.sql.tests.pandas.test_pandas_sqlmetrics",
-        "pyspark.sql.tests.pandas.test_converter",
+        "pyspark.sql.tests.pandas.test_block_connect_access",
+        "pyspark.sql.tests.pipelines.test_blocking_connect_access"
+        "pyspark.sql.tests.pipelines.test_cli",
+        "pyspark.sql.tests.pipelines.test_decorators",
+        "pyspark.sql.tests.pipelines.test_graph_element_registry",
         "pyspark.sql.tests.test_python_datasource",
         "pyspark.sql.tests.test_python_streaming_datasource",
         "pyspark.sql.tests.test_readwriter",
