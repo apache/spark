@@ -33,8 +33,7 @@ message PipelineCommand {
     DefineFlow define_flow = 3;
     DropDataflowGraph drop_dataflow_graph = 4;
     StartRun start_run = 5;
-    StopRun stop_run = 6;
-    DefineSqlGraphElements define_sql_graph_elements = 7;
+    DefineSqlGraphElements define_sql_graph_elements = 6;
   }
 
   // Request to create a new dataflow graph.
@@ -114,12 +113,6 @@ message PipelineCommand {
   // graph elements are registered.
   message StartRun {
     // The graph to start.
-    string dataflow_graph_id = 1;
-  }
-
-  // Stops all running flows in the graph. This is a no-op if the graph is not running.
-  message StopRun {
-    // The ID of the graph to stop.
     string dataflow_graph_id = 1;
   }
 }
