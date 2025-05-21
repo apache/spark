@@ -154,11 +154,17 @@ object NormalizePlan extends PredicateHelper {
             .getTagValue(DeduplicateRelations.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION)
             .isDefined =>
         project.child
+      case aggregate @ Aggregate(_, _, innerProject: Project, _) =>
+        val newInnerProject = Project(
+          innerProject.projectList.sortBy(_.name),
+          innerProject.child
+        )
+        aggregate.copy(child = newInnerProject)
       case Project(outerProjectList, innerProject: Project) =>
-        val normalizedInnerProjectList = normalizeProjectList(innerProject.projectList)
-        val orderedInnerProjectList = normalizedInnerProjectList.sortBy(_.name)
-        val newInnerProject =
-          Project(orderedInnerProjectList, innerProject.child)
+        val newInnerProject = Project(
+          innerProject.projectList.sortBy(_.name),
+          innerProject.child
+        )
         Project(normalizeProjectList(outerProjectList), newInnerProject)
       case Project(projectList, child) =>
         Project(normalizeProjectList(projectList), child)
