@@ -162,15 +162,7 @@ object ColumnDefinition {
         cmd.columns.foreach { col =>
           col.defaultValue.foreach { default =>
             checkDefaultColumnConflicts(col)
-            if (!default.resolved) {
-              throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
-                statement, col.name, default.originalSQL, null)
-            }
             validateDefaultValueExpr(default, statement, col.name, col.dataType)
-            if (!default.deterministic) {
-              throw QueryCompilationErrors.defaultValueNonDeterministicError(
-                statement, col.name, default.originalSQL)
-            }
           }
         }
 
@@ -178,15 +170,7 @@ object ColumnDefinition {
         val statement = "ALTER TABLE ADD COLUMNS"
         cmd.columnsToAdd.foreach { c =>
           c.default.foreach { d =>
-            if (!d.resolved) {
-              throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
-                statement, c.colName, d.originalSQL, null)
-            }
             validateDefaultValueExpr(d, statement, c.colName, c.dataType)
-            if (!d.deterministic) {
-              throw QueryCompilationErrors.defaultValueNonDeterministicError(
-                statement, c.colName, d.originalSQL)
-            }
           }
         }
 
@@ -194,16 +178,12 @@ object ColumnDefinition {
         val statement = "ALTER TABLE ALTER COLUMN"
         cmd.specs.foreach { c =>
           c.newDefaultExpression.foreach { d =>
+            // Eagerly check resolved, as accessing datatype requires it to be resolved
             if (!d.resolved) {
               throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
                 statement, c.column.name.quoted, d.originalSQL, null)
             }
-            validateDefaultValueExpr(d, statement,
-              c.column.name.quoted, d.dataType)
-            if (!d.deterministic) {
-              throw QueryCompilationErrors.defaultValueNonDeterministicError(
-                statement, c.column.name.quoted, d.originalSQL)
-            }
+            validateDefaultValueExpr(d, statement, c.column.name.quoted, d.dataType)
           }
         }
 

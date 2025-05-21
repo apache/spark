@@ -1170,7 +1170,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("create table t(i boolean, s bigint default badvalue) using parquet")
         },
-        condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
+        condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
         parameters = Map(
           "statement" -> "CREATE TABLE",
           "colName" -> "`s`",

@@ -598,12 +598,22 @@ object ResolveDefaultColumns extends QueryErrorsBase
       // expression is `foldable` here, as the plan is not optimized yet.
     }
 
+    if (!default.resolved) {
+      throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+        statement, colName, default.originalSQL, null)
+    }
+
     if (default.references.nonEmpty || default.exists(_.isInstanceOf[VariableReference])) {
       // Ideally we should let the rest of `CheckAnalysis` report errors about why the default
       // expression is unresolved. But we should report a better error here if the default
       // expression references columns, which means it's not a constant for sure.
       // Note that, session variable should be considered as non-constant as well.
       throw QueryCompilationErrors.defaultValueNotConstantError(
+        statement, colName, default.originalSQL)
+    }
+
+    if (!default.deterministic) {
+      throw QueryCompilationErrors.defaultValueNonDeterministicError(
         statement, colName, default.originalSQL)
     }
   }
