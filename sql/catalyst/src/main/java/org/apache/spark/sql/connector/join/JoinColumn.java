@@ -43,7 +43,7 @@ public final class JoinColumn implements NamedReference {
     String[] fullyQualified = new String[qualifier.length + 1];
     System.arraycopy(qualifier, 0, fullyQualified, 0, qualifier.length);
     fullyQualified[qualifier.length] = name;
-    return qualifier;
+    return fullyQualified;
   }
 
   @Override

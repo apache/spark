@@ -19,10 +19,5 @@ package org.apache.spark.sql.connector.join;
 
 import org.apache.spark.annotation.Evolving;
 
-/**
- * Base class of the public Join type API.
- *
- * @since 4.0.0
- */
 @Evolving
 public final class Inner implements JoinType { }
