@@ -84,7 +84,7 @@ public class TestSparkBloomFilter {
       @Values(doubles = {0.05, 0.03, 0.01, 0.001}) double expectedFpp,
       @Values(ints = {BloomFilterImpl.DEFAULT_SEED, 1, 127}) int deterministicSeed
     ) {
-        long optimalNumOfBits = BloomFilter.optimalNumOfBits(numItems, expectedFpp) / Byte.SIZE;
+        long optimalNumOfBits = BloomFilter.optimalNumOfBits(numItems, expectedFpp);
         System.err.printf(
                 "optimal   bitArray: %d (%d MB)\n",
                 optimalNumOfBits,
