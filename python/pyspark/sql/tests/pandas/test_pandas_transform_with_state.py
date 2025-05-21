@@ -760,6 +760,7 @@ class TransformWithStateTestsMixin:
         time_mode="None",
         checkpoint_path=None,
         initial_state=None,
+        with_extra_transformation=False,
     ):
         input_path = tempfile.mkdtemp()
         if checkpoint_path is None:
@@ -798,6 +799,14 @@ class TransformWithStateTestsMixin:
                 initialState=initial_state,
             )
 
+        if with_extra_transformation:
+            from pyspark.sql import functions as fn
+
+            tws_df = tws_df.select(
+                fn.col("id").cast("string").alias("key"),
+                fn.to_json(fn.struct(fn.col("value"))).alias("value"),
+            )
+
         q = (
             tws_df.writeStream.queryName("this_query")
             .option("checkpointLocation", checkpoint_path)
@@ -833,6 +842,31 @@ class TransformWithStateTestsMixin:
 
         self._test_transform_with_state_init_state(
             SimpleStatefulProcessorWithInitialStateFactory(), check_results
+        )
+
+    def test_transform_with_state_init_state_with_extra_transformation(self):
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                # for key 0, initial state was processed and it was only processed once;
+                # for key 1, it did not appear in the initial state df;
+                # for key 3, it did not appear in the first batch of input keys
+                # so it won't be emitted
+                assert set(batch_df.sort("key").collect()) == {
+                    Row(key="0", value=f'{{"value":"{789 + 123 + 46}"}}'),
+                    Row(key="1", value=f'{{"value":"{146 + 346}"}}'),
+                }
+            else:
+                # for key 0, verify initial state was only processed once in the first batch;
+                # for key 3, verify init state was processed and reflected in the accumulated value
+                assert set(batch_df.sort("key").collect()) == {
+                    Row(key="0", value=f'{{"value":"{789 + 123 + 46 + 67}"}}'),
+                    Row(key="3", value=f'{{"value":"{987 + 12}"}}'),
+                }
+
+        self._test_transform_with_state_init_state(
+            SimpleStatefulProcessorWithInitialStateFactory(),
+            check_results,
+            with_extra_transformation=True,
         )
 
     def _test_transform_with_state_non_contiguous_grouping_cols(
