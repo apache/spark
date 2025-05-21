@@ -504,7 +504,7 @@ if [[ "$1" == "publish-release" ]]; then
       file_short="{}"
       dest_url="'$NEXUS_ROOT'/deployByRepositoryId/'$staged_repo_id'/org/apache/spark/$file_short"
       echo "[START] $file_short"
-      if curl --retry 3 --retry-all-errors -sS -u "$ASF_USERNAME:$ASF_PASSWORD" \
+      if curl --retry 3 -u "$ASF_USERNAME:$ASF_PASSWORD" \
           --upload-file "$file_short" "$dest_url"; then
         echo "[ OK  ] $file_short"
       else
