@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{And, CheckInvariant, Expression, V2ExpressionUtils}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, UpdateTable, V2WriteCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, MergeIntoTable, UpdateTable, V2WriteCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Table}
@@ -42,6 +42,10 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
         u.copy(checkConstraint = Some(condition))
       }.getOrElse(u)
 
+    case m: MergeIntoTable if m.targetTable.resolved && m.checkConstraint.isEmpty =>
+      extractCheckCondition(m.targetTable).map { condition =>
+        m.copy(checkConstraint = Some(condition))
+      }.getOrElse(m)
   }
 
   private def extractCheckCondition(plan: LogicalPlan): Option[Expression] = {

@@ -1676,10 +1676,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             }
 
             val resolvedMergeCondition = resolveExpressionByPlanChildren(m.mergeCondition, m)
+            val resolvedCheckConstraint = m.checkConstraint.map { checkConstraint =>
+              resolveExpressionByPlanChildren(checkConstraint, m)
+            }
             m.copy(mergeCondition = resolvedMergeCondition,
               matchedActions = newMatchedActions,
               notMatchedActions = newNotMatchedActions,
-              notMatchedBySourceActions = newNotMatchedBySourceActions)
+              notMatchedBySourceActions = newNotMatchedBySourceActions,
+              checkConstraint = resolvedCheckConstraint)
         }
 
       // UnresolvedHaving can host grouping expressions and aggregate functions. We should resolve
