@@ -601,6 +601,23 @@ class ScalarArrowUDFTestsMixin:
         self.assertEqual(expected.collect(), res1.collect())
         self.assertEqual(expected.collect(), res2.collect())
 
+    def test_udf_register_nondeterministic_arrow_udf(self):
+        import pyarrow as pa
+
+        random_arrow_udf = arrow_udf(
+            lambda x: pa.compute.add(x, random.randint(6, 6)), LongType()
+        ).asNondeterministic()
+        self.assertEqual(random_arrow_udf.deterministic, False)
+        self.assertEqual(random_arrow_udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
+
+        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS randomArrowUDF")
+        nondeterministic_arrow_udf = self.spark.udf.register("randomArrowUDF", random_arrow_udf)
+
+        self.assertEqual(nondeterministic_arrow_udf.deterministic, False)
+        self.assertEqual(nondeterministic_arrow_udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
+        [row] = self.spark.sql("SELECT randomArrowUDF(1)").collect()
+        self.assertEqual(row[0], 7)
+
     def test_catalog_register_nondeterministic_arrow_udf(self):
         import pyarrow as pa
 
@@ -614,23 +631,6 @@ class ScalarArrowUDFTestsMixin:
         nondeterministic_arrow_udf = self.spark.catalog.registerFunction(
             "randomArrowUDF", random_arrow_udf
         )
-
-        self.assertEqual(nondeterministic_arrow_udf.deterministic, False)
-        self.assertEqual(nondeterministic_arrow_udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
-        [row] = self.spark.sql("SELECT randomArrowUDF(1)").collect()
-        self.assertEqual(row[0], 7)
-
-    def test_udf_register_nondeterministic_arrow_udf(self):
-        import pyarrow as pa
-
-        random_arrow_udf = arrow_udf(
-            lambda x: pa.compute.add(x, random.randint(6, 6)), LongType()
-        ).asNondeterministic()
-        self.assertEqual(random_arrow_udf.deterministic, False)
-        self.assertEqual(random_arrow_udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
-
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS randomArrowUDF")
-        nondeterministic_arrow_udf = self.spark.udf.register("randomArrowUDF", random_arrow_udf)
 
         self.assertEqual(nondeterministic_arrow_udf.deterministic, False)
         self.assertEqual(nondeterministic_arrow_udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
