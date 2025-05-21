@@ -549,20 +549,92 @@ class ScalarArrowUDFTestsMixin:
             )
             self.assertEqual(df.collect(), res.collect())
 
-    def test_register_nondeterministic_arrow_udf(self):
+    def test_udf_register_arrow_udf_basic(self):
         import pyarrow as pa
 
-        random_pandas_udf = arrow_udf(
+        scalar_original_add = arrow_udf(
+            lambda x, y: pa.compute.add(x, y).cast(pa.int32()), IntegerType()
+        )
+        self.assertEqual(scalar_original_add.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
+        self.assertEqual(scalar_original_add.deterministic, True)
+
+        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS add1")
+        new_add = self.spark.udf.register("add1", scalar_original_add)
+
+        self.assertEqual(new_add.deterministic, True)
+        self.assertEqual(new_add.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
+
+        df = self.spark.range(10).select(
+            F.col("id").cast("int").alias("a"), F.col("id").cast("int").alias("b")
+        )
+        res1 = df.select(new_add(F.col("a"), F.col("b")))
+        res2 = self.spark.sql(
+            "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
+        )
+        expected = df.select(F.expr("a + b"))
+        self.assertEqual(expected.collect(), res1.collect())
+        self.assertEqual(expected.collect(), res2.collect())
+
+    def test_catalog_register_arrow_udf_basic(self):
+        import pyarrow as pa
+
+        scalar_original_add = arrow_udf(
+            lambda x, y: pa.compute.add(x, y).cast(pa.int32()), IntegerType()
+        )
+        self.assertEqual(scalar_original_add.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
+        self.assertEqual(scalar_original_add.deterministic, True)
+
+        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS add1")
+        new_add = self.spark.catalog.registerFunction("add1", scalar_original_add)
+
+        self.assertEqual(new_add.deterministic, True)
+        self.assertEqual(new_add.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
+
+        df = self.spark.range(10).select(
+            F.col("id").cast("int").alias("a"), F.col("id").cast("int").alias("b")
+        )
+        res1 = df.select(new_add(F.col("a"), F.col("b")))
+        res2 = self.spark.sql(
+            "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
+        )
+        expected = df.select(F.expr("a + b"))
+        self.assertEqual(expected.collect(), res1.collect())
+        self.assertEqual(expected.collect(), res2.collect())
+
+    def test_udf_register_nondeterministic_arrow_udf(self):
+        import pyarrow as pa
+
+        random_arrow_udf = arrow_udf(
             lambda x: pa.compute.add(x, random.randint(6, 6)), LongType()
         ).asNondeterministic()
-        self.assertEqual(random_pandas_udf.deterministic, False)
-        self.assertEqual(random_pandas_udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
-        nondeterministic_pandas_udf = self.spark.catalog.registerFunction(
-            "randomPandasUDF", random_pandas_udf
+        self.assertEqual(random_arrow_udf.deterministic, False)
+        self.assertEqual(random_arrow_udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
+
+        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS randomArrowUDF")
+        nondeterministic_arrow_udf = self.spark.udf.register("randomArrowUDF", random_arrow_udf)
+
+        self.assertEqual(nondeterministic_arrow_udf.deterministic, False)
+        self.assertEqual(nondeterministic_arrow_udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
+        [row] = self.spark.sql("SELECT randomArrowUDF(1)").collect()
+        self.assertEqual(row[0], 7)
+
+    def test_catalog_register_nondeterministic_arrow_udf(self):
+        import pyarrow as pa
+
+        random_arrow_udf = arrow_udf(
+            lambda x: pa.compute.add(x, random.randint(6, 6)), LongType()
+        ).asNondeterministic()
+        self.assertEqual(random_arrow_udf.deterministic, False)
+        self.assertEqual(random_arrow_udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
+
+        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS randomArrowUDF")
+        nondeterministic_arrow_udf = self.spark.catalog.registerFunction(
+            "randomArrowUDF", random_arrow_udf
         )
-        self.assertEqual(nondeterministic_pandas_udf.deterministic, False)
-        self.assertEqual(nondeterministic_pandas_udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
-        [row] = self.spark.sql("SELECT randomPandasUDF(1)").collect()
+
+        self.assertEqual(nondeterministic_arrow_udf.deterministic, False)
+        self.assertEqual(nondeterministic_arrow_udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
+        [row] = self.spark.sql("SELECT randomArrowUDF(1)").collect()
         self.assertEqual(row[0], 7)
 
     def test_nondeterministic_arrow_udf(self):
@@ -599,7 +671,6 @@ class ScalarArrowUDFTestsMixin:
                 with self.assertRaisesRegex(AnalysisException, "Non-deterministic"):
                     df.agg(F.sum(random_udf("id"))).collect()
 
-    # TODO: add tests for registering Arrow UDF
     # TODO: add tests for chained Arrow UDFs
     # TODO: add tests for named arguments
 
