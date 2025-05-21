@@ -351,9 +351,7 @@ object ShuffleExchangeExec {
           val projection =
             UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
           val mutablePair = new MutablePair[InternalRow, Null]()
-          // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
-          // partition bounds. To get accurate samples, we need to copy the mutable keys.
-          iter.map(row => mutablePair.update(projection(row).copy(), null))
+          iter.map(row => mutablePair.update(projection(row), null))
         }
         // Construct ordering on extracted sort key.
         val orderingAttributes = sortingExpressions.zipWithIndex.map { case (ord, i) =>
