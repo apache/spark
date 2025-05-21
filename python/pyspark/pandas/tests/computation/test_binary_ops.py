@@ -189,6 +189,19 @@ class FrameBinaryOpsMixin:
         psdf = ps.from_pandas(pdf)
         self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
 
+        pdf = pd.DataFrame(
+            {
+                "a": [1, -1, 0],
+                "b": [0, 0, 0],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        # a / b: .. divide by zero
+        self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
+
+        # b / a: 0 divided by ..
+        self.assert_eq(psdf["b"] / psdf["a"], pdf["b"] / pdf["a"])
+
     def test_binary_operator_truediv(self):
         # Positive
         pdf = pd.DataFrame({"a": [3], "b": [2]})
