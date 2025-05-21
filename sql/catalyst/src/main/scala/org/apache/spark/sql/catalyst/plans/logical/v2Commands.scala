@@ -719,7 +719,7 @@ case class UpdateTable(
     table: LogicalPlan,
     assignments: Seq[Assignment],
     condition: Option[Expression],
-    checkConstraint: Option[Expression]) extends UnaryCommand with SupportsSubquery {
+    checkConstraint: Option[Expression] = None) extends UnaryCommand with SupportsSubquery {
 
   lazy val aligned: Boolean = AssignmentUtils.aligned(table.output, assignments)
 
@@ -751,7 +751,8 @@ case class MergeIntoTable(
     matchedActions: Seq[MergeAction],
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction],
-    withSchemaEvolution: Boolean) extends BinaryCommand with SupportsSubquery {
+    withSchemaEvolution: Boolean,
+    checkConstraint: Option[Expression] = None) extends BinaryCommand with SupportsSubquery {
 
   lazy val aligned: Boolean = {
     val actions = matchedActions ++ notMatchedActions ++ notMatchedBySourceActions
