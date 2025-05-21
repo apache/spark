@@ -49,26 +49,26 @@ message PipelineCommand {
 
     message Response {
       // The ID of the created graph.
-      string dataflow_graph_id = 1;
+      optional string dataflow_graph_id = 1;
     }
   }
 
   // Drops the graph and stops any running attached flows.
   message DropDataflowGraph {
     // The graph to drop.
-    string dataflow_graph_id = 1;
+    optional string dataflow_graph_id = 1;
   }
 
   // Request to define a dataset: a table, a materialized view, or a temporary view.
   message DefineDataset {
     // The graph to attach this dataset to.
-    string dataflow_graph_id = 1;
+    optional string dataflow_graph_id = 1;
 
     // Name of the dataset. Can be partially or fully qualified.
-    string dataset_name = 2;
+    optional string dataset_name = 2;
 
     // The type of the dataset.
-    DatasetType dataset_type = 3;
+    optional DatasetType dataset_type = 3;
 
     // Optional comment for the dataset.
     optional string comment = 4;
@@ -90,30 +90,30 @@ message PipelineCommand {
 
   // Request to define a flow targeting a dataset.
   message DefineFlow {
-    // The graph to attach this dataset to.
-    string dataflow_graph_id = 1;
+    // The graph to attach this flow to.
+    optional string dataflow_graph_id = 1;
 
     // Name of the flow. For standalone flows, this must be a single-part name.
-    string flow_name = 2;
+    optional string flow_name = 2;
 
     // Name of the dataset this flow writes to. Can be partially or fully qualified.
-    string target_dataset_name = 3;
+    optional string target_dataset_name = 3;
 
     // An unresolved relation that defines the dataset's flow.
-    spark.connect.Relation plan = 4;
+    optional spark.connect.Relation plan = 4;
 
-    // Default SQL configurations set when running this flow.
+    // SQL configurations set when running this flow.
     map<string, string> sql_conf = 5;
 
     // If true, this flow will only be run once per execution.
-    bool once = 6;
+    optional bool once = 6;
   }
 
   // Resolves all datasets and flows and start a pipeline update. Should be called after all
   // graph elements are registered.
   message StartRun {
     // The graph to start.
-    string dataflow_graph_id = 1;
+    optional string dataflow_graph_id = 1;
   }
 }
 
@@ -136,7 +136,7 @@ message PipelineCommandResult {
   }
   message CreateDataflowGraphResult {
     // The ID of the created graph.
-    string dataflow_graph_id = 1;
+    optional string dataflow_graph_id = 1;
   }
 }
 
