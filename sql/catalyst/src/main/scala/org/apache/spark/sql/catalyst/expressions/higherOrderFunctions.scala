@@ -1109,10 +1109,32 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
    */
   @transient private lazy val getKeysWithValueIndexes:
       (ArrayData, ArrayData) => mutable.Iterable[(Any, Array[Option[Int]])] = {
-    if (TypeUtils.typeWithProperEquals(keyType)) {
-      getKeysWithIndexesFast
-    } else {
-      getKeysWithIndexesBruteForce
+    keyType match {
+      case properEqualsType if TypeUtils.typeWithProperEquals(properEqualsType) =>
+        getKeysWithIndexesFast
+      case FloatType | DoubleType =>
+        getKeysWithInexesForFloatingPoints
+      case _ =>
+        getKeysWithIndexesBruteForce
+    }
+  }
+
+  private def getKeysWithInexesForFloatingPoints(keys1: ArrayData, keys2: ArrayData) = {
+    val keysWithIndexes = getKeysWithIndexesFast(keys1, keys2)
+    val NaNKeys = keyType match {
+      case FloatType => keysWithIndexes.keySet.filter(v => v.asInstanceOf[Float].isNaN)
+      case DoubleType => keysWithIndexes.keySet.filter(v => v.asInstanceOf[Double].isNaN)
+      case _ => Seq.empty
+    }
+    if (NaNKeys.size == 2) {
+      val value1 = keysWithIndexes(NaNKeys.head).head
+      val value2 = keysWithIndexes(NaNKeys.last).last
+      keysWithIndexes.remove(NaNKeys.last)
+      keysWithIndexes.put(NaNKeys.head, Array(value1, value2))
+      keysWithIndexes
+    }
+    else {
+      keysWithIndexes
     }
   }
 
