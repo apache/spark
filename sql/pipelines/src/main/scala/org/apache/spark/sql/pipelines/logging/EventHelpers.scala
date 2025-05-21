@@ -40,7 +40,7 @@ object EventHelpers {
     formatter.format(instant)
   }
 
-  /** Converts an ISO 8601 formatted timestamp to a java [[Timestamp]].  */
+  /** Converts an ISO 8601 formatted timestamp to a {@link java.sql.Timestamp}.  */
   def parseTimestamp(timeString: String): Timestamp = {
     if (timeString.isEmpty) {
       new Timestamp(0L)
