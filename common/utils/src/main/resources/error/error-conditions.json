@@ -2386,6 +2386,12 @@
     ],
     "sqlState" : "42601"
   },
+  "INVALID_BUCKET_COUNT" : {
+    "message" : [
+      "BucketBy must specify a bucket count > 0, received <numBuckets> instead."
+    ],
+    "sqlState" : "22003"
+  },
   "INVALID_BUCKET_FILE" : {
     "message" : [
       "Invalid bucket file: <path>."

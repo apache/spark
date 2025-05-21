@@ -658,9 +658,12 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   test("Write with invalid bucketBy configuration") {
     val cmd = localRelation.write(bucketByCols = Seq("id"), numBuckets = Some(0))
-    assertThrows[InvalidCommandInput] {
-      transform(cmd)
-    }
+    checkError(
+      exception = intercept[InvalidCommandInput] {
+        transform(cmd)
+      },
+      condition = "INVALID_BUCKET_COUNT",
+      parameters = Map("numBuckets" -> "0"))
   }
 
   test("Write to Path") {
