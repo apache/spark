@@ -599,9 +599,18 @@ SELECT val FROM randoms LIMIT 5;
 
 -- Non-deterministic query with uniform with seed
 WITH RECURSIVE randoms(val, step) AS (
-    SELECT CAST(UNIFORM(1, 6, 82374) AS INT), 1 AS step
+    SELECT CAST(UNIFORM(1, 6, 82374) AS INT)
     UNION ALL
-    SELECT CAST(UNIFORM(1, 6, 237685) AS INT), step + 1
+    SELECT CAST(UNIFORM(1, 6, 237685) AS INT)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Non-deterministic query with randn with seed
+WITH RECURSIVE randoms(val) AS (
+    SELECT CAST(floor(randn(82374) * 5 + 1) AS INT)
+    UNION ALL
+    SELECT CAST(floor(randn(237685) * 5 + 1) AS INT)
     FROM randoms
 )
 SELECT val FROM randoms LIMIT 5;
