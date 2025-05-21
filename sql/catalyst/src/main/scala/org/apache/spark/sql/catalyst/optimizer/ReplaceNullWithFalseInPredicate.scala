@@ -63,7 +63,8 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
       rd.copy(condition = newCond, groupFilterCondition = newGroupFilterCond)
     case wd @ WriteDelta(_, cond, _, _, _, _) => wd.copy(condition = replaceNullWithFalse(cond))
     case d @ DeleteFromTable(_, cond) => d.copy(condition = replaceNullWithFalse(cond))
-    case u @ UpdateTable(_, _, Some(cond)) => u.copy(condition = Some(replaceNullWithFalse(cond)))
+    case u @ UpdateTable(_, _, Some(cond), _) =>
+      u.copy(condition = Some(replaceNullWithFalse(cond)))
     case m: MergeIntoTable =>
       m.copy(
         mergeCondition = replaceNullWithFalse(m.mergeCondition),

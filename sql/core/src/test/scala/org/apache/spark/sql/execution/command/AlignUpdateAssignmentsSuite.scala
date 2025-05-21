@@ -647,7 +647,7 @@ class AlignUpdateAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
   private def parseAndAlignAssignments(query: String): Seq[Assignment] = {
     parseAndResolve(query) match {
-      case UpdateTable(_, assignments, _) => assignments
+      case UpdateTable(_, assignments, _, _) => assignments
       case plan => fail("Expected UpdateTable, but got:\n" + plan.treeString)
     }
   }

@@ -36,7 +36,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 object RewriteUpdateTable extends RewriteRowLevelCommand {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case u @ UpdateTable(aliasedTable, assignments, cond)
+    case u @ UpdateTable(aliasedTable, assignments, cond, checkConstraint)
         if u.resolved && u.rewritable && u.aligned =>
 
       EliminateSubqueryAliases(aliasedTable) match {

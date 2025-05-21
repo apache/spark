@@ -469,7 +469,7 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   private def testUpdate(originalCond: Expression, expectedCond: Expression): Unit = {
-    test((rel, expr) => UpdateTable(rel, Seq.empty, Some(expr)), originalCond, expectedCond)
+    test((rel, expr) => UpdateTable(rel, Seq.empty, Some(expr), None), originalCond, expectedCond)
   }
 
   private def testMerge(originalCond: Expression, expectedCond: Expression): Unit = {

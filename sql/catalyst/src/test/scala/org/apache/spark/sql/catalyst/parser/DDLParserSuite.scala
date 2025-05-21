@@ -1799,6 +1799,7 @@ class DDLParserSuite extends AnalysisTest {
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Seq(Assignment(UnresolvedAttribute("a"), Literal("Robert")),
           Assignment(UnresolvedAttribute("b"), Literal(32))),
+        None,
         None))
   }
 
@@ -1813,7 +1814,8 @@ class DDLParserSuite extends AnalysisTest {
         SubqueryAlias("t", UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"))),
         Seq(Assignment(UnresolvedAttribute("t.a"), Literal("Robert")),
           Assignment(UnresolvedAttribute("t.b"), Literal(32))),
-        Some(EqualTo(UnresolvedAttribute("t.c"), Literal(2)))))
+        Some(EqualTo(UnresolvedAttribute("t.c"), Literal(2))),
+        None))
   }
 
   test("update table: column aliases are not allowed") {

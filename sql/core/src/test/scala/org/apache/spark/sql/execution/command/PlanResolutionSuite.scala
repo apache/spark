@@ -1051,6 +1051,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
             AsDataSourceV2Relation(_),
             Seq(Assignment(name: UnresolvedAttribute, StringLiteral("Robert")),
               Assignment(age: UnresolvedAttribute, IntegerLiteral(32))),
+            None,
             None) =>
           assert(name.name == "name")
           assert(age.name == "age")
@@ -1063,6 +1064,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
             SubqueryAlias(AliasIdentifier("t", Seq()), AsDataSourceV2Relation(_)),
             Seq(Assignment(name: UnresolvedAttribute, StringLiteral("Robert")),
               Assignment(age: UnresolvedAttribute, IntegerLiteral(32))),
+            None,
             None) =>
           assert(name.name == "name")
           assert(age.name == "age")
@@ -1075,7 +1077,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
             SubqueryAlias(AliasIdentifier("t", Seq()), AsDataSourceV2Relation(_)),
             Seq(Assignment(name: UnresolvedAttribute, StringLiteral("Robert")),
               Assignment(age: UnresolvedAttribute, IntegerLiteral(32))),
-            Some(EqualTo(p: UnresolvedAttribute, IntegerLiteral(1)))) =>
+            Some(EqualTo(p: UnresolvedAttribute, IntegerLiteral(1))),
+            None) =>
           assert(name.name == "name")
           assert(age.name == "age")
           assert(p.name == "p")
@@ -1086,7 +1089,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       parsed4 match {
         case UpdateTable(SubqueryAlias(AliasIdentifier("t", Seq()), AsDataSourceV2Relation(_)),
           Seq(Assignment(key: UnresolvedAttribute, IntegerLiteral(32))),
-          Some(InSubquery(values, query))) =>
+          Some(InSubquery(values, query)),
+          None) =>
           assert(key.name == "t.age")
           assert(values.size == 1 && values.head.isInstanceOf[UnresolvedAttribute])
           assert(values.head.asInstanceOf[UnresolvedAttribute].name == "t.name")
@@ -1108,6 +1112,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           Seq(
             Assignment(name: UnresolvedAttribute, UnresolvedAttribute(Seq("DEFAULT"))),
             Assignment(age: UnresolvedAttribute, UnresolvedAttribute(Seq("DEFAULT")))),
+          None,
           None) =>
           assert(name.name == "name")
           assert(age.name == "age")
@@ -1124,6 +1129,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
             // that column. This is intended.
             Assignment(i: AttributeReference, Literal(null, IntegerType)),
             Assignment(s: AttributeReference, Literal(null, StringType))),
+          None,
           None) =>
           assert(i.name == "i")
           assert(s.name == "s")
@@ -1178,6 +1184,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       Seq(
       Assignment(i: AttributeReference, Literal(true, BooleanType)),
       Assignment(s: AttributeReference, Literal(42, IntegerType))),
+      None,
       None) =>
         assert(i.name == "i")
         assert(s.name == "s")
@@ -1189,6 +1196,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case UpdateTable(
       _,
       Seq(Assignment(i: AttributeReference, Literal(null, StringType))),
+      None,
       None) =>
         assert(i.name == "i")
 
@@ -1199,6 +1207,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case UpdateTable(
       _,
       Seq(Assignment(i: AttributeReference, Literal(null, IntegerType))),
+      None,
       None) =>
         assert(i.name == "i")
 

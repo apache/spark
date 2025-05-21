@@ -718,7 +718,8 @@ case class DeleteFromTableWithFilters(
 case class UpdateTable(
     table: LogicalPlan,
     assignments: Seq[Assignment],
-    condition: Option[Expression]) extends UnaryCommand with SupportsSubquery {
+    condition: Option[Expression],
+    checkConstraint: Option[Expression]) extends UnaryCommand with SupportsSubquery {
 
   lazy val aligned: Boolean = AssignmentUtils.aligned(table.output, assignments)
 

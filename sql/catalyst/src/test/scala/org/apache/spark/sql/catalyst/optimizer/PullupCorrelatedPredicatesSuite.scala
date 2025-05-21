@@ -132,14 +132,14 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
   test("PullupCorrelatedPredicates should handle updates") {
     val subPlan = testRelation2.where($"a" === $"c").select($"c")
     val cond = InSubquery(Seq($"a"), ListQuery(subPlan))
-    val updatePlan = UpdateTable(testRelation, Seq.empty, Some(cond)).analyze
+    val updatePlan = UpdateTable(testRelation, Seq.empty, Some(cond), None).analyze
     assert(updatePlan.resolved)
 
     val optimized = Optimize.execute(updatePlan)
     assert(optimized.resolved)
 
     optimized match {
-      case UpdateTable(_, _, Some(s: InSubquery)) =>
+      case UpdateTable(_, _, Some(s: InSubquery), _) =>
         val outerRefs = SubExprUtils.getOuterReferences(s.query.plan)
         assert(outerRefs.isEmpty, "should be no outer refs")
       case other =>

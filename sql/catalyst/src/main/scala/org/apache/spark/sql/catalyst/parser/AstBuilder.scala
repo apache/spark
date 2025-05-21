@@ -1019,7 +1019,7 @@ class AstBuilder extends DataTypeAstBuilder
       None
     }
 
-    UpdateTable(aliasedTable, assignments, predicate)
+    UpdateTable(aliasedTable, assignments, predicate, None)
   }
 
   protected def withAssignments(assignCtx: SqlBaseParser.AssignmentListContext): Seq[Assignment] =
