@@ -52,7 +52,7 @@ class Param[T: ClassTag](
 
   // Spark Connect ML needs T type information which has been erased when compiling,
   // Use classTag to preserve the T type.
-  val paramValueClassTag = implicitly[ClassTag[T]]
+  private[spark] val paramValueClassTag = implicitly[ClassTag[T]]
 
   def this(parent: Identifiable, name: String, doc: String, isValid: T => Boolean) =
     this(parent.uid, name, doc, isValid)
