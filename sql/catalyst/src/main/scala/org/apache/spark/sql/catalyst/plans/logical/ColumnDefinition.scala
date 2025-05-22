@@ -149,6 +149,7 @@ object ColumnDefinition {
       // Do not check anything if the children are not resolved yet.
       case _ if !plan.childrenResolved =>
 
+      // Wrap errors for default values in a more user-friendly message.
       case cmd: V2CreateTablePlan if cmd.columns.exists(_.defaultValue.isDefined) =>
         val statement = cmd match {
           case _: CreateTable => "CREATE TABLE"
@@ -161,44 +162,22 @@ object ColumnDefinition {
         cmd.columns.foreach { col =>
           col.defaultValue.foreach { default =>
             checkDefaultColumnConflicts(col)
-            validateDefaultValueExpr(default, statement, col.name, col.dataType)
-            if (!default.deterministic) {
-              throw QueryCompilationErrors.defaultValueNonDeterministicError(
-                "CREATE TABLE", col.name, default.originalSQL)
-            }
+            validateDefaultValueExpr(default, statement, col.name, Some(col.dataType))
           }
         }
 
       case cmd: AddColumns if cmd.columnsToAdd.exists(_.default.isDefined) =>
-        // Wrap analysis errors for default values in a more user-friendly message.
         cmd.columnsToAdd.foreach { c =>
           c.default.foreach { d =>
-            if (!d.resolved) {
-              throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
-                "ALTER TABLE", c.colName, d.originalSQL, null)
-            }
-            validateDefaultValueExpr(d, "ALTER TABLE", c.colName, c.dataType)
-            if (!d.deterministic) {
-              throw QueryCompilationErrors.defaultValueNonDeterministicError(
-                "ALTER TABLE", c.colName, d.originalSQL)
-            }
+            validateDefaultValueExpr(d, "ALTER TABLE ADD COLUMNS", c.colName, Some(c.dataType))
           }
         }
 
       case cmd: AlterColumns if cmd.specs.exists(_.newDefaultExpression.isDefined) =>
-        // Wrap analysis errors for default values in a more user-friendly message.
         cmd.specs.foreach { c =>
           c.newDefaultExpression.foreach { d =>
-            if (!d.resolved) {
-              throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
-                "ALTER TABLE ALTER COLUMN", c.column.name.quoted, d.originalSQL, null)
-            }
-            validateDefaultValueExpr(d, "ALTER TABLE ALTER COLUMN",
-              c.column.name.quoted, d.dataType)
-            if (!d.deterministic) {
-              throw QueryCompilationErrors.defaultValueNonDeterministicError(
-                "ALTER TABLE ALTER COLUMN", c.column.name.quoted, d.originalSQL)
-            }
+            validateDefaultValueExpr(d, "ALTER TABLE ALTER COLUMN", c.column.name.quoted,
+              None)
           }
         }
 
