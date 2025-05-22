@@ -511,7 +511,7 @@ class DataSourceV2DataFrameSuite
               Array(LiteralValue(123, IntegerType), LiteralValue(56, IntegerType)))))
 
         val alterExecCol2 = executeAndKeepPhysicalPlan[AlterTableExec] {
-          sql(s"ALTER TABLE $tableName ALTER COLUMN salary SET DEFAULT ('r' || 'l')")
+          sql(s"ALTER TABLE $tableName ALTER COLUMN dep SET DEFAULT ('r' || 'l')")
         }
         checkDefaultValue(
           alterExecCol2.changes.collect {
@@ -526,7 +526,7 @@ class DataSourceV2DataFrameSuite
                 LiteralValue(UTF8String.fromString("l"), StringType)))))
 
         val alterExecCol3 = executeAndKeepPhysicalPlan[AlterTableExec] {
-          sql(s"ALTER TABLE $tableName ALTER COLUMN salary SET DEFAULT CAST(0 AS BOOLEAN)")
+          sql(s"ALTER TABLE $tableName ALTER COLUMN active SET DEFAULT CAST(0 AS BOOLEAN)")
         }
         checkDefaultValue(
           alterExecCol3.changes.collect {

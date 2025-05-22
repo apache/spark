@@ -162,28 +162,22 @@ object ColumnDefinition {
         cmd.columns.foreach { col =>
           col.defaultValue.foreach { default =>
             checkDefaultColumnConflicts(col)
-            validateDefaultValueExpr(default, statement, col.name, col.dataType)
+            validateDefaultValueExpr(default, statement, col.name, Some(col.dataType))
           }
         }
 
       case cmd: AddColumns if cmd.columnsToAdd.exists(_.default.isDefined) =>
-        val statement = "ALTER TABLE ADD COLUMNS"
         cmd.columnsToAdd.foreach { c =>
           c.default.foreach { d =>
-            validateDefaultValueExpr(d, statement, c.colName, c.dataType)
+            validateDefaultValueExpr(d, "ALTER TABLE ADD COLUMNS", c.colName, Some(c.dataType))
           }
         }
 
       case cmd: AlterColumns if cmd.specs.exists(_.newDefaultExpression.isDefined) =>
-        val statement = "ALTER TABLE ALTER COLUMN"
         cmd.specs.foreach { c =>
           c.newDefaultExpression.foreach { d =>
-            // Eagerly check resolved, as accessing datatype requires it to be resolved
-            if (!d.resolved) {
-              throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
-                statement, c.column.name.quoted, d.originalSQL, null)
-            }
-            validateDefaultValueExpr(d, statement, c.column.name.quoted, d.dataType)
+            validateDefaultValueExpr(d, "ALTER TABLE ALTER COLUMN", c.column.name.quoted,
+              None)
           }
         }
 
