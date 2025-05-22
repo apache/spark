@@ -3392,4 +3392,21 @@ class HiveDDLSuite
       )
     }
   }
+
+  test("SPARK-52272: alter table should update column comments") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      val catalog = spark.sessionState.catalog
+
+      sql(s"CREATE TABLE $tabName (col int COMMENT 'comment1') USING PARQUET")
+      val identifier = TableIdentifier(tabName, Some("default"))
+
+      val table = catalog.getTableMetadata(identifier)
+      val newTable = table.copy(schema =
+        new StructType().add("col", IntegerType, nullable = true, "comment2"))
+      catalog.alterTable(newTable)
+      val fetchedTable = catalog.getTableMetadata(identifier)
+      assert(fetchedTable.schema == newTable.schema)
+    }
+  }
 }

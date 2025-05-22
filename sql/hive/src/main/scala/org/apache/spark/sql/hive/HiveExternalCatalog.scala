@@ -684,11 +684,23 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       } else {
         (oldTableDef.schema, oldTableDef.partitionColumnNames)
       }
+
+      // alter column comments
+      val newCommentMap = tableDefinition.schema.map(f => (f.name, f.getComment())).toMap
+      val newSchemaWithComments = newSchema.copy(
+        fields = newSchema.fields.map { f =>
+          newCommentMap.getOrElse(f.name, None) match {
+            case Some(comment) => f.withComment(comment)
+            case _ => f
+          }
+        }
+      )
+
       // // Add old table's owner if we need to restore
       val owner = Option(tableDefinition.owner).filter(_.nonEmpty).getOrElse(oldTableDef.owner)
       val newDef = tableDefinition.copy(
         storage = newStorage,
-        schema = newSchema,
+        schema = newSchemaWithComments,
         partitionColumnNames = partitionColumnNames,
         bucketSpec = oldTableDef.bucketSpec,
         properties = newTableProps,
