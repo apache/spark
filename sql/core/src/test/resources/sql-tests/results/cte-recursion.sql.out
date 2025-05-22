@@ -1489,7 +1489,7 @@ SELECT val FROM randoms LIMIT 5
 struct<val:int>
 -- !query output
 1
-4
+3
 4
 4
 5
@@ -1507,7 +1507,7 @@ SELECT val FROM randoms LIMIT 5
 struct<val:int>
 -- !query output
 1
-4
+3
 4
 4
 5
@@ -1525,9 +1525,9 @@ SELECT val FROM randoms LIMIT 5
 struct<val:int>
 -- !query output
 -2
-1
 2
 2
+5
 6
 
 
@@ -1543,7 +1543,7 @@ SELECT val FROM randoms LIMIT 5
 struct<val:string>
 -- !query output
 IpXzdTW03I
-UxLgwhvH5j
+Zj7uI2Ex6e
 dBlWnfo7rO
 fmfDBMf60f
 kFeBV7dQWi
@@ -1560,9 +1560,9 @@ SELECT val FROM randoms LIMIT 5
 -- !query schema
 struct<val:string>
 -- !query output
+19974dca-21f6-47ef-b58c-73908ab52aa0
 4ea190e3-c088-4ddd-a545-fb431059ae3c
 8b88900e-f862-468c-8d3b-828188116155
-9e75cc4e-6d6e-4235-9788-5efd4d0fd0cc
 be4f5346-1c7f-4697-8a2c-1343347872c5
 d0032efe-ae60-461b-8582-f6a7c649f238
 
@@ -1580,6 +1580,6 @@ struct<val:array<int>>
 -- !query output
 [1,2,3,4,5]
 [1,2,3,5,4]
-[3,4,2,1,5]
+[2,1,5,3,4]
 [4,3,2,5,1]
 [4,5,1,2,3]

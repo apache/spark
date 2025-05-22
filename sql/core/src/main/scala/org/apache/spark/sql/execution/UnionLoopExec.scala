@@ -192,7 +192,7 @@ case class UnionLoopExec(
       } else {
         recursion.transformAllExpressionsWithSubqueries {
           case e: ExpressionWithRandomSeed =>
-            e.withShiftedSeed(currentLevel)
+            e.withShiftedSeed(currentLevel - 1)
         }
       }
 
