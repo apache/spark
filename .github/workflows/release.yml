@@ -190,10 +190,10 @@ jobs:
 
           # Zip logs/output
           if [ "$DRYRUN_MODE" = "1" ]; then
-            zip logs.zip "$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/*.log"
+            zip logs.zip "$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/"*.log
             zip -9 output.zip -r "$OUTPUT_DIR"
           else
-            zip -P "$ASF_PASSWORD" logs.zip "$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/*.log"
+            zip -P "$ASF_PASSWORD" logs.zip "$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/"*.log
             zip -9 -P "$ASF_PASSWORD" output.zip -r "$OUTPUT_DIR"
           fi
       - name: Upload logs
