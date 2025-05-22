@@ -87,6 +87,10 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
     }
   }
 
+  /**
+   * A type coercion rule that implicitly casts default value expression in DDL statements
+   * to expected types.
+   */
   object DefaultValueExpressionCoercion extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case createTable @ CreateTable(_, cols, _, _, _) if createTable.resolved &&
@@ -130,6 +134,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
               castWiderOnlyLiterals = false))))
         }
         addColumns.copy(columnsToAdd = newCols)
+
       case alterColumns @ AlterColumns(_, specs) if alterColumns.resolved &&
         specs.exists(_.newDefaultExpression.isDefined) =>
         val newSpecs = specs.map { c =>
