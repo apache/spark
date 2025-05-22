@@ -246,7 +246,7 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
   test("SPARK-50137: Avoid fallback to Hive-incompatible ways on thrift exception") {
     val hadoopConf = new Configuration()
     // Use an unavailable uri to mock client connection timeout.
-    hadoopConf.set("hive.metastore.uris", "thrift://1.1.1.1:1111")
+    hadoopConf.set("hive.metastore.uris", "thrift://192.0.2.1:9083")
     hadoopConf.set("hive.metastore.client.connection.timeout", "1s")
     // Dummy HiveExternalCatalog to mock that the hive client is still available
     // when checking database and table.
