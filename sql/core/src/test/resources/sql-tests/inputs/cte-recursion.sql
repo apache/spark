@@ -615,10 +615,29 @@ WITH RECURSIVE randoms(val) AS (
 )
 SELECT val FROM randoms LIMIT 5;
 
+-- Non-deterministic query with randstr
 WITH RECURSIVE randoms(val) AS (
     SELECT randstr(10, 82374)
     UNION ALL
     SELECT randstr(10, 237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Non-deterministic query with UUID
+WITH RECURSIVE randoms(val) AS (
+    SELECT UUID(82374)
+    UNION ALL
+    SELECT UUID(237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Non-deterministic query with shuffle
+WITH RECURSIVE randoms(val) AS (
+    SELECT ARRAY(1,2,3,4,5)
+    UNION ALL
+    SELECT SHUFFLE(ARRAY(1,2,3,4,5), 237685)
     FROM randoms
 )
 SELECT val FROM randoms LIMIT 5;

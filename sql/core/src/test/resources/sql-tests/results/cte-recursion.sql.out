@@ -1547,3 +1547,39 @@ UxLgwhvH5j
 dBlWnfo7rO
 fmfDBMf60f
 kFeBV7dQWi
+
+
+-- !query
+WITH RECURSIVE randoms(val) AS (
+    SELECT UUID(82374)
+    UNION ALL
+    SELECT UUID(237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5
+-- !query schema
+struct<val:string>
+-- !query output
+4ea190e3-c088-4ddd-a545-fb431059ae3c
+8b88900e-f862-468c-8d3b-828188116155
+9e75cc4e-6d6e-4235-9788-5efd4d0fd0cc
+be4f5346-1c7f-4697-8a2c-1343347872c5
+d0032efe-ae60-461b-8582-f6a7c649f238
+
+
+-- !query
+WITH RECURSIVE randoms(val) AS (
+    SELECT ARRAY(1,2,3,4,5)
+    UNION ALL
+    SELECT SHUFFLE(ARRAY(1,2,3,4,5), 237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5
+-- !query schema
+struct<val:array<int>>
+-- !query output
+[1,2,3,4,5]
+[1,2,3,5,4]
+[3,4,2,1,5]
+[4,3,2,5,1]
+[4,5,1,2,3]
