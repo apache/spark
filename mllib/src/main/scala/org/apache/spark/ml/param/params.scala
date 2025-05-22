@@ -46,7 +46,7 @@ import org.apache.spark.util.SizeEstimator
  *                See [[ParamValidators]] for factory methods for common validation functions.
  * @tparam T param value type
  */
-class Param[T: ClassTag](
+class Param[T](
     val parent: String, val name: String, val doc: String, val isValid: T => Boolean,
     val dataClass: Class[T]
   ) extends Serializable {
