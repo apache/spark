@@ -344,8 +344,9 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
 
   test("Check constraint violation on table insert - top level column") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-      sql(s"CREATE TABLE $t (id INT, CONSTRAINT positive_id CHECK (id > 0)) $defaultUsing")
-      val error = intercept[SparkRuntimeException] {
+      sql(s"CREATE TABLE $t (id INT, CONSTRAINT positive_id CHECK (id > 0), " +
+        s" CONSTRAINT less_than_100 CHECK(abs(id) < 100)) $defaultUsing")
+      var error = intercept[SparkRuntimeException] {
         sql(s"INSERT INTO $t VALUES (-1)")
       }
       checkError(
@@ -354,6 +355,18 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         sqlState = "23001",
         parameters =
           Map("constraintName" -> "positive_id", "expression" -> "id > 0", "values" -> " - id : -1")
+      )
+
+      error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (100)")
+      }
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters =
+          Map("constraintName" -> "less_than_100", "expression" -> "abs(id) < 100",
+            "values" -> " - id : 100")
       )
     }
   }
@@ -425,9 +438,10 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   test("Check constraint violation on table update - top level column") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
       sql(s"CREATE TABLE $t (id INT, value INT," +
-        s" CONSTRAINT positive_id CHECK (id > 0)) $defaultUsing")
+        s" CONSTRAINT positive_id CHECK (id > 0)," +
+        s" CONSTRAINT less_than_100 CHECK(abs(value) < 100)) $defaultUsing")
       sql(s"INSERT INTO $t VALUES (5, 10)")
-      val error = intercept[SparkRuntimeException] {
+      var error = intercept[SparkRuntimeException] {
         sql(s"UPDATE $t SET id = -1 WHERE value = 10")
       }
       checkError(
@@ -436,6 +450,18 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         sqlState = "23001",
         parameters =
           Map("constraintName" -> "positive_id", "expression" -> "id > 0", "values" -> " - id : -1")
+      )
+
+      error = intercept[SparkRuntimeException] {
+        sql(s"UPDATE $t SET value = -100 WHERE id = 5")
+      }
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters =
+          Map("constraintName" -> "less_than_100", "expression" -> "abs(value) < 100",
+            "values" -> " - value : -100")
       )
     }
   }
@@ -501,7 +527,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
       withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
         sql(s"CREATE TABLE $target (id INT, value INT," +
-          s" CONSTRAINT positive_id CHECK (id > 0)) $defaultUsing")
+          s" CONSTRAINT positive_id CHECK (id > 0)," +
+          s" CONSTRAINT less_than_100 CHECK(abs(id) < 100)) $defaultUsing")
         sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
         sql(s"INSERT INTO $target VALUES (5, 10)")
         sql(s"INSERT INTO $source VALUES (-1, 20)")
@@ -522,6 +549,24 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           parameters =
             Map("constraintName" -> "positive_id", "expression" -> "id > 0",
               "values" -> " - id : -1")
+        )
+
+        error = intercept[SparkRuntimeException] {
+          sql(
+            s"""
+               |MERGE INTO $target t
+               |USING $source s
+               |ON t.value = s.value
+               |WHEN NOT MATCHED THEN INSERT(id, value) VALUES (100, s.value)
+               |""".stripMargin)
+        }
+        checkError(
+          exception = error,
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters =
+            Map("constraintName" -> "less_than_100", "expression" -> "abs(id) < 100",
+              "values" -> " - id : 100")
         )
 
         error = intercept[SparkRuntimeException] {
@@ -696,6 +741,14 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("Check constraint validation succeeds on table insert - top level column with function") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, CONSTRAINT less_than_10 CHECK (abs(id) < 10)) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1), (null)")
+      checkAnswer(spark.table(t), Seq(Row(1), Row(null)))
+    }
+  }
+
   test("Check constraint validation succeeds on table insert - nested column") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id INT," +
@@ -726,7 +779,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   test("Check constraint validation succeeds on table update - top level column") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
       sql(s"CREATE TABLE $t (id INT, value INT," +
-        s" CONSTRAINT positive_id CHECK (id > 0)) $defaultUsing")
+        s" CONSTRAINT positive_id CHECK (id > 0)," +
+        s" CONSTRAINT less_than_100 CHECK(abs(value) < 100)) $defaultUsing")
       sql(s"INSERT INTO $t VALUES (1, 10), (2, 20)")
       sql(s"UPDATE $t SET id = null WHERE value = 10")
       checkAnswer(spark.table(t), Seq(Row(null, 10), Row(2, 20)))
@@ -767,7 +821,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
       withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
         sql(s"CREATE TABLE $target (id INT, value INT," +
-          s" CONSTRAINT positive_id CHECK (id > 0)) $defaultUsing")
+          s" CONSTRAINT positive_id CHECK (id > 0)," +
+          s" CONSTRAINT less_than_100 CHECK(abs(value) < 100)) $defaultUsing")
         sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
         sql(s"INSERT INTO $target VALUES (1, 10), (2, 20)")
         sql(s"INSERT INTO $source VALUES (3, 30), (4, 40)")
