@@ -47,12 +47,12 @@ import org.apache.spark.util.SizeEstimator
  * @tparam T param value type
  */
 class Param[T: ClassTag](
-    val parent: String, val name: String, val doc: String, val isValid: T => Boolean)
-  extends Serializable {
+    val parent: String, val name: String, val doc: String, val isValid: T => Boolean,
+    val dataClass: Class[T]
+  ) extends Serializable {
 
-  // Spark Connect ML needs T type information which has been erased when compiling,
-  // Use classTag to preserve the T type.
-  val paramValueClassTag = implicitly[ClassTag[T]]
+  def this(parent: String, name: String, doc: String, isValid: T => Boolean) =
+    this(parent, name, doc, isValid, null)
 
   def this(parent: Identifiable, name: String, doc: String, isValid: T => Boolean) =
     this(parent.uid, name, doc, isValid)
@@ -329,7 +329,7 @@ object ParamValidators {
  * Specialized version of `Param[Double]` for Java.
  */
 class DoubleParam(parent: String, name: String, doc: String, isValid: Double => Boolean)
-  extends Param[Double](parent, name, doc, isValid) {
+  extends Param[Double](parent, name, doc, isValid, classOf[Double]) {
 
   def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
@@ -387,7 +387,7 @@ private[param] object DoubleParam {
  * Specialized version of `Param[Int]` for Java.
  */
 class IntParam(parent: String, name: String, doc: String, isValid: Int => Boolean)
-  extends Param[Int](parent, name, doc, isValid) {
+  extends Param[Int](parent, name, doc, isValid, classOf[Int]) {
 
   def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
@@ -414,7 +414,7 @@ class IntParam(parent: String, name: String, doc: String, isValid: Int => Boolea
  * Specialized version of `Param[Float]` for Java.
  */
 class FloatParam(parent: String, name: String, doc: String, isValid: Float => Boolean)
-  extends Param[Float](parent, name, doc, isValid) {
+  extends Param[Float](parent, name, doc, isValid, classOf[Float]) {
 
   def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
@@ -473,7 +473,7 @@ private object FloatParam {
  * Specialized version of `Param[Long]` for Java.
  */
 class LongParam(parent: String, name: String, doc: String, isValid: Long => Boolean)
-  extends Param[Long](parent, name, doc, isValid) {
+  extends Param[Long](parent, name, doc, isValid, classOf[Long]) {
 
   def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
@@ -500,7 +500,8 @@ class LongParam(parent: String, name: String, doc: String, isValid: Long => Bool
  * Specialized version of `Param[Boolean]` for Java.
  */
 class BooleanParam(parent: String, name: String, doc: String) // No need for isValid
-  extends Param[Boolean](parent, name, doc) {
+  extends Param[Boolean](parent, name, doc, ParamValidators.alwaysTrue[Boolean], classOf[Boolean])
+{
 
   def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
 
@@ -521,7 +522,7 @@ class BooleanParam(parent: String, name: String, doc: String) // No need for isV
  * Specialized version of `Param[Array[String]]` for Java.
  */
 class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array[String] => Boolean)
-  extends Param[Array[String]](parent, name, doc, isValid) {
+  extends Param[Array[String]](parent.uid, name, doc, isValid, classOf[Array[String]]) {
 
   def this(parent: Params, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
@@ -544,7 +545,7 @@ class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array
  * Specialized version of `Param[Array[Double]]` for Java.
  */
 class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array[Double] => Boolean)
-  extends Param[Array[Double]](parent, name, doc, isValid) {
+  extends Param[Array[Double]](parent.uid, name, doc, isValid, classOf[Array[Double]]) {
 
   def this(parent: Params, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
@@ -576,7 +577,9 @@ class DoubleArrayArrayParam(
     name: String,
     doc: String,
     isValid: Array[Array[Double]] => Boolean)
-  extends Param[Array[Array[Double]]](parent, name, doc, isValid) {
+  extends Param[Array[Array[Double]]](
+    parent.uid, name, doc, isValid, classOf[Array[Array[Double]]]
+  ) {
 
   def this(parent: Params, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
@@ -610,7 +613,7 @@ class DoubleArrayArrayParam(
  * Specialized version of `Param[Array[Int]]` for Java.
  */
 class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[Int] => Boolean)
-  extends Param[Array[Int]](parent, name, doc, isValid) {
+  extends Param[Array[Int]](parent.uid, name, doc, isValid, classOf[Array[Int]]) {
 
   def this(parent: Params, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)

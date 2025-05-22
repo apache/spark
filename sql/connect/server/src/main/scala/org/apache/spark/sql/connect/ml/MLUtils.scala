@@ -157,8 +157,14 @@ private[ml] object MLUtils {
           }
 
         case _ =>
+          if (p.dataClass == null) {
+            throw MlUnsupportedException(
+              "Spark Connect ML requires the customized ML Param class setting 'dataClass' " +
+              s"parameter, but the param $name does not have the required dataClass."
+            )
+          }
           reconcileParam(
-            p.paramValueClassTag.runtimeClass,
+            p.dataClass,
             LiteralValueProtoConverter.toCatalystValue(literal))
       }
       instance.set(p, value)
