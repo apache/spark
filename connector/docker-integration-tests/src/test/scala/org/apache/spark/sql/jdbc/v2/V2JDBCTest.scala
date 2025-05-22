@@ -19,6 +19,7 @@ package org.apache.spark.sql.jdbc.v2
 
 import org.apache.logging.log4j.Level
 
+import org.apache.spark.TestUtils.withConf
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sample, Sort}
