@@ -158,7 +158,7 @@ private[ml] object MLUtils {
 
         case _ =>
           val paramValue = LiteralValueProtoConverter.toCatalystValue(literal)
-          val paramType = if (p.dataClass == null) {
+          val paramType: Class[_] = if (p.dataClass == null) {
             if (paramValue.isInstanceOf[String]) {
               classOf[String]
             } else if (paramValue.isInstanceOf[Boolean]) {
