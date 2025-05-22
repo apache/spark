@@ -19,9 +19,13 @@ from pyspark.sql.streaming.list_state_client import ListStateClient
 from pyspark.sql.streaming.map_state_client import MapStateClient
 from pyspark.sql.streaming.value_state_client import ValueStateClient
 from pyspark.sql.streaming.stateful_processor import ListState, MapState, ValueState
+from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
+from pyspark.sql.types import StructType
 
 
-def get_value_state(api_client, state_name, value_schema):
+def get_value_state(
+    api_client: StatefulProcessorApiClient, state_name: str, value_schema: StructType
+) -> ValueState:
     api_client.get_value_state(
         state_name,
         schema=value_schema,
@@ -33,7 +37,9 @@ def get_value_state(api_client, state_name, value_schema):
     return ValueState(value_state_client, state_name)
 
 
-def get_list_state(api_client, state_name, list_element_schema):
+def get_list_state(
+    api_client: StatefulProcessorApiClient, state_name: str, list_element_schema: StructType
+) -> ListState:
     api_client.get_list_state(
         state_name,
         schema=list_element_schema,
@@ -45,7 +51,12 @@ def get_list_state(api_client, state_name, list_element_schema):
     return ListState(list_state_client, state_name)
 
 
-def get_map_state(api_client, state_name, map_key_schema, map_value_schema):
+def get_map_state(
+    api_client: StatefulProcessorApiClient,
+    state_name: str,
+    map_key_schema: StructType,
+    map_value_schema: StructType,
+) -> MapState:
     api_client.get_map_state(
         state_name,
         user_key_schema=map_key_schema,

@@ -17,8 +17,10 @@
 
 import numpy as np
 
+from typing import List
 
-def print_percentiles(values, percentiles):
+
+def print_percentiles(values: List[float], percentiles: List[float]) -> None:
     percentile_values = np.percentile(values, q=percentiles)
     print("\t\t".join([f"perc:{x}" for x in percentiles]))
     print("\t\t".join(["{:.3f}".format(x) for x in percentile_values]))

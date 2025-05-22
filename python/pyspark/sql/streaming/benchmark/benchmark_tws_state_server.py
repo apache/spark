@@ -24,6 +24,7 @@ sys.path.append(os.getcwd())
 import uuid
 import time
 import random
+from typing import List
 
 from pyspark.sql.types import (
     StringType,
@@ -39,7 +40,7 @@ from pyspark.sql.streaming.benchmark.utils import print_percentiles
 from pyspark.sql.streaming.benchmark.tws_utils import get_list_state, get_map_state, get_value_state
 
 
-def benchmark_value_state(api_client, params):
+def benchmark_value_state(api_client: StatefulProcessorApiClient, params: List[str]) -> None:
     data_size = int(params[0])
 
     value_state = get_value_state(
@@ -70,7 +71,7 @@ def benchmark_value_state(api_client, params):
 
         # Measure the time taken for the get operation
         start_time_get_ns = time.perf_counter_ns()
-        old_value = value_state.get()
+        value_state.get()
         end_time_get_ns = time.perf_counter_ns()
 
         measured_times_get.append((end_time_get_ns - start_time_get_ns) / 1000)
@@ -91,7 +92,7 @@ def benchmark_value_state(api_client, params):
     print_percentiles(measured_times_update, [50, 95, 99, 99.9, 100])
 
 
-def benchmark_list_state(api_client, params):
+def benchmark_list_state(api_client: StatefulProcessorApiClient, params: List[str]) -> None:
     data_size = int(params[0])
     list_length = int(params[1])
 
@@ -166,7 +167,7 @@ def benchmark_list_state(api_client, params):
     print_percentiles(measured_times_append_value, [50, 95, 99, 99.9, 100])
 
 
-def benchmark_map_state(api_client, params):
+def benchmark_map_state(api_client: StatefulProcessorApiClient, params: List[str]) -> None:
     data_size = int(params[0])
     map_length = int(params[1])
 
@@ -274,7 +275,7 @@ def benchmark_map_state(api_client, params):
     print_percentiles(measured_times_remove_key, [50, 95, 99, 99.9, 100])
 
 
-def benchmark_timer(api_client, params):
+def benchmark_timer(api_client: StatefulProcessorApiClient, params: List[str]) -> None:
     num_timers = int(params[0])
 
     measured_times_implicit_key = []
@@ -325,14 +326,20 @@ def benchmark_timer(api_client, params):
     print_percentiles(measured_times_list, [50, 95, 99, 99.9, 100])
 
 
-def main(state_server_port, benchmark_type):
+def main(state_server_port: str, benchmark_type: str) -> None:
     key_schema = StructType(
         [
             StructField("key", StringType(), True),
         ]
     )
+
+    try:
+        state_server_id = int(state_server_port)
+    except ValueError:
+        state_server_id = state_server_port  # type: ignore[assignment]
+
     api_client = StatefulProcessorApiClient(
-        state_server_port=int(state_server_port),
+        state_server_port=state_server_id,
         key_schema=key_schema,
     )
 
@@ -352,7 +359,8 @@ if __name__ == "__main__":
     (assuming you installed required dependencies for PySpark)
 
     1. `cd python`
-    2. `python3 pyspark/sql/streaming/benchmark/benchmark_tws_state_server.py <port of state server> <state type> <params if required>`
+    2. `python3 pyspark/sql/streaming/benchmark/benchmark_tws_state_server.py
+        <port/uds file of state server> <state type> <params if required>`
 
     Currently, state type can be one of the following:
     - value
@@ -360,7 +368,8 @@ if __name__ == "__main__":
     - map
     - timer
 
-    Please take a look at the benchmark functions to see the parameters required for each state type.
+    Please take a look at the benchmark functions to see the parameters required for each state
+    type.
     """
     print("Starting the benchmark code... state server port: " + sys.argv[1])
     main(sys.argv[1], sys.argv[2])

@@ -17,13 +17,18 @@
 
 package org.apache.spark.sql.execution.python.streaming.benchmark
 
+import java.io.File
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.StandardProtocolFamily
+import java.net.UnixDomainSocketAddress
 import java.nio.channels.ServerSocketChannel
 import java.util.UUID
 
 import scala.collection.mutable
 
+import org.apache.spark.internal.config.Python.PYTHON_UNIX_DOMAIN_SOCKET_DIR
+import org.apache.spark.internal.config.Python.PYTHON_UNIX_DOMAIN_SOCKET_ENABLED
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -289,7 +294,8 @@ class InMemoryStatefulProcessorHandleImpl(
  * The instruction to run this benchmark:
  * 1. Build Spark with `./dev/make-distribution.sh`
  * 2. `cd dist`
- * 3. `java -classpath "./jars&#47;*" org.apache.spark.sql.execution.python.streaming.BenchmarkTransformWithStateInPySparkStateServer`
+ * 3. `java -classpath "./jars&#47;*" org.apache.spark.sql.execution.python.streaming.benchmark.BenchmarkTransformWithStateInPySparkStateServer`
+ *    To run this with Unix Domain Socket, set the environment variable `PYSPARK_UDS_MODE=true`
  *
  * The app will show the port number of the server, which is needed to connect to the server.
  */
@@ -317,9 +323,25 @@ object BenchmarkTransformWithStateInPySparkStateServer extends App {
   )
 
   // Start with a socket - using random port
-  val stateServerSocket = ServerSocketChannel.open()
-    .bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 1)
-  val stateServerSocketPort = stateServerSocket.socket().getLocalPort
+  var serverSocketChannel: ServerSocketChannel = _
+  var sockPath: File = null
+  var stateServerSocketPort = -1
+
+  val isUnixDomainSock = spark.sparkContext.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED)
+
+  if (isUnixDomainSock) {
+    sockPath = new File(
+      spark.sparkContext.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_DIR)
+        .getOrElse(System.getProperty("java.io.tmpdir")),
+      s".${UUID.randomUUID()}.sock")
+    serverSocketChannel = ServerSocketChannel.open(StandardProtocolFamily.UNIX)
+    sockPath.deleteOnExit()
+    serverSocketChannel.bind(UnixDomainSocketAddress.of(sockPath.getPath))
+  } else {
+    serverSocketChannel = ServerSocketChannel.open()
+      .bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 1)
+    stateServerSocketPort = serverSocketChannel.socket().getLocalPort
+  }
 
   val stateHandleImpl = new InMemoryStatefulProcessorHandleImpl(
     TimeMode.None(),
@@ -328,7 +350,7 @@ object BenchmarkTransformWithStateInPySparkStateServer extends App {
   )
 
   val stateServer = new TransformWithStateInPySparkStateServer(
-    stateServerSocket,
+    serverSocketChannel,
     stateHandleImpl,
     groupingKeySchema,
     timeZoneId,
@@ -337,12 +359,18 @@ object BenchmarkTransformWithStateInPySparkStateServer extends App {
     arrowTransformWithStateInPySparkMaxRecordsPerBatch
   )
   // scalastyle:off println
-  println(
-    s"TransformWithStateInPySparkStateServer is starting on port $stateServerSocketPort")
+  if (stateServerSocketPort >= 0) {
+    println(
+      s"TransformWithStateInPySparkStateServer is starting on port $stateServerSocketPort")
+  } else {
+    println(
+      s"TransformWithStateInPySparkStateServer is starting with UDS at " +
+        s"${sockPath.getAbsolutePath}")
+  }
   // scalastyle:on println
   try {
     stateServer.run()
   } finally {
-    stateServerSocket.close()
+    serverSocketChannel.close()
   }
 }
