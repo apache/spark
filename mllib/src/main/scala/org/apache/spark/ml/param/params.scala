@@ -23,7 +23,6 @@ import java.util.{List => JList}
 import scala.annotation.varargs
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
-import scala.reflect.ClassTag
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
