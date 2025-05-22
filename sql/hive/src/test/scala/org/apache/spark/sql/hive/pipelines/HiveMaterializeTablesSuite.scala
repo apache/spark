@@ -17,11 +17,41 @@
 
 package org.apache.spark.sql.pipelines.hive
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.connector.catalog.{
+  CatalogV2Util,
+  Identifier,
+  TableCatalog,
+  TableChange,
+  TableInfo
+}
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.pipelines.graph.MaterializeTablesSuite
+import org.apache.spark.sql.types.{IntegerType, StructType}
 
 class HiveMaterializeTablesSuite extends MaterializeTablesSuite {
+  test("super basic") {
+    val catalogManager = spark.sessionState.catalogManager
+    val catalog = catalogManager.currentCatalog.asInstanceOf[TableCatalog]
+    val identifier = Identifier.of(Array("default"), "test_table")
+    val outputSchema =
+      new StructType().add("a", IntegerType, true, "comment1")
+    catalog.createTable(
+      identifier,
+      new TableInfo.Builder()
+        .withProperties(Map.empty.asJava)
+        .withColumns(CatalogV2Util.structTypeToV2Columns(outputSchema))
+        .withPartitions(Array.empty)
+        .build()
+    )
+
+    catalog.alterTable(identifier, TableChange.updateColumnComment(Array("a"), "comment2"))
+    val table = catalog.loadTable(identifier)
+    assert(table.schema() == new StructType().add("a", IntegerType, true, "comment2"))
+  }
+
   protected val hiveContext: TestHiveContext = TestHive
 
   override def createAndInitializeSpark(): SparkSession = TestHive.sparkSession
