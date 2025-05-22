@@ -671,7 +671,61 @@ class ScalarArrowUDFTestsMixin:
                 with self.assertRaisesRegex(AnalysisException, "Non-deterministic"):
                     df.agg(F.sum(random_udf("id"))).collect()
 
-    # TODO: add tests for chained Arrow UDFs
+    def test_arrow_udf_chained(self):
+        import pyarrow as pa
+
+        scalar_f = arrow_udf(lambda x: pa.compute.add(x, 1), LongType())
+        scalar_g = arrow_udf(lambda x: pa.compute.subtract(x, 1), LongType())
+
+        df = self.spark.range(10)
+        expected = df.select(F.col("id").alias("res")).collect()
+
+        res = df.select(scalar_g(scalar_f(F.col("id"))).alias("res"))
+        self.assertEqual(expected, res.collect())
+
+    def test_arrow_udf_chained_ii(self):
+        import pyarrow as pa
+
+        scalar_f = arrow_udf(lambda x: pa.compute.add(x, 1), LongType())
+
+        df = self.spark.range(10)
+        expected = df.select((F.col("id") + 3).alias("res")).collect()
+
+        res = df.select(scalar_f(scalar_f(scalar_f("id"))).alias("res"))
+        self.assertEqual(expected, res.collect())
+
+    def test_arrow_udf_chained_iii(self):
+        import pyarrow as pa
+
+        scalar_f = arrow_udf(lambda x: pa.compute.add(x, 1), LongType())
+        scalar_g = arrow_udf(lambda x: pa.compute.subtract(x, 1), LongType())
+        scalar_m = arrow_udf(lambda x, y: pa.compute.multiply(x, y), LongType())
+
+        df = self.spark.range(10)
+        expected = df.select(((F.col("id") + 1) * (F.col("id") - 1)).alias("res")).collect()
+
+        res = df.select(scalar_m(scalar_f(F.col("id")), scalar_g(F.col("id"))).alias("res"))
+        self.assertEqual(expected, res.collect())
+
+    def test_arrow_udf_chained_struct_type(self):
+        import pyarrow as pa
+
+        return_type = StructType([StructField("id", LongType()), StructField("str", StringType())])
+
+        @arrow_udf(return_type)
+        def scalar_f(id):
+            return pa.StructArray.from_arrays([id, id.cast(pa.string())], names=["id", "str"])
+
+        scalar_g = arrow_udf(lambda x: x, return_type)
+
+        df = self.spark.range(10)
+        expected = df.select(
+            F.struct(F.col("id"), F.col("id").cast("string").alias("str")).alias("res")
+        ).collect()
+
+        res = df.select(scalar_g(scalar_f(F.col("id"))).alias("res"))
+        self.assertEqual(expected, res.collect())
+
     # TODO: add tests for named arguments
 
 
