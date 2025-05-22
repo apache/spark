@@ -258,7 +258,7 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
         }
         // Without the fix, the result is unpredictable when PARQUET_FIELD_ID_READ_ENABLED is
         // enabled. It could cause NPE if OnHeapColumnVector is used in the scan. It could produce
-        // incorrect results if OnHeapColumnVector is used.
+        // incorrect results if OffHeapColumnVector is used.
         withSQLConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true") {
           checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath),
             Seq(Row(1L), Row(2L), Row(3L)))
