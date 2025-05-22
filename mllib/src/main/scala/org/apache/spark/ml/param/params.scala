@@ -59,6 +59,9 @@ class Param[T](
   def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue[T])
 
+  def this(parent: String, name: String, doc: String, dataClass: Class[T]) =
+    this(parent, name, doc, ParamValidators.alwaysTrue[T], dataClass)
+
   def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
 
   /**
