@@ -76,7 +76,9 @@ jobs:
     name: Release Apache Spark (dryrun and RC)
     runs-on: ubuntu-latest
     # Do not allow dispatching this workflow manually in the main repo.
-    if: ${{ !(github.repository == 'apache/spark' && inputs.branch != '' && inputs.release-version != '') }}
+    # and skip this workflow in forked repository when running as a
+    # scheduled job (dryrun).
+    if: ${{ (github.repository == 'apache/spark') != (inputs.branch != '' && inputs.release-version != '') }}
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v4
