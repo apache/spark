@@ -38,6 +38,14 @@
 # - GPG_PASSPHRASE:
 #     The passphrase for your GPG private key.
 #
+# - PYPI_API_TOKEN:
+#     When you finalize the release, PyPI API token is required. It can be created in
+#     https://pypi.org/manage/account/ once you have the permission to the projects in:
+#       - https://pypi.org/project/pyspark/
+#       - https://pypi.org/project/pyspark-connect/
+#       - https://pypi.org/project/pyspark-client/
+#     Ask private@spark.apache.org to have the permission if you do not have.
+#
 # This workflow supports dry runs by default. If the required GitHub Secrets are not provided,
 # only dry runs will be executed.
 #
@@ -57,7 +65,7 @@
 #
 # 4. Drop the staging repository if it exists (https://repository.apache.org/#stagingRepositories)
 
-name: Release Apache Spark (dryrun and RC)
+name: Release Apache Spark
 
 on:
   schedule:
@@ -70,10 +78,17 @@ on:
       release-version:
         description: 'Release version. Leave it empty to launch a dryrun.'
         required: false
+      rc-count:
+        description: 'RC number. Leave it empty to launch a dryrun.'
+        required: false
+      finalize:
+        description: 'Whether to convert RC to the official release (IRREVERSIBLE)'
+        required: true
+        default: false
 
 jobs:
   release:
-    name: Release Apache Spark (dryrun and RC)
+    name: Release Apache Spark
     runs-on: ubuntu-latest
     # Do not allow dispatching this workflow manually in the main repo.
     if: ${{ !(github.repository == 'apache/spark' && inputs.branch != '' && inputs.release-version != '') }}
@@ -83,21 +98,41 @@ jobs:
         with:
           repository: apache/spark
           ref: "${{ inputs.branch }}"
-      - name: Release Apache Spark (dryrun and RC)
+      - name: Release Apache Spark
         env:
           GIT_BRANCH: "${{ inputs.branch }}"
           RELEASE_VERSION: "${{ inputs.release-version }}"
+          SPARK_RC_COUNT: "${{ inputs.rc-count }}"
+          IS_FINALIZE: "${{ inputs.finalize }}"
           GIT_NAME: "${{ github.actor }}"
           ASF_USERNAME: "${{ secrets.ASF_USERNAME }}"
           ASF_PASSWORD: "${{ secrets.ASF_PASSWORD }}"
           GPG_PRIVATE_KEY: "${{ secrets.GPG_PRIVATE_KEY }}"
           GPG_PASSPHRASE: "${{ secrets.GPG_PASSPHRASE }}"
+          PYPI_API_TOKEN: "${{ secrets.PYPI_API_TOKEN }}"
           DEBUG_MODE: 1
           ANSWER: y
         run: |
+          if [ "$IS_FINALIZE" = "true" ]; then
+            echo ""
+            echo "┌────────────────────────────────────────────────────────────────────────────┐"
+            echo "│                               !!! WARNING !!!                              │"
+            echo "├────────────────────────────────────────────────────────────────────────────┤"
+            echo "│ This step will CONVERT THE RC ARTIFACTS into THE OFFICIAL RELEASE.         │"
+            echo "│                                                                            │"
+            echo "│    This action is IRREVERSIBLE.                                            │"
+            echo "│                                                                            │"
+            echo "│ The workflow will continue in 60 seconds.                                  │"
+            echo "│ Cancel this workflow now if you do NOT intend to finalize the release.     │"
+            echo "└────────────────────────────────────────────────────────────────────────────┘"
+            echo ""
+
+            sleep 60
+          fi
+
           empty_count=0
           non_empty_count=0
-          for val in "$GIT_BRANCH" "$RELEASE_VERSION"; do
+          for val in "$GIT_BRANCH" "$RELEASE_VERSION" "$SPARK_RC_COUNT"; do
             if [ -z "$val" ]; then
               empty_count=$((empty_count+1))
             else
@@ -110,7 +145,7 @@ jobs:
             exit 1
           fi
 
-          if [ "$empty_count" -eq 2 ]; then
+          if [ "$empty_count" -eq 3 ]; then
             echo "Dry run mode enabled"
             export DRYRUN_MODE=1
             ASF_PASSWORD="not_used"
@@ -151,6 +186,9 @@ jobs:
           CMD="dev/create-release/do-release-docker.sh -d \"$RELEASE_DIR\""
           if [ "$DRYRUN_MODE" = "1" ]; then
             CMD="$CMD -n"
+          fi
+          if [ "$IS_FINALIZE" = "true" ]; then
+            CMD="$CMD -s finalize"
           fi
 
           echo "Running release command: $CMD"
