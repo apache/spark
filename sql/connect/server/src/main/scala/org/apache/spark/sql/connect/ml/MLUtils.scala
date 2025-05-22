@@ -166,9 +166,8 @@ private[ml] object MLUtils {
             } else {
               throw MlUnsupportedException(
                 "Spark Connect ML requires the customized ML Param class setting 'dataClass' " +
-                "parameter if the param value type is not String or Boolean type, " +
-                s"but the param $name does not have the required dataClass."
-              )
+                  "parameter if the param value type is not String or Boolean type, " +
+                  s"but the param $name does not have the required dataClass.")
             }
           } else {
             p.dataClass
