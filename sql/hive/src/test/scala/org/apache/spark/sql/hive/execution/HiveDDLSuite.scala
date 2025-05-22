@@ -22,6 +22,8 @@ import java.net.URI
 import java.time.LocalDateTime
 import java.util.Locale
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.scalatest.BeforeAndAfterEach
@@ -31,13 +33,16 @@ import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, TableChange, TableInfo}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetFooterReader}
+import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
@@ -3392,4 +3397,180 @@ class HiveDDLSuite
       )
     }
   }
+
+  test("SPARK-52272: V2SessionCatalog does not alter schema on Hive Catalog") {
+    val externalCatalog = new CustomHiveCatalog(spark.sessionState.catalog.externalCatalog)
+    val v1SessionCatalog = new SessionCatalog(externalCatalog)
+    val v2SessionCatalog = new V2SessionCatalog(v1SessionCatalog)
+    withTable("t1") {
+      val identifier = Identifier.of(Array("default"), "t1")
+      val outputSchema = new StructType().add("a", IntegerType, true, "comment1")
+      v2SessionCatalog.createTable(
+        identifier,
+        new TableInfo.Builder()
+          .withProperties(Map.empty.asJava)
+          .withColumns(CatalogV2Util.structTypeToV2Columns(outputSchema))
+          .withPartitions(Array.empty)
+          .build()
+      )
+      v2SessionCatalog.alterTable(identifier, TableChange.setProperty("foo", "bar"))
+      val loaded = v2SessionCatalog.loadTable(identifier)
+      assert(loaded.properties().get("foo") == "bar")
+
+      assert(externalCatalog.getAlterTableCalledTimes == 1)
+      assert(externalCatalog.getAlterTableDataSchemaCalledTimes == 0)
+
+      v2SessionCatalog.alterTable(identifier,
+        TableChange.updateColumnComment(Array("a"), "comment2"))
+      val loaded2 = v2SessionCatalog.loadTable(identifier)
+      assert(loaded2.columns().length == 1)
+      assert(loaded2.columns.head.comment() == "comment2")
+
+      assert(externalCatalog.getAlterTableCalledTimes == 1)
+      assert(externalCatalog.getAlterTableDataSchemaCalledTimes == 1)
+    }
+  }
+}
+
+class CustomHiveCatalog(catalog: ExternalCatalog) extends ExternalCatalog {
+
+  private var alterTableCalledTimes: Int = 0
+  private var alterTableDataSchemaCalledTimes: Int = 0
+
+  override def alterTable(tableDefinition: CatalogTable): Unit = {
+    alterTableCalledTimes += 1
+    catalog.alterTable(tableDefinition)
+  }
+
+  override def alterTableDataSchema(
+      db: String,
+      table: String,
+      newDataSchema: StructType): Unit = {
+    alterTableDataSchemaCalledTimes += 1
+    catalog.alterTableDataSchema(db, table, newDataSchema)
+  }
+
+  def getAlterTableCalledTimes: Int = alterTableCalledTimes
+  def getAlterTableDataSchemaCalledTimes: Int = alterTableDataSchemaCalledTimes
+
+  override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit =
+    catalog.createDatabase(dbDefinition, ignoreIfExists)
+
+  override def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit =
+    catalog.dropDatabase(db, ignoreIfNotExists, cascade)
+
+  override def alterDatabase(dbDefinition: CatalogDatabase): Unit =
+    catalog.alterDatabase(dbDefinition)
+
+  override def getDatabase(db: String): CatalogDatabase = catalog.getDatabase(db)
+
+  override def databaseExists(db: String): Boolean = catalog.databaseExists(db)
+
+  override def listDatabases(): Seq[String] = catalog.listDatabases()
+
+  override def listDatabases(pattern: String): Seq[String] = catalog.listDatabases(pattern)
+
+  override def setCurrentDatabase(db: String): Unit = catalog.setCurrentDatabase(db)
+
+  override def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit =
+    catalog.createTable(tableDefinition, ignoreIfExists)
+
+  override def dropTable(db: String, table: String, ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit =
+    catalog.dropTable(db, table, ignoreIfNotExists, purge)
+
+  override def renameTable(db: String, oldName: String, newName: String): Unit =
+    catalog.renameTable(db, oldName, newName)
+
+  override def alterTableStats(db: String, table: String,
+      stats: Option[CatalogStatistics]): Unit = catalog.alterTableStats(db, table, stats)
+
+  override def getTable(db: String, table: String): CatalogTable =
+    catalog.getTable(db, table)
+
+  override def getTablesByName(db: String, tables: Seq[String]): Seq[CatalogTable] =
+    catalog.getTablesByName(db, tables)
+
+  override def tableExists(db: String, table: String): Boolean =
+    catalog.tableExists(db, table)
+
+  override def listTables(db: String): Seq[String] = catalog.listTables(db)
+
+  override def listTables(db: String, pattern: String): Seq[String] =
+    catalog.listTables(db, pattern)
+
+  override def listViews(db: String, pattern: String): Seq[String] =
+    catalog.listViews(db, pattern)
+
+  override def loadTable(db: String, table: String, loadPath: String, isOverwrite: Boolean,
+    isSrcLocal: Boolean): Unit = catalog.loadTable(db, table, loadPath, isOverwrite, isSrcLocal)
+
+  override def loadPartition(db: String, table: String, loadPath: String,
+                             partition: TablePartitionSpec,
+                             isOverwrite: Boolean,
+                             inheritTableSpecs: Boolean,
+                             isSrcLocal: Boolean): Unit =
+    catalog.loadPartition(db, table, loadPath, partition, isOverwrite, inheritTableSpecs,
+      isSrcLocal)
+
+  override def loadDynamicPartitions(db: String, table: String, loadPath: String,
+    partition: TablePartitionSpec, replace: Boolean, numDP: Int): Unit =
+    catalog.loadDynamicPartitions(db, table, loadPath, partition, replace, numDP)
+
+  override def createPartitions(db: String, table: String, parts: Seq[CatalogTablePartition],
+                                ignoreIfExists: Boolean): Unit =
+    catalog.createPartitions(db, table, parts, ignoreIfExists)
+
+  override def dropPartitions(db: String, table: String, parts: Seq[TablePartitionSpec],
+    ignoreIfNotExists: Boolean, purge: Boolean, retainData: Boolean): Unit =
+    catalog.dropPartitions(db, table, parts, ignoreIfNotExists, purge, retainData)
+
+  override def renamePartitions(db: String, table: String, specs: Seq[TablePartitionSpec],
+    newSpecs: Seq[TablePartitionSpec]): Unit =
+    catalog.renamePartitions(db, table, specs, newSpecs)
+
+  override def alterPartitions(db: String, table: String,
+    parts: Seq[CatalogTablePartition]): Unit =
+    catalog.alterPartitions(db, table, parts)
+
+  override def getPartition(db: String, table: String, spec: TablePartitionSpec):
+    CatalogTablePartition =
+    catalog.getPartition(db, table, spec)
+
+  override def getPartitionOption(db: String, table: String, spec: TablePartitionSpec):
+    Option[CatalogTablePartition] =
+    catalog.getPartitionOption(db, table, spec)
+
+  override def listPartitionNames(db: String, table: String,
+                                  partialSpec: Option[TablePartitionSpec]): Seq[String] =
+    catalog.listPartitionNames(db, table, partialSpec)
+
+  override def listPartitions(db: String, table: String, partialSpec: Option[TablePartitionSpec]):
+    Seq[CatalogTablePartition] = catalog.listPartitions(db, table, partialSpec)
+
+  override def listPartitionsByFilter(db: String,
+                                      table: String,
+                                      predicates: Seq[Expression],
+                                      defaultTimeZoneId: String): Seq[CatalogTablePartition] =
+    catalog.listPartitionsByFilter(db, table, predicates, defaultTimeZoneId)
+
+  override def createFunction(db: String, funcDefinition: CatalogFunction): Unit =
+    catalog.createFunction(db, funcDefinition)
+
+  override def dropFunction(db: String, funcName: String): Unit = catalog.dropFunction(db, funcName)
+
+  override def alterFunction(db: String, funcDefinition: CatalogFunction): Unit =
+    catalog.alterFunction(db, funcDefinition)
+
+  override def renameFunction(db: String, oldName: String, newName: String): Unit =
+    catalog.renameFunction(db, oldName, newName)
+
+  override def getFunction(db: String, funcName: String): CatalogFunction =
+    catalog.getFunction(db, funcName)
+
+  override def functionExists(db: String, funcName: String): Boolean =
+    catalog.functionExists(db, funcName)
+
+  override def listFunctions(db: String, pattern: String): Seq[String] =
+    catalog.listFunctions(db, pattern)
 }

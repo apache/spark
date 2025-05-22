@@ -34,7 +34,7 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -302,10 +302,22 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
     val finalProperties = CatalogV2Util.applyClusterByChanges(properties, schema, changes)
     try {
-      catalog.alterTable(
-        catalogTable.copy(
-          properties = finalProperties, schema = schema, owner = owner, comment = comment,
-          collation = collation, storage = storage))
+      if (SQLConf.get.getConf(StaticSQLConf.CATALOG_IMPLEMENTATION).equals("hive")) {
+        if (changes.exists(!_.isInstanceOf[TableChange.ColumnChange])) {
+          catalog.alterTable(
+            catalogTable.copy(
+              properties = finalProperties, schema = schema, owner = owner, comment = comment,
+              collation = collation, storage = storage))
+        }
+        if (changes.exists(_.isInstanceOf[TableChange.ColumnChange])) {
+          catalog.alterTableDataSchema(ident.asTableIdentifier, schema)
+        }
+      } else {
+        catalog.alterTable(
+          catalogTable.copy(
+            properties = finalProperties, schema = schema, owner = owner, comment = comment,
+            collation = collation, storage = storage))
+      }
     } catch {
       case _: NoSuchTableException =>
         throw QueryCompilationErrors.noSuchTableError(ident)
