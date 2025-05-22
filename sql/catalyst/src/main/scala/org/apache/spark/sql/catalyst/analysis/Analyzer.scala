@@ -442,6 +442,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       new ResolveIdentifierClause(earlyBatches) ::
       ResolveUnion ::
       ResolveRowLevelCommandAssignments ::
+      RewriteDeleteFromTable ::
+      RewriteUpdateTable ::
+      RewriteMergeIntoTable ::
       MoveParameterizedQueriesDown ::
       BindParameters ::
       new SubstituteExecuteImmediate(
@@ -472,16 +475,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       UpdateAttributeNullability),
     Batch("UDF", Once,
       ResolveEncodersInUDF),
-    // The rewrite rules might move resolved query plan into subquery. Once the resolved plan
-    // contains ScalaUDF, their encoders won't be resolved if `ResolveEncodersInUDF` is not
-    // applied before the rewrite rules. So we need to apply `ResolveEncodersInUDF` before the
-    // rewrite rules.
-    Batch("DML rewrite", fixedPoint,
-      RewriteDeleteFromTable,
-      RewriteUpdateTable,
-      RewriteMergeIntoTable,
-      // Ensures columns of an output table are correctly resolved from the data in a logical plan.
-      ResolveOutputRelation),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
@@ -3571,31 +3564,32 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * The resolved encoders then will be used to deserialize the internal row to Scala value.
    */
   object ResolveEncodersInUDF extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      _.containsPattern(SCALA_UDF), ruleId) {
+    override def apply(plan: LogicalPlan): LogicalPlan =
+      plan.resolveOperatorsUpWithSubqueriesAndPruning(_.containsPattern(SCALA_UDF), ruleId) {
       case p if !p.resolved => p // Skip unresolved nodes.
 
-      case p => p.transformExpressionsUpWithPruning(_.containsPattern(SCALA_UDF), ruleId) {
+        case p => p.transformExpressionsUpWithPruning(_.containsPattern(SCALA_UDF), ruleId) {
 
-        case udf: ScalaUDF if udf.inputEncoders.nonEmpty =>
-          val boundEncoders = udf.inputEncoders.zipWithIndex.map { case (encOpt, i) =>
-            val dataType = udf.children(i).dataType
-            encOpt.map { enc =>
-              val attrs = if (enc.isSerializedAsStructForTopLevel) {
-                // Value class that has been replaced with its underlying type
-                if (enc.schema.fields.length == 1 && enc.schema.fields.head.dataType == dataType) {
-                  DataTypeUtils.toAttributes(enc.schema)
+          case udf: ScalaUDF if udf.inputEncoders.nonEmpty =>
+            val boundEncoders = udf.inputEncoders.zipWithIndex.map { case (encOpt, i) =>
+              val dataType = udf.children(i).dataType
+              encOpt.map { enc =>
+                val attrs = if (enc.isSerializedAsStructForTopLevel) {
+                  // Value class that has been replaced with its underlying type
+                  if (enc.schema.fields.length == 1 &&
+                    enc.schema.fields.head.dataType == dataType) {
+                    DataTypeUtils.toAttributes(enc.schema)
+                  } else {
+                    DataTypeUtils.toAttributes(dataType.asInstanceOf[StructType])
+                  }
                 } else {
-                  DataTypeUtils.toAttributes(dataType.asInstanceOf[StructType])
+                  // the field name doesn't matter here, so we use
+                  // a simple literal to avoid any overhead
+                  DataTypeUtils.toAttribute(StructField("input", dataType)) :: Nil
                 }
-              } else {
-                // the field name doesn't matter here, so we use
-                // a simple literal to avoid any overhead
-                DataTypeUtils.toAttribute(StructField("input", dataType)) :: Nil
+                enc.resolveAndBind(attrs)
               }
-              enc.resolveAndBind(attrs)
             }
-          }
           udf.copy(inputEncoders = boundEncoders)
       }
     }
