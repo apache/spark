@@ -504,12 +504,12 @@ if [[ "$1" == "publish-release" ]]; then
     error_flag_file=$(mktemp)
 
     find . -type f | sed -e 's|^\./||' | \
-    xargs -P 8 -n 1 -I {} bash -c '
+    xargs -P 4 -n 1 -I {} bash -c '
       file_short="{}"
       dest_url="'$NEXUS_ROOT'/deployByRepositoryId/'$staged_repo_id'/org/apache/spark/$file_short"
       echo "[START] $file_short"
 
-      if curl --retry 3 -u "$ASF_USERNAME:$ASF_PASSWORD" \
+      if curl --retry 10 -u "$ASF_USERNAME:$ASF_PASSWORD" \
           --upload-file "$file_short" "$dest_url"; then
         echo "[ OK  ] $file_short"
       else
