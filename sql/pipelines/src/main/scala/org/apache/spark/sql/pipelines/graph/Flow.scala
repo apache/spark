@@ -192,11 +192,5 @@ class AppendOnceFlow(
     val funcResult: FlowFunctionResult
 ) extends ResolvedFlow {
 
-  /**
-   * Whether the flow was declared as once or not in UnresolvedFlow. If false, then it means the
-   * flow is created from batch query.
-   */
-  val definedAsOnce: Boolean = flow.once
-
   override val once = true
 }

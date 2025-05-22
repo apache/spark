@@ -191,8 +191,6 @@ case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], views: Seq[View])
     validatePersistedViewSources()
     validateEveryDatasetHasFlow()
     validateTablesAreResettable()
-    validateAppendOnceFlows()
-    // Ensures that all flows are resolved and have a valid schema.
     inferredSchema
   }.failed
 

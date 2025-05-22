@@ -124,26 +124,6 @@ trait GraphValidations extends Logging {
       }
   }
 
-  /**
-   * Validate if we have any append only flows writing into a streaming table but was created
-   * from a batch query.
-   */
-  protected def validateAppendOnceFlows(): Seq[GraphValidationWarning] = {
-    flows
-      .filter {
-        case af: AppendOnceFlow => !af.definedAsOnce
-        case _ => false
-      }
-      .groupBy(_.destinationIdentifier)
-      .flatMap {
-        case (destination, flows) =>
-          table
-            .get(destination)
-            .map(t => AppendOnceFlowCreatedFromBatchQueryException(t, flows.map(_.identifier)))
-      }
-      .toSeq
-  }
-
   protected def validateUserSpecifiedSchemas(): Unit = {
     flows.flatMap(f => table.get(f.identifier)).foreach { t: TableInput =>
       // The output inferred schema of a table is the declared schema merged with the
