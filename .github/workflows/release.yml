@@ -76,7 +76,9 @@ jobs:
     name: Release Apache Spark (dryrun and RC)
     runs-on: ubuntu-latest
     # Do not allow dispatching this workflow manually in the main repo.
-    if: ${{ !(github.repository == 'apache/spark' && inputs.branch != '' && inputs.release-version != '') }}
+    # and skip this workflow in forked repository when running as a
+    # scheduled job (dryrun).
+    if: ${{ (github.repository == 'apache/spark') != (inputs.branch != '' && inputs.release-version != '') }}
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v4
@@ -190,10 +192,10 @@ jobs:
 
           # Zip logs/output
           if [ "$DRYRUN_MODE" = "1" ]; then
-            zip logs.zip "$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/*.log"
+            zip logs.zip "$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/"*.log
             zip -9 output.zip -r "$OUTPUT_DIR"
           else
-            zip -P "$ASF_PASSWORD" logs.zip "$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/*.log"
+            zip -P "$ASF_PASSWORD" logs.zip "$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/"*.log
             zip -9 -P "$ASF_PASSWORD" output.zip -r "$OUTPUT_DIR"
           fi
       - name: Upload logs

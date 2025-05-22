@@ -141,6 +141,9 @@ function get_release_info {
   export RELEASE_VERSION=$(read_config "Release" "$RELEASE_VERSION")
 
   RC_COUNT=$(read_config "RC #" "$RC_COUNT")
+  if [ -n "$SPARK_RC_COUNT" ]; then
+    RC_COUNT=$SPARK_RC_COUNT
+  fi
 
   # Check if the RC already exists, and if re-creating the RC, skip tag creation.
   RELEASE_TAG="v${RELEASE_VERSION}-rc${RC_COUNT}"

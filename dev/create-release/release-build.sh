@@ -516,7 +516,7 @@ if [[ "$1" == "publish-release" ]]; then
   if ! is_dry_run; then
     echo "Creating Nexus staging repository"
     repo_request="<promoteRequest><data><description>Apache Spark $SPARK_VERSION (commit $git_hash)</description></data></promoteRequest>"
-    out=$(curl -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
+    out=$(curl --retry 10 --retry-all-errors -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
       -H "Content-Type:application/xml" -v \
       $NEXUS_ROOT/profiles/$NEXUS_PROFILE/start)
     staged_repo_id=$(echo $out | sed -e "s/.*\(orgapachespark-[0-9]\{4\}\).*/\1/")
@@ -568,12 +568,12 @@ if [[ "$1" == "publish-release" ]]; then
     error_flag_file=$(mktemp)
 
     find . -type f | sed -e 's|^\./||' | \
-    xargs -P 8 -n 1 -I {} bash -c '
+    xargs -P 4 -n 1 -I {} bash -c '
       file_short="{}"
       dest_url="'$NEXUS_ROOT'/deployByRepositoryId/'$staged_repo_id'/org/apache/spark/$file_short"
       echo "[START] $file_short"
 
-      if curl --retry 3 --retry-all-errors -sS -u "$ASF_USERNAME:$ASF_PASSWORD" \
+      if curl --retry 10 --retry-all-errors -sS -u "$ASF_USERNAME:$ASF_PASSWORD" \
           --upload-file "$file_short" "$dest_url"; then
         echo "[ OK  ] $file_short"
       else
@@ -594,7 +594,7 @@ if [[ "$1" == "publish-release" ]]; then
 
     echo "Closing nexus staging repository"
     repo_request="<promoteRequest><data><stagedRepositoryId>$staged_repo_id</stagedRepositoryId><description>Apache Spark $SPARK_VERSION (commit $git_hash)</description></data></promoteRequest>"
-    out=$(curl -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
+    out=$(curl --retry 10 --retry-all-errors -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
       -H "Content-Type:application/xml" -v \
       $NEXUS_ROOT/profiles/$NEXUS_PROFILE/finish)
     echo "Closed Nexus staging repository: $staged_repo_id"
