@@ -113,19 +113,49 @@ class FrameBinaryOpsMixin:
 
     @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_divide_by_zero_behavior(self):
+        # float
+        for dtype in [np.float32, np.float64]:
+            pdf = pd.DataFrame(
+                {
+                    "a": [1.0, -1.0, 0.0, np.nan],
+                    "b": [0.0, 0.0, 0.0, 0.0],
+                },
+                dtype=dtype,
+            )
+            psdf = ps.from_pandas(pdf)
+
+            self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
+
+        # int
+        for dtype in [np.int32, np.int64]:
+            pdf = pd.DataFrame(
+                {
+                    "a": [1, -1, 0],
+                    "b": [0, 0, 0],
+                },
+                dtype=dtype,
+            )
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
+
+        # bool
         pdf = pd.DataFrame(
             {
-                "a": [1.0, -1.0, 0.0, np.nan],
-                "b": [0.0, 0.0, 0.0, 0.0],
+                "a": pd.Series([True, False]),
+                "b": pd.Series([0, 0]),
             }
         )
         psdf = ps.from_pandas(pdf)
-
-        # a / b: .. divide by zero
         self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
 
-        # b / a: 0 divided by ..
-        self.assert_eq(psdf["b"] / psdf["a"], pdf["b"] / pdf["a"])
+        pdf = pd.DataFrame(
+            {
+                "a": pd.Series([True, False]),
+                "b": pd.Series([0.0, 0.0]),
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
 
     def test_binary_operator_truediv(self):
         # Positive
