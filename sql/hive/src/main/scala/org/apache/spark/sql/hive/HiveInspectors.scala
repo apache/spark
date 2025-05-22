@@ -933,6 +933,7 @@ private[hive] trait HiveInspectors {
   //       for the rule `FinishAnalysis` to compute the values.
   private def canEarlyEval(e: Expression): Boolean = e match {
     case _: CurrentDate => false
+    case _: CurrentTime => false
     case _: CurrentTimestampLike => false
     case _: LocalTimestamp => false
     case _ => e.children.forall(canEarlyEval)
