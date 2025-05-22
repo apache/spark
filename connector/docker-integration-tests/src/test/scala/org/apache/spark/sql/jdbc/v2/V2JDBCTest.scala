@@ -1125,7 +1125,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val invalidUrl = originalUrl.replace("localhost", "nonexistenthost")
       .replace("127.0.0.1", "1.2.3.4")
 
-    withSqlConf(s"spark.sql.catalog.$catalogName.url" -> invalidUrl) {
+    withSQLConf(s"spark.sql.catalog.$catalogName.url" -> invalidUrl) {
       // We want to check that SQLException is thrown and not FAILED_JDBC.TABLE_EXISTS
       val e = intercept[java.sql.SQLException] {
         sql(s"SELECT * FROM $invalidTableName")
