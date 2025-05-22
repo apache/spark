@@ -30,7 +30,7 @@ class RecursiveCTESuite extends QueryTest with SharedSparkSession {
                    |    SELECT CAST(floor(rand() * 50 + 1) AS INT)
                    |    FROM randoms
                    |)
-                   |SELECT val FROM randoms LIMIT 10;""".stripMargin)
+                   |SELECT val FROM randoms LIMIT 30;""".stripMargin)
 
     val distinctCount = df.select(countDistinct("val")).collect()(0).getLong(0)
     assert(distinctCount > 2)
@@ -43,7 +43,7 @@ class RecursiveCTESuite extends QueryTest with SharedSparkSession {
                    |    SELECT CAST(UNIFORM(1,51) AS INT)
                    |    FROM randoms
                    |)
-                   |SELECT val FROM randoms LIMIT 10;""".stripMargin)
+                   |SELECT val FROM randoms LIMIT 30;""".stripMargin)
 
     val distinctCount = df.select(countDistinct("val")).collect()(0).getLong(0)
     assert(distinctCount > 2)
@@ -56,7 +56,7 @@ class RecursiveCTESuite extends QueryTest with SharedSparkSession {
                    |    SELECT CAST(floor(randn() * 50) AS INT)
                    |    FROM randoms
                    |)
-                   |SELECT val FROM randoms LIMIT 10;""".stripMargin)
+                   |SELECT val FROM randoms LIMIT 30;""".stripMargin)
 
     val distinctCount = df.select(countDistinct("val")).collect()(0).getLong(0)
     assert(distinctCount > 2)
@@ -69,7 +69,7 @@ class RecursiveCTESuite extends QueryTest with SharedSparkSession {
                    |    SELECT randstr(10)
                    |    FROM randoms
                    |)
-                   |SELECT val FROM randoms LIMIT 10;""".stripMargin)
+                   |SELECT val FROM randoms LIMIT 30;""".stripMargin)
 
     val distinctCount = df.select(countDistinct("val")).collect()(0).getLong(0)
     assert(distinctCount > 2)
@@ -82,7 +82,7 @@ class RecursiveCTESuite extends QueryTest with SharedSparkSession {
                    |    SELECT UUID()
                    |    FROM randoms
                    |)
-                   |SELECT val FROM randoms LIMIT 10;""".stripMargin)
+                   |SELECT val FROM randoms LIMIT 30;""".stripMargin)
 
     val distinctCount = df.select(countDistinct("val")).collect()(0).getLong(0)
     assert(distinctCount > 2)
@@ -95,7 +95,7 @@ class RecursiveCTESuite extends QueryTest with SharedSparkSession {
                    |    SELECT SHUFFLE(ARRAY(1,2,3,4,5))
                    |    FROM randoms
                    |  )
-                   |SELECT val FROM randoms LIMIT 10;""".stripMargin)
+                   |SELECT val FROM randoms LIMIT 30;""".stripMargin)
 
     val distinctCount = df.select(countDistinct("val")).collect()(0).getLong(0)
     assert(distinctCount > 2)

@@ -115,7 +115,8 @@ case class Rand(child: Expression, hideSeed: Boolean = false) extends Nondetermi
 
   override def withNewSeed(seed: Long): Rand = Rand(Literal(seed, LongType), hideSeed)
 
-  override def withShiftedSeed(shift: Long): Rand = Rand(Add(child, Literal(shift)), hideSeed)
+  override def withShiftedSeed(shift: Long): Rand =
+    Rand(Add(child, Literal(shift), evalMode = EvalMode.LEGACY), hideSeed)
 
   override protected def evalInternal(input: InternalRow): Double = rng.nextDouble()
 
@@ -168,7 +169,8 @@ case class Randn(child: Expression, hideSeed: Boolean = false) extends Nondeterm
 
   override def withNewSeed(seed: Long): Randn = Randn(Literal(seed, LongType), hideSeed)
 
-  override def withShiftedSeed(shift: Long): Randn = Randn(Add(child, Literal(shift)), hideSeed)
+  override def withShiftedSeed(shift: Long): Randn =
+    Randn(Add(child, Literal(shift), evalMode = EvalMode.LEGACY), hideSeed)
 
   override protected def evalInternal(input: InternalRow): Double = rng.nextGaussian()
 

@@ -190,7 +190,7 @@ case class UnionLoopExec(
       val recursionReseeded = if (recursion.deterministic) {
         recursion
       } else {
-        recursion.transformExpressionsDown {
+        recursion.transformAllExpressionsWithSubqueries {
           case e: ExpressionWithRandomSeed =>
             e.withShiftedSeed(currentLevel)
         }

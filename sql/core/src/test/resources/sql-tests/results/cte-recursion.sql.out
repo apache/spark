@@ -1496,7 +1496,7 @@ struct<val:int>
 
 
 -- !query
-WITH RECURSIVE randoms(val, step) AS (
+WITH RECURSIVE randoms(val) AS (
     SELECT CAST(UNIFORM(1, 6, 82374) AS INT)
     UNION ALL
     SELECT CAST(UNIFORM(1, 6, 237685) AS INT)
@@ -1504,24 +1504,13 @@ WITH RECURSIVE randoms(val, step) AS (
 )
 SELECT val FROM randoms LIMIT 5
 -- !query schema
-struct<>
+struct<val:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
-  "sqlState" : "42802",
-  "messageParameters" : {
-    "numExpr" : "2",
-    "numTarget" : "1"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 154,
-    "stopIndex" : 160,
-    "fragment" : "randoms"
-  } ]
-}
+1
+4
+4
+4
+5
 
 
 -- !query
@@ -1540,3 +1529,21 @@ struct<val:int>
 2
 2
 6
+
+
+-- !query
+WITH RECURSIVE randoms(val) AS (
+    SELECT randstr(10, 82374)
+    UNION ALL
+    SELECT randstr(10, 237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5
+-- !query schema
+struct<val:string>
+-- !query output
+IpXzdTW03I
+UxLgwhvH5j
+dBlWnfo7rO
+fmfDBMf60f
+kFeBV7dQWi
