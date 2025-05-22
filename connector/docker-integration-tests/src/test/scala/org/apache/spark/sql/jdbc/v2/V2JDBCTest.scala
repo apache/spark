@@ -19,7 +19,6 @@ package org.apache.spark.sql.jdbc.v2
 
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.TestUtils.withConf
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sample, Sort}
@@ -1126,7 +1125,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val invalidUrl = originalUrl.replace("localhost", "nonexistenthost")
       .replace("127.0.0.1", "1.2.3.4")
 
-    withConf(s"spark.sql.catalog.$catalogName.url", invalidUrl) {
+    withSqlConf(s"spark.sql.catalog.$catalogName.url" -> invalidUrl) {
       // We want to check that SQLException is thrown and not FAILED_JDBC.TABLE_EXISTS
       val e = intercept[java.sql.SQLException] {
         sql(s"SELECT * FROM $invalidTableName")
