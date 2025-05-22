@@ -247,6 +247,7 @@ class IntegralOps(NumericOps):
         _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("True division can not be applied to given types.")
+        right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
 
         def truediv(left: PySparkColumn, right: Any) -> PySparkColumn:
             if not get_option("compute.ansi_mode_support"):
@@ -262,7 +263,6 @@ class IntegralOps(NumericOps):
                     .otherwise(F.lit(np.nan)),
                 ).otherwise(left / right)
 
-        right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         return numpy_column_op(truediv)(left, right)
 
     def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -340,6 +340,7 @@ class FractionalOps(NumericOps):
         _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("True division can not be applied to given types.")
+        right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
 
         def truediv(left: PySparkColumn, right: Any) -> PySparkColumn:
             if not get_option("compute.ansi_mode_support"):
@@ -359,7 +360,6 @@ class FractionalOps(NumericOps):
                     .otherwise(F.lit(np.nan)),
                 ).otherwise(left / right)
 
-        right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         return numpy_column_op(truediv)(left, right)
 
     def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
