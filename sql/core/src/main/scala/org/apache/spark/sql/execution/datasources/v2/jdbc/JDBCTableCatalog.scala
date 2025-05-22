@@ -94,15 +94,15 @@ class JDBCTableCatalog extends TableCatalog
     checkNamespace(ident.namespace())
     val writeOptions = new JdbcOptionsInWrite(
       options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
-    JdbcUtils.classifyException(
-      condition = "FAILED_JDBC.TABLE_EXISTS",
-      messageParameters = Map(
-        "url" -> options.getRedactUrl(),
-        "tableName" -> toSQLId(ident)),
-      dialect,
-      description = s"Failed table existence check: $ident",
-      isRuntime = false) {
-      JdbcUtils.withConnection(options)(JdbcUtils.tableExists(_, writeOptions))
+    JdbcUtils.withConnection(options) {
+      JdbcUtils.classifyException(
+        condition = "FAILED_JDBC.TABLE_EXISTS",
+        messageParameters = Map(
+          "url" -> options.getRedactUrl(),
+          "tableName" -> toSQLId(ident)),
+        dialect,
+        description = s"Failed table existence check: $ident",
+        isRuntime = false)(JdbcUtils.tableExists(_, writeOptions))
     }
   }
 
