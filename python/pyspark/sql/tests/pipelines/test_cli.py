@@ -24,6 +24,7 @@ from pyspark.errors import PySparkException
 from pyspark.sql.pipelines.cli import (
     change_dir,
     find_pipeline_spec,
+    init,
     load_pipeline_spec,
     register_definitions,
     unpack_pipeline_spec,
@@ -305,6 +306,27 @@ class CLIUtilityTests(unittest.TestCase):
                         configuration={},
                         definitions=[DefinitionsGlob(include="defs.py")],
                     ),
+                )
+
+    def test_init(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_name = "test_project"
+            with change_dir(Path(temp_dir)):
+                init(project_name)
+            with change_dir(Path(temp_dir) / project_name):
+                spec_path = find_pipeline_spec(Path.cwd())
+                spec = load_pipeline_spec(spec_path)
+                registry = LocalGraphElementRegistry()
+                register_definitions(spec_path, registry, spec)
+                self.assertEqual(len(registry.datasets), 1)
+                self.assertEqual(registry.datasets[0].name, "example_python_materialized_view")
+                self.assertEqual(len(registry.flows), 1)
+                self.assertEqual(registry.flows[0].name, "example_python_materialized_view")
+                self.assertEqual(registry.flows[0].target, "example_python_materialized_view")
+                self.assertEqual(len(registry.sql_files), 1)
+                self.assertEqual(
+                    registry.sql_files[0].file_path,
+                    Path("transformations") / "example_sql_materialized_view.sql",
                 )
 
 

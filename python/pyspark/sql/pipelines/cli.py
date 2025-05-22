@@ -37,6 +37,7 @@ from pyspark.sql.pipelines.graph_element_registry import (
     graph_element_registration_context,
     GraphElementRegistry,
 )
+from pyspark.sql.pipelines.init_cli import init
 from pyspark.sql.pipelines.spark_connect_graph_element_registry import (
     SparkConnectGraphElementRegistry,
 )
@@ -182,7 +183,8 @@ def register_definitions(
                         print(f"Registering SQL file {file}...")
                         with file.open("r") as f:
                             sql = f.read()
-                        registry.register_sql(sql, file)
+                        file_path_relative_to_spec = file.relative_to(spec_path.parent)
+                        registry.register_sql(sql, file_path_relative_to_spec)
                     else:
                         raise PySparkException(
                             errorClass="PIPELINE_UNSUPPORTED_DEFINITIONS_FILE_EXTENSION",
@@ -235,21 +237,40 @@ def run(spec_path: Path, remote: str) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pipeline CLI")
-    parser.add_argument("command", choices=["run"], help="The command to execute")
-    parser.add_argument("--spec", help="Path to the pipeline spec", required=False)
-    parser.add_argument("--remote", help="The Spark Connect remote to connect to", required=True)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # "run" subcommand
+    run_parser = subparsers.add_parser("run", help="Run a pipeline.")
+    run_parser.add_argument("--spec", help="Path to the pipeline spec.")
+    run_parser.add_argument(
+        "--remote", help="The Spark Connect remote to connect to.", required=True
+    )
+
+    # "init" subcommand
+    init_parser = subparsers.add_parser(
+        "init",
+        help="Generates a simple pipeline project, including a spec file and example definitions.",
+    )
+    init_parser.add_argument(
+        "--name",
+        help="Name of the project. A directory with this name will be created underneath the current directory.",
+        required=True,
+    )
 
     args = parser.parse_args()
+    assert args.command in ["run", "init"]
 
-    assert args.command == "run"
-    if args.spec is not None:
-        spec_path = Path(args.spec)
-        if not spec_path.is_file():
-            raise PySparkException(
-                errorClass="PIPELINE_SPEC_FILE_DOES_NOT_EXIST",
-                messageParameters={"spec_path": args.spec},
-            )
-    else:
-        spec_path = find_pipeline_spec(Path.cwd())
+    if args.command == "run":
+        if args.spec is not None:
+            spec_path = Path(args.spec)
+            if not spec_path.is_file():
+                raise PySparkException(
+                    errorClass="PIPELINE_SPEC_FILE_DOES_NOT_EXIST",
+                    messageParameters={"spec_path": args.spec},
+                )
+        else:
+            spec_path = find_pipeline_spec(Path.cwd())
 
-    run(spec_path=spec_path, remote=args.remote)
+        run(spec_path=spec_path, remote=args.remote)
+    elif args.command == "init":
+        init(args.name)

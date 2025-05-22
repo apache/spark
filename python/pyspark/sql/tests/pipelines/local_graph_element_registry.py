@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Sequence
 
@@ -23,10 +24,17 @@ from pyspark.sql.pipelines.flow import Flow
 from pyspark.sql.pipelines.graph_element_registry import GraphElementRegistry
 
 
+@dataclass(frozen=True)
+class SqlFile:
+    sql_text: str
+    file_path: Path
+
+
 class LocalGraphElementRegistry(GraphElementRegistry):
     def __init__(self) -> None:
         self._datasets: List[Dataset] = []
         self._flows: List[Flow] = []
+        self._sql_files: List[SqlFile] = []
 
     def register_dataset(self, dataset: Dataset) -> None:
         self._datasets.append(dataset)
@@ -35,7 +43,7 @@ class LocalGraphElementRegistry(GraphElementRegistry):
         self._flows.append(flow)
 
     def register_sql(self, sql_text: str, file_path: Path) -> None:
-        raise NotImplementedError
+        self._sql_files.append(SqlFile(sql_text, file_path))
 
     @property
     def datasets(self) -> Sequence[Dataset]:
@@ -44,3 +52,7 @@ class LocalGraphElementRegistry(GraphElementRegistry):
     @property
     def flows(self) -> Sequence[Flow]:
         return self._flows
+
+    @property
+    def sql_files(self) -> Sequence[SqlFile]:
+        return self._sql_files
