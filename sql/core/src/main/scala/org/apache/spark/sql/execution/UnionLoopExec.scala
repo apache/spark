@@ -187,7 +187,7 @@ case class UnionLoopExec(
       // If the recursive part contains non-deterministic expressions that depends on a seed, we
       // need to create a new seed since the seed for this expression is set in the analysis, and
       // we avoid re-triggering the analysis for every iterative step.
-      val recursionReseeded = if (recursion.deterministic) {
+      val recursionReseeded = if (currentLevel == 1 || recursion.deterministic) {
         recursion
       } else {
         recursion.transformAllExpressionsWithSubqueries {
