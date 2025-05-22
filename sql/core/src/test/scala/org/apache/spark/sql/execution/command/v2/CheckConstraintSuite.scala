@@ -371,6 +371,86 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("Check constraint with current_timestamp function") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      // Create table with a constraint using current_timestamp
+      sql(s"CREATE TABLE $t (id INT, creation_time TIMESTAMP, " +
+        s"CONSTRAINT valid_time CHECK (creation_time <= current_timestamp())) $defaultUsing")
+
+      // Insert valid data (current or past timestamp)
+      sql(s"INSERT INTO $t VALUES (1, current_timestamp()), (2, TIMESTAMP '2020-01-01 00:00:00')")
+      checkAnswer(spark.table(t).select("id"), Seq(Row(1), Row(2)))
+
+      // Insert valid data with null timestamp
+      sql(s"INSERT INTO $t VALUES (3, null)")
+      checkAnswer(spark.table(t).select("id"), Seq(Row(1), Row(2), Row(3)))
+
+      // Future timestamp should fail validation
+      val tomorrow = "current_timestamp() + INTERVAL 1 DAY"
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (4, $tomorrow)")
+      }
+      assert(error.getMessage.contains("CHECK_CONSTRAINT_VIOLATION"))
+      assert(error.getMessageParameters.get("constraintName") == "valid_time")
+      assert(error.getMessageParameters.get("expression") == "creation_time <= current_timestamp()")
+    }
+  }
+
+  test("Check constraint with current_date function") {
+    // Create another table with other current_* functions
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, creation_date DATE, " +
+        s"CONSTRAINT valid_date CHECK (creation_date <= current_date())) $defaultUsing")
+
+      // Insert valid data (current or past timestamp)
+      sql(s"INSERT INTO $t VALUES (1, current_date()), (2, DATE'2020-01-01')")
+      checkAnswer(spark.table(t).select("id"), Seq(Row(1), Row(2)))
+
+      // Future date should fail validation
+      val tomorrow = "DATE'9999-12-31'"
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (3, $tomorrow)")
+      }
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "valid_date",
+          "expression" -> "creation_date <= current_date()",
+          "values" -> " - creation_date : 2932896"
+        )
+      )
+    }
+  }
+
+  test("Check constraint with current_database function") {
+    withNamespaceAndTable("test_db", "tbl", nonPartitionCatalog) { t =>
+      sql(s"USE $nonPartitionCatalog.test_db")
+      sql(s"CREATE TABLE $t (id INT, db STRING, " +
+        s"CONSTRAINT valid_db CHECK (db = current_database())) $defaultUsing")
+
+      // Insert valid data (current database)
+      sql(s"INSERT INTO $t VALUES (1, current_database()), (2, 'test_db')")
+      checkAnswer(spark.table(t).select("id"), Seq(Row(1), Row(2)))
+
+      // Invalid database should fail validation
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (3, 'invalid_db')")
+      }
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "valid_db",
+          "expression" -> "db = current_database()",
+          "values" -> " - db : invalid_db"
+        )
+      )
+    }
+  }
+
   test("Check constraint violation on table insert - nested column") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id INT," +
