@@ -262,13 +262,13 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
   val testingVersions: Seq[String] = if (isPythonVersionAvailable &&
       SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
     import scala.io.Source
+    val SparkVersionPattern = """<a href="spark-(\d.\d.\d)/">""".r
     try Utils.tryWithResource(
       Source.fromURL(s"$releaseMirror/spark")) { source =>
       source.mkString
         .split("\n")
-        .filter(_.contains("""<a href="spark-"""))
-        .filterNot(_.contains("preview"))
-        .map("""<a href="spark-(\d.\d.\d)/">""".r.findFirstMatchIn(_).get.group(1))
+        .filter(SparkVersionPattern.unanchored.matches(_))
+        .map(SparkVersionPattern.findFirstMatchIn(_).get.group(1))
         .filter(_ < org.apache.spark.SPARK_VERSION)
         .filterNot(skipReleaseVersions.contains).toImmutableArraySeq
     } catch {
