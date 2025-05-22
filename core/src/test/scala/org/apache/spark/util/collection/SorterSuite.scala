@@ -18,10 +18,8 @@
 package org.apache.spark.util.collection
 
 import java.util.Arrays
-import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.util.Utils.timeIt
 import org.apache.spark.util.random.XORShiftRandom
 
 class SorterSuite extends SparkFunSuite {
@@ -169,28 +167,6 @@ class SorterSuite extends SparkFunSuite {
     } while (i < sizeOfArrayToSort)
     assert(sum === runLengths.length)
     */
-  }
-
-  /** Runs an experiment several times. */
-  def runExperiment(name: String, skip: Boolean = false)(f: => Unit, prepare: () => Unit): Unit = {
-    if (skip) {
-      logInfo(s"Skipped experiment $name.")
-      return
-    }
-
-    val firstTry = TimeUnit.NANOSECONDS.toMillis(timeIt(1)(f, Some(prepare)))
-    System.gc()
-
-    var i = 0
-    var next10: Long = 0
-    while (i < 10) {
-      val time = TimeUnit.NANOSECONDS.toMillis(timeIt(1)(f, Some(prepare)))
-      next10 += time
-      logInfo(s"$name: Took $time ms")
-      i += 1
-    }
-
-    logInfo(s"$name: ($firstTry ms first try, ${next10 / 10} ms average)")
   }
 }
 
