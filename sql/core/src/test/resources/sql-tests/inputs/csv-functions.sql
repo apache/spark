@@ -12,6 +12,7 @@ select from_csv();
 select from_csv('1,abc', schema_of_csv('1,abc'));
 select schema_of_csv('1|abc', map('delimiter', '|'));
 select schema_of_csv(null);
+select schema_of_csv(42);
 CREATE TEMPORARY VIEW csvTable(csvField, a) AS SELECT * FROM VALUES ('1,abc', 'a');
 SELECT schema_of_csv(csvField) FROM csvTable;
 -- Clean up

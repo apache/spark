@@ -211,7 +211,7 @@ object InvalidInputErrors {
     InvalidPlanInput("UnionByName `allowMissingCol` can be true only if `byName` is true.")
 
   def invalidBucketCount(numBuckets: Int): InvalidCommandInput =
-    InvalidCommandInput("BucketBy must specify a bucket count > 0, received $numBuckets instead.")
+    InvalidCommandInput("INVALID_BUCKET_COUNT", Map("numBuckets" -> numBuckets.toString))
 
   def invalidPythonUdtfReturnType(actualType: String): InvalidPlanInput =
     InvalidPlanInput(

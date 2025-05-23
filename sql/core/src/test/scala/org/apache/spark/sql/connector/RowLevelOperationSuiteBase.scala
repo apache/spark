@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.METADATA_COL_ATTR_KEY
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Delete, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, Insert, MetadataColumn, Operation, Reinsert, Update, Write}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Delete, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, Insert, MetadataColumn, Operation, Reinsert, TableInfo, Update, Write}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.{InSubqueryExec, QueryExecution, SparkPlan}
@@ -102,7 +102,12 @@ abstract class RowLevelOperationSuiteBase
 
   protected def createTable(columns: Array[Column]): Unit = {
     val transforms = Array[Transform](identity(reference(Seq("dep"))))
-    catalog.createTable(ident, columns, transforms, extraTableProps)
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(columns)
+      .withPartitions(transforms)
+      .withProperties(extraTableProps)
+      .build()
+    catalog.createTable(ident, tableInfo)
   }
 
   protected def createAndInitTable(schemaString: String, jsonData: String): Unit = {

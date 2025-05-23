@@ -392,6 +392,8 @@ FROM r
 INSERT INTO rt2 SELECT *
 INSERT INTO rt2 SELECT *;
 
+SELECT * FROM rt2;
+
 DROP TABLE rt2;
 
 -- multiple recursive CTEs

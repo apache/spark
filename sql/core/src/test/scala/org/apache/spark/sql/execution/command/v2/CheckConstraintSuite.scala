@@ -344,8 +344,9 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
 
   test("Check constraint violation on table insert - top level column") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-      sql(s"CREATE TABLE $t (id INT, CONSTRAINT positive_id CHECK (id > 0)) $defaultUsing")
-      val error = intercept[SparkRuntimeException] {
+      sql(s"CREATE TABLE $t (id INT, CONSTRAINT positive_id CHECK (id > 0), " +
+        s" CONSTRAINT less_than_100 CHECK(abs(id) < 100)) $defaultUsing")
+      var error = intercept[SparkRuntimeException] {
         sql(s"INSERT INTO $t VALUES (-1)")
       }
       checkError(
@@ -354,6 +355,18 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         sqlState = "23001",
         parameters =
           Map("constraintName" -> "positive_id", "expression" -> "id > 0", "values" -> " - id : -1")
+      )
+
+      error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (100)")
+      }
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters =
+          Map("constraintName" -> "less_than_100", "expression" -> "abs(id) < 100",
+            "values" -> " - id : 100")
       )
     }
   }
@@ -422,6 +435,253 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("Check constraint violation on table update - top level column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" CONSTRAINT positive_id CHECK (id > 0)," +
+        s" CONSTRAINT less_than_100 CHECK(abs(value) < 100)) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (5, 10)")
+      var error = intercept[SparkRuntimeException] {
+        sql(s"UPDATE $t SET id = -1 WHERE value = 10")
+      }
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters =
+          Map("constraintName" -> "positive_id", "expression" -> "id > 0", "values" -> " - id : -1")
+      )
+
+      error = intercept[SparkRuntimeException] {
+        sql(s"UPDATE $t SET value = -100 WHERE id = 5")
+      }
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters =
+          Map("constraintName" -> "less_than_100", "expression" -> "abs(value) < 100",
+            "values" -> " - value : -100")
+      )
+    }
+  }
+
+  test("Check constraint violation on table update - nested column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" s STRUCT<num INT, str STRING> CONSTRAINT positive_num CHECK (s.num > 0)) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (5, 10, struct(5, 'test'))")
+      val error = intercept[SparkRuntimeException] {
+        sql(s"UPDATE $t SET s = named_struct('num', -1, 'str', 'test') WHERE value = 10")
+      }
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters =
+          Map("constraintName" -> "positive_num",
+            "expression" -> "s.num > 0", "values" -> " - s.num : -1")
+      )
+    }
+  }
+
+  test("Check constraint violation on table update - map type column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (5, 10, map('a', 5))")
+      val error = intercept[SparkRuntimeException] {
+        sql(s"UPDATE $t SET m = map('a', -1) WHERE value = 10")
+      }
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters =
+          Map("constraintName" -> "positive_num",
+            "expression" -> "m['a'] > 0", "values" -> " - m['a'] : -1")
+      )
+    }
+  }
+
+  test("Check constraint violation on table update - array type column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (5, 10, array(5, 6))")
+      val error = intercept[SparkRuntimeException] {
+        sql(s"UPDATE $t SET a = array(1, -2) WHERE value = 10")
+      }
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters =
+          Map("constraintName" -> "positive_array",
+            "expression" -> "a[1] > 0", "values" -> " - a[1] : -2")
+      )
+    }
+  }
+
+  test("Check constraint violation on table merge - top level column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
+      withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" CONSTRAINT positive_id CHECK (id > 0)," +
+          s" CONSTRAINT less_than_100 CHECK(abs(id) < 100)) $defaultUsing")
+        sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
+        sql(s"INSERT INTO $target VALUES (5, 10)")
+        sql(s"INSERT INTO $source VALUES (-1, 20)")
+
+        var error = intercept[SparkRuntimeException] {
+          sql(
+            s"""
+               |MERGE INTO $target t
+               |USING $source s
+               |ON t.value = s.value
+               |WHEN NOT MATCHED THEN INSERT(id, value) VALUES (s.id, s.value)
+               |""".stripMargin)
+        }
+        checkError(
+          exception = error,
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters =
+            Map("constraintName" -> "positive_id", "expression" -> "id > 0",
+              "values" -> " - id : -1")
+        )
+
+        error = intercept[SparkRuntimeException] {
+          sql(
+            s"""
+               |MERGE INTO $target t
+               |USING $source s
+               |ON t.value = s.value
+               |WHEN NOT MATCHED THEN INSERT(id, value) VALUES (100, s.value)
+               |""".stripMargin)
+        }
+        checkError(
+          exception = error,
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters =
+            Map("constraintName" -> "less_than_100", "expression" -> "abs(id) < 100",
+              "values" -> " - id : 100")
+        )
+
+        error = intercept[SparkRuntimeException] {
+          sql(
+            s"""
+               |MERGE INTO $target t
+               |USING $source s
+               |ON t.value = s.value
+               |WHEN MATCHED THEN UPDATE SET id = s.id
+               |WHEN NOT MATCHED THEN INSERT(id, value) VALUES (s.id, s.value)
+               |""".stripMargin)
+        }
+        checkError(
+          exception = error,
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters =
+            Map("constraintName" -> "positive_id", "expression" -> "id > 0",
+              "values" -> " - id : -1")
+        )
+      }
+    }
+  }
+
+  test("Check constraint violation on table merge - nested column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
+      withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" s STRUCT<num INT, str STRING> " +
+          s"CONSTRAINT positive_num CHECK (s.num > 0)) $defaultUsing")
+        sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
+        sql(s"INSERT INTO $target VALUES (5, 10, struct(5, 'test'))")
+        sql(s"INSERT INTO $source VALUES (-1, 20)")
+
+        val error = intercept[SparkRuntimeException] {
+          sql(
+            s"""
+               |MERGE INTO $target t
+               |USING $source s
+               |ON t.value = s.value
+               |WHEN NOT MATCHED THEN INSERT(id, value, s) VALUES
+               |  (s.id, s.value, named_struct('num', -1, 'str', 'test'))
+               |""".stripMargin)
+        }
+        checkError(
+          exception = error,
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters =
+            Map("constraintName" -> "positive_num", "expression" -> "s.num > 0",
+              "values" -> " - s.num : -1")
+        )
+      }
+    }
+  }
+
+  test("Check constraint violation on table merge - map type column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
+      withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
+        sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
+        sql(s"INSERT INTO $target VALUES (5, 10, map('a', 5))")
+        sql(s"INSERT INTO $source VALUES (-1, 20)")
+
+        val error = intercept[SparkRuntimeException] {
+          sql(
+            s"""
+               |MERGE INTO $target t
+               |USING $source s
+               |ON t.value = s.value
+               |WHEN NOT MATCHED THEN INSERT(id, value, m) VALUES (s.id, s.value, map('a', -1))
+               |""".stripMargin)
+        }
+        checkError(
+          exception = error,
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters =
+            Map("constraintName" -> "positive_num", "expression" -> "m['a'] > 0",
+              "values" -> " - m['a'] : -1")
+        )
+      }
+    }
+  }
+
+  test("Check constraint violation on table merge - array type column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
+      withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
+        sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
+        sql(s"INSERT INTO $target VALUES (5, 10, array(5, 6))")
+        sql(s"INSERT INTO $source VALUES (-1, 20)")
+
+        val error = intercept[SparkRuntimeException] {
+          sql(
+            s"""
+               |MERGE INTO $target t
+               |USING $source s
+               |ON t.value = s.value
+               |WHEN NOT MATCHED THEN INSERT(id, value, a) VALUES (s.id, s.value, array(1, -2))
+               |""".stripMargin)
+        }
+        checkError(
+          exception = error,
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters =
+            Map("constraintName" -> "positive_array", "expression" -> "a[1] > 0",
+              "values" -> " - a[1] : -2")
+        )
+      }
+    }
+  }
 
   test("Check constraint violation on insert overwrite by position") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
@@ -481,6 +741,14 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("Check constraint validation succeeds on table insert - top level column with function") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, CONSTRAINT less_than_10 CHECK (abs(id) < 10)) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1), (null)")
+      checkAnswer(spark.table(t), Seq(Row(1), Row(null)))
+    }
+  }
+
   test("Check constraint validation succeeds on table insert - nested column") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id INT," +
@@ -505,6 +773,139 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
       sql(s"INSERT INTO $t VALUES (1, array(5, 6, 7)), (2, array(8, null))")
       checkAnswer(spark.table(t), Seq(Row(1, Seq(5, 6, 7)), Row(2, Seq(8, null))))
+    }
+  }
+
+  test("Check constraint validation succeeds on table update - top level column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" CONSTRAINT positive_id CHECK (id > 0)," +
+        s" CONSTRAINT less_than_100 CHECK(abs(value) < 100)) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, 10), (2, 20)")
+      sql(s"UPDATE $t SET id = null WHERE value = 10")
+      checkAnswer(spark.table(t), Seq(Row(null, 10), Row(2, 20)))
+    }
+  }
+
+  test("Check constraint validation succeeds on table update - nested column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" s STRUCT<num INT, str STRING> CONSTRAINT positive_num CHECK (s.num > 0)) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, 10, struct(5, 'test')), (2, 20, struct(10, 'test'))")
+      sql(s"UPDATE $t SET s = named_struct('num', null, 'str', 'test') WHERE value = 10")
+      checkAnswer(spark.table(t), Seq(Row(1, 10, Row(null, "test")), Row(2, 20, Row(10, "test"))))
+    }
+  }
+
+  test("Check constraint validation succeeds on table update - map type column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, 10, map('a', 5)), (2, 20, map('b', 10))")
+      sql(s"UPDATE $t SET m = map('a', null) WHERE value = 10")
+      checkAnswer(spark.table(t), Seq(Row(1, 10, Map("a" -> null)), Row(2, 20, Map("b" -> 10))))
+    }
+  }
+
+  test("Check constraint validation succeeds on table update - array type column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, 10, array(5, 6)), (2, 20, array(7, 8))")
+      sql(s"UPDATE $t SET a = array(null, 1) WHERE value = 10")
+      checkAnswer(spark.table(t), Seq(Row(1, 10, Seq(null, 1)), Row(2, 20, Seq(7, 8))))
+    }
+  }
+
+  test("Check constraint validation succeeds on table merge - top level column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
+      withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" CONSTRAINT positive_id CHECK (id > 0)," +
+          s" CONSTRAINT less_than_100 CHECK(abs(value) < 100)) $defaultUsing")
+        sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
+        sql(s"INSERT INTO $target VALUES (1, 10), (2, 20)")
+        sql(s"INSERT INTO $source VALUES (3, 30), (4, 40)")
+
+        sql(
+          s"""
+             |MERGE INTO $target t
+             |USING $source s
+             |ON t.value = s.value
+             |WHEN NOT MATCHED THEN INSERT(id, value) VALUES (s.id, s.value)
+             |""".stripMargin)
+        checkAnswer(spark.table(target), Seq(Row(1, 10), Row(2, 20), Row(3, 30), Row(4, 40)))
+      }
+    }
+  }
+
+  test("Check constraint validation succeeds on table merge - nested column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
+      withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" s STRUCT<num INT, str STRING> " +
+          s"CONSTRAINT positive_num CHECK (s.num > 0)) $defaultUsing")
+        sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
+        sql(s"INSERT INTO $target VALUES (1, 10, struct(5, 'test')), (2, 20, struct(10, 'test'))")
+        sql(s"INSERT INTO $source VALUES (3, 30), (4, 40)")
+
+        sql(
+          s"""
+             |MERGE INTO $target t
+             |USING $source s
+             |ON t.value = s.value
+             |WHEN NOT MATCHED THEN INSERT(id, value) VALUES (s.id, s.value)
+             |""".stripMargin)
+        checkAnswer(spark.table(target),
+          Seq(Row(1, 10, Row(5, "test")), Row(2, 20, Row(10, "test")),
+            Row(3, 30, null), Row(4, 40, null)))
+      }
+    }
+  }
+
+  test("Check constraint validation succeeds on table merge - map type column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
+      withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
+        sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
+        sql(s"INSERT INTO $target VALUES (1, 10, map('a', 5)), (2, 20, map('b', 10))")
+        sql(s"INSERT INTO $source VALUES (3, 30), (4, 40)")
+
+        sql(
+          s"""
+             |MERGE INTO $target t
+             |USING $source s
+             |ON t.value = s.value
+             |WHEN NOT MATCHED THEN INSERT(id, value) VALUES (s.id, s.value)
+             |""".stripMargin)
+        checkAnswer(spark.table(target),
+          Seq(Row(1, 10, Map("a" -> 5)), Row(2, 20, Map("b" -> 10)),
+            Row(3, 30, null), Row(4, 40, null)))
+      }
+    }
+  }
+
+  test("Check constraint validation succeeds on table merge - array type column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
+      withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
+        sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
+        sql(s"INSERT INTO $target VALUES (1, 10, array(5, 6)), (2, 20, array(7, 8))")
+        sql(s"INSERT INTO $source VALUES (3, 30), (4, 40)")
+
+        sql(
+          s"""
+             |MERGE INTO $target t
+             |USING $source s
+             |ON t.value = s.value
+             |WHEN NOT MATCHED THEN INSERT(id, value) VALUES (s.id, s.value)
+             |""".stripMargin)
+        checkAnswer(spark.table(target),
+          Seq(Row(1, 10, Seq(5, 6)), Row(2, 20, Seq(7, 8)),
+            Row(3, 30, null), Row(4, 40, null)))
+      }
     }
   }
 }

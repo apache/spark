@@ -19,7 +19,7 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.SqlScriptingLocalVariableManager
+import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.StructType
  * SQL scripting executor - executes script and returns result statements.
  * This supports returning multiple result statements from a single script.
  * The caller of the SqlScriptingExecution API must wrap the interpretation and execution of
- * statements with the [[withLocalVariableManager]] method, and adhere to the contract of executing
+ * statements with the [[withContextManager]] method, and adhere to the contract of executing
  * the returned statement before continuing iteration. Executing the statement needs to be done
  * inside withErrorHandling block.
  *
@@ -60,15 +60,15 @@ class SqlScriptingExecution(
     ctx
   }
 
-  private val variableManager = new SqlScriptingLocalVariableManager(context)
-  private val variableManagerHandle = SqlScriptingLocalVariableManager.create(variableManager)
+  private val contextManager = new SqlScriptingContextManagerImpl(context)
+  private val contextManagerHandle = SqlScriptingContextManager.create(contextManager)
 
   /**
    * Handles scripting context creation/access/deletion. Calls to execution API must be wrapped
    * with this method.
    */
-  def withLocalVariableManager[R](f: => R): R = {
-    variableManagerHandle.runWith(f)
+  def withContextManager[R](f: => R): R = {
+    contextManagerHandle.runWith(f)
   }
 
   /** Helper method to iterate get next statements from the first available frame. */
@@ -197,7 +197,7 @@ object SqlScriptingExecution {
       script: CompoundBody,
       args: Map[String, Expression] = Map.empty): LogicalPlan = {
     val sse = new SqlScriptingExecution(script, session, args)
-    sse.withLocalVariableManager {
+    sse.withContextManager {
       var result: Option[Seq[Row]] = None
 
       // We must execute returned df before calling sse.getNextResult again because sse.hasNext

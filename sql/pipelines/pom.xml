@@ -31,8 +31,17 @@
     <packaging>jar</packaging>
     <name>Spark Project Declarative Pipelines Library</name>
     <url>https://spark.apache.org/</url>
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-core_${scala.binary.version}</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
     <build>
-        <outputDirectory>core/target/scala-2.13/classes</outputDirectory>
-        <testOutputDirectory>core/target/scala-2.13/test-classes</testOutputDirectory>
+        <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
+        <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     </build>
 </project>

@@ -2386,6 +2386,12 @@
     ],
     "sqlState" : "42601"
   },
+  "INVALID_BUCKET_COUNT" : {
+    "message" : [
+      "BucketBy must specify a bucket count > 0, received <numBuckets> instead."
+    ],
+    "sqlState" : "22003"
+  },
   "INVALID_BUCKET_FILE" : {
     "message" : [
       "Invalid bucket file: <path>."
@@ -3876,6 +3882,24 @@
     },
     "sqlState" : "42000"
   },
+  "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
+    "message" : [
+      "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>."
+    ],
+    "subClass" : {
+      "DURING_OUTPUT_SCHEMA_RESOLUTION" : {
+        "message" : [
+          "The error occurred during output schema resolution."
+        ]
+      },
+      "DURING_QUERY_EXECUTION" : {
+        "message" : [
+          "The error occurred during query execution."
+        ]
+      }
+    },
+    "sqlState" : "42000"
+  },
   "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE" : {
     "message" : [
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
@@ -4644,7 +4668,7 @@
   },
   "RECURSION_LEVEL_LIMIT_EXCEEDED" : {
     "message" : [
-      "Recursion level limit <levelLimit> reached but query has not exhausted, try increasing it like 'WITH RECURSIVE t(col) MAX RECURSION DEPTH 200'."
+      "Recursion level limit <levelLimit> reached but query has not exhausted, try increasing it like 'WITH RECURSIVE t(col) MAX RECURSION LEVEL 200'."
     ],
     "sqlState" : "42836"
   },
@@ -4660,9 +4684,9 @@
     ],
     "sqlState" : "42836"
   },
-  "RECURSIVE_CTE_WHEN_INLINING_IS_FORCED" : {
+  "RECURSIVE_CTE_WITH_LEGACY_INLINE_FLAG" : {
     "message" : [
-      "Recursive definitions cannot be used when CTE inlining is forced."
+      "Recursive definitions cannot be used when legacy inline flag is set to true (spark.sql.legacy.inlineCTEInCommands=true)."
     ],
     "sqlState" : "42836"
   },
@@ -5858,6 +5882,16 @@
           "CONTINUE exception handler is not supported. Use EXIT handler."
         ]
       },
+      "CREATE_FLOW_QUERY_EXECUTION" : {
+        "message" : [
+          "Direct execution of a CREATE FLOW statement is not supported. To create a flow, create and execute a pipeline with a SQL file containing your statement attached in the pipeline spec."
+        ]
+      },
+      "CREATE_PIPELINE_DATASET_QUERY_EXECUTION" : {
+        "message" : [
+          "Direct execution of a CREATE ... <pipelineDatasetType> query. To create a pipeline dataset, create and execute a pipeline with a SQL file containing your query attached in the pipeline definition."
+        ]
+      },
       "DESC_TABLE_COLUMN_JSON" : {
         "message" : [
           "DESC TABLE COLUMN AS JSON not supported for individual columns."
@@ -6330,6 +6364,12 @@
       "<outputMode> output mode not supported for <statefulOperator> on streaming DataFrames/DataSets without watermark."
     ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION" : {
+    "message" : [
+      "The function <funcName> does not support streaming. Please remove the STREAM keyword"
+    ],
+    "sqlState" : "42000"
   },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [

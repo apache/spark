@@ -374,7 +374,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
           },
           condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
           parameters = Map(
-            "statement" -> "ALTER TABLE",
+            "statement" -> "ALTER TABLE ADD COLUMNS",
             "colName" -> "`s`",
             "defaultValue" -> "badvalue"))
 

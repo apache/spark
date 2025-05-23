@@ -583,20 +583,28 @@ object ResolveDefaultColumns extends QueryErrorsBase
       default: DefaultValueExpression,
       statement: String,
       colName: String,
-      targetType: DataType): Unit = {
+      targetTypeOption: Option[DataType]): Unit = {
     if (default.containsPattern(PLAN_EXPRESSION)) {
       throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
         statement, colName, default.originalSQL)
     } else if (default.resolved) {
-      val dataType = CharVarcharUtils.replaceCharVarcharWithString(targetType)
-      if (!Cast.canUpCast(default.child.dataType, dataType) &&
-        defaultValueFromWiderTypeLiteral(default.child, dataType, colName).isEmpty) {
-        throw QueryCompilationErrors.defaultValuesDataTypeError(
-          statement, colName, default.originalSQL, targetType, default.child.dataType)
+      targetTypeOption match {
+        case Some(targetType) =>
+          CharVarcharUtils.replaceCharVarcharWithString(targetType)
+          if (!Cast.canUpCast(default.child.dataType, targetType) &&
+            defaultValueFromWiderTypeLiteral(default.child, targetType, colName).isEmpty) {
+            throw QueryCompilationErrors.defaultValuesDataTypeError(
+              statement, colName, default.originalSQL, targetType, default.child.dataType)
+          }
+        case _ => ()
       }
-      // Our analysis check passes here. We do not further inspect whether the
-      // expression is `foldable` here, as the plan is not optimized yet.
+    } else {
+      throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+        statement, colName, default.originalSQL, null)
     }
+
+    // Our analysis check passes here. We do not further inspect whether the
+    // expression is `foldable` here, as the plan is not optimized yet.
 
     if (default.references.nonEmpty || default.exists(_.isInstanceOf[VariableReference])) {
       // Ideally we should let the rest of `CheckAnalysis` report errors about why the default
@@ -604,6 +612,11 @@ object ResolveDefaultColumns extends QueryErrorsBase
       // expression references columns, which means it's not a constant for sure.
       // Note that, session variable should be considered as non-constant as well.
       throw QueryCompilationErrors.defaultValueNotConstantError(
+        statement, colName, default.originalSQL)
+    }
+
+    if (!default.deterministic) {
+      throw QueryCompilationErrors.defaultValueNonDeterministicError(
         statement, colName, default.originalSQL)
     }
   }

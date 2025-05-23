@@ -16,10 +16,21 @@
  */
 package org.apache.spark.sql.connect.common
 
+import scala.jdk.CollectionConverters._
+
+import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
+
 /**
  * Error thrown when a connect command is not valid.
  */
 final case class InvalidCommandInput(
-    private val message: String = "",
+    private val errorCondition: String,
+    private val messageParameters: Map[String, String] = Map.empty,
     private val cause: Throwable = null)
-    extends Exception(message, cause)
+    extends Exception(SparkThrowableHelper.getMessage(errorCondition, messageParameters), cause)
+    with SparkThrowable {
+
+  override def getCondition: String = errorCondition
+
+  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
+}
