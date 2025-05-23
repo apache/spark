@@ -79,9 +79,6 @@ class ConnectValidPipelineSuite extends PipelineTest {
 
   test("Multi-hop schema merging") {
     class P extends TestGraphRegistrationContext(spark) {
-
-//      import org.apache.spark.sql.functions._ fixme
-
       registerView(
         "b",
         query = sqlFlowFunc(spark, """SELECT * FROM VALUES ((1)) OUTER JOIN d ON false""")
@@ -229,46 +226,6 @@ class ConnectValidPipelineSuite extends PipelineTest {
     val schema = new StructType().add("z", IntegerType, false)
     verifyFlowSchema(p, fullyQualifiedIdentifier("c", isView = true), schema)
   }
-
-//  test("connect from actual table") {
-//    val rootDir = Files.createTempDirectory("evaluation").toString
-//
-//    def tablePath(tableName: String): String = s"$rootDir/$tableName"
-//
-//    Seq(3, 4).toDF().write.format("delta").save(tablePath("b"))
-//    val p = legacyNormalizeTablePaths(
-//      DataflowGraph(new TestPipelineDefinition {
-//        createView("a", query = () => Seq(3, 4).toDF("incorrect-col-name"))
-//        createTable("b", query = read("a"), path = Option(tablePath("b")))
-//        createView("c", query = read("b"))
-//        createView("d", query = () => spark.readStream.table("b"))
-//      }),
-//      dbfsRoot = rootDir
-//    ).connect.validate()
-//    assert(p.flowByName("c").df.schema == new StructType().add("value", IntegerType))
-//    assert(p.flowByName("d").df.schema == new StructType().add("value", IntegerType))
-//  }
-//
-//  test("connect from source") {
-//    val rootDir = Files.createTempDirectory("evaluation").toString
-//    val inputPath = rootDir + "/input"
-//    val g = legacyNormalizeTablePaths(
-//      DataflowGraph(new TestPipelineDefinition {
-//        createView("a", query = () => spark.spark.table.format("delta").load(inputPath))
-//        createTable("b", query = read("a")).expectOrFail("blah", $"value" > 0)
-//      }),
-//      rootDir
-//    )
-//    Seq(1).toDF().write.format("delta").save(inputPath)
-//    Seq(3).toDF().write.format("delta").save(g.tableByName("b").path)
-//    val graph1 = g.virtualize.connect.validate()
-//    assert(graph1.resolved)
-//    assert(graph1.flowByName("b").df.schema == new StructType().add("value", IntegerType))
-//
-//    val graph2 = g.connect.validate()
-//    assert(graph2.resolved)
-//    assert(graph2.flowByName("b").df.schema == new StructType().add("value", IntegerType))
-//  }
 
   test("Connect retains and fuses confs") {
     // a -> b \
@@ -476,58 +433,6 @@ class ConnectValidPipelineSuite extends PipelineTest {
     )
   }
 
-//  test("Dataset names are case sensitive and can be spark.table correctly") {
-//    class P extends TestPipelineDefinition {
-//      createView("A", query = dfFlowFunc(spark.range(5))
-//      createView("a", query = readFlowFunc("A").filter("id = 0").toDF("value"))
-//      createView("b", query = readFlowFunc("a"))
-//    }
-//
-//    val p = new P().resolveToDataflowGraph()
-//    verifyFlowSchema(p, "b", new StructType().add("value", LongType, nullable = false))
-//  }
-
-//  test("Dataset names are case sensitive and will not spark.table in a case insensitive way") {
-//    class P extends TestPipelineDefinition {
-//      createView("A", query = () => spark.range(5).toDF())
-//      createView("b", query = sql(spark, "SELECT x as y FROM a")))
-//    }
-//
-//    val dfg = DataflowGraph(new P).connect
-//    assert(!dfg.resolved, "Pipeline should not have resolved properly")
-//    val ex = intercept[UnresolvedPipelineException] {
-//      dfg.validate()
-//    }
-//    assert(ex.getMessage.contains("Failed to resolve flows in the pipeline"))
-//    assertSparkException(
-//      ex.directFailures("b"),
-//      "DATASET_NOT_DEFINED",
-//      Map("datasetName" -> "a")
-//    )
-//  }
-
-//  test("Verify duplicate table names due to lower-casing is caught") {
-//    class P extends TestPipelineDefinition {
-//      createTable("A", query = Option(() => spark.range(5).toDF()))
-//      createTable("a", query = read("A").filter("id = 0").toDF("value"))
-//    }
-//    val ex = intercept[AnalysisException] {
-//      (new P).resolveToDataflowGraph(shouldLowerCaseNames = true)
-//    }
-//    assert(ex.getMessage.contains("Found duplicate table"))
-//  }
-//
-//  test("Verify duplicate view names due to lower-casing is caught") {
-//    class P extends TestPipelineDefinition {
-//      createTable("A", query = () => spark.range(5))
-//      createView("a", query = read("A").filter("id = 0").toDF("value"))
-//    }
-//    val ex = intercept[AnalysisException] {
-//      (new P).resolveToDataflowGraph(shouldLowerCaseNames = true)
-//    }
-//    assert(ex.getMessage.contains("Found duplicate dataset"))
-//  }
-
   /** Verifies the [[DataflowGraph]] has the specified [[Flow]] with the specified schema. */
   private def verifyFlowSchema(
       pipeline: DataflowGraph,
@@ -547,43 +452,4 @@ class ConnectValidPipelineSuite extends PipelineTest {
       s"Flow ${identifier.unquotedString} has the wrong schema"
     )
   }
-
-//  test("external sink") {
-//    SparkSessionUtils.withSQLConf(
-//      spark,
-//      ("pipelines.externalSink.enabled", true.toString)
-//    ) {
-//      class P extends TestPipelineDefinition {
-//        val mem = MemoryStream[Int]
-//        mem.addData(1, 2)
-//        createView("a", query = mem.toDF().select($"value" as "x"))
-//        createExternalSink("sink_a", format = "memory")
-//        createSinkForTopLevelFlow("sink_a", query = "sink_flow", readStream("a"))
-//      }
-//      val g = new P().resolveToDataflowGraph()
-//      g.validate()
-//      assert(g.resolved)
-//      assert(g.sinkByName("sink_a").isInstanceOf[ExternalSink])
-//      val externalSink = g.sinkByName("sink_a").asInstanceOf[ExternalSink]
-//      assert(externalSink.format == "memory")
-//      assert(g.flowByName("sink_flow").isInstanceOf[ExternalSinkFlow])
-//    }
-//  }
-//
-//  test("Writing from view to sink") {
-//    class P extends TestPipelineDefinition {
-//      val mem = MemoryStream[Int]
-//      mem.addData(1, 2, 3)
-//      createView("a", query = mem.toDF())
-//      createView("b")
-//        .query(readStream("a"))
-//        .sink(
-//          func = df => df.writeStream,
-//          userValidation =
-//            df => assert(df.schema == new StructType().add("value", IntegerType, false))
-//        )
-//    }
-//    val p = DataflowGraph(new P).connect
-//    assert(p.resolved)
-//  }
 }
