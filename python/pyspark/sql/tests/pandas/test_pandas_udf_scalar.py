@@ -836,6 +836,47 @@ class ScalarPandasUDFTestsMixin:
             result = df.select(f(col("map_of_v")).alias("udf")).collect()
             self.assertEqual(result, expected)
 
+    def test_udf_struct_with_metadata_value_field(self):
+        # This makes sure that not every struct with <metadata, value> fields is treated as Variant
+        scalar_f = pandas_udf(
+            lambda u: pd.DataFrame(
+                {
+                    "value": u.apply(lambda i: bytes([12, i])),
+                    "metadata": u.apply(lambda i: bytes([1, 0, i])),
+                }
+            ),
+            StructType(
+                [
+                    StructField("value", BinaryType(), True),
+                    StructField("metadata", BinaryType(), True),
+                ]
+            ),
+        )
+        iter_f = pandas_udf(
+            lambda it: map(
+                lambda u: pd.DataFrame(
+                    {
+                        "value": u.apply(lambda i: bytes([12, i])),
+                        "metadata": u.apply(lambda i: bytes([1, 0, i])),
+                    }
+                ),
+                it,
+            ),
+            StructType(
+                [
+                    StructField("value", BinaryType(), True),
+                    StructField("metadata", BinaryType(), True),
+                ]
+            ),
+            PandasUDFType.SCALAR_ITER,
+        )
+
+        expected = [Row(udf=Row(bytes([12, i]), bytes([1, 0, i]))) for i in range(10)]
+
+        for f in [scalar_f, iter_f]:
+            result = self.spark.range(10).select(f(col("id")).alias("udf")).collect()
+            self.assertEqual(result, expected)
+
     def test_udf_with_variant_nested_output(self):
         # struct<variant>
         # Variants representing the int8 value i.

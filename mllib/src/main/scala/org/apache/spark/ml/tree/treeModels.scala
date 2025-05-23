@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.tree
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.Path
@@ -116,6 +118,10 @@ private[spark] trait DecisionTreeModel {
   def predictLeaf(features: Vector): Double = {
     leafIndices(rootNode.predictImpl(features)).toDouble
   }
+
+  def getEstimatedSize(): Long = {
+    org.apache.spark.util.SizeEstimator.estimate(rootNode)
+  }
 }
 
 /**
@@ -167,6 +173,10 @@ private[spark] trait TreeEnsembleModel[M <: DecisionTreeModel] {
 
   private[ml] def getLeafField(leafCol: String) = {
     new AttributeGroup(leafCol, attrs = trees.map(_.leafAttr)).toStructField()
+  }
+
+  def getEstimatedSize(): Long = {
+    org.apache.spark.util.SizeEstimator.estimate(trees.map(_.rootNode))
   }
 }
 
@@ -340,6 +350,21 @@ private[ml] object DecisionTreeModelReadWrite {
       case s: ContinuousSplit =>
         SplitData(s.featureIndex, Array(s.threshold), -1)
     }
+
+    private[ml] def serializeData(data: SplitData, dos: DataOutputStream): Unit = {
+      import ReadWriteUtils._
+      dos.writeInt(data.featureIndex)
+      serializeDoubleArray(data.leftCategoriesOrThreshold, dos)
+      dos.writeInt(data.numCategories)
+    }
+
+    private[ml] def deserializeData(dis: DataInputStream): SplitData = {
+      import ReadWriteUtils._
+      val featureIndex = dis.readInt()
+      val leftCategoriesOrThreshold = deserializeDoubleArray(dis)
+      val numCategories = dis.readInt()
+      SplitData(featureIndex, leftCategoriesOrThreshold, numCategories)
+    }
   }
 
   /**
@@ -395,6 +420,36 @@ private[ml] object DecisionTreeModelReadWrite {
       // 7,280,000 nodes is about 128MB
       (numNodes / 7280000.0).ceil.toInt
     }
+
+    private[ml] def serializeData(data: NodeData, dos: DataOutputStream): Unit = {
+      import ReadWriteUtils._
+      dos.writeInt(data.id)
+      dos.writeDouble(data.prediction)
+      dos.writeDouble(data.impurity)
+      serializeDoubleArray(data.impurityStats, dos)
+      dos.writeLong(data.rawCount)
+      dos.writeDouble(data.gain)
+      dos.writeInt(data.leftChild)
+      dos.writeInt(data.rightChild)
+      SplitData.serializeData(data.split, dos)
+    }
+
+    private[ml] def deserializeData(dis: DataInputStream): NodeData = {
+      import ReadWriteUtils._
+      val id = dis.readInt()
+      val prediction = dis.readDouble()
+      val impurity = dis.readDouble()
+      val impurityStats = deserializeDoubleArray(dis)
+      val rawCount = dis.readLong()
+      val gain = dis.readDouble()
+      val leftChild = dis.readInt()
+      val rightChild = dis.readInt()
+      val split = SplitData.deserializeData(dis)
+      NodeData(
+        id, prediction, impurity, impurityStats, rawCount, gain, leftChild, rightChild, split
+      )
+    }
+
   }
 
   /**
@@ -422,7 +477,7 @@ private[ml] object DecisionTreeModelReadWrite {
       df.as[NodeData].collect()
     } else {
       import org.apache.spark.ml.util.ReadWriteUtils
-      ReadWriteUtils.loadArray[NodeData](dataPath, sparkSession)
+      ReadWriteUtils.loadArray[NodeData](dataPath, sparkSession, NodeData.deserializeData)
     }
 
     buildTreeFromNodes(nodeDataArray, impurityType)
@@ -485,7 +540,12 @@ private[ml] object EnsembleModelReadWrite {
     }
     val treesMetadataPath = new Path(path, "treesMetadata").toString
     ReadWriteUtils.saveArray[(Int, String, Double)](
-      treesMetadataPath, treesMetadataWeights, sparkSession, numDataParts = 1
+      treesMetadataPath, treesMetadataWeights, sparkSession,
+      (v, dos) => {
+        dos.writeInt(v._1)
+        dos.writeUTF(v._2)
+        dos.writeDouble(v._3)
+      }, numDataParts = 1
     )
 
     val dataPath = new Path(path, "data").toString
@@ -495,7 +555,11 @@ private[ml] object EnsembleModelReadWrite {
       case (tree, treeID) => EnsembleNodeData.build(tree, treeID)
     }
     ReadWriteUtils.saveArray[EnsembleNodeData](
-      dataPath, nodeDataArray, sparkSession, numDataParts
+      dataPath, nodeDataArray, sparkSession,
+      (v, dos) => {
+        dos.writeInt(v.treeID)
+        NodeData.serializeData(v.nodeData, dos)
+      }, numDataParts
     )
   }
 
@@ -527,7 +591,13 @@ private[ml] object EnsembleModelReadWrite {
     val treesMetadataPath = new Path(path, "treesMetadata").toString
 
     val treesMetadataWeights = ReadWriteUtils.loadArray[(Int, String, Double)](
-      treesMetadataPath, sparkSession
+      treesMetadataPath, sparkSession,
+      dis => {
+        val treeID = dis.readInt()
+        val json = dis.readUTF()
+        val weights = dis.readDouble()
+        (treeID, json, weights)
+      }
     ).map { case (treeID: Int, json: String, weights: Double) =>
       treeID -> ((DefaultParamsReader.parseMetadata(json, treeClassName), weights))
     }.sortBy(_._1).map(_._2)
@@ -547,7 +617,14 @@ private[ml] object EnsembleModelReadWrite {
       df = df.withColumn("nodeData", newNodeDataCol)
       df.as[EnsembleNodeData].collect()
     } else {
-      ReadWriteUtils.loadArray[EnsembleNodeData](dataPath, sparkSession)
+      ReadWriteUtils.loadArray[EnsembleNodeData](
+        dataPath, sparkSession,
+        dis => {
+          val treeID = dis.readInt()
+          val nodeData = NodeData.deserializeData(dis)
+          EnsembleNodeData(treeID, nodeData)
+        }
+      )
     }
     val rootNodes = ensembleNodeDataArray
       .groupBy(_.treeID)
@@ -582,4 +659,8 @@ private[ml] object EnsembleModelReadWrite {
       nodeData.map(nd => EnsembleNodeData(treeID, nd))
     }
   }
+}
+
+private[spark] object TreeConfig {
+  private[spark] var trainingEarlyStopModelSizeThresholdInBytes: Long = 0L
 }

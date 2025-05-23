@@ -29,10 +29,12 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, TimeZoneAwar
  * @constructor Creates a new TimezoneAwareExpressionResolver with the given expression resolver.
  * @param expressionResolver The [[ExpressionResolver]] used to resolve child expressions.
  */
-class TimezoneAwareExpressionResolver(expressionResolver: TreeNodeResolver[Expression, Expression])
+class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[TimeZoneAwareExpression, Expression]
-    with ResolvesExpressionChildren {
-  val typeCoercionResolver = new TypeCoercionResolver(this)
+    with ResolvesExpressionChildren
+    with CoercesExpressionTypes {
+
+  private val traversals = expressionResolver.getExpressionTreeTraversals
 
   /**
    * Resolves a [[TimeZoneAwareExpression]] by resolving its children and applying a timezone.
@@ -46,11 +48,19 @@ class TimezoneAwareExpressionResolver(expressionResolver: TreeNodeResolver[Expre
   override def resolve(unresolvedTimezoneExpression: TimeZoneAwareExpression): Expression = {
     val expressionWithResolvedChildren =
       withResolvedChildren(unresolvedTimezoneExpression, expressionResolver.resolve _)
-    withResolvedTimezone(expressionWithResolvedChildren, conf.sessionLocalTimeZone) match {
+    TimezoneAwareExpressionResolver.resolveTimezone(
+      expressionWithResolvedChildren,
+      traversals.current.sessionLocalTimeZone
+    ) match {
       case cast: Cast => cast
-      case other => typeCoercionResolver.resolve(other)
+      case other =>
+        coerceExpressionTypes(expression = other, expressionTreeTraversal = traversals.current)
     }
   }
+
+}
+
+object TimezoneAwareExpressionResolver {
 
   /**
    * Applies a timezone to a [[TimeZoneAwareExpression]] while preserving original tags.
@@ -62,7 +72,7 @@ class TimezoneAwareExpressionResolver(expressionResolver: TreeNodeResolver[Expre
    * @param timeZoneId The timezone ID to apply.
    * @return A new [[TimeZoneAwareExpression]] with the specified timezone and original tags.
    */
-  def withResolvedTimezone(expression: Expression, timeZoneId: String): Expression =
+  def resolveTimezone(expression: Expression, timeZoneId: String): Expression = {
     expression match {
       case timezoneExpression: TimeZoneAwareExpression if timezoneExpression.timeZoneId.isEmpty =>
         val withTimezone = timezoneExpression.withTimeZone(timeZoneId)
@@ -70,4 +80,5 @@ class TimezoneAwareExpressionResolver(expressionResolver: TreeNodeResolver[Expre
         withTimezone
       case other => other
     }
+  }
 }

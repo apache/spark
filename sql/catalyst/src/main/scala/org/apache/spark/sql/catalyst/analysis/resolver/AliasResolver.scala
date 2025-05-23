@@ -27,6 +27,8 @@ class AliasResolver(expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[UnresolvedAlias, Expression]
     with ResolvesExpressionChildren {
   private val scopes = expressionResolver.getNameScopes
+  private val expressionResolutionContextStack =
+    expressionResolver.getExpressionResolutionContextStack
 
   /**
    * Resolves [[UnresolvedAlias]] by resolving its child and computing the alias name by calling
@@ -55,14 +57,26 @@ class AliasResolver(expressionResolver: ExpressionResolver)
 
   /**
    * Handle already resolved [[Alias]] nodes, i.e. user-specified aliases. Here we only need to
-   * resolve its children and afterwards reassign exprId to the resulting [[Alias]].
+   * resolve its children and afterwards reassign exprId to the resulting [[Alias]]. Resulting
+   * [[Alias]] must be added to the list of `availableAliases` in the current [[NameScope]].
+   *
+   * When resolving grouping expressions, we may meet duplicate aliases from grouping expressions.
+   * This is only the case with partially resolved DataFrame logical plans. We need to deprioritize
+   * those aliases. See [[ExpressionIdAssigner.mapExpression]] doc for more details.
    */
   def handleResolvedAlias(alias: Alias): Alias = {
     val resolvedAlias = scopes.current.lcaRegistry.withNewLcaScope {
       val aliasWithResolvedChildren =
         withResolvedChildren(alias, expressionResolver.resolve _).asInstanceOf[Alias]
 
-      expressionResolver.getExpressionIdAssigner.mapExpression(aliasWithResolvedChildren)
+      val mappedAlias = expressionResolver.getExpressionIdAssigner.mapExpression(
+        originalExpression = aliasWithResolvedChildren,
+        prioritizeOldDuplicateAliasId =
+          expressionResolutionContextStack.peek().resolvingGroupingExpressions
+      )
+      scopes.current.availableAliases.add(mappedAlias.exprId)
+
+      mappedAlias
     }
 
     collapseAlias(resolvedAlias)

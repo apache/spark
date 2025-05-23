@@ -154,15 +154,20 @@ object NormalizePlan extends PredicateHelper {
             .getTagValue(DeduplicateRelations.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION)
             .isDefined =>
         project.child
+      case aggregate @ Aggregate(_, _, innerProject: Project, _) =>
+        val newInnerProject = Project(
+          innerProject.projectList.sortBy(_.name),
+          innerProject.child
+        )
+        aggregate.copy(child = newInnerProject)
+      case Project(outerProjectList, innerProject: Project) =>
+        val newInnerProject = Project(
+          innerProject.projectList.sortBy(_.name),
+          innerProject.child
+        )
+        Project(normalizeProjectList(outerProjectList), newInnerProject)
       case Project(projectList, child) =>
-        val projList = projectList
-          .map { e =>
-            e.transformUp {
-              case g: GetViewColumnByNameAndOrdinal => g.copy(viewDDL = None)
-            }
-          }
-          .asInstanceOf[Seq[NamedExpression]]
-        Project(projList, child)
+        Project(normalizeProjectList(projectList), child)
       case c: KeepAnalyzedQuery => c.storeAnalyzedQuery()
       case localRelation: LocalRelation if !localRelation.data.isEmpty =>
         /**
@@ -197,6 +202,16 @@ object NormalizePlan extends PredicateHelper {
     case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
     case LessThanOrEqual(l, r) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
     case _ => condition // Don't reorder.
+  }
+
+  private def normalizeProjectList(projectList: Seq[NamedExpression]): Seq[NamedExpression] = {
+    projectList
+      .map { e =>
+        e.transformUp {
+          case g: GetViewColumnByNameAndOrdinal => g.copy(viewDDL = None)
+        }
+      }
+      .asInstanceOf[Seq[NamedExpression]]
   }
 }
 

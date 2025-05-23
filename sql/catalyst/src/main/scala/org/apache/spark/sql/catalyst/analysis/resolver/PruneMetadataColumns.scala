@@ -19,7 +19,12 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.HashSet
 
-import org.apache.spark.sql.catalyst.expressions.{ExprId, NamedExpression, OuterReference}
+import org.apache.spark.sql.catalyst.expressions.{
+  Expression,
+  ExprId,
+  NamedExpression,
+  OuterReference
+}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -50,9 +55,9 @@ object PruneMetadataColumns extends Rule[LogicalPlan] {
    * @param neededAttributes A set of [[ExprId]]s that is required by operators above [[plan]].
    *
    * We distinguish three separate cases here, based on the type of operator node:
-   *  - For [[Aggregate]] nodes we only need to propagate aggregate expressions as needed
-   *  attributes to the lower operators. This is because in single-pass, we are not adding metadata
-   *   columns to [[Aggregate]] operators.
+   *  - For [[Aggregate]] nodes we only need to propagate attributes from aggregate and grouping
+   *  expressions as needed attributes to the lower operators. This is because in single-pass
+   *  we are not adding metadata columns to [[Aggregate]] operators.
    *  - For [[Project]] nodes we prune away all metadata columns that are either not required by
    *  operators above or they are duplicated in the project list.
    *  - For all other operators we collect references, add them to [[neededAttributes]] and
@@ -64,7 +69,7 @@ object PruneMetadataColumns extends Rule[LogicalPlan] {
     case aggregate: Aggregate =>
       withNewChildrenPrunedByNeededAttributes(
         aggregate,
-        aggregate.aggregateExpressions
+        aggregate.aggregateExpressions ++ aggregate.groupingExpressions
       )
     case project: Project =>
       pruneMetadataColumnsInProject(project, neededAttributes)
@@ -128,11 +133,11 @@ object PruneMetadataColumns extends Rule[LogicalPlan] {
 
   private def withNewChildrenPrunedByNeededAttributes(
       plan: LogicalPlan,
-      newNeededAttributes: Seq[NamedExpression]): LogicalPlan = {
+      expressionsWithNeededAttributes: Seq[Expression]): LogicalPlan = {
     val neededAttributes = new HashSet[ExprId]
-    newNeededAttributes.foreach {
+    expressionsWithNeededAttributes.foreach {
       case _: OuterReference =>
-      case other: NamedExpression =>
+      case other =>
         other.foreach {
           case namedExpression: NamedExpression =>
             neededAttributes.add(namedExpression.exprId)

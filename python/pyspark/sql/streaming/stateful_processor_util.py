@@ -38,10 +38,12 @@ if TYPE_CHECKING:
 # contains public APIs.
 
 
-class TransformWithStateInPySparkFuncMode(Enum):
+class TransformWithStateInPandasFuncMode(Enum):
     """
     Internal mode for python worker UDF mode for transformWithState in PySpark; external mode are
     in `StatefulProcessorHandleState` for public use purposes.
+
+    NOTE: The class has `Pandas` in its name for compatibility purposes in Spark Connect.
     """
 
     PROCESS_DATA = 1
@@ -50,10 +52,12 @@ class TransformWithStateInPySparkFuncMode(Enum):
     PRE_INIT = 4
 
 
-class TransformWithStateInPySparkUdfUtils:
+class TransformWithStateInPandasUdfUtils:
     """
     Internal Utility class used for python worker UDF for transformWithState in PySpark. This class
     is shared for both classic and spark connect mode.
+
+    NOTE: The class has `Pandas` in its name for compatibility purposes in Spark Connect.
     """
 
     def __init__(self, stateful_processor: StatefulProcessor, time_mode: str):
@@ -63,11 +67,11 @@ class TransformWithStateInPySparkUdfUtils:
     def transformWithStateUDF(
         self,
         stateful_processor_api_client: StatefulProcessorApiClient,
-        mode: TransformWithStateInPySparkFuncMode,
+        mode: TransformWithStateInPandasFuncMode,
         key: Any,
         input_rows: Union[Iterator["PandasDataFrameLike"], Iterator[Row]],
     ) -> Union[Iterator["PandasDataFrameLike"], Iterator[Row]]:
-        if mode == TransformWithStateInPySparkFuncMode.PRE_INIT:
+        if mode == TransformWithStateInPandasFuncMode.PRE_INIT:
             return self._handle_pre_init(stateful_processor_api_client)
 
         handle = StatefulProcessorHandle(stateful_processor_api_client)
@@ -76,13 +80,13 @@ class TransformWithStateInPySparkUdfUtils:
             self._stateful_processor.init(handle)
             stateful_processor_api_client.set_handle_state(StatefulProcessorHandleState.INITIALIZED)
 
-        if mode == TransformWithStateInPySparkFuncMode.PROCESS_TIMER:
+        if mode == TransformWithStateInPandasFuncMode.PROCESS_TIMER:
             stateful_processor_api_client.set_handle_state(
                 StatefulProcessorHandleState.DATA_PROCESSED
             )
             result = self._handle_expired_timers(stateful_processor_api_client)
             return result
-        elif mode == TransformWithStateInPySparkFuncMode.COMPLETE:
+        elif mode == TransformWithStateInPandasFuncMode.COMPLETE:
             stateful_processor_api_client.set_handle_state(
                 StatefulProcessorHandleState.TIMER_PROCESSED
             )
@@ -91,14 +95,14 @@ class TransformWithStateInPySparkUdfUtils:
             stateful_processor_api_client.set_handle_state(StatefulProcessorHandleState.CLOSED)
             return iter([])
         else:
-            # mode == TransformWithStateInPySparkFuncMode.PROCESS_DATA
+            # mode == TransformWithStateInPandasFuncMode.PROCESS_DATA
             result = self._handle_data_rows(stateful_processor_api_client, key, input_rows)
             return result
 
     def transformWithStateWithInitStateUDF(
         self,
         stateful_processor_api_client: StatefulProcessorApiClient,
-        mode: TransformWithStateInPySparkFuncMode,
+        mode: TransformWithStateInPandasFuncMode,
         key: Any,
         input_rows: Union[Iterator["PandasDataFrameLike"], Iterator[Row]],
         initial_states: Optional[Union[Iterator["PandasDataFrameLike"], Iterator[Row]]] = None,
@@ -115,7 +119,7 @@ class TransformWithStateInPySparkUdfUtils:
         - `initialStates` is None, while `inputRows` is not empty. This is not first batch.
          `initialStates` is initialized to the positional value as None.
         """
-        if mode == TransformWithStateInPySparkFuncMode.PRE_INIT:
+        if mode == TransformWithStateInPandasFuncMode.PRE_INIT:
             return self._handle_pre_init(stateful_processor_api_client)
 
         handle = StatefulProcessorHandle(stateful_processor_api_client)
@@ -124,19 +128,19 @@ class TransformWithStateInPySparkUdfUtils:
             self._stateful_processor.init(handle)
             stateful_processor_api_client.set_handle_state(StatefulProcessorHandleState.INITIALIZED)
 
-        if mode == TransformWithStateInPySparkFuncMode.PROCESS_TIMER:
+        if mode == TransformWithStateInPandasFuncMode.PROCESS_TIMER:
             stateful_processor_api_client.set_handle_state(
                 StatefulProcessorHandleState.DATA_PROCESSED
             )
             result = self._handle_expired_timers(stateful_processor_api_client)
             return result
-        elif mode == TransformWithStateInPySparkFuncMode.COMPLETE:
+        elif mode == TransformWithStateInPandasFuncMode.COMPLETE:
             stateful_processor_api_client.remove_implicit_key()
             self._stateful_processor.close()
             stateful_processor_api_client.set_handle_state(StatefulProcessorHandleState.CLOSED)
             return iter([])
         else:
-            # mode == TransformWithStateInPySparkFuncMode.PROCESS_DATA
+            # mode == TransformWithStateInPandasFuncMode.PROCESS_DATA
             batch_timestamp, watermark_timestamp = stateful_processor_api_client.get_timestamps(
                 self._time_mode
             )

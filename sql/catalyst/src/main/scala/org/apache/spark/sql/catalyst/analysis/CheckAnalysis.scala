@@ -736,6 +736,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
+          case a: AddCheckConstraint if !a.checkConstraint.deterministic =>
+            a.checkConstraint.child.failAnalysis(
+              errorClass = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
+              messageParameters = Map("checkCondition" -> a.checkConstraint.condition)
+            )
+
           case alter: AlterTableCommand =>
             checkAlterTableCommand(alter)
 
@@ -1037,12 +1043,6 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)
 
-      case AddConstraint(_: ResolvedTable, check: CheckConstraint) if !check.deterministic =>
-        check.child.failAnalysis(
-          errorClass = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
-          messageParameters = Map("checkCondition" -> check.condition)
-        )
-
       case AlterColumns(table: ResolvedTable, specs) =>
         val groupedColumns = specs.groupBy(_.column.name)
         groupedColumns.collect {
@@ -1063,7 +1063,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           }
         }
         specs.foreach {
-          case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _) =>
+          case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _, _) =>
             val fieldName = col.name.quoted
             if (dataType.isDefined) {
               val field = CharVarcharUtils.getRawType(col.field.metadata)

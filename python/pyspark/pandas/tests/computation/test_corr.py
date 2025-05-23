@@ -22,9 +22,11 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, SPARK_CONF_ARROW_ENABLED
 from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import is_ansi_mode_test, ansi_mode_not_supported_message
 
 
 class FrameCorrMixin:
+    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_dataframe_corr(self):
         pdf = pd.DataFrame(
             index=[

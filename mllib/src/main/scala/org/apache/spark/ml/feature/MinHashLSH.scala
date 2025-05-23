@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import scala.util.Random
 
 import org.apache.hadoop.fs.Path
@@ -212,6 +214,17 @@ object MinHashLSH extends DefaultParamsReadable[MinHashLSH] {
 object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
   private[ml] case class Data(randCoefficients: Array[Int])
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeIntArray(data.randCoefficients, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val randCoefficients = deserializeIntArray(dis)
+    Data(randCoefficients)
+  }
+
   @Since("2.1.0")
   override def read: MLReader[MinHashLSHModel] = new MinHashLSHModelReader
 
@@ -225,7 +238,7 @@ object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.randCoefficients.flatMap(tuple => Array(tuple._1, tuple._2)))
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -238,7 +251,7 @@ object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
       val model = new MinHashLSHModel(
         metadata.uid,
         data.randCoefficients.grouped(2).map(tuple => (tuple(0), tuple(1))).toArray

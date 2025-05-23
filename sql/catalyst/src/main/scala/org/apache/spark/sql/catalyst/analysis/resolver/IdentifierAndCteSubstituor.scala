@@ -26,7 +26,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   UnresolvedWith
 }
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION, UNRESOLVED_RELATION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{
+  PLAN_EXPRESSION,
+  UNRESOLVED_RELATION,
+  UNRESOLVED_WITH
+}
 
 /**
  * The [[IdentifierAndCteSubstitutor]] is responsible for substituting the IDENTIFIERs (not yet
@@ -90,7 +94,7 @@ class IdentifierAndCteSubstitutor {
    */
   private def handleWith(unresolvedWith: UnresolvedWith): LogicalPlan = {
     val cteRelationsAfterSubstitution = unresolvedWith.cteRelations.map { cteRelation =>
-      val (cteName, ctePlan) = cteRelation
+      val (cteName, ctePlan, maxDepth) = cteRelation
 
       val ctePlanAfter = cteRegistry.withNewScope() {
         substitute(ctePlan).asInstanceOf[SubqueryAlias]
@@ -98,7 +102,7 @@ class IdentifierAndCteSubstitutor {
 
       cteRegistry.currentScope.registerCte(cteName, CTERelationDef(ctePlanAfter))
 
-      (cteName, ctePlanAfter)
+      (cteName, ctePlanAfter, maxDepth)
     }
 
     val childAfterSubstitution = cteRegistry.withNewScope() {
@@ -180,5 +184,5 @@ class IdentifierAndCteSubstitutor {
 }
 
 object IdentifierAndCteSubstitutor {
-  val NODES_OF_INTEREST = Seq(CTE, UNRESOLVED_RELATION)
+  val NODES_OF_INTEREST = Seq(UNRESOLVED_RELATION, UNRESOLVED_WITH)
 }

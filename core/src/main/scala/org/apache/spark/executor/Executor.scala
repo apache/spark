@@ -1271,12 +1271,13 @@ private[spark] class Executor(
       if (taskRunner.task != null) {
         taskRunner.task.metrics.mergeShuffleReadMetrics()
         taskRunner.task.metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
-        val accumulatorsToReport =
+        val accumulatorsToReport = {
           if (HEARTBEAT_DROP_ZEROES) {
             taskRunner.task.metrics.accumulators().filterNot(_.isZero)
           } else {
             taskRunner.task.metrics.accumulators()
           }
+        }.filterNot(_.excludeFromHeartbeat)
         accumUpdates += ((taskRunner.taskId, accumulatorsToReport))
       }
     }
