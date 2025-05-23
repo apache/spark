@@ -1159,6 +1159,25 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create an [[SetNamespaceCollation]] logical plan.
+   *
+   * For example:
+   * {{{
+   *   ALTER (DATABASE|SCHEMA|NAMESPACE) namespace DEFAULT COLLATION collation;
+   * }}}
+   */
+  override def visitSetNamespaceCollation(ctx: SetNamespaceCollationContext): LogicalPlan = {
+    withOrigin(ctx) {
+      if (!SQLConf.get.schemaLevelCollationsEnabled) {
+        throw QueryCompilationErrors.schemaLevelCollationsNotEnabledError()
+      }
+      SetNamespaceCollationCommand(
+        withIdentClause(ctx.identifierReference, UnresolvedNamespace(_)),
+        visitCollationSpec(ctx.collationSpec()))
+    }
+  }
+
+  /**
    * Create a [[DescribeColumn]] or [[DescribeRelation]] or [[DescribeRelationAsJsonCommand]]
    * command.
    */

@@ -1118,4 +1118,19 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       testBinaryLiteral("<=>", greaterThanBinary, 0)
     }
   }
+
+  test("SPARK-52262: FAILED_JDBC.TABLE_EXISTS not thrown on connection error") {
+    val invalidTableName = s"$catalogName.invalid"
+    val originalUrl = spark.conf.get(s"spark.sql.catalog.$catalogName.url")
+    val invalidUrl = originalUrl.replace("localhost", "nonexistenthost")
+      .replace("127.0.0.1", "1.2.3.4")
+
+    withSQLConf(s"spark.sql.catalog.$catalogName.url" -> invalidUrl) {
+      // Ideally we would catch SQLException, but analyzer wraps it
+      val e = intercept[AnalysisException] {
+        sql(s"SELECT * FROM $invalidTableName")
+      }
+      assert(e.getCondition !== "FAILED_JDBC.TABLE_EXISTS")
+    }
+  }
 }

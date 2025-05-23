@@ -6064,6 +6064,11 @@
           "The replace function does not support nested column <colName>."
         ]
       },
+      "SCHEMA_LEVEL_COLLATIONS" : {
+        "message" : [
+          "Default collation for the specified schema."
+        ]
+      },
       "SET_NAMESPACE_PROPERTY" : {
         "message" : [
           "<property> is a reserved namespace property, <msg>."

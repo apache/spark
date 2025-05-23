@@ -12,6 +12,7 @@ mlflow>=2.3.1
 scikit-learn
 matplotlib
 memory-profiler>=0.61.0
+pyyaml>=3.11
 
 # PySpark test dependencies
 unittest-xml-reporting
