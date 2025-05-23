@@ -186,7 +186,6 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     val ex = intercept[UnresolvedPipelineException] {
       dfg.validate()
     }
-    // This error message has changed between DBR versions.
     assert(
       ex.directFailures(fullyQualifiedIdentifier("c", isView = true))
         .getMessage
@@ -432,35 +431,4 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     assert(!ex1.getMessage.contains(streamingTableHint))
     assert(ex2.getMessage.contains(streamingTableHint))
   }
-
-//  test("Sink has wrong type of data coming in") {
-//    class P extends TestPipelineDefinition {
-//      val mem = MemoryStream[Int]
-//      mem.addData(1, 2, 3)
-//      createView("a", query =(mem.toDF())
-//      createView("b") , query =(readStream("a"))
-//        .sink(
-//          func = df => df.writeStream,
-//          userValidation = df =>
-//            if (df.schema != new StructType().add("value", StringType, false)) {
-//              throw new IllegalStateException()
-//            }
-//        )
-//    }
-//    val p = DataflowGraph(new P).connect
-//    intercept[IllegalStateException] { p.validate() }
-//  }
-
-//  test("Flow to sink cannot be resolved") {
-//    class P extends TestPipelineDefinition {
-//      createView("a", query =(() => sys.error("not available"))
-//      createView("b", query =(readStream("a")).sink(df => df.writeStream)
-//    }
-//    val p = DataflowGraph(new P()).connect
-//    assert(!p.resolved)
-//    val ex = intercept[UnresolvedPipelineException] { p.validate() }
-//    assert(ex.directFailures.keySet == Set("a"))
-//    assert(ex.downstreamFailures.keySet == Set("b"))
-//    assert(ex.directFailures("a").getMessage.contains("not available"))
-//  }
 }
