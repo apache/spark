@@ -418,6 +418,8 @@ object SparkBuild extends PomBuild {
 
   enable(HiveThriftServer.settings)(hiveThriftServer)
 
+  enable(SparkConnect.settings)(pipelines)
+
   enable(SparkConnectCommon.settings)(connectCommon)
   enable(SparkConnect.settings)(connect)
   enable(SparkConnectClient.settings)(connectClient)

@@ -1,0 +1,153 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.pipelines.graph
+
+import scala.annotation.unused
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
+
+/**
+ * Exception raised when a flow tries to read from a dataset that exists but is unresolved
+ *
+ * @param identifier The identifier of the dataset
+ */
+case class UnresolvedDatasetException(identifier: TableIdentifier)
+    extends AnalysisException(
+      s"Failed to read dataset '${identifier.unquotedString}'. Dataset is defined in the " +
+      s"pipeline but could not be resolved."
+    )
+
+/**
+ * Exception raised when a flow fails to read from a table defined within the pipeline
+ *
+ * @param name The name of the table
+ * @param cause The cause of the failure
+ */
+case class LoadTableException(name: String, override val cause: Option[Throwable])
+    extends AnalysisException(s"Failed to load table '$name'", cause = cause)
+
+/**
+ * Exception raised when a pipeline has one or more flows that cannot be resolved
+ *
+ * @param directFailures     Mapping between the name of flows that failed to resolve (due to an
+ *                           error in that flow) and the error that occurred when attempting to
+ *                           resolve them
+ * @param downstreamFailures Mapping between the name of flows that failed to resolve (because they
+ *                           failed to read from other unresolved flows) and the error that occurred
+ *                           when attempting to resolve them
+ */
+case class UnresolvedPipelineException(
+    graph: DataflowGraph,
+    directFailures: Map[TableIdentifier, Throwable],
+    downstreamFailures: Map[TableIdentifier, Throwable],
+    additionalHint: Option[String] = None)
+    extends AnalysisException(
+      s"""
+       |Failed to resolve flows in the pipeline.
+       |
+       |A flow can fail to resolve because the flow itself contains errors or because it reads
+       |from an upstream flow which failed to resolve.
+       |${additionalHint.getOrElse("")}
+       |Flows with errors: ${directFailures.keys.map(_.unquotedString).toSeq.sorted.mkString(", ")}
+       |Flows that failed due to upstream errors: ${downstreamFailures.keys
+           .map(_.unquotedString)
+           .toSeq
+           .sorted
+           .mkString(", ")}
+       |
+       |To view the exceptions that were raised while resolving these flows, look for FlowProgress
+       |logs with status FAILED that precede this log.""".stripMargin
+    )
+
+/** A validation error that can either be thrown as an exception or logged as a warning. */
+trait GraphValidationWarning extends Logging {
+
+  /** The exception to throw when this validation fails. */
+  protected def exception: AnalysisException
+
+  /** The details of the event to construct when this validation fails. */
+  //  protected def warningEventDetails: EventDetails => EventDetails
+
+  //  /** Log the exception message and construct a warning event log. */
+  //  def logAndConstructWarningEventLog(origin: Origin): PipelineEvent = {
+  //    logWarning(exception.getMessage)
+  //    ConstructPipelineEvent(
+  //      origin = origin,
+  //      level = EventLevel.WARN,
+  //      message = exception.getMessage,
+  //      details = warningEventDetails
+  //    )
+  //  }
+
+  /** Log the exception message and throw the exception. */
+  @unused
+  def logAndThrow(): Unit = {
+    logError(exception.getMessage)
+    throw exception
+  }
+}
+
+/**
+ * Raised when there's a circular dependency in the current pipeline. That is, a downstream
+ * table is referenced while creating a upstream table.
+ */
+case class CircularDependencyException(
+    downstreamTable: TableIdentifier,
+    upstreamDataset: TableIdentifier)
+    extends AnalysisException(
+      s"The downstream table '${downstreamTable.unquotedString}' is referenced when " +
+      s"creating the upstream table or view '${upstreamDataset.unquotedString}'. " +
+      s"Circular dependencies are not supported in a pipeline. Please remove the dependency " +
+      s"between '${upstreamDataset.unquotedString}' and '${downstreamTable.unquotedString}'."
+    )
+
+/**
+ * Raised when some tables in the current pipeline are not resettable due to some non-resettable
+ * downstream dependencies.
+ */
+case class InvalidResettableDependencyException(originName: String, tables: Seq[Table])
+    extends GraphValidationWarning {
+  override def exception: AnalysisException = new AnalysisException(
+    "INVALID_RESETTABLE_DEPENDENCY",
+    Map(
+      "downstreamTable" -> originName,
+      "upstreamResettableTables" -> tables
+        .map(_.displayName)
+        .sorted
+        .map(t => s"'$t'")
+        .mkString(", "),
+      "resetAllowedKey" -> PipelinesTableProperties.resetAllowed.key
+    )
+  )
+}
+
+/**
+ * Warn if the append once flows was declared from batch query if there was a run before.
+ * Throw an exception if not.
+ * @param table the streaming destination that contains Append Once flows declared with batch query.
+ * @param flows the append once flows that are declared with batch query.
+ */
+case class AppendOnceFlowCreatedFromBatchQueryException(table: Table, flows: Seq[TableIdentifier])
+    extends GraphValidationWarning {
+  override def exception: AnalysisException = new AnalysisException(
+    "APPEND_ONCE_FROM_BATCH_QUERY",
+    Map("table" -> table.displayName)
+  )
+}

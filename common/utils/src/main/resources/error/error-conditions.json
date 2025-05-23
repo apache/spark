@@ -1322,6 +1322,12 @@
     ],
     "sqlState" : "42713"
   },
+  "DUPLICATE_FLOW_SQL_CONF": {
+    "message": [
+      "Found duplicate sql conf for dataset '<datasetName>': '<key>' is defined by both '<flowName1>' and '<flowName2>'"
+    ],
+    "sqlState": "42710"
+  },
   "DUPLICATED_MAP_KEY" : {
     "message" : [
       "Duplicate map key <key> was found, please check the input data.",
@@ -2018,6 +2024,18 @@
       "The join types <joinType1> and <joinType2> are incompatible."
     ],
     "sqlState" : "42613"
+  },
+  "INCOMPATIBLE_BATCH_VIEW_READ": {
+    "message": [
+      "View <datasetIdentifier> is not a streaming view and must be referenced using read. This check can be disabled by setting Spark conf pipelines.incompatibleViewCheck.enabled = false."
+    ],
+    "sqlState": "42000"
+  },
+  "INCOMPATIBLE_STREAMING_VIEW_READ": {
+    "message": [
+      "View <datasetIdentifier> is a streaming view and must be referenced using readStream. This check can be disabled by setting Spark conf pipelines.incompatibleViewCheck.enabled = false."
+    ],
+    "sqlState": "42000"
   },
   "INCOMPATIBLE_VIEW_SCHEMA_CHANGE" : {
     "message" : [
@@ -6570,6 +6588,20 @@
       "The `raise_error()` function was used to raise an unknown error class: <errorClass>"
     ],
     "sqlState" : "P0001"
+  },
+  "USER_SPECIFIED_AND_INFERRED_SCHEMA_NOT_COMPATIBLE": {
+    "message": [
+      "Table '<tableName>' has a user-specified schema that is incompatible with the schema",
+      " inferred from its query.",
+      "<streamingTableHint>",
+      "",
+      "Declared schema:",
+      "<specifiedSchema>",
+      "",
+      "Inferred schema:",
+      "<inferredDataSchema>"
+    ],
+    "sqlState": "42000"
   },
   "VARIABLE_ALREADY_EXISTS" : {
     "message" : [
