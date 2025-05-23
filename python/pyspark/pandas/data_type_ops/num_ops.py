@@ -257,7 +257,7 @@ class IntegralOps(NumericOps):
                 ).otherwise(F.lit(np.inf).__div__(left))
             else:
                 return F.when(
-                    right == 0,
+                    F.lit(right == 0),
                     F.when(left < 0, F.lit(float("-inf")))
                     .when(left > 0, F.lit(float("inf")))
                     .otherwise(F.lit(np.nan)),
@@ -354,7 +354,7 @@ class FractionalOps(NumericOps):
                 )
             else:
                 return F.when(
-                    right == 0,
+                    F.lit(right == 0),
                     F.when(left < 0, F.lit(float("-inf")))
                     .when(left > 0, F.lit(float("inf")))
                     .otherwise(F.lit(np.nan)),
