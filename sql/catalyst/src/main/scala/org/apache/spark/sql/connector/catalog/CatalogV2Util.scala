@@ -73,6 +73,7 @@ private[sql] object CatalogV2Util {
    */
   val NAMESPACE_RESERVED_PROPERTIES =
     Seq(SupportsNamespaces.PROP_COMMENT,
+      SupportsNamespaces.PROP_COLLATION,
       SupportsNamespaces.PROP_LOCATION,
       SupportsNamespaces.PROP_OWNER)
 
