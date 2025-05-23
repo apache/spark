@@ -2027,6 +2027,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val APPLY_SESSION_CONF_OVERRIDES_TO_FUNCTION_RESOLUTION =
+    buildConf("spark.sql.analyzer.sqlFunctionResolution.applyConfOverrides")
+      .internal()
+      .version("4.1.0")
+      .doc("When true, applies the conf overrides for certain feature flags during the " +
+        "resolution of user-defined sql table valued functions, consistent with view resolution.")
+      .booleanConf
+      .createWithDefault(true)
+
   // Whether to retain group by columns or not in GroupedData.agg.
   val DATAFRAME_RETAIN_GROUP_COLUMNS = buildConf("spark.sql.retainGroupColumns")
     .version("1.4.0")

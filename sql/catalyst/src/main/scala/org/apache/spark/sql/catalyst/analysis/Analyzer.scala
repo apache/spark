@@ -242,6 +242,35 @@ object AnalysisContext {
   }
 }
 
+object Analyzer {
+  // List of configurations that should be passed on when resolving views and User-Defined Table
+  // Valued functions
+  private val RETAINED_ANALYSIS_FLAGS = Seq(
+    // retainedHiveConfigs
+    // TODO: remove this `retainedHiveConfigs` after the `RelationConversions` is moved to
+    // optimization phase.
+    "spark.sql.hive.convertMetastoreParquet",
+    "spark.sql.hive.convertMetastoreOrc",
+    "spark.sql.hive.convertInsertingPartitionedTable",
+    "spark.sql.hive.convertInsertingUnpartitionedTable",
+    "spark.sql.hive.convertMetastoreCtas",
+    // retainedLoggingConfigs
+    "spark.sql.planChangeLog.level",
+    "spark.sql.expressionTreeChangeLog.level"
+  )
+
+  def retainResolutionConfigsForAnalysis(newConf: SQLConf, existingConf: SQLConf): Unit = {
+    val retainedConfigs = existingConf.getAllConfs.filter { case (key, _) =>
+      // Also apply catalog configs
+      RETAINED_ANALYSIS_FLAGS.contains(key) || key.startsWith("spark.sql.catalog.")
+    }
+
+    retainedConfigs.foreach { case (k, v) =>
+      newConf.settings.put(k, v)
+    }
+  }
+}
+
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
  * [[UnresolvedRelation]]s into fully typed objects using information in a [[SessionCatalog]].
@@ -2779,9 +2808,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       _.containsPattern(SQL_TABLE_FUNCTION)) {
       case SQLTableFunction(name, function, inputs, output) =>
         // Resolve the SQL table function plan using its function context.
-        val conf = new SQLConf()
-        function.getSQLConfigs.foreach { case (k, v) => conf.settings.put(k, v) }
-        val resolved = SQLConf.withExistingConf(conf) {
+        val newConf = new SQLConf()
+        function.getSQLConfigs.foreach { case (k, v) => newConf.settings.put(k, v) }
+        if (conf.getConf(SQLConf.APPLY_SESSION_CONF_OVERRIDES_TO_FUNCTION_RESOLUTION)) {
+          Analyzer.retainResolutionConfigsForAnalysis(newConf = newConf, existingConf = conf)
+        }
+        val resolved = SQLConf.withExistingConf(newConf) {
           val plan = v1SessionCatalog.makeSQLTableFunctionPlan(name, function, inputs, output)
           SQLFunctionContext.withSQLFunction {
             executeSameContext(plan)
