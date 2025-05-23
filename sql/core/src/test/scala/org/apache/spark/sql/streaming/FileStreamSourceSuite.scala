@@ -2619,6 +2619,26 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       }
     }
   }
+
+  test("SPARK-50603: respect user-provided basePath without globbing") {
+    withTempDirs { case (dir, tmp) =>
+      val partitionFooSubDir = new File(dir, "partition=foo")
+      partitionFooSubDir.mkdir()
+
+      val schema = new StructType().add("value", StringType).add("partition", StringType)
+      val fileStream = createFileStream("json", s"${dir.getCanonicalPath}/partition=foo",
+        Some(schema), Map("basePath" -> dir.getCanonicalPath()))
+      testStream(fileStream)(
+        // Add data to partition dir
+        AddTextFileData("{'value': 'abc'}", partitionFooSubDir, tmp),
+        CheckAnswer(("abc", "foo")),
+
+        // Add more data to same partition=foo sub dir
+        AddTextFileData("{'value': 'def'}", partitionFooSubDir, tmp),
+        CheckAnswer(("abc", "foo"), ("def", "foo"))
+      )
+    }
+  }
 }
 
 @SlowSQLTest
