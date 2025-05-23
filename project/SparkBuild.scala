@@ -906,8 +906,6 @@ object SparkDeclarativePipelines {
       )
     },
 
-    (assembly / test) := { },
-
     (assembly / logLevel) := Level.Info,
 
     // Exclude `scala-library` from assembly.

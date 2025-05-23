@@ -132,9 +132,9 @@ class DataflowGraph(val flows: Seq[Flow], val tables: Seq[Table], val views: Seq
 
   /** Returns a copy of this [[DataflowGraph]] with optionally replaced components. */
   def copy(
-            flows: Seq[Flow] = flows,
-            tables: Seq[Table] = tables,
-            views: Seq[View] = views): DataflowGraph = {
+      flows: Seq[Flow] = flows,
+      tables: Seq[Table] = tables,
+      views: Seq[View] = views): DataflowGraph = {
     new DataflowGraph(flows, tables, views)
   }
 
