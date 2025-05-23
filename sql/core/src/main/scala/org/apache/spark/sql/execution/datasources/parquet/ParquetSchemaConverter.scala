@@ -74,7 +74,8 @@ class ParquetToSparkSchemaConverter(
     caseSensitive = conf.get(SQLConf.CASE_SENSITIVE.key).toBoolean,
     inferTimestampNTZ = conf.get(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key).toBoolean,
     nanosAsLong = conf.get(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key).toBoolean,
-    useFieldId = conf.get(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key).toBoolean)
+    useFieldId = conf.getBoolean(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key,
+      SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get))
 
   /**
    * Converts Parquet [[MessageType]] `parquetSchema` to a Spark SQL [[StructType]].
