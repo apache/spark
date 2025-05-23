@@ -49,8 +49,12 @@ class PipelineEventSuite extends SparkFunSuite with Logging {
 
   private def makeEvent() = {
     ConstructPipelineEvent(
-      origin =
-        PipelineEventOrigin(flowName = Option("a"), datasetName = None, sourceCodeLocation = None),
+      origin = PipelineEventOrigin(
+        flowName = Option("a"),
+        datasetName = None,
+        sourceCodeLocation = None
+      ),
+      level = EventLevel.INFO,
       message = "OK",
       details = FlowProgress(FlowStatus.STARTING)
     )
@@ -73,7 +77,7 @@ class PipelineEventSuite extends SparkFunSuite with Logging {
     // the two events, being created right after one another, should not be far apart
     assert(
       EventHelpers.parseTimestamp(event2.timestamp).getTime -
-      EventHelpers.parseTimestamp(event1.timestamp).getTime < 1000
+        EventHelpers.parseTimestamp(event1.timestamp).getTime < 1000
     )
   }
   test("formatTimestamp / parseTimestamp") {
@@ -87,11 +91,16 @@ class PipelineEventSuite extends SparkFunSuite with Logging {
 
   test("basic flow progress event has expected fields set") {
     val event = ConstructPipelineEvent(
-      origin =
-        PipelineEventOrigin(flowName = Option("a"), datasetName = None, sourceCodeLocation = None),
+      origin = PipelineEventOrigin(
+        flowName = Option("a"),
+        datasetName = None,
+        sourceCodeLocation = None
+      ),
+      level = EventLevel.INFO,
       message = "Flow 'a' has completed",
       details = FlowProgress(FlowStatus.COMPLETED)
     )
+    assert(event.level == EventLevel.INFO)
     assert(event.message == "Flow 'a' has completed")
     assert(event.details.isInstanceOf[FlowProgress])
     assert(event.origin.flowName == Option("a"))
