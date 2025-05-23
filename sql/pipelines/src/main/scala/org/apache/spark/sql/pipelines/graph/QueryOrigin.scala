@@ -19,6 +19,7 @@ package org.apache.spark.sql.pipelines.graph
 
 import scala.util.control.{NonFatal, NoStackTrace}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.pipelines.Language
 import org.apache.spark.sql.pipelines.logging.SourceCodeLocation
@@ -47,6 +48,7 @@ case class QueryOrigin(
     objectType: Option[String] = None,
     objectName: Option[String] = None
 ) {
+
   /**
    * Merges this origin with another one.
    *
@@ -94,7 +96,7 @@ case class QueryOrigin(
   )
 }
 
-object QueryOrigin {
+object QueryOrigin extends Logging {
 
   /** An empty QueryOrigin without any provenance information. */
   val empty: QueryOrigin = QueryOrigin()
@@ -103,9 +105,7 @@ object QueryOrigin {
    * An exception that wraps [[QueryOrigin]] and lets us store it in errors as suppressed
    * exceptions.
    */
-  private case class QueryOriginWrapper(origin: QueryOrigin)
-      extends Exception
-      with NoStackTrace
+  private case class QueryOriginWrapper(origin: QueryOrigin) extends Exception with NoStackTrace
 
   implicit class ExceptionHelpers(t: Throwable) {
 
@@ -124,8 +124,7 @@ object QueryOrigin {
           t.addSuppressed(QueryOriginWrapper(origin))
         }
       } catch {
-        case NonFatal(e) =>
-        //          logger.error("Failed to add pipeline context", e)
+        case NonFatal(e) => logError("Failed to add pipeline context", e)
       }
       t
     }
@@ -146,7 +145,7 @@ object QueryOrigin {
       }
     } catch {
       case NonFatal(e) =>
-        //        logger.error("Failed to get pipeline context", e)
+        logError("Failed to get pipeline context", e)
         None
     }
   }

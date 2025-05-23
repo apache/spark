@@ -906,20 +906,6 @@ object SparkDeclarativePipelines {
       )
     },
 
-    dependencyOverrides ++= {
-      val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get(
-          "connect.guava.version").asInstanceOf[String]
-      val guavaFailureaccessVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get(
-          "guava.failureaccess.version").asInstanceOf[String]
-      Seq(
-        "com.google.guava" % "guava" % guavaVersion,
-        "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
-        "com.google.protobuf" % "protobuf-java" % protoVersion
-      )
-    },
-
     (assembly / test) := { },
 
     (assembly / logLevel) := Level.Info,
@@ -943,27 +929,6 @@ object SparkDeclarativePipelines {
         validPrefixes.exists(v.data.getName.startsWith)
       }
     },
-
-    (assembly / assemblyShadeRules) := Seq(
-      ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.grpc.@0").inAll,
-      ShadeRule.rename("com.google.common.**" -> "org.sparkproject.connect.guava.@1").inAll,
-      ShadeRule.rename("com.google.thirdparty.**" -> "org.sparkproject.connect.guava.@1").inAll,
-      ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.connect.protobuf.@1").inAll,
-      ShadeRule.rename("android.annotation.**" -> "org.sparkproject.connect.android_annotation.@1").inAll,
-      ShadeRule.rename("io.perfmark.**" -> "org.sparkproject.connect.io_perfmark.@1").inAll,
-      ShadeRule.rename("org.codehaus.mojo.animal_sniffer.**" -> "org.sparkproject.connect.animal_sniffer.@1").inAll,
-      ShadeRule.rename("com.google.j2objc.annotations.**" -> "org.sparkproject.connect.j2objc_annotations.@1").inAll,
-      ShadeRule.rename("com.google.errorprone.annotations.**" -> "org.sparkproject.connect.errorprone_annotations.@1").inAll,
-      ShadeRule.rename("org.checkerframework.**" -> "org.sparkproject.connect.checkerframework.@1").inAll,
-      ShadeRule.rename("com.google.gson.**" -> "org.sparkproject.connect.gson.@1").inAll,
-      ShadeRule.rename("com.google.api.**" -> "org.sparkproject.connect.google_protos.api.@1").inAll,
-      ShadeRule.rename("com.google.cloud.**" -> "org.sparkproject.connect.google_protos.cloud.@1").inAll,
-      ShadeRule.rename("com.google.geo.**" -> "org.sparkproject.connect.google_protos.geo.@1").inAll,
-      ShadeRule.rename("com.google.logging.**" -> "org.sparkproject.connect.google_protos.logging.@1").inAll,
-      ShadeRule.rename("com.google.longrunning.**" -> "org.sparkproject.connect.google_protos.longrunning.@1").inAll,
-      ShadeRule.rename("com.google.rpc.**" -> "org.sparkproject.connect.google_protos.rpc.@1").inAll,
-      ShadeRule.rename("com.google.type.**" -> "org.sparkproject.connect.google_protos.type.@1").inAll
-    ),
 
     (assembly / assemblyMergeStrategy) := {
       case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
