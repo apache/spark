@@ -120,31 +120,27 @@ class SparkConnectPlanner(
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
   /**
-   * The root of the query plan is a relation and we apply the transformations to it. The resolved
-   * logical plan will not get cached. If the result needs to be cached, use
-   * `transformRelation(rel, cachePlan = true)` instead.
-   * @param rel
-   *   The relation to transform.
-   * @return
-   *   The resolved logical plan.
-   */
-  @DeveloperApi
-  def transformRelation(rel: proto.Relation): LogicalPlan =
-    transformRelation(rel, cachePlan = false)
-
-  /**
    * The root of the query plan is a relation and we apply the transformations to it.
    * @param rel
    *   The relation to transform.
-   * @param cachePlan
-   *   Set to true for a performance optimization, if the plan is likely to be reused, e.g. built
-   *   upon by further dataset transformation. The default is false.
    * @return
    *   The resolved logical plan.
    */
   @DeveloperApi
-  def transformRelation(rel: proto.Relation, cachePlan: Boolean): LogicalPlan = {
-    sessionHolder.usePlanCache(rel, cachePlan) { rel =>
+  def transformRelation(rel: proto.Relation): LogicalPlan = transformRelationWithCache(rel)._1
+
+  /**
+   * The root of the query plan is a relation and we apply the transformations to it. If the
+   * relation exists in the plan cache, return the cached plan, but it does not update the plan
+   * cache.
+   * @param rel
+   *   The relation to transform.
+   * @return
+   *   The resolved logical plan and a flag indicating that the cache was hit.
+   */
+  @DeveloperApi
+  def transformRelationWithCache(rel: proto.Relation): (LogicalPlan, Boolean) = {
+    sessionHolder.usePlanCache(rel) { rel =>
       val plan = rel.getRelTypeCase match {
         // DataFrame API
         case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
