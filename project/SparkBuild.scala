@@ -1135,7 +1135,10 @@ object OldDeps {
     // even if the project is not using it.
     PB.protocVersion := protoVersion,
     name := "old-deps",
-    libraryDependencies := allPreviousArtifactKeys.value.flatten
+    libraryDependencies := allPreviousArtifactKeys.value.flatten,
+    excludeDependencies ++= Seq(
+      ExclusionRule("org.slf4j", "slf4j-api")
+    )
   )
 }
 
