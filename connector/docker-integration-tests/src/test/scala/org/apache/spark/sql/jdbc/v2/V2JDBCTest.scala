@@ -1130,7 +1130,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       val e = intercept[AnalysisException] {
         sql(s"SELECT * FROM $invalidTableName")
       }
-      assert(e.getCondition !== FAILED_JDBC.TABLE_EXISTS)
+      assert(e.getCondition !== "FAILED_JDBC.TABLE_EXISTS")
     }
   }
 }
