@@ -88,11 +88,11 @@ object MimaBuild {
     val organization = "org.apache.spark"
     val previousSparkVersion = "4.0.0"
     val project = projectRef.project
-    val fullId = "spark-" + project + "_2.13"
+    val id = "spark-" + project
 
     Seq(
       mimaFailOnNoPrevious := true,
-      mimaPreviousArtifacts := Set(organization % fullId % previousSparkVersion),
+      mimaPreviousArtifacts := Set(organization % s"${id}_2.13" % previousSparkVersion),
       mimaBinaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value)
     )
   }
