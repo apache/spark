@@ -29,6 +29,8 @@ addSbtPlugin("org.scalastyle" %% "scalastyle-sbt-plugin" % "1.0.0")
 
 addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "1.1.4")
 
+libraryDependencies += "org.slf4j" % "slf4j-api" % "1.7.5"
+
 addSbtPlugin("com.github.sbt" % "sbt-unidoc" % "0.5.0")
 
 addSbtPlugin("io.spray" % "sbt-revolver" % "0.10.0")
