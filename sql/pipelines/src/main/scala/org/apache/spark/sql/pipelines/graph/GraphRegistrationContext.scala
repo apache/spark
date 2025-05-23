@@ -49,7 +49,6 @@ class GraphRegistrationContext(
 
   def toDataflowGraph: DataflowGraph = {
     val qualifiedTables = tables.toSeq.map { t =>
-      // TODO: Track session-level catalog changes.
       t.copy(
         identifier = GraphIdentifierManager
           .parseAndQualifyTableIdentifier(
@@ -93,7 +92,6 @@ class GraphRegistrationContext(
       if (isImplicitFlow && flowWritesToView) {
         f
       } else {
-        // TODO: Track session-level catalog changes.
         f.copy(
           identifier = GraphIdentifierManager
             .parseAndQualifyFlowIdentifier(
