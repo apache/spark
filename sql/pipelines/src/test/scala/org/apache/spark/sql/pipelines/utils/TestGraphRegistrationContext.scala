@@ -219,7 +219,6 @@ class TestGraphRegistrationContext(
 }
 
 object TestGraphRegistrationContext {
-  // TODO: Add support for custom catalogs in tests.
   val DEFAULT_CATALOG = "spark_catalog"
   val DEFAULT_DATABASE = "test_db"
 }

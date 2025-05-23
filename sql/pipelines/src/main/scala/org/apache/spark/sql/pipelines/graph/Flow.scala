@@ -26,6 +26,10 @@ import org.apache.spark.sql.pipelines.AnalysisWarning
 import org.apache.spark.sql.pipelines.util.InputReadOptions
 import org.apache.spark.sql.types.StructType
 
+/**
+ * A [[Flow]] is a node of data transformation in a dataflow graph. It describes the movement
+ * of data into a particular dataset.
+ */
 trait Flow extends GraphElement with Logging {
 
   /** The [[FlowFunction]] containing the user's query. */

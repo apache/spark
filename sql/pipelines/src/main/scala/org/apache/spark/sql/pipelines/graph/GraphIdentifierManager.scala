@@ -69,8 +69,6 @@ object GraphIdentifierManager {
     // fully/partially qualified name (e.g., "SELECT * FROM catalog.schema.a" or "SELECT * FROM
     // schema.a").
     val inputIdentifier = parseTableIdentifier(rawInputName, context.spark)
-    // TODO: once pipeline spec catalog/schema is propagated, use that catalog via DSv2 API
-    val catalog = context.spark.sessionState.catalog
 
     /** Return whether we're referencing a dataset that is part of the pipeline. */
     def isInternalDataset(identifier: TableIdentifier): Boolean = {
@@ -81,9 +79,6 @@ object GraphIdentifierManager {
       isInternalDataset(inputIdentifier)) {
       // reading a single-part-name dataset defined in the dataflow graph (e.g., a view)
       InternalDatasetIdentifier(identifier = inputIdentifier)
-    } else if (catalog.isTempView(inputIdentifier)) {
-      // referencing a temp view or temp table in the current spark session
-      ExternalDatasetIdentifier(identifier = inputIdentifier)
     } else if (isPathIdentifier(context.spark, inputIdentifier)) {
       // path-based reference, always read as external dataset
       ExternalDatasetIdentifier(identifier = inputIdentifier)
@@ -326,7 +321,6 @@ object IdentifierHelper {
 
   /** Assert whether the identifier is properly fully qualified when creating a dataset. */
   def assertIsFullyQualifiedForCreate(identifier: TableIdentifier): Unit = {
-    // TODO: validate catalog exists
     assert(
       identifier.catalog.isDefined && identifier.database.isDefined,
       s"Dataset identifier $identifier is not properly fully qualified, expect a " +

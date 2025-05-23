@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import scala.annotation.unused
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -81,27 +79,6 @@ trait GraphValidationWarning extends Logging {
 
   /** The exception to throw when this validation fails. */
   protected def exception: AnalysisException
-
-  /** The details of the event to construct when this validation fails. */
-  //  protected def warningEventDetails: EventDetails => EventDetails
-
-  //  /** Log the exception message and construct a warning event log. */
-  //  def logAndConstructWarningEventLog(origin: Origin): PipelineEvent = {
-  //    logWarning(exception.getMessage)
-  //    ConstructPipelineEvent(
-  //      origin = origin,
-  //      level = EventLevel.WARN,
-  //      message = exception.getMessage,
-  //      details = warningEventDetails
-  //    )
-  //  }
-
-  /** Log the exception message and throw the exception. */
-  @unused
-  def logAndThrow(): Unit = {
-    logError(exception.getMessage)
-    throw exception
-  }
 }
 
 /**

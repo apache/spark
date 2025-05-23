@@ -22,6 +22,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 
 /**
+ * A mutable context for registering tables, views, and flows in a dataflow graph.
+ *
  * @param defaultCatalog The pipeline's default catalog.
  * @param defaultDatabase The pipeline's default schema.
  */

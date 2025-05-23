@@ -73,21 +73,18 @@ object FlowAnalysis {
 
   /**
    * Constructs an analyzed [[DataFrame]] from a [[LogicalPlan]] by resolving Pipelines specific
-   * TVFs and datasets that cannot be resolved directly by Catalyst. This is used in SQL pipelines
-   * and Python pipelines (when users call spark.sql).
+   * TVFs and datasets that cannot be resolved directly by Catalyst.
    *
    * This function shouldn't call any singleton as it will break concurrent access to graph
    * analysis; or any thread local variables as graph analysis and this function will use
    * different threads in python repl.
    *
    * @param plan     The [[LogicalPlan]] defining a flow.
-   * @param forAnalysisApi Whether the query is being analyzed through Analysis API algorithm.
    * @return An analyzed [[DataFrame]].
    */
   private def analyze(
       context: FlowAnalysisContext,
-      plan: LogicalPlan,
-      forAnalysisApi: Boolean = false
+      plan: LogicalPlan
   ): DataFrame = {
     // Users can define CTEs within their CREATE statements. For example,
     //
