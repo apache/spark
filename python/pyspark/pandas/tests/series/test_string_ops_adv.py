@@ -185,6 +185,8 @@ class SeriesStringOpsAdvMixin:
         with self.assertRaises(NotImplementedError):
             self.check_func(lambda x: x.str.split(expand=True))
 
+        self.check_func_on_series(lambda x: repr(x.str.split("-", n=1, expand=True)), pser)
+
     @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_string_rsplit(self):
         self.check_func_on_series(lambda x: repr(x.str.rsplit()), self.pser[:-1])
