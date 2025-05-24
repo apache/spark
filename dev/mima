@@ -42,7 +42,10 @@ $JAVA_CMD \
   -cp "$TOOLS_CLASSPATH:$OLD_DEPS_CLASSPATH" \
   org.apache.spark.tools.GenerateMIMAIgnore
 
-echo -e "q\n" | build/sbt -mem 5632 -DcopyDependencies=false "reload; clean; update; mimaReportBinaryIssues" | grep -v -e "info.*Resolving"
+rm -rf ~/.m2/repository/org/slf4j/slf4j-api/1.7.5/
+rm -rf ~/.ivy2/cache/org.slf4j/slf4j-api/
+
+echo -e "q\n" | build/sbt -mem 5632 -DcopyDependencies=false "$@" mimaReportBinaryIssues | grep -v -e "info.*Resolving"
 ret_val=$?
 
 if [ $ret_val != 0 ]; then
