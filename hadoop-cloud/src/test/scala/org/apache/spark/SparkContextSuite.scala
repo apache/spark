@@ -34,7 +34,7 @@ class SparkContextSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("SPARK-35383: Fill missing S3A magic committer configs if needed") {
+  test("SPARK-47618: Use Magic Committer for all S3 buckets by default") {
     Seq(
       "org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter",
       "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol"
@@ -44,16 +44,6 @@ class SparkContextSuite extends SparkFunSuite with BeforeAndAfterEach {
 
     val c1 = new SparkConf().setAppName("s3a-test").setMaster("local")
     sc = new SparkContext(c1)
-    assert(!sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
-    sc.stop()
-
-    val c2 = c1.clone.set("spark.hadoop.fs.s3a.bucket.mybucket.committer.magic.enabled", "false")
-    sc = new SparkContext(c2)
-    assert(!sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
-    sc.stop()
-
-    val c3 = c1.clone.set("spark.hadoop.fs.s3a.bucket.mybucket.committer.magic.enabled", "true")
-    sc = new SparkContext(c3)
     Seq(
       "spark.hadoop.fs.s3a.committer.magic.enabled" -> "true",
       "spark.hadoop.fs.s3a.committer.name" -> "magic",
@@ -69,10 +59,8 @@ class SparkContextSuite extends SparkFunSuite with BeforeAndAfterEach {
     sc.stop()
 
     // Respect a user configuration
-    val c4 = c1.clone
-      .set("spark.hadoop.fs.s3a.committer.magic.enabled", "false")
-      .set("spark.hadoop.fs.s3a.bucket.mybucket.committer.magic.enabled", "true")
-    sc = new SparkContext(c4)
+    val c2 = c1.clone.set("spark.hadoop.fs.s3a.committer.magic.enabled", "false")
+    sc = new SparkContext(c2)
     Seq(
       "spark.hadoop.fs.s3a.committer.magic.enabled" -> "false",
       "spark.hadoop.fs.s3a.committer.name" -> null,
