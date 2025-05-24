@@ -3390,7 +3390,9 @@ object SparkContext extends Logging {
       .getAllWithPrefix("spark.hadoop.fs.s3a.bucket.")
       .filter(_._1.endsWith(".committer.magic.enabled"))
       .filter(_._2.equalsIgnoreCase("true"))
-    if (magicCommitterConfs.nonEmpty) {
+    if (magicCommitterConfs.nonEmpty &&
+        Utils.classIsLoadable("org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter") &&
+        Utils.classIsLoadable("org.apache.spark.internal.io.cloud.PathOutputCommitProtocol")) {
       // Try to enable S3 magic committer if missing
       conf.setIfMissing("spark.hadoop.fs.s3a.committer.magic.enabled", "true")
       if (conf.get("spark.hadoop.fs.s3a.committer.magic.enabled").equals("true")) {
