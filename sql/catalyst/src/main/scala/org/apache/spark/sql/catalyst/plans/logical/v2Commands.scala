@@ -419,15 +419,12 @@ trait V2CreateTableAsSelectPlan
   def query: LogicalPlan
 
   /**
-   * For EXPLAIN, we want to show the optimized query plan without actually executing the CTAS.
-   * This method returns the query part for optimization and physical planning.
+   * SPARK-48660: Override to return the optimized query plan for explain
    */
   override def stageForExplain(): LogicalPlan = query
 
   /**
-   * SPARK-48660: Override stats to propagate statistics from the inner query
-   * instead of returning dummy statistics like other commands.
-   * This ensures consistency with CreateDataSourceTableAsSelectCommand behavior.
+   * SPARK-48660: Override to return the optimized query plan for explain
    */
   override def stats: Statistics = query.stats
 
