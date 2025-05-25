@@ -414,8 +414,22 @@ case class WriteDelta(
 trait V2CreateTableAsSelectPlan
   extends V2CreateTablePlan
     with AnalysisOnlyCommand
-    with CTEInChildren {
+    with CTEInChildren
+    with ExecutableDuringAnalysis {
   def query: LogicalPlan
+
+  /**
+   * For EXPLAIN, we want to show the optimized query plan without actually executing the CTAS.
+   * This method returns the query part for optimization and physical planning.
+   */
+  override def stageForExplain(): LogicalPlan = query
+
+  /**
+   * SPARK-48660: Override stats to propagate statistics from the inner query
+   * instead of returning dummy statistics like other commands.
+   * This ensures consistency with CreateDataSourceTableAsSelectCommand behavior.
+   */
+  override def stats: Statistics = query.stats
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
     withNameAndQuery(newName = name, newQuery = WithCTE(query, cteDefs))

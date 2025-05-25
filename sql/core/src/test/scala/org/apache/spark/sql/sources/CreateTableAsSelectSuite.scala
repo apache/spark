@@ -300,4 +300,36 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
           stop = 57))
     }
   }
+
+  test("SPARK-48660: EXPLAIN COST should show statistics") {
+    withTable("source_table") {
+      // Create source table with data
+      sql("""
+        CREATE TABLE source_table (
+          id INT,
+          name STRING
+        ) USING PARQUET
+      """)
+
+      // Get explain output for CTAS
+      val explainResult = sql("""
+        EXPLAIN COST
+        CREATE TABLE target_table
+        USING PARQUET
+        AS SELECT * FROM source_table WHERE id > 0
+      """).collect()
+
+      val explainOutput = explainResult.map(_.getString(0)).mkString("\n")
+      println(explainOutput)
+
+      // The explain output should contain statistics information
+      assert(explainOutput.contains("Statistics"),
+        s"EXPLAIN COST output should contain statistics information. Output: $explainOutput")
+
+      // The explain output should contain pushdown information
+      assert(explainOutput.contains("PushedFilters"),
+        s"EXPLAIN COST output should contain pushdown information. Output: $explainOutput")
+    }
+  }
+
 }
