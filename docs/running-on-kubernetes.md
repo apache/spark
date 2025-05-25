@@ -1017,7 +1017,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.report.interval</code></td>
-  <td><code>1s</code></td>
+  <td><code>10s</code></td>
   <td>
     Interval between reports of the current Spark job status in cluster mode.
   </td>
