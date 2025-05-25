@@ -37,53 +37,61 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
   }
 
   override def afterAll(): Unit = {
-    spark.sessionState.experimentalMethods.extraOptimizations = Nil
     spark.catalog.dropTempView("table")
     spark.catalog.dropTempView("table2")
     super.afterAll()
   }
 
-  private def testOverride(testName: String)(f: => Unit): Unit = {
+  private def testOverride(testName: String)(f: (String, String) => Unit): Unit = {
     test(testName) {
       val key = "spark.sql.catalog.x.y"
       val value = "true"
       withSQLConf(key -> value) {
-        ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
-          f
-        }
+        f
       }
     }
   }
 
-  testOverride("simple plan") {
-    spark.sql("SELECT * FROM TaBlE")
+  testOverride("simple plan") { case (key, value) =>
+    ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
+      spark.sql("SELECT * FROM TaBlE")
+    }
   }
 
-  testOverride("CTE") {
-    spark.sql("""WITH cte AS (SELECT * FROM TaBlE)
-                |SELECT * FROM cte
-                |""".stripMargin)
+  testOverride("CTE") { case (key, value) =>
+    ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
+      spark.sql(
+        """WITH cte AS (SELECT * FROM TaBlE)
+          |SELECT * FROM cte
+          |""".stripMargin)
+    }
   }
 
-  testOverride("Subquery") {
-    spark.sql("""
-                |SELECT * FROM TaBlE WHERE a in (SELECT a FROM table2)
-                |""".stripMargin)
+  testOverride("Subquery") { case (key, value) =>
+    ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
+      spark.sql(
+        """
+          |SELECT * FROM TaBlE WHERE a in (SELECT a FROM table2)
+          |""".stripMargin)
+    }
   }
 
-  testOverride("View") {
+  testOverride("View") { case (key, value) =>
     withTable("test_table", "test_table2") {
       spark.sql("CREATE TABLE test_table AS SELECT id as a FROM range(10)")
       spark.sql("CREATE TABLE test_table2 AS SELECT id as a, (id + 1) as b FROM range(10)")
       withView("test_view") {
         spark.sql("CREATE VIEW test_view AS " +
           "SELECT * FROM test_table WHERE a in (SELECT a FROM test_table2)")
-        spark.sql("SELECT * FROM test_view")
+
+        ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
+          spark.sql("SELECT * FROM test_view")
+        }
       }
     }
   }
 
-  testOverride("user defined table valued function") {
+  testOverride("user defined table valued function") { case (key, value) =>
     withTable("test_table", "test_table2") {
       spark.sql("CREATE TABLE test_table AS SELECT id as a FROM range(10)")
       spark.sql("CREATE TABLE test_table2 AS SELECT id as a, (id + 1) as b FROM range(10)")
@@ -98,13 +106,50 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
             |RETURN SELECT * FROM test_table WHERE a in (SELECT a FROM test_table2)
             |""".stripMargin
         )
-        spark.sql("SELECT * FROM f1()")
-        spark.sql("SELECT * FROM f2()")
+        ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
+          spark.sql("SELECT * FROM f1()")
+        }
+        ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
+          spark.sql("SELECT * FROM f2()")
+        }
+      }
+    }
+  }
+
+  testOverride("user defined table valued function - test conf disabled") { case (key, value) =>
+    withTable("test_table", "test_table2") {
+      spark.sql("CREATE TABLE test_table AS SELECT id as a FROM range(10)")
+      spark.sql("CREATE TABLE test_table2 AS SELECT id as a, (id + 1) as b FROM range(10)")
+      // turn the flag off to maintain former behavior
+      withSQLConf("spark.sql.analyzer.sqlFunctionResolution.applyConfOverrides" -> "false") {
+        withUserDefinedFunction("f1" -> true, "f2" -> false) {
+          spark.sql(
+            """CREATE OR REPLACE TEMPORARY FUNCTION f1() RETURNS TABLE (a bigint)
+              |RETURN SELECT * FROM test_table WHERE a in (SELECT a FROM test_table2)
+              |""".stripMargin
+          )
+          spark.sql(
+            """CREATE OR REPLACE FUNCTION f2() RETURNS TABLE (a bigint)
+              |RETURN SELECT * FROM test_table WHERE a in (SELECT a FROM test_table2)
+              |""".stripMargin
+          )
+          intercept[AssertionError] {
+            ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
+              spark.sql("SELECT * FROM f1()")
+            }
+          }
+          intercept[AssertionError] {
+            ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
+              spark.sql("SELECT * FROM f2()")
+            }
+          }
+        }
       }
     }
   }
 }
 
+/** Utility singleton object to orchestrate the test. */
 object ValidateConfOverrideRule {
   private var confToCheck: Option[(String, String)] = None
   private var isCalled: Boolean = false
