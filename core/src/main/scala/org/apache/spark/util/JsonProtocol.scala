@@ -1023,14 +1023,14 @@ private[spark] class JsonProtocol(sparkConf: SparkConf) extends JsonUtils {
   }
 
   def taskResourceRequestMapFromJson(json: JsonNode): Map[String, TaskResourceRequest] = {
-    json.fields().asScala.collect { case field =>
+    json.properties().asScala.collect { case field =>
       val req = taskResourceRequestFromJson(field.getValue)
       (field.getKey, req)
     }.toMap
   }
 
   def executorResourceRequestMapFromJson(json: JsonNode): Map[String, ExecutorResourceRequest] = {
-    json.fields().asScala.collect { case field =>
+    json.properties().asScala.collect { case field =>
       val req = executorResourceRequestFromJson(field.getValue)
       (field.getKey, req)
     }.toMap
@@ -1543,7 +1543,7 @@ private[spark] class JsonProtocol(sparkConf: SparkConf) extends JsonUtils {
 
   def resourcesMapFromJson(json: JsonNode): Map[String, ResourceInformation] = {
     assert(json.isObject, s"expected object, got ${json.getNodeType}")
-    json.fields.asScala.map { field =>
+    json.properties.asScala.map { field =>
       val resourceInfo = ResourceInformation.parseJson(field.getValue.toString)
       (field.getKey, resourceInfo)
     }.toMap
@@ -1555,7 +1555,7 @@ private[spark] class JsonProtocol(sparkConf: SparkConf) extends JsonUtils {
 
   def mapFromJson(json: JsonNode): Map[String, String] = {
     assert(json.isObject, s"expected object, got ${json.getNodeType}")
-    json.fields.asScala.map { field =>
+    json.properties.asScala.map { field =>
       (field.getKey, field.getValue.extractString)
     }.toMap
   }
