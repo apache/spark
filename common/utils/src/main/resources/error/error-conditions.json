@@ -3198,6 +3198,12 @@
     },
     "sqlState" : "42K06"
   },
+  "INVALID_OUTPUT_SCHEMA_TYPE_FOR_TRANSFORM_WITH_STATE_IN_PANDAS_NON_STRUCT" : {
+    "message" : [
+      "Invalid user-defined output schema type for TransformWithStateInPandas. Expect a struct type, but got <dataType>."
+    ],
+    "sqlState" : "42K09"
+  },
   "INVALID_PANDAS_UDF_PLACEMENT" : {
     "message" : [
       "The group aggregate pandas UDF <functionList> cannot be invoked together with as other, non-pandas aggregate functions."
@@ -3354,6 +3360,12 @@
     ],
     "sqlState" : "42602"
   },
+  "INVALID_PYTHON_UDTF_RETURN_TYPE_NON_STRUCT" : {
+    "message" : [
+      "Invalid Python user-defined table function return type. Expect a struct type, but got <dataType>."
+    ],
+    "sqlState" : "42K09"
+  },
   "INVALID_QUERY_MIXED_QUERY_PARAMETERS" : {
     "message" : [
       "Parameterized query must either use positional, or named parameters, but not both."
@@ -3431,6 +3443,12 @@
       "<name> is not a valid name for tables/schemas. Valid names only contain alphabet characters, numbers and _."
     ],
     "sqlState" : "42602"
+  },
+  "INVALID_SCHEMA_TYPE_NON_STRUCT" : {
+    "message" : [
+      "Invalid schema type. Expect a struct type, but got <dataType>."
+    ],
+    "sqlState" : "42K09"
   },
   "INVALID_SET_SYNTAX" : {
     "message" : [
@@ -3641,6 +3659,12 @@
       "The statement or clause: <operation> is not valid."
     ],
     "sqlState" : "42601"
+  },
+  "INVALID_STATE_SCHEMA_TYPE_FOR_FLAT_MAP_GROUPS_WITH_STATE_NON_STRUCT" : {
+    "message" : [
+      "Invalid state schema type for flatMapGroupsWithState. Expect a struct type, but got <dataType>."
+    ],
+    "sqlState" : "42K09"
   },
   "INVALID_SUBQUERY_EXPRESSION" : {
     "message" : [
