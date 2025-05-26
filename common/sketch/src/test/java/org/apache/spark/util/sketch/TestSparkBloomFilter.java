@@ -26,9 +26,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
 
-import static java.nio.file.StandardOpenOption.CREATE;
 
 @Disabled
 public class TestSparkBloomFilter {
@@ -43,9 +44,8 @@ public class TestSparkBloomFilter {
 
     private static Instant START;
 
-    private String testName;
     private Instant start;
-    private PrintStream testOut;
+    private final Map<String,PrintStream> testOutMap = new ConcurrentHashMap<>();
 
     @BeforeAll
     public static void beforeAll() {
@@ -64,20 +64,25 @@ public class TestSparkBloomFilter {
     ) throws Exception {
         start = Instant.now();
 
-        Path testLogPath = Path.of(testInfo.getDisplayName() + ".log");
-        Files.deleteIfExists(testLogPath);
-        testOut = new PrintStream(Files.newOutputStream(testLogPath));
+        String testName = testInfo.getDisplayName();
 
-        testName = testInfo.getDisplayName();
+        Path testLogPath = Path.of(testName + ".log");
+        Files.deleteIfExists(testLogPath);
+        PrintStream testOut = new PrintStream(Files.newOutputStream(testLogPath));
+        testOutMap.put(testName, testOut);
+
         testOut.println("testName: " + testName);
     }
 
     @AfterEach
     public void afterEach(TestInfo testInfo) {
         Duration duration = Duration.between(start, Instant.now());
+
+        String testName = testInfo.getDisplayName();
+        PrintStream testOut = testOutMap.get(testName);
+
         testOut.println("duration: " + duration );
         testOut.close();
-        testName = "";
     }
 
     /**
@@ -96,8 +101,12 @@ public class TestSparkBloomFilter {
     public void testAccuracyEvenOdd(
       @Values(longs = {1_000_000L, 1_000_000_000L, 5_000_000_000L}) long numItems,
       @Values(doubles = {0.05, 0.03, 0.01, 0.001}) double expectedFpp,
-      @Values(ints = {BloomFilterImpl.DEFAULT_SEED, 1, 127}) int deterministicSeed
+      @Values(ints = {BloomFilterImpl.DEFAULT_SEED, 1, 127}) int deterministicSeed,
+      TestInfo testInfo
     ) {
+        String testName = testInfo.getDisplayName();
+        PrintStream testOut = testOutMap.get(testName);
+
         long optimalNumOfBits = BloomFilter.optimalNumOfBits(numItems, expectedFpp);
         testOut.printf(
                 "optimal   bitArray: %d (%d MB)\n",
@@ -205,8 +214,12 @@ public class TestSparkBloomFilter {
     public void testAccuracyRandom(
             @Values(longs = {1_000_000L, 1_000_000_000L}) long numItems,
             @Values(doubles = {0.05, 0.03, 0.01, 0.001}) double expectedFpp,
-            @Values(ints = {BloomFilterImpl.DEFAULT_SEED, 1, 127}) int deterministicSeed
+            @Values(ints = {BloomFilterImpl.DEFAULT_SEED, 1, 127}) int deterministicSeed,
+            TestInfo testInfo
     ) {
+        String testName = testInfo.getDisplayName();
+        PrintStream testOut = testOutMap.get(testName);
+
         long optimalNumOfBits = BloomFilter.optimalNumOfBits(numItems, expectedFpp);
         testOut.printf(
                 "optimal   bitArray: %d (%d MB)\n",
