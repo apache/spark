@@ -25365,13 +25365,27 @@ def isnotnull(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(None,), (1,)], ["e"])
-    >>> df.select(isnotnull(df.e).alias('r')).collect()
-    [Row(r=False), Row(r=True)]
+    >>> df.select('*', sf.isnotnull(df.e)).show()
+    +----+---------------+
+    |   e|(e IS NOT NULL)|
+    +----+---------------+
+    |NULL|          false|
+    |   1|           true|
+    +----+---------------+
+
+    >>> df.select('*', sf.isnotnull('e')).show()
+    +----+---------------+
+    |   e|(e IS NOT NULL)|
+    +----+---------------+
+    |NULL|          false|
+    |   1|           true|
+    +----+---------------+
     """
     return _invoke_function_over_columns("isnotnull", col)
 
@@ -25386,14 +25400,28 @@ def equal_null(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
-    col2 : :class:`~pyspark.sql.Column` or str
+    col1 : :class:`~pyspark.sql.Column` or column name
+    col2 : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(None, None,), (1, 9,)], ["a", "b"])
-    >>> df.select(equal_null(df.a, df.b).alias('r')).collect()
-    [Row(r=True), Row(r=False)]
+    >>> df.select('*', sf.equal_null(df.a, df.b)).show()
+    +----+----+----------------+
+    |   a|   b|equal_null(a, b)|
+    +----+----+----------------+
+    |NULL|NULL|            true|
+    |   1|   9|           false|
+    +----+----+----------------+
+
+    >>> df.select('*', sf.equal_null('a', 'b')).show()
+    +----+----+----------------+
+    |   a|   b|equal_null(a, b)|
+    +----+----+----------------+
+    |NULL|NULL|            true|
+    |   1|   9|           false|
+    +----+----+----------------+
     """
     return _invoke_function_over_columns("equal_null", col1, col2)
 
@@ -25407,14 +25435,28 @@ def nullif(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
-    col2 : :class:`~pyspark.sql.Column` or str
+    col1 : :class:`~pyspark.sql.Column` or column name
+    col2 : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(None, None,), (1, 9,)], ["a", "b"])
-    >>> df.select(nullif(df.a, df.b).alias('r')).collect()
-    [Row(r=None), Row(r=1)]
+    >>> df.select('*', sf.nullif(df.a, df.b)).show()
+    +----+----+------------+
+    |   a|   b|nullif(a, b)|
+    +----+----+------------+
+    |NULL|NULL|        NULL|
+    |   1|   9|           1|
+    +----+----+------------+
+
+    >>> df.select('*', sf.nullif('a', 'b')).show()
+    +----+----+------------+
+    |   a|   b|nullif(a, b)|
+    +----+----+------------+
+    |NULL|NULL|        NULL|
+    |   1|   9|           1|
+    +----+----+------------+
     """
     return _invoke_function_over_columns("nullif", col1, col2)
 
@@ -25428,18 +25470,27 @@ def nullifzero(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(0,), (1,)], ["a"])
-    >>> df.select(nullifzero(df.a).alias("result")).show()
-    +------+
-    |result|
-    +------+
-    |  NULL|
-    |     1|
-    +------+
+    >>> df.select('*', sf.nullifzero(df.a)).show()
+    +---+-------------+
+    |  a|nullifzero(a)|
+    +---+-------------+
+    |  0|         NULL|
+    |  1|            1|
+    +---+-------------+
+
+    >>> df.select('*', sf.nullifzero('a')).show()
+    +---+-------------+
+    |  a|nullifzero(a)|
+    +---+-------------+
+    |  0|         NULL|
+    |  1|            1|
+    +---+-------------+
     """
     return _invoke_function_over_columns("nullifzero", col)
 
@@ -25453,14 +25504,28 @@ def nvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
-    col2 : :class:`~pyspark.sql.Column` or str
+    col1 : :class:`~pyspark.sql.Column` or column name
+    col2 : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(None, 8,), (1, 9,)], ["a", "b"])
-    >>> df.select(nvl(df.a, df.b).alias('r')).collect()
-    [Row(r=8), Row(r=1)]
+    >>> df.select('*', sf.nvl(df.a, df.b)).show()
+    +----+---+---------+
+    |   a|  b|nvl(a, b)|
+    +----+---+---------+
+    |NULL|  8|        8|
+    |   1|  9|        1|
+    +----+---+---------+
+
+    >>> df.select('*', sf.nvl('a', 'b')).show()
+    +----+---+---------+
+    |   a|  b|nvl(a, b)|
+    +----+---+---------+
+    |NULL|  8|        8|
+    |   1|  9|        1|
+    +----+---+---------+
     """
     return _invoke_function_over_columns("nvl", col1, col2)
 
@@ -25474,15 +25539,29 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
-    col2 : :class:`~pyspark.sql.Column` or str
-    col3 : :class:`~pyspark.sql.Column` or str
+    col1 : :class:`~pyspark.sql.Column` or column name
+    col2 : :class:`~pyspark.sql.Column` or column name
+    col3 : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(None, 8, 6,), (1, 9, 9,)], ["a", "b", "c"])
-    >>> df.select(nvl2(df.a, df.b, df.c).alias('r')).collect()
-    [Row(r=6), Row(r=9)]
+    >>> df.select('*', sf.nvl2(df.a, df.b, df.c)).show()
+    +----+---+---+-------------+
+    |   a|  b|  c|nvl2(a, b, c)|
+    +----+---+---+-------------+
+    |NULL|  8|  6|            6|
+    |   1|  9|  9|            9|
+    +----+---+---+-------------+
+
+    >>> df.select('*', sf.nvl2('a', 'b', 'c')).show()
+    +----+---+---+-------------+
+    |   a|  b|  c|nvl2(a, b, c)|
+    +----+---+---+-------------+
+    |NULL|  8|  6|            6|
+    |   1|  9|  9|            9|
+    +----+---+---+-------------+
     """
     return _invoke_function_over_columns("nvl2", col1, col2, col3)
 
@@ -25496,18 +25575,27 @@ def zeroifnull(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(None,), (1,)], ["a"])
-    >>> df.select(zeroifnull(df.a).alias("result")).show()
-    +------+
-    |result|
-    +------+
-    |     0|
-    |     1|
-    +------+
+    >>> df.select('*', sf.zeroifnull(df.a)).show()
+    +----+-------------+
+    |   a|zeroifnull(a)|
+    +----+-------------+
+    |NULL|            0|
+    |   1|            1|
+    +----+-------------+
+
+    >>> df.select('*', sf.zeroifnull('a')).show()
+    +----+-------------+
+    |   a|zeroifnull(a)|
+    +----+-------------+
+    |NULL|            0|
+    |   1|            1|
+    +----+-------------+
     """
     return _invoke_function_over_columns("zeroifnull", col)
 
