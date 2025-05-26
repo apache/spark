@@ -1603,6 +1603,7 @@ package object config {
         "By default it is Long.MAX_VALUE, which means we never force the sorter to spill, " +
         "until we reach some limitations, like the max page size limitation for the pointer " +
         "array in the sorter.")
+      .version("4.1.0")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(v => v > 0, "The threshold should be positive.")
       .createWithDefault(Long.MaxValue)
