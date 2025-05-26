@@ -19,14 +19,12 @@ package org.apache.spark
 
 import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
-
 import scala.collection.mutable.LinkedHashSet
 import scala.jdk.CollectionConverters._
-
 import org.apache.avro.{Schema, SchemaNormalization}
-
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.LogKeys.{CONFIG, VALUE}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Kryo._
@@ -341,8 +339,10 @@ class SparkConf(loadDefaults: Boolean)
     }
     if (driverJvmStartupConfList.contains(key) && settings.containsKey(key)) {
       logWarning(
-        s"Spark user should not overwrite spark driver JVM startup parameters in code:\n" +
-          s"  key = $key, effective value = ${settings.get(key)}, user setting value = $value.")
+        log"Spark user should not overwrite spark driver JVM startup parameters in code:\n" +
+          log"key = ${MDC(CONFIG, key)} , " +
+          log"effective value = ${MDC(VALUE, settings.get(key))}, " +
+          log"user setting value = ${MDC(VALUE, value)}.")
       return this
     }
     settings.put(key, value)
