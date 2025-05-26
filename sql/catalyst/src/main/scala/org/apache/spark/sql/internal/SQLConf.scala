@@ -1109,6 +1109,14 @@ object SQLConf {
       .stringConf
       .createOptional
 
+  val MAP_ZIP_WITH_USES_JAVA_COLLECTIONS =
+    buildConf("spark.sql.mapZipWithUsesJavaCollections")
+      .doc("When true, the `map_zip_with` function uses Java collections instead of Scala " +
+        "collections. This is useful for avoiding NaN equality issues.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
       .internal()
@@ -6382,6 +6390,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
    * Returns the error handler for handling hint errors.
    */
   def hintErrorHandler: HintErrorHandler = HintErrorLogger
+
+  def mapZipWithUsesJavaCollections: Boolean =
+    getConf(MAP_ZIP_WITH_USES_JAVA_COLLECTIONS)
 
   def subexpressionEliminationEnabled: Boolean =
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
