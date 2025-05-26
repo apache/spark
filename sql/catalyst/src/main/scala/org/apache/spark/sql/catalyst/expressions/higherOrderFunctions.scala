@@ -1110,8 +1110,10 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
    */
   @transient private lazy val getKeysWithValueIndexes:
       (ArrayData, ArrayData) => mutable.Iterable[(Any, Array[Option[Int]])] = {
-    if (TypeUtils.typeWithProperEquals(keyType)) {
-      getKeysWithIndexesFast
+    if (TypeUtils.typeWithProperEquals(keyType) && SQLConf.get.mapZipWithUsesJavaCollections) {
+      getKeysWithIndexesFastAsJava
+    } else if (TypeUtils.typeWithProperEquals(keyType)) {
+      getKeysWithIndexesFastUsingScala
     } else {
       getKeysWithIndexesBruteForce
     }
@@ -1123,7 +1125,29 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     }
   }
 
-  private def getKeysWithIndexesFast(
+  private def getKeysWithIndexesFastUsingScala(keys1: ArrayData, keys2: ArrayData) = {
+    val hashMap = new mutable.LinkedHashMap[Any, Array[Option[Int]]]
+    for ((z, array) <- Array((0, keys1), (1, keys2))) {
+      var i = 0
+      while (i < array.numElements()) {
+        val key = array.get(i, keyType)
+        hashMap.get(key) match {
+          case Some(indexes) =>
+            if (indexes(z).isEmpty) {
+              indexes(z) = Some(i)
+            }
+          case None =>
+            val indexes = Array[Option[Int]](None, None)
+            indexes(z) = Some(i)
+            hashMap.put(key, indexes)
+        }
+        i += 1
+      }
+    }
+    hashMap
+  }
+
+  private def getKeysWithIndexesFastAsJava(
       keys1: ArrayData,
       keys2: ArrayData
   ): scala.collection.mutable.LinkedHashMap[Any, Array[Option[Int]]] = {
