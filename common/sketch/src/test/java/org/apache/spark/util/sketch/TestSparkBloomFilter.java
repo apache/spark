@@ -28,6 +28,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Random;
 
+import static java.nio.file.StandardOpenOption.CREATE;
+
 @Disabled
 public class TestSparkBloomFilter {
 
@@ -43,7 +45,7 @@ public class TestSparkBloomFilter {
 
     private String testName;
     private Instant start;
-    private PrintStream oldOut;
+    private PrintStream testOut;
 
     @BeforeAll
     public static void beforeAll() {
@@ -62,26 +64,19 @@ public class TestSparkBloomFilter {
     ) throws Exception {
         start = Instant.now();
 
-        oldOut = System.out;
-        PrintStream newOut =
-                new PrintStream(
-                        Files.newOutputStream(Path.of(testInfo.getDisplayName() + ".log"))
-                );
-        System.setOut(newOut);
+        Path testLogPath = Path.of(testInfo.getDisplayName() + ".log");
+        Files.deleteIfExists(testLogPath);
+        testOut = new PrintStream(Files.newOutputStream(testLogPath));
 
         testName = testInfo.getDisplayName();
-        System.out.println("testName: " + testName);
+        testOut.println("testName: " + testName);
     }
 
     @AfterEach
     public void afterEach(TestInfo testInfo) {
         Duration duration = Duration.between(start, Instant.now());
-        System.out.println("duration: " + duration );
-
-        PrintStream newOut = System.out;
-        System.setOut(oldOut);
-        newOut.close();
-
+        testOut.println("duration: " + duration );
+        testOut.close();
         testName = "";
     }
 
@@ -104,7 +99,7 @@ public class TestSparkBloomFilter {
       @Values(ints = {BloomFilterImpl.DEFAULT_SEED, 1, 127}) int deterministicSeed
     ) {
         long optimalNumOfBits = BloomFilter.optimalNumOfBits(numItems, expectedFpp);
-        System.out.printf(
+        testOut.printf(
                 "optimal   bitArray: %d (%d MB)\n",
                 optimalNumOfBits,
                 optimalNumOfBits / Byte.SIZE / 1024 / 1024
@@ -117,7 +112,7 @@ public class TestSparkBloomFilter {
         );
 
         BloomFilter bloomFilter = BloomFilter.create(numItems, optimalNumOfBits, deterministicSeed);
-        System.out.printf(
+        testOut.printf(
                 "allocated bitArray: %d (%d MB)\n",
                 bloomFilter.bitSize(),
                 bloomFilter.bitSize() / Byte.SIZE / 1024 / 1024
@@ -131,7 +126,7 @@ public class TestSparkBloomFilter {
             bloomFilter.putLong(2 * i);
         }
 
-        System.out.printf("bitCount: %d\nsaturation: %f\n",
+        testOut.printf("bitCount: %d\nsaturation: %f\n",
                 bloomFilter.cardinality(),
                 (double) bloomFilter.cardinality() / bloomFilter.bitSize()
         );
@@ -163,9 +158,9 @@ public class TestSparkBloomFilter {
         double actualFpp = (double) mightContainOdd / numItems;
         double acceptableFpp = expectedFpp * (1 + FPP_EVEN_ODD_ERROR_FACTOR);
 
-        System.out.printf("expectedFpp:   %f %%\n", 100 * expectedFpp);
-        System.out.printf("acceptableFpp: %f %%\n", 100 * acceptableFpp);
-        System.out.printf("actualFpp:     %f %%\n", 100 * actualFpp);
+        testOut.printf("expectedFpp:   %f %%\n", 100 * expectedFpp);
+        testOut.printf("acceptableFpp: %f %%\n", 100 * acceptableFpp);
+        testOut.printf("actualFpp:     %f %%\n", 100 * actualFpp);
 
         Assumptions.assumeTrue(
                 actualFpp <= acceptableFpp,
@@ -213,7 +208,7 @@ public class TestSparkBloomFilter {
             @Values(ints = {BloomFilterImpl.DEFAULT_SEED, 1, 127}) int deterministicSeed
     ) {
         long optimalNumOfBits = BloomFilter.optimalNumOfBits(numItems, expectedFpp);
-        System.out.printf(
+        testOut.printf(
                 "optimal   bitArray: %d (%d MB)\n",
                 optimalNumOfBits,
                 optimalNumOfBits / Byte.SIZE / 1024 / 1024
@@ -230,7 +225,7 @@ public class TestSparkBloomFilter {
         BloomFilter bloomFilterSecondary =
                 BloomFilter.create(numItems, optimalNumOfBits, 0xCAFEBABE);
 
-        System.out.printf(
+        testOut.printf(
                 "allocated bitArray: %d (%d MB)\n",
                 bloomFilterPrimary.bitSize(),
                 bloomFilterPrimary.bitSize() / Byte.SIZE / 1024 / 1024
@@ -252,7 +247,7 @@ public class TestSparkBloomFilter {
                 bloomFilterSecondary.putLong(candidate);
             }
         }
-        System.out.printf("bitCount: %d\nsaturation: %f\n",
+        testOut.printf("bitCount: %d\nsaturation: %f\n",
                 bloomFilterPrimary.cardinality(),
                 (double) bloomFilterPrimary.cardinality() / bloomFilterPrimary.bitSize()
         );
@@ -300,12 +295,12 @@ public class TestSparkBloomFilter {
         double actualFpp = (double) mightContainOddIndexed / confirmedAsNotInserted;
         double acceptableFpp = expectedFpp * (1 + FPP_RANDOM_ERROR_FACTOR);
 
-        System.out.printf("mightContainOddIndexed: %10d\n", mightContainOddIndexed);
-        System.out.printf("confirmedAsNotInserted: %10d\n", confirmedAsNotInserted);
-        System.out.printf("numItems:               %10d\n", numItems);
-        System.out.printf("expectedFpp:   %f %%\n", 100 * expectedFpp);
-        System.out.printf("acceptableFpp: %f %%\n", 100 * acceptableFpp);
-        System.out.printf("actualFpp:     %f %%\n", 100 * actualFpp);
+        testOut.printf("mightContainOddIndexed: %10d\n", mightContainOddIndexed);
+        testOut.printf("confirmedAsNotInserted: %10d\n", confirmedAsNotInserted);
+        testOut.printf("numItems:               %10d\n", numItems);
+        testOut.printf("expectedFpp:   %f %%\n", 100 * expectedFpp);
+        testOut.printf("acceptableFpp: %f %%\n", 100 * acceptableFpp);
+        testOut.printf("actualFpp:     %f %%\n", 100 * actualFpp);
 
         Assumptions.assumeTrue(
                 actualFpp <= acceptableFpp,
