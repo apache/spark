@@ -649,6 +649,7 @@ class PythonEvalType:
 
     # Arrow UDFs
     SQL_SCALAR_ARROW_UDF: "ArrowScalarUDFType" = 250
+    SQL_SCALAR_ARROW_ITER_UDF: "ArrowScalarIterUDFType" = 251
 
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
