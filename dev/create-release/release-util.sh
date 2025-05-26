@@ -150,9 +150,11 @@ function get_release_info {
   SKIP_TAG="${SKIP_TAG:-0}"
   if check_for_tag "$RELEASE_TAG" && [[ $SKIP_TAG = 0 ]]; then
     if [ -z "$ANSWER" ]; then
-      read -p "$RELEASE_TAG already exists. Continue anyway [y/n]? " ANSWER
-    fi
-    if [ "$ANSWER" != "y" ]; then
+      read -p "$RELEASE_TAG already exists. Continue anyway [y/n]? " userinput
+      if [ "$userinput" != "y" ]; then
+        error "Exiting."
+      fi
+    elif [ "$ANSWER" != "y" ]; then
       error "Exiting."
     fi
     SKIP_TAG=1
@@ -201,11 +203,12 @@ E-MAIL:     $GIT_EMAIL
 EOF
 
   if [ -z "$ANSWER" ]; then
-    read -p "Is this info correct [y/n]? " ANSWER
-  fi
-  if [ "$ANSWER" != "y" ]; then
-    echo "Exiting."
-    exit 1
+    read -p "Is this info correct [y/n]? " userinput
+    if [ "$userinput" != "y" ]; then
+      error "Exiting."
+    fi
+  elif [ "$ANSWER" != "y" ]; then
+    error "Exiting."
   fi
 
   if ! is_dry_run; then

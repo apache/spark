@@ -71,7 +71,7 @@ jobs:
           - >-
             graphx,streaming,hadoop-cloud
           - >-
-            mllib-local,mllib
+            mllib-local,mllib,sql#pipelines
           - >-
             repl,sql#hive-thriftserver
           - >-
