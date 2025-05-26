@@ -103,12 +103,7 @@ class InMemoryFileIndex(
   }
 
   override def equals(other: Any): Boolean = other match {
-    case hdfs: InMemoryFileIndex =>
-      // print("Comparing root paths\n")
-      val ret = rootPaths.sorted == hdfs.rootPaths.sorted
-      // print(s"${rootPaths} equal to ${hdfs.rootPaths}? ${ret}\n")
-      ret
-      // rootPaths.toSet == hdfs.rootPaths.toSet
+    case hdfs: InMemoryFileIndex => rootPaths.toSet == hdfs.rootPaths.toSet
     case _ => false
   }
 
