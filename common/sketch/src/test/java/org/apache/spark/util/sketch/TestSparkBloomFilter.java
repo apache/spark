@@ -21,6 +21,9 @@ import org.junit.jupiter.api.*;
 import org.junitpioneer.jupiter.cartesian.CartesianTest;
 import org.junitpioneer.jupiter.cartesian.CartesianTest.Values;
 
+import java.io.PrintStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Random;
@@ -37,7 +40,10 @@ public class TestSparkBloomFilter {
     final long REQUIRED_HEAP_UPPER_BOUND_IN_BYTES = 4 * ONE_GB;
 
     private static Instant START;
+
+    private String testName;
     private Instant start;
+    private PrintStream oldOut;
 
     @BeforeAll
     public static void beforeAll() {
@@ -51,19 +57,32 @@ public class TestSparkBloomFilter {
     }
 
     @BeforeEach
-    public void beforeEach(TestInfo testInfo) {
+    public void beforeEach(
+            TestInfo testInfo
+    ) throws Exception {
         start = Instant.now();
-        System.err.println("---");
-        System.err.println(
-            testInfo.getTestMethod().get().getName()
-            + " "
-            + testInfo.getDisplayName());
+
+        oldOut = System.out;
+        PrintStream newOut =
+                new PrintStream(
+                        Files.newOutputStream(Path.of(testInfo.getDisplayName() + ".log"))
+                );
+        System.setOut(newOut);
+
+        testName = testInfo.getDisplayName();
+        System.out.println("testName: " + testName);
     }
 
     @AfterEach
     public void afterEach(TestInfo testInfo) {
         Duration duration = Duration.between(start, Instant.now());
-        System.err.println(duration );
+        System.out.println("duration: " + duration );
+
+        PrintStream newOut = System.out;
+        System.setOut(oldOut);
+        newOut.close();
+
+        testName = "";
     }
 
     /**
@@ -78,14 +97,14 @@ public class TestSparkBloomFilter {
      * @param deterministicSeed the deterministic seed to use to initialize
      *                          the primary BloomFilter instance.
      */
-    @CartesianTest
+    @CartesianTest(name = "testAccuracyEvenOdd_{index}.n{0}_fpp{1}_seed{2}")
     public void testAccuracyEvenOdd(
       @Values(longs = {1_000_000L, 1_000_000_000L, 5_000_000_000L}) long numItems,
       @Values(doubles = {0.05, 0.03, 0.01, 0.001}) double expectedFpp,
       @Values(ints = {BloomFilterImpl.DEFAULT_SEED, 1, 127}) int deterministicSeed
     ) {
         long optimalNumOfBits = BloomFilter.optimalNumOfBits(numItems, expectedFpp);
-        System.err.printf(
+        System.out.printf(
                 "optimal   bitArray: %d (%d MB)\n",
                 optimalNumOfBits,
                 optimalNumOfBits / Byte.SIZE / 1024 / 1024
@@ -98,7 +117,7 @@ public class TestSparkBloomFilter {
         );
 
         BloomFilter bloomFilter = BloomFilter.create(numItems, optimalNumOfBits, deterministicSeed);
-        System.err.printf(
+        System.out.printf(
                 "allocated bitArray: %d (%d MB)\n",
                 bloomFilter.bitSize(),
                 bloomFilter.bitSize() / Byte.SIZE / 1024 / 1024
@@ -106,23 +125,23 @@ public class TestSparkBloomFilter {
 
         for (long i = 0; i < numItems; i++) {
             if (i % 10_000_000 == 0) {
-                System.err.printf(
-                    "i: %d, bitCount: %d, saturation: %f\n",
-                    i,
-                    bloomFilter.cardinality(),
-                    (double) bloomFilter.cardinality() / bloomFilter.bitSize()
-                );
+                System.err.printf("i: %d\n", i);
             }
+
             bloomFilter.putLong(2 * i);
         }
+
+        System.out.printf("bitCount: %d\nsaturation: %f\n",
+                bloomFilter.cardinality(),
+                (double) bloomFilter.cardinality() / bloomFilter.bitSize()
+        );
 
         long mightContainEven = 0;
         long mightContainOdd = 0;
 
         for (long i = 0; i < numItems; i++) {
             if (i % (numItems / 100) == 0) {
-                System.err.print(".");
-                System.err.flush();
+                System.err.printf("%s: %2d %%\n", testName, 100 * i / numItems);
             }
 
             long even = 2 * i;
@@ -135,7 +154,6 @@ public class TestSparkBloomFilter {
                 mightContainOdd++;
             }
         }
-        System.err.println();
 
         Assertions.assertEquals(
                 numItems, mightContainEven,
@@ -145,9 +163,9 @@ public class TestSparkBloomFilter {
         double actualFpp = (double) mightContainOdd / numItems;
         double acceptableFpp = expectedFpp * (1 + FPP_EVEN_ODD_ERROR_FACTOR);
 
-        System.err.printf("expectedFpp:   %f %%\n", 100 * expectedFpp);
-        System.err.printf("acceptableFpp: %f %%\n", 100 * acceptableFpp);
-        System.err.printf("actualFpp:     %f %%\n", 100 * actualFpp);
+        System.out.printf("expectedFpp:   %f %%\n", 100 * expectedFpp);
+        System.out.printf("acceptableFpp: %f %%\n", 100 * acceptableFpp);
+        System.out.printf("actualFpp:     %f %%\n", 100 * actualFpp);
 
         Assumptions.assumeTrue(
                 actualFpp <= acceptableFpp,
@@ -187,14 +205,15 @@ public class TestSparkBloomFilter {
      *                          the primary BloomFilter instance. (The secondary will be
      *                          initialized with the constant seed of 0xCAFEBABE)
      */
-    @CartesianTest
+    @Disabled
+    @CartesianTest(name = "testAccuracyRandom_{index}.n{0}_fpp{1}_seed{2}")
     public void testAccuracyRandom(
             @Values(longs = {1_000_000L, 1_000_000_000L}) long numItems,
             @Values(doubles = {0.05, 0.03, 0.01, 0.001}) double expectedFpp,
             @Values(ints = {BloomFilterImpl.DEFAULT_SEED, 1, 127}) int deterministicSeed
     ) {
         long optimalNumOfBits = BloomFilter.optimalNumOfBits(numItems, expectedFpp);
-        System.err.printf(
+        System.out.printf(
                 "optimal   bitArray: %d (%d MB)\n",
                 optimalNumOfBits,
                 optimalNumOfBits / Byte.SIZE / 1024 / 1024
@@ -211,7 +230,7 @@ public class TestSparkBloomFilter {
         BloomFilter bloomFilterSecondary =
                 BloomFilter.create(numItems, optimalNumOfBits, 0xCAFEBABE);
 
-        System.err.printf(
+        System.out.printf(
                 "allocated bitArray: %d (%d MB)\n",
                 bloomFilterPrimary.bitSize(),
                 bloomFilterPrimary.bitSize() / Byte.SIZE / 1024 / 1024
@@ -224,12 +243,7 @@ public class TestSparkBloomFilter {
         pseudoRandom.setSeed(deterministicSeed);
         for (long i = 0; i < iterationCount; i++) {
             if (i % 10_000_000 == 0) {
-                System.err.printf(
-                        "i: %d, bitCount: %d, saturation: %f\n",
-                        i,
-                        bloomFilterPrimary.cardinality(),
-                        (double) bloomFilterPrimary.cardinality() / bloomFilterPrimary.bitSize()
-                );
+                System.err.printf("i: %d\n", i);
             }
 
             long candidate = pseudoRandom.nextLong();
@@ -238,6 +252,10 @@ public class TestSparkBloomFilter {
                 bloomFilterSecondary.putLong(candidate);
             }
         }
+        System.out.printf("bitCount: %d\nsaturation: %f\n",
+                bloomFilterPrimary.cardinality(),
+                (double) bloomFilterPrimary.cardinality() / bloomFilterPrimary.bitSize()
+        );
 
         long mightContainEvenIndexed = 0;
         long mightContainOddIndexed = 0;
@@ -246,8 +264,7 @@ public class TestSparkBloomFilter {
         pseudoRandom.setSeed(deterministicSeed);
         for (long i = 0; i < iterationCount; i++) {
             if (i % (iterationCount / 100) == 0) {
-                System.err.print(".");
-                System.err.flush();
+                System.err.printf("%s: %2d %%\n", testName, 100 * i / iterationCount);
             }
 
             long candidate = pseudoRandom.nextLong();
@@ -274,7 +291,6 @@ public class TestSparkBloomFilter {
                 }
             }
         }
-        System.err.println();
 
         Assertions.assertEquals(
                 numItems, mightContainEvenIndexed,
@@ -284,12 +300,12 @@ public class TestSparkBloomFilter {
         double actualFpp = (double) mightContainOddIndexed / confirmedAsNotInserted;
         double acceptableFpp = expectedFpp * (1 + FPP_RANDOM_ERROR_FACTOR);
 
-        System.err.printf("mightContainOddIndexed: %10d\n", mightContainOddIndexed);
-        System.err.printf("confirmedAsNotInserted: %10d\n", confirmedAsNotInserted);
-        System.err.printf("numItems:               %10d\n", numItems);
-        System.err.printf("expectedFpp:   %f %%\n", 100 * expectedFpp);
-        System.err.printf("acceptableFpp: %f %%\n", 100 * acceptableFpp);
-        System.err.printf("actualFpp:     %f %%\n", 100 * actualFpp);
+        System.out.printf("mightContainOddIndexed: %10d\n", mightContainOddIndexed);
+        System.out.printf("confirmedAsNotInserted: %10d\n", confirmedAsNotInserted);
+        System.out.printf("numItems:               %10d\n", numItems);
+        System.out.printf("expectedFpp:   %f %%\n", 100 * expectedFpp);
+        System.out.printf("acceptableFpp: %f %%\n", 100 * acceptableFpp);
+        System.out.printf("actualFpp:     %f %%\n", 100 * actualFpp);
 
         Assumptions.assumeTrue(
                 actualFpp <= acceptableFpp,
