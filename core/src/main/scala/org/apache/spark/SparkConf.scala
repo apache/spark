@@ -288,6 +288,8 @@ class SparkConf(loadDefaults: Boolean)
 
   private val settings = new ConcurrentHashMap[String, String]()
 
+  private val driverJvmStartupConfList = new LinkedHashSet[String]()
+
   @transient private lazy val reader: ConfigReader = {
     val _reader = new ConfigReader(new SparkConfigProvider(settings))
     _reader.bindEnv((key: String) => Option(getenv(key)))
@@ -299,8 +301,24 @@ class SparkConf(loadDefaults: Boolean)
   }
 
   private[spark] def loadFromSystemProperties(silent: Boolean): SparkConf = {
+    val systemProperties = Utils.getSystemProperties
+    // Some configs of the spark driver cannot be modified by the user
+    // after the driver is started and `settings` contains it
+    if (systemProperties.contains(SPARK_DRIVER_JVM_CONFIG_BLACKLIST.key)) {
+      systemProperties.get(SPARK_DRIVER_JVM_CONFIG_BLACKLIST.key).foreach { conf =>
+        conf.split(",").map(_.trim).foreach { key =>
+          driverJvmStartupConfList.add(key)
+        }
+      }
+    } else {
+      SPARK_DRIVER_JVM_CONFIG_BLACKLIST.defaultValue.get.foreach { conf =>
+        conf.split(",").map(_.trim).foreach { key =>
+          driverJvmStartupConfList.add(key)
+        }
+      }
+    }
     // Load any spark.* system properties
-    for ((key, value) <- Utils.getSystemProperties if key.startsWith("spark.")) {
+    for ((key, value) <- systemProperties if key.startsWith("spark.")) {
       set(key, value, silent)
     }
     this
@@ -320,6 +338,12 @@ class SparkConf(loadDefaults: Boolean)
     }
     if (!silent) {
       logDeprecationWarning(key)
+    }
+    if (driverJvmStartupConfList.contains(key) && settings.containsKey(key)) {
+      logWarning(
+        s"Spark user should not overwrite spark driver JVM startup parameters in code:\n" +
+          s"  key = $key, effective value = ${settings.get(key)}, user setting value = $value.")
+      return this
     }
     settings.put(key, value)
     this

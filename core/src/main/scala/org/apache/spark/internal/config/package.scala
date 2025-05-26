@@ -2838,4 +2838,12 @@ package object config {
       .checkValues(Set("connect", "classic"))
       .createWithDefault(
         if (sys.env.get("SPARK_CONNECT_MODE").contains("1")) "connect" else "classic")
+
+  private[spark] val SPARK_DRIVER_JVM_CONFIG_BLACKLIST =
+    ConfigBuilder("spark.driver.jvm.config.blacklist")
+      .doc("Spark driver jvm startup blacklist conf list.")
+      .version("3.2.1")
+      .stringConf.toSequence
+      .createWithDefault(
+        DRIVER_MEMORY.key :: DRIVER_MEMORY_OVERHEAD.key :: DRIVER_CORES.key :: Nil)
 }
