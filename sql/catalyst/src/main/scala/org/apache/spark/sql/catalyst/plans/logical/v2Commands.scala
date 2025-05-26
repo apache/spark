@@ -1504,6 +1504,18 @@ case class SetTableSerDeProperties(
 }
 
 /**
+ * The logical plan of the ALTER TABLE ... UNSET SERDEPROPERTIES command.
+ */
+case class UnsetTableSerDeProperties(
+    child: LogicalPlan,
+    propertyKeys: Seq[String],
+    ifExists: Boolean,
+    partitionSpec: Option[TablePartitionSpec]) extends UnaryCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnsetTableSerDeProperties =
+    copy(child = newChild)
+}
+
+/**
  * The logical plan of the CACHE TABLE command.
  */
 case class CacheTable(

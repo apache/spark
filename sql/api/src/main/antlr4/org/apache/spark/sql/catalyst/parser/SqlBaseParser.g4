@@ -253,6 +253,8 @@ statement
         SET SERDE stringLit (WITH SERDEPROPERTIES propertyList)?       #setTableSerDe
     | ALTER TABLE identifierReference (partitionSpec)?
         SET SERDEPROPERTIES propertyList                               #setTableSerDe
+    | ALTER TABLE identifierReference (partitionSpec)?
+        UNSET SERDEPROPERTIES (IF EXISTS)? propertyList                #unsetTableSerDeProperties
     | ALTER (TABLE | VIEW) identifierReference ADD (IF errorCapturingNot EXISTS)?
         partitionSpecLocation+                                         #addTablePartition
     | ALTER TABLE identifierReference

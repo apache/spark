@@ -6007,6 +6007,26 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Create an [[UnsetTableSerDeProperties]]
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE multi_part_name [PARTITION spec] UNSET SERDEPROPERTIES [IF EXISTS] ('key');
+   * }}}
+   */
+  override def visitUnsetTableSerDeProperties(
+      ctx: UnsetTableSerDePropertiesContext): LogicalPlan = withOrigin(ctx) {
+    val properties = visitPropertyKeys(ctx.propertyList)
+    val ifExists = ctx.EXISTS != null
+    UnsetTableSerDeProperties(
+      createUnresolvedTable(ctx.identifierReference, "ALTER TABLE ... UNSET SERDEPROPERTIES", true),
+      properties,
+      ifExists,
+      // TODO a partition spec is allowed to have optional values. This is currently violated.
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
+  }
+
+  /**
    * Alter the query of a view. This creates a [[AlterViewAs]]
    *
    * For example:

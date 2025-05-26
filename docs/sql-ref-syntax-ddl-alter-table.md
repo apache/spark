@@ -302,6 +302,16 @@ ALTER TABLE table_identifier [ partition_spec ] SET SERDE serde_class_name
     [ WITH SERDEPROPERTIES ( key1 = val1, key2 = val2, ... ) ]
 ```
 
+#### UNSET SERDE PROPERTIES
+
+`ALTER TABLE UNSET` command can also be used to drop the SERDE properties for tables and Hive table partitions.
+
+##### Syntax
+
+```sql
+ALTER TABLE table_identifier partition_spec UNSET SERDEPROPERTIES [ IF EXISTS ] ( key1, key2, ... )
+```
+
 #### SET LOCATION And SET FILE FORMAT
 
 `ALTER TABLE SET` command can also be used for changing the file location and file format for 

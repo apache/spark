@@ -516,6 +516,44 @@ case class AlterTableSerDePropertiesCommand(
 }
 
 /**
+ * A command that unsets the serde properties of a table/partition.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   ALTER TABLE table [PARTITION spec] UNSET SERDEPROPERTIES [IF EXISTS] ('key1', 'key2', ...);
+ * }}}
+ */
+case class AlterTableUnsetSerDePropertiesCommand(
+    tableName: TableIdentifier,
+    propKeys: Seq[String],
+    ifExists: Boolean,
+    partSpec: Option[TablePartitionSpec])
+  extends LeafRunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val table = catalog.getTableRawMetadata(tableName)
+    // For datasource tables, disallow unsetting partition serde properties
+    if (partSpec.isDefined && DDLUtils.isDatasourceTable(table)) {
+      throw QueryCompilationErrors.alterTableUnsetSerdePropertiesNotSupportedError(
+        table.qualifiedName)
+    }
+    if (partSpec.isEmpty) {
+      val newProperties = table.storage.properties.filter { case (k, _) => !propKeys.contains(k) }
+      val newTable = table.withNewStorage(properties = newProperties)
+      catalog.alterTable(newTable)
+    } else {
+      val spec = partSpec.get
+      val part = catalog.getPartition(table.identifier, spec)
+      val newProperties = part.storage.properties.filter { case (k, _) => !propKeys.contains(k) }
+      val newPart = part.copy(storage = part.storage.copy(properties = newProperties))
+      catalog.alterPartitions(table.identifier, Seq(newPart))
+    }
+    Seq.empty[Row]
+  }
+}
+
+/**
  * Add Partition in ALTER TABLE: add the table partitions.
  *
  * An error message will be issued if the partition exists, unless 'ifNotExists' is true.

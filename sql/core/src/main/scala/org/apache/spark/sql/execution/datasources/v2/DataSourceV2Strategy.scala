@@ -476,6 +476,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case SetTableSerDeProperties(_: ResolvedTable, _, _, _) =>
       throw QueryCompilationErrors.alterTableSerDePropertiesNotSupportedForV2TablesError()
 
+    case UnsetTableSerDeProperties(_: ResolvedTable, _, _, _) =>
+      throw QueryCompilationErrors.alterTableUnsetSerDePropertiesNotSupportedForV2TablesError()
+
     case LoadData(_: ResolvedTable, _, _, _, _) =>
       throw QueryCompilationErrors.loadDataNotSupportedForV2TablesError()
 
