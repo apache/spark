@@ -625,6 +625,75 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       parameters = Map("sqlState" -> "X22012"))
   }
 
+  test("handler - correct handler is chosen based on the full error condition") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN.WITHOUT_SUGGESTION
+        |  BEGIN
+        |    SELECT 2;
+        |  END;
+        |  DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN.WITH_SUGGESTION
+        |  BEGIN
+        |    SELECT 3;
+        |  END;
+        |  SELECT X;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)) // select
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("handler - full condition takes precedence before main error class") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          |  DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN
+          |  BEGIN
+          |    SELECT 1;
+          |  END;
+          |  DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN.WITH_SUGGESTION
+          |  BEGIN
+          |    SELECT 2;
+          |  END;
+          |  CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |  SELECT d FROM t;
+          |END
+          |""".stripMargin
+      val expected = Seq(
+        Seq(Row(2)) // select
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("handler - catch the main error class without subclass") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          |  DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN
+          |  BEGIN
+          |    SELECT 1;
+          |  END;
+          |  CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |  SELECT d FROM t;
+          |END
+          |""".stripMargin
+      val expected = Seq(
+        Seq(Row(1)) // select
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
   // Tests
   test("multi statement - simple") {
     withTable("t") {
