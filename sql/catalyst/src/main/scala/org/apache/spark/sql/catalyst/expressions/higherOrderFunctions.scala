@@ -21,6 +21,7 @@ import java.util.Comparator
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters.MapHasAsScala
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedException}
@@ -1122,43 +1123,29 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     }
   }
 
-  private def getKeysWithIndexesFast(keys1: ArrayData, keys2: ArrayData) = {
-    val hashMap = new mutable.LinkedHashMap[Any, Array[Option[Int]]]
-    val NaNTracker = Array[Option[Int]](None, None)
+  private def getKeysWithIndexesFast(
+      keys1: ArrayData,
+      keys2: ArrayData
+  ): scala.collection.mutable.LinkedHashMap[Any, Array[Option[Int]]] = {
+    val hashMap = new java.util.LinkedHashMap[Any, Array[Option[Int]]]
     for ((z, array) <- Array((0, keys1), (1, keys2))) {
       var i = 0
       while (i < array.numElements()) {
         val key = array.get(i, keyType)
-        keyType match {
-          case FloatType if key.asInstanceOf[Float].isNaN =>
-            NaNTracker(z) = Some(i)
-          case DoubleType if key.asInstanceOf[Double].isNaN =>
-            NaNTracker(z) = Some(i)
-          case _ =>
-            hashMap.get(key) match {
-              case Some(indexes) =>
-                if (indexes(z).isEmpty) {
-                  indexes(z) = Some(i)
-                }
-              case None =>
-                val indexes = Array[Option[Int]](None, None)
-                indexes(z) = Some(i)
-                hashMap.put(key, indexes)
+        Option(hashMap.get(key)) match {
+          case Some(indexes) =>
+            if (indexes(z).isEmpty) {
+              indexes(z) = Some(i)
             }
+          case None =>
+            val indexes = Array[Option[Int]](None, None)
+            indexes(z) = Some(i)
+            hashMap.put(key, indexes)
         }
         i += 1
       }
     }
-    if (NaNTracker(0).isDefined || NaNTracker(1).isDefined) {
-      keyType match {
-        case FloatType =>
-          hashMap.put(Float.NaN, NaNTracker)
-        case DoubleType =>
-          hashMap.put(Double.NaN, NaNTracker)
-        case _ =>
-      }
-    }
-    hashMap
+    scala.collection.mutable.LinkedHashMap(hashMap.asScala.toSeq: _*)
   }
 
   private def getKeysWithIndexesBruteForce(keys1: ArrayData, keys2: ArrayData) = {
