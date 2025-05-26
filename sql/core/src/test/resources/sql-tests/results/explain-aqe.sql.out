@@ -968,36 +968,35 @@ SELECT * FROM r
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-* Project (6)
-+- UnionLoop (1)
-      :- LocalRelation (2)
-      +- Project (5)
-         +- Filter (4)
-            +- UnionLoopRef (3)
+UnionLoop (1)
+   :- Project (3)
+   :  +- LocalRelation (2)
+   +- Project (6)
+      +- Filter (5)
+         +- UnionLoopRef (4)
 
 
 (1) UnionLoop
 Loop id: xxxx
-Output [1]: [col1#x]
+Output [1]: [level#x]
 Limit: None
 
 (2) LocalRelation
 Arguments: [col1#x]
 
-(3) UnionLoopRef
+(3) Project
+Arguments: [col1#x AS level#x]
+
+(4) UnionLoopRef
 Loop id: xxxx
-Output [1]: [col1#x]
+Output [1]: [level#x]
 Accumulated: false
 
-(4) Filter
-Arguments: (col1#x < 9)
+(5) Filter
+Arguments: (level#x < 9)
 
-(5) Project
-Arguments: [(col1#x + 1) AS (level + 1)#x]
-
-(6) Project [codegen id : 1]
-Output [1]: [col1#x AS level#x]
-Input [1]: [col1#x]
+(6) Project
+Arguments: [(level#x + 1) AS (level + 1)#x]
 
 
 -- !query
