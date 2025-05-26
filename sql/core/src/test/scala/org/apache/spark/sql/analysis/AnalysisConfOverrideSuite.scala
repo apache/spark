@@ -91,11 +91,11 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
     }
   }
 
-  testOverride("user defined table valued function") { case (key, value) =>
+  testOverride("user defined functions") { case (key, value) =>
     withTable("test_table", "test_table2") {
       spark.sql("CREATE TABLE test_table AS SELECT id as a FROM range(10)")
       spark.sql("CREATE TABLE test_table2 AS SELECT id as a, (id + 1) as b FROM range(10)")
-      withUserDefinedFunction("f1" -> true, "f2" -> false) {
+      withUserDefinedFunction("f1" -> true, "f2" -> false, "f3" -> false) {
         spark.sql(
           """CREATE OR REPLACE TEMPORARY FUNCTION f1() RETURNS TABLE (a bigint)
             |RETURN SELECT * FROM test_table WHERE a in (SELECT a FROM test_table2)
@@ -106,23 +106,31 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
             |RETURN SELECT * FROM test_table WHERE a in (SELECT a FROM test_table2)
             |""".stripMargin
         )
+        spark.sql(
+          """CREATE OR REPLACE FUNCTION f3(in bigint) RETURNS (out bigint)
+            |RETURN in + 1
+            |""".stripMargin
+        )
         ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
           spark.sql("SELECT * FROM f1()")
         }
         ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
           spark.sql("SELECT * FROM f2()")
         }
+        ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
+          spark.sql("SELECT f3(1)")
+        }
       }
     }
   }
 
-  testOverride("user defined table valued function - test conf disabled") { case (key, value) =>
+  testOverride("user defined functions - test conf disabled") { case (key, value) =>
     withTable("test_table", "test_table2") {
       spark.sql("CREATE TABLE test_table AS SELECT id as a FROM range(10)")
       spark.sql("CREATE TABLE test_table2 AS SELECT id as a, (id + 1) as b FROM range(10)")
       // turn the flag off to maintain former behavior
       withSQLConf("spark.sql.analyzer.sqlFunctionResolution.applyConfOverrides" -> "false") {
-        withUserDefinedFunction("f1" -> true, "f2" -> false) {
+        withUserDefinedFunction("f1" -> true, "f2" -> false, "f3" -> false) {
           spark.sql(
             """CREATE OR REPLACE TEMPORARY FUNCTION f1() RETURNS TABLE (a bigint)
               |RETURN SELECT * FROM test_table WHERE a in (SELECT a FROM test_table2)
@@ -133,6 +141,11 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
               |RETURN SELECT * FROM test_table WHERE a in (SELECT a FROM test_table2)
               |""".stripMargin
           )
+          spark.sql(
+            """CREATE OR REPLACE FUNCTION f3(in bigint) RETURNS (out bigint)
+              |RETURN in + 1
+              |""".stripMargin
+          )
           intercept[AssertionError] {
             ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
               spark.sql("SELECT * FROM f1()")
@@ -141,6 +154,11 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
           intercept[AssertionError] {
             ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
               spark.sql("SELECT * FROM f2()")
+            }
+          }
+          intercept[AssertionError] {
+            ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
+              spark.sql("SELECT f3(1)")
             }
           }
         }

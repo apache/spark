@@ -247,7 +247,7 @@ object Analyzer {
   // Valued functions
   private val RETAINED_ANALYSIS_FLAGS = Seq(
     // retainedHiveConfigs
-    // TODO: remove this `retainedHiveConfigs` after the `RelationConversions` is moved to
+    // TODO: remove these Hive-related configs after the `RelationConversions` is moved to
     // optimization phase.
     "spark.sql.hive.convertMetastoreParquet",
     "spark.sql.hive.convertMetastoreOrc",
@@ -2515,9 +2515,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       val plan = v1SessionCatalog.makeSQLFunctionPlan(f.name, f.function, f.inputs)
       val resolved = SQLFunctionContext.withSQLFunction {
         // Resolve the SQL function plan using its context.
-        val conf = new SQLConf()
-        f.function.getSQLConfigs.foreach { case (k, v) => conf.settings.put(k, v) }
-        SQLConf.withExistingConf(conf) {
+        val newConf = new SQLConf()
+        f.function.getSQLConfigs.foreach { case (k, v) => newConf.settings.put(k, v) }
+        if (conf.getConf(SQLConf.APPLY_SESSION_CONF_OVERRIDES_TO_FUNCTION_RESOLUTION)) {
+          Analyzer.retainResolutionConfigsForAnalysis(newConf = newConf, existingConf = conf)
+        }
+        SQLConf.withExistingConf(newConf) {
           executeSameContext(plan)
         }
       }

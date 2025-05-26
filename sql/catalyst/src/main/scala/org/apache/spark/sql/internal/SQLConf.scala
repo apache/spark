@@ -2030,7 +2030,7 @@ object SQLConf {
   val APPLY_SESSION_CONF_OVERRIDES_TO_FUNCTION_RESOLUTION =
     buildConf("spark.sql.analyzer.sqlFunctionResolution.applyConfOverrides")
       .internal()
-      .version("4.1.0")
+      .version("4.0.1")
       .doc("When true, applies the conf overrides for certain feature flags during the " +
         "resolution of user-defined sql table valued functions, consistent with view resolution.")
       .booleanConf
