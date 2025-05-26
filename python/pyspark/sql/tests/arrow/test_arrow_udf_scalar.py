@@ -690,16 +690,15 @@ class ScalarArrowUDFTestsMixin:
         scalar_f = arrow_udf(lambda x: pa.compute.add(x, 1), LongType())
         scalar_g = arrow_udf(lambda x: pa.compute.subtract(x, 1), LongType())
 
-        iter_f = arrow_udf(
-            lambda it: map(lambda x: pa.compute.add(x, 1), it),
-            LongType(),
-            ArrowUDFType.SCALAR_ITER,
-        )
-        iter_g = arrow_udf(
-            lambda it: map(lambda x: pa.compute.subtract(x, 1), it),
-            LongType(),
-            ArrowUDFType.SCALAR_ITER,
-        )
+        @arrow_udf(LongType(), ArrowUDFType.SCALAR_ITER)
+        def iter_f(it):
+            for x in it:
+                yield pa.compute.add(x, 1)
+
+        @arrow_udf(LongType(), ArrowUDFType.SCALAR_ITER)
+        def iter_g(it):
+            for x in it:
+                yield pa.compute.subtract(x, 1)
 
         df = self.spark.range(10)
         expected = df.select(F.col("id").alias("res")).collect()
