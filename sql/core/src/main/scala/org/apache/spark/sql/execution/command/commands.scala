@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{CommandExecutionMode, ExplainMode, LeafExecNode, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.command.CreateDataSourceTableAsSelectCommand
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.IncrementalExecution
@@ -65,6 +66,39 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
 
   override lazy val metrics: Map[String, SQLMetric] = cmd.metrics
 
+  // Cache the optimized command to avoid recomputation
+  @transient private lazy val executedQuery: Option[QueryPlan[_]] = {
+    cmd match {
+      case cmd: CreateDataSourceTableAsSelectCommand =>
+        try {
+          SparkSession.getActiveSession match {
+            case Some(spark) =>
+              try {
+                val qe = spark.sessionState.executePlan(cmd.query)
+                Some(qe.executedPlan)
+              } catch {
+                case _: Exception => Some(cmd.query)
+              }
+            case None => Some(cmd.query)
+          }
+        } catch {
+          case _: Exception => Some(cmd.query)
+        }
+      case _ => None
+    }
+  }
+
+  // Override to return the optimized command instead of the command
+  override def innerChildren: Seq[QueryPlan[_]] = {
+    cmd match {
+      case cmd: CreateDataSourceTableAsSelectCommand =>
+        executedQuery.toSeq
+      case _ =>
+        // For other commands, delegate to the command's innerChildren
+        cmd.innerChildren
+    }
+  }
+
   /**
    * A concrete command should override this lazy field to wrap up any side effects caused by the
    * command or any other computation that should be evaluated exactly once. The value of this field
@@ -78,8 +112,6 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
     cmd.run(session).map(converter(_).asInstanceOf[InternalRow])
   }
-
-  override def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
 
   override def output: Seq[Attribute] = cmd.output
 

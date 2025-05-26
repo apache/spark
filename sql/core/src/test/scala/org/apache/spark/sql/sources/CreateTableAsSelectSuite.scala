@@ -320,7 +320,9 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
       """).collect()
 
       val explainOutput = explainResult.map(_.getString(0)).mkString("\n")
-      println(explainOutput)
+
+      assert(explainOutput.contains("CreateDataSourceTableAsSelectCommand"),
+        s"EXPLAIN COST output should contain createtableasselect. Output: $explainOutput")
 
       // The explain output should contain statistics information
       assert(explainOutput.contains("Statistics"),

@@ -414,19 +414,8 @@ case class WriteDelta(
 trait V2CreateTableAsSelectPlan
   extends V2CreateTablePlan
     with AnalysisOnlyCommand
-    with CTEInChildren
-    with ExecutableDuringAnalysis {
+    with CTEInChildren {
   def query: LogicalPlan
-
-  /**
-   * SPARK-48660: Override to return the optimized query plan for explain
-   */
-  override def stageForExplain(): LogicalPlan = query
-
-  /**
-   * SPARK-48660: Override to return the optimized query plan for explain
-   */
-  override def stats: Statistics = query.stats
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
     withNameAndQuery(newName = name, newQuery = WithCTE(query, cteDefs))
