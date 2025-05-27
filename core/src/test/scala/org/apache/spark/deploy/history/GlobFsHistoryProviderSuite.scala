@@ -45,6 +45,7 @@ import org.apache.spark.internal.config.DRIVER_LOG_DFS_DIR
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.UI.{ADMIN_ACLS, ADMIN_ACLS_GROUPS, UI_VIEW_ACLS, UI_VIEW_ACLS_GROUPS, USER_GROUPS_MAPPING}
 import org.apache.spark.io._
+import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.status.AppStatusStore
@@ -57,7 +58,9 @@ import org.apache.spark.util.kvstore.InMemoryStore
 import org.apache.spark.util.logging.DriverLogger
 
 abstract class GlobFsHistoryProviderSuite
-  extends SparkFunSuite with Matchers with PrivateMethodTester {
+    extends SparkFunSuite
+    with Matchers
+    with PrivateMethodTester {
 
   private var testDirs: IndexedSeq[File] = null
   private var numSubDirs: Int = 0
@@ -94,8 +97,7 @@ abstract class GlobFsHistoryProviderSuite
       codec: Option[String] = None): IndexedSeq[File] = {
     val ip = if (inProgress) EventLogFileWriter.IN_PROGRESS else ""
     testDirs.map { testDir =>
-      val logUri = SingleEventLogFileWriter.getLogPath(testDir.toURI,
-        appId, appAttemptId, codec)
+      val logUri = SingleEventLogFileWriter.getLogPath(testDir.toURI, appId, appAttemptId, codec)
       val logPath = new Path(logUri).toUri.getPath + ip
       new File(logPath)
     }
@@ -130,40 +132,53 @@ abstract class GlobFsHistoryProviderSuite
     // Write new-style application logs.
     val newAppCompletes = newLogFiles("new1", None, inProgress = false)
     newAppCompletes.foreach { newAppComplete =>
-      writeFile(newAppComplete, None,
-        SparkListenerApplicationStart(newAppComplete.getName(),
-          Some("new-app-complete"), 1L, "test",
+      writeFile(
+        newAppComplete,
+        None,
+        SparkListenerApplicationStart(
+          newAppComplete.getName(),
+          Some("new-app-complete"),
+          1L,
+          "test",
           None),
-        SparkListenerApplicationEnd(5L)
-        )
+        SparkListenerApplicationEnd(5L))
     }
 
     // Write a new-style application log.
-    val newAppCompressedCompletes = newLogFiles("new1compressed", None, inProgress = false,
-      Some(CompressionCodec.LZF))
+    val newAppCompressedCompletes =
+      newLogFiles("new1compressed", None, inProgress = false, Some(CompressionCodec.LZF))
     newAppCompressedCompletes.foreach { newAppCompressedComplete =>
       writeFile(
-        newAppCompressedComplete, Some(CompressionCodec.createCodec(conf, CompressionCodec.LZF)),
-        SparkListenerApplicationStart(newAppCompressedComplete.getName(), Some("new-complete-lzf"),
-          1L, "test", None),
+        newAppCompressedComplete,
+        Some(CompressionCodec.createCodec(conf, CompressionCodec.LZF)),
+        SparkListenerApplicationStart(
+          newAppCompressedComplete.getName(),
+          Some("new-complete-lzf"),
+          1L,
+          "test",
+          None),
         SparkListenerApplicationEnd(4L))
     }
 
     // Write an unfinished app, new-style.
     val newAppIncompletes = newLogFiles("new2", None, inProgress = true)
     newAppIncompletes.foreach { newAppIncomplete =>
-      writeFile(newAppIncomplete, None,
-        SparkListenerApplicationStart(newAppIncomplete.getName(),
-          Some("new-incomplete"), 1L, "test",
-          None)
-        )
+      writeFile(
+        newAppIncomplete,
+        None,
+        SparkListenerApplicationStart(
+          newAppIncomplete.getName(),
+          Some("new-incomplete"),
+          1L,
+          "test",
+          None))
     }
 
     // Force a reload of data from the log directories, and check that logs are loaded.
     // Take the opportunity to check that the offset checks work as expected.
     updateAndCheck(provider) { list =>
-      list.size should be (3 * numSubDirs)
-      list.count(_.attempts.head.completed) should be (2 * numSubDirs)
+      list.size should be(3 * numSubDirs)
+      list.count(_.attempts.head.completed) should be(2 * numSubDirs)
 
       def makeAppInfo(
           id: String,
@@ -175,23 +190,55 @@ abstract class GlobFsHistoryProviderSuite
           completed: Boolean): ApplicationInfo = {
 
         val duration = if (end > 0) end - start else 0
-        new ApplicationInfo(id, name, None, None, None, None,
-          List(ApplicationAttemptInfo(None, new Date(start),
-            new Date(end), new Date(lastMod), duration, user, completed, SPARK_VERSION)))
+        new ApplicationInfo(
+          id,
+          name,
+          None,
+          None,
+          None,
+          None,
+          List(
+            ApplicationAttemptInfo(
+              None,
+              new Date(start),
+              new Date(end),
+              new Date(lastMod),
+              duration,
+              user,
+              completed,
+              SPARK_VERSION)))
       }
 
       // For completed files, lastUpdated would be lastModified time.
       (0 until numSubDirs).foreach { i =>
-        list(2 * i) should be (makeAppInfo("new-app-complete",
-          newAppCompletes(i).getName(), 1L, 5L,
-          newAppCompletes(i).lastModified(), "test", true))
-        list(2 * i + 1) should be (makeAppInfo("new-complete-lzf",
-          newAppCompressedCompletes(i).getName(),
-          1L, 4L, newAppCompressedCompletes(i).lastModified(), "test", true))
+        list(2 * i) should be(
+          makeAppInfo(
+            "new-app-complete",
+            newAppCompletes(i).getName(),
+            1L,
+            5L,
+            newAppCompletes(i).lastModified(),
+            "test",
+            true))
+        list(2 * i + 1) should be(
+          makeAppInfo(
+            "new-complete-lzf",
+            newAppCompressedCompletes(i).getName(),
+            1L,
+            4L,
+            newAppCompressedCompletes(i).lastModified(),
+            "test",
+            true))
         // For Inprogress files, lastUpdated would be current loading time.
-        list(i + numSubDirs * 2) should be (makeAppInfo("new-incomplete",
-          newAppIncompletes(i).getName(), 1L, -1L,
-          clock.getTimeMillis(), "test", false))
+        list(i + numSubDirs * 2) should be(
+          makeAppInfo(
+            "new-incomplete",
+            newAppIncompletes(i).getName(),
+            1L,
+            -1L,
+            clock.getTimeMillis(),
+            "test",
+            false))
       }
 
       // Make sure the UI can be rendered.
@@ -222,25 +269,27 @@ abstract class GlobFsHistoryProviderSuite
 
     val logFiles1 = newLogFiles("new1", None, inProgress = false)
     logFiles1.foreach { logFile1 =>
-      writeFile(logFile1, None,
+      writeFile(
+        logFile1,
+        None,
         SparkListenerApplicationStart("app1-1", Some("app1-1"), 1L, "test", None),
-        SparkListenerApplicationEnd(2L)
-        )
+        SparkListenerApplicationEnd(2L))
     }
     val logFiles2 = newLogFiles("new2", None, inProgress = false)
     logFiles2.foreach { logFile2 =>
-      writeFile(logFile2, None,
+      writeFile(
+        logFile2,
+        None,
         SparkListenerApplicationStart("app1-2", Some("app1-2"), 1L, "test", None),
-        SparkListenerApplicationEnd(2L)
-        )
+        SparkListenerApplicationEnd(2L))
       logFile2.setReadable(false, false)
     }
 
     updateAndCheck(provider) { list =>
-      list.size should be (1)
+      list.size should be(1)
     }
 
-    provider.doMergeApplicationListingCall should be (1)
+    provider.doMergeApplicationListingCall should be(1)
   }
 
   test("history file is renamed from inprogress to completed") {
@@ -248,23 +297,27 @@ abstract class GlobFsHistoryProviderSuite
 
     val logFiles1 = newLogFiles("app1", None, inProgress = true)
     logFiles1.foreach { logFile1 =>
-      writeFile(logFile1, None,
-      SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", None),
-      SparkListenerApplicationEnd(2L))
+      writeFile(
+        logFile1,
+        None,
+        SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", None),
+        SparkListenerApplicationEnd(2L))
     }
     updateAndCheck(provider) { list =>
-      list.size should be (numSubDirs)
+      list.size should be(numSubDirs)
       provider.getAttempt("app1", None).logPath should endWith(EventLogFileWriter.IN_PROGRESS)
     }
 
     val renamedLogFiles = newLogFiles("app1", None, inProgress = false)
-    logFiles1.lazyZip(renamedLogFiles).foreach{ case (originalFile, renamedFile) =>
+    logFiles1.lazyZip(renamedLogFiles).foreach { case (originalFile, renamedFile) =>
       originalFile.renameTo(renamedFile)
     }
 
     updateAndCheck(provider) { list =>
-      list.size should be (numSubDirs)
-      provider.getAttempt("app1", None).logPath should not endWith(EventLogFileWriter.IN_PROGRESS)
+      list.size should be(numSubDirs)
+      provider
+        .getAttempt("app1", None)
+        .logPath should not endWith (EventLogFileWriter.IN_PROGRESS)
     }
   }
 
@@ -286,21 +339,23 @@ abstract class GlobFsHistoryProviderSuite
         withLogAppender(logAppender1) {
           provider invokePrivate mergeApplicationListing(
             EventLogFileReader(fs, new Path(file.toURI), None),
-          System.currentTimeMillis,
-          true
-          )
+            System.currentTimeMillis,
+            true)
         }
       }
-      val logs1 = logAppender1.loggingEvents.map(_.getMessage.getFormattedMessage)
+      val logs1 = logAppender1.loggingEvents
+        .map(_.getMessage.getFormattedMessage)
         .filter(_.contains("In-progress event log file does not exist: "))
       assert(logs1.size === 1)
       inProgressFile.foreach { file =>
-        writeFile(file, None,
+        writeFile(
+          file,
+          None,
           SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", None),
           SparkListenerApplicationEnd(2L))
       }
       val finalFile = newLogFiles("app1", None, inProgress = false)
-      inProgressFile.lazyZip(finalFile).foreach{ case (inProgressFile, finalFile) =>
+      inProgressFile.lazyZip(finalFile).foreach { case (inProgressFile, finalFile) =>
         inProgressFile.renameTo(finalFile)
       }
       val logAppender2 = new LogAppender("in-progress event log file has been renamed to final")
@@ -308,12 +363,12 @@ abstract class GlobFsHistoryProviderSuite
         withLogAppender(logAppender2) {
           provider invokePrivate mergeApplicationListing(
             EventLogFileReader(fs, new Path(file.toURI), None),
-          System.currentTimeMillis,
-          true
-          )
+            System.currentTimeMillis,
+            true)
         }
       }
-      val logs2 = logAppender2.loggingEvents.map(_.getMessage.getFormattedMessage)
+      val logs2 = logAppender2.loggingEvents
+        .map(_.getMessage.getFormattedMessage)
         .filter(_.contains("In-progress event log file does not exist: "))
       assert(logs2.isEmpty)
     }
@@ -324,12 +379,10 @@ abstract class GlobFsHistoryProviderSuite
 
     val logFiles1 = newLogFiles("app1", None, inProgress = true)
     logFiles1.foreach { file =>
-      writeFile(file, None,
-        SparkListenerLogStart("1.4")
-      )
+      writeFile(file, None, SparkListenerLogStart("1.4"))
     }
     updateAndCheck(provider) { list =>
-      list.size should be (0)
+      list.size should be(0)
     }
   }
 
@@ -337,10 +390,12 @@ abstract class GlobFsHistoryProviderSuite
     val provider = new GlobFsHistoryProvider(createTestConf())
 
     val logFiles1 = newLogFiles("app1", None, inProgress = true)
-    logFiles1.foreach{ logFile1 =>
-      writeFile(logFile1, None,
-      SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", None),
-      SparkListenerApplicationEnd(2L))
+    logFiles1.foreach { logFile1 =>
+      writeFile(
+        logFile1,
+        None,
+        SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", None),
+        SparkListenerApplicationEnd(2L))
     }
     testDirs.foreach { testDir =>
       val oldLog = new File(testDir, "old1")
@@ -349,7 +404,7 @@ abstract class GlobFsHistoryProviderSuite
 
     provider.checkForLogs()
     val appListAfterRename = provider.getListing()
-    appListAfterRename.size should be (numSubDirs)
+    appListAfterRename.size should be(numSubDirs)
   }
 
   test("apps with multiple attempts with order") {
@@ -357,56 +412,60 @@ abstract class GlobFsHistoryProviderSuite
 
     val attempt1 = newLogFiles("app1", Some("attempt1"), inProgress = true)
     attempt1.foreach { file =>
-      writeFile(file, None,
-        SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1"))
-      )
+      writeFile(
+        file,
+        None,
+        SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1")))
     }
 
     updateAndCheck(provider) { list =>
-      list.size should be (numSubDirs)
-      list.head.attempts.size should be (numSubDirs)
+      list.size should be(numSubDirs)
+      list.head.attempts.size should be(numSubDirs)
     }
 
     val attempt2 = newLogFiles("app1", Some("attempt2"), inProgress = true)
     attempt2.foreach { file =>
-      writeFile(file, None,
-        SparkListenerApplicationStart("app1", Some("app1"), 2L, "test", Some("attempt2"))
-      )
+      writeFile(
+        file,
+        None,
+        SparkListenerApplicationStart("app1", Some("app1"), 2L, "test", Some("attempt2")))
     }
 
     updateAndCheck(provider) { list =>
-      list.size should be (numSubDirs)
-      list.head.attempts.size should be (2 * numSubDirs)
-      list.head.attempts.head.attemptId should be (Some("attempt2"))
+      list.size should be(numSubDirs)
+      list.head.attempts.size should be(2 * numSubDirs)
+      list.head.attempts.head.attemptId should be(Some("attempt2"))
     }
 
     val attempt3 = newLogFiles("app1", Some("attempt3"), inProgress = false)
     attempt3.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", Some("attempt3")),
-        SparkListenerApplicationEnd(4L)
-      )
+        SparkListenerApplicationEnd(4L))
     }
 
     updateAndCheck(provider) { list =>
-      list.size should be (numSubDirs)
-      list.head.attempts.size should be (3 * numSubDirs)
-      list.head.attempts.head.attemptId should be (Some("attempt3"))
+      list.size should be(numSubDirs)
+      list.head.attempts.size should be(3 * numSubDirs)
+      list.head.attempts.head.attemptId should be(Some("attempt3"))
     }
 
     val app2Attempt1 = newLogFiles("app2", Some("attempt1"), inProgress = false)
     app2Attempt1.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerApplicationStart("app2", Some("app2"), 5L, "test", Some("attempt1")),
-        SparkListenerApplicationEnd(6L)
-      )
+        SparkListenerApplicationEnd(6L))
     }
 
     updateAndCheck(provider) { list =>
-      list.size should be (2 * numSubDirs)
-      list.head.attempts.size should be (numSubDirs)
-      list.last.attempts.size should be (3 * numSubDirs)
-      list.head.attempts.head.attemptId should be (Some("attempt1"))
+      list.size should be(2 * numSubDirs)
+      list.head.attempts.size should be(numSubDirs)
+      list.last.attempts.size should be(3 * numSubDirs)
+      list.head.attempts.head.attemptId should be(Some("attempt1"))
 
       list.foreach { app =>
         app.attempts.foreach { attempt =>
@@ -439,10 +498,13 @@ abstract class GlobFsHistoryProviderSuite
 
     val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
       val attr = execInfo.attributes
-      val newLogUrlMap = attr("LOG_FILES").split(",").map { file =>
-        val newLogUrl = getExpectedExecutorLogUrl(attr, Some(file))
-        file -> newLogUrl
-      }.toMap
+      val newLogUrlMap = attr("LOG_FILES")
+        .split(",")
+        .map { file =>
+          val newLogUrl = getExpectedExecutorLogUrl(attr, Some(file))
+          file -> newLogUrl
+        }
+        .toMap
 
       execInfo -> newLogUrlMap
     }.toMap
@@ -473,8 +535,10 @@ abstract class GlobFsHistoryProviderSuite
     // which Spark will fail back to provide origin log url with warning log.
 
     val conf = createTestConf()
-      .set(CUSTOM_EXECUTOR_LOG_URL, getCustomExecutorLogUrl(includeFileName = true) +
-        "/{{NON_EXISTING}}")
+      .set(
+        CUSTOM_EXECUTOR_LOG_URL,
+        getCustomExecutorLogUrl(includeFileName = true) +
+          "/{{NON_EXISTING}}")
 
     val executorInfos = (1 to 5).map(createTestExecutorInfo("app1", "user1", _))
 
@@ -491,8 +555,8 @@ abstract class GlobFsHistoryProviderSuite
     val conf = createTestConf()
       .set(CUSTOM_EXECUTOR_LOG_URL, getCustomExecutorLogUrl(includeFileName = true))
 
-    val executorInfos = (1 to 5).map(
-      createTestExecutorInfo("app1", "user1", _, includingLogFiles = false))
+    val executorInfos =
+      (1 to 5).map(createTestExecutorInfo("app1", "user1", _, includingLogFiles = false))
 
     val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
       execInfo -> execInfo.logUrlMap
@@ -512,10 +576,13 @@ abstract class GlobFsHistoryProviderSuite
 
     val expected: Map[ExecutorInfo, Map[String, String]] = executorInfos.map { execInfo =>
       val attr = execInfo.attributes
-      val newLogUrlMap = attr("LOG_FILES").split(",").map { file =>
-        val newLogUrl = getExpectedExecutorLogUrl(attr, Some(file))
-        file -> newLogUrl
-      }.toMap
+      val newLogUrlMap = attr("LOG_FILES")
+        .split(",")
+        .map { file =>
+          val newLogUrl = getExpectedExecutorLogUrl(attr, Some(file))
+          file -> newLogUrl
+        }
+        .toMap
 
       execInfo -> newLogUrlMap
     }.toMap
@@ -565,11 +632,19 @@ abstract class GlobFsHistoryProviderSuite
 
     val attempt1 = newLogFiles("app1", Some("attempt1"), inProgress = true)
 
-    val executorAddedEvents = expectedLogUrlMap.keys.zipWithIndex.map { case (execInfo, idx) =>
-      SparkListenerExecutorAdded(1 + idx, s"exec$idx", execInfo)
-    }.toList.sortBy(_.time)
-    val allEvents = List(SparkListenerApplicationStart("app1", Some("app1"), 1L,
-      "test", Some("attempt1"))) ++ executorAddedEvents ++
+    val executorAddedEvents = expectedLogUrlMap.keys.zipWithIndex
+      .map { case (execInfo, idx) =>
+        SparkListenerExecutorAdded(1 + idx, s"exec$idx", execInfo)
+      }
+      .toList
+      .sortBy(_.time)
+    val allEvents = List(
+      SparkListenerApplicationStart(
+        "app1",
+        Some("app1"),
+        1L,
+        "test",
+        Some("attempt1"))) ++ executorAddedEvents ++
       (if (isCompletedApp) List(SparkListenerApplicationEnd(1000L)) else Seq())
 
     attempt1.foreach { file =>
@@ -577,8 +652,8 @@ abstract class GlobFsHistoryProviderSuite
     }
 
     updateAndCheck(provider) { list =>
-      list.size should be (numSubDirs)
-      list.head.attempts.size should be (numSubDirs)
+      list.size should be(numSubDirs)
+      list.head.attempts.size should be(numSubDirs)
 
       list.foreach { app =>
         app.attempts.foreach { attempt =>
@@ -600,7 +675,7 @@ abstract class GlobFsHistoryProviderSuite
             executorCount += 1
           }
 
-          executorCount should be (expectedLogUrlMap.size)
+          executorCount should be(expectedLogUrlMap.size)
         }
       }
     }
@@ -609,15 +684,16 @@ abstract class GlobFsHistoryProviderSuite
   test("log cleaner") {
     val maxAge = TimeUnit.SECONDS.toMillis(10)
     val clock = new ManualClock(maxAge / 2)
-    val provider = new GlobFsHistoryProvider(
-      createTestConf().set(MAX_LOG_AGE_S.key, s"${maxAge}ms"), clock)
+    val provider =
+      new GlobFsHistoryProvider(createTestConf().set(MAX_LOG_AGE_S.key, s"${maxAge}ms"), clock)
 
     val logs1 = newLogFiles("app1", Some("attempt1"), inProgress = false)
     logs1.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1")),
-        SparkListenerApplicationEnd(2L)
-      )
+        SparkListenerApplicationEnd(2L))
     }
     logs1.foreach { file =>
       file.setLastModified(0L)
@@ -625,27 +701,28 @@ abstract class GlobFsHistoryProviderSuite
 
     val logs2 = newLogFiles("app1", Some("attempt2"), inProgress = false)
     logs2.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", Some("attempt2")),
-        SparkListenerApplicationEnd(4L)
-      )
+        SparkListenerApplicationEnd(4L))
     }
     logs2.foreach { file =>
       file.setLastModified(clock.getTimeMillis())
     }
 
     updateAndCheck(provider) { list =>
-      list.size should be (numSubDirs)
-      list.head.attempts.size should be (2 * numSubDirs)
+      list.size should be(numSubDirs)
+      list.head.attempts.size should be(2 * numSubDirs)
     }
 
     // Move the clock forward so log1 exceeds the max age.
     clock.advance(maxAge)
 
     updateAndCheck(provider) { list =>
-      list.size should be (numSubDirs)
-      list.head.attempts.size should be (numSubDirs)
-      list.head.attempts.head.attemptId should be (Some("attempt2"))
+      list.size should be(numSubDirs)
+      list.head.attempts.size should be(numSubDirs)
+      list.head.attempts.head.attemptId should be(Some("attempt2"))
     }
     logs1.foreach { file =>
       assert(!file.exists())
@@ -655,7 +732,7 @@ abstract class GlobFsHistoryProviderSuite
     clock.advance(maxAge)
 
     updateAndCheck(provider) { list =>
-      list.size should be (0)
+      list.size should be(0)
     }
     logs2.foreach { file =>
       assert(!file.exists())
@@ -667,14 +744,19 @@ abstract class GlobFsHistoryProviderSuite
     val secondFileModifiedTime = TimeUnit.DAYS.toMillis(6)
     val maxAge = TimeUnit.DAYS.toMillis(7)
     val clock = new ManualClock(0)
-    val provider = new GlobFsHistoryProvider(
-      createTestConf().set(MAX_LOG_AGE_S, maxAge / 1000), clock)
+    val provider =
+      new GlobFsHistoryProvider(createTestConf().set(MAX_LOG_AGE_S, maxAge / 1000), clock)
     val logs = newLogFiles("inProgressApp1", None, inProgress = true)
     logs.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerApplicationStart(
-          "inProgressApp1", Some("inProgressApp1"), 3L, "test", Some("attempt1"))
-      )
+          "inProgressApp1",
+          Some("inProgressApp1"),
+          3L,
+          "test",
+          Some("attempt1")))
     }
     clock.setTime(firstFileModifiedTime)
     logs.foreach { file =>
@@ -682,11 +764,16 @@ abstract class GlobFsHistoryProviderSuite
     }
     provider.checkForLogs()
     logs.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerApplicationStart(
-          "inProgressApp1", Some("inProgressApp1"), 3L, "test", Some("attempt1")),
-        SparkListenerJobStart(0, 1L, Nil, null)
-      )
+          "inProgressApp1",
+          Some("inProgressApp1"),
+          3L,
+          "test",
+          Some("attempt1")),
+        SparkListenerJobStart(0, 1L, Nil, null))
     }
     clock.setTime(secondFileModifiedTime)
     logs.foreach { file =>
@@ -695,12 +782,17 @@ abstract class GlobFsHistoryProviderSuite
     provider.checkForLogs()
     clock.setTime(TimeUnit.DAYS.toMillis(10))
     logs.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerApplicationStart(
-          "inProgressApp1", Some("inProgressApp1"), 3L, "test", Some("attempt1")),
+          "inProgressApp1",
+          Some("inProgressApp1"),
+          3L,
+          "test",
+          Some("attempt1")),
         SparkListenerJobStart(0, 1L, Nil, null),
-        SparkListenerJobEnd(0, 1L, JobSucceeded)
-      )
+        SparkListenerJobEnd(0, 1L, JobSucceeded))
     }
     logs.foreach { file =>
       file.setLastModified(clock.getTimeMillis())
@@ -717,15 +809,20 @@ abstract class GlobFsHistoryProviderSuite
     val secondFileModifiedTime = TimeUnit.SECONDS.toMillis(20)
     val maxAge = TimeUnit.SECONDS.toMillis(40)
     val clock = new ManualClock(0)
-    val provider = new GlobFsHistoryProvider(
-      createTestConf().set(MAX_LOG_AGE_S.key, s"${maxAge}ms"), clock)
+    val provider =
+      new GlobFsHistoryProvider(createTestConf().set(MAX_LOG_AGE_S.key, s"${maxAge}ms"), clock)
 
     val logs1 = newLogFiles("inProgressApp1", None, inProgress = true)
     logs1.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerApplicationStart(
-          "inProgressApp1", Some("inProgressApp1"), 3L, "test", Some("attempt1"))
-      )
+          "inProgressApp1",
+          Some("inProgressApp1"),
+          3L,
+          "test",
+          Some("attempt1")))
     }
 
     clock.setTime(firstFileModifiedTime)
@@ -733,10 +830,15 @@ abstract class GlobFsHistoryProviderSuite
 
     val logs2 = newLogFiles("inProgressApp2", None, inProgress = true)
     logs2.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerApplicationStart(
-          "inProgressApp2", Some("inProgressApp2"), 23L, "test2", Some("attempt2"))
-      )
+          "inProgressApp2",
+          Some("inProgressApp2"),
+          23L,
+          "test2",
+          Some("attempt2")))
     }
 
     clock.setTime(secondFileModifiedTime)
@@ -777,11 +879,16 @@ abstract class GlobFsHistoryProviderSuite
     val logs = (1 to 2).map { i =>
       val logs = newLogFiles("downloadApp1", Some(s"attempt$i"), inProgress = false)
       logs.foreach { file =>
-        writeFile(file, None,
+        writeFile(
+          file,
+          None,
           SparkListenerApplicationStart(
-            "downloadApp1", Some("downloadApp1"), 5000L * i, "test", Some(s"attempt$i")),
-          SparkListenerApplicationEnd(5001L * i)
-        )
+            "downloadApp1",
+            Some("downloadApp1"),
+            5000L * i,
+            "test",
+            Some(s"attempt$i")),
+          SparkListenerApplicationEnd(5001L * i))
       }
       logs
     }
@@ -793,20 +900,22 @@ abstract class GlobFsHistoryProviderSuite
         val outputStream = new ZipOutputStream(underlyingStream)
         provider.writeEventLogs("downloadApp1", Some(s"attempt$i"), outputStream)
         outputStream.close()
-        val inputStream = new ZipInputStream(new ByteArrayInputStream(underlyingStream.toByteArray))
+        val inputStream =
+          new ZipInputStream(new ByteArrayInputStream(underlyingStream.toByteArray))
         var totalEntries = 0
         var entry = inputStream.getNextEntry
         entry should not be null
         while (entry != null) {
           val actual = new String(ByteStreams.toByteArray(inputStream), StandardCharsets.UTF_8)
           val expected =
-            Files.asCharSource(log.find(_.getName == entry.getName).get, StandardCharsets.UTF_8)
+            Files
+              .asCharSource(log.find(_.getName == entry.getName).get, StandardCharsets.UTF_8)
               .read()
-          actual should be (expected)
+          actual should be(expected)
           totalEntries += 1
           entry = inputStream.getNextEntry
         }
-        totalEntries should be (numSubDirs)
+        totalEntries should be(numSubDirs)
         inputStream.close()
       }
     }
@@ -819,7 +928,9 @@ abstract class GlobFsHistoryProviderSuite
     val clock = new ManualClock(0)
     testDirs.foreach { testDir =>
       val testConf = new SparkConf()
-      testConf.set(HISTORY_LOG_DIR, Utils.createTempDir(namePrefix = "eventLog").getAbsolutePath())
+      testConf.set(
+        HISTORY_LOG_DIR,
+        Utils.createTempDir(namePrefix = "eventLog").getAbsolutePath())
       testConf.set(DRIVER_LOG_DFS_DIR, testDir.getAbsolutePath())
       testConf.set(DRIVER_LOG_CLEANER_ENABLED, true)
       testConf.set(DRIVER_LOG_CLEANER_INTERVAL, maxAge / 4)
@@ -876,13 +987,11 @@ abstract class GlobFsHistoryProviderSuite
     // Write a new log file without an app id, to make sure it's ignored.
     val logFiles = newLogFiles("app1", None, inProgress = true)
     logFiles.foreach { file =>
-      writeFile(file, None,
-        SparkListenerLogStart("1.4")
-      )
+      writeFile(file, None, SparkListenerLogStart("1.4"))
     }
 
     updateAndCheck(provider) { list =>
-      list.size should be (numSubDirs)
+      list.size should be(numSubDirs)
     }
   }
 
@@ -899,10 +1008,10 @@ abstract class GlobFsHistoryProviderSuite
     val provider = new SafeModeTestProvider(createTestConf(), clock)
     val initThread = provider.initialize()
     try {
-      provider.getConfig().keys should contain ("HDFS State")
+      provider.getConfig().keys should contain("HDFS State")
 
       clock.setTime(5000)
-      provider.getConfig().keys should contain ("HDFS State")
+      provider.getConfig().keys should contain("HDFS State")
 
       provider.inSafeMode = false
       clock.setTime(10000)
@@ -962,23 +1071,23 @@ abstract class GlobFsHistoryProviderSuite
     // and write one real file, which should still get picked up just fine
     val newAppCompleteFiles = newLogFiles("real-app", None, inProgress = false)
     newAppCompleteFiles.foreach { file =>
-      writeFile(file, None,
-        SparkListenerApplicationStart(file.getName(), Some("new-app-complete"), 1L, "test",
-          None),
-        SparkListenerApplicationEnd(5L)
-      )
+      writeFile(
+        file,
+        None,
+        SparkListenerApplicationStart(file.getName(), Some("new-app-complete"), 1L, "test", None),
+        SparkListenerApplicationEnd(5L))
     }
 
     val provider = new GlobFsHistoryProvider(createTestConf())
     updateAndCheck(provider) { list =>
-      list.size should be (numSubDirs)
-      list(0).name should be ("real-app")
+      list.size should be(numSubDirs)
+      list(0).name should be("real-app")
     }
   }
 
   test("support history server ui admin acls") {
-    def createAndCheck(conf: SparkConf, properties: (String, String)*)
-      (checkFn: SecurityManager => Unit): Unit = {
+    def createAndCheck(conf: SparkConf, properties: (String, String)*)(
+        checkFn: SecurityManager => Unit): Unit = {
       // Empty the testDirs for each test.
       testDirs.foreach { testDir =>
         if (testDir.exists() && testDir.isDirectory) {
@@ -991,17 +1100,23 @@ abstract class GlobFsHistoryProviderSuite
         provider = new GlobFsHistoryProvider(conf)
         val logs = newLogFiles("app1", Some("attempt1"), inProgress = false)
         logs.foreach { file =>
-          writeFile(file, None,
-            SparkListenerApplicationStart("app1", Some("app1"), System.currentTimeMillis(),
-              "test", Some("attempt1")),
-          SparkListenerEnvironmentUpdate(Map(
-            "Spark Properties" -> properties.toSeq,
-            "Hadoop Properties" -> Seq.empty,
-            "JVM Information" -> Seq.empty,
-            "System Properties" -> Seq.empty,
-            "Metrics Properties" -> Seq.empty,
-              "Classpath Entries" -> Seq.empty
-            )),
+          writeFile(
+            file,
+            None,
+            SparkListenerApplicationStart(
+              "app1",
+              Some("app1"),
+              System.currentTimeMillis(),
+              "test",
+              Some("attempt1")),
+            SparkListenerEnvironmentUpdate(
+              Map(
+                "Spark Properties" -> properties.toSeq,
+                "Hadoop Properties" -> Seq.empty,
+                "JVM Information" -> Seq.empty,
+                "System Properties" -> Seq.empty,
+                "Metrics Properties" -> Seq.empty,
+                "Classpath Entries" -> Seq.empty)),
             SparkListenerApplicationEnd(System.currentTimeMillis()))
         }
 
@@ -1028,16 +1143,16 @@ abstract class GlobFsHistoryProviderSuite
     createAndCheck(conf1, (ADMIN_ACLS.key, "user"), (ADMIN_ACLS_GROUPS.key, "group")) {
       securityManager =>
         // Test whether user has permission to access UI.
-        securityManager.checkUIViewPermissions("user1") should be (true)
-        securityManager.checkUIViewPermissions("user2") should be (true)
-        securityManager.checkUIViewPermissions("user") should be (true)
-        securityManager.checkUIViewPermissions("abc") should be (false)
+        securityManager.checkUIViewPermissions("user1") should be(true)
+        securityManager.checkUIViewPermissions("user2") should be(true)
+        securityManager.checkUIViewPermissions("user") should be(true)
+        securityManager.checkUIViewPermissions("abc") should be(false)
 
         // Test whether user with admin group has permission to access UI.
-        securityManager.checkUIViewPermissions("user3") should be (true)
-        securityManager.checkUIViewPermissions("user4") should be (true)
-        securityManager.checkUIViewPermissions("user5") should be (true)
-        securityManager.checkUIViewPermissions("user6") should be (false)
+        securityManager.checkUIViewPermissions("user3") should be(true)
+        securityManager.checkUIViewPermissions("user4") should be(true)
+        securityManager.checkUIViewPermissions("user5") should be(true)
+        securityManager.checkUIViewPermissions("user6") should be(false)
     }
 
     // Test only history ui admin acls are configured.
@@ -1048,33 +1163,33 @@ abstract class GlobFsHistoryProviderSuite
       .set(USER_GROUPS_MAPPING, classOf[TestGroupsMappingProvider].getName)
     createAndCheck(conf2) { securityManager =>
       // Test whether user has permission to access UI.
-      securityManager.checkUIViewPermissions("user1") should be (true)
-      securityManager.checkUIViewPermissions("user2") should be (true)
+      securityManager.checkUIViewPermissions("user1") should be(true)
+      securityManager.checkUIViewPermissions("user2") should be(true)
       // Check the unknown "user" should return false
-      securityManager.checkUIViewPermissions("user") should be (false)
+      securityManager.checkUIViewPermissions("user") should be(false)
 
       // Test whether user with admin group has permission to access UI.
-      securityManager.checkUIViewPermissions("user3") should be (true)
-      securityManager.checkUIViewPermissions("user4") should be (true)
+      securityManager.checkUIViewPermissions("user3") should be(true)
+      securityManager.checkUIViewPermissions("user4") should be(true)
       // Check the "user5" without mapping relation should return false
-      securityManager.checkUIViewPermissions("user5") should be (false)
+      securityManager.checkUIViewPermissions("user5") should be(false)
     }
 
     // Test neither history ui admin acls nor application acls are configured.
-     val conf3 = createTestConf()
+    val conf3 = createTestConf()
       .set(HISTORY_SERVER_UI_ACLS_ENABLE, true)
       .set(USER_GROUPS_MAPPING, classOf[TestGroupsMappingProvider].getName)
     createAndCheck(conf3) { securityManager =>
       // Test whether user has permission to access UI.
-      securityManager.checkUIViewPermissions("user1") should be (false)
-      securityManager.checkUIViewPermissions("user2") should be (false)
-      securityManager.checkUIViewPermissions("user") should be (false)
+      securityManager.checkUIViewPermissions("user1") should be(false)
+      securityManager.checkUIViewPermissions("user2") should be(false)
+      securityManager.checkUIViewPermissions("user") should be(false)
 
       // Test whether user with admin group has permission to access UI.
       // Check should be failed since we don't have acl group settings.
-      securityManager.checkUIViewPermissions("user3") should be (false)
-      securityManager.checkUIViewPermissions("user4") should be (false)
-      securityManager.checkUIViewPermissions("user5") should be (false)
+      securityManager.checkUIViewPermissions("user3") should be(false)
+      securityManager.checkUIViewPermissions("user4") should be(false)
+      securityManager.checkUIViewPermissions("user5") should be(false)
     }
   }
 
@@ -1084,22 +1199,25 @@ abstract class GlobFsHistoryProviderSuite
 
     val logFiles = newLogFiles("app1", None, inProgress = false)
     logFiles.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerLogStart("2.3"),
         SparkListenerApplicationStart("test", Some("test"), 1L, "test", None),
-        SparkListenerApplicationEnd(5L)
-      )
+        SparkListenerApplicationEnd(5L))
     }
 
     updateAndCheck(oldProvider) { list =>
-      list.size should be (numSubDirs)
+      list.size should be(numSubDirs)
     }
     assert(oldProvider.listing.count(classOf[ApplicationInfoWrapper]) === numSubDirs)
 
     // Manually overwrite the version in the listing db; this should cause the new provider to
     // discard all data because the versions don't match.
-    val meta = new GlobFsHistoryProviderMetadata(GlobFsHistoryProvider.CURRENT_LISTING_VERSION + 1,
-      AppStatusStore.CURRENT_VERSION, conf.get(LOCAL_STORE_DIR).get)
+    val meta = new GlobFsHistoryProviderMetadata(
+      GlobFsHistoryProvider.CURRENT_LISTING_VERSION + 1,
+      AppStatusStore.CURRENT_VERSION,
+      conf.get(LOCAL_STORE_DIR).get)
     oldProvider.listing.setMetadata(meta)
     oldProvider.stop()
 
@@ -1114,9 +1232,7 @@ abstract class GlobFsHistoryProviderSuite
     // Write an incomplete app log.
     val appLogs = newLogFiles(appId, None, inProgress = true)
     appLogs.foreach { file =>
-      writeFile(file, None,
-        SparkListenerApplicationStart(appId, Some(appId), 1L, "test", None)
-      )
+      writeFile(file, None, SparkListenerApplicationStart(appId, Some(appId), 1L, "test", None))
     }
     provider.checkForLogs()
 
@@ -1129,10 +1245,11 @@ abstract class GlobFsHistoryProviderSuite
 
     // Add more info to the app log, and trigger the provider to update things.
     appLogs.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerApplicationStart(appId, Some(appId), 1L, "test", None),
-        SparkListenerJobStart(0, 1L, Nil, null)
-      )
+        SparkListenerJobStart(0, 1L, Nil, null))
     }
     provider.checkForLogs()
 
@@ -1158,19 +1275,21 @@ abstract class GlobFsHistoryProviderSuite
       clock.advance(1)
       val attempts1 = newLogFiles(appId, Some("1"), inProgress = false)
       attempts1.foreach { file =>
-        writeFile(file, None,
+        writeFile(
+          file,
+          None,
           SparkListenerApplicationStart(appId, Some(appId), 1L, "test", Some("1")),
           SparkListenerJobStart(0, 1L, Nil, null),
-          SparkListenerApplicationEnd(5L)
-        )
+          SparkListenerApplicationEnd(5L))
       }
       val attempts2 = newLogFiles(appId, Some("2"), inProgress = false)
       attempts2.foreach { file =>
-        writeFile(file, None,
+        writeFile(
+          file,
+          None,
           SparkListenerApplicationStart(appId, Some(appId), 1L, "test", Some("2")),
           SparkListenerJobStart(0, 1L, Nil, null),
-          SparkListenerApplicationEnd(5L)
-        )
+          SparkListenerApplicationEnd(5L))
       }
       updateAndCheck(provider) { list =>
         assert(list.size === numSubDirs)
@@ -1263,7 +1382,9 @@ abstract class GlobFsHistoryProviderSuite
     // Update the slow app to contain valid info. Code should detect the change and not clean
     // it up.
     slowApp.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerApplicationStart(file.getName(), Some(file.getName()), 1L, "test", None))
       file.setLastModified(clock.getTimeMillis())
     }
@@ -1274,7 +1395,7 @@ abstract class GlobFsHistoryProviderSuite
     clock.advance(TimeUnit.DAYS.toMillis(2))
     provider.checkForLogs()
     provider.cleanLogs()
-    testDirs.foreach{ testDir =>
+    testDirs.foreach { testDir =>
       assert(new File(testDir.toURI).listFiles().length === validLogCount)
     }
   }
@@ -1284,19 +1405,27 @@ abstract class GlobFsHistoryProviderSuite
     // the end of the file. The correct listing should still be generated.
     val logs = newLogFiles("end-event-test", None, inProgress = false)
     logs.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         Seq(
-        SparkListenerApplicationStart("end-event-test", Some("end-event-test"), 1L, "test", None),
-        SparkListenerEnvironmentUpdate(Map(
-          "Spark Properties" -> Seq.empty,
-          "Hadoop Properties" -> Seq.empty,
-          "JVM Information" -> Seq.empty,
-          "System Properties" -> Seq.empty,
-          "Metrics Properties" -> Seq.empty,
-          "Classpath Entries" -> Seq.empty
-        )),
-        SparkListenerApplicationEnd(5L)
-      ) ++ (1 to 1000).map { i => SparkListenerJobStart(i, i, Nil) }: _*)
+          SparkListenerApplicationStart(
+            "end-event-test",
+            Some("end-event-test"),
+            1L,
+            "test",
+            None),
+          SparkListenerEnvironmentUpdate(
+            Map(
+              "Spark Properties" -> Seq.empty,
+              "Hadoop Properties" -> Seq.empty,
+              "JVM Information" -> Seq.empty,
+              "System Properties" -> Seq.empty,
+              "Metrics Properties" -> Seq.empty,
+              "Classpath Entries" -> Seq.empty)),
+          SparkListenerApplicationEnd(5L)) ++ (1 to 1000).map { i =>
+          SparkListenerJobStart(i, i, Nil)
+        }: _*)
     }
 
     val conf = createTestConf().set(END_EVENT_REPARSE_CHUNK_SIZE.key, s"1k")
@@ -1316,22 +1445,24 @@ abstract class GlobFsHistoryProviderSuite
 
     val complete = newLogFiles("complete", None, inProgress = false)
     complete.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerApplicationStart("complete", Some("complete"), 1L, "test", None),
-        SparkListenerApplicationEnd(5L)
-      )
+        SparkListenerApplicationEnd(5L))
     }
 
     val incomplete = newLogFiles("incomplete", None, inProgress = true)
     incomplete.foreach { file =>
-      writeFile(file, None,
-        SparkListenerApplicationStart("incomplete", Some("incomplete"), 1L, "test", None)
-      )
+      writeFile(
+        file,
+        None,
+        SparkListenerApplicationStart("incomplete", Some("incomplete"), 1L, "test", None))
     }
 
     updateAndCheck(provider) { list =>
-      list.size should be (2)
-      list.count(_.attempts.head.completed) should be (1)
+      list.size should be(2)
+      list.count(_.attempts.head.completed) should be(1)
     }
   }
 
@@ -1340,20 +1471,26 @@ abstract class GlobFsHistoryProviderSuite
     val provider = new GlobFsHistoryProvider(createTestConf(), clock)
     val accessDeniedFiles = newLogFiles("accessDenied", None, inProgress = false)
     accessDeniedFiles.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerApplicationStart("accessDenied", Some("accessDenied"), 1L, "test", None))
     }
     val accessGrantedFiles = newLogFiles("accessGranted", None, inProgress = false)
     accessGrantedFiles.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerApplicationStart("accessGranted", Some("accessGranted"), 1L, "test", None),
         SparkListenerApplicationEnd(5L))
     }
     var isReadable = false
     val mockedFs = spy[FileSystem](provider.fs)
-    doThrow(new AccessControlException("Cannot read accessDenied file")).when(mockedFs).open(
-      argThat((path: Path) => path.getName.toLowerCase(Locale.ROOT) == "accessdenied" &&
-        !isReadable))
+    doThrow(new AccessControlException("Cannot read accessDenied file"))
+      .when(mockedFs)
+      .open(argThat((path: Path) =>
+        path.getName.toLowerCase(Locale.ROOT) == "accessdenied" &&
+          !isReadable))
     val mockedProvider = spy[GlobFsHistoryProvider](provider)
     when(mockedProvider.fs).thenReturn(mockedFs)
     updateAndCheck(mockedProvider) { list =>
@@ -1363,7 +1500,7 @@ abstract class GlobFsHistoryProviderSuite
     updateAndCheck(mockedProvider) { list =>
       list.size should be(1)
     }
-    val accessDeniedPaths = accessDeniedFiles.map {accessDenied =>
+    val accessDeniedPaths = accessDeniedFiles.map { accessDenied =>
       new Path(accessDenied.getPath())
     }
     accessDeniedPaths.foreach { path =>
@@ -1374,9 +1511,9 @@ abstract class GlobFsHistoryProviderSuite
     mockedProvider.cleanLogs()
     accessDeniedPaths.foreach { accessDeniedPath =>
       updateAndCheck(mockedProvider) { list =>
-      assert(mockedProvider.isAccessible(accessDeniedPath))
-      assert(list.exists(_.name == "accessDenied"))
-      assert(list.exists(_.name == "accessGranted"))
+        assert(mockedProvider.isAccessible(accessDeniedPath))
+        assert(list.exists(_.name == "accessDenied"))
+        assert(list.exists(_.name == "accessGranted"))
         list.size should be(2)
       }
     }
@@ -1397,8 +1534,16 @@ abstract class GlobFsHistoryProviderSuite
     // FileStatus.getLen is more than logInfo fileSize
     var fileStatus = new FileStatus(200, false, 0, 0, 0, path)
     when(mockedFs.getFileStatus(path)).thenReturn(fileStatus)
-    var logInfo = new GlobLogInfo(path.toString, 0, GlobLogType.EventLogs, Some("appId"),
-      Some("attemptId"), 100, None, None, false)
+    var logInfo = new GlobLogInfo(
+      path.toString,
+      0,
+      GlobLogType.EventLogs,
+      Some("appId"),
+      Some("attemptId"),
+      100,
+      None,
+      None,
+      false)
     var reader = EventLogFileReader(mockedFs, path)
     assert(reader.isDefined)
     assert(mockedProvider.shouldReloadLog(logInfo, reader.get))
@@ -1407,15 +1552,31 @@ abstract class GlobFsHistoryProviderSuite
     fileStatus.setPath(path)
     when(mockedFs.getFileStatus(path)).thenReturn(fileStatus)
     // DFSInputStream.getFileLength is more than logInfo fileSize
-    logInfo = new GlobLogInfo(path.toString, 0, GlobLogType.EventLogs, Some("appId"),
-      Some("attemptId"), 100, None, None, false)
+    logInfo = new GlobLogInfo(
+      path.toString,
+      0,
+      GlobLogType.EventLogs,
+      Some("appId"),
+      Some("attemptId"),
+      100,
+      None,
+      None,
+      false)
     reader = EventLogFileReader(mockedFs, path)
     assert(reader.isDefined)
     assert(mockedProvider.shouldReloadLog(logInfo, reader.get))
 
     // DFSInputStream.getFileLength is equal to logInfo fileSize
-    logInfo = new GlobLogInfo(path.toString, 0, GlobLogType.EventLogs, Some("appId"),
-      Some("attemptId"), 200, None, None, false)
+    logInfo = new GlobLogInfo(
+      path.toString,
+      0,
+      GlobLogType.EventLogs,
+      Some("appId"),
+      Some("attemptId"),
+      200,
+      None,
+      None,
+      false)
     reader = EventLogFileReader(mockedFs, path)
     assert(reader.isDefined)
     assert(!mockedProvider.shouldReloadLog(logInfo, reader.get))
@@ -1439,56 +1600,61 @@ abstract class GlobFsHistoryProviderSuite
     (5 to 0 by -1).foreach { num =>
       val logs1_1 = newLogFiles("app1", Some("attempt1"), inProgress = false)
       logs1_1.foreach { file =>
-        writeFile(file, None,
+        writeFile(
+          file,
+          None,
           SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1")),
-          SparkListenerApplicationEnd(2L)
-        )
+          SparkListenerApplicationEnd(2L))
         file.setLastModified(2L)
       }
 
       val logs2_1 = newLogFiles("app2", Some("attempt1"), inProgress = false)
       logs2_1.foreach { file =>
-        writeFile(file, None,
+        writeFile(
+          file,
+          None,
           SparkListenerApplicationStart("app2", Some("app2"), 3L, "test", Some("attempt1")),
-          SparkListenerApplicationEnd(4L)
-        )
+          SparkListenerApplicationEnd(4L))
         file.setLastModified(4L)
       }
 
       val logs3_1 = newLogFiles("app3", Some("attempt1"), inProgress = false)
       logs3_1.foreach { file =>
-        writeFile(file, None,
+        writeFile(
+          file,
+          None,
           SparkListenerApplicationStart("app3", Some("app3"), 5L, "test", Some("attempt1")),
-          SparkListenerApplicationEnd(6L)
-        )
+          SparkListenerApplicationEnd(6L))
         file.setLastModified(6L)
       }
 
       val logs1_2_incomplete = newLogFiles("app1", Some("attempt2"), inProgress = false)
       logs1_2_incomplete.foreach { file =>
-        writeFile(file, None,
-          SparkListenerApplicationStart("app1", Some("app1"), 7L, "test", Some("attempt2"))
-        )
+        writeFile(
+          file,
+          None,
+          SparkListenerApplicationStart("app1", Some("app1"), 7L, "test", Some("attempt2")))
         file.setLastModified(8L)
       }
 
       val logs3_2 = newLogFiles("app3", Some("attempt2"), inProgress = false)
       logs3_2.foreach { file =>
-        writeFile(file, None,
+        writeFile(
+          file,
+          None,
           SparkListenerApplicationStart("app3", Some("app3"), 9L, "test", Some("attempt2")),
-          SparkListenerApplicationEnd(10L)
-        )
+          SparkListenerApplicationEnd(10L))
         file.setLastModified(10L)
       }
 
-      val provider = new GlobFsHistoryProvider(
-        createTestConf().set(MAX_LOG_NUM.key, s"$num"), clock)
+      val provider =
+        new GlobFsHistoryProvider(createTestConf().set(MAX_LOG_NUM.key, s"$num"), clock)
       updateAndCheck(provider) { list =>
         logs1_1.foreach { log =>
           assert(log.exists() == (num > 4))
         }
         logs1_2_incomplete.foreach { log =>
-          assert(log.exists())  // Always exists for all configurations
+          assert(log.exists()) // Always exists for all configurations
         }
         logs2_1.foreach { log =>
           assert(log.exists() == (num > 3))
@@ -1505,14 +1671,14 @@ abstract class GlobFsHistoryProviderSuite
 
   test("backwards compatibility with LogInfo from Spark 2.4") {
     case class LogInfoV24(
-         logPath: String,
-         lastProcessed: Long,
-         appId: Option[String],
-         attemptId: Option[String],
-         fileSize: Long)
+        logPath: String,
+        lastProcessed: Long,
+        appId: Option[String],
+        attemptId: Option[String],
+        fileSize: Long)
 
-    val oldObj = LogInfoV24("dummy", System.currentTimeMillis(), Some("hello"),
-      Some("attempt1"), 100)
+    val oldObj =
+      LogInfoV24("dummy", System.currentTimeMillis(), Some("hello"), Some("attempt1"), 100)
 
     val serializer = new KVStoreScalaSerializer()
     val serializedOldObj = serializer.serialize(oldObj)
@@ -1541,33 +1707,56 @@ abstract class GlobFsHistoryProviderSuite
     }
 
     val serializer = new KVStoreScalaSerializer()
-    val logInfoWithIndexAsNone = LogInfo("dummy", 0, LogType.EventLogs, Some("appId"),
-      Some("attemptId"), 100, None, None, false)
+    val logInfoWithIndexAsNone = LogInfo(
+      "dummy",
+      0,
+      LogType.EventLogs,
+      Some("appId"),
+      Some("attemptId"),
+      100,
+      None,
+      None,
+      false)
     assertSerDe(serializer, logInfoWithIndexAsNone)
 
-    val logInfoWithIndex = LogInfo("dummy", 0, LogType.EventLogs, Some("appId"),
-      Some("attemptId"), 100, Some(3), None, false)
+    val logInfoWithIndex = LogInfo(
+      "dummy",
+      0,
+      LogType.EventLogs,
+      Some("appId"),
+      Some("attemptId"),
+      100,
+      Some(3),
+      None,
+      false)
     assertSerDe(serializer, logInfoWithIndex)
   }
 
   test("SPARK-52327 AttemptInfoWrapper should be serialized/deserialized by jackson properly") {
     def assertSerDe(serializer: KVStoreScalaSerializer, attempt: AttemptInfoWrapper): Unit = {
-      val attemptAfterSerDe = serializer.deserialize(serializer.serialize(attempt),
-        classOf[AttemptInfoWrapper])
+      val attemptAfterSerDe =
+        serializer.deserialize(serializer.serialize(attempt), classOf[AttemptInfoWrapper])
       assert(attemptAfterSerDe.info === attempt.info)
       // skip comparing some fields, as they've not triggered SPARK-52327
       assertOptionAfterSerde(attemptAfterSerDe.lastIndex, attempt.lastIndex)
     }
 
     val serializer = new KVStoreScalaSerializer()
-    val appInfo = new ApplicationAttemptInfo(None, new Date(1), new Date(1), new Date(1),
-      10, "spark", false, "dummy")
-    val attemptInfoWithIndexAsNone = new AttemptInfoWrapper(appInfo, "dummyPath", 10, None,
-      None, None, None, None)
+    val appInfo = new ApplicationAttemptInfo(
+      None,
+      new Date(1),
+      new Date(1),
+      new Date(1),
+      10,
+      "spark",
+      false,
+      "dummy")
+    val attemptInfoWithIndexAsNone =
+      new AttemptInfoWrapper(appInfo, "dummyPath", 10, None, None, None, None, None)
     assertSerDe(serializer, attemptInfoWithIndexAsNone)
 
-    val attemptInfoWithIndex = new AttemptInfoWrapper(appInfo, "dummyPath", 10, Some(1),
-      None, None, None, None)
+    val attemptInfoWithIndex =
+      new AttemptInfoWrapper(appInfo, "dummyPath", 10, Some(1), None, None, None, None)
     assertSerDe(serializer, attemptInfoWithIndex)
   }
 
@@ -1580,8 +1769,7 @@ abstract class GlobFsHistoryProviderSuite
     val inValidLogFiles = newLogFiles("inValidLogFile", None, inProgress = true)
     inValidLogFiles.foreach { file =>
       file.createNewFile()
-      writeFile(file, None,
-        SparkListenerApplicationStart(file.getName, None, 1L, "test", None))
+      writeFile(file, None, SparkListenerApplicationStart(file.getName, None, 1L, "test", None))
       file.setLastModified(clock.getTimeMillis())
     }
 
@@ -1589,7 +1777,9 @@ abstract class GlobFsHistoryProviderSuite
     val validLogFiles = newLogFiles("validLogFile", None, inProgress = true)
     validLogFiles.foreach { file =>
       file.createNewFile()
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerApplicationStart(file.getName, Some("local_123"), 1L, "test", None))
       file.setLastModified(clock.getTimeMillis())
     }
@@ -1614,8 +1804,8 @@ abstract class GlobFsHistoryProviderSuite
     } else {
       // The issue happens only when the value in Option is being unboxed. Here we ensure unboxing
       // to Long succeeds: even though IDE suggests `.toLong` is redundant, direct comparison
-      // doesn't trigger unboxing and passes even without SPARK-29755, so don't remove
-      // `.toLong` below. Please refer SPARK-29755 for more details.
+      // doesn't trigger unboxing and passes even without SPARK-52327, so don't remove
+      // `.toLong` below. Please refer SPARK-52327 for more details.
       assert(opt.get.toLong === expected.get.toLong)
     }
   }
@@ -1663,9 +1853,12 @@ abstract class GlobFsHistoryProviderSuite
       writer.start()
 
       // writing event log file 1 - don't compact for now
-      writeEventsToRollingWriter(writer, Seq(
-        SparkListenerApplicationStart("app", Some("app"), 0, "user", None),
-        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      writeEventsToRollingWriter(
+        writer,
+        Seq(
+          SparkListenerApplicationStart("app", Some("app"), 0, "user", None),
+          SparkListenerJobStart(1, 0, Seq.empty)),
+        rollFile = false)
 
       updateAndCheck(provider) { _ =>
         verifyEventLogFiles(fs, writer.logPath, None, Seq(1))
@@ -1675,8 +1868,10 @@ abstract class GlobFsHistoryProviderSuite
 
       // writing event log file 2 - compact the event log file 1 into 1.compact
       writeEventsToRollingWriter(writer, Seq.empty, rollFile = true)
-      writeEventsToRollingWriter(writer, Seq(SparkListenerUnpersistRDD(1),
-        SparkListenerJobEnd(1, 1, JobSucceeded)), rollFile = false)
+      writeEventsToRollingWriter(
+        writer,
+        Seq(SparkListenerUnpersistRDD(1), SparkListenerJobEnd(1, 1, JobSucceeded)),
+        rollFile = false)
 
       updateAndCheck(provider) { _ =>
         verifyEventLogFiles(fs, writer.logPath, Some(1), Seq(2))
@@ -1686,10 +1881,13 @@ abstract class GlobFsHistoryProviderSuite
 
       // writing event log file 3 - compact two files - 1.compact & 2 into one, 2.compact
       writeEventsToRollingWriter(writer, Seq.empty, rollFile = true)
-      writeEventsToRollingWriter(writer, Seq(
-        SparkListenerExecutorAdded(3, "exec1", new ExecutorInfo("host1", 1, Map.empty)),
-        SparkListenerJobStart(2, 4, Seq.empty),
-        SparkListenerJobEnd(2, 5, JobSucceeded)), rollFile = false)
+      writeEventsToRollingWriter(
+        writer,
+        Seq(
+          SparkListenerExecutorAdded(3, "exec1", new ExecutorInfo("host1", 1, Map.empty)),
+          SparkListenerJobStart(2, 4, Seq.empty),
+          SparkListenerJobEnd(2, 5, JobSucceeded)),
+        rollFile = false)
 
       writer.stop()
 
@@ -1737,17 +1935,23 @@ abstract class GlobFsHistoryProviderSuite
       val writer = new RollingEventLogFilesWriter("app", None, dir.toURI, conf, hadoopConf)
       writer.start()
 
-      writeEventsToRollingWriter(writer, Seq(
-        SparkListenerApplicationStart("app", Some("app"), 0, "user", None),
-        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      writeEventsToRollingWriter(
+        writer,
+        Seq(
+          SparkListenerApplicationStart("app", Some("app"), 0, "user", None),
+          SparkListenerJobStart(1, 0, Seq.empty)),
+        rollFile = false)
       provider.checkForLogs()
       provider.cleanLogs()
       assert(dir.listFiles().length === 1)
       assert(provider.getListing().length === 1)
 
       // Manually delete the appstatus file to make an invalid rolling event log
-      val appStatusPath = RollingEventLogFilesWriter.getAppStatusFilePath(new Path(writer.logPath),
-        "app", None, true)
+      val appStatusPath = RollingEventLogFilesWriter.getAppStatusFilePath(
+        new Path(writer.logPath),
+        "app",
+        None,
+        true)
       fs.delete(appStatusPath, false)
       provider.checkForLogs()
       provider.cleanLogs()
@@ -1756,9 +1960,12 @@ abstract class GlobFsHistoryProviderSuite
       // Create a new application
       val writer2 = new RollingEventLogFilesWriter("app2", None, dir.toURI, conf, hadoopConf)
       writer2.start()
-      writeEventsToRollingWriter(writer2, Seq(
-        SparkListenerApplicationStart("app2", Some("app2"), 0, "user", None),
-        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      writeEventsToRollingWriter(
+        writer2,
+        Seq(
+          SparkListenerApplicationStart("app2", Some("app2"), 0, "user", None),
+          SparkListenerJobStart(1, 0, Seq.empty)),
+        rollFile = false)
 
       // Both folders exist but only one application found
       provider.checkForLogs()
@@ -1785,17 +1992,23 @@ abstract class GlobFsHistoryProviderSuite
       // Create 1st application
       val writer1 = new RollingEventLogFilesWriter("app1", None, dir.toURI, conf, hadoopConf)
       writer1.start()
-      writeEventsToRollingWriter(writer1, Seq(
-        SparkListenerApplicationStart("app1", Some("app1"), 0, "user", None),
-        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      writeEventsToRollingWriter(
+        writer1,
+        Seq(
+          SparkListenerApplicationStart("app1", Some("app1"), 0, "user", None),
+          SparkListenerJobStart(1, 0, Seq.empty)),
+        rollFile = false)
       writer1.stop()
 
       // Create 2nd application
       val writer2 = new RollingEventLogFilesWriter("app2", None, dir.toURI, conf, hadoopConf)
       writer2.start()
-      writeEventsToRollingWriter(writer2, Seq(
-        SparkListenerApplicationStart("app2", Some("app2"), 0, "user", None),
-        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      writeEventsToRollingWriter(
+        writer2,
+        Seq(
+          SparkListenerApplicationStart("app2", Some("app2"), 0, "user", None),
+          SparkListenerJobStart(1, 0, Seq.empty)),
+        rollFile = false)
       writer2.stop()
 
       // The 1st checkForLogs should scan/update app2 only since it is newer than app1
@@ -1808,9 +2021,12 @@ abstract class GlobFsHistoryProviderSuite
       // Create 3rd application
       val writer3 = new RollingEventLogFilesWriter("app3", None, dir.toURI, conf, hadoopConf)
       writer3.start()
-      writeEventsToRollingWriter(writer3, Seq(
-        SparkListenerApplicationStart("app3", Some("app3"), 0, "user", None),
-        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      writeEventsToRollingWriter(
+        writer3,
+        Seq(
+          SparkListenerApplicationStart("app3", Some("app3"), 0, "user", None),
+          SparkListenerJobStart(1, 0, Seq.empty)),
+        rollFile = false)
       writer3.stop()
 
       // The 2nd checkForLogs should scan/update app3 only since it is newer than app1
@@ -1836,9 +2052,12 @@ abstract class GlobFsHistoryProviderSuite
       val writer = new RollingEventLogFilesWriter("app", None, dir.toURI, conf, hadoopConf)
       writer.start()
 
-      writeEventsToRollingWriter(writer, Seq(
-        SparkListenerApplicationStart("app", Some("app"), 0, "user", None),
-        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      writeEventsToRollingWriter(
+        writer,
+        Seq(
+          SparkListenerApplicationStart("app", Some("app"), 0, "user", None),
+          SparkListenerJobStart(1, 0, Seq.empty)),
+        rollFile = false)
       provider.checkForLogs()
       provider.cleanLogs()
       assert(dir.listFiles().length === 1)
@@ -1863,17 +2082,25 @@ abstract class GlobFsHistoryProviderSuite
     val provider = new GlobFsHistoryProvider(conf)
     val logs = newLogFiles("app1", Some("attempt1"), inProgress = false)
     logs.foreach { file =>
-      writeFile(file, None,
-        SparkListenerApplicationStart("app1", Some("app1"), System.currentTimeMillis(),
-          "test", Some("attempt1")),
-      SparkListenerEnvironmentUpdate(Map(
-        "Spark Properties" -> List((UI_VIEW_ACLS.key, "user"), (UI_VIEW_ACLS_GROUPS.key, "group")),
-        "Hadoop Properties" -> Seq.empty,
-        "JVM Information" -> Seq.empty,
-        "System Properties" -> Seq.empty,
-        "Metrics Properties" -> Seq.empty,
-          "Classpath Entries" -> Seq.empty
-        )),
+      writeFile(
+        file,
+        None,
+        SparkListenerApplicationStart(
+          "app1",
+          Some("app1"),
+          System.currentTimeMillis(),
+          "test",
+          Some("attempt1")),
+        SparkListenerEnvironmentUpdate(
+          Map(
+            "Spark Properties" -> List(
+              (UI_VIEW_ACLS.key, "user"),
+              (UI_VIEW_ACLS_GROUPS.key, "group")),
+            "Hadoop Properties" -> Seq.empty,
+            "JVM Information" -> Seq.empty,
+            "System Properties" -> Seq.empty,
+            "Metrics Properties" -> Seq.empty,
+            "Classpath Entries" -> Seq.empty)),
         SparkListenerApplicationEnd(System.currentTimeMillis()))
     }
 
@@ -1910,7 +2137,7 @@ abstract class GlobFsHistoryProviderSuite
 
   test("SPARK-52327: Reduce the number of doMergeApplicationListing invocations") {
     class TestGlobFsHistoryProvider(conf: SparkConf, clock: Clock)
-      extends GlobFsHistoryProvider(conf, clock) {
+        extends GlobFsHistoryProvider(conf, clock) {
       var doMergeApplicationListingCall = 0
       override private[history] def doMergeApplicationListing(
           reader: EventLogFileReader,
@@ -1929,10 +2156,11 @@ abstract class GlobFsHistoryProviderSuite
 
     val logs1 = newLogFiles("app1", Some("attempt1"), inProgress = false)
     logs1.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1")),
-        SparkListenerApplicationEnd(2L)
-      )
+        SparkListenerApplicationEnd(2L))
     }
     logs1.foreach { file =>
       file.setLastModified(0L)
@@ -1940,10 +2168,11 @@ abstract class GlobFsHistoryProviderSuite
 
     val logs2 = newLogFiles("app1", Some("attempt2"), inProgress = false)
     logs2.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerApplicationStart("app1", Some("app1"), 2L, "test", Some("attempt2")),
-        SparkListenerApplicationEnd(4L)
-      )
+        SparkListenerApplicationEnd(4L))
     }
     logs2.foreach { file =>
       file.setLastModified(clock.getTimeMillis())
@@ -1951,24 +2180,25 @@ abstract class GlobFsHistoryProviderSuite
 
     val logs3 = newLogFiles("app2", Some("attempt1"), inProgress = false)
     logs3.foreach { file =>
-      writeFile(file, None,
+      writeFile(
+        file,
+        None,
         SparkListenerApplicationStart("app2", Some("app1"), 3L, "test", Some("attempt1")),
-        SparkListenerApplicationEnd(4L)
-      )
+        SparkListenerApplicationEnd(4L))
     }
     logs3.foreach { file =>
       file.setLastModified(0L)
     }
 
-    provider.getListing().size should be (0)
+    provider.getListing().size should be(0)
 
     // Move the clock forward so log1 and log3 exceed the max age.
     clock.advance(maxAge)
     // Avoid unnecessary parse, the expired log files would be cleaned by checkForLogs().
     provider.checkForLogs()
 
-    provider.doMergeApplicationListingCall should be (1)
-    provider.getListing().size should be (1)
+    provider.doMergeApplicationListingCall should be(1)
+    provider.getListing().size should be(1)
 
     logs1.foreach { file =>
       assert(!file.exists())
@@ -1994,22 +2224,22 @@ abstract class GlobFsHistoryProviderSuite
   }
 
   /**
-   * Asks the provider to check for logs and calls a function to perform checks on the updated
-   * app list. Example:
+   * Asks the provider to check for logs and calls a function to perform checks on the updated app
+   * list. Example:
    *
-   *     updateAndCheck(provider) { list =>
-   *       // asserts
-   *     }
+   * updateAndCheck(provider) { list => // asserts }
    */
-  private def updateAndCheck(provider: GlobFsHistoryProvider)
-      (checkFn: Seq[ApplicationInfo] => Unit): Unit = {
+  private def updateAndCheck(provider: GlobFsHistoryProvider)(
+      checkFn: Seq[ApplicationInfo] => Unit): Unit = {
     provider.checkForLogs()
     provider.cleanLogs()
     checkFn(provider.getListing().toSeq)
   }
 
-  private def writeFile(file: File, codec: Option[CompressionCodec],
-    events: SparkListenerEvent*) = {
+  private def writeFile(
+      file: File,
+      codec: Option[CompressionCodec],
+      events: SparkListenerEvent*) = {
     val fstream = new FileOutputStream(file)
     val cstream = codec.map(_.compressedContinuousOutputStream(fstream)).getOrElse(fstream)
     val bstream = new BufferedOutputStream(cstream)
@@ -2059,18 +2289,19 @@ abstract class GlobFsHistoryProviderSuite
     val cluster = s"cluster$executorSeqNum"
     val logUrlPrefix = s"http://$host:8888/$appId/$container/origin"
 
-    val executorLogUrlMap = Map("stdout" -> s"$logUrlPrefix/stdout",
-      "stderr" -> s"$logUrlPrefix/stderr")
+    val executorLogUrlMap =
+      Map("stdout" -> s"$logUrlPrefix/stdout", "stderr" -> s"$logUrlPrefix/stderr")
 
-    val extraAttributes = if (includingLogFiles) Map("LOG_FILES" -> "stdout,stderr") else Map.empty
-    val executorAttributes = Map("CONTAINER_ID" -> container, "CLUSTER_ID" -> cluster,
-      "USER" -> user) ++ extraAttributes
+    val extraAttributes =
+      if (includingLogFiles) Map("LOG_FILES" -> "stdout,stderr") else Map.empty
+    val executorAttributes =
+      Map("CONTAINER_ID" -> container, "CLUSTER_ID" -> cluster, "USER" -> user) ++ extraAttributes
 
     new ExecutorInfo(host, 1, executorLogUrlMap, executorAttributes)
   }
 
   private class SafeModeTestProvider(conf: SparkConf, clock: Clock)
-    extends GlobFsHistoryProvider(conf, clock) {
+      extends GlobFsHistoryProvider(conf, clock) {
 
     @volatile var inSafeMode = true
 
@@ -2080,5 +2311,10 @@ abstract class GlobFsHistoryProviderSuite
     private[history] override def isFsInSafeMode(): Boolean = inSafeMode
 
   }
+}
 
+@ExtendedLevelDBTest
+class LevelDBBackendGlobFsHistoryProviderSuite extends GlobFsHistoryProviderSuite {
+  override protected def diskBackend: HybridStoreDiskBackend.Value =
+    HybridStoreDiskBackend.LEVELDB
 }
