@@ -25,7 +25,7 @@ on:
       java:
         required: false
         type: string
-        default: 17
+        default: 21
       branch:
         description: Branch to run the build against
         required: false
@@ -372,7 +372,7 @@ jobs:
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
         # SPARK-46283: should delete the following env replacement after SPARK 3.x EOL
-        if [[ "$MODULES_TO_TEST" == *"streaming-kinesis-asl"* ]] && [[ "${{ inputs.branch }}" =~ ^branch-3 ]]; then 
+        if [[ "$MODULES_TO_TEST" == *"streaming-kinesis-asl"* ]] && [[ "${{ inputs.branch }}" =~ ^branch-3 ]]; then
           MODULES_TO_TEST=${MODULES_TO_TEST//streaming-kinesis-asl, /}
         fi
         export SERIAL_SBT_TESTS=1

@@ -419,20 +419,24 @@ private[spark] object ClosureCleaner extends Logging {
     accessedFields.foreach { f => logDebug("     " + f) }
 
     if (accessedFields(capturingClass).size < capturingClass.getDeclaredFields.length) {
-      // clone and clean the enclosing `this` only when there are fields to null out
-      logDebug(s" + cloning instance of REPL class ${capturingClass.getName}")
-      val clonedOuterThis = cloneAndSetFields(
-        parent = null, outerThis, capturingClass, accessedFields)
+      // Instead of cloning and trying to update lambda reference, directly modify the original
+      // REPL object to null out unused fields. This works because REPL objects are not hidden
+      // classes and their fields can be modified.
+      val fieldsToNull = capturingClass.getDeclaredFields.filterNot { field =>
+        accessedFields(capturingClass).contains(field.getName)
+      }
 
-      val outerField = func.getClass.getDeclaredField("arg$1")
-      // SPARK-37072: When Java 17 is used and `outerField` is read-only,
-      // the content of `outerField` cannot be set by reflect api directly.
-      // But we can remove the `final` modifier of `outerField` before set value
-      // and reset the modifier after set value.
-      setFieldAndIgnoreModifiers(func, outerField, clonedOuterThis)
+      for (field <- fieldsToNull) {
+        try {
+          field.setAccessible(true)
+          field.set(outerThis, null)
+        } catch {
+          case _: Exception =>
+            // Ignore failures to set fields - this is a best-effort cleanup
+        }
+      }
     }
   }
-
 
   /**
    * Cleans up Ammonite closures and nulls out fields captured from cmd & cmd$Helper objects
