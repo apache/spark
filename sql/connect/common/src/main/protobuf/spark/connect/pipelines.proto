@@ -143,7 +143,7 @@ message PipelineCommandResult {
 // The type of dataset.
 enum DatasetType {
   // Safe default value. Should not be used.
-  DATASET_UNSPECIFIED = 0;
+  DATASET_TYPE_UNSPECIFIED = 0;
   // A materialized view dataset which is published to the catalog
   MATERIALIZED_VIEW = 1;
   // A table which is published to the catalog
@@ -152,9 +152,9 @@ enum DatasetType {
   TEMPORARY_VIEW = 3;
 }
 
-// A response containing events emitted during the run of a pipeline.
-message PipelineEventsResult {
-  repeated PipelineEvent events = 1;
+// A response containing an event emitted during the run of a pipeline.
+message PipelineEventResult {
+  PipelineEvent event = 1;
 }
 
 // An event emitted during the run of a graph.

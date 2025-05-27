@@ -400,9 +400,8 @@ message ExecutePlanResponse {
     // ML command response
     MlCommandResult ml_command_result = 20;
 
-    // Response containing pipeline events that are streamed back to the client during a pipeline
-    // run
-    PipelineEventsResult pipeline_events_result = 21;
+    // Response containing pipeline event that is streamed back to the client during a pipeline run
+    PipelineEventResult pipeline_event_result = 21;
 
     // Pipeline command response
     PipelineCommandResult pipeline_command_result = 22;
