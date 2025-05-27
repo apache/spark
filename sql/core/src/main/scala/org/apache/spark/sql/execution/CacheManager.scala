@@ -95,11 +95,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       tableName: Option[String],
       storageLevel: StorageLevel): Unit = {
     if (query.queryExecution.analyzed.isInstanceOf[IgnoreCachedData]) {
-      logWarning(
-        s"""
+      logWarning(s"""
            |Asked to cache the plans that are inapplicable for caching:
-           |${query.queryExecution.analyzed}
-        log""".stripMargin)
+           |${MDC(query.queryExecution.analyzed)}
+        """.stripMargin)
     } else {
       cacheQueryInternal(
         query.sparkSession,
