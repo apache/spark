@@ -97,7 +97,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     if (query.queryExecution.analyzed.isInstanceOf[IgnoreCachedData]) {
       logWarning(s"""
            |Asked to cache the plans that are inapplicable for caching:
-           |${MDC(query.queryExecution.analyzed)}
+           |${MDC(LOGICAL_PLAN, query.queryExecution.analyzed)}
         """.stripMargin)
     } else {
       cacheQueryInternal(
