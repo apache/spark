@@ -91,7 +91,7 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
     }
   }
 
-  testOverride("user defined functions") { case (key, value) =>
+  testOverride("user defined SQL functions") { case (key, value) =>
     withTable("test_table", "test_table2") {
       spark.sql("CREATE TABLE test_table AS SELECT id as a FROM range(10)")
       spark.sql("CREATE TABLE test_table2 AS SELECT id as a, (id + 1) as b FROM range(10)")
@@ -124,7 +124,7 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
     }
   }
 
-  testOverride("user defined functions - test conf disabled") { case (key, value) =>
+  testOverride("user defined SQL functions - test conf disabled") { case (key, value) =>
     withTable("test_table", "test_table2") {
       spark.sql("CREATE TABLE test_table AS SELECT id as a FROM range(10)")
       spark.sql("CREATE TABLE test_table2 AS SELECT id as a, (id + 1) as b FROM range(10)")

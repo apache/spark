@@ -243,8 +243,7 @@ object AnalysisContext {
 }
 
 object Analyzer {
-  // List of configurations that should be passed on when resolving views and User-Defined Table
-  // Valued functions
+  // List of configurations that should be passed on when resolving views and SQL UDF.
   private val RETAINED_ANALYSIS_FLAGS = Seq(
     // retainedHiveConfigs
     // TODO: remove these Hive-related configs after the `RelationConversions` is moved to
