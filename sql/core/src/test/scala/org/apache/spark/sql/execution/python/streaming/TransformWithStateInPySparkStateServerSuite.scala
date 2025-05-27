@@ -64,7 +64,7 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
   var valueStateMap: mutable.HashMap[String, ValueStateInfo] = mutable.HashMap()
   var listStateMap: mutable.HashMap[String, ListStateInfo] = mutable.HashMap()
   var mapStateMap: mutable.HashMap[String, MapStateInfo] = mutable.HashMap()
-  var expiryTimerIter: Iterator[(Any, Long)] = _
+  var expiryTimerIter: mutable.HashMap[String, Iterator[(Row, Long)]] = _
   var listTimerMap: mutable.HashMap[String, Iterator[Long]] = mutable.HashMap()
 
   override def beforeEach(): Unit = {
@@ -87,7 +87,8 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     // reset the iterator map to empty so be careful to call it if you want to access the iterator
     // map later.
     val testRow = getIntegerRow(1)
-    expiryTimerIter = Iterator.single(testRow, 1L /* a random long type value */)
+    expiryTimerIter = mutable.HashMap[String, Iterator[(Row, Long)]](
+      iteratorId -> Iterator.single((testRow, 1L /* a random long type value */)))
     val iteratorMap = mutable.HashMap[String, Iterator[Row]](iteratorId -> Iterator(testRow))
     val keyValueIteratorMap = mutable.HashMap[String, Iterator[(Row, Row)]](iteratorId ->
       Iterator((testRow, testRow)))
