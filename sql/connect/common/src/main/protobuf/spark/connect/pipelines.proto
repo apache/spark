@@ -105,7 +105,7 @@ message PipelineCommand {
     // SQL configurations set when running this flow.
     map<string, string> sql_conf = 5;
 
-    // If true, this flow will only be run once per execution.
+    // If true, this flow will only be run once per full refresh.
     optional bool once = 6;
   }
 
