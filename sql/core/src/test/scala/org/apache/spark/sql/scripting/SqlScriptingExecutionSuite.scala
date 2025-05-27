@@ -2744,7 +2744,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected = expected)
   }
 
-  test("ES-1406131: Exception handler in a FOR loop - with condition") {
+  test("Exception handler in a FOR loop - with condition") {
     withTable("t") {
       withView("v") {
         val sqlScript =
@@ -2771,7 +2771,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("ES-1406131: Exception handler in a FOR loop - with SQL state") {
+  test("Exception handler in a FOR loop - with SQL state") {
     withTable("t") {
       withView("v") {
         val sqlScript =
@@ -2796,5 +2796,147 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         verifySqlScriptResult(sqlScript, expected)
       }
     }
+  }
+
+  test("Exception in a last statement in if/else") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  IF true THEN
+        |    SELECT 1/0;
+        |  END IF;
+        |  SELECT 2;
+        |END;
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))     // select 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("Exception in a last statement in simple case") {
+    val commands =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  CASE 1
+        |    WHEN 1 THEN
+        |      SELECT 1/0;
+        |  END CASE;
+        |  SELECT 2;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(1)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("Exception in a last statement in searched case") {
+    val commands =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  CASE
+        |    WHEN 1=1 THEN
+        |      SELECT 1/0;
+        |  END CASE;
+        |  SELECT 2;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(1)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("Exception in a last statement in - while") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE i INT DEFAULT 0;
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  WHILE i < 2 DO
+        |    SELECT 1/0;
+        |  END WHILE;
+        |  SELECT 2;
+        |END;
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))     // select 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("Exception in a last statement in - repeat") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE i INT DEFAULT 0;
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  REPEAT
+        |    SELECT 1/0;
+        |  UNTIL i = 2
+        |  END REPEAT;
+        |  SELECT 2;
+        |END;
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))     // select 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("Exception in a last statement in loop") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  LOOP
+        |    SELECT 1/0;
+        |  END LOOP;
+        |  SELECT 2;
+        |END;
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))     // select 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("Exception in a last statement in for") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE i INT DEFAULT 0;
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  FOR row AS (SELECT * FROM VALUES (1), (2), (3) AS tbl(i)) DO
+        |    SELECT 1/0;
+        |  END FOR;
+        |  SELECT 2;
+        |END;
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))     // select 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
   }
 }

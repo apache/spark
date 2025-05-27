@@ -419,43 +419,47 @@ class IfElseStatementExec(
     new Iterator[CompoundStatementExec] {
       override def hasNext: Boolean = curr.nonEmpty
 
-      override def next(): CompoundStatementExec = state match {
-        case IfElseState.Condition =>
-          if (curr.exists(_.isInstanceOf[LeaveStatementExec])) {
-            // Handling the case when condition evaluation throws an exception. Exception handling
-            //   mechanism will replace condition with the appropriate LEAVE statement if the
-            //   relevant condition handler was found.
-            return curr.get
-          }
+      override def next(): CompoundStatementExec = {
+        if (curr.exists(_.isInstanceOf[LeaveStatementExec])) {
+          // Handling two cases when an exception is thrown:
+          //   1. During condition evaluation - exception handling mechanism will replace condition
+          //     with the appropriate LEAVE statement if the relevant condition handler was found.
+          //   2. In the last statement of the body - curr would already be set to None when
+          //     LEAVE statement is injected to it (i.e. LEAVE statement would replace None).
+          return curr.get
+        }
 
-          val condition = curr.get.asInstanceOf[SingleStatementExec]
-          if (evaluateBooleanCondition(session, condition)) {
-            state = IfElseState.Body
-            curr = Some(conditionalBodies(clauseIdx))
-          } else {
-            clauseIdx += 1
-            if (clauseIdx < conditionsCount) {
-              // There are ELSEIF clauses remaining.
-              state = IfElseState.Condition
-              curr = Some(conditions(clauseIdx))
-            } else if (elseBody.isDefined) {
-              // ELSE clause exists.
+        state match {
+          case IfElseState.Condition =>
+            val condition = curr.get.asInstanceOf[SingleStatementExec]
+            if (evaluateBooleanCondition(session, condition)) {
               state = IfElseState.Body
-              curr = Some(elseBody.get)
+              curr = Some(conditionalBodies(clauseIdx))
             } else {
-              // No remaining clauses.
+              clauseIdx += 1
+              if (clauseIdx < conditionsCount) {
+                // There are ELSEIF clauses remaining.
+                state = IfElseState.Condition
+                curr = Some(conditions(clauseIdx))
+              } else if (elseBody.isDefined) {
+                // ELSE clause exists.
+                state = IfElseState.Body
+                curr = Some(elseBody.get)
+              } else {
+                // No remaining clauses.
+                curr = None
+              }
+            }
+            condition
+          case IfElseState.Body =>
+            assert(curr.get.isInstanceOf[CompoundBodyExec])
+            val currBody = curr.get.asInstanceOf[CompoundBodyExec]
+            val retStmt = currBody.getTreeIterator.next()
+            if (!currBody.getTreeIterator.hasNext) {
               curr = None
             }
-          }
-          condition
-        case IfElseState.Body =>
-          assert(curr.get.isInstanceOf[CompoundBodyExec])
-          val currBody = curr.get.asInstanceOf[CompoundBodyExec]
-          val retStmt = currBody.getTreeIterator.next()
-          if (!currBody.getTreeIterator.hasNext) {
-            curr = None
-          }
-          retStmt
+            retStmt
+        }
       }
     }
 
@@ -588,43 +592,47 @@ class SearchedCaseStatementExec(
     new Iterator[CompoundStatementExec] {
       override def hasNext: Boolean = curr.nonEmpty
 
-      override def next(): CompoundStatementExec = state match {
-        case CaseState.Condition =>
-          if (curr.exists(_.isInstanceOf[LeaveStatementExec])) {
-            // Handling the case when condition evaluation throws an exception. Exception handling
-            //   mechanism will replace condition with the appropriate LEAVE statement if the
-            //   relevant condition handler was found.
-            return curr.get
-          }
+      override def next(): CompoundStatementExec = {
+        if (curr.exists(_.isInstanceOf[LeaveStatementExec])) {
+          // Handling two cases when an exception is thrown:
+          //   1. During condition evaluation - exception handling mechanism will replace condition
+          //     with the appropriate LEAVE statement if the relevant condition handler was found.
+          //   2. In the last statement of the body - curr would already be set to None when
+          //     LEAVE statement is injected to it (i.e. LEAVE statement would replace None).
+          return curr.get
+        }
 
-          val condition = curr.get.asInstanceOf[SingleStatementExec]
-          if (evaluateBooleanCondition(session, condition)) {
-            state = CaseState.Body
-            curr = Some(conditionalBodies(clauseIdx))
-          } else {
-            clauseIdx += 1
-            if (clauseIdx < conditionsCount) {
-              // There are WHEN clauses remaining.
-              state = CaseState.Condition
-              curr = Some(conditions(clauseIdx))
-            } else if (elseBody.isDefined) {
-              // ELSE clause exists.
+        state match {
+          case CaseState.Condition =>
+            val condition = curr.get.asInstanceOf[SingleStatementExec]
+            if (evaluateBooleanCondition(session, condition)) {
               state = CaseState.Body
-              curr = Some(elseBody.get)
+              curr = Some(conditionalBodies(clauseIdx))
             } else {
-              // No remaining clauses.
+              clauseIdx += 1
+              if (clauseIdx < conditionsCount) {
+                // There are WHEN clauses remaining.
+                state = CaseState.Condition
+                curr = Some(conditions(clauseIdx))
+              } else if (elseBody.isDefined) {
+                // ELSE clause exists.
+                state = CaseState.Body
+                curr = Some(elseBody.get)
+              } else {
+                // No remaining clauses.
+                curr = None
+              }
+            }
+            condition
+          case CaseState.Body =>
+            assert(curr.get.isInstanceOf[CompoundBodyExec])
+            val currBody = curr.get.asInstanceOf[CompoundBodyExec]
+            val retStmt = currBody.getTreeIterator.next()
+            if (!currBody.getTreeIterator.hasNext) {
               curr = None
             }
-          }
-          condition
-        case CaseState.Body =>
-          assert(curr.get.isInstanceOf[CompoundBodyExec])
-          val currBody = curr.get.asInstanceOf[CompoundBodyExec]
-          val retStmt = currBody.getTreeIterator.next()
-          if (!currBody.getTreeIterator.hasNext) {
-            curr = None
-          }
-          retStmt
+            retStmt
+        }
       }
     }
 
