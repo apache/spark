@@ -93,9 +93,7 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
     cmd match {
       case cmd: CreateDataSourceTableAsSelectCommand =>
         executedQuery.toSeq
-      case _ =>
-        // For other commands, delegate to the command's innerChildren
-        cmd.innerChildren
+      case _ => cmd :: Nil
     }
   }
 
