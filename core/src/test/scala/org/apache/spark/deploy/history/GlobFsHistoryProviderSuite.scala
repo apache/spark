@@ -107,11 +107,11 @@ abstract class GlobFsHistoryProviderSuite
     }
   }
 
-  test("SPARK-31608: parse application logs with HybridStore") {
+  test("SPARK-52327: parse application logs with HybridStore") {
     testAppLogParsing(false, true)
   }
 
-  test("SPARK-41685: Verify the configurable serializer for history server") {
+  test("SPARK-52327: Verify the configurable serializer for history server") {
     val conf = createTestConf()
     val serializerOfKVStore = KVUtils.serializerForHistoryServer(conf)
     assert(serializerOfKVStore.isInstanceOf[KVStoreScalaSerializer])
@@ -203,7 +203,7 @@ abstract class GlobFsHistoryProviderSuite
     }
   }
 
-  test("SPARK-3697: ignore files that cannot be read.") {
+  test("SPARK-52327 ignore files that cannot be read.") {
     // setReadable(...) does not work on Windows. Please refer JDK-6728842.
     assume(!Utils.isWindows)
 
@@ -268,7 +268,7 @@ abstract class GlobFsHistoryProviderSuite
     }
   }
 
-  test("SPARK-39439: Check final file if in-progress event log file does not exist") {
+  test("SPARK-52327: Check final file if in-progress event log file does not exist") {
     withTempDir { dir =>
       val conf = createTestConf()
       conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
@@ -333,7 +333,7 @@ abstract class GlobFsHistoryProviderSuite
     }
   }
 
-  test("SPARK-5582: empty log directory") {
+  test("SPARK-52327 empty log directory") {
     val provider = new GlobFsHistoryProvider(createTestConf())
 
     val logFiles1 = newLogFiles("app1", None, inProgress = true)
@@ -870,7 +870,7 @@ abstract class GlobFsHistoryProviderSuite
     }
   }
 
-  test("SPARK-8372: new logs with no app ID are ignored") {
+  test("SPARK-52327 new logs with no app ID are ignored") {
     val provider = new GlobFsHistoryProvider(createTestConf())
 
     // Write a new log file without an app id, to make sure it's ignored.
@@ -1207,7 +1207,7 @@ abstract class GlobFsHistoryProviderSuite
     }
   }
 
-  test("SPARK-21571: clean up removes invalid history files") {
+  test("SPARK-52327: clean up removes invalid history files") {
     val clock = new ManualClock()
     val conf = createTestConf().set(MAX_LOG_AGE_S.key, s"2d")
     val provider = new GlobFsHistoryProvider(conf, clock)
@@ -1335,7 +1335,7 @@ abstract class GlobFsHistoryProviderSuite
     }
   }
 
-  test("SPARK-24948: ignore files we don't have read permission on") {
+  test("SPARK-52327: ignore files we don't have read permission on") {
     val clock = new ManualClock(1533132471)
     val provider = new GlobFsHistoryProvider(createTestConf(), clock)
     val accessDeniedFiles = newLogFiles("accessDenied", None, inProgress = false)
@@ -1523,17 +1523,17 @@ abstract class GlobFsHistoryProviderSuite
     assert(deserializedOldObj.attemptId === oldObj.attemptId)
     assert(deserializedOldObj.fileSize === oldObj.fileSize)
 
-    // SPARK-25118: added logType: LogType.Value - expected 'null' on old format
+    // SPARK-52327: added logType: LogType.Value - expected 'null' on old format
     assert(deserializedOldObj.logType === null)
 
-    // SPARK-28869: added lastIndex: Option[Long], isComplete: Boolean - expected 'None' and
+    // SPARK-52327: added lastIndex: Option[Long], isComplete: Boolean - expected 'None' and
     // 'false' on old format. The default value for isComplete is wrong value for completed app,
     // but the value will be corrected once checkForLogs is called.
     assert(deserializedOldObj.lastIndex === None)
     assert(deserializedOldObj.isComplete === false)
   }
 
-  test("SPARK-29755 LogInfo should be serialized/deserialized by jackson properly") {
+  test("SPARK-52327 LogInfo should be serialized/deserialized by jackson properly") {
     def assertSerDe(serializer: KVStoreScalaSerializer, info: LogInfo): Unit = {
       val infoAfterSerDe = serializer.deserialize(serializer.serialize(info), classOf[LogInfo])
       assert(infoAfterSerDe === info)
@@ -1550,12 +1550,12 @@ abstract class GlobFsHistoryProviderSuite
     assertSerDe(serializer, logInfoWithIndex)
   }
 
-  test("SPARK-29755 AttemptInfoWrapper should be serialized/deserialized by jackson properly") {
+  test("SPARK-52327 AttemptInfoWrapper should be serialized/deserialized by jackson properly") {
     def assertSerDe(serializer: KVStoreScalaSerializer, attempt: AttemptInfoWrapper): Unit = {
       val attemptAfterSerDe = serializer.deserialize(serializer.serialize(attempt),
         classOf[AttemptInfoWrapper])
       assert(attemptAfterSerDe.info === attempt.info)
-      // skip comparing some fields, as they've not triggered SPARK-29755
+      // skip comparing some fields, as they've not triggered SPARK-52327
       assertOptionAfterSerde(attemptAfterSerDe.lastIndex, attempt.lastIndex)
     }
 
@@ -1571,7 +1571,7 @@ abstract class GlobFsHistoryProviderSuite
     assertSerDe(serializer, attemptInfoWithIndex)
   }
 
-  test("SPARK-29043: clean up specified event log") {
+  test("SPARK-52327: clean up specified event log") {
     val clock = new ManualClock()
     val conf = createTestConf().set(MAX_LOG_AGE_S, 0L).set(CLEANER_ENABLED, true)
     val provider = new GlobFsHistoryProvider(conf, clock)
@@ -1725,7 +1725,7 @@ abstract class GlobFsHistoryProviderSuite
     }
   }
 
-  test("SPARK-33146: don't let one bad rolling log folder prevent loading other applications") {
+  test("SPARK-52327: don't let one bad rolling log folder prevent loading other applications") {
     withTempDir { dir =>
       val conf = createTestConf(true)
       conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
@@ -1774,7 +1774,7 @@ abstract class GlobFsHistoryProviderSuite
     }
   }
 
-  test("SPARK-39225: Support spark.history.fs.update.batchSize") {
+  test("SPARK-52327: Support spark.history.fs.update.batchSize") {
     withTempDir { dir =>
       val conf = createTestConf(true)
       conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
@@ -1824,7 +1824,7 @@ abstract class GlobFsHistoryProviderSuite
     }
   }
 
-  test("SPARK-36354: EventLogFileReader should skip rolling event log directories with no logs") {
+  test("SPARK-52327: EventLogFileReader should skip rolling event log directories with no logs") {
     withTempDir { dir =>
       val conf = createTestConf(true)
       conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
@@ -1853,7 +1853,7 @@ abstract class GlobFsHistoryProviderSuite
     }
   }
 
-  test("SPARK-33215: check ui view permissions without retrieving ui") {
+  test("SPARK-52327: check ui view permissions without retrieving ui") {
     val conf = createTestConf()
       .set(HISTORY_SERVER_UI_ACLS_ENABLE, true)
       .set(HISTORY_SERVER_UI_ADMIN_ACLS, Seq("user1", "user2"))
@@ -1908,7 +1908,7 @@ abstract class GlobFsHistoryProviderSuite
     provider.stop()
   }
 
-  test("SPARK-41447: Reduce the number of doMergeApplicationListing invocations") {
+  test("SPARK-52327: Reduce the number of doMergeApplicationListing invocations") {
     class TestGlobFsHistoryProvider(conf: SparkConf, clock: Clock)
       extends GlobFsHistoryProvider(conf, clock) {
       var doMergeApplicationListingCall = 0
@@ -1981,7 +1981,7 @@ abstract class GlobFsHistoryProviderSuite
     }
   }
 
-  test("SPARK-51136: GlobFsHistoryProvider start should set Hadoop CallerContext") {
+  test("SPARK-52327: GlobFsHistoryProvider start should set Hadoop CallerContext") {
     val provider = new GlobFsHistoryProvider(createTestConf())
     provider.start()
 
