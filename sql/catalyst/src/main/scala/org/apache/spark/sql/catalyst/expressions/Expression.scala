@@ -414,10 +414,10 @@ trait Unevaluable extends Expression {
   /** Unevaluable is not foldable because we don't have an eval for it. */
   final override def foldable: Boolean = false
 
-  final override def eval(input: InternalRow = null): Any =
+  override def eval(input: InternalRow = null): Any =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
-  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
 
