@@ -3553,15 +3553,6 @@
       <id>jjwt-provided</id>
     </profile>
     <profile>
-      <id>aarch64</id>
-      <activation>
-        <os>
-          <family>linux</family>
-          <arch>aarch64</arch>
-        </os>
-      </activation>
-    </profile>
-    <profile>
       <id>applesilicon</id>
       <properties>
         <test.default.exclude.tags>org.apache.spark.tags.ChromeUITest</test.default.exclude.tags>
