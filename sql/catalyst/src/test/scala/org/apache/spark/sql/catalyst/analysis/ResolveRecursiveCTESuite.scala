@@ -77,11 +77,11 @@ class ResolveRecursiveCTESuite extends AnalysisTest {
 
     def getAfterPlan(): LogicalPlan = {
       val col = anchor.output.head
-      val recursion = UnionLoopRef(cteId, anchor.output, accumulated = false)
-        .select(col.as("n"))
+      val newAnchor = anchor.select(col.as("n"))
+      val recursion = UnionLoopRef(cteId, newAnchor.output, accumulated = false)
         .subquery("t")
       val cteDef = CTERelationDef(
-        UnionLoop(cteId, anchor, recursion).select(col.as("n")).subquery("t"),
+        UnionLoop(cteId, newAnchor, recursion).subquery("t"),
         cteId)
       val cteRef = CTERelationRef(
         cteId,
