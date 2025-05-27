@@ -158,9 +158,13 @@ if [[ "$1" == "finalize" ]]; then
   git push origin HEAD:asf-site
   cd ..
   rm -rf spark-website
-  svn rm --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Remove RC artifacts" --no-auth-cache \
-    "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-docs"
   echo "docs uploaded"
+
+  # Moves the docs from dev directory to release directory.
+  echo "Moving Spark docs to the release directory"
+  svn mv --username "$ASF_USERNAME" --password "$ASF_PASSWORD" -m"Apache Spark $RELEASE_VERSION" \
+    --no-auth-cache "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-docs/_site" "$RELEASE_LOCATION/docs/$RELEASE_VERSION"
+  echo "Spark docs moved"
 
   # Moves the binaries from dev directory to release directory.
   echo "Moving Spark binaries to the release directory"
