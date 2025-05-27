@@ -18,7 +18,6 @@
 package org.apache.spark.network.util;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.commons.lang3.SystemUtils;
 import org.apache.spark.network.shuffledb.DBBackend;
 import org.apache.spark.network.shuffledb.StoreVersion;
 import org.junit.jupiter.api.Assertions;
@@ -26,8 +25,6 @@ import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
-
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 public class DBProviderSuite {
 

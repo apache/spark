@@ -22,8 +22,6 @@ import java.io.IOException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 
-import org.apache.spark.internal.SparkLogger;
-import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.shuffledb.DB;
 import org.apache.spark.network.shuffledb.DBBackend;
 import org.apache.spark.network.shuffledb.RocksDB;
