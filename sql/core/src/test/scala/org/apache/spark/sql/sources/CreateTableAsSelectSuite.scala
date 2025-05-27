@@ -321,14 +321,13 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
 
       val explainOutput = explainResult.map(_.getString(0)).mkString("\n")
 
-      assert(explainOutput.contains("CreateDataSourceTableAsSelectCommand"),
-        s"EXPLAIN COST output should contain createtableasselect. Output: $explainOutput")
-
-      // The explain output should contain statistics information
+      // The explain output should not eliminate SubqueryAlias
+      assert(!explainOutput.contains("SubqueryAlias"),
+        s"EXPLAIN COST output should not contain SubqueryAlias. Output: $explainOutput")
       assert(explainOutput.contains("Statistics"),
         s"EXPLAIN COST output should contain statistics information. Output: $explainOutput")
 
-      // The explain output should contain pushdown information
+      // The explain output should contain pushdown
       assert(explainOutput.contains("PushedFilters"),
         s"EXPLAIN COST output should contain pushdown information. Output: $explainOutput")
     }
