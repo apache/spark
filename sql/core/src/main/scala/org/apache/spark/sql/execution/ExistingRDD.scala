@@ -356,7 +356,7 @@ case class OneRowRelationExec() extends LeafExecNode
 
   override def inputRDD: RDD[InternalRow] = rdd
 
-  override protected val createUnsafeProjection: Boolean = true
+  override protected val createUnsafeProjection: Boolean = false
 
   override protected def doCanonicalize(): SparkPlan = {
     super.doCanonicalize().asInstanceOf[OneRowRelationExec].copy()
