@@ -2318,3 +2318,8 @@ class LevelDBBackendGlobFsHistoryProviderSuite extends GlobFsHistoryProviderSuit
   override protected def diskBackend: HybridStoreDiskBackend.Value =
     HybridStoreDiskBackend.LEVELDB
 }
+
+class RocksDBBackendGlobFsHistoryProviderSuite extends GlobFsHistoryProviderSuite {
+  override protected def diskBackend: HybridStoreDiskBackend.Value =
+    HybridStoreDiskBackend.ROCKSDB
+}
