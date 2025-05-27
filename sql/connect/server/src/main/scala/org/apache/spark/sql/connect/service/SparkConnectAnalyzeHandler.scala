@@ -146,6 +146,8 @@ private[connect] class SparkConnectAnalyzeHandler(
           proto.AnalyzePlanResponse.SparkVersion
             .newBuilder()
             .setVersion(session.version)
+            .setJavaVersion(System.getProperty("java.version"))
+            .setScalaVersion(scala.util.Properties.versionNumberString)
             .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.DDL_PARSE =>
