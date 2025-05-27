@@ -591,6 +591,59 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
       }
     }
   }
+
+  test("SPARK-52312: caching dataframe created from INSERT shouldn't re-execute the command") {
+    withTable("t") {
+      createTable("t", Seq("c1", "c2"), Seq("int", "string"))
+
+      val insertDF = sql("INSERT INTO t VALUES (1, 'a'), (2, 'b')")
+      checkAnswer(spark.table("t"), Seq(Row(1, "a"), Row(2, "b")))
+
+      // Caching the DataFrame created from INSERT should not re-execute the command
+      val cachedDF = insertDF.cache()
+      checkAnswer(spark.table("t"), Seq(Row(1, "a"), Row(2, "b")))
+    }
+  }
+
+  test(
+    "SPARK-52312: caching dataframe created from INSERT OVERWRITE shouldn't re-execute the command"
+  ) {
+    withTable("t") {
+      createTable("t", Seq("c1", "c2"), Seq("int", "string"))
+
+      val insertDF = sql("INSERT OVERWRITE t VALUES (1, 'a'), (2, 'b')")
+      checkAnswer(spark.table("t"), Seq(Row(1, "a"), Row(2, "b")))
+
+      // Insert one more row after the INSERT OVERWRITE
+      sql("INSERT INTO t VALUES (3, 'c')")
+
+      // Caching the DataFrame created from INSERT should not re-execute the command
+      val cachedDF = insertDF.cache()
+      checkAnswer(spark.table("t"), Seq(Row(1, "a"), Row(2, "b"), Row(3, "c")))
+    }
+  }
+
+  test(
+    "SPARK-52312: " +
+    "caching dataframe created from dynamic INSERT OVERWRITE shouldn't re-execute the command"
+  ) {
+    withTable("t") {
+      // Create a table partitioned by c1
+      createTable("t", Seq("c1", "c2"), Seq("int", "string"), Seq("c1"))
+
+      sql(s"SET spark.sql.sources.partitionOverwriteMode = DYNAMIC")
+
+      val insertDF = sql("INSERT OVERWRITE t VALUES (1, 'a'), (2, 'b')")
+      checkAnswer(spark.table("t"), Seq(Row(1, "a"), Row(2, "b")))
+
+      // Insert one more row after the dynamic INSERT OVERWRITE, in the existing partition c1 = 1
+      sql("INSERT INTO t VALUES (1, 'c')")
+
+      // Caching the DataFrame created from INSERT should not re-execute the command
+      val cachedDF = insertDF.cache()
+      checkAnswer(spark.table("t"), Seq(Row(1, "a"), Row(2, "b"), Row(1, "c")))
+    }
+  }
 }
 
 @SQLUserDefinedType(udt = classOf[MyIntUDT])
