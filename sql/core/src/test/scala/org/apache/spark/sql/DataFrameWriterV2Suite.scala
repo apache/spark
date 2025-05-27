@@ -875,4 +875,53 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       }
     }
   }
+
+  test("SPARK-52312: caching dataframe created from INSERT shouldn't re-execute the command") {
+    spark.sql("CREATE TABLE testcat.table_name (c1 int, c2 string) USING foo")
+
+    val insertDF = spark.sql("INSERT INTO testcat.table_name VALUES (1, 'a'), (2, 'b')")
+    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1, "a"), Row(2, "b")))
+
+    // Caching the DataFrame created from INSERT should not re-execute the command
+    insertDF.cache()
+    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1, "a"), Row(2, "b")))
+  }
+
+  test(
+    "SPARK-52312: caching dataframe created from INSERT OVERWRITE shouldn't re-execute the command"
+  ) {
+    spark.sql("CREATE TABLE testcat.table_name (c1 int, c2 string) USING foo")
+
+    val insertDF = spark.sql("INSERT OVERWRITE testcat.table_name VALUES (1, 'a'), (2, 'b')")
+    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1, "a"), Row(2, "b")))
+
+    // Insert one more row after the INSERT OVERWRITE
+    spark.sql("INSERT INTO testcat.table_name VALUES (3, 'c')")
+    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1, "a"), Row(2, "b"), Row(3, "c")))
+
+    // Caching the DataFrame created from INSERT should not re-execute the command
+    insertDF.cache()
+    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1, "a"), Row(2, "b"), Row(3, "c")))
+  }
+
+  test(
+    "SPARK-52312: " +
+    "caching dataframe created from dynamic INSERT OVERWRITE shouldn't re-execute the command"
+  ) {
+    // Create a table partitioned by c1
+    spark.sql("CREATE TABLE testcat.table_name (c1 int, c2 string) USING foo PARTITIONED BY (c1)")
+
+    spark.sql(s"SET spark.sql.sources.partitionOverwriteMode = DYNAMIC")
+
+    val insertDF = sql("INSERT OVERWRITE testcat.table_name VALUES (1, 'a'), (2, 'b')")
+    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1, "a"), Row(2, "b")))
+
+    // Insert one more row after the dynamic INSERT OVERWRITE, in the existing partition c1 = 1
+    spark.sql("INSERT INTO testcat.table_name VALUES (1, 'c')")
+    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1, "a"), Row(2, "b"), Row(1, "c")))
+
+    // Caching the DataFrame created from INSERT should not re-execute the command
+    insertDF.cache()
+    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1, "a"), Row(2, "b"), Row(1, "c")))
+  }
 }
