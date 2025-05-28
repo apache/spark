@@ -2184,7 +2184,12 @@ class StringMethods:
         if expand:
             psdf = psser.to_frame()
             scol = psdf._internal.data_spark_columns[0]
-            spark_columns = [scol[i].alias(str(i)) for i in range(n + 1)]
+            if ps.get_option("compute.ansi_mode_support"):
+                spark_columns = [
+                    F.try_element_at(scol, F.lit(i + 1)).alias(str(i)) for i in range(n + 1)
+                ]
+            else:
+                spark_columns = [scol[i].alias(str(i)) for i in range(n + 1)]
             column_labels = [(i,) for i in range(n + 1)]
             internal = psdf._internal.with_new_columns(
                 spark_columns,
