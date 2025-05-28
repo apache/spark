@@ -690,8 +690,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  protected lazy val singleRowRdd = session.sparkContext.parallelize(Seq(InternalRow()), 1)
-
   object InMemoryScans extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalOperation(projectList, filters, mem: InMemoryRelation) =>
@@ -1054,7 +1052,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           generator, g.requiredChildOutput, outer,
           g.qualifiedGeneratorOutput, planLater(child)) :: Nil
       case _: logical.OneRowRelation =>
-        execution.RDDScanExec(Nil, singleRowRdd, "OneRowRelation") :: Nil
+        execution.OneRowRelationExec() :: Nil
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
