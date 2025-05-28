@@ -657,7 +657,7 @@ class FileIndexSuite extends SharedSparkSession {
     assert(FileIndexOptions.isValidOption("pathglobfilter"))
   }
 
-  test("SPARK-??????: Correctly compare root paths") {
+  test("SPARK-52339: Correctly compare root paths") {
     withTempDir { dir =>
       val file1 = new File(dir, "text1.txt")
       stringToFile(file1, "text1")
@@ -668,10 +668,12 @@ class FileIndexSuite extends SharedSparkSession {
 
       val schema = StructType(Seq(StructField("a", StringType, false)))
 
+      // Verify that the order of paths doesn't matter
       val fileIndex1a = new InMemoryFileIndex(spark, Seq(path1, path2), Map.empty, Some(schema))
       val fileIndex1b = new InMemoryFileIndex(spark, Seq(path2, path1), Map.empty, Some(schema))
       assert(fileIndex1a == fileIndex1b)
 
+      // Verify that a different number of paths does matter
       val fileIndex2a = new InMemoryFileIndex(spark, Seq(path1, path1), Map.empty, Some(schema))
       val fileIndex2b = new InMemoryFileIndex(spark, Seq(path1, path1, path1),
         Map.empty, Some(schema))
