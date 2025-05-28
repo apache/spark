@@ -896,12 +896,12 @@ object SparkDeclarativePipelines {
       val guavaVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "connect.guava.version").asInstanceOf[String]
-      val guavaFailureaccessVersion =
+      val guavaFailureAccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
       Seq(
         "com.google.guava" % "guava" % guavaVersion,
-        "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
+        "com.google.guava" % "failureaccess" % guavaFailureAccessVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
       )
     },
