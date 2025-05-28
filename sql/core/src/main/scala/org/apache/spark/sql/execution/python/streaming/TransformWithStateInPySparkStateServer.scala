@@ -273,7 +273,7 @@ class TransformWithStateInPySparkStateServer(
           sendResponse(2, s"No expired timer.")
         } else {
           sendResponseWithTimers(0, iter = iteratorOption.get) { case (key, timestamp) =>
-            (key.asInstanceOf[Row], timestamp)
+            (key, timestamp)
           }
         }
 

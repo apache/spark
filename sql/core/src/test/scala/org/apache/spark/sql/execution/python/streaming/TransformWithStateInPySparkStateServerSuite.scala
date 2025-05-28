@@ -559,13 +559,13 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
 
   test("get expiry timers") {
     val message = TimerRequest.newBuilder().setExpiryTimerRequest(
-      ExpiryTimerRequest.newBuilder().setExpiryTimestampMs(
+      ExpiryTimerRequest.newBuilder().setIteratorId(iteratorId).setExpiryTimestampMs(
         10L
       ).build()
     ).build()
     stateServer.handleTimerRequest(message)
-    verify(arrowStreamWriter).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+    verify(outputStream).write(any[Array[Byte]])
   }
 
   test("stateful processor register timer") {
@@ -598,8 +598,8 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     ).build()
     stateServer.handleStatefulProcessorCall(message)
     verify(statefulProcessorHandle, times(0)).listTimers()
-    verify(arrowStreamWriter).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+    verify(outputStream).write(any[Array[Byte]])
   }
 
   test("stateful processor list timer - iterator not in map") {
@@ -617,8 +617,8 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     when(statefulProcessorHandle.listTimers()).thenReturn(Iterator(1))
     stateServer.handleStatefulProcessorCall(message)
     verify(statefulProcessorHandle, times(1)).listTimers()
-    verify(arrowStreamWriter).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+    verify(outputStream).write(any[Array[Byte]])
   }
 
   test("utils request - parse string schema") {
