@@ -456,7 +456,7 @@ private[spark] class SparkSubmit extends Logging {
               }
               // Keep the URIs of local files with the given fragments.
               Utils.getUriBuilder(
-                localResources).fragment(resolvedUri.getFragment).build().toString
+                dest.toURI).fragment(resolvedUri.getFragment).build().toString
           } ++ avoidDownloads.map(_.toString)).mkString(",")
         }
 
