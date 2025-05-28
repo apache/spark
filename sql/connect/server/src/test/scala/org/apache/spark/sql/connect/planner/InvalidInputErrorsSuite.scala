@@ -34,7 +34,7 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
 
   val testCases = Seq(
     TestCase(
-      name = "Invalid schema data type",
+      name = "Invalid schema data type non struct for Parse",
       expectedErrorCondition = "INVALID_SCHEMA_TYPE_NON_STRUCT",
       expectedParameters = Map("dataType" -> "\"ARRAY<INT>\""),
       invalidInput = {
@@ -47,31 +47,8 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
         proto.Relation.newBuilder().setParse(parse).build()
       }),
     TestCase(
-      name = "Invalid schema string non-struct type",
-      expectedErrorCondition = "INVALID_SCHEMA.NON_STRUCT_TYPE",
-      expectedParameters = Map(
-        "inputSchema" -> """"{"type":"array","elementType":"integer","containsNull":false}"""",
-        "dataType" -> "\"ARRAY<INT>\""),
-      invalidInput = {
-        val invalidSchema = """{"type":"array","elementType":"integer","containsNull":false}"""
-
-        val dataSource = proto.Read.DataSource
-          .newBuilder()
-          .setFormat("csv")
-          .setSchema(invalidSchema)
-          .build()
-
-        val read = proto.Read
-          .newBuilder()
-          .setDataSource(dataSource)
-          .build()
-
-        proto.Relation.newBuilder().setRead(read).build()
-      }),
-    TestCase(
-      name = "Invalid output schema type for TransformWithStateInPandas",
-      expectedErrorCondition =
-        "INVALID_OUTPUT_SCHEMA_TYPE_FOR_TRANSFORM_WITH_STATE_IN_PANDAS_NON_STRUCT",
+      name = "Invalid schema type non struct for TransformWithState",
+      expectedErrorCondition = "INVALID_SCHEMA_TYPE_NON_STRUCT",
       expectedParameters = Map("dataType" -> "\"ARRAY<INT>\""),
       invalidInput = {
         val pythonUdf = proto.CommonInlineUserDefinedFunction
@@ -96,6 +73,28 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
           .build()
 
         proto.Relation.newBuilder().setGroupMap(groupMap).build()
+      }),
+    TestCase(
+      name = "Invalid schema string non struct type",
+      expectedErrorCondition = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      expectedParameters = Map(
+        "inputSchema" -> """"{"type":"array","elementType":"integer","containsNull":false}"""",
+        "dataType" -> "\"ARRAY<INT>\""),
+      invalidInput = {
+        val invalidSchema = """{"type":"array","elementType":"integer","containsNull":false}"""
+
+        val dataSource = proto.Read.DataSource
+          .newBuilder()
+          .setFormat("csv")
+          .setSchema(invalidSchema)
+          .build()
+
+        val read = proto.Read
+          .newBuilder()
+          .setDataSource(dataSource)
+          .build()
+
+        proto.Relation.newBuilder().setRead(read).build()
       }))
 
   // Run all test cases

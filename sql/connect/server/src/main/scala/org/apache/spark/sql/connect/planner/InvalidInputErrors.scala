@@ -96,7 +96,7 @@ object InvalidInputErrors {
   def schemaRequiredForLocalRelation(): InvalidPlanInput =
     InvalidPlanInput("Schema for LocalRelation is required when the input data is not provided.")
 
-  def invalidSchemaNonStructType(schema: String, dataType: DataType): InvalidPlanInput =
+  def invalidSchemaStringNonStructType(schema: String, dataType: DataType): InvalidPlanInput =
     invalidPlanInput(
       "INVALID_SCHEMA.NON_STRUCT_TYPE",
       Map("inputSchema" -> quoteByDefault(schema), "dataType" -> toSQLType(dataType)))
@@ -113,7 +113,7 @@ object InvalidInputErrors {
   def doesNotSupport(what: String): InvalidPlanInput =
     InvalidPlanInput(s"Does not support $what")
 
-  def invalidSchemaType(dataType: DataType): InvalidPlanInput =
+  def invalidSchemaTypeNonStruct(dataType: DataType): InvalidPlanInput =
     invalidPlanInput("INVALID_SCHEMA_TYPE_NON_STRUCT", Map("dataType" -> toSQLType(dataType)))
 
   def expressionIdNotSupported(exprId: Int): InvalidPlanInput =
@@ -196,11 +196,6 @@ object InvalidInputErrors {
   def usingColumnsOrJoinConditionSetInJoin(): InvalidPlanInput =
     InvalidPlanInput("Using columns or join conditions cannot be set at the same time in Join")
 
-  def invalidStateSchemaTypeForFlatMapGroupsWithState(dataType: DataType): InvalidPlanInput =
-    invalidPlanInput(
-      "INVALID_STATE_SCHEMA_TYPE_FOR_FLAT_MAP_GROUPS_WITH_STATE_NON_STRUCT",
-      Map("dataType" -> toSQLType(dataType)))
-
   def sqlCommandExpectsSqlOrWithRelations(other: proto.Relation.RelTypeCase): InvalidPlanInput =
     InvalidPlanInput(s"SQL command expects either a SQL or a WithRelations, but got $other")
 
@@ -221,16 +216,6 @@ object InvalidInputErrors {
 
   def invalidBucketCount(numBuckets: Int): InvalidCommandInput =
     InvalidCommandInput("INVALID_BUCKET_COUNT", Map("numBuckets" -> numBuckets.toString))
-
-  def invalidPythonUdtfReturnType(dataType: DataType): InvalidPlanInput =
-    invalidPlanInput(
-      "INVALID_PYTHON_UDTF_RETURN_TYPE_NON_STRUCT",
-      Map("dataType" -> toSQLType(dataType)))
-
-  def invalidOutputSchemaTypeForTransformWithStateInPandas(dataType: DataType): InvalidPlanInput =
-    invalidPlanInput(
-      "INVALID_OUTPUT_SCHEMA_TYPE_FOR_TRANSFORM_WITH_STATE_IN_PANDAS_NON_STRUCT",
-      Map("dataType" -> toSQLType(dataType)))
 
   def unsupportedUserDefinedFunctionImplementation(clazz: Class[_]): InvalidPlanInput =
     InvalidPlanInput(s"Unsupported UserDefinedFunction implementation: ${clazz}")
