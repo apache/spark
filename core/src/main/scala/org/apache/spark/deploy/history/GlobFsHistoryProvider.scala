@@ -268,13 +268,14 @@ private[history] class GlobFsHistoryProvider(conf: SparkConf, clock: Clock)
     // Validate the log directory.
     val path = new Path(logDir)
     try {
-      if (!fs.getFileStatus(path).isDirectory) {
+      val matchedStatuses = fs.globStatus(path)
+      if (matchedStatuses == null || matchedStatuses.isEmpty)  {
         throw new IllegalArgumentException(
-          "Logging directory specified is not a directory: %s".format(logDir))
+          "Logging directory glob specified is not any directory: %s".format(logDir))
       }
     } catch {
       case f: FileNotFoundException =>
-        var msg = s"Log directory specified does not exist: $logDir"
+        var msg = s"Log directory specified by glob does not exist: $logDir"
         if (logDir == DEFAULT_LOG_DIR) {
           msg += " Did you configure the correct one through spark.history.fs.logDirectory?"
         }
@@ -507,7 +508,7 @@ private[history] class GlobFsHistoryProvider(conf: SparkConf, clock: Clock)
       // In checkForLogs()
       val updated = subDirs
         .flatMap { subDir =>
-          val fullSubDirPath = new Path(logDir, subDir.getPath.getName()) // Preserve full path
+          val fullSubDirPath = new Path(subDir.getPath().toString()) // Preserve full path
           Option(fs.listStatus(fullSubDirPath))
             .map(_.toImmutableArraySeq)
             .getOrElse(Nil)
