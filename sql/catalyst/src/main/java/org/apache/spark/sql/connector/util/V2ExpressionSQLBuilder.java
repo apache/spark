@@ -181,9 +181,8 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitJoinColumn(JoinColumn column) {
-    List<String> fullyQualifiedName = new ArrayList<>(Arrays.asList(column.qualifier));
-    fullyQualifiedName.add(column.name);
-    return joinListToString(fullyQualifiedName, ".", "", "");
+    throw new SparkIllegalArgumentException(
+      "_LEGACY_ERROR_TEMP_3207", Map.of("expr", String.valueOf(column)));
   }
 
   protected String visitIn(String v, List<String> list) {
