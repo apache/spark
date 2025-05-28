@@ -26,7 +26,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * Test suite for converting a [[PipelineDefinition]]s into a connected [[DataflowGraph]]. These
+ * Test suite for resolving the flows in a [[DataflowGraph]]. These
  * examples are all semantically correct and logically correct and connect should not result in any
  * errors.
  */

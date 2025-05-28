@@ -23,7 +23,7 @@ import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistration
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
 /**
- * Test suite for converting one or more [[Pipeline]]s into a connected [[DataflowGraph]]. These
+ * Test suite for resolving the flows in a [[DataflowGraph]]. These
  * examples are all semantically correct but contain logical errors which should be found
  * when connect is called and thrown when validate() is called.
  */
