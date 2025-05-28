@@ -301,7 +301,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-48660: EXPLAIN COST should show statistics") {
+  test("SPARK-48660: EXPLAIN COST should exclude SubqueryAlias") {
     withTable("source_table") {
       // Create source table with data
       sql("""

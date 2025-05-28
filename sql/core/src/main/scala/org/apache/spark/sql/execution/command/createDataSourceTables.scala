@@ -22,7 +22,6 @@ import java.net.URI
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, Statistics, WithCTE}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils}
@@ -148,11 +147,7 @@ case class CreateDataSourceTableAsSelectCommand(
     outputColumnNames: Seq[String])
   extends LeafRunnableCommand with CTEInChildren {
   assert(query.resolved)
-
-  // Override to return the eliminated query as innerChildren to help correct the explain result.
-  override def innerChildren: Seq[LogicalPlan] = {
-    Seq(EliminateSubqueryAliases(query))
-  }
+  override def innerChildren: Seq[LogicalPlan] = query :: Nil
 
   // Override stats to return stats from the inner query
   override def stats: Statistics = query.stats
