@@ -90,15 +90,15 @@ trait FlowFunction extends Logging {
 /**
  * Holds the [[DataFrame]] returned by a [[FlowFunction]] along with the inputs used to
  * construct it.
- * @param usedBatchInputs the identifiers of the complete inputs read by the flow
- * @param usedStreamingInputs the identifiers of the incremental inputs read by the flow
+ * @param batchInputs the complete inputs read by the flow
+ * @param sreamingInputs the incremental inputs read by the flow
  * @param usedExternalInputs the identifiers of the external inputs read by the flow
  * @param dataFrame the [[DataFrame]] expression executed by the flow if the flow can be resolved
  */
 case class FlowFunctionResult(
     requestedInputs: Set[TableIdentifier],
-    usedBatchInputs: Set[ResolvedInput],
-    usedStreamingInputs: Set[ResolvedInput],
+    batchInputs: Set[ResolvedInput],
+    streamingInputs: Set[ResolvedInput],
     usedExternalInputs: Set[String],
     dataFrame: Try[DataFrame],
     sqlConf: Map[String, String],
@@ -113,12 +113,6 @@ case class FlowFunctionResult(
     (batchInputs ++ streamingInputs).map(_.input.identifier)
   }
 
-  /** Names of [[Input]]s read completely by this [[Flow]]. */
-  def batchInputs: Set[ResolvedInput] = usedBatchInputs
-
-  /** Names of [[Input]]s read incrementally by this [[Flow]]. */
-  def streamingInputs: Set[ResolvedInput] = usedStreamingInputs
-
   /** Returns errors that occurred when attempting to analyze this [[Flow]]. */
   def failure: Seq[Throwable] = {
     dataFrame.failed.toOption.toSeq
@@ -129,35 +123,17 @@ case class FlowFunctionResult(
 }
 
 /** A [[Flow]] whose output schema and dependencies aren't known. */
-class UnresolvedFlow(
-    val identifier: TableIdentifier,
-    val destinationIdentifier: TableIdentifier,
-    val func: FlowFunction,
-    val currentCatalog: Option[String],
-    val currentDatabase: Option[String],
-    val sqlConf: Map[String, String],
-    val comment: Option[String] = None,
+case class UnresolvedFlow(
+    identifier: TableIdentifier,
+    destinationIdentifier: TableIdentifier,
+    func: FlowFunction,
+    currentCatalog: Option[String],
+    currentDatabase: Option[String],
+    sqlConf: Map[String, String],
+    comment: Option[String] = None,
     override val once: Boolean,
     override val origin: QueryOrigin
-) extends Flow {
-  def copy(
-      identifier: TableIdentifier = identifier,
-      destinationIdentifier: TableIdentifier = destinationIdentifier,
-      sqlConf: Map[String, String] = sqlConf
-  ): UnresolvedFlow = {
-    new UnresolvedFlow(
-      identifier = identifier,
-      destinationIdentifier = destinationIdentifier,
-      func = func,
-      currentCatalog = currentCatalog,
-      currentDatabase = currentDatabase,
-      sqlConf = sqlConf,
-      comment = comment,
-      once = once,
-      origin = origin
-    )
-  }
-}
+) extends Flow
 
 /**
  * A [[Flow]] whose flow function has been invoked, meaning either:

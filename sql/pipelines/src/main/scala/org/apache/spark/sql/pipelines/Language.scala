@@ -19,6 +19,8 @@ package org.apache.spark.sql.pipelines
 
 sealed trait Language {}
 
-case class Python() extends Language {}
+object Language {
+  case class Python() extends Language {}
+  case class Sql() extends Language {}
+}
 
-case class Sql() extends Language {}

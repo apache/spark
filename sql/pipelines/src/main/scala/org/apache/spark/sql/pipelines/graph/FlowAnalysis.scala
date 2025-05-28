@@ -17,23 +17,14 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import scala.util.Try
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CTESubstitution, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
-import org.apache.spark.sql.classic.{DataFrame, Dataset, DataStreamReader, SparkSession}
-import org.apache.spark.sql.pipelines.{AnalysisWarning, Sql}
-import org.apache.spark.sql.pipelines.graph.GraphIdentifierManager.{
-  ExternalDatasetIdentifier,
-  InternalDatasetIdentifier
-}
-import org.apache.spark.sql.pipelines.util.{
-  BatchReadOptions,
-  InputReadOptions,
-  StreamingReadOptions
-}
+import org.apache.spark.sql.classic.{DataFrame, DataStreamReader, Dataset, SparkSession}
+import org.apache.spark.sql.pipelines.{AnalysisWarning, Language}
+import org.apache.spark.sql.pipelines.graph.GraphIdentifierManager.{ExternalDatasetIdentifier, InternalDatasetIdentifier}
+import org.apache.spark.sql.pipelines.util.{BatchReadOptions, InputReadOptions, StreamingReadOptions}
 
 object FlowAnalysis {
   def createFlowFunctionFromLogicalPlan(plan: LogicalPlan): FlowFunction = {
@@ -115,7 +106,7 @@ object FlowAnalysis {
             name = IdentifierHelper.toQuotedString(u.multipartIdentifier),
             spark.readStream,
             streamingReadOptions = StreamingReadOptions(
-              apiLanguage = Sql()
+              apiLanguage = Language.Sql()
             )
           ).queryExecution.analyzed
 
@@ -124,7 +115,7 @@ object FlowAnalysis {
           readBatchInput(
             context,
             name = IdentifierHelper.toQuotedString(u.multipartIdentifier),
-            batchReadOptions = BatchReadOptions(apiLanguage = Sql())
+            batchReadOptions = BatchReadOptions(apiLanguage = Language.Sql())
           ).queryExecution.analyzed
       }
     Dataset.ofRows(spark, resolvedPlan)
