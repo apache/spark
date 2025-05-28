@@ -18,6 +18,8 @@
 package org.apache.spark.sql.collation
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.DatasourceV2SQLBase
 import org.apache.spark.sql.test.SharedSparkSession
@@ -266,6 +268,21 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
 }
 
 class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
+
+  test("Check AttributeReference dataType from View with default collation") {
+    withView(testView) {
+      sql(s"CREATE VIEW $testView DEFAULT COLLATION UTF8_LCASE AS SELECT 'a' AS c1")
+
+      val df = sql(s"SELECT * FROM $testView")
+      val analyzedPlan = df.queryExecution.analyzed
+      analyzedPlan match {
+        case Project(Seq(AttributeReference("c1", dataType, _, _)), _) =>
+          assert(dataType == StringType("UTF8_LCASE"))
+        case _ =>
+          assert(false)
+      }
+    }
+  }
 
   test("create/alter view created from a table") {
     withTable(testTable) {
