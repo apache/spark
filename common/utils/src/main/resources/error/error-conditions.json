@@ -3432,6 +3432,12 @@
     ],
     "sqlState" : "42602"
   },
+  "INVALID_SCHEMA_TYPE_NON_STRUCT" : {
+    "message" : [
+      "Invalid schema type. Expect a struct type, but got <dataType>."
+    ],
+    "sqlState" : "42K09"
+  },
   "INVALID_SET_SYNTAX" : {
     "message" : [
       "Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include special characters in key, or include semicolon in value, please use backquotes, e.g., SET `key`=`value`."

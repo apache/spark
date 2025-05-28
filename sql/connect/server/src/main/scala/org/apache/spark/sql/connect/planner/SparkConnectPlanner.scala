@@ -773,7 +773,7 @@ class SparkConnectPlanner(
       val stateSchema = DataTypeProtoConverter.toCatalystType(rel.getStateSchema) match {
         case s: StructType => s
         case other =>
-          throw InvalidInputErrors.invalidStateSchemaDataType(other)
+          throw InvalidInputErrors.invalidSchemaTypeNonStruct(other)
       }
       val stateEncoder = TypedScalaUdf.encoderFor(
         // the state agnostic encoder is the second element in the input encoders.
@@ -1105,8 +1105,7 @@ class SparkConnectPlanner(
       transformDataType(twsInfo.getOutputSchema) match {
         case s: StructType => s
         case dt =>
-          throw InvalidInputErrors.invalidUserDefinedOutputSchemaTypeForTransformWithState(
-            dt.typeName)
+          throw InvalidInputErrors.invalidSchemaTypeNonStruct(dt)
       }
     }
 
@@ -1502,7 +1501,7 @@ class SparkConnectPlanner(
       StructType.fromDDL,
       fallbackParser = DataType.fromJson) match {
       case s: StructType => s
-      case other => throw InvalidInputErrors.invalidSchema(other)
+      case other => throw InvalidInputErrors.invalidSchemaStringNonStructType(schema, other)
     }
   }
 
@@ -1580,7 +1579,7 @@ class SparkConnectPlanner(
       if (rel.hasSchema) {
         DataTypeProtoConverter.toCatalystType(rel.getSchema) match {
           case s: StructType => reader.schema(s)
-          case other => throw InvalidInputErrors.invalidSchemaDataType(other)
+          case other => throw InvalidInputErrors.invalidSchemaTypeNonStruct(other)
         }
       }
       localMap.foreach { case (key, value) => reader.option(key, value) }
@@ -2967,8 +2966,7 @@ class SparkConnectPlanner(
     val returnType = if (udtf.hasReturnType) {
       transformDataType(udtf.getReturnType) match {
         case s: StructType => Some(s)
-        case dt =>
-          throw InvalidInputErrors.invalidPythonUdtfReturnType(dt.typeName)
+        case dt => throw InvalidInputErrors.invalidSchemaTypeNonStruct(dt)
       }
     } else {
       None
