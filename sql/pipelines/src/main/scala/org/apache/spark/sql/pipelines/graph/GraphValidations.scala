@@ -86,12 +86,12 @@ trait GraphValidations extends Logging {
    * Validate that all tables are resettable. This is a best-effort check that will only catch
    * upstream tables that are resettable but have a non-resettable downstream dependency.
    */
-  protected def validateTablesAreResettable(): Seq[GraphValidationWarning] = {
+  protected def validateTablesAreResettable(): Unit = {
     validateTablesAreResettable(tables)
   }
 
   /** Validate that all specified tables are resettable. */
-  protected def validateTablesAreResettable(tables: Seq[Table]): Seq[GraphValidationWarning] = {
+  protected def validateTablesAreResettable(tables: Seq[Table]): Unit = {
     val tableLookup = mapUnique(tables, "table")(_.identifier)
     val nonResettableTables =
       tables.filter(t => !PipelinesTableProperties.resetAllowed.fromMap(t.properties))
@@ -120,7 +120,18 @@ trait GraphValidations extends Logging {
       .reverse
       .map {
         case (nameForEvent, tables) =>
-          InvalidResettableDependencyException(nameForEvent, tables)
+          throw new AnalysisException(
+            "INVALID_RESETTABLE_DEPENDENCY",
+            Map(
+              "downstreamTable" -> nameForEvent,
+              "upstreamResettableTables" -> tables
+                .map(_.displayName)
+                .sorted
+                .map(t => s"'$t'")
+                .mkString(", "),
+              "resetAllowedKey" -> PipelinesTableProperties.resetAllowed.key
+            )
+          )
       }
   }
 

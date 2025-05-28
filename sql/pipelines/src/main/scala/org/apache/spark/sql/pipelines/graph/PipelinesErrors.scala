@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 
@@ -39,12 +37,10 @@ case class UnresolvedDatasetException(identifier: TableIdentifier)
  * @param name The name of the table
  * @param cause The cause of the failure
  */
-case class LoadTableException(name: String, cause: Option[Throwable])
-    extends SparkException(
-      errorClass = "INTERNAL_ERROR",
-      messageParameters = Map("message" -> s"Failed to load table '$name'"),
-      cause = cause.orNull
-    )
+case class LoadTableException(name: String, override val cause: Option[Throwable])
+    extends AnalysisException(s"Failed to load table '$name'", cause = cause)
+
+
 
 /**
  * Exception raised when a pipeline has one or more flows that cannot be resolved
@@ -79,13 +75,6 @@ case class UnresolvedPipelineException(
        |failures that precede this log.""".stripMargin
     )
 
-/** A validation error that can either be thrown as an exception or logged as a warning. */
-trait GraphValidationWarning extends Logging {
-
-  /** The exception to throw when this validation fails. */
-  protected def exception: AnalysisException
-}
-
 /**
  * Raised when there's a circular dependency in the current pipeline. That is, a downstream
  * table is referenced while creating a upstream table.
@@ -99,37 +88,3 @@ case class CircularDependencyException(
       s"Circular dependencies are not supported in a pipeline. Please remove the dependency " +
       s"between '${upstreamDataset.unquotedString}' and '${downstreamTable.unquotedString}'."
     )
-
-/**
- * Raised when some tables in the current pipeline are not resettable due to some non-resettable
- * downstream dependencies.
- */
-case class InvalidResettableDependencyException(originName: String, tables: Seq[Table])
-    extends GraphValidationWarning {
-  override def exception: AnalysisException = new AnalysisException(
-    "INVALID_RESETTABLE_DEPENDENCY",
-    Map(
-      "downstreamTable" -> originName,
-      "upstreamResettableTables" -> tables
-        .map(_.displayName)
-        .sorted
-        .map(t => s"'$t'")
-        .mkString(", "),
-      "resetAllowedKey" -> PipelinesTableProperties.resetAllowed.key
-    )
-  )
-}
-
-/**
- * Warn if the append once flows was declared from batch query if there was a run before.
- * Throw an exception if not.
- * @param table the streaming destination that contains Append Once flows declared with batch query.
- * @param flows the append once flows that are declared with batch query.
- */
-case class AppendOnceFlowCreatedFromBatchQueryException(table: Table, flows: Seq[TableIdentifier])
-    extends GraphValidationWarning {
-  override def exception: AnalysisException = new AnalysisException(
-    "APPEND_ONCE_FROM_BATCH_QUERY",
-    Map("table" -> table.displayName)
-  )
-}
