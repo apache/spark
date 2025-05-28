@@ -27,6 +27,13 @@ import org.apache.spark.sql.pipelines.util.InputReadOptions
 import org.apache.spark.sql.types.StructType
 
 /**
+ * Contains the catalog and database context information for query execution.
+ */
+case class QueryContext(
+    currentCatalog: Option[String],
+    currentDatabase: Option[String])
+
+/**
  * A [[Flow]] is a node of data transformation in a dataflow graph. It describes the movement
  * of data into a particular dataset.
  */
@@ -49,11 +56,8 @@ trait Flow extends GraphElement with Logging {
    */
   def once: Boolean = false
 
-  /** The current catalog in the execution context when the query is defined. */
-  def currentCatalog: Option[String]
-
-  /** The current database in the execution context when the query is defined. */
-  def currentDatabase: Option[String]
+  /** The current query context (catalog and database) when the query is defined. */
+  def queryContext: QueryContext
 
   /** The comment associated with this flow */
   def comment: Option[String]
@@ -74,16 +78,14 @@ trait FlowFunction extends Logging {
    *                  [[DataflowGraph]].
    * @param availableInputs the list of all [[Input]]s available to this flow
    * @param configuration the spark configurations that apply to this flow.
-   * @param currentCatalog The current catalog in execution context when the query is defined.
-   * @param currentDatabase The current database in execution context when the query is defined.
+   * @param queryContext The context of the query being evaluated.
    * @return the inputs actually used, and the [[DataFrame]] expression for the flow
    */
   def call(
       allInputs: Set[TableIdentifier],
       availableInputs: Seq[Input],
       configuration: Map[String, String],
-      currentCatalog: Option[String],
-      currentDatabase: Option[String]
+      queryContext: QueryContext
   ): FlowFunctionResult
 }
 
@@ -127,8 +129,7 @@ case class UnresolvedFlow(
     identifier: TableIdentifier,
     destinationIdentifier: TableIdentifier,
     func: FlowFunction,
-    currentCatalog: Option[String],
-    currentDatabase: Option[String],
+    queryContext: QueryContext,
     sqlConf: Map[String, String],
     comment: Option[String] = None,
     override val once: Boolean,
@@ -147,8 +148,7 @@ trait ResolutionCompletedFlow extends Flow {
   val identifier: TableIdentifier = flow.identifier
   val destinationIdentifier: TableIdentifier = flow.destinationIdentifier
   def func: FlowFunction = flow.func
-  def currentCatalog: Option[String] = flow.currentCatalog
-  def currentDatabase: Option[String] = flow.currentDatabase
+  def queryContext: QueryContext = flow.queryContext
   def comment: Option[String] = flow.comment
   def sqlConf: Map[String, String] = funcResult.sqlConf
   def origin: QueryOrigin = flow.origin

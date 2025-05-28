@@ -374,7 +374,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
         .getMessage
         .contains(
           s"View ${fullyQualifiedIdentifier("a", isView = true).quotedString}" +
-          s" is not a streaming view and must be referenced using read."
+          s" is not a batch view and must be referenced using read."
         )
     )
   }
