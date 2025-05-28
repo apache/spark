@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType, toSQLValue}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
@@ -436,8 +437,14 @@ case class CurrentTime(
   with TimeZoneAwareExpression with ImplicitCastInputTypes with CodegenFallback {
 
   def this() = {
-    this(Literal(TimeType.MICROS_PRECISION))
+    this(Literal(TimeType.MICROS_PRECISION), None)
   }
+
+  def this(child: Expression) = {
+    this(child, None)
+  }
+
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
 
   override def nullable: Boolean = false
 
