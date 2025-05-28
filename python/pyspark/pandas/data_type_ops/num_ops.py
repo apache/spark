@@ -52,7 +52,7 @@ from pyspark.sql.types import (
 from pyspark.errors import PySparkValueError
 
 # For Supporting Spark Connect
-from pyspark.sql.utils import pyspark_column_op
+from pyspark.sql.utils import pyspark_column_op, is_ansi_mode_enabled
 
 
 def _non_fractional_astype(
@@ -250,18 +250,18 @@ class IntegralOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
 
         def truediv(left: PySparkColumn, right: Any) -> PySparkColumn:
-            if not get_option("compute.ansi_mode_support"):
-                return F.when(
-                    F.lit(right != 0) | F.lit(right).isNull(),
-                    left.__div__(right),
-                ).otherwise(F.lit(np.inf).__div__(left))
-            else:
+            if is_ansi_mode_enabled():
                 return F.when(
                     F.lit(right == 0),
                     F.when(left < 0, F.lit(float("-inf")))
                     .when(left > 0, F.lit(float("inf")))
                     .otherwise(F.lit(np.nan)),
                 ).otherwise(left / right)
+            else:
+                return F.when(
+                    F.lit(right != 0) | F.lit(right).isNull(),
+                    left.__div__(right),
+                ).otherwise(F.lit(np.inf).__div__(left))
 
         return numpy_column_op(truediv)(left, right)
 
@@ -343,7 +343,14 @@ class FractionalOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
 
         def truediv(left: PySparkColumn, right: Any) -> PySparkColumn:
-            if not get_option("compute.ansi_mode_support"):
+            if is_ansi_mode_enabled():
+                return F.when(
+                    F.lit(right == 0),
+                    F.when(left < 0, F.lit(float("-inf")))
+                    .when(left > 0, F.lit(float("inf")))
+                    .otherwise(F.lit(np.nan)),
+                ).otherwise(left / right)
+            else:
                 return F.when(
                     F.lit(right != 0) | F.lit(right).isNull(),
                     left.__div__(right),
@@ -352,13 +359,6 @@ class FractionalOps(NumericOps):
                         F.lit(np.inf).__div__(left)
                     )
                 )
-            else:
-                return F.when(
-                    F.lit(right == 0),
-                    F.when(left < 0, F.lit(float("-inf")))
-                    .when(left > 0, F.lit(float("inf")))
-                    .otherwise(F.lit(np.nan)),
-                ).otherwise(left / right)
 
         return numpy_column_op(truediv)(left, right)
 
