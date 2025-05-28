@@ -93,7 +93,7 @@ trait FlowFunction extends Logging {
  * Holds the [[DataFrame]] returned by a [[FlowFunction]] along with the inputs used to
  * construct it.
  * @param batchInputs the complete inputs read by the flow
- * @param sreamingInputs the incremental inputs read by the flow
+ * @param streamingInputs the incremental inputs read by the flow
  * @param usedExternalInputs the identifiers of the external inputs read by the flow
  * @param dataFrame the [[DataFrame]] expression executed by the flow if the flow can be resolved
  */

@@ -126,9 +126,8 @@ case class Table(
     baseOrigin: QueryOrigin,
     isStreamingTableOpt: Option[Boolean],
     format: Option[String]
-) extends GraphElement
-    with Output
-    with TableInput {
+) extends TableInput
+    with Output {
 
   override val origin: QueryOrigin = baseOrigin.copy(
     objectType = Some("table"),
