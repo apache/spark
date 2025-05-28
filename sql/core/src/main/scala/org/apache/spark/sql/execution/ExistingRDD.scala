@@ -337,7 +337,7 @@ case class OneRowRelationExec() extends LeafExecNode
     val numOutputRows = longMetric("numOutputRows")
     session
       .sparkContext
-      .parallelize(Seq[Int](), 1)
+      .parallelize(Seq(""), 1)
       .mapPartitionsInternal { _ =>
         val proj = UnsafeProjection.create(Seq.empty[Expression])
         Iterator(proj.apply(InternalRow.empty)).map { r =>
