@@ -1322,12 +1322,6 @@
     ],
     "sqlState" : "42713"
   },
-  "DUPLICATE_FLOW_SQL_CONF": {
-    "message": [
-      "Found duplicate sql conf for dataset '<datasetName>': '<key>' is defined by both '<flowName1>' and '<flowName2>'"
-    ],
-    "sqlState": "42710"
-  },
   "DUPLICATED_MAP_KEY" : {
     "message" : [
       "Duplicate map key <key> was found, please check the input data.",
@@ -1377,6 +1371,12 @@
       }
     },
     "sqlState" : "42734"
+  },
+  "DUPLICATE_FLOW_SQL_CONF" : {
+    "message" : [
+      "Found duplicate sql conf for dataset '<datasetName>': '<key>' is defined by both '<flowName1>' and '<flowName2>'"
+    ],
+    "sqlState" : "42710"
   },
   "DUPLICATE_KEY" : {
     "message" : [
@@ -1949,6 +1949,12 @@
     ],
     "sqlState" : "42818"
   },
+  "INCOMPATIBLE_BATCH_VIEW_READ" : {
+    "message" : [
+      "View <datasetIdentifier> is not a batch view and must be referenced using read. This check can be disabled by setting Spark conf pipelines.incompatibleViewCheck.enabled = false."
+    ],
+    "sqlState" : "42000"
+  },
   "INCOMPATIBLE_COLUMN_TYPE" : {
     "message" : [
       "<operator> can only be performed on tables with compatible column types. The <columnOrdinalNumber> column of the <tableOrdinalNumber> table is <dataType1> type which is not compatible with <dataType2> at the same column of the first table.<hint>."
@@ -2025,17 +2031,11 @@
     ],
     "sqlState" : "42613"
   },
-  "INCOMPATIBLE_BATCH_VIEW_READ": {
-    "message": [
-      "View <datasetIdentifier> is not a batch view and must be referenced using read. This check can be disabled by setting Spark conf pipelines.incompatibleViewCheck.enabled = false."
-    ],
-    "sqlState": "42000"
-  },
-  "INCOMPATIBLE_STREAMING_VIEW_READ": {
-    "message": [
+  "INCOMPATIBLE_STREAMING_VIEW_READ" : {
+    "message" : [
       "View <datasetIdentifier> is a streaming view and must be referenced using readStream. This check can be disabled by setting Spark conf pipelines.incompatibleViewCheck.enabled = false."
     ],
-    "sqlState": "42000"
+    "sqlState" : "42000"
   },
   "INCOMPATIBLE_VIEW_SCHEMA_CHANGE" : {
     "message" : [
@@ -6589,10 +6589,10 @@
     ],
     "sqlState" : "P0001"
   },
-  "USER_SPECIFIED_AND_INFERRED_SCHEMA_NOT_COMPATIBLE": {
-    "message": [
+  "USER_SPECIFIED_AND_INFERRED_SCHEMA_NOT_COMPATIBLE" : {
+    "message" : [
       "Table '<tableName>' has a user-specified schema that is incompatible with the schema",
-      " inferred from its query.",
+      "inferred from its query.",
       "<streamingTableHint>",
       "",
       "Declared schema:",
@@ -6601,7 +6601,7 @@
       "Inferred schema:",
       "<inferredDataSchema>"
     ],
-    "sqlState": "42000"
+    "sqlState" : "42000"
   },
   "VARIABLE_ALREADY_EXISTS" : {
     "message" : [
