@@ -42,7 +42,7 @@ case class UnionLoop(
     id: Long,
     anchor: LogicalPlan,
     recursion: LogicalPlan,
-    private val outputAttrIds: Seq[ExprId],
+    outputAttrIds: Seq[ExprId],
     limit: Option[Int] = None,
     maxDepth: Option[Int] = None) extends UnionBase {
   override def children: Seq[LogicalPlan] = Seq(anchor, recursion)
