@@ -94,20 +94,13 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       query: Dataset[_],
       tableName: Option[String],
       storageLevel: StorageLevel): Unit = {
-    if (query.queryExecution.analyzed.isInstanceOf[IgnoreCachedData]) {
-      logWarning(
-        log"Asked to cache a plan that is inapplicable for caching: " +
-        log"${MDC(LOGICAL_PLAN, query.queryExecution.analyzed)}"
-      )
-    } else {
-      cacheQueryInternal(
-        query.sparkSession,
-        query.queryExecution.analyzed,
-        query.queryExecution.normalized,
-        tableName,
-        storageLevel
-      )
-    }
+    cacheQueryInternal(
+      query.sparkSession,
+      query.queryExecution.analyzed,
+      query.queryExecution.normalized,
+      tableName,
+      storageLevel
+    )
   }
 
   /**
@@ -134,6 +127,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       // Do nothing for StorageLevel.NONE since it will not actually cache any data.
     } else if (lookupCachedDataInternal(normalizedPlan).nonEmpty) {
       logWarning("Asked to cache already cached data.")
+    } else if (unnormalizedPlan.isInstanceOf[IgnoreCachedData]) {
+      logWarning(
+        log"Asked to cache a plan that is inapplicable for caching: " +
+        log"${MDC(LOGICAL_PLAN, unnormalizedPlan)}"
+      )
     } else {
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
       val inMemoryRelation = sessionWithConfigsOff.withActive {
