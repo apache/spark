@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from contextlib import contextmanager
-from typing import Generator, Any
+from typing import Callable, Generator, NoReturn
 
 from pyspark.errors import PySparkException
 from pyspark.sql.connect.proto.base_pb2_grpc import SparkConnectServiceStub
@@ -37,11 +37,11 @@ def block_spark_connect_execution_and_analysis() -> Generator[None, None, None]:
     original_getattr = getattr(SparkConnectServiceStub, "__getattribute__")
 
     # Define a new __getattribute__ method that blocks RPC calls
-    def blocked_getattr(self: Any, name: str) -> Any:
+    def blocked_getattr(self: SparkConnectServiceStub, name: str) -> Callable:
         if name not in BLOCKED_RPC_NAMES:
             return original_getattr(self, name)
 
-        def blocked_method(*args, **kwargs):
+        def blocked_method(*args: object, **kwargs: object) -> NoReturn:
             raise PySparkException(
                 errorClass="ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION",
                 messageParameters={},

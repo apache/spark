@@ -22,7 +22,6 @@ Example usage:
     $ bin/spark-pipelines run --spec /path/to/pipeline.yaml
 """
 from contextlib import contextmanager
-from threading import Thread
 import argparse
 import importlib.util
 import os
@@ -111,14 +110,14 @@ def load_pipeline_spec(spec_path: Path) -> PipelineSpec:
 
 def unpack_pipeline_spec(spec_data: Mapping[str, Any]) -> PipelineSpec:
     for key in spec_data.keys():
-        if key not in ["catalog", "database", "configuration", "definitions"]:
+        if key not in ["catalog", "database", "schema", "configuration", "definitions"]:
             raise PySparkException(
                 errorClass="PIPELINE_SPEC_UNEXPECTED_FIELD", messageParameters={"field_name": key}
             )
 
     return PipelineSpec(
         catalog=spec_data.get("catalog"),
-        database=spec_data.get("database"),
+        database=spec_data.get("database", spec_data.get("schema")),
         configuration=validate_str_dict(spec_data.get("configuration", {}), "configuration"),
         definitions=[
             DefinitionsGlob(include=entry["glob"]["include"])
@@ -253,7 +252,8 @@ if __name__ == "__main__":
     )
     init_parser.add_argument(
         "--name",
-        help="Name of the project. A directory with this name will be created underneath the current directory.",
+        help="Name of the project. A directory with this name will be created underneath the "
+        "current directory.",
         required=True,
     )
 

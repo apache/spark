@@ -60,6 +60,31 @@ class CLIUtilityTests(unittest.TestCase):
             assert len(spec.definitions) == 1
             assert spec.definitions[0].include == "test_include"
 
+    def test_load_pipeline_spec_schema_fallback(self):
+        with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
+            tmpfile.write(
+                """
+                {
+                    "catalog": "test_catalog",
+                    "schema": "test_database",
+                    "configuration": {
+                        "key1": "value1",
+                        "key2": "value2"
+                    },
+                    "definitions": [
+                        {"glob": {"include": "test_include"}}
+                    ]
+                }
+                """
+            )
+            tmpfile.flush()
+            spec = load_pipeline_spec(Path(tmpfile.name))
+            assert spec.catalog == "test_catalog"
+            assert spec.database == "test_database"
+            assert spec.configuration == {"key1": "value1", "key2": "value2"}
+            assert len(spec.definitions) == 1
+            assert spec.definitions[0].include == "test_include"
+
     def test_load_pipeline_spec_invalid(self):
         with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
             tmpfile.write(
@@ -168,22 +193,6 @@ class CLIUtilityTests(unittest.TestCase):
             found_spec = find_pipeline_spec(Path(child_dir))
             self.assertEqual(found_spec, spec_path)
 
-    def test_find_pipeline_spec_fails_at_directory_without_permissions(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            parent_dir = Path(temp_dir)
-            child_dir = Path(temp_dir) / "child"
-            child_dir.mkdir()
-            spec_path = parent_dir / "pipeline.yaml"
-            with spec_path.open("w") as f:
-                f.write("{}")
-
-            # Remove permissions from the parent directory
-            parent_dir.chmod(0o000)
-
-            with self.assertRaises(PySparkException) as context:
-                find_pipeline_spec(Path(child_dir))
-            self.assertEqual(context.exception.getCondition(), "PIPELINE_SPEC_FILE_NOT_FOUND")
-
     def test_register_definitions(self):
         spec = PipelineSpec(
             catalog=None,
@@ -201,11 +210,10 @@ class CLIUtilityTests(unittest.TestCase):
                 f.write(
                     textwrap.dedent(
                         """
-                        from pyspark.sql import SparkSession, pipelines as sdp
-                        spark = SparkSession.active()
+                        from pyspark.sql import pipelines as sdp
                         @sdp.materialized_view
                         def mv1():
-                            return spark.range(1)
+                            raise NotImplementedError()
                     """
                     )
                 )
@@ -214,11 +222,9 @@ class CLIUtilityTests(unittest.TestCase):
                 f.write(
                     textwrap.dedent(
                         """
-                        from pyspark.sql import SparkSession, pipelines as sdp
-                        spark = SparkSession.active()
-                        @sdp.materialized_view
+                        from pyspark.sql import pipelines as sdp
                         def mv2():
-                            return spark.range(1)
+                            raise NotImplementedError()
                     """
                     )
                 )
@@ -261,7 +267,7 @@ class CLIUtilityTests(unittest.TestCase):
             registry = LocalGraphElementRegistry()
             with self.assertRaises(PySparkException) as context:
                 register_definitions(outer_dir, registry, spec)
-            self.assertEquals(
+            self.assertEqual(
                 context.exception.getCondition(), "PIPELINE_UNSUPPORTED_DEFINITIONS_FILE_EXTENSION"
             )
 

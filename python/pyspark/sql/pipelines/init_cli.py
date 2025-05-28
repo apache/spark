@@ -29,7 +29,7 @@ PYTHON_EXAMPLE = """
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import pipelines as sdp
 
-spark = SparkSession.getActiveSession()
+spark = SparkSession.active()
 
 @sdp.materialized_view
 def example_python_materialized_view() -> DataFrame:
@@ -69,4 +69,4 @@ def init(name: str) -> None:
 
     print(f"Pipeline project '{name}' created successfully. To run your pipeline:")
     print(f"cd '{name}'")
-    print(f"spark-pipelines run")
+    print("spark-pipelines run")

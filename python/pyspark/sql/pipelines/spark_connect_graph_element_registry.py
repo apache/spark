@@ -18,6 +18,7 @@ from pathlib import Path
 
 from pyspark.errors import PySparkTypeError
 from pyspark.sql import SparkSession
+from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
 from pyspark.sql.pipelines.block_connect_access import block_spark_connect_execution_and_analysis
 from pyspark.sql.pipelines.dataset import (
     Dataset,
@@ -28,6 +29,7 @@ from pyspark.sql.pipelines.dataset import (
 )
 from pyspark.sql.pipelines.flow import Flow
 from pyspark.sql.pipelines.graph_element_registry import GraphElementRegistry
+from typing import cast
 import pyspark.sql.connect.proto as pb2
 
 
@@ -83,7 +85,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
     def register_flow(self, flow: Flow) -> None:
         with block_spark_connect_execution_and_analysis():
             df = flow.func()
-        relation = df._plan.plan(self._spark.client)
+        relation = cast(ConnectDataFrame, df)._plan.plan(self._spark.client)
 
         inner_command = pb2.PipelineCommand.DefineFlow(
             dataflow_graph_id=self._dataflow_graph_id,
@@ -98,10 +100,10 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         self._spark.client.execute_command(command)
 
     def register_sql(self, sql_text: str, file_path: Path) -> None:
-        inner_command = pb2.PipelineCommand.DefineSqlGraphElements(
+        inner_command = pb2.DefineSqlGraphElements(
             dataflow_graph_id=self._dataflow_graph_id,
             sql_text=sql_text,
-            sql_file_name=str(file_path),
+            sql_file_path=str(file_path),
         )
         command = pb2.Command()
         command.pipeline_command.define_sql_graph_elements.CopyFrom(inner_command)
