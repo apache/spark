@@ -82,7 +82,6 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case Literal(value, dataType) => Some(LiteralValue(value, dataType))
     case joinRefColumn: JoinColumnReference =>
       Some (new JoinColumn(
-        Array(),
         joinRefColumn.originalReference.name,
         joinRefColumn.isReferringColumnFromLeftSubquery
       ))

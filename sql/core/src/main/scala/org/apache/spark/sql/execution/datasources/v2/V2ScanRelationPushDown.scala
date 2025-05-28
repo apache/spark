@@ -185,11 +185,20 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           leftRequiredSchema,
           rightRequiredSchema
         )) {
-        leftHolder.joinedRelations = leftHolder.joinedRelations :+ rightHolder.relation
+        leftHolder.joinedRelations =
+          leftHolder.joinedRelations :+ rightHolder.relation :+ rightHolder.relation
+        leftHolder.pushedPredicates = leftHolder.pushedPredicates :+ rightHolder.pushedPredicates
 
-        val newSchema = leftHolder.builder.build().readSchema()
-        val newOutput = (leftProjections ++ rightProjections).asInstanceOf[Seq[AttributeReference]]
-          .zip(newSchema.fields)
+        val joinOutputSchema = lBuilder.getOutputSchema
+
+        assert(joinOutputSchema.length == node.output.length,
+          "The data source returns unexpected number of columns")
+        assert(joinOutputSchema.fields.zip(node.output).forall { case (a1, a2) =>
+          a1.dataType.sameType(a2.dataType)
+        })
+
+        val newOutput = node.output.asInstanceOf[Seq[AttributeReference]]
+          .zip(joinOutputSchema.fields)
           .map { case (attr, schemaField) =>
             attr.withName(schemaField.name)
           }

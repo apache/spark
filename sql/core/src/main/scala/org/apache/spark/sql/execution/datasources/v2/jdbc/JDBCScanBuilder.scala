@@ -143,19 +143,19 @@ case class JDBCScanBuilder(
     val leftNodeSQLQuery = buildSQLQuery()
     val rightNodeSQLQuery = other.asInstanceOf[JDBCScanBuilder].buildSQLQuery()
 
-    val leftSideQualifier = JoinOutputAliasIterator.get
-    val rightSideQualifier = JoinOutputAliasIterator.get
+    val leftSideQualifier = JoinOutputAliasIterator.generateSubqueryAlias
+    val rightSideQualifier = JoinOutputAliasIterator.generateSubqueryAlias
 
     val leftProjections: Seq[JoinColumn] = leftRequiredSchema.fields.map { e =>
-      new JoinColumn(Array(leftSideQualifier), e.name, true)
+      new JoinColumn(e.name, true)
     }.toSeq
     val rightProjections: Seq[JoinColumn] = rightRequiredSchema.fields.map { e =>
-      new JoinColumn(Array(rightSideQualifier), e.name, false)
+      new JoinColumn(e.name, false)
     }.toSeq
 
     var aliasedLeftSchema = StructType(Seq())
     var aliasedRightSchema = StructType(Seq())
-    val outputAliasPrefix = JoinOutputAliasIterator.get
+    val outputAliasPrefix = JoinOutputAliasIterator.generateSubqueryAlias
 
     val aliasedOutput = (leftProjections ++ rightProjections)
       .zipWithIndex
@@ -172,7 +172,12 @@ case class JDBCScanBuilder(
             aliasedRightSchema.add(name, field.dataType, field.nullable, field.metadata)
         }
 
-        s"""${dialect.compileExpression(proj).get} AS ${dialect.compileExpression(output).get}"""
+        val compiledJoinColumn = dialect.compileExpressionWithJoinColumnSupported(
+            proj,
+            Some(leftSideQualifier),
+            Some(rightSideQualifier)
+          ).get
+        s"$compiledJoinColumn AS ${dialect.compileExpression(output).get}"
       }.mkString(",")
 
     val compiledJoinType = dialect.compileJoinType(joinType)
@@ -180,15 +185,13 @@ case class JDBCScanBuilder(
 
     val conditionString = condition.toScala match {
       case Some(cond) =>
-        qualifyCondition(cond, leftSideQualifier, rightSideQualifier)
-        s"ON ${dialect.compileExpression(cond).get}"
+        val compiledCond = dialect.compileExpressionWithJoinColumnSupported(
+          cond,
+          Some(leftSideQualifier),
+          Some(rightSideQualifier)
+        ).get
+        s"ON $compiledCond"
       case _ => ""
-    }
-
-    val subqueryASKeyword = if (dialect.needsASKeywordForJoinSubquery) {
-      " AS "
-    } else {
-      " "
     }
 
     val compiledLeftSideQualifier =
@@ -199,9 +202,9 @@ case class JDBCScanBuilder(
     val joinQuery =
       s"""
          |SELECT $aliasedOutput FROM
-         |($leftNodeSQLQuery)$subqueryASKeyword$compiledLeftSideQualifier
+         |($leftNodeSQLQuery) $compiledLeftSideQualifier
          |${compiledJoinType.get}
-         |($rightNodeSQLQuery)$subqueryASKeyword$compiledRightSideQualifier
+         |($rightNodeSQLQuery) $compiledRightSideQualifier
          |$conditionString
          |""".stripMargin
 
@@ -231,22 +234,7 @@ case class JDBCScanBuilder(
       .getExternalEngineQuery
   }
 
-  // Fully qualify the condition. For example:
-  // DEPT=SALARY turns into leftSideQualifier.DEPT = rightSideQualifier=SALARY
-  def qualifyCondition(condition: Predicate, leftSideQualifier: String, rightSideQualifier: String)
-  : Unit = {
-    condition.references()
-      .filter(_.isInstanceOf[JoinColumn])
-      .foreach { e =>
-        val qualifier = if (e.asInstanceOf[JoinColumn].isInLeftSideOfJoin) {
-          leftSideQualifier
-        } else {
-          rightSideQualifier
-        }
-
-        e.asInstanceOf[JoinColumn].qualifier = Array(qualifier)
-      }
-  }
+  override def getOutputSchema(): StructType = finalSchema
 
   override def pushTableSample(
       lowerBound: Double,
@@ -326,11 +314,7 @@ case class JDBCScanBuilder(
 object JoinOutputAliasIterator {
   private var curId = new java.util.concurrent.atomic.AtomicLong()
 
-  def get: String = {
+  def generateSubqueryAlias: String = {
     "subquery_" + curId.getAndIncrement()
-  }
-
-  def reset(): Unit = {
-    curId = new java.util.concurrent.atomic.AtomicLong()
   }
 }
