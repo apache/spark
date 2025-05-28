@@ -379,7 +379,9 @@ abstract class JdbcDialect extends Serializable with Logging {
     case _ => value
   }
 
-  private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
+  private[jdbc] class JDBCSQLBuilder(
+    leftSideQualifier: Option[String] = None,
+    rightSideQualifier: Option[String] = None) extends V2ExpressionSQLBuilder with Serializable {
     // Some dialects do not support boolean type and this convenient util function is
     // provided to generate SQL string without boolean values.
     protected def inputToSQLNoBool(input: Expression): String = input match {
@@ -407,7 +409,12 @@ abstract class JdbcDialect extends Serializable with Logging {
     }
 
     override def visitJoinColumn(column: JoinColumn): String = {
-      (column.qualifier.toSeq ++ Seq(column.name)).map(quoteIdentifier(_)).mkString(".")
+      val qualifierOpt = if (column.isInLeftSideOfJoin) {
+        leftSideQualifier
+      } else {
+        rightSideQualifier
+      }
+      (qualifierOpt.toSeq ++ column.fieldNames).map(quoteIdentifier(_)).mkString(".")
     }
 
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
@@ -514,6 +521,29 @@ abstract class JdbcDialect extends Serializable with Logging {
   @Since("3.3.0")
   def compileExpression(expr: Expression): Option[String] = {
     val jdbcSQLBuilder = new JDBCSQLBuilder()
+    try {
+      Some(jdbcSQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
+  }
+
+  /**
+   * Converts V2 expression to String representing a SQL expression.
+   * Difference between this method and compileExpression is that this method
+   * accepts left and right side qualifiers needed for translating JoinColumn.
+   * @param expr The V2 expression to be converted.
+   * @return Converted value.
+   */
+  @Since("4.0.0")
+  def compileExpressionWithJoinColumnSupported(
+    expr: Expression,
+    leftSideQualifier: Option[String] = None,
+    rightSideQualifier: Option[String] = None)
+  : Option[String] = {
+    val jdbcSQLBuilder = new JDBCSQLBuilder(leftSideQualifier, rightSideQualifier)
     try {
       Some(jdbcSQLBuilder.build(expr))
     } catch {

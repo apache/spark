@@ -41,4 +41,7 @@ public interface SupportsPushDownJoin extends ScanBuilder {
     StructType leftRequiredSchema,
     StructType rightRequiredSchema
     );
+
+  // When join is pushed down, the output schema can be changed in case of duplicate column names.
+  StructType getOutputSchema();
 }

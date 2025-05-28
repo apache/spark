@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.util;
 
-import org.apache.spark.SparkIllegalArgumentException;
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.connector.join.*;
 
 import java.util.HashMap;
@@ -44,6 +44,6 @@ public class JoinTypeSQLBuilder {
   protected String visitUnexpectedJoinType(JoinType joinType) throws IllegalArgumentException {
     Map<String, String> params = new HashMap<>();
     params.put("joinType", String.valueOf(joinType));
-    throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3209", params);
+    throw new SparkUnsupportedOperationException("UNSUPPORTED_JOIN_TYPES", params);
   }
 }
