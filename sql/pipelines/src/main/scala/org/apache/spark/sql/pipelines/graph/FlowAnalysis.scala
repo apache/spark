@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.pipelines.graph
 
+import scala.util.Try
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CTESubstitution, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
-import org.apache.spark.sql.classic.{DataFrame, DataStreamReader, Dataset, SparkSession}
+import org.apache.spark.sql.classic.{DataFrame, Dataset, DataStreamReader, SparkSession}
 import org.apache.spark.sql.pipelines.{AnalysisWarning, Language}
 import org.apache.spark.sql.pipelines.graph.GraphIdentifierManager.{ExternalDatasetIdentifier, InternalDatasetIdentifier}
 import org.apache.spark.sql.pipelines.util.{BatchReadOptions, InputReadOptions, StreamingReadOptions}
@@ -33,14 +35,12 @@ object FlowAnalysis {
           allInputs: Set[TableIdentifier],
           availableInputs: Seq[Input],
           confs: Map[String, String],
-          currentCatalog: Option[String],
-          currentDatabase: Option[String]
+          queryContext: QueryContext
       ): FlowFunctionResult = {
         val ctx = FlowAnalysisContext(
           allInputs = allInputs,
           availableInputs = availableInputs,
-          currentCatalog = currentCatalog,
-          currentDatabase = currentDatabase,
+          queryContext = queryContext,
           spark = SparkSession.active
         )
         val df = try {
@@ -51,8 +51,8 @@ object FlowAnalysis {
         }
         FlowFunctionResult(
           requestedInputs = ctx.requestedInputs.toSet,
-          usedBatchInputs = ctx.batchInputs.toSet,
-          usedStreamingInputs = ctx.streamingInputs.toSet,
+          batchInputs = ctx.batchInputs.toSet,
+          streamingInputs = ctx.streamingInputs.toSet,
           usedExternalInputs = ctx.externalInputs.toSet,
           dataFrame = df,
           sqlConf = confs,

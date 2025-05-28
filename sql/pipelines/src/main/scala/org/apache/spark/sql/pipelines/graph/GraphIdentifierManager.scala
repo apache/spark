@@ -85,8 +85,8 @@ object GraphIdentifierManager {
     } else {
       val fullyQualifiedInputIdentifier = fullyQualifyIdentifier(
         maybeFullyQualifiedIdentifier = inputIdentifier,
-        currentCatalog = context.currentCatalog,
-        currentDatabase = context.currentDatabase
+        currentCatalog = context.queryContext.currentCatalog,
+        currentDatabase = context.queryContext.currentDatabase
       )
       assertIsFullyQualifiedForRead(identifier = fullyQualifiedInputIdentifier)
 

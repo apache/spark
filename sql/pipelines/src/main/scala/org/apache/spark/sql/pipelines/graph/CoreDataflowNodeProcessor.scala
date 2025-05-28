@@ -132,8 +132,7 @@ private class FlowResolver(rawGraph: DataflowGraph) extends Logging {
       allInputs = allInputs,
       availableInputs = availableResolvedInputs.values.toList,
       configuration = flowToResolve.sqlConf,
-      currentCatalog = flowToResolve.currentCatalog,
-      currentDatabase = flowToResolve.currentDatabase
+      queryContext = flowToResolve.queryContext
     )
     val result =
       flowFunctionResult match {
@@ -179,8 +178,7 @@ private class FlowResolver(rawGraph: DataflowGraph) extends Logging {
               allInputs = allInputs,
               availableInputs = availableResolvedInputs.values.toList,
               configuration = newSqlConf,
-              currentCatalog = flowToResolve.currentCatalog,
-              currentDatabase = flowToResolve.currentDatabase
+              queryContext = flowToResolve.queryContext
             )
           } else {
             f

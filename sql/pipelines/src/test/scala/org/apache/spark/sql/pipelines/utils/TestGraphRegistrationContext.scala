@@ -27,6 +27,7 @@ import org.apache.spark.sql.pipelines.graph.{
   GraphIdentifierManager,
   GraphRegistrationContext,
   PersistedView,
+  QueryContext,
   QueryOrigin,
   Table,
   TemporaryView,
@@ -86,10 +87,12 @@ class TestGraphRegistrationContext(
           identifier = tableIdentifier,
           destinationIdentifier = tableIdentifier,
           func = query.get,
+          queryContext = QueryContext(
+            currentCatalog = catalog.orElse(Some(defaultCatalog)),
+            currentDatabase = database.orElse(Some(defaultDatabase))
+          ),
           sqlConf = sqlConf,
           once = false,
-          currentCatalog = catalog.orElse(Some(defaultCatalog)),
-          currentDatabase = database.orElse(Some(defaultDatabase)),
           comment = comment,
           origin = baseOrigin
         )
@@ -138,10 +141,12 @@ class TestGraphRegistrationContext(
         identifier = viewIdentifier,
         destinationIdentifier = viewIdentifier,
         func = query,
+        queryContext = QueryContext(
+          currentCatalog = catalog.orElse(Some(defaultCatalog)),
+          currentDatabase = database.orElse(Some(defaultDatabase))
+        ),
         sqlConf = sqlConf,
         once = false,
-        currentCatalog = catalog.orElse(Some(defaultCatalog)),
-        currentDatabase = database.orElse(Some(defaultDatabase)),
         comment = comment,
         origin = origin
       )
@@ -165,10 +170,12 @@ class TestGraphRegistrationContext(
         identifier = flowIdentifier,
         destinationIdentifier = flowDestinationIdentifier,
         func = query,
+        queryContext = QueryContext(
+          currentCatalog = catalog.orElse(Some(defaultCatalog)),
+          currentDatabase = database.orElse(Some(defaultDatabase))
+        ),
         sqlConf = Map.empty,
         once = once,
-        currentCatalog = catalog.orElse(Some(defaultCatalog)),
-        currentDatabase = database.orElse(Some(defaultDatabase)),
         comment = None,
         origin = QueryOrigin()
       )

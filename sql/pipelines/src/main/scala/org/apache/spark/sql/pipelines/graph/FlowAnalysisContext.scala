@@ -29,8 +29,7 @@ import org.apache.spark.sql.pipelines.AnalysisWarning
  *
  * @param allInputs            Set of identifiers for all [[Input]]s defined in the DataflowGraph.
  * @param availableInputs      Inputs available to be referenced with `read` or `readStream`.
- * @param currentCatalog       The current catalog in execution context when the query is defined.
- * @param currentDatabase        The current schema in execution context when the query is defined.
+ * @param queryContext         The context of the query being evaluated.
  * @param requestedInputs      A mutable buffer populated with names of all inputs that were
  *                             requested.
  * @param spark                the spark session to be used.
@@ -40,8 +39,7 @@ import org.apache.spark.sql.pipelines.AnalysisWarning
 private[pipelines] case class FlowAnalysisContext(
     allInputs: Set[TableIdentifier],
     availableInputs: Seq[Input],
-    currentCatalog: Option[String],
-    currentDatabase: Option[String],
+    queryContext: QueryContext,
     batchInputs: mutable.HashSet[ResolvedInput] = mutable.HashSet.empty,
     streamingInputs: mutable.HashSet[ResolvedInput] = mutable.HashSet.empty,
     requestedInputs: mutable.HashSet[TableIdentifier] = mutable.HashSet.empty,
