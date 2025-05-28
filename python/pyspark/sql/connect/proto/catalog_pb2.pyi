@@ -33,7 +33,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-
 import builtins
 import collections.abc
 import google.protobuf.descriptor
@@ -41,11 +40,16 @@ import google.protobuf.internal.containers
 import google.protobuf.message
 import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.types_pb2
+import sys
 import typing
+
+if sys.version_info >= (3, 8):
+    import typing as typing_extensions
+else:
+    import typing_extensions
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
-@typing.final
 class Catalog(google.protobuf.message.Message):
     """Catalog messages are marked as unstable."""
 
@@ -161,7 +165,7 @@ class Catalog(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "cache_table",
             b"cache_table",
             "cat_type",
@@ -220,7 +224,7 @@ class Catalog(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "cache_table",
             b"cache_table",
             "cat_type",
@@ -278,9 +282,9 @@ class Catalog(google.protobuf.message.Message):
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing.Literal["cat_type", b"cat_type"]
+        self, oneof_group: typing_extensions.Literal["cat_type", b"cat_type"]
     ) -> (
-        typing.Literal[
+        typing_extensions.Literal[
             "current_database",
             "set_current_database",
             "list_databases",
@@ -313,7 +317,6 @@ class Catalog(google.protobuf.message.Message):
 
 global___Catalog = Catalog
 
-@typing.final
 class CurrentDatabase(google.protobuf.message.Message):
     """See `spark.catalog.currentDatabase`"""
 
@@ -325,7 +328,6 @@ class CurrentDatabase(google.protobuf.message.Message):
 
 global___CurrentDatabase = CurrentDatabase
 
-@typing.final
 class SetCurrentDatabase(google.protobuf.message.Message):
     """See `spark.catalog.setCurrentDatabase`"""
 
@@ -339,11 +341,10 @@ class SetCurrentDatabase(google.protobuf.message.Message):
         *,
         db_name: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["db_name", b"db_name"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["db_name", b"db_name"]) -> None: ...
 
 global___SetCurrentDatabase = SetCurrentDatabase
 
-@typing.final
 class ListDatabases(google.protobuf.message.Message):
     """See `spark.catalog.listDatabases`"""
 
@@ -358,18 +359,17 @@ class ListDatabases(google.protobuf.message.Message):
         pattern: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing.Literal["_pattern", b"_pattern", "pattern", b"pattern"]
+        self, field_name: typing_extensions.Literal["_pattern", b"_pattern", "pattern", b"pattern"]
     ) -> builtins.bool: ...
     def ClearField(
-        self, field_name: typing.Literal["_pattern", b"_pattern", "pattern", b"pattern"]
+        self, field_name: typing_extensions.Literal["_pattern", b"_pattern", "pattern", b"pattern"]
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing.Literal["_pattern", b"_pattern"]
-    ) -> typing.Literal["pattern"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_pattern", b"_pattern"]
+    ) -> typing_extensions.Literal["pattern"] | None: ...
 
 global___ListDatabases = ListDatabases
 
-@typing.final
 class ListTables(google.protobuf.message.Message):
     """See `spark.catalog.listTables`"""
 
@@ -389,7 +389,7 @@ class ListTables(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "_db_name",
             b"_db_name",
             "_pattern",
@@ -402,7 +402,7 @@ class ListTables(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "_db_name",
             b"_db_name",
             "_pattern",
@@ -415,16 +415,15 @@ class ListTables(google.protobuf.message.Message):
     ) -> None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing.Literal["_db_name", b"_db_name"]
-    ) -> typing.Literal["db_name"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_db_name", b"_db_name"]
+    ) -> typing_extensions.Literal["db_name"] | None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing.Literal["_pattern", b"_pattern"]
-    ) -> typing.Literal["pattern"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_pattern", b"_pattern"]
+    ) -> typing_extensions.Literal["pattern"] | None: ...
 
 global___ListTables = ListTables
 
-@typing.final
 class ListFunctions(google.protobuf.message.Message):
     """See `spark.catalog.listFunctions`"""
 
@@ -444,7 +443,7 @@ class ListFunctions(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "_db_name",
             b"_db_name",
             "_pattern",
@@ -457,7 +456,7 @@ class ListFunctions(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "_db_name",
             b"_db_name",
             "_pattern",
@@ -470,16 +469,15 @@ class ListFunctions(google.protobuf.message.Message):
     ) -> None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing.Literal["_db_name", b"_db_name"]
-    ) -> typing.Literal["db_name"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_db_name", b"_db_name"]
+    ) -> typing_extensions.Literal["db_name"] | None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing.Literal["_pattern", b"_pattern"]
-    ) -> typing.Literal["pattern"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_pattern", b"_pattern"]
+    ) -> typing_extensions.Literal["pattern"] | None: ...
 
 global___ListFunctions = ListFunctions
 
-@typing.final
 class ListColumns(google.protobuf.message.Message):
     """See `spark.catalog.listColumns`"""
 
@@ -498,21 +496,20 @@ class ListColumns(google.protobuf.message.Message):
         db_name: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
+        self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "_db_name", b"_db_name", "db_name", b"db_name", "table_name", b"table_name"
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing.Literal["_db_name", b"_db_name"]
-    ) -> typing.Literal["db_name"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_db_name", b"_db_name"]
+    ) -> typing_extensions.Literal["db_name"] | None: ...
 
 global___ListColumns = ListColumns
 
-@typing.final
 class GetDatabase(google.protobuf.message.Message):
     """See `spark.catalog.getDatabase`"""
 
@@ -526,11 +523,10 @@ class GetDatabase(google.protobuf.message.Message):
         *,
         db_name: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["db_name", b"db_name"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["db_name", b"db_name"]) -> None: ...
 
 global___GetDatabase = GetDatabase
 
-@typing.final
 class GetTable(google.protobuf.message.Message):
     """See `spark.catalog.getTable`"""
 
@@ -549,21 +545,20 @@ class GetTable(google.protobuf.message.Message):
         db_name: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
+        self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "_db_name", b"_db_name", "db_name", b"db_name", "table_name", b"table_name"
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing.Literal["_db_name", b"_db_name"]
-    ) -> typing.Literal["db_name"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_db_name", b"_db_name"]
+    ) -> typing_extensions.Literal["db_name"] | None: ...
 
 global___GetTable = GetTable
 
-@typing.final
 class GetFunction(google.protobuf.message.Message):
     """See `spark.catalog.getFunction`"""
 
@@ -582,21 +577,20 @@ class GetFunction(google.protobuf.message.Message):
         db_name: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
+        self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "_db_name", b"_db_name", "db_name", b"db_name", "function_name", b"function_name"
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing.Literal["_db_name", b"_db_name"]
-    ) -> typing.Literal["db_name"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_db_name", b"_db_name"]
+    ) -> typing_extensions.Literal["db_name"] | None: ...
 
 global___GetFunction = GetFunction
 
-@typing.final
 class DatabaseExists(google.protobuf.message.Message):
     """See `spark.catalog.databaseExists`"""
 
@@ -610,11 +604,10 @@ class DatabaseExists(google.protobuf.message.Message):
         *,
         db_name: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["db_name", b"db_name"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["db_name", b"db_name"]) -> None: ...
 
 global___DatabaseExists = DatabaseExists
 
-@typing.final
 class TableExists(google.protobuf.message.Message):
     """See `spark.catalog.tableExists`"""
 
@@ -633,21 +626,20 @@ class TableExists(google.protobuf.message.Message):
         db_name: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
+        self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "_db_name", b"_db_name", "db_name", b"db_name", "table_name", b"table_name"
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing.Literal["_db_name", b"_db_name"]
-    ) -> typing.Literal["db_name"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_db_name", b"_db_name"]
+    ) -> typing_extensions.Literal["db_name"] | None: ...
 
 global___TableExists = TableExists
 
-@typing.final
 class FunctionExists(google.protobuf.message.Message):
     """See `spark.catalog.functionExists`"""
 
@@ -666,27 +658,25 @@ class FunctionExists(google.protobuf.message.Message):
         db_name: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
+        self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "_db_name", b"_db_name", "db_name", b"db_name", "function_name", b"function_name"
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing.Literal["_db_name", b"_db_name"]
-    ) -> typing.Literal["db_name"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_db_name", b"_db_name"]
+    ) -> typing_extensions.Literal["db_name"] | None: ...
 
 global___FunctionExists = FunctionExists
 
-@typing.final
 class CreateExternalTable(google.protobuf.message.Message):
     """See `spark.catalog.createExternalTable`"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing.final
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -701,7 +691,7 @@ class CreateExternalTable(google.protobuf.message.Message):
             value: builtins.str = ...,
         ) -> None: ...
         def ClearField(
-            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
     TABLE_NAME_FIELD_NUMBER: builtins.int
@@ -734,7 +724,7 @@ class CreateExternalTable(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "_path",
             b"_path",
             "_schema",
@@ -751,7 +741,7 @@ class CreateExternalTable(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "_path",
             b"_path",
             "_schema",
@@ -772,26 +762,24 @@ class CreateExternalTable(google.protobuf.message.Message):
     ) -> None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing.Literal["_path", b"_path"]
-    ) -> typing.Literal["path"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_path", b"_path"]
+    ) -> typing_extensions.Literal["path"] | None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing.Literal["_schema", b"_schema"]
-    ) -> typing.Literal["schema"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]
+    ) -> typing_extensions.Literal["schema"] | None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing.Literal["_source", b"_source"]
-    ) -> typing.Literal["source"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_source", b"_source"]
+    ) -> typing_extensions.Literal["source"] | None: ...
 
 global___CreateExternalTable = CreateExternalTable
 
-@typing.final
 class CreateTable(google.protobuf.message.Message):
     """See `spark.catalog.createTable`"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing.final
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -806,7 +794,7 @@ class CreateTable(google.protobuf.message.Message):
             value: builtins.str = ...,
         ) -> None: ...
         def ClearField(
-            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
     TABLE_NAME_FIELD_NUMBER: builtins.int
@@ -843,7 +831,7 @@ class CreateTable(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "_description",
             b"_description",
             "_path",
@@ -864,7 +852,7 @@ class CreateTable(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "_description",
             b"_description",
             "_path",
@@ -889,24 +877,23 @@ class CreateTable(google.protobuf.message.Message):
     ) -> None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing.Literal["_description", b"_description"]
-    ) -> typing.Literal["description"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_description", b"_description"]
+    ) -> typing_extensions.Literal["description"] | None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing.Literal["_path", b"_path"]
-    ) -> typing.Literal["path"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_path", b"_path"]
+    ) -> typing_extensions.Literal["path"] | None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing.Literal["_schema", b"_schema"]
-    ) -> typing.Literal["schema"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]
+    ) -> typing_extensions.Literal["schema"] | None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing.Literal["_source", b"_source"]
-    ) -> typing.Literal["source"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_source", b"_source"]
+    ) -> typing_extensions.Literal["source"] | None: ...
 
 global___CreateTable = CreateTable
 
-@typing.final
 class DropTempView(google.protobuf.message.Message):
     """See `spark.catalog.dropTempView`"""
 
@@ -920,11 +907,12 @@ class DropTempView(google.protobuf.message.Message):
         *,
         view_name: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["view_name", b"view_name"]) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["view_name", b"view_name"]
+    ) -> None: ...
 
 global___DropTempView = DropTempView
 
-@typing.final
 class DropGlobalTempView(google.protobuf.message.Message):
     """See `spark.catalog.dropGlobalTempView`"""
 
@@ -938,11 +926,12 @@ class DropGlobalTempView(google.protobuf.message.Message):
         *,
         view_name: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["view_name", b"view_name"]) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["view_name", b"view_name"]
+    ) -> None: ...
 
 global___DropGlobalTempView = DropGlobalTempView
 
-@typing.final
 class RecoverPartitions(google.protobuf.message.Message):
     """See `spark.catalog.recoverPartitions`"""
 
@@ -956,11 +945,12 @@ class RecoverPartitions(google.protobuf.message.Message):
         *,
         table_name: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["table_name", b"table_name"]) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["table_name", b"table_name"]
+    ) -> None: ...
 
 global___RecoverPartitions = RecoverPartitions
 
-@typing.final
 class IsCached(google.protobuf.message.Message):
     """See `spark.catalog.isCached`"""
 
@@ -974,11 +964,12 @@ class IsCached(google.protobuf.message.Message):
         *,
         table_name: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["table_name", b"table_name"]) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["table_name", b"table_name"]
+    ) -> None: ...
 
 global___IsCached = IsCached
 
-@typing.final
 class CacheTable(google.protobuf.message.Message):
     """See `spark.catalog.cacheTable`"""
 
@@ -999,13 +990,13 @@ class CacheTable(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "_storage_level", b"_storage_level", "storage_level", b"storage_level"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "_storage_level",
             b"_storage_level",
             "storage_level",
@@ -1015,12 +1006,11 @@ class CacheTable(google.protobuf.message.Message):
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing.Literal["_storage_level", b"_storage_level"]
-    ) -> typing.Literal["storage_level"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_storage_level", b"_storage_level"]
+    ) -> typing_extensions.Literal["storage_level"] | None: ...
 
 global___CacheTable = CacheTable
 
-@typing.final
 class UncacheTable(google.protobuf.message.Message):
     """See `spark.catalog.uncacheTable`"""
 
@@ -1034,11 +1024,12 @@ class UncacheTable(google.protobuf.message.Message):
         *,
         table_name: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["table_name", b"table_name"]) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["table_name", b"table_name"]
+    ) -> None: ...
 
 global___UncacheTable = UncacheTable
 
-@typing.final
 class ClearCache(google.protobuf.message.Message):
     """See `spark.catalog.clearCache`"""
 
@@ -1050,7 +1041,6 @@ class ClearCache(google.protobuf.message.Message):
 
 global___ClearCache = ClearCache
 
-@typing.final
 class RefreshTable(google.protobuf.message.Message):
     """See `spark.catalog.refreshTable`"""
 
@@ -1064,11 +1054,12 @@ class RefreshTable(google.protobuf.message.Message):
         *,
         table_name: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["table_name", b"table_name"]) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["table_name", b"table_name"]
+    ) -> None: ...
 
 global___RefreshTable = RefreshTable
 
-@typing.final
 class RefreshByPath(google.protobuf.message.Message):
     """See `spark.catalog.refreshByPath`"""
 
@@ -1082,11 +1073,10 @@ class RefreshByPath(google.protobuf.message.Message):
         *,
         path: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["path", b"path"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["path", b"path"]) -> None: ...
 
 global___RefreshByPath = RefreshByPath
 
-@typing.final
 class CurrentCatalog(google.protobuf.message.Message):
     """See `spark.catalog.currentCatalog`"""
 
@@ -1098,7 +1088,6 @@ class CurrentCatalog(google.protobuf.message.Message):
 
 global___CurrentCatalog = CurrentCatalog
 
-@typing.final
 class SetCurrentCatalog(google.protobuf.message.Message):
     """See `spark.catalog.setCurrentCatalog`"""
 
@@ -1112,11 +1101,12 @@ class SetCurrentCatalog(google.protobuf.message.Message):
         *,
         catalog_name: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["catalog_name", b"catalog_name"]) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["catalog_name", b"catalog_name"]
+    ) -> None: ...
 
 global___SetCurrentCatalog = SetCurrentCatalog
 
-@typing.final
 class ListCatalogs(google.protobuf.message.Message):
     """See `spark.catalog.listCatalogs`"""
 
@@ -1131,13 +1121,13 @@ class ListCatalogs(google.protobuf.message.Message):
         pattern: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing.Literal["_pattern", b"_pattern", "pattern", b"pattern"]
+        self, field_name: typing_extensions.Literal["_pattern", b"_pattern", "pattern", b"pattern"]
     ) -> builtins.bool: ...
     def ClearField(
-        self, field_name: typing.Literal["_pattern", b"_pattern", "pattern", b"pattern"]
+        self, field_name: typing_extensions.Literal["_pattern", b"_pattern", "pattern", b"pattern"]
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing.Literal["_pattern", b"_pattern"]
-    ) -> typing.Literal["pattern"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_pattern", b"_pattern"]
+    ) -> typing_extensions.Literal["pattern"] | None: ...
 
 global___ListCatalogs = ListCatalogs
