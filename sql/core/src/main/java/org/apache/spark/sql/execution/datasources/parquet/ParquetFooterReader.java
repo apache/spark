@@ -20,14 +20,13 @@ package org.apache.spark.sql.execution.datasources.parquet;
 import java.io.IOException;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.Path;
 import org.apache.parquet.HadoopReadOptions;
 import org.apache.parquet.ParquetReadOptions;
 import org.apache.parquet.format.converter.ParquetMetadataConverter;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
+import org.apache.parquet.io.SeekableInputStream;
 
 import org.apache.spark.sql.execution.datasources.PartitionedFile;
 
@@ -53,37 +52,45 @@ public class ParquetFooterReader {
       Configuration configuration,
       PartitionedFile file,
       boolean skipRowGroup) throws IOException {
-    long fileStart = file.start();
-    ParquetMetadataConverter.MetadataFilter filter;
+    ParquetMetadataConverter.MetadataFilter filter =
+        footerFilter(configuration, file, skipRowGroup);
+    return readFooter(HadoopInputFile.fromStatus(file.fileStatus(), configuration), filter);
+  }
+
+  public static ParquetMetadataConverter.MetadataFilter footerFilter(
+      Configuration configuration, PartitionedFile file, boolean skipRowGroup) {
     if (skipRowGroup) {
-      filter = ParquetMetadataConverter.SKIP_ROW_GROUPS;
+      return ParquetMetadataConverter.SKIP_ROW_GROUPS;
     } else {
-      filter = HadoopReadOptions.builder(configuration, file.toPath())
-          .withRange(fileStart, fileStart + file.length())
+      return HadoopReadOptions.builder(configuration, file.toPath())
+          .withRange(file.start(), file.start() + file.length())
           .build()
           .getMetadataFilter();
     }
-    return readFooter(configuration, file.toPath(), filter);
   }
 
-  public static ParquetMetadata readFooter(Configuration configuration,
-      Path file, ParquetMetadataConverter.MetadataFilter filter) throws IOException {
-    return readFooter(HadoopInputFile.fromPath(file, configuration), filter);
-  }
-
-  public static ParquetMetadata readFooter(Configuration configuration,
-      FileStatus fileStatus, ParquetMetadataConverter.MetadataFilter filter) throws IOException {
-    return readFooter(HadoopInputFile.fromStatus(fileStatus, configuration), filter);
-  }
-
-  private static ParquetMetadata readFooter(HadoopInputFile inputFile,
+  public static ParquetMetadata readFooter(HadoopInputFile inputFile,
       ParquetMetadataConverter.MetadataFilter filter) throws IOException {
-    ParquetReadOptions readOptions =
-      HadoopReadOptions.builder(inputFile.getConfiguration(), inputFile.getPath())
+    ParquetReadOptions readOptions = HadoopReadOptions
+        .builder(inputFile.getConfiguration(), inputFile.getPath())
+        .usePageChecksumVerification(false) // Useless for reading footer
         .withMetadataFilter(filter).build();
     // Use try-with-resources to ensure fd is closed.
     try (ParquetFileReader fileReader = ParquetFileReader.open(inputFile, readOptions)) {
       return fileReader.getFooter();
     }
+  }
+
+  // The caller takes responsibility to close inputStream.
+  public static ParquetMetadata readFooter(
+      HadoopInputFile inputFile,
+      SeekableInputStream inputStream,
+      ParquetMetadataConverter.MetadataFilter filter)  throws IOException {
+    ParquetReadOptions readOptions = HadoopReadOptions
+        .builder(inputFile.getConfiguration(), inputFile.getPath())
+        .usePageChecksumVerification(false) // Useless for reading footer
+        .withMetadataFilter(filter).build();
+    ParquetFileReader fileReader = ParquetFileReader.open(inputFile, readOptions, inputStream);
+    return fileReader.getFooter();
   }
 }

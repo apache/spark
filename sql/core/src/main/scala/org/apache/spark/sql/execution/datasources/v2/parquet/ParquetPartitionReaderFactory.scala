@@ -25,6 +25,8 @@ import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate}
 import org.apache.parquet.hadoop.{ParquetInputFormat, ParquetRecordReader}
 import org.apache.parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
+import org.apache.parquet.hadoop.util.HadoopInputFile
+import org.apache.parquet.io.SeekableInputStream
 
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
@@ -84,17 +86,29 @@ case class ParquetPartitionReaderFactory(
   private val datetimeRebaseModeInRead = options.datetimeRebaseModeInRead
   private val int96RebaseModeInRead = options.int96RebaseModeInRead
 
-  private def getFooter(file: PartitionedFile): ParquetMetadata = {
-    val conf = broadcastedConf.value.value
-    if (aggregation.isDefined || enableVectorizedReader) {
-      // There are two purposes for reading footer with row groups：
-      // 1. When there are aggregates to push down, we get max/min/count from footer statistics.
-      // 2. When there are vectorized reads, we can avoid reading the footer twice by reading
-      //    all row groups in advance and filter row groups according to filters that require
-      //    push down (no need to read the footer metadata again).
-      ParquetFooterReader.readFooter(conf, file, ParquetFooterReader.WITH_ROW_GROUPS)
+  private def getFooter(file: PartitionedFile):
+      (Option[HadoopInputFile], Option[SeekableInputStream], ParquetMetadata) = {
+    val hadoopConf = broadcastedConf.value.value
+    if (aggregation.isDefined) {
+      // When there are aggregates to push down, we get max/min/count from footer statistics.
+      val footer = ParquetFooterReader.readFooter(
+        hadoopConf, file, ParquetFooterReader.WITH_ROW_GROUPS)
+      (None, None, footer)
+    } else if (enableVectorizedReader) {
+      // When there are vectorized reads, we can avoid reading the footer twice by reading
+      // all row groups in advance and filter row groups according to filters that require
+      // push down (no need to read the footer metadata again).
+      val hadoopInputFile = HadoopInputFile.fromStatus(file.fileStatus, hadoopConf)
+      val fileInputStream = hadoopInputFile.newStream()
+      val footerFilter = ParquetFooterReader.footerFilter(
+        hadoopConf, file, ParquetFooterReader.WITH_ROW_GROUPS)
+      val footer = ParquetFooterReader.readFooter(
+        hadoopInputFile, fileInputStream, footerFilter)
+      (Some(hadoopInputFile), Some(fileInputStream), footer)
     } else {
-      ParquetFooterReader.readFooter(conf, file, ParquetFooterReader.SKIP_ROW_GROUPS)
+      val footer = ParquetFooterReader.readFooter(
+        hadoopConf, file, ParquetFooterReader.SKIP_ROW_GROUPS)
+      (None, None, footer)
     }
   }
 
@@ -128,7 +142,7 @@ case class ParquetPartitionReaderFactory(
       new PartitionReader[InternalRow] {
         private var hasNext = true
         private lazy val row: InternalRow = {
-          val footer = getFooter(file)
+          val (_, _, footer) = getFooter(file)
 
           if (footer != null && footer.getBlocks.size > 0) {
             ParquetUtils.createAggInternalRowFromFooter(footer, file.urlEncodedPath,
@@ -173,7 +187,7 @@ case class ParquetPartitionReaderFactory(
       new PartitionReader[ColumnarBatch] {
         private var hasNext = true
         private val batch: ColumnarBatch = {
-          val footer = getFooter(file)
+          val (_, _, footer) = getFooter(file)
           if (footer != null && footer.getBlocks.size > 0) {
             val row = ParquetUtils.createAggInternalRowFromFooter(footer, file.urlEncodedPath,
               dataSchema, partitionSchema, aggregation.get, readDataSchema, file.partitionValues,
@@ -211,7 +225,7 @@ case class ParquetPartitionReaderFactory(
 
     val filePath = file.toPath
     val split = new FileSplit(filePath, file.start, file.length, Array.empty[String])
-    val fileFooter = getFooter(file)
+    val (inputFile, inputStream, fileFooter) = getFooter(file)
     val footerFileMetaData = fileFooter.getFileMetaData
     val datetimeRebaseSpec = getDatetimeRebaseSpec(footerFileMetaData)
     // Try to push down filters when filter push-down is enabled.
@@ -272,7 +286,8 @@ case class ParquetPartitionReaderFactory(
       ) { reader =>
         reader match {
           case vectorizedReader: VectorizedParquetRecordReader =>
-            vectorizedReader.initialize(split, hadoopAttemptContext, Option.apply(fileFooter))
+            vectorizedReader.initialize(
+              split, hadoopAttemptContext, inputFile, inputStream, Some(fileFooter))
           case _ =>
             reader.initialize(split, hadoopAttemptContext)
         }
