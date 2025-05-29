@@ -19,11 +19,21 @@ package org.apache.spark.sql.connect.planner
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.common.{InvalidCommandInput, InvalidPlanInput}
+import org.apache.spark.sql.errors.DataTypeErrors.{quoteByDefault, toSQLType}
 import org.apache.spark.sql.types.DataType
 
 object InvalidInputErrors {
+
+  // invalidPlanInput is a helper function to facilitate the migration of InvalidInputErrors
+  // to support NERF.
+  private def invalidPlanInput(
+      errorCondition: String,
+      messageParameters: Map[String, String] = Map.empty): InvalidPlanInput = {
+    InvalidPlanInput(SparkThrowableHelper.getMessage(errorCondition, messageParameters))
+  }
 
   def unknownRelationNotSupported(rel: proto.Relation): InvalidPlanInput =
     InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -72,11 +82,6 @@ object InvalidInputErrors {
   def rowNotSupportedForUdf(errorType: String): InvalidPlanInput =
     InvalidPlanInput(s"Row is not a supported $errorType type for this UDF.")
 
-  def invalidUserDefinedOutputSchemaType(actualType: String): InvalidPlanInput =
-    InvalidPlanInput(
-      s"Invalid user-defined output schema type for TransformWithStateInPandas. " +
-        s"Expect a struct type, but got $actualType.")
-
   def notFoundCachedLocalRelation(hash: String, sessionUUID: String): InvalidPlanInput =
     InvalidPlanInput(
       s"Not found any cached local relation with the hash: " +
@@ -91,8 +96,10 @@ object InvalidInputErrors {
   def schemaRequiredForLocalRelation(): InvalidPlanInput =
     InvalidPlanInput("Schema for LocalRelation is required when the input data is not provided.")
 
-  def invalidSchema(schema: DataType): InvalidPlanInput =
-    InvalidPlanInput(s"Invalid schema $schema")
+  def invalidSchemaStringNonStructType(schema: String, dataType: DataType): InvalidPlanInput =
+    invalidPlanInput(
+      "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      Map("inputSchema" -> quoteByDefault(schema), "dataType" -> toSQLType(dataType)))
 
   def invalidJdbcParams(): InvalidPlanInput =
     InvalidPlanInput("Invalid jdbc params, please specify jdbc url and table.")
@@ -106,8 +113,8 @@ object InvalidInputErrors {
   def doesNotSupport(what: String): InvalidPlanInput =
     InvalidPlanInput(s"Does not support $what")
 
-  def invalidSchemaDataType(dataType: DataType): InvalidPlanInput =
-    InvalidPlanInput(s"Invalid schema dataType $dataType")
+  def invalidSchemaTypeNonStruct(dataType: DataType): InvalidPlanInput =
+    invalidPlanInput("INVALID_SCHEMA_TYPE_NON_STRUCT", Map("dataType" -> toSQLType(dataType)))
 
   def expressionIdNotSupported(exprId: Int): InvalidPlanInput =
     InvalidPlanInput(s"Expression with ID: $exprId is not supported")
@@ -189,9 +196,6 @@ object InvalidInputErrors {
   def usingColumnsOrJoinConditionSetInJoin(): InvalidPlanInput =
     InvalidPlanInput("Using columns or join conditions cannot be set at the same time in Join")
 
-  def invalidStateSchemaDataType(dataType: DataType): InvalidPlanInput =
-    InvalidPlanInput(s"Invalid state schema dataType $dataType for flatMapGroupsWithState")
-
   def sqlCommandExpectsSqlOrWithRelations(other: proto.Relation.RelTypeCase): InvalidPlanInput =
     InvalidPlanInput(s"SQL command expects either a SQL or a WithRelations, but got $other")
 
@@ -212,17 +216,6 @@ object InvalidInputErrors {
 
   def invalidBucketCount(numBuckets: Int): InvalidCommandInput =
     InvalidCommandInput("INVALID_BUCKET_COUNT", Map("numBuckets" -> numBuckets.toString))
-
-  def invalidPythonUdtfReturnType(actualType: String): InvalidPlanInput =
-    InvalidPlanInput(
-      s"Invalid Python user-defined table function return type. " +
-        s"Expect a struct type, but got $actualType.")
-
-  def invalidUserDefinedOutputSchemaTypeForTransformWithState(
-      actualType: String): InvalidPlanInput =
-    InvalidPlanInput(
-      s"Invalid user-defined output schema type for TransformWithStateInPandas. " +
-        s"Expect a struct type, but got $actualType.")
 
   def unsupportedUserDefinedFunctionImplementation(clazz: Class[_]): InvalidPlanInput =
     InvalidPlanInput(s"Unsupported UserDefinedFunction implementation: ${clazz}")

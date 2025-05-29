@@ -114,11 +114,28 @@ object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
           if tableSpec.collation.isEmpty =>
           createTable.copy(tableSpec = tableSpec.copy(
             collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
-        case replaceTable@ReplaceTable(
-        ResolvedIdentifier(catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _)
+
+        case replaceTable@ReplaceTable(ResolvedIdentifier(
+        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _)
           if tableSpec.collation.isEmpty =>
           replaceTable.copy(tableSpec = tableSpec.copy(
             collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
+
+        case createView@CreateView(ResolvedIdentifier(
+        catalog: SupportsNamespaces, identifier), _, _, _, _, _, _, _, _, _)
+          if createView.collation.isEmpty =>
+          createView.copy(
+            collation = getCollationFromSchemaMetadata(catalog, identifier.namespace()))
+
+        // We match against ResolvedPersistentView because temporary views don't have a
+        // schema/catalog.
+        case alterViewAs@AlterViewAs(resolvedPersistentView@ResolvedPersistentView(
+        catalog: SupportsNamespaces, identifier, _), _, _)
+          if resolvedPersistentView.metadata.collation.isEmpty =>
+          val newResolvedPersistentView = resolvedPersistentView.copy(
+            metadata = resolvedPersistentView.metadata.copy(
+              collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
+          alterViewAs.copy(child = newResolvedPersistentView)
         case other =>
           other
       }

@@ -609,3 +609,57 @@ WITH RECURSIVE tmp(x) AS (
     SELECT x + 1, x, y + 1, y FROM rcte WHERE x < 5
 )
 SELECT * FROM rcte;
+
+-- Non-deterministic query with rand with seed
+WITH RECURSIVE randoms(val) AS (
+    SELECT CAST(floor(rand(82374) * 5 + 1) AS INT)
+    UNION ALL
+    SELECT CAST(floor(rand(237685) * 5 + 1) AS INT)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Non-deterministic query with uniform with seed
+WITH RECURSIVE randoms(val) AS (
+    SELECT CAST(UNIFORM(1, 6, 82374) AS INT)
+    UNION ALL
+    SELECT CAST(UNIFORM(1, 6, 237685) AS INT)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Non-deterministic query with randn with seed
+WITH RECURSIVE randoms(val) AS (
+    SELECT CAST(floor(randn(82374) * 5 + 1) AS INT)
+    UNION ALL
+    SELECT CAST(floor(randn(237685) * 5 + 1) AS INT)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Non-deterministic query with randstr
+WITH RECURSIVE randoms(val) AS (
+    SELECT randstr(10, 82374)
+    UNION ALL
+    SELECT randstr(10, 237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Non-deterministic query with UUID
+WITH RECURSIVE randoms(val) AS (
+    SELECT UUID(82374)
+    UNION ALL
+    SELECT UUID(237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Non-deterministic query with shuffle
+WITH RECURSIVE randoms(val) AS (
+    SELECT ARRAY(1,2,3,4,5)
+    UNION ALL
+    SELECT SHUFFLE(ARRAY(1,2,3,4,5), 237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
