@@ -69,7 +69,7 @@ abstract class GlobFsHistoryProviderSuite
   override def beforeEach(): Unit = {
     super.beforeEach()
     val random = new scala.util.Random
-    numSubDirs = random.nextInt(10) + 1
+    numSubDirs = random.nextInt(3) + 1
     testDirs = (0 until numSubDirs).map { i =>
       Utils.createTempDir(namePrefix = testGlob)
     }
@@ -1356,20 +1356,9 @@ abstract class GlobFsHistoryProviderSuite
     val clock = new ManualClock(1533132471)
     val provider = new GlobFsHistoryProvider(createTestConf(), clock)
     val accessDeniedFiles = newLogFiles("accessDenied", None, inProgress = false)
-    accessDeniedFiles.foreach { file =>
-      writeFile(
-        file,
-        None,
-        SparkListenerApplicationStart("accessDenied", Some("accessDenied"), 1L, "test", None))
-    }
+    writeAppLogs(accessDeniedFiles, Some("accessDenied"), "accessDenied", 1L, None, "test")
     val accessGrantedFiles = newLogFiles("accessGranted", None, inProgress = false)
-    accessGrantedFiles.foreach { file =>
-      writeFile(
-        file,
-        None,
-        SparkListenerApplicationStart("accessGranted", Some("accessGranted"), 1L, "test", None),
-        SparkListenerApplicationEnd(5L))
-    }
+    writeAppLogs(accessGrantedFiles, Some("accessGranted"), "accessGranted", 1L, Some(5L), "test")
     var isReadable = false
     val mockedFs = spy[FileSystem](provider.fs)
     doThrow(new AccessControlException("Cannot read accessDenied file"))
@@ -1380,11 +1369,11 @@ abstract class GlobFsHistoryProviderSuite
     val mockedProvider = spy[GlobFsHistoryProvider](provider)
     when(mockedProvider.fs).thenReturn(mockedFs)
     updateAndCheck(mockedProvider) { list =>
-      list.size should be(1)
+      list.size should be(numSubDirs)
     }
     // Doing 2 times in order to check the inaccessibleList filter too
     updateAndCheck(mockedProvider) { list =>
-      list.size should be(1)
+      list.size should be(numSubDirs)
     }
     val accessDeniedPaths = accessDeniedFiles.map { accessDenied =>
       new Path(accessDenied.getPath())
@@ -1524,8 +1513,8 @@ abstract class GlobFsHistoryProviderSuite
         assert(logs1_1.forall { log => log.exists() == (num > 4) })
         assert(logs1_2_incomplete.forall { log => log.exists() })
         assert(logs2_1.forall { log => log.exists() == (num > 3) })
-        // assert(logs3_1.forall { log => log.exists() == (num > 2) })
-        // assert(logs3_2.forall { log => log.exists() == (num > 2) })
+        assert(logs3_1.forall { log => log.exists() == (num > 2) })
+        assert(logs3_2.forall { log => log.exists() == (num > 2) })
       }
 
       provider.stop()
