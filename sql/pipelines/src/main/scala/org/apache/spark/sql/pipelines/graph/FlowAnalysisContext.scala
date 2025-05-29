@@ -46,7 +46,7 @@ private[pipelines] case class FlowAnalysisContext(
     shouldLowerCaseNames: Boolean = false,
     analysisWarnings: mutable.Buffer[AnalysisWarning] = new ListBuffer[AnalysisWarning],
     spark: SparkSession,
-    externalInputs: mutable.HashSet[String] = mutable.HashSet.empty
+    externalInputs: mutable.HashSet[TableIdentifier] = mutable.HashSet.empty
 ) {
 
   /** Map from [[Input]] name to the actual [[Input]] */

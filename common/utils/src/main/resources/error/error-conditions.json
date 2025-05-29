@@ -1951,7 +1951,7 @@
   },
   "INCOMPATIBLE_BATCH_VIEW_READ" : {
     "message" : [
-      "View <datasetIdentifier> is not a batch view and must be referenced using read. This check can be disabled by setting Spark conf pipelines.incompatibleViewCheck.enabled = false."
+      "View <datasetIdentifier> is a batch view and must be referenced using SparkSession#read. This check can be disabled by setting Spark conf pipelines.incompatibleViewCheck.enabled = false."
     ],
     "sqlState" : "42000"
   },
@@ -2033,7 +2033,7 @@
   },
   "INCOMPATIBLE_STREAMING_VIEW_READ" : {
     "message" : [
-      "View <datasetIdentifier> is a streaming view and must be referenced using readStream. This check can be disabled by setting Spark conf pipelines.incompatibleViewCheck.enabled = false."
+      "View <datasetIdentifier> is a streaming view and must be referenced using SparkSession#readStream. This check can be disabled by setting Spark conf pipelines.incompatibleViewCheck.enabled = false."
     ],
     "sqlState" : "42000"
   },

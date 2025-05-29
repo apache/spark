@@ -374,7 +374,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
         .getMessage
         .contains(
           s"View ${fullyQualifiedIdentifier("a", isView = true).quotedString}" +
-          s" is not a batch view and must be referenced using read."
+          s" is a batch view and must be referenced using SparkSession#read."
         )
     )
   }
@@ -392,7 +392,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
         .getMessage
         .contains(
           s"View ${fullyQualifiedIdentifier("a", isView = true).quotedString} " +
-          s"is a streaming view and must be referenced using readStream"
+          s"is a streaming view and must be referenced using SparkSession#readStream"
         )
     )
   }

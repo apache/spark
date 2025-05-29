@@ -101,7 +101,7 @@ case class FlowFunctionResult(
     requestedInputs: Set[TableIdentifier],
     batchInputs: Set[ResolvedInput],
     streamingInputs: Set[ResolvedInput],
-    usedExternalInputs: Set[String],
+    usedExternalInputs: Set[TableIdentifier],
     dataFrame: Try[DataFrame],
     sqlConf: Map[String, String],
     analysisWarnings: Seq[AnalysisWarning] = Nil) {
