@@ -30,19 +30,16 @@ trait GraphValidations extends Logging {
   this: DataflowGraph =>
 
   /**
-   * Validate multi query table correctness. Exposed for Python unit testing, which currently cannot
-   * run anything which invokes the flow function as there's no persistent Python to run it.
+   * Validate multi query table correctness.
    *
    * @return the multi-query tables by destination
    */
-  protected[pipelines] def validateMultiQueryTables(): Map[TableIdentifier, Seq[Flow]] = {
+  protected[graph] def validateMultiQueryTables(): Map[TableIdentifier, Seq[Flow]] = {
     val multiQueryTables = flowsTo.filter(_._2.size > 1)
     // Non-streaming tables do not support multiflow.
     multiQueryTables
       .find {
-        case (dest, flows) =>
-          flows.exists(f => !resolvedFlow(f.identifier).df.isStreaming) &&
-          table.contains(dest)
+        case (dest, _) => table.get(dest).exists(!_.isStreamingTable)
       }
       .foreach {
         case (dest, flows) =>
@@ -89,12 +86,12 @@ trait GraphValidations extends Logging {
    * Validate that all tables are resettable. This is a best-effort check that will only catch
    * upstream tables that are resettable but have a non-resettable downstream dependency.
    */
-  protected def validateTablesAreResettable(): Seq[GraphValidationWarning] = {
+  protected def validateTablesAreResettable(): Unit = {
     validateTablesAreResettable(tables)
   }
 
   /** Validate that all specified tables are resettable. */
-  protected def validateTablesAreResettable(tables: Seq[Table]): Seq[GraphValidationWarning] = {
+  protected def validateTablesAreResettable(tables: Seq[Table]): Unit = {
     val tableLookup = mapUnique(tables, "table")(_.identifier)
     val nonResettableTables =
       tables.filter(t => !PipelinesTableProperties.resetAllowed.fromMap(t.properties))
@@ -123,28 +120,19 @@ trait GraphValidations extends Logging {
       .reverse
       .map {
         case (nameForEvent, tables) =>
-          InvalidResettableDependencyException(nameForEvent, tables)
+          throw new AnalysisException(
+            "INVALID_RESETTABLE_DEPENDENCY",
+            Map(
+              "downstreamTable" -> nameForEvent,
+              "upstreamResettableTables" -> tables
+                .map(_.displayName)
+                .sorted
+                .map(t => s"'$t'")
+                .mkString(", "),
+              "resetAllowedKey" -> PipelinesTableProperties.resetAllowed.key
+            )
+          )
       }
-  }
-
-  /**
-   * Validate if we have any append only flows writing into a streaming table but was created
-   * from a batch query.
-   */
-  protected def validateAppendOnceFlows(): Seq[GraphValidationWarning] = {
-    flows
-      .filter {
-        case af: AppendOnceFlow => !af.definedAsOnce
-        case _ => false
-      }
-      .groupBy(_.destinationIdentifier)
-      .flatMap {
-        case (destination, flows) =>
-          table
-            .get(destination)
-            .map(t => AppendOnceFlowCreatedFromBatchQueryException(t, flows.map(_.identifier)))
-      }
-      .toSeq
   }
 
   protected def validateUserSpecifiedSchemas(): Unit = {
@@ -178,7 +166,7 @@ trait GraphValidations extends Logging {
 
   /**
    * Validates that all flows are resolved. If there are unresolved flows,
-   * detects a possible cyclic dependency and throw the appropriate execption.
+   * detects a possible cyclic dependency and throw the appropriate execution.
    */
   protected def validateSuccessfulFlowAnalysis(): Unit = {
     // all failed flows with their errors
@@ -232,7 +220,7 @@ trait GraphValidations extends Logging {
    * @return the start and end node of a cycle if found, None otherwise
    */
   private def detectCycle(ancestors: Map[TableIdentifier, Seq[TableIdentifier]])
-      : Option[(TableIdentifier, TableIdentifier)] = {
+  : Option[(TableIdentifier, TableIdentifier)] = {
     var cycle: Option[(TableIdentifier, TableIdentifier)] = None
     val visited = mutable.Set[TableIdentifier]()
     def visit(f: TableIdentifier, currentPath: List[TableIdentifier]): Unit = {

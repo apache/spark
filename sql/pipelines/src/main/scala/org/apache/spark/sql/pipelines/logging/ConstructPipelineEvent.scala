@@ -41,13 +41,14 @@ object ConstructPipelineEvent {
     Option(t.getCause).map(serializeException).getOrElse(Nil)
   }
 
-  def constructErrorDetails(t: Throwable): ErrorDetail = ErrorDetail(serializeException(t))
+  private def constructErrorDetails(t: Throwable): ErrorDetail = ErrorDetail(serializeException(t))
 
   /**
    * Returns a new event with the current or provided timestamp and the given origin/message.
    */
   def apply(
       origin: PipelineEventOrigin,
+      level: EventLevel,
       message: String,
       details: EventDetails,
       exception: Throwable = null,
@@ -55,6 +56,7 @@ object ConstructPipelineEvent {
   ): PipelineEvent = {
     ConstructPipelineEvent(
       origin = origin,
+      level = level,
       message = message,
       details = details,
       errorDetails = Option(exception).map(constructErrorDetails),
@@ -67,6 +69,7 @@ object ConstructPipelineEvent {
    */
   def apply(
       origin: PipelineEventOrigin,
+      level: EventLevel,
       message: String,
       details: EventDetails,
       errorDetails: Option[ErrorDetail],
@@ -82,7 +85,8 @@ object ConstructPipelineEvent {
       message = message,
       details = details,
       error = errorDetails,
-      origin = origin
+      origin = origin,
+      level = level
     )
   }
 }
