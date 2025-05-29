@@ -588,8 +588,6 @@ WITH RECURSIVE t1 AS (
     SELECT n+1 FROM t2 WHERE n < 5)
 SELECT * FROM t1;
 
-SELECT * FROM t1;
-
 -- Recursive CTE with multiple of the same reference in the anchor, which get referenced differently subsequent iterations.
 WITH RECURSIVE tmp(x) AS (
     values (1), (2), (3), (4), (5)
