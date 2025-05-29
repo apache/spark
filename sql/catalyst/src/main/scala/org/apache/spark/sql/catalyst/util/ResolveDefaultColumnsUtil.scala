@@ -432,23 +432,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
       targetType: DataType,
       colName: String): Option[Expression] = {
     expr match {
-      case l: Literal => defaultValueFromWiderType(l, targetType, colName)
-      case _ => None
-    }
-  }
-
-  /**
-   * If the provided default value is a literal of a wider type than the target column,
-   * but the literal value fits within the narrower type, just coerce it for convenience.
-   * Exclude boolean/array/struct/map types from consideration for this type coercion to
-   * avoid surprising behavior like interpreting "false" as integer zero.
-   */
-  def defaultValueFromWiderType(
-      expr: Expression,
-      targetType: DataType,
-      colName: String): Option[Expression] = {
-    expr match {
-      case e if !Seq(targetType, e.dataType).exists(_ match {
+      case e if e.foldable && !Seq(targetType, e.dataType).exists(_ match {
         case _: BooleanType | _: ArrayType | _: StructType | _: MapType => true
         case _ => false
       }) =>
@@ -456,12 +440,12 @@ object ResolveDefaultColumns extends QueryErrorsBase
         try {
           Option(casted.eval(EmptyRow)).map(Literal(_, targetType))
         } catch {
-          case e @ ( _: SparkThrowable | _: RuntimeException) =>
+          case ex @ ( _: SparkThrowable | _: RuntimeException) =>
             logWarning(log"Failed to cast default value '${MDC(COLUMN_DEFAULT_VALUE, e)}' " +
               log"for column ${MDC(COLUMN_NAME, colName)} " +
-              log"from ${MDC(COLUMN_DATA_TYPE_SOURCE, expr.dataType)} " +
+              log"from ${MDC(COLUMN_DATA_TYPE_SOURCE, e.dataType)} " +
               log"to ${MDC(COLUMN_DATA_TYPE_TARGET, targetType)} " +
-              log"due to ${MDC(ERROR, e.getMessage)}", e)
+              log"due to ${MDC(ERROR, ex.getMessage)}", ex)
             None
         }
       case _ => None
@@ -477,8 +461,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
       dataType: DataType,
       statementType: String,
       colName: String,
-      defaultSQL: String,
-      castWiderOnlyLiterals: Boolean = true): Expression = {
+      defaultSQL: String): Expression = {
     val supplanted = CharVarcharUtils.replaceCharVarcharWithString(dataType)
     // Perform implicit coercion from the provided expression type to the required column type.
     val ret = analyzed match {
@@ -487,12 +470,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
       case canUpCast if Cast.canUpCast(canUpCast.dataType, supplanted) =>
         Cast(analyzed, supplanted, Some(conf.sessionLocalTimeZone))
       case other =>
-        val casted = if (castWiderOnlyLiterals) {
-          defaultValueFromWiderTypeLiteral(other, supplanted, colName)
-        } else {
-          defaultValueFromWiderType(other, supplanted, colName)
-        }
-        casted.getOrElse(
+        defaultValueFromWiderTypeLiteral(other, supplanted, colName).getOrElse(
           throw QueryCompilationErrors.defaultValuesDataTypeError(
             statementType, colName, defaultSQL, dataType, other.dataType))
     }
