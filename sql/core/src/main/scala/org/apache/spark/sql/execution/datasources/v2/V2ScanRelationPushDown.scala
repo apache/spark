@@ -38,6 +38,25 @@ import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StructTyp
 import org.apache.spark.sql.util.SchemaUtils._
 import org.apache.spark.util.ArrayImplicits._
 
+object PostV2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
+  import V2ScanRelationPushDown._
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val pushdownRules = Seq[LogicalPlan => LogicalPlan] (
+      createScanBuilder,
+      pruneColumns)
+
+    pushdownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
+      pushDownRule(newPlan)
+    }
+  }
+
+  private def createScanBuilder(plan: LogicalPlan) = plan.transform {
+    case r @ DataSourceV2ScanRelation(_, _, _, _, _, Some(builder)) =>
+      ScanBuilderHolder(r.output, r.relation, builder)
+  }
+}
+
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
@@ -374,7 +393,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
       val wrappedScan = getWrappedScan(scan, sHolder)
 
-      val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
+      val scanRelation = DataSourceV2ScanRelation(
+        sHolder.relation, wrappedScan, output, builder = Some(sHolder.builder))
 
       val projectionOverSchema =
         ProjectionOverSchema(output.toStructType, AttributeSet(output))
