@@ -2382,7 +2382,7 @@
   },
   "INVALID_BUCKET_COUNT" : {
     "message" : [
-      "BucketBy must specify a bucket count > 0, received <numBuckets> instead."
+      "Number of buckets should be greater than 0 but less than or equal to bucketing.maxBuckets (`<bucketingMaxBuckets>`). Got `<numBuckets>`."
     ],
     "sqlState" : "22003"
   },
@@ -7040,11 +7040,6 @@
   "_LEGACY_ERROR_TEMP_1082" : {
     "message" : [
       "Partition [<specString>] did not specify locationUri."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1083" : {
-    "message" : [
-      "Number of buckets should be greater than 0 but less than or equal to bucketing.maxBuckets (`<bucketingMaxBuckets>`). Got `<numBuckets>`."
     ]
   },
   "_LEGACY_ERROR_TEMP_1089" : {
