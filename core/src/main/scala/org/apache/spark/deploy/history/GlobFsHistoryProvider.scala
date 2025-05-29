@@ -184,11 +184,11 @@ private[history] class GlobFsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // Visible for testing
   private[history] def isAccessible(path: Path): Boolean = {
-    !inaccessibleList.containsKey(path.toString())
+    !inaccessibleList.containsKey(path.getName())
   }
 
   private def markInaccessible(path: Path): Unit = {
-    inaccessibleList.put(path.toString(), clock.getTimeMillis())
+    inaccessibleList.put(path.getName(), clock.getTimeMillis())
   }
 
   /**

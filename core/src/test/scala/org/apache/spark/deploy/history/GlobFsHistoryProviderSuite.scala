@@ -118,8 +118,8 @@ abstract class GlobFsHistoryProviderSuite
       inProgress: Boolean,
       codec: Option[String] = None): IndexedSeq[File] = {
     val ip = if (inProgress) EventLogFileWriter.IN_PROGRESS else ""
-    testDirs.map { testDir =>
-      val logUri = SingleEventLogFileWriter.getLogPath(testDir.toURI, appId, appAttemptId, codec)
+    testDirs.zipWithIndex.map { case (testDir, i) =>
+      val logUri = SingleEventLogFileWriter.getLogPath(testDir.toURI, s"$appId-$i", appAttemptId, codec)
       val logPath = new Path(logUri).toUri.getPath + ip
       new File(logPath)
     }
@@ -999,7 +999,7 @@ abstract class GlobFsHistoryProviderSuite
     val provider = new GlobFsHistoryProvider(createTestConf())
     updateAndCheck(provider) { list =>
       list.size should be(numSubDirs)
-      list(0).name should be("real-app")
+      list(0).name should be(s"real-app-${numSubDirs-1}")
     }
   }
 
@@ -1364,7 +1364,7 @@ abstract class GlobFsHistoryProviderSuite
     doThrow(new AccessControlException("Cannot read accessDenied file"))
       .when(mockedFs)
       .open(argThat((path: Path) =>
-        path.getName.toLowerCase(Locale.ROOT) == "accessdenied" &&
+        path.getName.toLowerCase(Locale.ROOT).startsWith("accessdenied") &&
           !isReadable))
     val mockedProvider = spy[GlobFsHistoryProvider](provider)
     when(mockedProvider.fs).thenReturn(mockedFs)
@@ -1387,9 +1387,9 @@ abstract class GlobFsHistoryProviderSuite
     accessDeniedPaths.foreach { accessDeniedPath =>
       updateAndCheck(mockedProvider) { list =>
         assert(mockedProvider.isAccessible(accessDeniedPath))
-        assert(list.exists(_.name == "accessDenied"))
-        assert(list.exists(_.name == "accessGranted"))
-        list.size should be(2)
+        assert(list.exists(_.name.startsWith("accessdenied")))
+        assert(list.exists(_.name.startsWith("accessgranted")))
+        list.size should be(2 * numSubDirs)
       }
     }
   }
