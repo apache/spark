@@ -269,7 +269,7 @@ private[history] class GlobFsHistoryProvider(conf: SparkConf, clock: Clock)
     val path = new Path(logDir)
     try {
       val matchedStatuses = fs.globStatus(path)
-      if (matchedStatuses == null || matchedStatuses.isEmpty)  {
+      if (matchedStatuses == null || matchedStatuses.isEmpty) {
         throw new IllegalArgumentException(
           "Logging directory glob specified is not any directory: %s".format(logDir))
       }
