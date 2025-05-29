@@ -1809,6 +1809,39 @@ class SparkSubmitSuite
     assert(classpath.contains("."))
   }
 
+  test("SPARK-52334: Update all files, jars, and pyFiles to" +
+    "reference the working directory after they are downloaded") {
+    val testFile = "test_metrics_config.properties"
+    val testPyFile = "test_metrics_system.properties"
+    val testJar = "TestUDTF.jar"
+    val clArgs = Seq(
+      "--deploy-mode", "client",
+      "--proxy-user", "test.user",
+      "--master", "k8s://host:port",
+      "--executor-memory", "5g",
+      "--class", "org.SomeClass",
+      "--driver-memory", "4g",
+      "--conf", "spark.kubernetes.namespace=spark",
+      "--conf", "spark.kubernetes.driver.container.image=bar",
+      "--conf", "spark.kubernetes.submitInDriver=true",
+      "--files", s"src/test/resources/$testFile",
+      "--py-files", s"src/test/resources/$testPyFile",
+      "--jars", s"src/test/resources/$testJar",
+      "/home/thejar.jar",
+      "arg1")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val _ = submit.prepareSubmitEnvironment(appArgs)
+
+    appArgs.files should be (s"file:${Paths.get(testFile).toAbsolutePath}," +
+      s"file:${Paths.get(testPyFile).toAbsolutePath}")
+    appArgs.pyFiles should be (s"file:${Paths.get(testPyFile).toAbsolutePath}")
+    appArgs.jars should be (s"file:${Paths.get(testJar).toAbsolutePath}")
+
+    Files.delete(Paths.get(testFile))
+    Files.delete(Paths.get(testPyFile))
+    Files.delete(Paths.get(testJar))
+  }
+
   // Requires Python dependencies for Spark Connect. Should be enabled by default.
   ignore("Spark Connect application submission (Python)") {
     val pyFile = File.createTempFile("remote_test", ".py")
