@@ -240,12 +240,7 @@ class StatefulProcessorApiClient:
             response_message = self._receive_proto_message_with_timers()
             status = response_message[0]
             if status == 0:
-                data_batch = list(
-                    map(
-                        lambda x: x.timestampMs,
-                        response_message[2]
-                    )
-                )
+                data_batch = list(map(lambda x: x.timestampMs, response_message[2]))
                 require_next_fetch = response_message[3]
                 index = 0
             else:
@@ -255,7 +250,11 @@ class StatefulProcessorApiClient:
         new_index = index + 1
         if new_index < len(data_batch):
             # Update the index in the dictionary.
-            self.list_timer_iterator_cursors[iterator_id] = (data_batch, new_index, require_next_fetch)
+            self.list_timer_iterator_cursors[iterator_id] = (
+                data_batch,
+                new_index,
+                require_next_fetch,
+            )
         else:
             # If the index is at the end of the data batch, remove the state from the dictionary.
             self.list_timer_iterator_cursors.pop(iterator_id, None)
@@ -266,9 +265,7 @@ class StatefulProcessorApiClient:
         return (timestamp, is_last_row_from_iterator)
 
     def get_expiry_timers_iterator(
-        self,
-        iterator_id: str,
-        expiry_timestamp: int
+        self, iterator_id: str, expiry_timestamp: int
     ) -> Tuple[Tuple, int, bool]:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
@@ -277,8 +274,7 @@ class StatefulProcessorApiClient:
             data_batch, index, require_next_fetch = self.expiry_timer_iterator_cursors[iterator_id]
         else:
             expiry_timer_call = stateMessage.ExpiryTimerRequest(
-                expiryTimestampMs=expiry_timestamp,
-                iteratorId=iterator_id
+                expiryTimestampMs=expiry_timestamp, iteratorId=iterator_id
             )
             timer_request = stateMessage.TimerRequest(expiryTimerRequest=expiry_timer_call)
             message = stateMessage.StateRequest(timerRequest=timer_request)
@@ -289,11 +285,8 @@ class StatefulProcessorApiClient:
             if status == 0:
                 data_batch = list(
                     map(
-                        lambda x: (
-                            self._deserialize_from_bytes(x.key),
-                            x.timestampMs
-                        ),
-                        response_message[2]
+                        lambda x: (self._deserialize_from_bytes(x.key), x.timestampMs),
+                        response_message[2],
                     )
                 )
                 require_next_fetch = response_message[3]
@@ -305,7 +298,11 @@ class StatefulProcessorApiClient:
         new_index = index + 1
         if new_index < len(data_batch):
             # Update the index in the dictionary.
-            self.expiry_timer_iterator_cursors[iterator_id] = (data_batch, new_index, require_next_fetch)
+            self.expiry_timer_iterator_cursors[iterator_id] = (
+                data_batch,
+                new_index,
+                require_next_fetch,
+            )
         else:
             # If the index is at the end of the data batch, remove the state from the dictionary.
             self.expiry_timer_iterator_cursors.pop(iterator_id, None)
@@ -603,7 +600,9 @@ class ListTimerIterator:
 
 
 class ExpiredTimerIterator:
-    def __init__(self, stateful_processor_api_client: StatefulProcessorApiClient, expiry_timestamp: int):
+    def __init__(
+        self, stateful_processor_api_client: StatefulProcessorApiClient, expiry_timestamp: int
+    ):
         # Generate a unique identifier for the iterator to make sure iterators on the
         # same partition won't interfere with each other
         self.iterator_id = str(uuid.uuid4())
@@ -618,7 +617,9 @@ class ExpiredTimerIterator:
         if self.iterator_fully_consumed:
             raise StopIteration()
 
-        key, ts, is_last_row = self.stateful_processor_api_client.get_expiry_timers_iterator(self.iterator_id, self.expiry_timestamp)
+        key, ts, is_last_row = self.stateful_processor_api_client.get_expiry_timers_iterator(
+            self.iterator_id, self.expiry_timestamp
+        )
         if is_last_row:
             self.iterator_fully_consumed = True
 
