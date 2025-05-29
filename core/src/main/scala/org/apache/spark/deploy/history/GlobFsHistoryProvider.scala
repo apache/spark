@@ -165,7 +165,7 @@ private[history] class GlobFsHistoryProvider(conf: SparkConf, clock: Clock)
   private val processing = ConcurrentHashMap.newKeySet[String]
 
   private def isProcessing(path: Path): Boolean = {
-    processing.contains(path.getName)
+    processing.contains(path.toString())
   }
 
   private def isProcessing(info: GlobLogInfo): Boolean = {
@@ -173,22 +173,22 @@ private[history] class GlobFsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   private def processing(path: Path): Unit = {
-    processing.add(path.getName)
+    processing.add(path.toString())
   }
 
   private def endProcessing(path: Path): Unit = {
-    processing.remove(path.getName)
+    processing.remove(path.toString())
   }
 
   private val inaccessibleList = new ConcurrentHashMap[String, Long]
 
   // Visible for testing
   private[history] def isAccessible(path: Path): Boolean = {
-    !inaccessibleList.containsKey(path.getName)
+    !inaccessibleList.containsKey(path.toString())
   }
 
   private def markInaccessible(path: Path): Unit = {
-    inaccessibleList.put(path.getName, clock.getTimeMillis())
+    inaccessibleList.put(path.toString(), clock.getTimeMillis())
   }
 
   /**
