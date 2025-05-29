@@ -206,6 +206,15 @@ class SqlScriptingExecutionScope(
     errorHandler = triggerToExceptionHandlerMap.getHandlerForCondition(uppercaseCondition)
 
     if (errorHandler.isEmpty) {
+      if (uppercaseCondition.contains('.')) {
+        // If the condition contains a dot, it has a main error class and a subclass.
+        // Check if the error class is defined in the triggerToExceptionHandlerMap.
+        val errorClass = uppercaseCondition.split('.').head
+        errorHandler = triggerToExceptionHandlerMap.getHandlerForCondition(errorClass)
+      }
+    }
+
+    if (errorHandler.isEmpty) {
       // Check if there is a specific handler for the given SQLSTATE.
       errorHandler = triggerToExceptionHandlerMap.getHandlerForSqlState(uppercaseSqlState)
     }
