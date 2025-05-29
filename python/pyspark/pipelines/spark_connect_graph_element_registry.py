@@ -19,17 +19,17 @@ from pathlib import Path
 from pyspark.errors import PySparkTypeError
 from pyspark.sql import SparkSession
 from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-from pyspark.sql.pipelines.block_connect_access import block_spark_connect_execution_and_analysis
-from pyspark.sql.pipelines.dataset import (
+from pyspark.pipelines.block_connect_access import block_spark_connect_execution_and_analysis
+from pyspark.pipelines.dataset import (
     Dataset,
     MaterializedView,
     Table,
     StreamingTable,
     TemporaryView,
 )
-from pyspark.sql.pipelines.flow import Flow
-from pyspark.sql.pipelines.graph_element_registry import GraphElementRegistry
-from typing import cast
+from pyspark.pipelines.flow import Flow
+from pyspark.pipelines.graph_element_registry import GraphElementRegistry
+from typing import Any, cast
 import pyspark.sql.connect.proto as pb2
 
 
@@ -37,7 +37,9 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
     """Registers datasets and flows in a dataflow graph held in a Spark Connect server."""
 
     def __init__(self, spark: SparkSession, dataflow_graph_id: str) -> None:
-        self._spark = spark
+        # Cast because mypy seems to think `spark`` is a function, not an object. Likely related to
+        # SPARK-47544.
+        self._client = cast(Any, spark).client
         self._dataflow_graph_id = dataflow_graph_id
 
     def register_dataset(self, dataset: Dataset) -> None:
@@ -80,12 +82,12 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         )
         command = pb2.Command()
         command.pipeline_command.define_dataset.CopyFrom(inner_command)
-        self._spark.client.execute_command(command)
+        self._client.execute_command(command)
 
     def register_flow(self, flow: Flow) -> None:
         with block_spark_connect_execution_and_analysis():
             df = flow.func()
-        relation = cast(ConnectDataFrame, df)._plan.plan(self._spark.client)
+        relation = cast(ConnectDataFrame, df)._plan.plan(self._client)
 
         inner_command = pb2.PipelineCommand.DefineFlow(
             dataflow_graph_id=self._dataflow_graph_id,
@@ -97,7 +99,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         )
         command = pb2.Command()
         command.pipeline_command.define_flow.CopyFrom(inner_command)
-        self._spark.client.execute_command(command)
+        self._client.execute_command(command)
 
     def register_sql(self, sql_text: str, file_path: Path) -> None:
         inner_command = pb2.DefineSqlGraphElements(
@@ -107,4 +109,4 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         )
         command = pb2.Command()
         command.pipeline_command.define_sql_graph_elements.CopyFrom(inner_command)
-        self._spark.client.execute_command(command)
+        self._client.execute_command(command)

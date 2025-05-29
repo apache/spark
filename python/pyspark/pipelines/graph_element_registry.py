@@ -18,8 +18,8 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from pyspark.sql.pipelines.dataset import Dataset
-from pyspark.sql.pipelines.flow import Flow
+from pyspark.pipelines.dataset import Dataset
+from pyspark.pipelines.flow import Flow
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Generator, Optional

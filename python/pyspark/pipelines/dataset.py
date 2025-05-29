@@ -17,7 +17,7 @@
 from dataclasses import dataclass
 from typing import Mapping, Optional, Sequence, Union
 
-from pyspark.sql.pipelines.source_code_location import SourceCodeLocation
+from pyspark.pipelines.source_code_location import SourceCodeLocation
 from pyspark.sql.types import StructType
 
 

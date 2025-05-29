@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import Callable, Dict
 
 from pyspark.sql import DataFrame
-from pyspark.sql.pipelines.source_code_location import SourceCodeLocation
+from pyspark.pipelines.source_code_location import SourceCodeLocation
 
 QueryFunction = Callable[[], DataFrame]
 

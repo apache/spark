@@ -25,9 +25,8 @@ definitions:
       include: transformations/**/*.sql
 """
 
-PYTHON_EXAMPLE = """
+PYTHON_EXAMPLE = """from pyspark import pipelines as sdp
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql import pipelines as sdp
 
 spark = SparkSession.active()
 
@@ -36,8 +35,7 @@ def example_python_materialized_view() -> DataFrame:
     return spark.range(10)
 """
 
-SQL_EXAMPLE = """
-CREATE MATERIALIZED VIEW example_sql_materialized_view AS
+SQL_EXAMPLE = """CREATE MATERIALIZED VIEW example_sql_materialized_view AS
 SELECT id FROM example_python_materialized_view
 WHERE id % 2 = 0
 """

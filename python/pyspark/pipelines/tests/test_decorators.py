@@ -18,7 +18,7 @@
 import unittest
 
 from pyspark.errors import PySparkTypeError
-from pyspark.sql import pipelines as sdp
+from pyspark import pipelines as sdp
 
 
 class DecoratorsTest(unittest.TestCase):

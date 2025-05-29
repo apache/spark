@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.pipelines.api import (
+from pyspark.pipelines.api import (
     append_flow,
     create_streaming_table,
     materialized_view,

@@ -18,9 +18,9 @@
 import unittest
 
 from pyspark.errors import PySparkException
-from pyspark.sql.pipelines.graph_element_registry import graph_element_registration_context
-from pyspark.sql import pipelines as sdp
-from pyspark.sql.tests.pipelines.local_graph_element_registry import LocalGraphElementRegistry
+from pyspark.pipelines.graph_element_registry import graph_element_registration_context
+from pyspark import pipelines as sdp
+from pyspark.pipelines.tests.local_graph_element_registry import LocalGraphElementRegistry
 
 
 class GraphElementRegistryTest(unittest.TestCase):

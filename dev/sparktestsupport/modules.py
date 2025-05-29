@@ -556,10 +556,6 @@ pyspark_sql = Module(
         "pyspark.sql.tests.pandas.test_pandas_udf_window",
         "pyspark.sql.tests.pandas.test_pandas_sqlmetrics",
         "pyspark.sql.tests.pandas.test_converter",
-        "pyspark.sql.tests.pipelines.test_block_connect_access",
-        "pyspark.sql.tests.pipelines.test_cli",
-        "pyspark.sql.tests.pipelines.test_decorators",
-        "pyspark.sql.tests.pipelines.test_graph_element_registry",
         "pyspark.sql.tests.test_python_datasource",
         "pyspark.sql.tests.test_python_streaming_datasource",
         "pyspark.sql.tests.test_readwriter",
@@ -1505,6 +1501,18 @@ pyspark_logger = Module(
     ],
 )
 
+pyspark_pipelines = Module(
+    name="pyspark-pipelines",
+    dependencies=[pyspark_core, pyspark_sql, pyspark_connect],
+    source_file_regexes=["python/pyspark/pipelines"],
+    python_test_goals=[
+        "pyspark.pipelines.tests.test_block_connect_access",
+        "pyspark.pipelines.tests.test_cli",
+        "pyspark.pipelines.tests.test_decorators",
+        "pyspark.pipelines.tests.test_graph_element_registry",
+        "pyspark.pipelines.tests.test_init_cli",
+    ],
+)
 
 sparkr = Module(
     name="sparkr",

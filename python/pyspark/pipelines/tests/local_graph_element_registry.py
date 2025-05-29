@@ -19,9 +19,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Sequence
 
-from pyspark.sql.pipelines.dataset import Dataset
-from pyspark.sql.pipelines.flow import Flow
-from pyspark.sql.pipelines.graph_element_registry import GraphElementRegistry
+from pyspark.pipelines.dataset import Dataset
+from pyspark.pipelines.flow import Flow
+from pyspark.pipelines.graph_element_registry import GraphElementRegistry
 
 
 @dataclass(frozen=True)

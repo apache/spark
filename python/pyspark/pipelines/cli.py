@@ -32,15 +32,15 @@ from typing import Any, Generator, Mapping, Optional, Sequence
 
 from pyspark.errors import PySparkException, PySparkTypeError
 from pyspark.sql import SparkSession
-from pyspark.sql.pipelines.graph_element_registry import (
+from pyspark.pipelines.graph_element_registry import (
     graph_element_registration_context,
     GraphElementRegistry,
 )
-from pyspark.sql.pipelines.init_cli import init
-from pyspark.sql.pipelines.spark_connect_graph_element_registry import (
+from pyspark.pipelines.init_cli import init
+from pyspark.pipelines.spark_connect_graph_element_registry import (
     SparkConnectGraphElementRegistry,
 )
-from pyspark.sql.pipelines.spark_connect_pipeline import (
+from pyspark.pipelines.spark_connect_pipeline import (
     create_dataflow_graph,
     start_run,
     handle_pipeline_events,

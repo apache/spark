@@ -14,11 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Dict, Mapping, Iterator, Optional
-
-from pyspark.sql import SparkSession
+from typing import Any, Dict, Mapping, Iterator, Optional, cast
 
 import pyspark.sql.connect.proto as pb2
+from pyspark.sql import SparkSession
 from pyspark.errors.exceptions.base import PySparkValueError
 
 
@@ -39,7 +38,9 @@ def create_dataflow_graph(
     )
     command = pb2.Command()
     command.pipeline_command.create_dataflow_graph.CopyFrom(inner_command)
-    (_, properties, _) = spark.client.execute_command(command)
+    # Cast because mypy seems to think `spark`` is a function, not an object. Likely related to
+    # SPARK-47544.
+    (_, properties, _) = cast(Any, spark).client.execute_command(command)
     return properties["pipeline_command_result"].create_dataflow_graph_result.dataflow_graph_id
 
 
@@ -69,4 +70,6 @@ def start_run(spark: SparkSession, dataflow_graph_id: str) -> Iterator[Dict[str,
     inner_command = pb2.PipelineCommand.StartRun(dataflow_graph_id=dataflow_graph_id)
     command = pb2.Command()
     command.pipeline_command.start_run.CopyFrom(inner_command)
-    return spark.client.execute_command_as_iterator(command)
+    # Cast because mypy seems to think `spark`` is a function, not an object. Likely related to
+    # SPARK-47544.
+    return cast(Any, spark).client.execute_command_as_iterator(command)
