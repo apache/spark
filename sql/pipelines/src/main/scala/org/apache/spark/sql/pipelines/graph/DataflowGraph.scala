@@ -199,7 +199,7 @@ case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], views: Seq[View])
    * streaming tables without a query; such tables should still have at least one flow
    * writing to it.
    */
-  def validateEveryDatasetHasFlow(): Unit = {
+  private def validateEveryDatasetHasFlow(): Unit = {
     (tables.map(_.identifier) ++ views.map(_.identifier)).foreach { identifier =>
       if (!flows.exists(_.destinationIdentifier == identifier)) {
         throw new AnalysisException(

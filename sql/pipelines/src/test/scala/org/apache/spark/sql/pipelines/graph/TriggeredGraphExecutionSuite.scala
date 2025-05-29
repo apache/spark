@@ -27,7 +27,6 @@ import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.pipelines.common.{FlowStatus, RunState}
-import org.apache.spark.sql.pipelines.graph.TriggeredGraphExecution.StreamState
 import org.apache.spark.sql.pipelines.logging.EventLevel
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
