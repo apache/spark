@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataC
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsReportStatistics}
+import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
@@ -147,8 +147,7 @@ case class DataSourceV2ScanRelation(
     scan: Scan,
     output: Seq[AttributeReference],
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
-    ordering: Option[Seq[SortOrder]] = None,
-    builder: Option[ScanBuilder] = None) extends LeafNode with NamedRelation {
+    ordering: Option[Seq[SortOrder]] = None) extends LeafNode with NamedRelation {
 
   override def name: String = relation.name
 

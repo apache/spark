@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
@@ -52,12 +53,16 @@ object PostV2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper
   }
 
   private def createScanBuilder(plan: LogicalPlan) = plan.transform {
-    case r @ DataSourceV2ScanRelation(_, _, _, _, _, Some(builder)) =>
-      ScanBuilderHolder(r.output, r.relation, builder)
+    case r @ DataSourceV2ScanRelation(relation, _, _, _, _)
+        if relation.getTagValue(V2_SCAN_BUILDER_HOLDER).nonEmpty =>
+      val sHolder = relation.getTagValue(V2_SCAN_BUILDER_HOLDER).get
+      sHolder.originRelation = Some(r)
+      sHolder
   }
 }
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
+  val V2_SCAN_BUILDER_HOLDER = TreeNodeTag[ScanBuilderHolder]("v2_scan_builder_holder")
   import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -124,7 +129,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   private def rewriteAggregate(agg: Aggregate): LogicalPlan = agg.child match {
     case PhysicalOperation(project, Nil, holder @ ScanBuilderHolder(_, _,
-        r: SupportsPushDownAggregates)) if CollapseProject.canCollapseExpressions(
+        r: SupportsPushDownAggregates, _)) if CollapseProject.canCollapseExpressions(
         agg.aggregateExpressions, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
       val actualResultExprs = agg.aggregateExpressions.map(replaceAliasButKeepName(_, aliasMap))
@@ -393,8 +398,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
       val wrappedScan = getWrappedScan(scan, sHolder)
 
-      val scanRelation = DataSourceV2ScanRelation(
-        sHolder.relation, wrappedScan, output, builder = Some(sHolder.builder))
+      val scanRelation: DataSourceV2ScanRelation = if (sHolder.originRelation.isEmpty) {
+        val relation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
+        // reuse sHolder to support column pruning after optimization
+        sHolder.output = output
+        sHolder.relation.setTagValue(V2_SCAN_BUILDER_HOLDER, sHolder)
+        relation
+      } else {
+        sHolder.originRelation.get.copy(scan = wrappedScan, output = output)
+      }
 
       val projectionOverSchema =
         ProjectionOverSchema(output.toStructType, AttributeSet(output))
@@ -579,7 +591,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 case class ScanBuilderHolder(
     var output: Seq[AttributeReference],
     relation: DataSourceV2Relation,
-    builder: ScanBuilder) extends LeafNode {
+    builder: ScanBuilder,
+    var originRelation: Option[DataSourceV2ScanRelation] = None) extends LeafNode {
   var pushedLimit: Option[Int] = None
 
   var pushedOffset: Option[Int] = None
