@@ -3637,7 +3637,8 @@ class DataSourceV2SQLSuiteV1Filter
         .parquet(dir.getCanonicalPath + "/t1")
       spark.range(10).write.mode("overwrite").parquet(dir.getCanonicalPath + "/t2")
 
-      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "",
+                  SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "WARN") {
         spark.read.parquet(dir.getCanonicalPath + "/t1").createOrReplaceTempView("t1")
         spark.read.parquet(dir.getCanonicalPath + "/t2").createOrReplaceTempView("t2")
         assert(sql(
