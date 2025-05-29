@@ -39,12 +39,12 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.linalg.Vector.getSizeInBytes"),
 
     // [SPARK-52221][SQL] Refactor SqlScriptingLocalVariableManager into more generic context manager
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.scripting.SqlScriptingExecution.withLocalVariableManager")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.scripting.SqlScriptingExecution.withLocalVariableManager"),
 
     // [SPARK-52024][SQL] Support cancel ShuffleQueryStage when propagate empty relations
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.FutureAction.cancel")
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ComplexFutureAction.cancel")
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SimpleFutureAction.cancel")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.FutureAction.cancel"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ComplexFutureAction.cancel"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SimpleFutureAction.cancel"),
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.FutureAction.cancel")
   )
 
