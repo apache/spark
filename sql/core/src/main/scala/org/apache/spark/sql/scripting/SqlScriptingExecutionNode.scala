@@ -84,18 +84,16 @@ trait NonLeafStatementExec extends CompoundStatementExec {
       assert(!statement.isExecuted)
       statement.isExecuted = true
 
-      // DataFrame evaluates to True if it is single row, single column
-      //  of boolean type with value True.
+      // First, it is checked if DataFrame represents a valid Boolean condition - single row,
+      //   single column of Boolean type.
+      // If that is true, the condition evaluates to True only if the Boolean value is True.
+      //   Otherwise, if the Boolean value is False or NULL, the condition evaluates to False.
       val df = statement.buildDataFrame(session)
       df.schema.fields match {
         case Array(field) if field.dataType == BooleanType =>
           df.limit(2).collect() match {
             case Array(row) =>
-              if (row.isNullAt(0)) {
-                throw SqlScriptingErrors.booleanStatementWithEmptyRow(
-                  statement.origin, statement.getText)
-              }
-              row.getBoolean(0)
+              if (row.isNullAt(0)) false else row.getBoolean(0)
             case _ =>
               throw SparkException.internalError(
                 s"Boolean statement ${statement.getText} is invalid. It returns more than one row.")
