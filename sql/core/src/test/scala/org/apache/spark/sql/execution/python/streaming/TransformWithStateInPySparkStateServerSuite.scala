@@ -64,7 +64,7 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
   var valueStateMap: mutable.HashMap[String, ValueStateInfo] = mutable.HashMap()
   var listStateMap: mutable.HashMap[String, ListStateInfo] = mutable.HashMap()
   var mapStateMap: mutable.HashMap[String, MapStateInfo] = mutable.HashMap()
-  var expiryTimerIter: Iterator[(Any, Long)] = _
+  var expiryTimerIter: mutable.HashMap[String, Iterator[(Row, Long)]] = _
   var listTimerMap: mutable.HashMap[String, Iterator[Long]] = mutable.HashMap()
 
   override def beforeEach(): Unit = {
@@ -87,7 +87,8 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     // reset the iterator map to empty so be careful to call it if you want to access the iterator
     // map later.
     val testRow = getIntegerRow(1)
-    expiryTimerIter = Iterator.single(testRow, 1L /* a random long type value */)
+    expiryTimerIter = mutable.HashMap[String, Iterator[(Row, Long)]](
+      iteratorId -> Iterator.single((testRow, 1L /* a random long type value */)))
     val iteratorMap = mutable.HashMap[String, Iterator[Row]](iteratorId -> Iterator(testRow))
     val keyValueIteratorMap = mutable.HashMap[String, Iterator[(Row, Row)]](iteratorId ->
       Iterator((testRow, testRow)))
@@ -558,13 +559,13 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
 
   test("get expiry timers") {
     val message = TimerRequest.newBuilder().setExpiryTimerRequest(
-      ExpiryTimerRequest.newBuilder().setExpiryTimestampMs(
+      ExpiryTimerRequest.newBuilder().setIteratorId(iteratorId).setExpiryTimestampMs(
         10L
       ).build()
     ).build()
     stateServer.handleTimerRequest(message)
-    verify(arrowStreamWriter).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+    verify(outputStream).write(any[Array[Byte]])
   }
 
   test("stateful processor register timer") {
@@ -597,8 +598,8 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     ).build()
     stateServer.handleStatefulProcessorCall(message)
     verify(statefulProcessorHandle, times(0)).listTimers()
-    verify(arrowStreamWriter).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+    verify(outputStream).write(any[Array[Byte]])
   }
 
   test("stateful processor list timer - iterator not in map") {
@@ -616,8 +617,8 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     when(statefulProcessorHandle.listTimers()).thenReturn(Iterator(1))
     stateServer.handleStatefulProcessorCall(message)
     verify(statefulProcessorHandle, times(1)).listTimers()
-    verify(arrowStreamWriter).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+    verify(outputStream).write(any[Array[Byte]])
   }
 
   test("utils request - parse string schema") {
