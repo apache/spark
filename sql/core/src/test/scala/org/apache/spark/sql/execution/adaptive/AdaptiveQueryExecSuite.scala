@@ -318,7 +318,9 @@ class AdaptiveQueryExecSuite
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
-        AQEPropagateEmptyRelation(collection.mutable.Map.empty).ruleName) {
+        AQEPropagateEmptyRelation(
+          scala.collection.concurrent.TrieMap.empty,
+          collection.mutable.Map.empty).ruleName) {
       val df1 = spark.range(10).withColumn("a", $"id")
       val df2 = spark.range(10).withColumn("b", $"id")
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
@@ -1473,7 +1475,9 @@ class AdaptiveQueryExecSuite
       // This test is a copy of test(SPARK-32573), in order to test the configuration
       // `spark.sql.adaptive.optimizer.excludedRules` works as expect.
       SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
-        AQEPropagateEmptyRelation(collection.mutable.Map.empty).ruleName) {
+        AQEPropagateEmptyRelation(
+          scala.collection.concurrent.TrieMap.empty,
+          collection.mutable.Map.empty).ruleName) {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData2 t1 WHERE t1.b NOT IN (SELECT b FROM testData3)")
       val bhj = findTopLevelBroadcastHashJoin(plan)
@@ -2104,7 +2108,9 @@ class AdaptiveQueryExecSuite
       withSQLConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
         SQLConf.SHUFFLE_PARTITIONS.key -> "2",
         SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
-          AQEPropagateEmptyRelation(collection.mutable.Map.empty).ruleName) {
+          AQEPropagateEmptyRelation(
+            scala.collection.concurrent.TrieMap.empty,
+            collection.mutable.Map.empty).ruleName) {
         spark.sql("CREATE TABLE t (c1 int) USING PARQUET")
         val (_, adaptive) = runAdaptiveAndVerifyResult("SELECT c1, count(*) FROM t GROUP BY c1")
         assert(
@@ -2285,7 +2291,9 @@ class AdaptiveQueryExecSuite
       SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
       SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
-        AQEPropagateEmptyRelation(collection.mutable.Map.empty).ruleName) {
+        AQEPropagateEmptyRelation(
+          scala.collection.concurrent.TrieMap.empty,
+          collection.mutable.Map.empty).ruleName) {
       withTempView("t2") {
         // create a temp view with 0 partition
         spark.createDataFrame(sparkContext.emptyRDD[Row], new StructType().add("b", IntegerType))
@@ -2605,7 +2613,9 @@ class AdaptiveQueryExecSuite
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1048584",
       SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
-        AQEPropagateEmptyRelation(collection.mutable.Map.empty).ruleName) {
+        AQEPropagateEmptyRelation(
+          scala.collection.concurrent.TrieMap.empty,
+          collection.mutable.Map.empty).ruleName) {
       // Spark estimates a string column as 20 bytes so with 60k rows, these relations should be
       // estimated at ~120m bytes which is greater than the broadcast join threshold.
       val joinKeyOne = "00112233445566778899"

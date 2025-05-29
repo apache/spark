@@ -840,7 +840,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         withSQLConf(
           SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> enabled.toString,
           SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
-            AQEPropagateEmptyRelation(collection.mutable.Map.empty).ruleName) {
+            AQEPropagateEmptyRelation(
+              scala.collection.concurrent.TrieMap.empty,
+              collection.mutable.Map.empty).ruleName) {
 
           Seq(1).toDF("c1").createOrReplaceTempView("t1")
           spark.catalog.cacheTable("t1")

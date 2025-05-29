@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import scala.collection.concurrent.TrieMap
+
 import org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelationBase
 import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJoin
 import org.apache.spark.sql.catalyst.plans.logical.EmptyRelation
@@ -36,6 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
  *    empty [[LocalRelation]].
  */
 case class AQEPropagateEmptyRelation(
+  stageReuse: TrieMap[SparkPlan, Unit],
   stagesToCancel: collection.mutable.Map[Int, (String, ExchangeQueryStageExec)])
   extends PropagateEmptyRelationBase {
   override protected def isEmpty(plan: LogicalPlan): Boolean =
@@ -51,7 +54,8 @@ case class AQEPropagateEmptyRelation(
     candidates.foreach(_.foreach {
       case LogicalQueryStage(_, physicalPlan: SparkPlan) =>
         physicalPlan.collect {
-          case s: ShuffleQueryStageExec if !s.isMaterialized => s
+          case s: ShuffleQueryStageExec if !s.isMaterialized &&
+          !stageReuse.contains(s.plan.canonicalized) => s
         }.foreach(s => stagesToCancel(s.id) = ("empty relation", s))
       case _ =>
     })

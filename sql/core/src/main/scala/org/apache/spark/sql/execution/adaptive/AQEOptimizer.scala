@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import scala.collection.concurrent.TrieMap
+
 import org.apache.spark.internal.LogKeys.{BATCH_NAME, RULE_NAME}
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, EliminateLimits, OptimizeOneRowPlan}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LogicalPlanIntegrity}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -31,6 +34,7 @@ import org.apache.spark.util.Utils
  */
 class AQEOptimizer(
   conf: SQLConf,
+  stageReuse: TrieMap[SparkPlan, Unit],
   stagesToCancel: collection.mutable.Map[Int, (String, ExchangeQueryStageExec)],
   extendedRuntimeOptimizerRules: Seq[Rule[LogicalPlan]])
   extends RuleExecutor[LogicalPlan] {
@@ -42,7 +46,7 @@ class AQEOptimizer(
 
   private val defaultBatches = Seq(
     Batch("Propagate Empty Relations", fixedPoint,
-      AQEPropagateEmptyRelation(stagesToCancel),
+      AQEPropagateEmptyRelation(stageReuse, stagesToCancel),
       ConvertToLocalRelation,
       UpdateAttributeNullability),
     Batch("Dynamic Join Selection", Once, DynamicJoinSelection),
