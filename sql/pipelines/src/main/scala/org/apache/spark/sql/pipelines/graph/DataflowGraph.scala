@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.StructType
  * It manages the relationships between logical flows, tables, and views, providing
  * operations for graph traversal, validation, and transformation.
  */
-class DataflowGraph(val flows: Seq[Flow], val tables: Seq[Table], val views: Seq[View])
+case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], views: Seq[View])
     extends GraphOperations
     with GraphValidations {
 
@@ -128,14 +128,6 @@ class DataflowGraph(val flows: Seq[Flow], val tables: Seq[Table], val views: Seq
     resolutionFailedFlows.map { f =>
       f.identifier -> f
     }.toMap
-  }
-
-  /** Returns a copy of this [[DataflowGraph]] with optionally replaced components. */
-  def copy(
-      flows: Seq[Flow] = flows,
-      tables: Seq[Table] = tables,
-      views: Seq[View] = views): DataflowGraph = {
-    new DataflowGraph(flows, tables, views)
   }
 
   /**

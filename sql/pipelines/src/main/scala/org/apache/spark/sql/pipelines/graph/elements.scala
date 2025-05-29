@@ -74,7 +74,10 @@ trait Input extends GraphElement {
   def load(readOptions: InputReadOptions): DataFrame
 }
 
-/** Represents a node in a [[DataflowGraph]] that can be written to by a [[Flow]]. */
+/**
+ * Represents a node in a [[DataflowGraph]] that can be written to by a [[Flow]].
+ * Must be backed by a file source.
+ */
 sealed trait Output {
 
   /**

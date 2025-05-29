@@ -280,7 +280,7 @@ object FlowAnalysis {
       name: String): DataFrame = {
 
     val spark = context.spark
-    context.externalInputs += name
+    context.externalInputs += inputIdentifier.identifier
     spark.read.table(inputIdentifier.identifier.quotedString)
   }
 
@@ -298,7 +298,7 @@ object FlowAnalysis {
       streamReader: DataStreamReader,
       name: String): DataFrame = {
 
-    context.externalInputs += name
+    context.externalInputs += inputIdentifier.identifier
     streamReader.table(inputIdentifier.identifier.quotedString)
   }
 }

@@ -97,7 +97,7 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
     flows.groupBy(_.destinationIdentifier)
   }
 
-  def transformTables(transformer: Table => Table): DataflowGraphTransformer = {
+  def transformTables(transformer: Table => Table): DataflowGraphTransformer = synchronized {
     tables = tables.map(transformer)
     tableMap = computeTableMap()
     this
