@@ -137,7 +137,7 @@ trait ShuffleExchangeLike extends Exchange {
           quietly = quiet
           promise.tryFailure(new SparkAQEStageCancelException)
         }
-        futureAction.get().foreach(_.cancel(reason, quiet))
+        futureAction.get().foreach(_.cancel(reason, quiet = quiet))
       }
     }
   }

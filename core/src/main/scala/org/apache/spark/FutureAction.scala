@@ -119,7 +119,7 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
 
   @volatile private var _cancelled: Boolean = false
 
-  override def cancel(reason: Option[String] = None, quiet: Boolean = false): Unit = {
+  override def cancel(reason: Option[String], quiet: Boolean = false): Unit = {
     _cancelled = true
     jobWaiter.cancel(reason, quiet)
   }
@@ -193,11 +193,11 @@ class ComplexFutureAction[T](run : JobSubmitter => Future[T])
   // A promise used to signal the future.
   private val p = Promise[T]().completeWith(run(jobSubmitter))
 
-  override def cancel(reason: Option[String] = None, quiet: Boolean = false): Unit =
+  override def cancel(reason: Option[String], quiet: Boolean = false): Unit =
     synchronized {
       _cancelled = true
       p.tryFailure(new SparkException("Action has been cancelled"))
-      subActions.foreach(_.cancel(reason, quiet))
+      subActions.foreach(_.cancel(reason, quiet = quiet))
   }
 
   private def jobSubmitter = new JobSubmitter {
