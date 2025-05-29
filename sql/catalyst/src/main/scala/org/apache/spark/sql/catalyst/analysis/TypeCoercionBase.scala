@@ -102,8 +102,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
               c.dataType,
               "CREATE TABLE",
               c.name,
-              d.originalSQL,
-              castWiderOnlyLiterals = false))))
+              d.originalSQL))))
         }
         createTable.copy(columns = newCols)
 
@@ -116,8 +115,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
               c.dataType,
               "REPLACE TABLE",
               c.name,
-              d.originalSQL,
-              castWiderOnlyLiterals = false))))
+              d.originalSQL))))
         }
         replaceTable.copy(columns = newCols)
 
@@ -130,8 +128,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
               c.dataType,
               "ALTER TABLE ADD COLUMNS",
               c.colName,
-              d.originalSQL,
-              castWiderOnlyLiterals = false))))
+              d.originalSQL))))
         }
         addColumns.copy(columnsToAdd = newCols)
 
@@ -145,8 +142,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
               dataType,
               "ALTER TABLE ALTER COLUMN",
               c.column.name.quoted,
-              d.originalSQL,
-              castWiderOnlyLiterals = false))))
+              d.originalSQL))))
         }
         alterColumns.copy(specs = newSpecs)
     }
