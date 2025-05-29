@@ -24,16 +24,12 @@ from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import (
     StructType,
-    TYPE_CHECKING,
     Row,
 )
 from pyspark.sql.pandas.types import convert_pandas_using_numpy_type
 from pyspark.serializers import CPickleSerializer
 from pyspark.errors import PySparkRuntimeError
 import uuid
-
-if TYPE_CHECKING:
-    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
 
 __all__ = ["StatefulProcessorApiClient", "StatefulProcessorHandleState"]
 

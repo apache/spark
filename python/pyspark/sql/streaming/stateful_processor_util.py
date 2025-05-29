@@ -223,7 +223,7 @@ class TransformWithStateInPandasUdfUtils:
         elif self._time_mode.lower() == "eventtime":
             expiry_iter = ExpiredTimerIterator(stateful_processor_api_client, watermark_timestamp)
         else:
-            expiry_iter = iter([])
+            expiry_iter = iter([])  # type: ignore[assignment]
 
         # process with expiry timers, only timer related rows will be emitted
         for key_obj, expiry_timestamp in expiry_iter:
