@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
-import org.apache.spark.sql.functions.broadcast
+import org.apache.spark.sql.functions.{broadcast, col}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -160,6 +160,106 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
             "(tmp.p = 0)")
         }
       }
+    }
+  }
+
+  test("prune files using EqualTo predicate on _metadata.file_name") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      // Create a DataFrame with two files (simulate partitioned or non-partitioned as needed)
+      val df = spark.range(2)
+        .write
+        .option("maxRecordsPerFile", 1)
+        .parquet(path)
+
+      // Read the table with the _metadata virtual column enabled
+      val dfWithMeta = spark.read
+        .option("includeMetadata", "true")
+        .parquet(path)
+
+      val files = dfWithMeta.selectExpr("`_metadata`.`file_name`").distinct().collect().map(
+        _.getString(0)).toSet
+
+      // Pick one file name for pruning
+      val fileToKeep = files.head
+
+      val pruned = dfWithMeta
+        .filter(col("_metadata.file_name") === fileToKeep)
+        .selectExpr("`_metadata`.`file_name`")
+        .distinct()
+        .collect()
+        .map(_.getString(0))
+        .toSet
+
+      assert(pruned == Set(fileToKeep))
+    }
+  }
+
+  test("prune files using In predicate on _metadata.file_name") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(2)
+        .write
+        .option("maxRecordsPerFile", 1)
+        .parquet(path)
+
+      val dfWithMeta = spark.read
+        .option("includeMetadata", "true")
+        .parquet(path)
+
+      val files = dfWithMeta.selectExpr("`_metadata`.`file_name`").distinct().collect().map(
+        _.getString(0)).toSeq
+
+      // Use all file names in IN predicate
+      val pruned = dfWithMeta
+        .filter(col("_metadata.file_name").isin(files: _*))
+        .selectExpr("`_metadata`.`file_name`")
+        .distinct()
+        .collect()
+        .map(_.getString(0))
+        .toSet
+
+      assert(pruned == files.toSet)
+    }
+  }
+
+  test("prune files to zero when _metadata.file_name does not match") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(2)
+        .write
+        .option("maxRecordsPerFile", 1)
+        .parquet(path)
+
+      val dfWithMeta = spark.read
+        .option("includeMetadata", "true")
+        .parquet(path)
+
+      val pruned = dfWithMeta
+        .filter(col("_metadata.file_name") === "nonexistent-file.parquet")
+        .selectExpr("`_metadata`.`file_name`")
+        .collect()
+
+      assert(pruned.isEmpty)
+    }
+  }
+
+  test("no pruning when no _metadata.file_name predicate") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(2)
+        .write
+        .option("maxRecordsPerFile", 1)
+        .parquet(path)
+
+      val dfWithMeta = spark.read
+        .option("includeMetadata", "true")
+        .parquet(path)
+
+      val files = dfWithMeta.selectExpr("`_metadata`.`file_name`").distinct().collect().map(
+        _.getString(0)).toSet
+
+      assert(files.size == 2)
     }
   }
 

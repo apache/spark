@@ -282,6 +282,76 @@ trait FileSourceScanLike extends DataSourceScanExec {
   private def isDynamicPruningFilter(e: Expression): Boolean =
     e.exists(_.isInstanceOf[PlanExpression[_]])
 
+  /**
+   * Extracts a set of file names from predicates on the `_metadata.file_name` column.
+   * Supports equality and IN predicates where `_metadata.file_name` is accessed as a struct field.
+   */
+  private[execution] def extractMetadataFilters(filters: Seq[Expression]): Option[Set[String]] = {
+
+    def isMetadataFileName(expr: Expression): Boolean = expr match {
+      case GetStructField(child, ordinal, _) =>
+        child match {
+          case attr: AttributeReference if attr.name == "_metadata" =>
+            attr.dataType match {
+              case struct: StructType =>
+                struct.fields.lift(ordinal).exists(_.name == "file_name")
+              case _ => false
+            }
+          case _ => false
+        }
+      case _ => false
+    }
+
+    val fileNameValues = filters.flatMap {
+      case EqualTo(left, Literal(value: String, _)) if isMetadataFileName(left) => Some(value)
+      case EqualTo(Literal(value: String, _), right) if isMetadataFileName(right) => Some(value)
+      case In(left, list) if isMetadataFileName(left) =>
+        list.collect { case Literal(v: String, _) => v }
+      case _ => None
+    }
+
+    if (fileNameValues.nonEmpty) Some(fileNameValues.toSet) else None
+  }
+
+  // This field will be accessed during planning (e.g., `outputPartitioning` relies on it), and can
+  // only use static filters.
+  @transient lazy val selectedPartitions: ScanFileListing = {
+    val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
+    val startTime = System.nanoTime()
+    // The filters may contain subquery expressions which can't be evaluated during planning.
+    // Here we filter out subquery expressions and get the static data/partition filters, so that
+    // they can be used to do pruning at the planning phase.
+    val staticDataFilters = dataFilters.filterNot(isDynamicPruningFilter)
+    val staticPartitionFilters = partitionFilters.filterNot(isDynamicPruningFilter)
+    val partitionDirectories = relation.location.listFiles(
+      staticPartitionFilters, staticDataFilters)
+    val fileListing = GenericScanFileListing(partitionDirectories.toArray)
+
+    // _metadata.file_name pruning
+    val fileNameFilterOpt = extractMetadataFilters(staticDataFilters)
+
+    val prunedListing = fileNameFilterOpt match {
+      case None =>
+        // Fast path: no _metadata.file_name filter, return original listing immediately
+        fileListing
+
+      case Some(fileNames) =>
+        // Prune files by exact file name match
+        val prunedDirs = fileListing.partitionDirectories.map { dir =>
+          val filteredFiles = dir.files.filter { file =>
+            fileNames.contains(file.getPath.getName)
+          }
+          dir.copy(files = filteredFiles)
+        }
+        GenericScanFileListing(prunedDirs)
+    }
+
+    setFilesNumAndSizeMetric(prunedListing, static = true)
+    val timeTakenMs = NANOSECONDS.toMillis(
+      (System.nanoTime() - startTime) + optimizerMetadataTimeNs)
+    driverMetrics("metadataTime").set(timeTakenMs)
+    prunedListing
+  }
 
   // This field will be accessed during planning (e.g., `outputPartitioning` relies on it), and can
   // only use static filters.
