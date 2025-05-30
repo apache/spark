@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation.hasUnevalu
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, LocalRelation, LogicalPlan, OneRowRelation, Project, Union, UnionLoopRef}
 import org.apache.spark.sql.classic.Dataset
-import org.apache.spark.sql.execution.LogicalRDD.rewriteStatsAndConstraints
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 
@@ -220,10 +219,7 @@ case class UnionLoopExec(
               val logicalRDD = LogicalRDD.fromDataset(prevDF.queryExecution.toRdd, prevDF,
                   prevDF.isStreaming).newInstance()
               prevPlan = logicalRDD
-              val logicalPlan = prevDF.logicalPlan
-              val optimizedPlan = prevDF.queryExecution.optimizedPlan
-              val (stats, constraints) = rewriteStatsAndConstraints(logicalPlan, optimizedPlan)
-              logicalRDD.copy(output = r.output)(prevDF.sparkSession, stats, constraints)
+              logicalRDD.copy(output = r.output)(prevDF.sparkSession, None, None)
           }
       }
 
