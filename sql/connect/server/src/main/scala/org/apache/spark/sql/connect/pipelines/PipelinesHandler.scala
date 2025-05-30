@@ -89,10 +89,6 @@ private[connect] object PipelinesHandler extends Logging {
         logInfo(s"Start pipeline cmd received: $cmd")
         startRun(cmd.getStartRun, responseObserver, sessionHolder)
         defaultResponse
-      case proto.PipelineCommand.CommandTypeCase.STOP_RUN =>
-        logInfo(s"Stop pipeline cmd received: $cmd")
-        stopRun(cmd.getStopRun)
-        defaultResponse
 //      case proto.PipelineCommand.CommandTypeCase.DEFINE_SQL_GRAPH_ELEMENTS =>
 //        logInfo(s"Register sql datasets cmd received: $cmd")
 //        defineSqlGraphElements(cmd.getDefineSqlGraphElements, sparkSession)
@@ -177,12 +173,12 @@ private[connect] object PipelinesHandler extends Logging {
               .filter(_.nonEmpty),
             properties = dataset.getTablePropertiesMap.asScala.toMap,
             baseOrigin = QueryOrigin(
-              filePath = Option.when(dataset.getSourceCodeLocation.hasFileName)(
-                dataset.getSourceCodeLocation.getFileName
-              ),
-              line = Option.when(dataset.getSourceCodeLocation.hasLineNumber)(
-                dataset.getSourceCodeLocation.getLineNumber
-              ),
+//              filePath = Option.when(dataset.getSourceCodeLocation.hasFileName)(
+//                dataset.getSourceCodeLocation.getFileName
+//              ),
+//              line = Option.when(dataset.getSourceCodeLocation.hasLineNumber)(
+//                dataset.getSourceCodeLocation.getLineNumber
+//              ),
               objectType = Option(QueryOriginType.Table.toString),
               objectName = Option(tableIdentifier.unquotedString),
               language = Option(Python())
@@ -202,12 +198,12 @@ private[connect] object PipelinesHandler extends Logging {
             comment = Option(dataset.getComment),
             sqlText = None,
             origin = QueryOrigin(
-              filePath = Option.when(dataset.getSourceCodeLocation.hasFileName)(
-                dataset.getSourceCodeLocation.getFileName
-              ),
-              line = Option.when(dataset.getSourceCodeLocation.hasLineNumber)(
-                dataset.getSourceCodeLocation.getLineNumber
-              ),
+//              filePath = Option.when(dataset.getSourceCodeLocation.hasFileName)(
+//                dataset.getSourceCodeLocation.getFileName
+//              ),
+//              line = Option.when(dataset.getSourceCodeLocation.hasLineNumber)(
+//                dataset.getSourceCodeLocation.getLineNumber
+//              ),
               objectType = Option(QueryOriginType.View.toString),
               objectName = Option(viewIdentifier.unquotedString),
               language = Option(Python())
@@ -265,11 +261,11 @@ private[connect] object PipelinesHandler extends Logging {
         ),
         comment = None,
         origin = QueryOrigin(
-          filePath = Option
-            .when(flow.getSourceCodeLocation.hasFileName)(flow.getSourceCodeLocation.getFileName),
-          line = Option.when(flow.getSourceCodeLocation.hasLineNumber)(
-            flow.getSourceCodeLocation.getLineNumber
-          ),
+//          filePath = Option
+//            .when(flow.getSourceCodeLocation.hasFileName)(flow.getSourceCodeLocation.getFileName),
+//          line = Option.when(flow.getSourceCodeLocation.hasLineNumber)(
+//            flow.getSourceCodeLocation.getLineNumber
+//          ),
           objectType = Option(QueryOriginType.Flow.toString),
           objectName = Option(flowIdentifier.unquotedString),
           language = Option(Python())
@@ -317,10 +313,9 @@ private[connect] object PipelinesHandler extends Logging {
             .newBuilder()
             .setSessionId(sessionHolder.sessionId)
             .setServerSideSessionId(sessionHolder.serverSessionId)
-            .setPipelineEventsResult(
-              proto.PipelineEventsResult.newBuilder
-                .addAllEvents(
-                  Seq(
+            .setPipelineEventResult(
+              proto.PipelineEventResult.newBuilder
+                .setEvent(
                     proto.PipelineEvent
                       .newBuilder()
                       .setTimestamp(
@@ -332,9 +327,7 @@ private[connect] object PipelinesHandler extends Logging {
                       )
                       .setMessage(message)
                       .build()
-                  ).asJava
-                )
-                .build()
+                ).build()
             )
             .build()
         )
@@ -350,9 +343,5 @@ private[connect] object PipelinesHandler extends Logging {
     runFailureEvent.foreach { event =>
       throw event.error.get
     }
-  }
-
-  private def stopRun(cmd: proto.PipelineCommand.StopRun): Unit = {
-    PipelineExecutionHolder.stopPipelineExecution(cmd.getDataflowGraphId)
   }
 }

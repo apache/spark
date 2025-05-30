@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connect.pipelines
 
 import scala.collection.mutable.ArrayBuffer
-import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.PipelineEvent
@@ -50,8 +49,8 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
         val responseIterator = client.execute(startRunRequest)
         while (responseIterator.hasNext) {
           val response = responseIterator.next()
-          if (response.hasPipelineEventsResult) {
-            response.getPipelineEventsResult.getEventsList.asScala.foreach(capturedEvents.append)
+          if (response.hasPipelineEventResult) {
+            capturedEvents.append(response.getPipelineEventResult.getEvent)
           }
         }
         val expectedEventMessages = Set(
@@ -101,8 +100,8 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
           val responseIterator = client.execute(startRunRequest)
           while (responseIterator.hasNext) {
             val response = responseIterator.next()
-            if (response.hasPipelineEventsResult) {
-              response.getPipelineEventsResult.getEventsList.asScala.foreach(capturedEvents.append)
+            if (response.hasPipelineEventResult) {
+              capturedEvents.append(response.getPipelineEventResult.getEvent)
             }
           }
         }
