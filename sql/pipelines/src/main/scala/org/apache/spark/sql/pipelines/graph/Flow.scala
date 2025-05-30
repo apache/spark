@@ -29,9 +29,7 @@ import org.apache.spark.sql.types.StructType
 /**
  * Contains the catalog and database context information for query execution.
  */
-case class QueryContext(
-    currentCatalog: Option[String],
-    currentDatabase: Option[String])
+case class QueryContext(currentCatalog: Option[String], currentDatabase: Option[String])
 
 /**
  * A [[Flow]] is a node of data transformation in a dataflow graph. It describes the movement
@@ -45,9 +43,7 @@ trait Flow extends GraphElement with Logging {
   val identifier: TableIdentifier
 
   /**
-   * The dataset that this Flow represents a write to. Since the DataflowGraph doesn't have a first-
-   * class concept of views, writing to a destination that isn't a Table or a Sink represents a
-   * view.
+   * The dataset that this Flow represents a write to.
    */
   val destinationIdentifier: TableIdentifier
 
@@ -65,7 +61,7 @@ trait Flow extends GraphElement with Logging {
   def sqlConf: Map[String, String]
 }
 
-/** A wrapper for a resolved internal input that includes the identifier used in SubqueryAlias */
+/** A wrapper for a resolved internal input that includes the alias provided by the user. */
 case class ResolvedInput(input: Input, aliasIdentifier: AliasIdentifier)
 
 /** A wrapper for the lambda function that defines a [[Flow]]. */
@@ -90,12 +86,12 @@ trait FlowFunction extends Logging {
 }
 
 /**
- * Holds the [[DataFrame]] returned by a [[FlowFunction]] along with the inputs used to
+ * Holds the DataFrame returned by a [[FlowFunction]] along with the inputs used to
  * construct it.
  * @param batchInputs the complete inputs read by the flow
  * @param streamingInputs the incremental inputs read by the flow
  * @param usedExternalInputs the identifiers of the external inputs read by the flow
- * @param dataFrame the [[DataFrame]] expression executed by the flow if the flow can be resolved
+ * @param dataFrame the DataFrame expression executed by the flow if the flow can be resolved
  */
 case class FlowFunctionResult(
     requestedInputs: Set[TableIdentifier],

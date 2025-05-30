@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.pipelines.graph
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -38,8 +39,12 @@ case class UnresolvedDatasetException(identifier: TableIdentifier)
  * @param name The name of the table
  * @param cause The cause of the failure
  */
-case class LoadTableException(name: String, override val cause: Option[Throwable])
-    extends AnalysisException(s"Failed to load table '$name'", cause = cause)
+case class LoadTableException(name: String, cause: Option[Throwable])
+    extends SparkException(
+      errorClass = "INTERNAL_ERROR",
+      messageParameters = Map("message" -> s"Failed to load table '$name'"),
+      cause = cause.orNull
+    )
 
 /**
  * Exception raised when a pipeline has one or more flows that cannot be resolved
@@ -70,8 +75,8 @@ case class UnresolvedPipelineException(
            .sorted
            .mkString(", ")}
        |
-       |To view the exceptions that were raised while resolving these flows, look for FlowProgress
-       |logs with status FAILED that precede this log.""".stripMargin
+       |To view the exceptions that were raised while resolving these flows, look for flow
+       |failures that precede this log.""".stripMargin
     )
 
 /** A validation error that can either be thrown as an exception or logged as a warning. */

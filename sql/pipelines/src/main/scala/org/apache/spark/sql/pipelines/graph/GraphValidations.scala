@@ -30,10 +30,7 @@ trait GraphValidations extends Logging {
   this: DataflowGraph =>
 
   /**
-   * Validate multi query table correctness. Exposed for Python unit testing, which currently cannot
-   * run anything which invokes the flow function as there's no persistent Python to run it.
-   *
-   * @return the multi-query tables by destination
+   * Validate multi query table correctness.
    */
   protected[pipelines] def validateMultiQueryTables(): Map[TableIdentifier, Seq[Flow]] = {
     val multiQueryTables = flowsTo.filter(_._2.size > 1)

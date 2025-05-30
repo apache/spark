@@ -82,6 +82,14 @@
     ],
     "sqlState" : "XX000"
   },
+  "APPEND_ONCE_FROM_BATCH_QUERY" : {
+    "message" : [
+      "Creating a streaming table from a batch query prevents incremental loading of new data from source. Offending table: '<table>'.",
+      "Please use the stream() operator. Example usage:",
+      "CREATE STREAMING TABLE <target table name> ... AS SELECT ... FROM stream(<source table name>) ..."
+    ],
+    "sqlState" : "42000"
+  },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
@@ -3137,6 +3145,12 @@
     },
     "sqlState" : "KD002"
   },
+  "INVALID_NAME_IN_USE_COMMAND" : {
+    "message" : [
+      "Invalid name '<name>' in <command> command. Reason: <reason>"
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
@@ -3401,6 +3415,12 @@
       "Could not perform regexp_replace for source = \"<source>\", pattern = \"<pattern>\", replacement = \"<replacement>\" and position = <position>."
     ],
     "sqlState" : "22023"
+  },
+  "INVALID_RESETTABLE_DEPENDENCY" : {
+    "message" : [
+      "Tables <upstreamResettableTables> are resettable but have a non-resettable downstream dependency '<downstreamTable>'. `reset` will fail as Spark Streaming does not support deleted source data. You can either remove the <resetAllowedKey>=false property from '<downstreamTable>' or add it to its upstream dependencies."
+    ],
+    "sqlState" : "42000"
   },
   "INVALID_RESET_COMMAND_FORMAT" : {
     "message" : [
@@ -4587,6 +4607,12 @@
     ],
     "sqlState" : "42K03"
   },
+  "PERSISTED_VIEW_READS_FROM_TEMPORARY_VIEW" : {
+    "message" : [
+      "Persisted view <persistedViewName> cannot reference temporary view <temporaryViewName> that will not be available outside the pipeline scope. Either make the persisted view temporary or persist the temporary view."
+    ],
+    "sqlState" : "42K0F"
+  },
   "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [
       "Non-grouping expression <expr> is provided as an argument to the |> AGGREGATE pipe operator but does not contain any aggregate function; please update it to include an aggregate function and then retry the query again."
@@ -5443,6 +5469,19 @@
     ],
     "sqlState" : "42KD9"
   },
+  "UNABLE_TO_INFER_PIPELINE_TABLE_SCHEMA" : {
+    "message" : [
+      "Failed to infer the schema for table <tableName> from its upstream flows.",
+      "Please modify the flows that write to this table to make their schemas compatible.",
+      "",
+      "Inferred schema so far:",
+      "<inferredDataSchema>",
+      "",
+      "Incompatible schema:",
+      "<incompatibleDataSchema>"
+    ],
+    "sqlState" : "42KD9"
+  },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
       "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to either a SQL literal or collection constructor functions such as `map()`, `array()`, `struct()`."
@@ -5607,6 +5646,12 @@
       "Cannot resolve routine <routineName> on search path <searchPath>."
     ],
     "sqlState" : "42883"
+  },
+  "UNRESOLVED_TABLE_PATH" : {
+    "message" : [
+      "Storage path for table <identifier> cannot be resolved."
+    ],
+    "sqlState" : "22KD1"
   },
   "UNRESOLVED_USING_COLUMN_FOR_JOIN" : {
     "message" : [

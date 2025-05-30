@@ -28,7 +28,18 @@ import org.apache.spark.sql.pipelines.{AnalysisWarning, Language}
 import org.apache.spark.sql.pipelines.graph.GraphIdentifierManager.{ExternalDatasetIdentifier, InternalDatasetIdentifier}
 import org.apache.spark.sql.pipelines.util.{BatchReadOptions, InputReadOptions, StreamingReadOptions}
 
+
 object FlowAnalysis {
+    /**
+     * Creates a [[FlowFunction]] that attempts to analyze the provided LogicalPlan
+     * using the existing resolved inputs.
+     * - If all upstream inputs have been resolved, then analysis succeeds and the
+     *   function returns a [[FlowFunctionResult]] containing the dataframe.
+     * - If any upstream inputs are unresolved, then the function throws an exception.
+     *
+     * @param plan The user-supplied LogicalPlan defining a flow.
+     * @return A FlowFunction that attempts to analyze the provided LogicalPlan.
+     */
   def createFlowFunctionFromLogicalPlan(plan: LogicalPlan): FlowFunction = {
     new FlowFunction {
       override def call(
@@ -105,9 +116,7 @@ object FlowAnalysis {
             context,
             name = IdentifierHelper.toQuotedString(u.multipartIdentifier),
             spark.readStream,
-            streamingReadOptions = StreamingReadOptions(
-              apiLanguage = Language.Sql()
-            )
+            streamingReadOptions = StreamingReadOptions()
           ).queryExecution.analyzed
 
         // Batch read on another dataset in the pipeline
@@ -115,7 +124,7 @@ object FlowAnalysis {
           readBatchInput(
             context,
             name = IdentifierHelper.toQuotedString(u.multipartIdentifier),
-            batchReadOptions = BatchReadOptions(apiLanguage = Language.Sql())
+            batchReadOptions = BatchReadOptions()
           ).queryExecution.analyzed
       }
     Dataset.ofRows(spark, resolvedPlan)

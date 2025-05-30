@@ -24,29 +24,24 @@ import org.apache.spark.sql.pipelines.util.StreamingReadOptions.EmptyUserOptions
 /**
  * Generic options for a read of an input.
  */
-sealed trait InputReadOptions {
-  // The language of the public API that called this function.
-  def apiLanguage: Language
-}
+sealed trait InputReadOptions
 
 /**
  * Options for a batch read of an input.
  *
  * @param apiLanguage The language of the public API that called this function.
  */
-final case class BatchReadOptions(apiLanguage: Language) extends InputReadOptions
+final case class BatchReadOptions() extends InputReadOptions
 
 /**
  * Options for a streaming read of an input.
  *
- * @param apiLanguage The language of the public API that called this function.
  * @param userOptions Holds the user defined read options.
  * @param droppedUserOptions Holds the options that were specified by the user but
  *                       not actually used. This is a bug but we are preserving this behavior
  *                       for now to avoid making a backwards incompatible change.
  */
 final case class StreamingReadOptions(
-    apiLanguage: Language,
     userOptions: CaseInsensitiveMap[String] = EmptyUserOptions,
     droppedUserOptions: CaseInsensitiveMap[String] = EmptyUserOptions
 ) extends InputReadOptions

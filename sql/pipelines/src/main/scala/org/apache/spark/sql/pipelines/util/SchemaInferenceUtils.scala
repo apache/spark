@@ -30,8 +30,13 @@ object SchemaInferenceUtils {
 
   /**
    * Given a set of flows that write to the same destination and possibly a user-specified schema,
-   * we infer the resulting schema.
-   *
+   * we infer the schema of the destination dataset. The logic is as follows:
+   * 1. If there are no incoming flows, return the user-specified schema (if provided)
+   *    or an empty schema.
+   * 2. If there are incoming flows, we merge the schemas of all flows that write to
+   *    the same destination.
+   * 3. If a user-specified schema is provided, we merge it with the inferred schema.
+   *    The user-specified schema will take precedence over the inferred schema.
    * Returns an error if encountered during schema inference or merging the inferred schema with
    * the user-specified one.
    */
