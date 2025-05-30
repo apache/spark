@@ -71,7 +71,7 @@ abstract class GlobFsHistoryProviderSuite
     super.beforeEach()
     // Create a unique base directory for each test to isolate glob matching.
     suiteBaseDir = Utils.createTempDir(namePrefix = "GlobFsHistoryProviderSuiteBase")
-    numSubDirs = 3   // use a fixed count for predictable assertions
+    numSubDirs = 3 // use a fixed count for predictable assertions
     testDirs = (0 until numSubDirs).map { i =>
       // Create subdirectories inside the unique suiteBaseDir
       Utils.createTempDir(root = suiteBaseDir.getAbsolutePath(), namePrefix = testGlob)
@@ -1693,7 +1693,9 @@ abstract class GlobFsHistoryProviderSuite
       logs3_2.foreach { file => file.setLastModified(10L) }
 
       val provider = new GlobFsHistoryProvider(
-        createTestConf().set(MAX_LOG_NUM.key, s"${((if (num > 4) 4 else if (num > 3) 3 else if (num > 2) 2 else 0) + 1) * numSubDirs}"),
+        createTestConf().set(
+          MAX_LOG_NUM.key,
+          s"${((if (num > 4) 4 else if (num > 3) 3 else if (num > 2) 2 else 0) + 1) * numSubDirs}"),
         clock)
       updateAndCheck(provider) { list =>
         assert(logs1_1.forall { log => log.exists() == (num > 4) })
@@ -1737,7 +1739,8 @@ abstract class GlobFsHistoryProviderSuite
 
   test("SPARK-52327 LogInfo should be serialized/deserialized by jackson properly") {
     def assertSerDe(serializer: KVStoreScalaSerializer, info: GlobLogInfo): Unit = {
-      val infoAfterSerDe = serializer.deserialize(serializer.serialize(info), classOf[GlobLogInfo])
+      val infoAfterSerDe =
+        serializer.deserialize(serializer.serialize(info), classOf[GlobLogInfo])
       assert(infoAfterSerDe === info)
       assertOptionAfterSerde(infoAfterSerDe.lastIndex, info.lastIndex)
     }
@@ -1768,7 +1771,8 @@ abstract class GlobFsHistoryProviderSuite
     assertSerDe(serializer, logInfoWithIndex)
   }
 
-  test("SPARK-52327 GlobAttemptInfoWrapper should be serialized/deserialized by jackson properly") {
+  test(
+    "SPARK-52327 GlobAttemptInfoWrapper should be serialized/deserialized by jackson properly") {
     def assertSerDe(serializer: KVStoreScalaSerializer, attempt: GlobAttemptInfoWrapper): Unit = {
       val attemptAfterSerDe =
         serializer.deserialize(serializer.serialize(attempt), classOf[GlobAttemptInfoWrapper])
