@@ -34,6 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
  * @param id The id of the loop, inherited from [[CTERelationDef]] within which the Union lived.
  * @param anchor The plan of the initial element of the loop.
  * @param recursion The plan that describes the recursion with an [[UnionLoopRef]] node.
+ * @param outputAttrIds The ids of UnionLoop's output attributes.
  * @param limit An optional limit that can be pushed down to the node to stop the loop earlier.
  * @param maxDepth Maximal number of iterations before we report an error.
  */
@@ -41,12 +42,23 @@ case class UnionLoop(
     id: Long,
     anchor: LogicalPlan,
     recursion: LogicalPlan,
+    outputAttrIds: Seq[ExprId],
     limit: Option[Int] = None,
     maxDepth: Option[Int] = None) extends UnionBase {
   override def children: Seq[LogicalPlan] = Seq(anchor, recursion)
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): UnionLoop =
     copy(anchor = newChildren(0), recursion = newChildren(1))
+
+  override protected def computeOutput(): Seq[Attribute] =
+    Union.mergeChildOutputs(children.map(_.output)).zip(outputAttrIds).map { case (x, id) =>
+      x.withExprId(id)
+    }
+
+  override def argString(maxFields: Int): String = {
+    id.toString + limit.map(", " + _.toString).getOrElse("") +
+      maxDepth.map(", " + _.toString).getOrElse("")
+  }
 }
 
 /**

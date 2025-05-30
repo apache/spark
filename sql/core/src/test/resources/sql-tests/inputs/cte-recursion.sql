@@ -588,6 +588,26 @@ WITH RECURSIVE t1 AS (
     SELECT n+1 FROM t2 WHERE n < 5)
 SELECT * FROM t1;
 
+-- Recursive CTE with multiple of the same reference in the anchor, which get referenced differently subsequent iterations.
+WITH RECURSIVE tmp(x) AS (
+    values (1), (2), (3), (4), (5)
+), rcte(x, y) AS (
+    SELECT x, x FROM tmp WHERE x = 1
+    UNION ALL
+    SELECT x + 1, x FROM rcte WHERE x < 5
+)
+SELECT * FROM rcte;
+
+-- Recursive CTE with multiple of the same reference in the anchor, which get referenced as different variables in subsequent iterations.
+WITH RECURSIVE tmp(x) AS (
+    values (1), (2), (3), (4), (5)
+), rcte(x, y, z, t) AS (
+    SELECT x, x, x, x FROM tmp WHERE x = 1
+    UNION ALL
+    SELECT x + 1, x, y + 1, y FROM rcte WHERE x < 5
+)
+SELECT * FROM rcte;
+
 -- Non-deterministic query with rand with seed
 WITH RECURSIVE randoms(val) AS (
     SELECT CAST(floor(rand(82374) * 5 + 1) AS INT)
