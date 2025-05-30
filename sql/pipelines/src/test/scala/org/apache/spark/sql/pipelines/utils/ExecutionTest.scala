@@ -20,8 +20,24 @@ package org.apache.spark.sql.pipelines.utils
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.pipelines.common.{FlowStatus, RunState}
-import org.apache.spark.sql.pipelines.graph.{AllFlows, AllTables, DataflowGraph, FlowFilter, NoTables, PipelineConf, PipelineUpdateContext, TableFilter}
-import org.apache.spark.sql.pipelines.logging.{ErrorDetail, EventLevel, FlowProgress, FlowProgressEventLogger, PipelineEvent, PipelineRunEventBuffer, RunProgress}
+import org.apache.spark.sql.pipelines.graph.{
+  AllFlows,
+  AllTables,
+  DataflowGraph,
+  FlowFilter,
+  NoTables,
+  PipelineConf,
+  PipelineUpdateContext,
+  TableFilter
+}
+import org.apache.spark.sql.pipelines.logging.{
+  EventLevel,
+  FlowProgress,
+  FlowProgressEventLogger,
+  PipelineEvent,
+  PipelineRunEventBuffer,
+  RunProgress
+}
 
 trait ExecutionTest
     extends PipelineTest
@@ -79,7 +95,7 @@ trait EventVerificationTestHelpers {
       identifier: TableIdentifier,
       expectedFlowStatus: FlowStatus,
       expectedEventLevel: EventLevel,
-      errorChecker: ErrorDetail => Boolean = _ => true,
+      errorChecker: Throwable => Boolean = _ => true,
       msgChecker: String => Boolean = _ => true,
       cond: PipelineEvent => Boolean = _ => true,
       expectedNumOfEvents: Option[Int] = None
@@ -191,13 +207,13 @@ trait EventVerificationTestHelpers {
       eventBuffer: PipelineRunEventBuffer,
       state: RunState,
       expectedEventLevel: EventLevel,
-      errorChecker: Option[ErrorDetail] => Boolean = null,
+      errorChecker: Option[Throwable] => Boolean = null,
       msgChecker: String => Boolean = _ => true): Unit = {
     val errorCheckerWithDefault = Option(errorChecker).getOrElse {
-      if (state == RunState.FAILED) { (errorDetailsOpt: Option[ErrorDetail]) =>
-        errorDetailsOpt.nonEmpty
-      } else { (errorDetailsOpt: Option[ErrorDetail]) =>
-        errorDetailsOpt.isEmpty
+      if (state == RunState.FAILED) { (errorOpt: Option[Throwable]) =>
+        errorOpt.nonEmpty
+      } else { (errorOpt: Option[Throwable]) =>
+        errorOpt.isEmpty
       }
     }
 

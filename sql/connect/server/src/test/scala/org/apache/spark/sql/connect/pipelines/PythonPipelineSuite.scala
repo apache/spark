@@ -28,7 +28,8 @@ import scala.util.Try
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.pipelines.{Python, QueryOriginType}
+import org.apache.spark.sql.pipelines.Language.Python
+import org.apache.spark.sql.pipelines. QueryOriginType
 import org.apache.spark.sql.pipelines.common.FlowStatus.{
   COMPLETED,
   FAILED,

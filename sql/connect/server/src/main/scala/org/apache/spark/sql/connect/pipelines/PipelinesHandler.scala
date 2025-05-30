@@ -30,9 +30,10 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
-import org.apache.spark.sql.pipelines.{Python, QueryOriginType}
+import org.apache.spark.sql.pipelines.Language.Python
+import org.apache.spark.sql.pipelines.QueryOriginType
 import org.apache.spark.sql.pipelines.common.RunState.{CANCELED, FAILED}
-import org.apache.spark.sql.pipelines.graph.{FlowAnalysis, GraphIdentifierManager, IdentifierHelper, QueryOrigin, SqlGraphRegistrationContext, Table, TemporaryView, UnresolvedFlow}
+import org.apache.spark.sql.pipelines.graph.{FlowAnalysis, GraphIdentifierManager, IdentifierHelper, QueryContext, QueryOrigin, Table, TemporaryView, UnresolvedFlow}
 import org.apache.spark.sql.pipelines.logging.{PipelineEvent, RunProgress}
 import org.apache.spark.sql.types.StructType
 
@@ -92,10 +93,10 @@ private[connect] object PipelinesHandler extends Logging {
         logInfo(s"Stop pipeline cmd received: $cmd")
         stopRun(cmd.getStopRun)
         defaultResponse
-      case proto.PipelineCommand.CommandTypeCase.DEFINE_SQL_GRAPH_ELEMENTS =>
-        logInfo(s"Register sql datasets cmd received: $cmd")
-        defineSqlGraphElements(cmd.getDefineSqlGraphElements, sparkSession)
-        defaultResponse
+//      case proto.PipelineCommand.CommandTypeCase.DEFINE_SQL_GRAPH_ELEMENTS =>
+//        logInfo(s"Register sql datasets cmd received: $cmd")
+//        defineSqlGraphElements(cmd.getDefineSqlGraphElements, sparkSession)
+//        defaultResponse
       case other => throw new UnsupportedOperationException(s"$other not supported")
     }
   }
@@ -133,22 +134,22 @@ private[connect] object PipelinesHandler extends Logging {
       defaultSqlConf = defaultSqlConf
     )
   }
-
-  private def defineSqlGraphElements(
-      cmd: proto.PipelineCommand.DefineSqlGraphElements,
-      session: SparkSession): Unit = {
-    val dataflowGraphId = cmd.getDataflowGraphId
-
-    val graphElementRegistry = DataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
-    val sqlGraphElementRegistrationContext = new SqlGraphRegistrationContext(
-      graphElementRegistry
-    )
-    sqlGraphElementRegistrationContext.processSqlFile(
-      cmd.getSqlText,
-      cmd.getSqlFilePath,
-      session
-    )
-  }
+//
+//  private def defineSqlGraphElements(
+//      cmd: proto.PipelineCommand.DefineSqlGraphElements,
+//      session: SparkSession): Unit = {
+//    val dataflowGraphId = cmd.getDataflowGraphId
+//
+//    val graphElementRegistry = DataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
+//    val sqlGraphElementRegistrationContext = new SqlGraphRegistrationContext(
+//      graphElementRegistry
+//    )
+//    sqlGraphElementRegistrationContext.processSqlFile(
+//      cmd.getSqlText,
+//      cmd.getSqlFilePath,
+//      session
+//    )
+//  }
 
   private def defineDataset(
       dataset: proto.PipelineCommand.DefineDataset,
@@ -258,8 +259,10 @@ private[connect] object PipelinesHandler extends Logging {
         ),
         sqlConf = flow.getSqlConfMap.asScala.toMap,
         once = flow.getOnce,
-        currentCatalog = Option(graphElementRegistry.defaultCatalog),
-        currentDatabase = Option(graphElementRegistry.defaultDatabase),
+        queryContext = QueryContext(
+          Option(graphElementRegistry.defaultCatalog),
+          Option(graphElementRegistry.defaultDatabase)
+        ),
         comment = None,
         origin = QueryOrigin(
           filePath = Option

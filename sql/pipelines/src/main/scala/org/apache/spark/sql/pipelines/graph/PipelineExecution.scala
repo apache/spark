@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import org.apache.spark.sql.pipelines.common.RunState
-
 import scala.annotation.unused
+
+import org.apache.spark.sql.pipelines.common.RunState
 import org.apache.spark.sql.pipelines.logging.{ConstructPipelineEvent, EventLevel, PipelineEventOrigin, RunProgress}
 
 /**
