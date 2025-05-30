@@ -353,26 +353,6 @@ trait FileSourceScanLike extends DataSourceScanExec {
     prunedListing
   }
 
-  // This field will be accessed during planning (e.g., `outputPartitioning` relies on it), and can
-  // only use static filters.
-  @transient lazy val selectedPartitions: ScanFileListing = {
-    val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
-    val startTime = System.nanoTime()
-    // The filters may contain subquery expressions which can't be evaluated during planning.
-    // Here we filter out subquery expressions and get the static data/partition filters, so that
-    // they can be used to do pruning at the planning phase.
-    val staticDataFilters = dataFilters.filterNot(isDynamicPruningFilter)
-    val staticPartitionFilters = partitionFilters.filterNot(isDynamicPruningFilter)
-    val partitionDirectories = relation.location.listFiles(
-      staticPartitionFilters, staticDataFilters)
-    val fileListing = GenericScanFileListing(partitionDirectories.toArray)
-    setFilesNumAndSizeMetric(fileListing, static = true)
-    val timeTakenMs = NANOSECONDS.toMillis(
-      (System.nanoTime() - startTime) + optimizerMetadataTimeNs)
-    driverMetrics("metadataTime").set(timeTakenMs)
-    fileListing
-  }
-
   // We can only determine the actual partitions at runtime when a dynamic partition filter is
   // present. This is because such a filter relies on information that is only available at run
   // time (for instance the keys used in the other side of a join).
