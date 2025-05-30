@@ -58,7 +58,6 @@ case class QueryOrigin(
       fileName = other.fileName.orElse(fileName),
       sqlText = other.sqlText.orElse(sqlText),
       line = other.line.orElse(line),
-      cellNumber = other.cellNumber.orElse(cellNumber),
       startPosition = other.startPosition.orElse(startPosition),
       objectType = other.objectType.orElse(objectType),
       objectName = other.objectName.orElse(objectName)

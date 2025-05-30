@@ -17,17 +17,15 @@
 
 package org.apache.spark.sql.pipelines.utils
 
-import java.io.{BufferedReader, File, FileNotFoundException, InputStreamReader}
-import java.nio.file.{Files, Paths}
+import java.io.{BufferedReader, FileNotFoundException, InputStreamReader}
+import java.nio.file.Files
 
 import scala.collection.mutable.ArrayBuffer
-import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Try}
 import scala.util.control.NonFatal
 
 import org.scalactic.source
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Tag}
-import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.matchers.should.Matchers
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -61,7 +59,7 @@ abstract class PipelineTest
    * all spark sessions created in tests.
    */
   protected def sparkConf: SparkConf = {
-    var conf = new SparkConf()
+    new SparkConf()
       .set("spark.sql.shuffle.partitions", "2")
       .set("spark.sql.session.timeZone", "UTC")
   }
