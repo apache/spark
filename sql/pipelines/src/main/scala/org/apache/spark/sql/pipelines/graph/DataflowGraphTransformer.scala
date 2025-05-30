@@ -42,7 +42,7 @@ import org.apache.spark.util.ThreadUtils
  * Assumptions:
  * 1. Each output will have at-least 1 flow to it.
  * 2. Each flow may or may not have a destination table. If a flow does not have a destination
- * table, the destination is a view.
+ *    table, the destination is a temporary view.
  *
  * The way graph is structured is that flows, tables and sinks all are graph elements or nodes.
  * While we expose transformation functions for each of these entities, we also expose a way to
@@ -66,8 +66,7 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
   // Failed flows are flows that are failed to resolve or its inputs are not available or its
   // destination failed to resolve.
   private var failedFlows: Seq[ResolutionCompletedFlow] = Seq.empty
-  // We define a dataset is failed to resolve if:
-  //   1. It is a destination of a flow that is unresolved.
+  // We define a dataset is failed to resolve if it is a destination of a flow that is unresolved.
   private var failedTables: Seq[Table] = Seq.empty
 
   private val parallelism = 10
@@ -341,7 +340,7 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
 object DataflowGraphTransformer {
 
   /**
-   * Exception thrown when a node in the graph fails to be transformed because at least one of its
+   * Exception thrown when transforming a node in the graph fails because at least one of its
    * dependencies weren't yet transformed.
    *
    * @param datasetIdentifier The identifier for an untransformed dependency table identifier in the
@@ -353,6 +352,11 @@ object DataflowGraphTransformer {
       extends Exception
       with NoStackTrace
 
+  /**
+   * Exception thrown when transforming a node in the graph fails with a non-retryable error.
+   *
+   * @param failedNode The failed node that could not be transformed.
+   */
   case class TransformNodeFailedException(failedNode: ResolutionFailedFlow)
       extends Exception
       with NoStackTrace

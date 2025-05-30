@@ -29,8 +29,6 @@ import org.apache.spark.sql.pipelines.logging.SourceCodeLocation
  *
  * @param language The language used by the user to define the query.
  * @param fileName The file name of the user code that defines the query.
- * @param cellNumber The cell number of the user code that defines the query.
- *                   Cell numbers are 1-indexed.
  * @param sqlText The SQL text of the query.
  * @param line The line number of the query in the user code.
  *             Line numbers are 1-indexed.
@@ -41,7 +39,6 @@ import org.apache.spark.sql.pipelines.logging.SourceCodeLocation
 case class QueryOrigin(
     language: Option[Language] = None,
     fileName: Option[String] = None,
-    cellNumber: Option[Int] = None,
     sqlText: Option[String] = None,
     line: Option[Int] = None,
     startPosition: Option[Int] = None,

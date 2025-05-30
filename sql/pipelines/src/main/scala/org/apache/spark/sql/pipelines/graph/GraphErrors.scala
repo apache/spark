@@ -26,12 +26,15 @@ import org.apache.spark.sql.types.StructType
 /** Collection of errors that can be thrown during graph resolution / analysis. */
 object GraphErrors {
 
+  /**
+   * Throws when a dataset is marked as internal but is not defined in the graph.
+   *
+   * @param datasetName the name of the dataset that is not defined
+   */
   def pipelineLocalDatasetNotDefinedError(datasetName: String): SparkException = {
-    // TODO: this should be an internal error, as we never expect this to happen
-    new SparkException(
-      errorClass = "PIPELINE_LOCAL_DATASET_NOT_DEFINED",
-      messageParameters = Map("datasetName" -> datasetName),
-      cause = null
+    SparkException.internalError(
+      s"Failed to read dataset '$datasetName'. This dataset was expected to be " +
+      s"defined and created by the pipeline."
     )
   }
 
@@ -54,6 +57,11 @@ object GraphErrors {
     )
   }
 
+  /**
+   * Throws when a table path is unresolved, i.e. the table identifier does not exist in the catalog.
+   *
+   * @param identifier the unresolved table identifier
+   */
   def unresolvedTablePath(identifier: TableIdentifier): SparkException = {
     new SparkException(
       errorClass = "UNRESOLVED_TABLE_PATH",
@@ -62,6 +70,11 @@ object GraphErrors {
     )
   }
 
+  /**
+   * Throws an error if the user-specified schema and the inferred schema are not compatible.
+   *
+   * @param tableIdentifier the identifier of the table that was not found
+   */
   def incompatibleUserSpecifiedAndInferredSchemasError(
       tableIdentifier: TableIdentifier,
       datasetType: DatasetType,
@@ -92,6 +105,12 @@ object GraphErrors {
     )
   }
 
+  /**
+   * Throws if the latest inferred schema for a pipeline table is not compatible with
+   * the table's existing schema.
+   *
+   * @param tableIdentifier the identifier of the table that was not found
+   */
   def unableToInferSchemaError(
       tableIdentifier: TableIdentifier,
       inferredSchema: StructType,
@@ -109,6 +128,12 @@ object GraphErrors {
     )
   }
 
+  /**
+   * Throws an error when a persisted view is trying to read from a temporary view.
+   *
+   * @param persistedViewIdentifier the identifier of the persisted view
+   * @param temporaryViewIdentifier the identifier of the temporary view
+   */
   def persistedViewReadsFromTemporaryView(
       persistedViewIdentifier: TableIdentifier,
       temporaryViewIdentifier: TableIdentifier): AnalysisException = {

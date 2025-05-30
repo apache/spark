@@ -192,12 +192,15 @@ case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], views: Seq[View])
     validateEveryDatasetHasFlow()
     validateTablesAreResettable()
     validateAppendOnceFlows()
+    // Ensures that all flows are resolved and have a valid schema.
     inferredSchema
   }.failed
 
-  /** Enforce every dataset has at least once input flow. For example its possible to define
+  /**
+   * Enforce every dataset has at least one input flow. For example its possible to define
    * streaming tables without a query; such tables should still have at least one flow
-   * writing to it. */
+   * writing to it.
+   */
   def validateEveryDatasetHasFlow(): Unit = {
     (tables.map(_.identifier) ++ views.map(_.identifier)).foreach { identifier =>
       if (!flows.exists(_.destinationIdentifier == identifier)) {
