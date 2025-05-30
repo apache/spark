@@ -95,8 +95,10 @@ trait FlowExecution {
   /** Context about this pipeline update. */
   def updateContext: PipelineUpdateContext
 
-  implicit val executionContext: ExecutionContext =
+  /** The thread execution context for the current [[FlowExecution]]. */
+  implicit val executionContext: ExecutionContext = {
     ExecutionContext.fromExecutor(FlowExecution.threadPool)
+  }
 
   /**
    * Stops execution of this [[FlowExecution]]. If you override this, please be sure to
@@ -107,8 +109,15 @@ trait FlowExecution {
     stopped.set(true)
   }
 
+  /** Returns an optional exception that occurred during execution, if any. */
   def exception: Option[Throwable] = _future.flatMap(_.value).flatMap(_.failed.toOption)
 
+  /**
+   * Executes this PhysicalFlow synchronously to perform its intended update.
+   * This method should be overridden by subclasses to provide the actual execution logic.
+   *
+   * @return a Future that completes when the execution is finished or stopped.
+   */
   def executeInternal(): Future[Unit]
 
   /**
@@ -129,10 +138,7 @@ trait FlowExecution {
         executeInternal()
           .transform {
             case Success(_) => Success(ExecutionResult.FINISHED)
-            // Add origin to exceptions raised while executing a flow i.e. inside the `Future`
-            // created by the `executeInternal` method.
-            case Failure(e) =>
-              Failure(e)
+            case Failure(e) => Failure(e)
           }
           .map(_ => ExecutionResult.FINISHED)
           .recover {
@@ -155,8 +161,10 @@ trait FlowExecution {
 }
 
 object FlowExecution {
-  private val threadPool: ThreadPoolExecutor =
+  /** A thread pool used to execute [[FlowExecution]]s. */
+  private val threadPool: ThreadPoolExecutor = {
     ThreadUtils.newDaemonCachedThreadPool("FlowExecution")
+  }
 }
 
 /** A [[FlowExecution]] that processes data statefully using Structured Streaming. */
@@ -190,6 +198,7 @@ trait StreamingFlowExecution extends FlowExecution with Logging {
   }
 }
 
+/** A [[StreamingFlowExecution]] that writes a streaming DataFrame to a DLT [[Table]]. */
 class StreamingTableWrite(
     val identifier: TableIdentifier,
     val flow: ResolvedFlow,
@@ -217,6 +226,7 @@ class StreamingTableWrite(
   }
 }
 
+/** A [[FlowExecution]] that writes a batch DataFrame to a DLT [[Table]]. */
 class BatchFlowExecution(
     val identifier: TableIdentifier,
     val flow: ResolvedFlow,

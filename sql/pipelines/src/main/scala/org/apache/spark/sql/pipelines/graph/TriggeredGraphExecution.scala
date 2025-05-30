@@ -31,19 +31,16 @@ import org.apache.spark.sql.pipelines.util.ExponentialBackoffStrategy
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
-sealed trait StreamState
-
-object StreamState {
-  case object QUEUED extends StreamState
-  case object RUNNING extends StreamState
-  case object EXCLUDED extends StreamState
-  case object IDLE extends StreamState
-  case object SKIPPED extends StreamState
-  case object TERMINATED_WITH_ERROR extends StreamState
-  case object CANCELED extends StreamState
-  case object SUCCESSFUL extends StreamState
-}
-
+/**
+ * Executes all of the flows in the given graph in topological order. Each flow processes
+ * all available data before downstream flows are triggered.
+ *
+ * @param graphForExecution the graph to execute.
+ * @param env the context in which the graph is executed.
+ * @param onCompletion a callback to execute after all streams are done. The boolean
+ *                     argument is true if the execution was successful.
+ * @param clock a clock used to determine the time of execution.
+ */
 class TriggeredGraphExecution(
     graphForExecution: DataflowGraph,
     env: PipelineUpdateContext,
@@ -219,16 +216,12 @@ class TriggeredGraphExecution(
         flowsToStart.append(graphForExecution.resolvedFlow(flowIdentifier))
       }
 
-      val (batchFlowsToStart, otherFlowsToStart) = flowsToStart.partition { f =>
-        graphForExecution.resolvedFlow(f.identifier).isInstanceOf[CompleteFlow]
-      }
-
-      def startFlowWithPlanningMode(flow: ResolvedFlow, mode: String): Unit = {
+      def startFlow(flow: ResolvedFlow): Unit = {
         val flowIdentifier = flow.identifier
-        logInfo(s"Starting flow ${flow.identifier} in $mode mode")
+        logInfo(s"Starting flow ${flow.identifier}")
         env.flowProgressEventLogger.recordPlanningForBatchFlow(flow)
         try {
-          val flowStarted = startFlow(flow)
+          val flowStarted = planAndStartFlow(flow)
           if (flowStarted.nonEmpty) {
             pipelineState.put(flowIdentifier, StreamState.RUNNING)
             logInfo(s"Flow $flowIdentifier started.")
@@ -250,16 +243,12 @@ class TriggeredGraphExecution(
         }
       }
 
-      // start non-batch flows serially because the configs will be attached to the pipeline's spark
-      // session (source dataframe's spark session)
-      otherFlowsToStart.foreach(startFlowWithPlanningMode(_, SERIAL_PLANNING))
-
-      // only start MV flows in parallel if enabled
-      startPlanning(batchFlowsToStart.toSeq) { (flow, mode) =>
-        startFlowWithPlanningMode(flow, mode)
-      }
+      // start each flow serially
+      flowsToStart.foreach(startFlow)
 
       try {
+        // Put thread to sleep for the configured polling interval to avoid busy-waiting
+        // and holding one CPU core.
         Thread.sleep(pipelineConf.streamStatePollingInterval * 1000)
       } catch {
         case _: InterruptedException => return
@@ -452,6 +441,35 @@ case class TriggeredFailureInfo(
 }
 
 object TriggeredGraphExecution {
+
+  // All possible states of a data stream for a flow
+  sealed trait StreamState
+  object StreamState {
+    // Stream is waiting on its parent tables to successfully finish processing
+    // data to start running, in triggered execution
+    case object QUEUED extends StreamState
+
+    // Stream is processing data
+    case object RUNNING extends StreamState
+
+    // Stream excluded if it's not selected in the partial graph update API call.
+    case object EXCLUDED extends StreamState
+
+    // Stream will not be rerun because it is a ONCE flow.
+    case object IDLE extends StreamState
+
+    // Stream will not be run due to parent tables not finishing successfully in triggered execution
+    case object SKIPPED extends StreamState
+
+    // Stream has been stopped with a fatal error
+    case object TERMINATED_WITH_ERROR extends StreamState
+
+    // Stream stopped before completion in triggered execution
+    case object CANCELED extends StreamState
+
+    // Stream successfully processed all available data in triggered execution
+    case object SUCCESSFUL extends StreamState
+  }
 
   /**
    * List of terminal states which we don't consider as failures.

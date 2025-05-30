@@ -18,12 +18,10 @@
 package org.apache.spark.sql.pipelines.graph
 import java.util.concurrent.{ConcurrentHashMap, TimeoutException}
 
-import scala.annotation.unused
 import scala.concurrent.ExecutionContext
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success}
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.internal.SQLConf
@@ -70,20 +68,9 @@ abstract class GraphExecution(
     triggerFor = streamTrigger
   )
 
-  val SERIAL_PLANNING = "SERIAL"
-
   // Listeners to process events and metrics.
   private val batchListener = new BatchListener()
   private val streamListener = new StreamListener(env, graphForExecution)
-
-  /**
-   * Run the given planning function `f` for each flow in `flows`.
-   */
-  protected def startPlanning(flows: Seq[ResolvedFlow])(
-      f: (ResolvedFlow, String) => Unit
-  ): Unit = {
-    flows.foreach(f(_, SERIAL_PLANNING))
-  }
 
   /**
    * Plans the logical [[ResolvedFlow]] into a [[FlowExecution]] and then starts executing it.
@@ -92,7 +79,7 @@ abstract class GraphExecution(
    * @return None if the flow planner decided that there is no actual update required here.
    *         Otherwise returns the corresponding physical flow.
    */
-  def startFlow(flow: ResolvedFlow): Option[FlowExecution] = {
+  def planAndStartFlow(flow: ResolvedFlow): Option[FlowExecution] = {
     try {
       val physicalFlow = flowPlanner.plan(
         flow = graphForExecution.resolvedFlow(flow.identifier)
@@ -249,9 +236,12 @@ object GraphExecution extends Logging {
 
   // Set of states after checking the exception for flow execution retryability analysis.
   sealed trait FlowExecutionAction
+    /** Indicates that the flow execution should be retried. */
   case object RetryFlowExecution extends FlowExecutionAction
+    /** Indicates that the flow execution should be stopped with a specific reason. */
   case class StopFlowExecution(reason: FlowExecutionStopReason) extends FlowExecutionAction
 
+  /** Represents the reason why a flow execution should be stopped. */
   sealed trait FlowExecutionStopReason {
     def cause: Throwable
     def flowDisplayName: String
@@ -261,28 +251,10 @@ object GraphExecution extends Logging {
     def warnInsteadOfError: Boolean = false
   }
 
-  @unused
-  case class ReanalyzeFlowSchema(originalCause: Throwable, flowDisplayName: String)
-      extends FlowExecutionStopReason {
-    override lazy val updateTerminationReason: UpdateTerminationReason = {
-      UpdateSchemaChange(flowDisplayName, Option(originalCause))
-    }
-    // Schema change can be automatically retried to handle
-    override val warnInsteadOfError: Boolean = true
-    override lazy val failureMessage: String = {
-      s"Flow '$flowDisplayName' has encountered a schema change during execution and " +
-      s"terminated. A new update using the new schema will be automatically started."
-    }
-    // Override the cause to make it more friendly for tracking purpose
-    override lazy val cause: Throwable = {
-      new SparkException(
-        errorClass = "FLOW_SCHEMA_CHANGED",
-        messageParameters = Map("flowName" -> flowDisplayName),
-        cause = originalCause
-      )
-    }
-  }
-
+  /**
+   * Represents the [[FlowExecution]] should be stopped due to it failed with some retryable errors
+   * and has exhausted all the retry attempts.
+   */
   private case class MaxRetryExceeded(
       cause: Throwable,
       flowDisplayName: String,
@@ -294,23 +266,6 @@ object GraphExecution extends Logging {
     override lazy val failureMessage: String = {
       s"Flow '$flowDisplayName' has FAILED more than $maxAllowedRetries times and will not be " +
       s"restarted."
-    }
-  }
-
-  @unused
-  case class NonRetryableException(cause: Throwable, flowDisplayName: String)
-      extends FlowExecutionStopReason {
-    override lazy val updateTerminationReason: UpdateTerminationReason = {
-      QueryExecutionFailure(
-        flowName = flowDisplayName,
-        // Set maxRetries to 0 to not mention maxRetries in the error message.
-        maxRetries = 0,
-        cause = Option(cause)
-      )
-    }
-    override lazy val failureMessage: String = {
-      s"Flow '$flowDisplayName' has FAILED due to a non-retryable exception and will not be " +
-      s"restarted in this update."
     }
   }
 
