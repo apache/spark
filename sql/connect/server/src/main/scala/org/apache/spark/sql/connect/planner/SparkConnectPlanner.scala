@@ -19,15 +19,18 @@ package org.apache.spark.sql.connect.planner
 
 import java.util.Properties
 import java.util.UUID
+
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
+
 import com.google.common.base.Throwables
 import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{ByteString, Any => ProtoAny}
 import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
+
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Since}

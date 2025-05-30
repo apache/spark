@@ -19,6 +19,7 @@ syntax = "proto3";
 
 package spark.connect;
 
+import "google/protobuf/timestamp.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
 
@@ -113,6 +114,7 @@ message PipelineCommand {
   // graph elements are registered.
   message StartRun {
     // The graph to start.
+<<<<<<< HEAD
     optional string dataflow_graph_id = 1;
   }
 }
@@ -127,6 +129,14 @@ message DefineSqlGraphElements {
 
   // The contents of the SQL file.
   optional string sql_text = 3;
+=======
+    string dataflow_graph_id = 1;
+  }
+  message StopRun {
+    // The ID of the graph to stop..
+    string dataflow_graph_id = 1;
+  }
+>>>>>>> c91260345a2 (copied tests and protos)
 }
 
 // Dispatch object for pipelines command results.
@@ -157,10 +167,9 @@ message PipelineEventResult {
   PipelineEvent event = 1;
 }
 
-// An event emitted during the run of a graph.
 message PipelineEvent {
-  // The time of the event.
-  optional string timestamp = 1;
+  // The timestamp corresponding to when the event occurred.
+  google.protobuf.Timestamp timestamp = 1;
   // The message that should be displayed to users.
   optional string message = 2;
 }
