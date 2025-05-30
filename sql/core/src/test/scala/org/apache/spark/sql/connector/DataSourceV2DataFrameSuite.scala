@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, ReplaceTableExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, IntegerType, StringType}
+import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, StringType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -498,43 +498,32 @@ class DataSourceV2DataFrameSuite
              |""".stripMargin)
 
         val alterExecCol1 = executeAndKeepPhysicalPlan[AlterTableExec] {
-          sql(s"ALTER TABLE $tableName ALTER COLUMN salary SET DEFAULT (123 + 56)")
+          sql(
+            s"""
+               |ALTER TABLE $tableName ALTER COLUMN
+               |  salary SET DEFAULT (123 + 56),
+               |  dep SET DEFAULT ('r' || 'l'),
+               |  active SET DEFAULT CAST(0 AS BOOLEAN)
+               |""".stripMargin)
         }
-        checkDefaultValue(
-          alterExecCol1.changes.collect {
-            case u: UpdateColumnDefaultValue => u
-          }.head,
-          new DefaultValue(
-            "(123 + 56)",
-            new GeneralScalarExpression(
-              "+",
-              Array(LiteralValue(123, IntegerType), LiteralValue(56, IntegerType)))))
-
-        val alterExecCol2 = executeAndKeepPhysicalPlan[AlterTableExec] {
-          sql(s"ALTER TABLE $tableName ALTER COLUMN dep SET DEFAULT ('r' || 'l')")
-        }
-        checkDefaultValue(
-          alterExecCol2.changes.collect {
-            case u: UpdateColumnDefaultValue => u
-          }.head,
-          new DefaultValue(
-            "('r' || 'l')",
-            new GeneralScalarExpression(
-              "CONCAT",
-              Array(
-                LiteralValue(UTF8String.fromString("r"), StringType),
-                LiteralValue(UTF8String.fromString("l"), StringType)))))
-
-        val alterExecCol3 = executeAndKeepPhysicalPlan[AlterTableExec] {
-          sql(s"ALTER TABLE $tableName ALTER COLUMN active SET DEFAULT CAST(0 AS BOOLEAN)")
-        }
-        checkDefaultValue(
-          alterExecCol3.changes.collect {
-            case u: UpdateColumnDefaultValue => u
-          }.head,
-          new DefaultValue(
-            "CAST(0 AS BOOLEAN)",
-            new V2Cast(LiteralValue(0, IntegerType), IntegerType, BooleanType)))
+        checkDefaultValues(
+          alterExecCol1.changes.map(_.asInstanceOf[UpdateColumnDefaultValue]).toArray,
+          Array(
+            new DefaultValue(
+              "(123 + 56)",
+              new GeneralScalarExpression(
+                "+",
+                Array(LiteralValue(123, IntegerType), LiteralValue(56, IntegerType)))),
+            new DefaultValue(
+              "('r' || 'l')",
+              new GeneralScalarExpression(
+                "CONCAT",
+                Array(
+                  LiteralValue(UTF8String.fromString("r"), StringType),
+                  LiteralValue(UTF8String.fromString("l"), StringType)))),
+            new DefaultValue(
+              "CAST(0 AS BOOLEAN)",
+              new V2Cast(LiteralValue(0, IntegerType), IntegerType, BooleanType))))
       }
     }
   }
@@ -666,13 +655,9 @@ class DataSourceV2DataFrameSuite
         sql(s"ALTER TABLE $tableName ALTER COLUMN cat SET DEFAULT current_catalog()")
       }
 
-      checkDefaultValue(
-        alterExec.changes.collect {
-          case u: UpdateColumnDefaultValue => u
-        }.head,
-        new DefaultValue(
-          "current_catalog()",
-          null /* No V2 Expression */))
+      checkDefaultValues(
+        alterExec.changes.map(_.asInstanceOf[UpdateColumnDefaultValue]).toArray,
+        Array(new DefaultValue("current_catalog()", null /* No V2 Expression */)))
 
       val df1 = Seq(1).toDF("dummy")
       df1.writeTo(tableName).append()
@@ -680,6 +665,109 @@ class DataSourceV2DataFrameSuite
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
         Seq(Row(1, "spark_catalog")))
+    }
+  }
+
+  test("create/replace table default value expression should have a cast") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""
+             |CREATE TABLE $tableName (
+             |  col1 int,
+             |  col2 timestamp DEFAULT '2018-11-17 13:33:33',
+             |  col3 double DEFAULT 1)
+             |""".stripMargin)
+      }
+      checkDefaultValues(
+        createExec.columns,
+        Array(
+          null,
+          new ColumnDefaultValue(
+            "'2018-11-17 13:33:33'",
+            new LiteralValue(1542490413000000L, TimestampType),
+            new LiteralValue(1542490413000000L, TimestampType)),
+          new ColumnDefaultValue(
+            "1",
+            new V2Cast(LiteralValue(1, IntegerType), IntegerType, DoubleType),
+            LiteralValue(1.0, DoubleType))))
+
+      val replaceExec = executeAndKeepPhysicalPlan[ReplaceTableExec] {
+        sql(
+          s"""
+             |REPLACE TABLE $tableName (
+             |  col1 int,
+             |  col2 timestamp DEFAULT '2022-02-23 05:55:55',
+             |  col3 double DEFAULT (1 + 1))
+             |""".stripMargin)
+      }
+      checkDefaultValues(
+        replaceExec.columns,
+        Array(
+          null,
+          new ColumnDefaultValue(
+            "'2022-02-23 05:55:55'",
+            LiteralValue(1645624555000000L, TimestampType),
+            LiteralValue(1645624555000000L, TimestampType)),
+          new ColumnDefaultValue(
+            "(1 + 1)",
+            new V2Cast(
+              new GeneralScalarExpression("+", Array(LiteralValue(1, IntegerType),
+                LiteralValue(1, IntegerType))),
+              IntegerType,
+              DoubleType),
+            LiteralValue(2.0, DoubleType))))
+    }
+  }
+
+  test("alter table default value expression should have a cast") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+
+      sql(s"CREATE TABLE $tableName (col1 int) using foo")
+      val alterExec = executeAndKeepPhysicalPlan[AlterTableExec] {
+        sql(
+          s"""
+            |ALTER TABLE $tableName ADD COLUMNS (
+            |  col2 timestamp DEFAULT '2018-11-17 13:33:33',
+            |  col3 double DEFAULT 1)
+            |""".stripMargin)
+      }
+
+      checkDefaultValues(
+        alterExec.changes.map(_.asInstanceOf[AddColumn]).toArray,
+        Array(
+          new ColumnDefaultValue(
+            "'2018-11-17 13:33:33'",
+            LiteralValue(1542490413000000L, TimestampType),
+            LiteralValue(1542490413000000L, TimestampType)),
+          new ColumnDefaultValue(
+            "1",
+            new V2Cast(LiteralValue(1, IntegerType), IntegerType, DoubleType),
+            LiteralValue(1.0, DoubleType))))
+
+      val alterCol1 = executeAndKeepPhysicalPlan[AlterTableExec] {
+        sql(
+          s"""
+             |ALTER TABLE $tableName ALTER COLUMN
+             |  col2 SET DEFAULT '2022-02-23 05:55:55',
+             |  col3 SET DEFAULT (1 + 1)
+             |""".stripMargin)
+      }
+      checkDefaultValues(
+        alterCol1.changes.map(_.asInstanceOf[UpdateColumnDefaultValue]).toArray,
+        Array(
+          new DefaultValue("'2022-02-23 05:55:55'",
+            LiteralValue(1645624555000000L, TimestampType)),
+          new DefaultValue(
+            "(1 + 1)",
+            new V2Cast(
+              new GeneralScalarExpression("+", Array(LiteralValue(1, IntegerType),
+                LiteralValue(1, IntegerType))),
+              IntegerType,
+              DoubleType))))
     }
   }
 
@@ -718,13 +806,18 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  private def checkDefaultValue(
-      column: UpdateColumnDefaultValue,
-      expectedDefault: DefaultValue): Unit = {
-    assert(
-      column.newCurrentDefault() == expectedDefault,
-        s"Default value mismatch for column '${column.toString}': " +
-        s"expected $expectedDefault but found ${column.newCurrentDefault()}")
+  private def checkDefaultValues(
+      columns: Array[UpdateColumnDefaultValue],
+      expectedDefaultValues: Array[DefaultValue]): Unit = {
+    assert(columns.length == expectedDefaultValues.length)
+
+    columns.zip(expectedDefaultValues).foreach {
+      case (column, expectedDefault) =>
+        assert(
+          column.newCurrentDefault() == expectedDefault,
+          s"Default value mismatch for column '${column.toString}': " +
+            s"expected $expectedDefault but found ${column.newCurrentDefault}")
+    }
   }
 
   private def checkDropDefaultValue(
