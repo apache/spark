@@ -114,7 +114,6 @@ message PipelineCommand {
   // graph elements are registered.
   message StartRun {
     // The graph to start.
-<<<<<<< HEAD
     optional string dataflow_graph_id = 1;
   }
 }
@@ -129,14 +128,6 @@ message DefineSqlGraphElements {
 
   // The contents of the SQL file.
   optional string sql_text = 3;
-=======
-    string dataflow_graph_id = 1;
-  }
-  message StopRun {
-    // The ID of the graph to stop..
-    string dataflow_graph_id = 1;
-  }
->>>>>>> c91260345a2 (copied tests and protos)
 }
 
 // Dispatch object for pipelines command results.
