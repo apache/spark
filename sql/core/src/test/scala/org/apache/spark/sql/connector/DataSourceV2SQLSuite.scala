@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, _}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
-import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression, GeneralScalarExpression, LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -645,8 +645,21 @@ class DataSourceV2SQLSuiteV1Filter
       assert(replaced.columns.length === 1,
         "Replaced table should have new schema.")
       val actual = replaced.columns.head
-      val expected = ColumnV2.create("id", LongType, false, null,
-        new ColumnDefaultValue("41 + 1", LiteralValue(42L, LongType)), null)
+      val expected = ColumnV2.create(
+        "id",
+        LongType,
+        false, /* not nullable */
+        null, /* no comment */
+        new ColumnDefaultValue(
+          "41 + 1",
+          new V2Cast(
+            new GeneralScalarExpression(
+              "+",
+              Array[Expression](LiteralValue(41, IntegerType), LiteralValue(1, IntegerType))),
+            IntegerType,
+            LongType),
+          LiteralValue(42L, LongType)),
+        null /* no metadata */)
       assert(actual === expected,
         "Replaced table should have new schema with DEFAULT column metadata.")
     }

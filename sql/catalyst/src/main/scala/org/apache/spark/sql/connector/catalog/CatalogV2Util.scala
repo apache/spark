@@ -22,12 +22,12 @@ import java.util.{Collections, Locale}
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CurrentUserContext
 import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
@@ -597,9 +597,29 @@ private[sql] object CatalogV2Util {
       // Note: the back-fill here is a logical concept. The data source can keep the existing
       //       data unchanged and let the data reader to return "exist default" for missing
       //       columns.
-      val existingDefault = Literal(default.getValue.value(), default.getValue.dataType()).sql
-      f.withExistenceDefaultValue(existingDefault).withCurrentDefaultValue(default.getSql)
+      val existsDefault = extractExistsDefault(default)
+      val (sql, expr) = extractCurrentDefault(default)
+      val newMetadata = new MetadataBuilder()
+        .withMetadata(f.metadata)
+        .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, existsDefault)
+        .putExpression(CURRENT_DEFAULT_COLUMN_METADATA_KEY, sql, expr)
+        .build()
+      f.copy(metadata = newMetadata)
     }.getOrElse(f)
+  }
+
+  private def extractExistsDefault(default: ColumnDefaultValue): String = {
+    Literal(default.getValue.value, default.getValue.dataType).sql
+  }
+
+  private def extractCurrentDefault(default: ColumnDefaultValue): (String, Option[Expression]) = {
+    val expr = Option(default.getExpression).flatMap(V2ExpressionUtils.toCatalyst)
+    val sql = Option(default.getSql).orElse(expr.map(_.sql)).getOrElse {
+      throw SparkException.internalError(
+        s"Can't generate SQL for $default. The connector expression couldn't be " +
+        "converted to Catalyst and there is no provided SQL representation.")
+    }
+    (sql, expr)
   }
 
   /**
