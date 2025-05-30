@@ -1141,7 +1141,7 @@ private[history] class GlobFsHistoryProvider(conf: SparkConf, clock: Clock)
 
     var countDeleted = 0
     toDelete.foreach { attempt =>
-      logInfo(s"Deleting expired event log for $attempt")
+      logInfo(log"Deleting expired event log for ${MDC(PATH, attempt.logPath)}")
       // Use the full path directly
       val fullLogPath = new Path(attempt.logPath)
       listing.delete(classOf[GlobLogInfo], fullLogPath.toString())

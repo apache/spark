@@ -68,8 +68,7 @@ abstract class GlobFsHistoryProviderSuite
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    val random = new scala.util.Random
-    numSubDirs = random.nextInt(3) + 1
+    numSubDirs = 3   // use a fixed count for predictable assertions
     testDirs = (0 until numSubDirs).map { i =>
       Utils.createTempDir(namePrefix = testGlob)
     }
@@ -1633,15 +1632,6 @@ abstract class GlobFsHistoryProviderSuite
   test("log cleaner with the maximum number of log files") {
     val clock = new ManualClock(0)
     (5 to 0 by -1).foreach { num =>
-      // Clean up any existing files from previous iterations
-      testDirs.foreach { testDir =>
-        if (testDir.exists() && testDir.isDirectory) {
-          testDir.listFiles().foreach { f =>
-            if (f.isFile) f.delete()
-          }
-        }
-      }
-
       val logs1_1 = newLogFiles("app1", Some("attempt1"), inProgress = false)
       writeAppLogs(
         logs1_1,
@@ -1707,8 +1697,6 @@ abstract class GlobFsHistoryProviderSuite
         assert(logs3_1.forall { log => log.exists() == (num > 2) })
         assert(logs3_2.forall { log => log.exists() == (num > 2) })
       }
-
-      provider.stop()
     }
   }
 
