@@ -27,7 +27,6 @@ import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_ENABLE_API_WATCHER
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_NAMESPACE
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
@@ -42,7 +41,7 @@ import org.apache.spark.util.Utils
 class ExecutorPodsWatchSnapshotSource(
     snapshotsStore: ExecutorPodsSnapshotsStore,
     kubernetesClient: KubernetesClient,
-    conf: SparkConf) extends Logging {
+    conf: SparkConf) extends ExecutorPodsSnapshotSource {
 
   private var watchConnection: Closeable = _
   private val enableWatching = conf.get(KUBERNETES_EXECUTOR_ENABLE_API_WATCHER)

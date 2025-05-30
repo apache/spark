@@ -139,8 +139,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       eventQueue,
       podAllocator,
       lifecycleEventHandler,
-      watchEvents,
-      pollEvents)
+      Seq(watchEvents, pollEvents))
   }
 
   after {
