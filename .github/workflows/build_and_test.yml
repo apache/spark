@@ -511,7 +511,7 @@ jobs:
           - >-
             pyspark-core, pyspark-errors, pyspark-streaming, pyspark-logger
           - >-
-            pyspark-mllib, pyspark-ml, pyspark-ml-connect
+            pyspark-mllib, pyspark-ml, pyspark-ml-connect, pyspark-pipelines
           - >-
             pyspark-connect
           - >-

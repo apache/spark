@@ -14,15 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.pipelines.api import (
+    append_flow,
+    create_streaming_table,
+    materialized_view,
+    table,
+    temporary_view,
+)
 
-from pyspark.sql.connect.proto.base_pb2_grpc import *
-from pyspark.sql.connect.proto.base_pb2 import *
-from pyspark.sql.connect.proto.types_pb2 import *
-from pyspark.sql.connect.proto.commands_pb2 import *
-from pyspark.sql.connect.proto.expressions_pb2 import *
-from pyspark.sql.connect.proto.relations_pb2 import *
-from pyspark.sql.connect.proto.catalog_pb2 import *
-from pyspark.sql.connect.proto.common_pb2 import *
-from pyspark.sql.connect.proto.ml_pb2 import *
-from pyspark.sql.connect.proto.ml_common_pb2 import *
-from pyspark.sql.connect.proto.pipelines_pb2 import *
+__all__ = [
+    "append_flow",
+    "create_streaming_table",
+    "materialized_view",
+    "table",
+    "temporary_view",
+]

@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -15,14 +17,17 @@
 # limitations under the License.
 #
 
-from pyspark.sql.connect.proto.base_pb2_grpc import *
-from pyspark.sql.connect.proto.base_pb2 import *
-from pyspark.sql.connect.proto.types_pb2 import *
-from pyspark.sql.connect.proto.commands_pb2 import *
-from pyspark.sql.connect.proto.expressions_pb2 import *
-from pyspark.sql.connect.proto.relations_pb2 import *
-from pyspark.sql.connect.proto.catalog_pb2 import *
-from pyspark.sql.connect.proto.common_pb2 import *
-from pyspark.sql.connect.proto.ml_pb2 import *
-from pyspark.sql.connect.proto.ml_common_pb2 import *
-from pyspark.sql.connect.proto.pipelines_pb2 import *
+# Default to standard python3 interpreter unless told otherwise
+if [[ -z "$PYSPARK_PYTHON" ]]; then
+  PYSPARK_PYTHON=python3
+fi
+
+if [ -z "${SPARK_HOME}" ]; then
+  source "$(dirname "$0")"/find-spark-home
+fi
+
+# Add the PySpark classes to the Python path:
+export PYTHONPATH="${SPARK_HOME}/python/:$PYTHONPATH"
+export PYTHONPATH="${SPARK_HOME}/python/lib/py4j-0.10.9.9-src.zip:$PYTHONPATH"
+
+$PYSPARK_PYTHON "${SPARK_HOME}"/python/pyspark/pipelines/cli.py "$@"
