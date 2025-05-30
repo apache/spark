@@ -21,7 +21,7 @@ from typing import Any, Union
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.pandas.base import column_op, IndexOpsMixin
+from pyspark.pandas.base import column_op, IndexOpsMixin, numpy_column_op
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
@@ -35,6 +35,7 @@ from pyspark.pandas.data_type_ops.base import (
     _is_boolean_type,
 )
 from pyspark.pandas.typedef.typehints import as_spark_type, extension_dtypes, pandas_on_spark_type
+from pyspark.pandas.utils import is_ansi_mode_enabled
 from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import BooleanType, StringType
 from pyspark.errors import PySparkValueError
@@ -136,13 +137,21 @@ class BooleanOps(DataTypeOps):
             raise TypeError(
                 "Modulo can not be applied to %s and the given type." % self.pretty_name
             )
+        spark_session = left._internal.spark_frame.sparkSession
+
+        def safe_mod(l: PySparkColumn, r: Any) -> PySparkColumn:
+            if is_ansi_mode_enabled(spark_session):
+                return F.when(F.lit(r == 0), F.lit(None)).otherwise(l % r)
+            else:
+                return l % r
+
         if isinstance(right, numbers.Number):
             left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
-            return left % right
+            return numpy_column_op(safe_mod)(left, right)
         else:
             assert isinstance(right, IndexOpsMixin)
             left = transform_boolean_operand_to_numeric(left, spark_type=right.spark.data_type)
-            return left % right
+            return numpy_column_op(safe_mod)(left, right)
 
     def pow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
@@ -226,7 +235,17 @@ class BooleanOps(DataTypeOps):
         _sanitize_list_like(right)
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
-            return right % left
+            spark_session = left._internal.spark_frame.sparkSession
+
+            def safe_rmod(left_col, right):
+                if is_ansi_mode_enabled(spark_session):
+                    return F.when(left_col != 0, F.pmod(F.lit(right), left_col)).otherwise(
+                        F.lit(None)
+                    )
+                else:
+                    return right % left
+
+            return numpy_column_op(safe_rmod)(left, right)
         else:
             raise TypeError(
                 "Modulo can not be applied to %s and the given type." % self.pretty_name
