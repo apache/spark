@@ -53,12 +53,12 @@ def handle_pipeline_events(iter: Iterator[Dict[str, Any]]) -> None:
             # We expect to get a pipeline_command_result back in response to the initial StartRun
             # command.
             continue
-        elif "pipeline_events_result" not in result.keys():
+        elif "pipeline_event_result" not in result.keys():
             raise PySparkValueError(
                 "Pipeline logs stream handler received an unexpected result: " f"{result}"
             )
         else:
-            for e in result["pipeline_events_result"].events:
+            for e in result["pipeline_event_result"].events:
                 print(f"{e.timestamp}: {e.message}")
 
 

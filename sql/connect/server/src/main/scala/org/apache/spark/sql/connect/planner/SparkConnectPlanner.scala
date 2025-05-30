@@ -65,6 +65,7 @@ import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.ml.MLHandler
+import org.apache.spark.sql.connect.pipelines.PipelinesHandler
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.MetricGenerator
@@ -2692,6 +2693,8 @@ class SparkConnectPlanner(
         handleMergeIntoTableCommand(command.getMergeIntoTableCommand)
       case proto.Command.CommandTypeCase.ML_COMMAND =>
         handleMlCommand(command.getMlCommand, responseObserver)
+      case proto.Command.CommandTypeCase.PIPELINE_COMMAND =>
+        handlePipelineCommand(command.getPipelineCommand, responseObserver)
       case proto.Command.CommandTypeCase.EXECUTE_EXTERNAL_COMMAND =>
         handleExecuteExternalCommand(command.getExecuteExternalCommand, responseObserver)
 
@@ -2713,6 +2716,28 @@ class SparkConnectPlanner(
         .setMlCommandResult(result)
         .build())
   }
+
+  private def handlePipelineCommand(
+      command: proto.PipelineCommand,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    val res = PipelinesHandler.handlePipelinesCommand(
+      sessionHolder,
+      command,
+      responseObserver,
+      session,
+      transformRelation
+    )
+    executeHolder.eventsManager.postFinished()
+    responseObserver.onNext(
+      proto.ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setServerSideSessionId(sessionHolder.serverSessionId)
+        .setPipelineCommandResult(res)
+        .build()
+    )
+  }
+
 
   private def handleExecuteExternalCommand(
       command: proto.ExecuteExternalCommand,

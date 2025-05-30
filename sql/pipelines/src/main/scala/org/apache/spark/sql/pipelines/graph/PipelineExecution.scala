@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.pipelines.graph
 
+import scala.annotation.unused
+
 import org.apache.spark.sql.pipelines.logging.{
   ConstructPipelineEvent,
   EventLevel,
   PipelineEventOrigin,
   RunProgress
 }
+import org.apache.spark.sql.pipelines.common.RunState
 
 /**
  * Executes a [[DataflowGraph]] by resolving the graph, materializing datasets, and running the
@@ -35,10 +38,14 @@ class PipelineExecution(context: PipelineUpdateContext) {
   /** [Visible for testing] */
   private[pipelines] var graphExecution: Option[TriggeredGraphExecution] = None
 
+  def executionStarted: Boolean = synchronized { graphExecution.nonEmpty }
+
+
   /**
-   * Executes all flows in the graph.
+   * Starts the pipeline execution by initializing the graph and starting the graph execution
+   * thread. This function does not block on the completion of the graph execution thread.
    */
-  def runPipeline(): Unit = synchronized {
+  def startPipeline(): Unit = synchronized {
     // Initialize the graph.
     val initializedGraph = initializeGraph()
 
@@ -55,7 +62,7 @@ class PipelineExecution(context: PipelineUpdateContext) {
             level = EventLevel.INFO,
             message = terminationReason.message,
             details = RunProgress(terminationReason.terminalState),
-            exception = terminationReason.cause.orNull
+            exception = terminationReason.cause
           )
         )
       })
@@ -63,7 +70,29 @@ class PipelineExecution(context: PipelineUpdateContext) {
     graphExecution.foreach(_.start())
   }
 
-  /** Initializes the graph by resolving it and materializing datasets. */
+  /** Starts pipeline execution and waits for it to complete before returning. */
+  def runPipeline(): Unit = synchronized {
+    try {
+      startPipeline()
+      context.pipelineExecution.awaitCompletion()
+    } catch {
+      case e: Throwable =>
+        context.eventBuffer.addEvent(
+          ConstructPipelineEvent(
+            origin = PipelineEventOrigin(
+              flowName = None,
+              datasetName = None,
+              sourceCodeLocation = None
+            ),
+            message = "Pipeline execution failed.",
+            details = RunProgress(RunState.FAILED),
+            exception = Option(e),
+            level = EventLevel.ERROR
+          )
+        )
+    }
+  }
+
   private def initializeGraph(): DataflowGraph = {
     val resolvedGraph = try {
       context.unresolvedGraph.resolve().validate()

@@ -94,7 +94,7 @@ trait EventVerificationTestHelpers {
       identifier: TableIdentifier,
       expectedFlowStatus: FlowStatus,
       expectedEventLevel: EventLevel,
-      errorChecker: ErrorDetail => Boolean = _ => true,
+      errorChecker: Throwable => Boolean = _ => true,
       msgChecker: String => Boolean = _ => true,
       cond: PipelineEvent => Boolean = _ => true,
       expectedNumOfEvents: Option[Int] = None
@@ -243,13 +243,13 @@ trait EventVerificationTestHelpers {
       eventBuffer: PipelineRunEventBuffer,
       state: RunState,
       expectedEventLevel: EventLevel,
-      errorChecker: Option[ErrorDetail] => Boolean = null,
+      errorChecker: Option[Throwable] => Boolean = null,
       msgChecker: String => Boolean = _ => true): Unit = {
     val errorCheckerWithDefault = Option(errorChecker).getOrElse {
-      if (state == RunState.FAILED) { (errorDetailsOpt: Option[ErrorDetail]) =>
-        errorDetailsOpt.nonEmpty
-      } else { (errorDetailsOpt: Option[ErrorDetail]) =>
-        errorDetailsOpt.isEmpty
+      if (state == RunState.FAILED) { (errorOpt: Option[Throwable]) =>
+        errorOpt.nonEmpty
+      } else { (errorOpt: Option[Throwable]) =>
+        errorOpt.isEmpty
       }
     }
 
