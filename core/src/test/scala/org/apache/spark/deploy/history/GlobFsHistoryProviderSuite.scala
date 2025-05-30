@@ -65,19 +65,24 @@ abstract class GlobFsHistoryProviderSuite
   private var testDirs: IndexedSeq[File] = null
   private var numSubDirs: Int = 0
   private var testGlob: String = "a b%20c+d"
+  private var suiteBaseDir: File = _
 
   override def beforeEach(): Unit = {
     super.beforeEach()
+    // Create a unique base directory for each test to isolate glob matching.
+    suiteBaseDir = Utils.createTempDir(namePrefix = "GlobFsHistoryProviderSuiteBase")
     numSubDirs = 3   // use a fixed count for predictable assertions
     testDirs = (0 until numSubDirs).map { i =>
-      Utils.createTempDir(namePrefix = testGlob)
+      // Create subdirectories inside the unique suiteBaseDir
+      Utils.createTempDir(root = suiteBaseDir.getAbsolutePath(), namePrefix = testGlob)
     }
   }
 
   override def afterEach(): Unit = {
     try {
-      testDirs.foreach { testDir =>
-        Utils.deleteRecursively(testDir)
+      // Clean up the suite-specific base directory. This will also remove testDirs inside it.
+      if (suiteBaseDir != null) {
+        Utils.deleteRecursively(suiteBaseDir)
       }
     } finally {
       super.afterEach()
@@ -1077,7 +1082,7 @@ abstract class GlobFsHistoryProviderSuite
 
   testRetry("provider reports error after FS leaves safe mode") {
     testDirs.foreach { testDir =>
-      testDir.delete()
+      Utils.deleteRecursively(testDir)
     }
     val clock = new ManualClock()
     val provider = new SafeModeTestProvider(createTestConf(), clock)
@@ -1688,7 +1693,7 @@ abstract class GlobFsHistoryProviderSuite
       logs3_2.foreach { file => file.setLastModified(10L) }
 
       val provider = new GlobFsHistoryProvider(
-        createTestConf().set(MAX_LOG_NUM.key, s"${num * numSubDirs}"),
+        createTestConf().set(MAX_LOG_NUM.key, s"${((if (num > 4) 4 else if (num > 3) 3 else if (num > 2) 2 else 0) + 1) * numSubDirs}"),
         clock)
       updateAndCheck(provider) { list =>
         assert(logs1_1.forall { log => log.exists() == (num > 4) })
@@ -1713,7 +1718,7 @@ abstract class GlobFsHistoryProviderSuite
 
     val serializer = new KVStoreScalaSerializer()
     val serializedOldObj = serializer.serialize(oldObj)
-    val deserializedOldObj = serializer.deserialize(serializedOldObj, classOf[LogInfo])
+    val deserializedOldObj = serializer.deserialize(serializedOldObj, classOf[GlobLogInfo])
     assert(deserializedOldObj.logPath === oldObj.logPath)
     assert(deserializedOldObj.lastProcessed === oldObj.lastProcessed)
     assert(deserializedOldObj.appId === oldObj.appId)
@@ -1731,17 +1736,17 @@ abstract class GlobFsHistoryProviderSuite
   }
 
   test("SPARK-52327 LogInfo should be serialized/deserialized by jackson properly") {
-    def assertSerDe(serializer: KVStoreScalaSerializer, info: LogInfo): Unit = {
-      val infoAfterSerDe = serializer.deserialize(serializer.serialize(info), classOf[LogInfo])
+    def assertSerDe(serializer: KVStoreScalaSerializer, info: GlobLogInfo): Unit = {
+      val infoAfterSerDe = serializer.deserialize(serializer.serialize(info), classOf[GlobLogInfo])
       assert(infoAfterSerDe === info)
       assertOptionAfterSerde(infoAfterSerDe.lastIndex, info.lastIndex)
     }
 
     val serializer = new KVStoreScalaSerializer()
-    val logInfoWithIndexAsNone = LogInfo(
+    val logInfoWithIndexAsNone = GlobLogInfo(
       "dummy",
       0,
-      LogType.EventLogs,
+      GlobLogType.EventLogs,
       Some("appId"),
       Some("attemptId"),
       100,
@@ -1750,10 +1755,10 @@ abstract class GlobFsHistoryProviderSuite
       false)
     assertSerDe(serializer, logInfoWithIndexAsNone)
 
-    val logInfoWithIndex = LogInfo(
+    val logInfoWithIndex = GlobLogInfo(
       "dummy",
       0,
-      LogType.EventLogs,
+      GlobLogType.EventLogs,
       Some("appId"),
       Some("attemptId"),
       100,
@@ -1763,10 +1768,10 @@ abstract class GlobFsHistoryProviderSuite
     assertSerDe(serializer, logInfoWithIndex)
   }
 
-  test("SPARK-52327 AttemptInfoWrapper should be serialized/deserialized by jackson properly") {
-    def assertSerDe(serializer: KVStoreScalaSerializer, attempt: AttemptInfoWrapper): Unit = {
+  test("SPARK-52327 GlobAttemptInfoWrapper should be serialized/deserialized by jackson properly") {
+    def assertSerDe(serializer: KVStoreScalaSerializer, attempt: GlobAttemptInfoWrapper): Unit = {
       val attemptAfterSerDe =
-        serializer.deserialize(serializer.serialize(attempt), classOf[AttemptInfoWrapper])
+        serializer.deserialize(serializer.serialize(attempt), classOf[GlobAttemptInfoWrapper])
       assert(attemptAfterSerDe.info === attempt.info)
       // skip comparing some fields, as they've not triggered SPARK-52327
       assertOptionAfterSerde(attemptAfterSerDe.lastIndex, attempt.lastIndex)
@@ -1783,11 +1788,11 @@ abstract class GlobFsHistoryProviderSuite
       false,
       "dummy")
     val attemptInfoWithIndexAsNone =
-      new AttemptInfoWrapper(appInfo, "dummyPath", 10, None, None, None, None, None)
+      new GlobAttemptInfoWrapper(appInfo, "dummyPath", 10, None, None, None, None, None)
     assertSerDe(serializer, attemptInfoWithIndexAsNone)
 
     val attemptInfoWithIndex =
-      new AttemptInfoWrapper(appInfo, "dummyPath", 10, Some(1), None, None, None, None)
+      new GlobAttemptInfoWrapper(appInfo, "dummyPath", 10, Some(1), None, None, None, None)
     assertSerDe(serializer, attemptInfoWithIndex)
   }
 
@@ -2297,14 +2302,14 @@ abstract class GlobFsHistoryProviderSuite
       inMemory: Boolean = false,
       useHybridStore: Boolean = false): SparkConf = {
     val conf = new SparkConf()
-      .set(HISTORY_LOG_DIR, testDirs(0).getParent() + "/" + testGlob + "*")
+      .set(HISTORY_LOG_DIR, new Path(suiteBaseDir.toURI.toString, testGlob + "*").toString)
       .set(FAST_IN_PROGRESS_PARSING, true)
 
     if (!inMemory) {
       // Use a separate temp directory for the KVStore to avoid interference with log file counts
       conf.set(
         LOCAL_STORE_DIR,
-        Utils.createTempDir(namePrefix = "history_kvstore").getAbsolutePath())
+        Utils.createTempDir(namePrefix = "glob_history_kvstore").getAbsolutePath())
     }
     conf.set(HYBRID_STORE_ENABLED, useHybridStore)
     conf.set(HYBRID_STORE_DISK_BACKEND.key, diskBackend.toString)
