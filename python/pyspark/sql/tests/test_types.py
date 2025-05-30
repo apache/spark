@@ -477,6 +477,23 @@ class TypesTestsMixin:
             df.first(),
         )
 
+    def test_infer_variant_type(self):
+        VariantRow = Row("f1", "f2", "f3")
+        value = VariantVal.parseJson('{"a": 1}')
+
+        data = [
+            VariantRow(value, [value], Row(value=value))
+        ]
+        df = self.spark.createDataFrame(data)
+        self.assertEqual(
+            Row(
+                f1=value,
+                f2=[value],
+                f3=Row(value=value),
+            ),
+            df.first(),
+        )
+
     def test_create_dataframe_from_dict_respects_schema(self):
         df = self.spark.createDataFrame([{"a": 1}], ["b"])
         self.assertEqual(df.columns, ["b"])
