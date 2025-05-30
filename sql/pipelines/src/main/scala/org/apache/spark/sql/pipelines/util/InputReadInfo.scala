@@ -18,7 +18,6 @@
 package org.apache.spark.sql.pipelines.util
 
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.pipelines.Language
 import org.apache.spark.sql.pipelines.util.StreamingReadOptions.EmptyUserOptions
 
 /**

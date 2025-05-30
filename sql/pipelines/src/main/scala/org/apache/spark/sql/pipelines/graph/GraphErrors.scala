@@ -58,7 +58,8 @@ object GraphErrors {
   }
 
   /**
-   * Throws when a table path is unresolved, i.e. the table identifier does not exist in the catalog.
+   * Throws when a table path is unresolved, i.e. the table identifier
+   * does not exist in the catalog.
    *
    * @param identifier the unresolved table identifier
    */
