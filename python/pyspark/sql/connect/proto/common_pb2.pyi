@@ -33,21 +33,17 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import builtins
 import collections.abc
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.message
-import sys
 import typing
-
-if sys.version_info >= (3, 8):
-    import typing as typing_extensions
-else:
-    import typing_extensions
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+@typing.final
 class StorageLevel(google.protobuf.message.Message):
     """StorageLevel for persisting Datasets/Tables."""
 
@@ -79,7 +75,7 @@ class StorageLevel(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "deserialized",
             b"deserialized",
             "replication",
@@ -95,6 +91,7 @@ class StorageLevel(google.protobuf.message.Message):
 
 global___StorageLevel = StorageLevel
 
+@typing.final
 class ResourceInformation(google.protobuf.message.Message):
     """ResourceInformation to hold information about a type of Resource.
     The corresponding class is 'org.apache.spark.resource.ResourceInformation'
@@ -118,11 +115,12 @@ class ResourceInformation(google.protobuf.message.Message):
         addresses: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["addresses", b"addresses", "name", b"name"]
+        self, field_name: typing.Literal["addresses", b"addresses", "name", b"name"]
     ) -> None: ...
 
 global___ResourceInformation = ResourceInformation
 
+@typing.final
 class ExecutorResourceRequest(google.protobuf.message.Message):
     """An executor resource request."""
 
@@ -150,7 +148,7 @@ class ExecutorResourceRequest(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "_discovery_script",
             b"_discovery_script",
             "_vendor",
@@ -163,7 +161,7 @@ class ExecutorResourceRequest(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "_discovery_script",
             b"_discovery_script",
             "_vendor",
@@ -180,15 +178,16 @@ class ExecutorResourceRequest(google.protobuf.message.Message):
     ) -> None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_discovery_script", b"_discovery_script"]
-    ) -> typing_extensions.Literal["discovery_script"] | None: ...
+        self, oneof_group: typing.Literal["_discovery_script", b"_discovery_script"]
+    ) -> typing.Literal["discovery_script"] | None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_vendor", b"_vendor"]
-    ) -> typing_extensions.Literal["vendor"] | None: ...
+        self, oneof_group: typing.Literal["_vendor", b"_vendor"]
+    ) -> typing.Literal["vendor"] | None: ...
 
 global___ExecutorResourceRequest = ExecutorResourceRequest
 
+@typing.final
 class TaskResourceRequest(google.protobuf.message.Message):
     """A task resource request."""
 
@@ -209,17 +208,16 @@ class TaskResourceRequest(google.protobuf.message.Message):
         amount: builtins.float = ...,
     ) -> None: ...
     def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "amount", b"amount", "resource_name", b"resource_name"
-        ],
+        self, field_name: typing.Literal["amount", b"amount", "resource_name", b"resource_name"]
     ) -> None: ...
 
 global___TaskResourceRequest = TaskResourceRequest
 
+@typing.final
 class ResourceProfile(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing.final
     class ExecutorResourcesEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -234,13 +232,12 @@ class ResourceProfile(google.protobuf.message.Message):
             key: builtins.str = ...,
             value: global___ExecutorResourceRequest | None = ...,
         ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["value", b"value"]
-        ) -> builtins.bool: ...
+        def HasField(self, field_name: typing.Literal["value", b"value"]) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
+    @typing.final
     class TaskResourcesEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -255,11 +252,9 @@ class ResourceProfile(google.protobuf.message.Message):
             key: builtins.str = ...,
             value: global___TaskResourceRequest | None = ...,
         ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["value", b"value"]
-        ) -> builtins.bool: ...
+        def HasField(self, field_name: typing.Literal["value", b"value"]) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
     EXECUTOR_RESOURCES_FIELD_NUMBER: builtins.int
@@ -290,13 +285,14 @@ class ResourceProfile(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "executor_resources", b"executor_resources", "task_resources", b"task_resources"
         ],
     ) -> None: ...
 
 global___ResourceProfile = ResourceProfile
 
+@typing.final
 class Origin(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -314,22 +310,23 @@ class Origin(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "function", b"function", "jvm_origin", b"jvm_origin", "python_origin", b"python_origin"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "function", b"function", "jvm_origin", b"jvm_origin", "python_origin", b"python_origin"
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["function", b"function"]
-    ) -> typing_extensions.Literal["python_origin", "jvm_origin"] | None: ...
+        self, oneof_group: typing.Literal["function", b"function"]
+    ) -> typing.Literal["python_origin", "jvm_origin"] | None: ...
 
 global___Origin = Origin
 
+@typing.final
 class PythonOrigin(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -346,12 +343,12 @@ class PythonOrigin(google.protobuf.message.Message):
         call_site: builtins.str = ...,
     ) -> None: ...
     def ClearField(
-        self,
-        field_name: typing_extensions.Literal["call_site", b"call_site", "fragment", b"fragment"],
+        self, field_name: typing.Literal["call_site", b"call_site", "fragment", b"fragment"]
     ) -> None: ...
 
 global___PythonOrigin = PythonOrigin
 
+@typing.final
 class JvmOrigin(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -398,7 +395,7 @@ class JvmOrigin(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "_line",
             b"_line",
             "_object_name",
@@ -431,7 +428,7 @@ class JvmOrigin(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "_line",
             b"_line",
             "_object_name",
@@ -466,35 +463,36 @@ class JvmOrigin(google.protobuf.message.Message):
     ) -> None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_line", b"_line"]
-    ) -> typing_extensions.Literal["line"] | None: ...
+        self, oneof_group: typing.Literal["_line", b"_line"]
+    ) -> typing.Literal["line"] | None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_object_name", b"_object_name"]
-    ) -> typing_extensions.Literal["object_name"] | None: ...
+        self, oneof_group: typing.Literal["_object_name", b"_object_name"]
+    ) -> typing.Literal["object_name"] | None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_object_type", b"_object_type"]
-    ) -> typing_extensions.Literal["object_type"] | None: ...
+        self, oneof_group: typing.Literal["_object_type", b"_object_type"]
+    ) -> typing.Literal["object_type"] | None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_sql_text", b"_sql_text"]
-    ) -> typing_extensions.Literal["sql_text"] | None: ...
+        self, oneof_group: typing.Literal["_sql_text", b"_sql_text"]
+    ) -> typing.Literal["sql_text"] | None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_start_index", b"_start_index"]
-    ) -> typing_extensions.Literal["start_index"] | None: ...
+        self, oneof_group: typing.Literal["_start_index", b"_start_index"]
+    ) -> typing.Literal["start_index"] | None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_start_position", b"_start_position"]
-    ) -> typing_extensions.Literal["start_position"] | None: ...
+        self, oneof_group: typing.Literal["_start_position", b"_start_position"]
+    ) -> typing.Literal["start_position"] | None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_stop_index", b"_stop_index"]
-    ) -> typing_extensions.Literal["stop_index"] | None: ...
+        self, oneof_group: typing.Literal["_stop_index", b"_stop_index"]
+    ) -> typing.Literal["stop_index"] | None: ...
 
 global___JvmOrigin = JvmOrigin
 
+@typing.final
 class StackTraceElement(google.protobuf.message.Message):
     """A message to hold a [[java.lang.StackTraceElement]]."""
 
@@ -534,7 +532,7 @@ class StackTraceElement(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "_class_loader_name",
             b"_class_loader_name",
             "_file_name",
@@ -555,7 +553,7 @@ class StackTraceElement(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "_class_loader_name",
             b"_class_loader_name",
             "_file_name",
@@ -582,23 +580,24 @@ class StackTraceElement(google.protobuf.message.Message):
     ) -> None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_class_loader_name", b"_class_loader_name"]
-    ) -> typing_extensions.Literal["class_loader_name"] | None: ...
+        self, oneof_group: typing.Literal["_class_loader_name", b"_class_loader_name"]
+    ) -> typing.Literal["class_loader_name"] | None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_file_name", b"_file_name"]
-    ) -> typing_extensions.Literal["file_name"] | None: ...
+        self, oneof_group: typing.Literal["_file_name", b"_file_name"]
+    ) -> typing.Literal["file_name"] | None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_module_name", b"_module_name"]
-    ) -> typing_extensions.Literal["module_name"] | None: ...
+        self, oneof_group: typing.Literal["_module_name", b"_module_name"]
+    ) -> typing.Literal["module_name"] | None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_module_version", b"_module_version"]
-    ) -> typing_extensions.Literal["module_version"] | None: ...
+        self, oneof_group: typing.Literal["_module_version", b"_module_version"]
+    ) -> typing.Literal["module_version"] | None: ...
 
 global___StackTraceElement = StackTraceElement
 
+@typing.final
 class Bools(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -612,10 +611,11 @@ class Bools(google.protobuf.message.Message):
         *,
         values: collections.abc.Iterable[builtins.bool] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["values", b"values"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["values", b"values"]) -> None: ...
 
 global___Bools = Bools
 
+@typing.final
 class Ints(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -629,10 +629,11 @@ class Ints(google.protobuf.message.Message):
         *,
         values: collections.abc.Iterable[builtins.int] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["values", b"values"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["values", b"values"]) -> None: ...
 
 global___Ints = Ints
 
+@typing.final
 class Longs(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -646,10 +647,11 @@ class Longs(google.protobuf.message.Message):
         *,
         values: collections.abc.Iterable[builtins.int] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["values", b"values"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["values", b"values"]) -> None: ...
 
 global___Longs = Longs
 
+@typing.final
 class Floats(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -663,10 +665,11 @@ class Floats(google.protobuf.message.Message):
         *,
         values: collections.abc.Iterable[builtins.float] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["values", b"values"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["values", b"values"]) -> None: ...
 
 global___Floats = Floats
 
+@typing.final
 class Doubles(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -680,10 +683,11 @@ class Doubles(google.protobuf.message.Message):
         *,
         values: collections.abc.Iterable[builtins.float] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["values", b"values"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["values", b"values"]) -> None: ...
 
 global___Doubles = Doubles
 
+@typing.final
 class Strings(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -697,6 +701,6 @@ class Strings(google.protobuf.message.Message):
         *,
         values: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["values", b"values"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["values", b"values"]) -> None: ...
 
 global___Strings = Strings
