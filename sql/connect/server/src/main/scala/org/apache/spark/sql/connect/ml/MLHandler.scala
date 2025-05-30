@@ -28,7 +28,7 @@ import org.apache.spark.ml.{Estimator, EstimatorUtils, Model, Transformer}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.tree.TreeConfig
-import org.apache.spark.ml.util.{MLWritable, Summary}
+import org.apache.spark.ml.util.{HasTrainingSummary, MLWritable, Summary}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.ml.Serializer.deserializeMethodArguments
@@ -223,10 +223,17 @@ private[connect] object MLHandler extends Logging {
           .build()
 
       case proto.MlCommand.CommandCase.FETCH =>
-        val helper = AttributeHelper(
-          sessionHolder,
-          mlCommand.getFetch.getObjRef.getId,
-          mlCommand.getFetch.getMethodsList.asScala.toArray)
+        val objRefId = mlCommand.getFetch.getObjRef.getId
+        val methods = mlCommand.getFetch.getMethodsList.asScala.toArray
+        val obj = sessionHolder.mlCache.get(objRefId)
+        if (obj != null && obj.isInstanceOf[HasTrainingSummary[_]]
+          && methods(0).getMethod == "summary"
+          && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
+          throw MLCacheInvalidException(
+            objRefId,
+            sessionHolder.mlCache.getOffloadingTimeoutMinute)
+        }
+        val helper = AttributeHelper(sessionHolder, objRefId, methods)
         val attrResult = helper.getAttribute
         attrResult match {
           case s: Summary =>
