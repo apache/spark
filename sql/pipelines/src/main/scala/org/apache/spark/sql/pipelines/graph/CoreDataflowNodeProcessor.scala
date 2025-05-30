@@ -87,10 +87,8 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
           isStreamingTableOpt = Option(resolvedFlowsToTable.exists(f => f.df.isStreaming))
         )
 
-        // Table will be virtual in either of the following scenarios:
-        // 1. If table is present in context.fullRefreshTables
-        // 2. If table has any virtual inputs (flows or tables)
-        // 3. If the table pre-existing metadata is different from current metadata
+        // We mark all tables as virtual to ensure resolution uses incoming flows
+        // rather than previously materialized tables.
         val virtualTableInput = VirtualTableInput(
           identifier = table.identifier,
           specifiedSchema = table.specifiedSchema,

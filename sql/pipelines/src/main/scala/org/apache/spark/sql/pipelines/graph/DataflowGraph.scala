@@ -38,11 +38,6 @@ case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], views: Seq[View])
   lazy val output: Map[TableIdentifier, Output] = mapUnique(tables, "output")(_.identifier)
 
   /**
-   * Returns a [[TableInput]], if one is available, that can be read from by downstream flows.
-   */
-  def tableInput(identifier: TableIdentifier): Option[TableInput] = table.get(identifier)
-
-  /**
    * Returns [[Flow]]s in this graph that need to get planned and potentially executed when
    * executing the graph. Flows that write to logical views are excluded.
    */

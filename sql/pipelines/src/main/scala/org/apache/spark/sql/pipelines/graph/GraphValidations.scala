@@ -148,7 +148,7 @@ trait GraphValidations extends Logging {
   }
 
   protected def validateUserSpecifiedSchemas(): Unit = {
-    flows.flatMap(f => tableInput(f.identifier)).foreach { t: TableInput =>
+    flows.flatMap(f => table.get(f.identifier)).foreach { t: TableInput =>
       // The output inferred schema of a table is the declared schema merged with the
       // schema of all incoming flows. This must be equivalent to the declared schema.
       val inferredSchema = SchemaInferenceUtils
