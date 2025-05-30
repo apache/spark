@@ -1476,8 +1476,8 @@ class SparkConnectClient(object):
                 yield {"streaming_query_listener_events_result": event_result}
             if b.HasField("pipeline_command_result"):
                 yield {"pipeline_command_result": b.pipeline_command_result}
-            if b.HasField("pipeline_events_result"):
-                yield {"pipeline_events_result": b.pipeline_events_result}
+            if b.HasField("pipeline_event_result"):
+                yield {"pipeline_event_result": b.pipeline_events_result}
             if b.HasField("get_resources_command_result"):
                 resources = {}
                 for key, resource in b.get_resources_command_result.resources.items():
