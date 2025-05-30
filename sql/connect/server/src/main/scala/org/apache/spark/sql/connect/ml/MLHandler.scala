@@ -226,12 +226,12 @@ private[connect] object MLHandler extends Logging {
         val objRefId = mlCommand.getFetch.getObjRef.getId
         val methods = mlCommand.getFetch.getMethodsList.asScala.toArray
         val obj = sessionHolder.mlCache.get(objRefId)
-        if (
-          obj != null && obj.isInstanceOf[HasTrainingSummary[_]]
+        if (obj != null && obj.isInstanceOf[HasTrainingSummary[_]]
           && methods(0).getMethod == "summary"
-          && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary
-        ) {
-          throw MLCacheInvalidException(objRefId, sessionHolder.mlCache.getOffloadingTimeoutMinute)
+          && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
+          throw MLCacheInvalidException(
+            objRefId,
+            sessionHolder.mlCache.getOffloadingTimeoutMinute)
         }
         val helper = AttributeHelper(sessionHolder, objRefId, methods)
         val attrResult = helper.getAttribute
