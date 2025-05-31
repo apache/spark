@@ -46,6 +46,8 @@ class ArrowUDFType:
 
     SCALAR = PythonEvalType.SQL_SCALAR_ARROW_UDF
 
+    SCALAR_ITER = PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
+
 
 def arrow_udf(f=None, returnType=None, functionType=None):
     return vectorized_udf(f, returnType, functionType, "arrow")
@@ -451,6 +453,7 @@ def vectorized_udf(
         )
     if kind == "arrow" and eval_type not in [
         PythonEvalType.SQL_SCALAR_ARROW_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
         None,
     ]:  # None means it should infer the type from type hints.
         raise PySparkTypeError(
