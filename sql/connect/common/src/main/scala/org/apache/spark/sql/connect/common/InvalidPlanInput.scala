@@ -16,10 +16,38 @@
  */
 package org.apache.spark.sql.connect.common
 
+import scala.jdk.CollectionConverters._
+
+import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
+
 /**
  * Error thrown when a connect plan is not valid.
  */
 final case class InvalidPlanInput(
-    private val message: String = "",
-    private val cause: Throwable = None.orNull)
-    extends Exception(message, cause)
+    private val errorCondition: String,
+    private val messageParameters: Map[String, String],
+    private val causeOpt: Option[Throwable])
+    extends Exception(
+      SparkThrowableHelper.getMessage(errorCondition, messageParameters),
+      causeOpt.orNull)
+    with SparkThrowable {
+
+  override def getCondition: String = errorCondition
+
+  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
+}
+
+object InvalidPlanInput {
+
+  def apply(message: String): InvalidPlanInput =
+    InvalidPlanInput(
+      errorCondition = "INTERNAL_ERROR",
+      messageParameters = Map("message" -> message),
+      causeOpt = None)
+
+  def apply(errorCondition: String, messageParameters: Map[String, String]): InvalidPlanInput =
+    InvalidPlanInput(
+      errorCondition = errorCondition,
+      messageParameters = messageParameters,
+      causeOpt = None)
+}

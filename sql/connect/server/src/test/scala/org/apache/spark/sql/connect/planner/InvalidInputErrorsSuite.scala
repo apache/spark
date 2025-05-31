@@ -95,6 +95,18 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
           .build()
 
         proto.Relation.newBuilder().setRead(read).build()
+      }),
+    TestCase(
+      name = "Deduplicate needs input",
+      expectedErrorCondition = "INTERNAL_ERROR",
+      expectedParameters = Map("message" -> "Deduplicate needs a plan input"),
+      invalidInput = {
+        val deduplicate = proto.Deduplicate
+          .newBuilder()
+          .setAllColumnsAsKeys(true)
+          .build()
+
+        proto.Relation.newBuilder().setDeduplicate(deduplicate).build()
       }))
 
   // Run all test cases
