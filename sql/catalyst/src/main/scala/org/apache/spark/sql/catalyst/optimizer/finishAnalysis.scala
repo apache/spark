@@ -76,6 +76,30 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
   }
 }
 
+
+/**
+ * Rewrite exists subquery to add a scalar project
+ *   WHERE EXISTS (SELECT * FROM TABLE B WHERE COL1 > 10)
+ * will be rewritten to
+ *   WHERE EXISTS (SELECT 1 FROM (SELECT * FROM TABLE B WHERE COL1 > 10))
+ */
+object RewriteExistsAsScalarProject extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+    _.containsPattern(EXISTS_SUBQUERY)) {
+    case exists: Exists if !hasSelectScalar(exists.plan) =>
+      exists.copy(plan = Project(Seq(Alias(Literal(1), "scalar")()), exists.plan))
+  }
+
+  private def hasSelectScalar(plan: LogicalPlan): Boolean = plan match {
+    case Project(projectList, _) =>
+      projectList.exists {
+        case Alias(Literal(_, IntegerType), _) => true
+        case _ => false
+      }
+    case _ => false
+  }
+}
+
 /**
  * Computes expressions in inline tables. This rule is supposed to be called at the very end
  * of the analysis phase, given that all the expressions need to be fully resolved/replaced
