@@ -358,6 +358,23 @@ class NameScopeSuite extends PlanTest {
       )
     )
 
+    val matchedMapStructs = stack.resolveMultipartName(Seq("col11", "key", "field"))
+    assert(
+      matchedMapStructs == NameTarget(
+        candidates = Seq(
+          GetStructField(GetMapValue(col11MapWithStruct, Literal("key")), 0, Some("field"))),
+        aliasName = Some("field"),
+        output = Seq(
+          col8Struct,
+          col9NestedStruct,
+          col10Map,
+          col11MapWithStruct,
+          col12Array,
+          col13ArrayWithStruct
+        )
+      )
+    )
+
     var matchedArrays = stack.resolveMultipartName(Seq("col12", "element"))
     assert(
       matchedArrays == NameTarget(
