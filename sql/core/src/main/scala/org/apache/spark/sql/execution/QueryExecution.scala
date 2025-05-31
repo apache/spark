@@ -158,6 +158,7 @@ class QueryExecution(
       CommandResult(
         qe.analyzed.output,
         qe.commandExecuted,
+        qe.optimizedPlan,
         qe.executedPlan,
         result.toImmutableArraySeq)
     }
