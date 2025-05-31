@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
@@ -38,7 +39,28 @@ import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StructTyp
 import org.apache.spark.sql.util.SchemaUtils._
 import org.apache.spark.util.ArrayImplicits._
 
+object PostV2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
+  import V2ScanRelationPushDown._
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val pushdownRules = Seq[LogicalPlan => LogicalPlan] (
+      createScanBuilder,
+      pruneColumns)
+
+    pushdownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
+      pushDownRule(newPlan)
+    }
+  }
+
+  private def createScanBuilder(plan: LogicalPlan) = plan.transform {
+    case DataSourceV2ScanRelation(relation, _, _, _, _)
+        if relation.getTagValue(V2_SCAN_BUILDER_HOLDER).nonEmpty =>
+      relation.getTagValue(V2_SCAN_BUILDER_HOLDER).get
+  }
+}
+
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
+  val V2_SCAN_BUILDER_HOLDER = TreeNodeTag[ScanBuilderHolder]("v2_scan_builder_holder")
   import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -375,6 +397,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val wrappedScan = getWrappedScan(scan, sHolder)
 
       val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
+      sHolder.relation.setTagValue(V2_SCAN_BUILDER_HOLDER, sHolder)
 
       val projectionOverSchema =
         ProjectionOverSchema(output.toStructType, AttributeSet(output))
