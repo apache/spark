@@ -813,7 +813,7 @@ package object config {
   private[spark] val SHUFFLE_SERVICE_DB_BACKEND =
     ConfigBuilder(Constants.SHUFFLE_SERVICE_DB_BACKEND)
       .doc("Specifies a disk-based store used in shuffle service local db. " +
-        "ROCKSDB or LEVELDB (deprecated).")
+        "Only supported ROCKSDB at now.")
       .version("3.4.0")
       .enumConf(classOf[DBBackend])
       .createWithDefault(DBBackend.ROCKSDB)

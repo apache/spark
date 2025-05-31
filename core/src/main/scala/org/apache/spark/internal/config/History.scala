@@ -293,11 +293,11 @@ private[spark] object History {
     .createWithDefaultString("2g")
 
   object HybridStoreDiskBackend extends Enumeration {
-    val LEVELDB, ROCKSDB = Value
+    val ROCKSDB = Value
   }
 
   val HYBRID_STORE_DISK_BACKEND = ConfigBuilder("spark.history.store.hybridStore.diskBackend")
-    .doc("Specifies a disk-based store used in hybrid store; ROCKSDB or LEVELDB (deprecated).")
+    .doc("Specifies a disk-based store used in hybrid store; only supported ROCKSDB at now.")
     .version("3.3.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
