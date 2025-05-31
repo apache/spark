@@ -409,6 +409,13 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         serdeProperties,
         partitionSpec)
 
+    case UnsetTableSerDeProperties(
+        ResolvedV1TableIdentifierInSessionCatalog(ident),
+        propertyKeys,
+        ifExists,
+        partitionSpec) =>
+      AlterTableUnsetSerDePropertiesCommand(ident, propertyKeys, ifExists, partitionSpec)
+
     case SetTableLocation(ResolvedV1TableIdentifier(ident), None, location) =>
       AlterTableSetLocationCommand(ident, None, location)
 
