@@ -493,7 +493,7 @@ class TypesTestsMixin:
         self.assertEqual(
             bytes(actual.metadata),
             bytes(value.metadata),
-        ]
+        )
 
     def test_create_dataframe_from_dict_respects_schema(self):
         df = self.spark.createDataFrame([{"a": 1}], ["b"])
