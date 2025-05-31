@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateTable, CreateTempView, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, TableSpec, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -140,7 +142,7 @@ object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
           other
       }
     } catch {
-      case _: NoSuchNamespaceException =>
+      case NonFatal(_) =>
         plan
     }
   }
