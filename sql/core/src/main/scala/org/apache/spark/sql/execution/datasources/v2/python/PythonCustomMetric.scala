@@ -29,7 +29,7 @@ class PythonCustomMetric(
   def this() = this(null, null)
 
   override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
-    MetricUtils.stringValue("size", taskMetrics, Array.empty[Long])
+    MetricUtils.stringValue("size", 0L, taskMetrics, Array.empty[Long])
   }
 }
 
