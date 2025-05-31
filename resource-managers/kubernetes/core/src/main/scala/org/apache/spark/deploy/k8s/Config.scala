@@ -494,7 +494,7 @@ private[spark] object Config extends Logging {
       .version("2.3.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(interval => interval > 0, s"Logging interval must be a positive time value.")
-      .createWithDefaultString("1s")
+      .createWithDefaultString("10s")
 
   val KUBERNETES_EXECUTOR_ENABLE_API_POLLING =
     ConfigBuilder("spark.kubernetes.executor.enableApiPolling")
