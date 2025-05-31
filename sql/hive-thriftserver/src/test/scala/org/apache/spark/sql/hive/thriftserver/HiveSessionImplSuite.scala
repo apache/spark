@@ -67,7 +67,7 @@ class OperationManagerMock extends OperationManager {
   private val calledHandles: mutable.Set[OperationHandle] = new mutable.HashSet[OperationHandle]()
 
   override def newGetCatalogsOperation(parentSession: HiveSession): GetCatalogsOperation = {
-    val operation = new GetCatalogsOperationMock(parentSession)
+    val operation = new GetCatalogsOperationMock(parentSession, this)
     try {
       val m = classOf[OperationManager].getDeclaredMethod("addOperation", classOf[Operation])
       m.setAccessible(true)
