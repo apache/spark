@@ -318,6 +318,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateSQLFunctionNode,
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
+      RewriteExistsWithFullTableProject,
       PullOutGroupingExpressions,
       // Put `InsertMapSortInGroupingExpressions` after `PullOutGroupingExpressions`,
       // so the grouping keys can only be attribute and literal which makes
