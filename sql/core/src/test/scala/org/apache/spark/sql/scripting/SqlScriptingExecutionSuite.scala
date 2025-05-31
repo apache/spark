@@ -2720,7 +2720,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |          SELECT varL3;
         |          SELECT 1/0;
         |        END;
-
         |        SELECT 5;
         |        SELECT 1/0;
         |        SELECT 6;
