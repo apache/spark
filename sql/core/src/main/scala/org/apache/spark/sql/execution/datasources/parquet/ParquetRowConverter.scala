@@ -144,7 +144,8 @@ private[parquet] class ParquetRowConverter(
     convertTz: Option[ZoneId],
     datetimeRebaseSpec: RebaseSpec,
     int96RebaseSpec: RebaseSpec,
-    updater: ParentContainerUpdater)
+    updater: ParentContainerUpdater,
+    externalIdMapping: ParquetIdExternalMapping)
   extends ParquetGroupConverter(updater) with Logging {
 
   assert(
@@ -249,7 +250,9 @@ private[parquet] class ParquetRowConverter(
       }
     }
     parquetType.getFields.asScala.map { parquetField =>
-      val catalystFieldIndex = Option(parquetField.getId).flatMap { fieldId =>
+      val catalystFieldIndex = Option(parquetField.getId)
+        .orElse(externalIdMapping.getFieldId(parquetField.getName).map(new Type.ID(_)))
+        .flatMap { fieldId =>
         // field has id, try to match by id first before falling back to match by name
         catalystFieldIdxByFieldId.get(fieldId.intValue())
       }.getOrElse {
@@ -260,7 +263,8 @@ private[parquet] class ParquetRowConverter(
       // Create a RowUpdater instance for converting Parquet objects to Catalyst rows.
       val rowUpdater: RowUpdater = new RowUpdater(currentRow, catalystFieldIndex)
       // Converted field value should be set to the `fieldIndex`-th cell of `currentRow`
-      newConverter(parquetField, catalystField.dataType, rowUpdater)
+      newConverter(parquetField, catalystField.dataType, rowUpdater,
+        externalIdMapping.getChild(parquetField.getName))
     }.toArray
   }
 
@@ -299,7 +303,9 @@ private[parquet] class ParquetRowConverter(
   private def newConverter(
       parquetType: Type,
       catalystType: DataType,
-      updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
+      updater: ParentContainerUpdater,
+      extIdMapping: ParquetIdExternalMapping
+      ): Converter with HasParentContainerUpdater = {
 
     def isUnsignedIntTypeMatched(bitWidth: Int): Boolean = {
       parquetType.getLogicalTypeAnnotation match {
@@ -499,14 +505,14 @@ private[parquet] class ParquetRowConverter(
         if (parquetType.isPrimitive) {
           new RepeatedPrimitiveConverter(parquetType, t.elementType, updater)
         } else {
-          new RepeatedGroupConverter(parquetType, t.elementType, updater)
+          new RepeatedGroupConverter(parquetType, t.elementType, updater, extIdMapping)
         }
 
       case t: ArrayType =>
-        new ParquetArrayConverter(parquetType.asGroupType(), t, updater)
+        new ParquetArrayConverter(parquetType.asGroupType(), t, updater, extIdMapping)
 
       case t: MapType =>
-        new ParquetMapConverter(parquetType.asGroupType(), t, updater)
+        new ParquetMapConverter(parquetType.asGroupType(), t, updater, extIdMapping)
 
       case t: StructType if VariantMetadata.isVariantStruct(t) =>
         new ParquetVariantConverter(t, parquetType.asGroupType(), updater)
@@ -545,7 +551,8 @@ private[parquet] class ParquetRowConverter(
           convertTz,
           datetimeRebaseSpec,
           int96RebaseSpec,
-          wrappedUpdater)
+          wrappedUpdater,
+          extIdMapping)
 
       case t: VariantType =>
         if (SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED)) {
@@ -698,7 +705,8 @@ private[parquet] class ParquetRowConverter(
   private final class ParquetArrayConverter(
       parquetSchema: GroupType,
       catalystSchema: ArrayType,
-      updater: ParentContainerUpdater)
+      updater: ParentContainerUpdater,
+      extIdMapping: ParquetIdExternalMapping)
     extends ParquetGroupConverter(updater) {
 
     private[this] val currentArray = ArrayBuffer.empty[Any]
@@ -755,7 +763,7 @@ private[parquet] class ParquetRowConverter(
         // type of the repeated field.
         newConverter(repeatedType, elementType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentArray += value
-        })
+        }, extIdMapping.getArray)
       } else {
         // If the repeated field corresponds to the syntactic group in the standard 3-level Parquet
         // LIST layout, creates a new converter using the only child field of the repeated field.
@@ -779,7 +787,7 @@ private[parquet] class ParquetRowConverter(
       private[this] val converter =
         newConverter(parquetType, catalystType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentElement = value
-        })
+        }, ParquetIdExternalMapping.EmptyMapping)
 
       override def getConverter(fieldIndex: Int): Converter = converter
 
@@ -793,7 +801,8 @@ private[parquet] class ParquetRowConverter(
   private final class ParquetMapConverter(
       parquetType: GroupType,
       catalystType: MapType,
-      updater: ParentContainerUpdater)
+      updater: ParentContainerUpdater,
+      extIdMapping: ParquetIdExternalMapping)
     extends ParquetGroupConverter(updater) {
 
     private[this] val currentKeys = ArrayBuffer.empty[Any]
@@ -841,12 +850,12 @@ private[parquet] class ParquetRowConverter(
         // Converter for keys
         newConverter(parquetKeyType, catalystKeyType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentKey = value
-        }),
+        }, externalIdMapping.getMapKey),
 
         // Converter for values
         newConverter(parquetValueType, catalystValueType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentValue = value
-        }))
+        }, externalIdMapping.getMapKey))
 
       override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
 
@@ -893,12 +902,12 @@ private[parquet] class ParquetRowConverter(
         // Converter for value
         newConverter(valueAndMetadata(0), BinaryType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentValue = value
-        }),
+        }, ParquetIdExternalMapping.EmptyMapping),
 
         // Converter for metadata
         newConverter(valueAndMetadata(1), BinaryType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentMetadata = value
-      }))
+        }, ParquetIdExternalMapping.EmptyMapping))
     }
 
     override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
@@ -935,7 +944,8 @@ private[parquet] class ParquetRowConverter(
       int96RebaseSpec,
       new ParentContainerUpdater {
         override def set(value: Any): Unit = currentRow = value
-      })
+      },
+      ParquetIdExternalMapping.EmptyMapping)
 
     override def getConverter(fieldIndex: Int): Converter = fileConverter.getConverter(fieldIndex)
 
@@ -979,7 +989,8 @@ private[parquet] class ParquetRowConverter(
     val updater: ParentContainerUpdater = newArrayUpdater(parentUpdater)
 
     private[this] val elementConverter: PrimitiveConverter =
-      newConverter(parquetType, catalystType, updater).asPrimitiveConverter()
+      newConverter(parquetType, catalystType, updater,
+        ParquetIdExternalMapping.EmptyMapping).asPrimitiveConverter()
 
     override def addBoolean(value: Boolean): Unit = elementConverter.addBoolean(value)
     override def addInt(value: Int): Unit = elementConverter.addInt(value)
@@ -1000,13 +1011,15 @@ private[parquet] class ParquetRowConverter(
   private final class RepeatedGroupConverter(
       parquetType: Type,
       catalystType: DataType,
-      parentUpdater: ParentContainerUpdater)
+      parentUpdater: ParentContainerUpdater,
+      externalIdMapping: ParquetIdExternalMapping)
     extends GroupConverter with HasParentContainerUpdater with RepeatedConverter {
 
     val updater: ParentContainerUpdater = newArrayUpdater(parentUpdater)
 
     private[this] val elementConverter: GroupConverter =
-      newConverter(parquetType, catalystType, updater).asGroupConverter()
+      newConverter(parquetType, catalystType, updater,
+        externalIdMapping.getArray).asGroupConverter()
 
     override def getConverter(field: Int): Converter = elementConverter.getConverter(field)
     override def end(): Unit = elementConverter.end()
