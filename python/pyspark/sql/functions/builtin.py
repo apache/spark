@@ -20777,7 +20777,7 @@ def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) ->
     |{"name":"Alice"}|
     +----------------+
 
-    Example 4: Converting a MapType column to JSON
+    Example 4: Converting a VariantType column to JSON
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(1, '{"name": "Alice"}')], ("key", "value"))
