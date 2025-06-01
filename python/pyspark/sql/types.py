@@ -2308,7 +2308,7 @@ def _infer_type(
                 messageParameters={"data_type": f"array({obj.typecode})"},
             )
     elif isinstance(obj, VariantVal):
-       return VariantType()
+        return VariantType()
     else:
         try:
             return _infer_schema(
