@@ -205,17 +205,17 @@ def change_dir(path: Path) -> Generator[None, None, None]:
         os.chdir(prev)
 
 
-def run(spec_path: Path, remote: str) -> None:
+def run(spec_path: Path) -> None:
     """Run the pipeline defined with the given spec."""
     log_with_curr_timestamp(f"Loading pipeline spec from {spec_path}...")
     spec = load_pipeline_spec(spec_path)
 
     log_with_curr_timestamp("Creating Spark session...")
-    spark_builder = SparkSession.builder.remote(remote)
+    spark_builder = SparkSession.builder
     for key, value in spec.configuration.items():
         spark_builder = spark_builder.config(key, value)
 
-    spark = spark_builder.create()
+    spark = spark_builder.getOrCreate()
 
     log_with_curr_timestamp("Creating dataflow graph...")
     dataflow_graph_id = create_dataflow_graph(
@@ -244,9 +244,6 @@ if __name__ == "__main__":
     # "run" subcommand
     run_parser = subparsers.add_parser("run", help="Run a pipeline.")
     run_parser.add_argument("--spec", help="Path to the pipeline spec.")
-    run_parser.add_argument(
-        "--remote", help="The Spark Connect remote to connect to.", required=True
-    )
 
     # "init" subcommand
     init_parser = subparsers.add_parser(
@@ -274,6 +271,6 @@ if __name__ == "__main__":
         else:
             spec_path = find_pipeline_spec(Path.cwd())
 
-        run(spec_path=spec_path, remote=args.remote)
+        run(spec_path=spec_path)
     elif args.command == "init":
         init(args.name)
