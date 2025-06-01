@@ -319,3 +319,46 @@ case class RDDScanExec(
 
   override def getStream: Option[SparkDataStream] = stream
 }
+
+/**
+ * A physical plan node for `OneRowRelation` for scans with no 'FROM' clause.
+ *
+ * We do not extend `RDDScanExec` in order to avoid complexity due to `TreeNode.makeCopy` and
+ * `TreeNode`'s general use of reflection.
+ */
+case class OneRowRelationExec() extends LeafExecNode
+  with InputRDDCodegen {
+
+  override val nodeName: String = s"Scan OneRowRelation"
+
+  override val output: Seq[Attribute] = Nil
+
+  private val rdd: RDD[InternalRow] = {
+    val numOutputRows = longMetric("numOutputRows")
+    session
+      .sparkContext
+      .parallelize(Seq(""), 1)
+      .mapPartitionsInternal { _ =>
+        val proj = UnsafeProjection.create(Seq.empty[Expression])
+        Iterator(proj.apply(InternalRow.empty)).map { r =>
+          numOutputRows += 1
+          r
+        }
+      }
+  }
+
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+
+  protected override def doExecute(): RDD[InternalRow] = rdd
+
+  override def simpleString(maxFields: Int): String = s"$nodeName[]"
+
+  override def inputRDD: RDD[InternalRow] = rdd
+
+  override protected val createUnsafeProjection: Boolean = false
+
+  override protected def doCanonicalize(): SparkPlan = {
+    super.doCanonicalize().asInstanceOf[OneRowRelationExec].copy()
+  }
+}

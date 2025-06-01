@@ -32,10 +32,9 @@ from pyspark.sql.types import (
     ArrayType,
     Row,
 )
-from pyspark.testing.sqlutils import MyObject, PythonOnlyUDT
-
-from pyspark.testing.connectutils import should_test_connect
-from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
+from pyspark.testing.objects import MyObject, PythonOnlyUDT
+from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 if should_test_connect:
     import pandas as pd
@@ -45,7 +44,7 @@ if should_test_connect:
     from pyspark.errors.exceptions.connect import ParseException
 
 
-class SparkConnectCreationTests(SparkConnectSQLTestCase):
+class SparkConnectCreationTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
     def test_with_local_data(self):
         """SPARK-41114: Test creating a dataframe using local data"""
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
@@ -219,11 +218,6 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
                 self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
     def test_with_none_and_nan(self):
-        # TODO(SPARK-51286): Fix test_with_none_and_nan to to pass with Arrow enabled
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
-            self.check_with_none_and_nan()
-
-    def check_with_none_and_nan(self):
         # SPARK-41855: make createDataFrame support None and NaN
         # SPARK-41814: test with eqNullSafe
         data1 = [Row(id=1, value=float("NaN")), Row(id=2, value=42.0), Row(id=3, value=None)]

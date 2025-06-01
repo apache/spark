@@ -283,6 +283,14 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val EVENT_LOG_READER_MAX_STRING_LENGTH =
+    ConfigBuilder("spark.eventLog.readerMaxStringLength")
+      .doc("Limit the maximum string size an eventlog item can have when deserializing it.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(_ > 0, "Maximum string size of an eventLog item should be positive.")
+      .createWithDefault(Int.MaxValue)
+
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite")
       .version("1.0.0")
@@ -807,10 +815,8 @@ package object config {
       .doc("Specifies a disk-based store used in shuffle service local db. " +
         "ROCKSDB or LEVELDB (deprecated).")
       .version("3.4.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(DBBackend.values.map(_.toString).toSet)
-      .createWithDefault(DBBackend.ROCKSDB.name)
+      .enumConf(classOf[DBBackend])
+      .createWithDefault(DBBackend.ROCKSDB)
 
   private[spark] val SHUFFLE_SERVICE_PORT =
     ConfigBuilder("spark.shuffle.service.port").version("1.2.0").intConf.createWithDefault(7337)
@@ -1360,7 +1366,7 @@ package object config {
         "spark.io.compression.codec.")
       .version("2.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME =
     ConfigBuilder("spark.rdd.checkpoint.cachePreferredLocsExpireTime")
@@ -2295,9 +2301,8 @@ package object config {
   private[spark] val SCHEDULER_MODE =
     ConfigBuilder("spark.scheduler.mode")
       .version("0.8.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .createWithDefault(SchedulingMode.FIFO.toString)
+      .enumConf(SchedulingMode)
+      .createWithDefault(SchedulingMode.FIFO)
 
   private[spark] val SCHEDULER_REVIVE_INTERVAL =
     ConfigBuilder("spark.scheduler.revive.interval")

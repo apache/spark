@@ -23,14 +23,15 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils,
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, UnaryExpression, Unevaluable, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, truncatedString, CharVarcharUtils, ReplaceDataProjections, RowDeltaUtils, WriteDeltaProjections}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber, toSQLExpr}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -55,7 +56,11 @@ trait KeepAnalyzedQuery extends Command {
 /**
  * Base trait for DataSourceV2 write commands
  */
-trait V2WriteCommand extends UnaryCommand with KeepAnalyzedQuery with CTEInChildren {
+trait V2WriteCommand
+    extends UnaryCommand
+    with KeepAnalyzedQuery
+    with CTEInChildren
+    with IgnoreCachedData {
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean
@@ -535,6 +540,110 @@ case class CreateTableAsSelect(
 }
 
 /**
+ * The base command representation for a statement that can be part of a Declarative Pipeline to
+ * define a pipeline dataset (MV or ST).
+ */
+
+trait CreatePipelineDataset extends Command {
+  // The name of the dataset.
+  val name: LogicalPlan
+
+  // The user specified columns for the dataset.
+  val columns: Seq[ColumnDefinition]
+
+  // The user specified column-based partitioning for the dataset.
+  val partitioning: Seq[Transform]
+
+  // Additional table specs for the dataset.
+  val tableSpec: TableSpecBase
+
+  // Whether the dataset should only be created if it doesn't already exist.
+  val ifNotExists: Boolean
+}
+
+/**
+ * An extension of the base command representation that represents a CTAS style CREATE statement.
+ */
+trait CreatePipelineDatasetAsSelect extends BinaryCommand
+  with CreatePipelineDataset
+  with CTEInChildren {
+
+  // The logical plan of the CTAS subquery for the pipeline dataset.
+  val query: LogicalPlan
+
+  // The text representation of the CTAS subquery for the dataset.
+  val originalText: String
+
+  override def left: LogicalPlan = name
+  override def right: LogicalPlan = query
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    withNewChildren(Seq(name, WithCTE(query, cteDefs)))
+  }
+}
+
+/**
+ * Command parsed from `CREATE MATERIALIZED VIEW ... AS ...` SQL syntax. This command serves as a
+ * logical representation of the matching SQL syntax and cannot be executed. Instead, it is
+ * interpreted by the pipeline submodule during a pipeline execution.
+ */
+case class CreateMaterializedViewAsSelect(
+    name: LogicalPlan,
+    columns: Seq[ColumnDefinition],
+    partitioning: Seq[Transform],
+    tableSpec: TableSpecBase,
+    query: LogicalPlan,
+    originalText: String,
+    ifNotExists: Boolean)
+  extends CreatePipelineDatasetAsSelect {
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
+    copy(name = newLeft, query = newRight)
+}
+
+/**
+ * Command parsed from `CREATE STREAMING TABLE ... AS ...` SQL syntax. This command serves as a
+ * logical representation of the matching SQL syntax and cannot be executed. Instead, it is
+ * interpreted by the pipeline submodule during a pipeline execution.
+ */
+case class CreateStreamingTableAsSelect(
+    name: LogicalPlan,
+    columns: Seq[ColumnDefinition],
+    partitioning: Seq[Transform],
+    tableSpec: TableSpecBase,
+    query: LogicalPlan,
+    originalText: String,
+    ifNotExists: Boolean)
+  extends CreatePipelineDatasetAsSelect {
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
+    copy(name = newLeft, query = newRight)
+}
+
+/**
+ * Command parsed from `CREATE STREAMING TABLE ...` SQL syntax. This command serves as a logical
+ * representation of the matching SQL syntac and cannot be executed. It is instead interpreted by
+ * the pipeline submodule during a pipeline execution.
+ *
+ * Differs from [[CreateStreamingTableAsSelect]] in that the AS [subquery] clause is not provided
+ * in this statement. This is allowed for streaming tables, where it is valid for a streaming table
+ * to be defined without a subquery, and populated by standalone pipeline flows instead. This
+ * behavior is not applicable or materialized views.
+ */
+case class CreateStreamingTable(
+    name: LogicalPlan,
+    columns: Seq[ColumnDefinition],
+    partitioning: Seq[Transform],
+    tableSpec: TableSpecBase,
+    ifNotExists: Boolean
+) extends UnaryCommand with CreatePipelineDataset {
+  override def child: LogicalPlan = name
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(name = newChild)
+}
+
+/**
  * Replace a table with a v2 catalog.
  *
  * If the table does not exist, and orCreate is true, then it will be created.
@@ -654,24 +763,6 @@ case class SetNamespaceLocation(
   override def child: LogicalPlan = namespace
   override protected def withNewChildInternal(newChild: LogicalPlan): SetNamespaceLocation =
     copy(namespace = newChild)
-}
-
-/**
- * The logical plan of the SHOW NAMESPACES command.
- */
-case class ShowNamespaces(
-    namespace: LogicalPlan,
-    pattern: Option[String],
-    override val output: Seq[Attribute] = ShowNamespaces.getOutputAttrs) extends UnaryCommand {
-  override def child: LogicalPlan = namespace
-  override protected def withNewChildInternal(newChild: LogicalPlan): ShowNamespaces =
-    copy(namespace = newChild)
-}
-
-object ShowNamespaces {
-  def getOutputAttrs: Seq[Attribute] = {
-    Seq(AttributeReference("namespace", StringType, nullable = false)())
-  }
 }
 
 /**
@@ -1377,6 +1468,13 @@ case class CreateView(
 }
 
 /**
+ * Used to apply ApplyDefaultCollationToStringType to CreateViewCommand
+ */
+trait CreateTempView {
+  val collation: Option[String]
+}
+
+/**
  * The logical plan of the ALTER VIEW ... SET TBLPROPERTIES command.
  */
 case class SetViewProperties(
@@ -1520,18 +1618,26 @@ case class UnresolvedTableSpec(
     comment: Option[String],
     collation: Option[String],
     serde: Option[SerdeInfo],
-    external: Boolean) extends UnaryExpression with Unevaluable with TableSpecBase {
+    external: Boolean,
+    constraints: Seq[TableConstraint])
+  extends Expression with Unevaluable with TableSpecBase {
 
   override def dataType: DataType =
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3113")
 
-  override def child: Expression = optionExpression
-
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    this.copy(optionExpression = newChild.asInstanceOf[OptionList])
-
   override def simpleString(maxFields: Int): String = {
     this.copy(properties = Utils.redact(properties).toMap).toString
+  }
+
+  override def nullable: Boolean = true
+
+  override def children: Seq[Expression] = optionExpression +: constraints
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(
+      optionExpression = newChildren.head.asInstanceOf[OptionList],
+      constraints = newChildren.tail.asInstanceOf[Seq[TableConstraint]])
   }
 }
 
@@ -1566,9 +1672,11 @@ case class TableSpec(
     comment: Option[String],
     collation: Option[String],
     serde: Option[SerdeInfo],
-    external: Boolean) extends TableSpecBase {
+    external: Boolean,
+    constraints: Seq[Constraint] = Seq.empty) extends TableSpecBase {
   def withNewLocation(newLocation: Option[String]): TableSpec = {
-    TableSpec(properties, provider, options, newLocation, comment, collation, serde, external)
+    TableSpec(properties, provider, options, newLocation,
+      comment, collation, serde, external, constraints)
   }
 }
 
@@ -1663,4 +1771,26 @@ case class Call(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Call =
     copy(procedure = newChild)
+}
+
+/**
+ * Command parsed from `CREATE FLOW ...` SQL syntax. This command serves as a logical
+ * representation of the matching SQL syntax and cannot be executed. Instead, it is interpreted by
+ * the pipelines submodule during a pipeline execution
+ *
+ * @param name  the name of this flow
+ * @param flowOperation the logical plan of the actual transformation this flow should execute
+ * @param comment an optional comment describing this flow
+ */
+case class CreateFlowCommand(
+    name: LogicalPlan,
+    flowOperation: LogicalPlan,
+    comment: Option[String]
+) extends BinaryCommand {
+  override def left: LogicalPlan = name
+  override def right: LogicalPlan = flowOperation
+
+  override protected def withNewChildrenInternal(
+     newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
+    copy(name = newLeft, flowOperation = newRight)
 }

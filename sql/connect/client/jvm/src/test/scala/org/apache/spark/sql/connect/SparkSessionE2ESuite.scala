@@ -308,34 +308,36 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
   }
 
   test("progress is available for the spark result") {
-    val result = spark
+    spark
       .range(10000)
       .repartition(1000)
-      .collectResult()
-    assert(result.length == 10000)
-    assert(result.progress.stages.map(_.numTasks).sum > 100)
-    assert(result.progress.stages.map(_.completedTasks).sum > 100)
+      .withResult { result =>
+        assert(result.length == 10000)
+        assert(result.progress.stages.map(_.numTasks).sum > 100)
+        assert(result.progress.stages.map(_.completedTasks).sum > 100)
+      }
   }
 
   test("interrupt operation") {
     val session = spark
     import session.implicits._
 
-    val result = spark
+    spark
       .range(10)
       .map(n => {
         Thread.sleep(5000); n
       })
-      .collectResult()
-    // cancel
-    val operationId = result.operationId
-    val canceledId = spark.interruptOperation(operationId)
-    assert(canceledId == Seq(operationId))
-    // and check that it got canceled
-    val e = intercept[SparkException] {
-      result.toArray
-    }
-    assert(e.getMessage contains "OPERATION_CANCELED")
+      .withResult { result =>
+        // cancel
+        val operationId = result.operationId
+        val canceledId = spark.interruptOperation(operationId)
+        assert(canceledId == Seq(operationId))
+        // and check that it got canceled
+        val e = intercept[SparkException] {
+          result.toArray
+        }
+        assert(e.getMessage contains "OPERATION_CANCELED")
+      }
   }
 
   test("option propagation") {

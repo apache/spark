@@ -357,6 +357,11 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
     ValidatorParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit = {
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "TrainValidationSplitModel does not support saving to local filesystem path."
+        )
+      }
       val persistSubModelsParam = optionMap.getOrElse("persistsubmodels",
         if (instance.hasSubModels) "true" else "false")
 
@@ -391,6 +396,11 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
     private val className = classOf[TrainValidationSplitModel].getName
 
     override def load(path: String): TrainValidationSplitModel = {
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "TrainValidationSplitModel does not support loading from local filesystem path."
+        )
+      }
       implicit val format = DefaultFormats
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =

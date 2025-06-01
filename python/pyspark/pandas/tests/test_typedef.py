@@ -54,6 +54,7 @@ from pyspark.pandas.typedef import (
     pandas_on_spark_type,
 )
 from pyspark import pandas as ps
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class TypeHintTestsMixin:
@@ -431,7 +432,7 @@ class TypeHintTestsMixin:
             self.assertEqual(pandas_on_spark_type(extension_dtype), (extension_dtype, spark_type))
 
 
-class TypeHintTests(TypeHintTestsMixin, unittest.TestCase):
+class TypeHintTests(TypeHintTestsMixin, PandasOnSparkTestCase):
     pass
 
 

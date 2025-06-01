@@ -35,7 +35,7 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * Provides access to CSV data from pure SQL statements.
  */
-class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
+case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "csv"
 
@@ -68,6 +68,14 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
+    // This is a defensive check to ensure the schema doesn't have variant. It shouldn't be
+    // triggered if other part of the code is correct because `supportDataType` doesn't allow
+    // variant (in case the user is not using `supportDataType/supportReadDataType` correctly).
+    dataSchema.foreach { field =>
+      if (!supportDataType(field.dataType, allowVariant = false)) {
+        throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError("CSV", field)
+      }
+    }
     val conf = job.getConfiguration
     val csvOptions = new CSVOptions(
       options,
@@ -100,7 +108,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val parsedOptions = new CSVOptions(
       options,
       sparkSession.sessionState.conf.csvColumnPruning,
@@ -150,13 +158,20 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def toString: String = "CSV"
 
-  override def hashCode(): Int = getClass.hashCode()
+  /**
+   * Allow reading variant from CSV, but don't allow writing variant into CSV. This is because the
+   * written data (the string representation of variant) may not be read back as the same variant.
+   */
+  override def supportDataType(dataType: DataType): Boolean =
+    supportDataType(dataType, allowVariant = false)
 
-  override def equals(other: Any): Boolean = other.isInstanceOf[CSVFileFormat]
+  override def supportReadDataType(dataType: DataType): Boolean =
+    supportDataType(dataType, allowVariant = true)
 
-  override def supportDataType(dataType: DataType): Boolean = dataType match {
-    case _: VariantType => false
+  private def supportDataType(dataType: DataType, allowVariant: Boolean): Boolean = dataType match {
+    case _: VariantType => allowVariant
 
+    case _: TimeType => false
     case _: AtomicType => true
 
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType)

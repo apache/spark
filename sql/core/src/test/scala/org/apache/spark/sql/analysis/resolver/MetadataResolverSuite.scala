@@ -21,13 +21,15 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{FunctionResolution, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   AnalyzerBridgeState,
+  BridgedRelationId,
   BridgedRelationMetadataProvider,
   MetadataResolver,
   RelationId,
-  Resolver
+  Resolver,
+  ViewResolver
 }
 import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.expressions.{Expression, PlanExpression}
@@ -128,6 +130,22 @@ class MetadataResolverSuite extends QueryTest with SharedSparkSession with SQLTe
     }
   }
 
+  test("Relation inside a CTE definition without CTE references") {
+    withTable("src") {
+      spark.sql("CREATE TABLE src (key INT, value STRING) USING PARQUET;").collect()
+
+      checkResolveUnresolvedCatalogRelation(
+        sqlText = """
+          SELECT * FROM (
+            WITH cte AS (SELECT key FROM src)
+            SELECT 1
+          )
+          """,
+        expectedTableData = Seq(createTableData("src"))
+      )
+    }
+  }
+
   test("Relation inside a CTE definition inside a subquery expression") {
     withTable("src") {
       spark.sql("CREATE TABLE src (key INT, value STRING) USING PARQUET;").collect()
@@ -173,7 +191,7 @@ class MetadataResolverSuite extends QueryTest with SharedSparkSession with SQLTe
 
       val analyzerBridgeState = new AnalyzerBridgeState
       analyzerBridgeState.relationsWithResolvedMetadata.put(
-        UnresolvedRelation(Seq("src")),
+        BridgedRelationId(UnresolvedRelation(Seq("src")), Seq.empty),
         createUnresolvedCatalogRelation("src")
       )
 
@@ -239,22 +257,27 @@ class MetadataResolverSuite extends QueryTest with SharedSparkSession with SQLTe
       analyzerBridgeState: Option[AnalyzerBridgeState]): Unit = {
     val unresolvedPlan = spark.sql(sqlText).queryExecution.logical
 
+    val resolver = new Resolver(spark.sessionState.catalogManager)
+
     val metadataResolver = analyzerBridgeState match {
       case Some(analyzerBridgeState) =>
         new BridgedRelationMetadataProvider(
           spark.sessionState.catalogManager,
           Resolver.createRelationResolution(spark.sessionState.catalogManager),
-          analyzerBridgeState
+          analyzerBridgeState,
+          new ViewResolver(resolver = resolver, catalogManager = spark.sessionState.catalogManager)
         )
       case None =>
-        val metadataResolver = new MetadataResolver(
+        val relationResolution =
+          Resolver.createRelationResolution(spark.sessionState.catalogManager)
+        new MetadataResolver(
           spark.sessionState.catalogManager,
-          Resolver.createRelationResolution(spark.sessionState.catalogManager),
+          relationResolution,
+          new FunctionResolution(spark.sessionState.catalogManager, relationResolution),
           Seq(new FileResolver(spark))
         )
-        metadataResolver.resolve(unresolvedPlan)
-        metadataResolver
     }
+    metadataResolver.resolve(unresolvedPlan)
 
     val actualTableData = new mutable.HashMap[RelationId, TestTableData]
 

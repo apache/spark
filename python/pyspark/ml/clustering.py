@@ -215,6 +215,14 @@ class GaussianMixtureModel(
         return self._set(probabilityCol=value)
 
     @property
+    @since("4.1.0")
+    def numFeatures(self) -> int:
+        """
+        Number of features, i.e., length of Vectors which this transforms.
+        """
+        return self._call_java("numFeatures")
+
+    @property
     @since("2.0.0")
     def weights(self) -> List[float]:
         """
@@ -255,7 +263,10 @@ class GaussianMixtureModel(
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return GaussianMixtureSummary(super(GaussianMixtureModel, self).summary)
+            s = GaussianMixtureSummary(super(GaussianMixtureModel, self).summary)
+            if is_remote():
+                s.__source_transformer__ = self  # type: ignore[attr-defined]
+            return s
         else:
             raise RuntimeError(
                 "No training summary available for this %s" % self.__class__.__name__
@@ -687,6 +698,14 @@ class KMeansModel(
         return [vec for vec in matrix.toArray()]
 
     @property
+    @since("4.1.0")
+    def numFeatures(self) -> int:
+        """
+        Number of features, i.e., length of Vectors which this transforms.
+        """
+        return self._call_java("numFeatures")
+
+    @property
     @since("2.1.0")
     def summary(self) -> KMeansSummary:
         """
@@ -694,7 +713,10 @@ class KMeansModel(
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return KMeansSummary(super(KMeansModel, self).summary)
+            s = KMeansSummary(super(KMeansModel, self).summary)
+            if is_remote():
+                s.__source_transformer__ = self  # type: ignore[attr-defined]
+            return s
         else:
             raise RuntimeError(
                 "No training summary available for this %s" % self.__class__.__name__
@@ -1026,6 +1048,14 @@ class BisectingKMeansModel(
         return self._call_java("computeCost", dataset)
 
     @property
+    @since("4.1.0")
+    def numFeatures(self) -> int:
+        """
+        Number of features, i.e., length of Vectors which this transforms.
+        """
+        return self._call_java("numFeatures")
+
+    @property
     @since("2.1.0")
     def summary(self) -> "BisectingKMeansSummary":
         """
@@ -1033,7 +1063,10 @@ class BisectingKMeansModel(
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return BisectingKMeansSummary(super(BisectingKMeansModel, self).summary)
+            s = BisectingKMeansSummary(super(BisectingKMeansModel, self).summary)
+            if is_remote():
+                s.__source_transformer__ = self  # type: ignore[attr-defined]
+            return s
         else:
             raise RuntimeError(
                 "No training summary available for this %s" % self.__class__.__name__

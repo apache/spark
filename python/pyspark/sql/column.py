@@ -318,7 +318,7 @@ class Column(TableValuedFunctionArgument):
     def bitwiseOR(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> "Column":
-        """ "
+        """
         Compute bitwise OR of this expression with another expression.
 
         .. versionchanged:: 3.4.0
@@ -883,6 +883,9 @@ class Column(TableValuedFunctionArgument):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
+        .. versionchanged:: 4.1.0
+            Also takes a single :class:`DataFrame` to be used as IN subquery.
+
         Parameters
         ----------
         cols : Any
@@ -900,7 +903,7 @@ class Column(TableValuedFunctionArgument):
 
         Example 1: Filter rows with names in the specified values
 
-        >>> df[df.name.isin("Bob", "Mike")].show()
+        >>> df[df.name.isin("Bob", "Mike")].orderBy("age").show()
         +---+----+
         |age|name|
         +---+----+
@@ -924,6 +927,26 @@ class Column(TableValuedFunctionArgument):
         |age|name|
         +---+----+
         |  8|Mike|
+        +---+----+
+
+        Example 4: Take a :class:`DataFrame` and work as IN subquery
+
+        >>> df.where(df.age.isin(spark.range(6))).orderBy("age").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+
+        Example 5: Multiple values for IN subquery
+
+        >>> from pyspark.sql.functions import lit, struct
+        >>> df.where(struct(df.age, df.name).isin(spark.range(6).select("id", lit("Bob")))).show()
+        +---+----+
+        |age|name|
+        +---+----+
+        |  5| Bob|
         +---+----+
         """
         ...

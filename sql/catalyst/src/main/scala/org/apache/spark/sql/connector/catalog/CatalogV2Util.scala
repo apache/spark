@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector.catalog
 
 import java.util
-import java.util.Collections
+import java.util.{Collections, Locale}
 
 import scala.jdk.CollectionConverters._
 
@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.TableChange._
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, LiteralValue, Transform}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -58,7 +59,8 @@ private[sql] object CatalogV2Util {
       TableCatalog.PROP_PROVIDER,
       TableCatalog.PROP_OWNER,
       TableCatalog.PROP_EXTERNAL,
-      TableCatalog.PROP_IS_MANAGED_LOCATION)
+      TableCatalog.PROP_IS_MANAGED_LOCATION,
+      TableCatalog.PROP_TABLE_TYPE)
 
   /**
    * The list of reserved namespace properties, which can not be removed or changed directly by
@@ -71,6 +73,7 @@ private[sql] object CatalogV2Util {
    */
   val NAMESPACE_RESERVED_PROPERTIES =
     Seq(SupportsNamespaces.PROP_COMMENT,
+      SupportsNamespaces.PROP_COLLATION,
       SupportsNamespaces.PROP_LOCATION,
       SupportsNamespaces.PROP_OWNER)
 
@@ -275,16 +278,14 @@ private[sql] object CatalogV2Util {
           }
 
         case update: UpdateColumnDefaultValue =>
-          replace(schema, update.fieldNames.toImmutableArraySeq, field =>
-            // The new DEFAULT value string will be non-empty for any DDL commands that set the
-            // default value, such as "ALTER TABLE t ALTER COLUMN c SET DEFAULT ..." (this is
-            // enforced by the parser). On the other hand, commands that drop the default value such
-            // as "ALTER TABLE t ALTER COLUMN c DROP DEFAULT" will set this string to empty.
-            if (update.newDefaultValue().nonEmpty) {
-              Some(field.withCurrentDefaultValue(update.newDefaultValue()))
+          replace(schema, update.fieldNames.toImmutableArraySeq, field => {
+            val newDefault = update.newCurrentDefault()
+            if (newDefault != null) {
+              Some(field.withCurrentDefaultValue(newDefault.getSql))
             } else {
               Some(field.clearCurrentDefaultValue())
-            })
+            }
+          })
 
         case delete: DeleteColumn =>
           replace(schema, delete.fieldNames.toImmutableArraySeq, _ => None, delete.ifExists)
@@ -294,6 +295,49 @@ private[sql] object CatalogV2Util {
           schema
       }
     }
+  }
+
+  /**
+   * Extracts and validates table constraints from a sequence of table changes.
+   */
+  def collectConstraintChanges(
+      table: Table,
+      changes: Seq[TableChange]): Array[Constraint] = {
+    val constraints = table.constraints()
+
+    def findExistingConstraint(name: String): Option[Constraint] = {
+      constraints.find(_.name.toLowerCase(Locale.ROOT) == name.toLowerCase(Locale.ROOT))
+    }
+
+    changes.foldLeft(constraints) { (constraints, change) =>
+      change match {
+        case add: AddConstraint =>
+          val newConstraint = add.constraint
+          val existingConstraint = findExistingConstraint(newConstraint.name)
+          if (existingConstraint.isDefined) {
+            throw new AnalysisException(
+              errorClass = "CONSTRAINT_ALREADY_EXISTS",
+              messageParameters =
+                Map("constraintName" -> existingConstraint.get.name,
+                  "oldConstraint" -> existingConstraint.get.toDDL))
+          }
+          constraints :+ newConstraint
+
+        case drop: DropConstraint =>
+          val existingConstraint = findExistingConstraint(drop.name)
+          if (existingConstraint.isEmpty && !drop.ifExists) {
+            throw new AnalysisException(
+              errorClass = "CONSTRAINT_DOES_NOT_EXIST",
+              messageParameters =
+                Map("constraintName" -> drop.name, "tableName" -> table.name()))
+          }
+          constraints.filterNot(_.name == drop.name)
+
+        case _ =>
+          // ignore non-constraint changes
+          constraints
+      }
+    }.toArray
   }
 
   private def addField(

@@ -57,6 +57,15 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    Set(42102, 42103, 42104, 90079).contains(e.getErrorCode)
+  }
+
+  // See https://www.h2database.com/javadoc/org/h2/api/ErrorCode.html
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    Option(exception.getSQLState).exists(_.startsWith("42"))
+  }
+
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     sqlType match {
@@ -283,22 +292,14 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
     }
 
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
-      if (isSupportedFunction(funcName)) {
-        funcName match {
-          case "MD5" =>
-            "RAWTOHEX(HASH('MD5', " + inputs.mkString(",") + "))"
-          case "SHA1" =>
-            "RAWTOHEX(HASH('SHA-1', " + inputs.mkString(",") + "))"
-          case "SHA2" =>
-            "RAWTOHEX(HASH('SHA-" + inputs(1) + "'," + inputs(0) + "))"
-          case _ => super.visitSQLFunction(funcName, inputs)
-        }
-      } else {
-        throw new SparkUnsupportedOperationException(
-          errorClass = "_LEGACY_ERROR_TEMP_3177",
-          messageParameters = Map(
-            "class" -> this.getClass.getSimpleName,
-            "funcName" -> funcName))
+      funcName match {
+        case "MD5" =>
+          "RAWTOHEX(HASH('MD5', " + inputs.mkString(",") + "))"
+        case "SHA1" =>
+          "RAWTOHEX(HASH('SHA-1', " + inputs.mkString(",") + "))"
+        case "SHA2" =>
+          "RAWTOHEX(HASH('SHA-" + inputs(1) + "'," + inputs(0) + "))"
+        case _ => super.visitSQLFunction(funcName, inputs)
       }
     }
   }

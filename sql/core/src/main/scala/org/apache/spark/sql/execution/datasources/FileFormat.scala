@@ -183,6 +183,13 @@ trait FileFormat {
   def supportDataType(dataType: DataType): Boolean = true
 
   /**
+   * Returns whether this format supports the given [[DataType]] in the read-only path.
+   * By default, it is the same as `supportDataType`. In certain file formats, it can allow more
+   * data types than `supportDataType`. At this point, only `CSVFileFormat` overrides it.
+   */
+  def supportReadDataType(dataType: DataType): Boolean = supportDataType(dataType)
+
+  /**
    * Returns whether this format supports the given filed name in read/write path.
    * By default all field name is supported.
    */

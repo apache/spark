@@ -55,7 +55,7 @@ import org.apache.spark.util.SerializableConfiguration
  * `FileFormat` for reading ORC files. If this is moved or renamed, please update
  * `DataSource`'s backwardCompatibilityMap.
  */
-class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable {
+case class OrcFileFormat() extends FileFormat with DataSourceRegister with Serializable {
 
   override def shortName(): String = "orc"
 
@@ -143,7 +143,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     }
 
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val ignoreCorruptFiles =
       new OrcOptions(options, sparkSession.sessionState.conf).ignoreCorruptFiles
 
@@ -193,7 +193,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     case _: VariantType => false
 
     case _: AnsiIntervalType => false
-
+    case _: TimeType => false
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }

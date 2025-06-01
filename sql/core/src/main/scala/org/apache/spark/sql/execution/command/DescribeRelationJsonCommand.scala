@@ -74,6 +74,7 @@ case class DescribeRelationJsonCommand(
         describeIdentifier(v.identifier.toQualifiedNameParts(v.catalog), jsonMap)
         describeColsJson(v.metadata.schema, jsonMap)
         describeFormattedTableInfoJson(v.metadata, jsonMap)
+        describeViewSqlConfsJson(v.metadata, jsonMap)
 
       case ResolvedTable(catalog, identifier, V1Table(metadata), _) =>
         describeIdentifier(identifier.toQualifiedNameParts(catalog), jsonMap)
@@ -97,6 +98,10 @@ case class DescribeRelationJsonCommand(
 
       case _ => throw QueryCompilationErrors.describeAsJsonNotSupportedForV2TablesError()
     }
+
+    // Add default collation if not yet added (addKeyValueToMap only adds unique keys).
+    // Add here to only affect `DESC AS JSON` and not the `DESC TABLE` output.
+    addKeyValueToMap("collation", JString("UTF8_BINARY"), jsonMap)
 
     Seq(Row(compact(render(JObject(jsonMap.toList)))))
   }
@@ -223,6 +228,12 @@ case class DescribeRelationJsonCommand(
           "end_unit" -> JString(getFieldName(dayTimeIntervalType.endField))
         )
 
+      case stringType: StringType =>
+        JObject(
+          "name" -> JString("string"),
+          "collation" -> JString(stringType.collationName)
+        )
+
       case _ =>
         JObject("name" -> JString(dataType.simpleString))
     }
@@ -236,26 +247,31 @@ case class DescribeRelationJsonCommand(
     addKeyValueToMap("columns", columnsJson, jsonMap)
   }
 
+  /** Display SQL confs set at time of view creation */
+  private def describeViewSqlConfsJson(
+      table: CatalogTable,
+      jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
+    val viewConfigs: Map[String, String] = table.viewSQLConfigs
+    val viewConfigsJson: JValue = JObject(viewConfigs.map { case (key, value) =>
+      key -> JString(value)
+    }.toList)
+    addKeyValueToMap("view_creation_spark_configuration", viewConfigsJson, jsonMap)
+  }
+
   private def describeClusteringInfoJson(
       table: CatalogTable, jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
     table.clusterBySpec.foreach { clusterBySpec =>
-      val clusteringColumnsJson: JValue = JArray(
-        clusterBySpec.columnNames.map { fieldNames =>
-          val nestedFieldOpt = table.schema.findNestedField(fieldNames.fieldNames.toIndexedSeq)
-          assert(nestedFieldOpt.isDefined,
-            "The clustering column " +
-              s"${fieldNames.fieldNames.map(quoteIfNeeded).mkString(".")} " +
-              s"was not found in the table schema ${table.schema.catalogString}."
-          )
-          val (path, field) = nestedFieldOpt.get
-          JObject(
-            "name" -> JString((path :+ field.name).map(quoteIfNeeded).mkString(".")),
-            "type" -> jsonType(field.dataType),
-            "comment" -> field.getComment().map(JString).getOrElse(JNull)
-          )
-        }.toList
-      )
-      addKeyValueToMap("clustering_information", clusteringColumnsJson, jsonMap)
+      val clusteringColumnsJson = JArray(clusterBySpec.columnNames.map { fieldNames =>
+        val nestedFieldOpt = table.schema.findNestedField(fieldNames.fieldNames.toIndexedSeq)
+        assert(nestedFieldOpt.isDefined,
+          "The clustering column " +
+            s"${fieldNames.fieldNames.map(quoteIfNeeded).mkString(".")} " +
+            s"was not found in the table schema ${table.schema.catalogString}."
+        )
+        JString(fieldNames.fieldNames.map(quoteIfNeeded).mkString("."))
+      }.toList)
+
+      addKeyValueToMap("clustering_columns", clusteringColumnsJson, jsonMap)
     }
   }
 

@@ -52,6 +52,12 @@ class ArrowSerializer[T](
     private[this] val allocator: BufferAllocator,
     private[this] val timeZoneId: String,
     private[this] val largeVarTypes: Boolean) {
+
+  // SPARK-51079: keep the old constructor for backward-compatibility.
+  def this(enc: AgnosticEncoder[T], allocator: BufferAllocator, timeZoneId: String) = {
+    this(enc, allocator, timeZoneId, false)
+  }
+
   private val (root, serializer) =
     ArrowSerializer.serializerFor(enc, allocator, timeZoneId, largeVarTypes)
   private val vectors = root.getFieldVectors.asScala
@@ -485,7 +491,7 @@ object ArrowSerializer {
           o => getter.invoke(o)
         }
 
-      case (TransformingEncoder(_, encoder, provider), v) =>
+      case (TransformingEncoder(_, encoder, provider, _), v) =>
         new Serializer {
           private[this] val codec = provider().asInstanceOf[Codec[Any, Any]]
           private[this] val delegate: Serializer = serializerFor(encoder, v)

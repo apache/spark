@@ -294,6 +294,28 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("tableName" -> toSQLId(tableName)))
   }
 
+  def unsupportedSetOperationOnMapType(mapCol: Attribute, origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+      messageParameters = Map(
+        "colName" -> toSQLId(mapCol.name),
+        "dataType" -> toSQLType(mapCol.dataType)
+      ),
+      origin = origin
+    )
+  }
+
+  def unsupportedSetOperationOnVariantType(variantCol: Attribute, origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+      messageParameters = Map(
+        "colName" -> toSQLId(variantCol.name),
+        "dataType" -> toSQLType(variantCol.dataType)
+      ),
+      origin = origin
+    )
+  }
+
   def nonPartitionColError(partitionName: String): Throwable = {
     new AnalysisException(
       errorClass = "NON_PARTITION_COLUMN",
@@ -354,6 +376,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def objectLevelCollationsNotEnabledError(): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.OBJECT_LEVEL_COLLATIONS",
+      messageParameters = Map.empty
+    )
+  }
+
+  def schemaLevelCollationsNotEnabledError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.SCHEMA_LEVEL_COLLATIONS",
       messageParameters = Map.empty
     )
   }
@@ -1247,7 +1276,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidBucketNumberError(bucketingMaxBuckets: Int, numBuckets: Int): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1083",
+      errorClass = "INVALID_BUCKET_COUNT",
       messageParameters = Map(
         "bucketingMaxBuckets" -> bucketingMaxBuckets.toString,
         "numBuckets" -> numBuckets.toString))
@@ -3179,13 +3208,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def notAllowedToCreatePermanentViewByReferencingTempVarError(
-      name: TableIdentifier,
-      varName: String): Throwable = {
+      nameParts: Seq[String],
+      varName: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_TEMP_OBJ_REFERENCE",
       messageParameters = Map(
         "obj" -> "VIEW",
-        "objName" -> toSQLId(name.nameParts),
+        "objName" -> toSQLId(nameParts),
         "tempObj" -> "VARIABLE",
         "tempObjName" -> toSQLId(varName)))
   }
@@ -3333,10 +3362,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "config" -> SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key))
   }
 
-  def invalidSingleVariantColumn(): Throwable = {
+  def invalidSingleVariantColumn(schema: DataType): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_SINGLE_VARIANT_COLUMN",
-      messageParameters = Map.empty)
+      messageParameters = Map("schema" -> toSQLType(schema)))
   }
 
   def writeWithSaveModeUnsupportedBySourceError(source: String, createMode: String): Throwable = {
@@ -3664,6 +3693,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       ))
   }
 
+  def defaultValueNonDeterministicError(
+      statement: String,
+      colName: String,
+      defaultValue: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_DEFAULT_VALUE.NON_DETERMINISTIC",
+      messageParameters = Map(
+        "statement" -> toSQLStmt(statement),
+        "colName" -> toSQLId(colName),
+        "defaultValue" -> defaultValue
+      ))
+  }
+
   def nullableColumnOrFieldError(name: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "NULLABLE_COLUMN_OR_FIELD",
@@ -3951,6 +3993,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotRenameTableAcrossSchemaError(): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "CANNOT_RENAME_ACROSS_SCHEMA", messageParameters = Map("type" -> "table")
+    )
+  }
+
+  def unsupportedCreatePipelineFlowQueryExecutionError(): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.CREATE_FLOW_QUERY_EXECUTION"
+    )
+  }
+
+  def unsupportedCreatePipelineDatasetQueryExecutionError(
+      pipelineDatasetType: String): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.CREATE_PIPELINE_DATASET_QUERY_EXECUTION",
+      messageParameters = Map("pipelineDatasetType" -> pipelineDatasetType)
     )
   }
 
@@ -4333,5 +4389,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       ),
       origin = origin
     )
+  }
+
+  def unsupportedStreamingTVF(funcName: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION",
+      messageParameters = Map("funcName" -> toSQLId(funcName)))
   }
 }

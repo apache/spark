@@ -199,9 +199,9 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
   <tr>
     <td><code>spark.kubernetes.test.javaImageTag</code></td>
     <td>
-      A specific OpenJDK base image tag to use, when set uses it instead of azul/zulu-openjdk.
+      A specific Azul Zulu OpenJDK base image tag to use, when set uses it instead of 21.
     </td>
-    <td><code>azul/zulu-openjdk</code></td>
+    <td><code>N/A</code></td>
   </tr>
   <tr>
     <td><code>spark.kubernetes.test.imageTagFile</code></td>

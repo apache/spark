@@ -31,7 +31,6 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.types._
 
 /**
@@ -55,9 +54,7 @@ private[hive] class SparkGetColumnsOperation(
   with SparkOperation
   with Logging {
 
-  val catalog: SessionCatalog = session.sessionState.catalog
-
-  override def runInternal(): Unit = {
+  override def runInternal(): Unit = withClassLoader { _ =>
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName, tablePattern : $tableName"
     val logMsg = s"Listing columns '$cmdStr, columnName : $columnName'"
@@ -71,10 +68,6 @@ private[hive] class SparkGetColumnsOperation(
       log"with ${MDC(STATEMENT_ID, statementId)}")
 
     setState(OperationState.RUNNING)
-    // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = session.sharedState.jarClassLoader
-    Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
-
     HiveThriftServer2.eventManager.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
@@ -184,9 +177,9 @@ private[hive] class SparkGetColumnsOperation(
     case FloatType => java.sql.Types.FLOAT
     case DoubleType => java.sql.Types.DOUBLE
     case _: DecimalType => java.sql.Types.DECIMAL
-    case StringType => java.sql.Types.VARCHAR
     case VarcharType(_) => java.sql.Types.VARCHAR
     case CharType(_) => java.sql.Types.CHAR
+    case _: StringType => java.sql.Types.VARCHAR
     case BinaryType => java.sql.Types.BINARY
     case DateType => java.sql.Types.DATE
     case TimestampType | TimestampNTZType => java.sql.Types.TIMESTAMP

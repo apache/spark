@@ -195,6 +195,8 @@ class DecisionTreeClassificationModel private[ml] (
   // For ml connect only
   private[ml] def this() = this("", Node.dummyNode, -1, -1)
 
+  override def estimatedSize: Long = getEstimatedSize()
+
   override def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction
   }
@@ -300,7 +302,9 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
       val (nodeData, _) = NodeData.build(instance.rootNode, 0)
       val dataPath = new Path(path, "data").toString
       val numDataParts = NodeData.inferNumPartitions(instance.numNodes)
-      sparkSession.createDataFrame(nodeData).repartition(numDataParts).write.parquet(dataPath)
+      ReadWriteUtils.saveArray(
+        dataPath, nodeData.toArray, sparkSession, NodeData.serializeData, numDataParts
+      )
     }
   }
 

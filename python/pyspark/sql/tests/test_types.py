@@ -71,14 +71,14 @@ from pyspark.sql.types import (
     _make_type_verifier,
     _merge_type,
 )
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.objects import (
     ExamplePointUDT,
     PythonOnlyUDT,
     ExamplePoint,
     PythonOnlyPoint,
     MyObject,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import PySparkErrorTestUtils
 
 
@@ -1077,7 +1077,7 @@ class TypesTestsMixin:
         udf = F.udf(lambda p: p.y, DoubleType())
         self.assertEqual(2.0, df.select(udf(df.point)).first()[0])
         arrow_udf = F.udf(lambda p: p.y, DoubleType(), useArrow=True)
-        self.assertEqual(2.0, df.select(udf(df.point)).first()[0])
+        self.assertEqual(2.0, df.select(arrow_udf(df.point)).first()[0])
 
         udf2 = F.udf(lambda p: PythonOnlyPoint(p.x + 1, p.y + 1), PythonOnlyUDT())
         self.assertEqual(PythonOnlyPoint(2.0, 3.0), df.select(udf2(df.point)).first()[0])

@@ -68,6 +68,7 @@ in_spark = os.path.isfile("../core/src/main/scala/org/apache/spark/SparkContext.
 test_packages = []
 if "SPARK_TESTING" in os.environ:
     test_packages = [
+        "pyspark.errors.tests.connect",
         "pyspark.tests",  # for Memory profiler parity tests
         "pyspark.resource.tests",
         "pyspark.sql.tests",
@@ -79,6 +80,7 @@ if "SPARK_TESTING" in os.environ:
         "pyspark.sql.tests.connect.pandas",
         "pyspark.sql.tests.connect.shell",
         "pyspark.sql.tests.pandas",
+        "pyspark.sql.tests.pandas.helper",
         "pyspark.sql.tests.plot",
         "pyspark.sql.tests.streaming",
         "pyspark.ml.tests",
@@ -109,6 +111,7 @@ if "SPARK_TESTING" in os.environ:
         "pyspark.pandas.tests.connect.reshape",
         "pyspark.pandas.tests.connect.series",
         "pyspark.pandas.tests.connect.window",
+        "pyspark.pipelines.tests",
         "pyspark.logger.tests",
         "pyspark.logger.tests.connect",
     ]
@@ -135,6 +138,7 @@ try:
     _minimum_pyarrow_version = "11.0.0"
     _minimum_grpc_version = "1.67.0"
     _minimum_googleapis_common_protos_version = "1.65.0"
+    _minimum_pyyaml_version = "3.11"
 
     with open("README.md") as f:
         long_description = f.read()
@@ -168,6 +172,7 @@ try:
         "pyspark.sql.plot",
         "pyspark.sql.protobuf",
         "pyspark.sql.streaming",
+        "pyspark.sql.streaming.proto",
         "pyspark.sql.worker",
         "pyspark.streaming",
         "pyspark.pandas",
@@ -178,6 +183,7 @@ try:
         "pyspark.pandas.spark",
         "pyspark.pandas.typedef",
         "pyspark.pandas.usage_logging",
+        "pyspark.pipelines",
         "pyspark.testing",
         "pyspark.resource",
         "pyspark.errors",
@@ -206,6 +212,7 @@ try:
             "grpcio-status>=%s" % _minimum_grpc_version,
             "googleapis-common-protos>=%s" % _minimum_googleapis_common_protos_version,
             "numpy>=%s" % _minimum_numpy_version,
+            "pyyaml>=%s" % _minimum_pyyaml_version,
         ],
         python_requires=">=3.9",
         classifiers=[

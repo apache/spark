@@ -27,6 +27,8 @@ class AliasResolver(expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[UnresolvedAlias, Expression]
     with ResolvesExpressionChildren {
   private val scopes = expressionResolver.getNameScopes
+  private val expressionResolutionContextStack =
+    expressionResolver.getExpressionResolutionContextStack
 
   /**
    * Resolves [[UnresolvedAlias]] by resolving its child and computing the alias name by calling
@@ -35,9 +37,10 @@ class AliasResolver(expressionResolver: ExpressionResolver)
    * resolution, after which they will be removed in the post-processing phase.
    */
   override def resolve(unresolvedAlias: UnresolvedAlias): NamedExpression =
-    scopes.top.lcaRegistry.withNewLcaScope {
+    scopes.current.lcaRegistry.withNewLcaScope {
       val aliasWithResolvedChildren =
-        withResolvedChildren(unresolvedAlias, expressionResolver.resolve)
+        withResolvedChildren(unresolvedAlias, expressionResolver.resolve _)
+          .asInstanceOf[UnresolvedAlias]
 
       val resolvedAlias =
         AliasResolution.resolve(aliasWithResolvedChildren).asInstanceOf[NamedExpression]
@@ -48,22 +51,71 @@ class AliasResolver(expressionResolver: ExpressionResolver)
             s"unsupported expression: ${multiAlias.getClass.getName}"
           )
         case alias: Alias =>
-          expressionResolver.getExpressionIdAssigner
-            .mapExpression(alias)
-            .asInstanceOf[Alias]
+          expressionResolver.getExpressionIdAssigner.mapExpression(alias)
       }
     }
 
   /**
    * Handle already resolved [[Alias]] nodes, i.e. user-specified aliases. Here we only need to
-   * resolve its children and afterwards reassign exprId to the resulting [[Alias]].
+   * resolve its children and afterwards reassign exprId to the resulting [[Alias]]. Resulting
+   * [[Alias]] must be added to the list of `availableAliases` in the current [[NameScope]].
+   *
+   * When resolving grouping expressions, we may meet duplicate aliases from grouping expressions.
+   * This is only the case with partially resolved DataFrame logical plans. We need to deprioritize
+   * those aliases. See [[ExpressionIdAssigner.mapExpression]] doc for more details.
    */
   def handleResolvedAlias(alias: Alias): Alias = {
-    scopes.top.lcaRegistry.withNewLcaScope {
-      val aliasWithResolvedChildren = withResolvedChildren(alias, expressionResolver.resolve)
-      expressionResolver.getExpressionIdAssigner
-        .mapExpression(aliasWithResolvedChildren)
-        .asInstanceOf[Alias]
+    val resolvedAlias = scopes.current.lcaRegistry.withNewLcaScope {
+      val aliasWithResolvedChildren =
+        withResolvedChildren(alias, expressionResolver.resolve _).asInstanceOf[Alias]
+
+      val mappedAlias = expressionResolver.getExpressionIdAssigner.mapExpression(
+        originalExpression = aliasWithResolvedChildren,
+        prioritizeOldDuplicateAliasId =
+          expressionResolutionContextStack.peek().resolvingGroupingExpressions
+      )
+      scopes.current.availableAliases.add(mappedAlias.exprId)
+
+      mappedAlias
     }
+
+    collapseAlias(resolvedAlias)
   }
+
+  /**
+   * In case where there are two explicit [[Alias]]es, one on top of the other, remove the bottom
+   * one. For the example bellow:
+   *
+   * - df.select($"column".as("alias_1").as("alias_2"))
+   *
+   * the plan is:
+   *
+   *   Project[
+   *     Alias("alias_2")(
+   *       Alias("alias_1")(id)
+   *     )
+   *   ]( ... )
+   *
+   * and after the `collapseAlias` call (removing the bottom one) it would be:
+   *
+   *   Project[
+   *     Alias("alias_2")(id)
+   *   ]( ... )
+   */
+  private def collapseAlias(alias: Alias): Alias =
+    alias.child match {
+      case innerAlias: Alias =>
+        val metadata = if (alias.metadata.isEmpty) {
+          None
+        } else {
+          Some(alias.metadata)
+        }
+        alias.copy(child = innerAlias.child)(
+          exprId = alias.exprId,
+          qualifier = alias.qualifier,
+          explicitMetadata = metadata,
+          nonInheritableMetadataKeys = alias.nonInheritableMetadataKeys
+        )
+      case _ => alias
+    }
 }

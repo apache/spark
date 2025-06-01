@@ -929,7 +929,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq.empty[String])
+    assert(statements === List("NOOP"))
   }
 
   test("for statement - nested") {
@@ -1035,7 +1035,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq.empty[String])
+    assert(statements === List("NOOP"))
   }
 
   test("for statement no variable - nested") {

@@ -38,6 +38,10 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")
 
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getErrorCode == 208
+  }
+
   // Microsoft SQL Server does not have the boolean type.
   // Compile the boolean value to the bit data type instead.
   // scalastyle:off line.size.limit
@@ -54,7 +58,8 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   // scalastyle:on line.size.limit
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
-  private val supportedFunctions = supportedAggregateFunctions
+  private val supportedStringFunctions = Set("RPAD", "LPAD")
+  private val supportedFunctions = supportedAggregateFunctions ++ supportedStringFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
@@ -83,6 +88,17 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       case "STDDEV_SAMP" => "STDEV"
       case _ => super.dialectFunctionName(funcName)
     }
+
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String =
+      funcName match {
+        case "RPAD" =>
+          val Array(str, len, pad) = inputs
+          s"LEFT(CONCAT($str, REPLICATE($pad, $len)), $len)"
+        case "LPAD" =>
+          val Array(str, len, pad) = inputs
+          s"RIGHT(CONCAT(REPLICATE($pad, $len), $str), $len)"
+        case _ => super.visitSQLFunction(funcName, inputs)
+      }
 
     override def build(expr: Expression): String = {
       // MsSqlServer does not support boolean comparison using standard comparison operators
@@ -256,6 +272,18 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
 
   override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
     new MsSqlServerSQLQueryBuilder(this, options)
+
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    val exceptionMessage = Option(exception.getMessage)
+      .map(_.toLowerCase(Locale.ROOT))
+      .getOrElse("")
+    // scalastyle:off line.size.limit
+    // All errors are shown here, but there is no consistent error code to identify
+    // most syntax errors so we have to base off the exception message.
+    // https://learn.microsoft.com/en-us/sql/relational-databases/errors-events/database-engine-events-and-errors?view=sql-server-ver16
+    // scalastyle:on line.size.limit
+    exceptionMessage.contains("incorrect syntax") || exceptionMessage.contains("syntax error")
+  }
 
   override def supportsLimit: Boolean = true
 }

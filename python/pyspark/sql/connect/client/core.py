@@ -666,11 +666,11 @@ class SparkConnectClient(object):
         elif user_id is not None:
             self._user_id = user_id
         else:
-            self._user_id = os.getenv("USER", None)
+            self._user_id = os.getenv("SPARK_USER", os.getenv("USER", None))
 
         self._channel = self._builder.toChannel()
         self._closed = False
-        self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
+        self._internal_stub = grpc_lib.SparkConnectServiceStub(self._channel)
         self._artifact_manager = ArtifactManager(
             self._user_id, self._session_id, self._channel, self._builder.metadata()
         )
@@ -686,7 +686,20 @@ class SparkConnectClient(object):
         self._progress_handlers: List[ProgressHandler] = []
 
         # cleanup ml cache if possible
-        atexit.register(self._cleanup_ml)
+        atexit.register(self._cleanup_ml_cache)
+
+    @property
+    def _stub(self) -> grpc_lib.SparkConnectServiceStub:
+        if self.is_closed:
+            raise SparkConnectException(
+                errorClass="NO_ACTIVE_SESSION", messageParameters=dict()
+            ) from None
+        return self._internal_stub
+
+    # For testing only.
+    @_stub.setter
+    def _stub(self, value: grpc_lib.SparkConnectServiceStub) -> None:
+        self._internal_stub = value
 
     def register_progress_handler(self, handler: ProgressHandler) -> None:
         """
@@ -945,7 +958,7 @@ class SparkConnectClient(object):
         # DataFrame, as it may fail with a segmentation fault. Instead, we create an empty pandas
         # DataFrame manually with the correct schema.
         if table.num_rows == 0:
-            pdf = pd.DataFrame(columns=schema.names)
+            pdf = pd.DataFrame(columns=schema.names, index=range(0))
         else:
             # Rename columns to avoid duplicated column names.
             renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
@@ -1215,7 +1228,9 @@ class SparkConnectClient(object):
         """
         return self._builder.token
 
-    def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
+    def _execute_plan_request_with_metadata(
+        self, operation_id: Optional[str] = None
+    ) -> pb2.ExecutePlanRequest:
         req = pb2.ExecutePlanRequest(
             session_id=self._session_id,
             client_type=self._builder.userAgent,
@@ -1225,6 +1240,15 @@ class SparkConnectClient(object):
             req.client_observed_server_side_session_id = self._server_session_id
         if self._user_id:
             req.user_context.user_id = self._user_id
+        if operation_id is not None:
+            try:
+                uuid.UUID(operation_id, version=4)
+            except ValueError as ve:
+                raise PySparkValueError(
+                    errorClass="INVALID_OPERATION_UUID_ID",
+                    messageParameters={"arg_name": "operation_id", "origin": str(ve)},
+                )
+            req.operation_id = operation_id
         return req
 
     def _analyze_plan_request_with_metadata(self) -> pb2.AnalyzePlanRequest:
@@ -1350,8 +1374,11 @@ class SparkConnectClient(object):
                 generator = ExecutePlanResponseReattachableIterator(
                     req, self._stub, self._retrying, self._builder.metadata()
                 )
-                for b in generator:
-                    handle_response(b)
+                try:
+                    for b in generator:
+                        handle_response(b)
+                finally:
+                    generator.close()
             else:
                 for attempt in self._retrying():
                     with attempt:
@@ -1507,8 +1534,11 @@ class SparkConnectClient(object):
                 generator = ExecutePlanResponseReattachableIterator(
                     req, self._stub, self._retrying, self._builder.metadata()
                 )
-                for b in generator:
-                    yield from handle_response(b)
+                try:
+                    for b in generator:
+                        yield from handle_response(b)
+                finally:
+                    generator.close()
             else:
                 for attempt in self._retrying():
                     with attempt:
@@ -1796,11 +1826,6 @@ class SparkConnectClient(object):
             self.thread_local.inside_error_handling = True
             if isinstance(error, grpc.RpcError):
                 self._handle_rpc_error(error)
-            elif isinstance(error, ValueError):
-                if "Cannot invoke RPC" in str(error) and "closed" in str(error):
-                    raise SparkConnectException(
-                        errorClass="NO_ACTIVE_SESSION", messageParameters=dict()
-                    ) from None
             raise error
         finally:
             self.thread_local.inside_error_handling = False
@@ -1876,9 +1901,12 @@ class SparkConnectClient(object):
                         status.message,
                         self._fetch_enriched_error(info),
                         self._display_server_stack_trace(),
+                        status.code,
                     ) from None
 
-            raise SparkConnectGrpcException(status.message) from None
+            raise SparkConnectGrpcException(
+                message=status.message, grpc_status_code=status.code
+            ) from None
         else:
             raise SparkConnectGrpcException(str(rpc_error)) from None
 
@@ -1953,32 +1981,43 @@ class SparkConnectClient(object):
         profile_id = properties["create_resource_profile_command_result"]
         return profile_id
 
-    def add_ml_cache(self, cache_id: str) -> None:
-        if not hasattr(self.thread_local, "ml_caches"):
-            self.thread_local.ml_caches = set()
-        self.thread_local.ml_caches.add(cache_id)
-
-    def remove_ml_cache(self, cache_id: str) -> None:
-        if not hasattr(self.thread_local, "ml_caches"):
-            self.thread_local.ml_caches = set()
-
-        if cache_id in self.thread_local.ml_caches:
-            self._delete_ml_cache(cache_id)
-
-    def _delete_ml_cache(self, cache_id: str) -> None:
+    def _delete_ml_cache(self, cache_ids: List[str]) -> List[str]:
         # try best to delete the cache
         try:
+            if len(cache_ids) > 0:
+                command = pb2.Command()
+                command.ml_command.delete.obj_refs.extend(
+                    [pb2.ObjectRef(id=cache_id) for cache_id in cache_ids]
+                )
+                (_, properties, _) = self.execute_command(command)
+
+                assert properties is not None
+
+                if properties is not None and "ml_command_result" in properties:
+                    ml_command_result = properties["ml_command_result"]
+                    deleted = ml_command_result.operator_info.obj_ref.id.split(",")
+                    return cast(List[str], deleted)
+            return []
+        except Exception:
+            return []
+
+    def _cleanup_ml_cache(self) -> None:
+        try:
             command = pb2.Command()
-            command.ml_command.delete.obj_ref.CopyFrom(pb2.ObjectRef(id=cache_id))
+            command.ml_command.clean_cache.SetInParent()
             self.execute_command(command)
         except Exception:
             pass
 
-    def _cleanup_ml(self) -> None:
-        if not hasattr(self.thread_local, "ml_caches"):
-            self.thread_local.ml_caches = set()
+    def _get_ml_cache_info(self) -> List[str]:
+        command = pb2.Command()
+        command.ml_command.get_cache_info.SetInParent()
+        (_, properties, _) = self.execute_command(command)
 
-        self.disable_reattachable_execute()
-        # Todo add a pattern to delete all model in one command
-        for model_id in self.thread_local.ml_caches:
-            self._delete_ml_cache(model_id)
+        assert properties is not None
+
+        if properties is not None and "ml_command_result" in properties:
+            ml_command_result = properties["ml_command_result"]
+            return [item.string for item in ml_command_result.param.array.elements]
+
+        return []

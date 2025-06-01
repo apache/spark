@@ -81,8 +81,8 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           // We put the resolved relation into the [[AnalyzerBridgeState]] for
           // it to be later reused by the single-pass [[Resolver]] to avoid resolving the
           // relation metadata twice.
-          AnalysisContext.get.getSinglePassResolverBridgeState.map { bridgeState =>
-            bridgeState.relationsWithResolvedMetadata.put(unresolvedRelation, resolvedRelation)
+          AnalysisContext.get.getSinglePassResolverBridgeState.foreach { bridgeState =>
+            bridgeState.addUnresolvedRelation(unresolvedRelation, resolvedRelation)
           }
         case _ =>
       })
@@ -684,7 +684,7 @@ case class QualifyLocationWithWarehouse(catalog: SessionCatalog) extends Rule[Lo
 object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case View(metaData, false, viewQuery)
+      case View(metaData, false, viewQuery, _)
         if (metaData.viewSchemaMode == SchemaTypeEvolution ||
           metaData.viewSchemaMode == SchemaEvolution) =>
         val viewSchemaMode = metaData.viewSchemaMode

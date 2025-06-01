@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import os
 from shutil import rmtree
 import tempfile
 import unittest
@@ -153,6 +153,28 @@ class OneVsRestTests(SparkSessionTestCase):
         dt = FMClassifier()
         ovr2 = OneVsRest(classifier=dt, weightCol="weight")
         self.assertIsNotNone(ovr2.fit(df))
+
+    def test_tmp_dfs_cache(self):
+        from pyspark.ml.util import _SPARKML_TEMP_DFS_PATH
+
+        with tempfile.TemporaryDirectory(prefix="ml_tmp_dir") as d:
+            os.environ[_SPARKML_TEMP_DFS_PATH] = d
+            try:
+                df = self.spark.createDataFrame(
+                    [
+                        (0.0, Vectors.dense(1.0, 0.8)),
+                        (1.0, Vectors.sparse(2, [], [])),
+                        (2.0, Vectors.dense(0.5, 0.5)),
+                    ],
+                    ["label", "features"],
+                )
+                lr = LogisticRegression(maxIter=5, regParam=0.01)
+                ovr = OneVsRest(classifier=lr, parallelism=1)
+                model = ovr.fit(df)
+                model.transform(df)
+                assert len(os.listdir(d)) == 0
+            finally:
+                os.environ.pop(_SPARKML_TEMP_DFS_PATH, None)
 
 
 class KMeansTests(SparkSessionTestCase):

@@ -193,6 +193,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     try {
       val name = "classes/smallClassFile.class"
       val artifactPath = inputFilePath.resolve("smallClassFile.class")
+      assume(artifactPath.toFile.exists)
       addSingleChunkArtifact(handler, name, artifactPath)
       handler.onCompleted()
       val response = ThreadUtils.awaitResult(promise.future, 5.seconds)
@@ -217,6 +218,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     try {
       val name = "jars/junitLargeJar.jar"
       val artifactPath = inputFilePath.resolve("junitLargeJar.jar")
+      assume(artifactPath.toFile.exists)
       addChunkedArtifact(handler, name, artifactPath)
       handler.onCompleted()
       val response = ThreadUtils.awaitResult(promise.future, 5.seconds)
@@ -250,6 +252,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
         inputFilePath.resolve("junitLargeJar.jar"),
         inputFilePath.resolve("smallClassFileDup.class"),
         inputFilePath.resolve("smallJar.jar"))
+      artifactPaths.foreach(p => assume(p.toFile.exists))
 
       addSingleChunkArtifact(handler, names.head, artifactPaths.head)
       addChunkedArtifact(handler, names(1), artifactPaths(1))
@@ -281,6 +284,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     try {
       val name = "classes/smallClassFile.class"
       val artifactPath = inputFilePath.resolve("smallClassFile.class")
+      assume(artifactPath.toFile.exists)
       val dataChunks = getDataChunks(artifactPath)
       assert(dataChunks.size == 1)
       val bytes = dataChunks.head

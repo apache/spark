@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.catalog;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.catalog.constraints.Constraint;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 
@@ -83,4 +84,15 @@ public interface Table {
    * Returns the set of capabilities for this table.
    */
   Set<TableCapability> capabilities();
+
+  /**
+   * Returns the constraints for this table.
+   */
+  default Constraint[] constraints() { return new Constraint[0]; }
+
+  /**
+   * Returns the current table version if implementation supports versioning.
+   * If the table is not versioned, null can be returned here.
+   */
+  default String currentVersion() { return null; }
 }

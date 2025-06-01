@@ -3325,7 +3325,7 @@ abstract class CSVSuite
   }
 
   test("SPARK-40667: validate CSV Options") {
-    assert(CSVOptions.getAllOptions.size == 40)
+    assert(CSVOptions.getAllOptions.size == 41)
     // Please add validation on any new CSV options here
     assert(CSVOptions.isValidOption("header"))
     assert(CSVOptions.isValidOption("inferSchema"))
@@ -3366,6 +3366,7 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("sep"))
     assert(CSVOptions.isValidOption("extension"))
     assert(CSVOptions.isValidOption("delimiter"))
+    assert(CSVOptions.isValidOption("singleVariantColumn"))
     assert(CSVOptions.isValidOption("columnPruning"))
     // Please add validation on any new parquet options with alternative here
     assert(CSVOptions.getAlternativeOption("sep").contains("delimiter"))
@@ -3492,6 +3493,199 @@ abstract class CSVSuite
     val textParsingException = malformedCSVException.getCause.asInstanceOf[TextParsingException]
     assert(textParsingException.getCause.isInstanceOf[ArrayIndexOutOfBoundsException])
   }
+
+  test("csv with variant") {
+    withTempPath { path =>
+      val data =
+        """field 1,field2
+          |100,1.1
+          |2000-01-01,2000-01-01 01:02:03
+          |,true
+          |1e9,hello,extra
+          |missing
+          |""".stripMargin
+      Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
+
+      def checkSingleVariant(options: Map[String, String], expected: String*): Unit = {
+        val allOptions = options ++ Map("singleVariantColumn" -> "v")
+        checkAnswer(
+          spark.read.options(allOptions).csv(path.getCanonicalPath).selectExpr("cast(v as string)"),
+          expected.map(Row(_))
+        )
+      }
+
+      checkSingleVariant(Map(),
+        """{"_c0":"field 1","_c1":"field2"}""",
+        """{"_c0":"100","_c1":"1.1"}""",
+        """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03"}""",
+        """{"_c0":null,"_c1":"true"}""",
+        """{"_c0":"1e9","_c1":"hello","_c2":"extra"}""",
+        """{"_c0":"missing"}""")
+
+      // With a small enough partition size, every line is parsed in a separate partition, so every
+      // value has the chance to try all scalar types.
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map(),
+          """{"_c0":"field 1","_c1":"field2"}""",
+          """{"_c0":100,"_c1":1.1}""",
+          """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03+00:00"}""",
+          """{"_c0":null,"_c1":true}""",
+          """{"_c0":1000000000,"_c1":"hello","_c2":"extra"}""",
+          """{"_c0":"missing"}""")
+      }
+
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map("header" -> "true"),
+          """{"field 1":100,"field2":1.1}""",
+          """{"field 1":"2000-01-01","field2":"2000-01-01 01:02:03+00:00"}""",
+          """{"field 1":null,"field2":true}""",
+          """{"field 1":"1e9","field2":"hello"}""",
+          """{"field 1":"missing"}""")
+      }
+
+      // Validate `CSVDataSource.setHeaderForSingleVariantColumn` works, no matter whether the
+      // partition is at the file start.
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map("header" -> "true"),
+          """{"field 1":100,"field2":1.1}""",
+          """{"field 1":"2000-01-01","field2":"2000-01-01 01:02:03+00:00"}""",
+          """{"field 1":null,"field2":true}""",
+          """{"field 1":1000000000,"field2":"hello"}""",
+          """{"field 1":"missing"}""")
+      }
+
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val options = Map("header" -> "true", "singleVariantColumn" -> "v")
+        checkAnswer(
+          spark.read.options(options)
+            .schema("v variant, _corrupt_record string")
+            .csv(path.getCanonicalPath)
+            .selectExpr("cast(v as string)", "_corrupt_record"),
+          // When `header` is true, inconsistent lengths between the header and content line is
+          // treated as a corrupt record.
+          Seq(
+            Row("""{"field 1":100,"field2":1.1}""", null),
+            Row("""{"field 1":"2000-01-01","field2":"2000-01-01 01:02:03+00:00"}""", null),
+            Row("""{"field 1":null,"field2":true}""", null),
+            Row("""{"field 1":"1e9","field2":"hello"}""", "1e9,hello,extra"),
+            Row("""{"field 1":"missing"}""", "missing")))
+      }
+
+      checkError(
+        exception = intercept[SparkException] {
+          val options = Map("singleVariantColumn" -> "v", "header" -> "true", "mode" -> "failfast")
+          spark.read.options(options).csv(path.getCanonicalPath).collect()
+        }.getCause.asInstanceOf[SparkException],
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map("badRecord" -> """[{"field 1":"1e9","field2":"hello"}]""",
+          "failFastMode" -> "FAILFAST")
+      )
+
+      def checkSchema(options: Map[String, String], expected: (String, String)*): Unit = {
+        checkAnswer(
+          spark.read.options(options).schema("`field 1` variant, field2 variant")
+            .csv(path.getCanonicalPath)
+            .selectExpr("cast(`field 1` as string)", "cast(field2 as string)"),
+          expected.map(f => Row(f._1, f._2))
+        )
+      }
+
+      checkSchema(Map(),
+        ("field 1", "field2"),
+        ("100", "1.1"),
+        ("2000-01-01", "2000-01-01 01:02:03"),
+        (null, "true"),
+        ("1e9", "hello"),
+        ("missing", null))
+
+      checkSchema(Map("header" -> "true"),
+        ("100", "1.1"),
+        ("2000-01-01", "2000-01-01 01:02:03"),
+        (null, "true"),
+        ("1e9", "hello"),
+        ("missing", null))
+
+      checkError(
+        exception = intercept[SparkException] {
+          val options = Map("multiLine" -> "true", "header" -> "true", "mode" -> "failfast")
+          spark.read.options(options).schema("`field 1` variant, field2 variant")
+            .csv(path.getCanonicalPath).collect()
+        }.getCause.asInstanceOf[SparkException],
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map("badRecord" -> """["1e9","hello"]""", "failFastMode" -> "FAILFAST")
+      )
+
+      // Tests focusing on datetime parsing.
+      val datetimeData =
+        """2000-01-01
+          |2000-01-01 01:02:03
+          |2000-01-01 01:02:03+01:00
+          |""".stripMargin
+      Files.write(path.toPath, datetimeData.getBytes(StandardCharsets.UTF_8))
+
+      // Default options. Row 1 is date. Row 2/3 is timestamp.
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map(),
+          """{"_c0":"2000-01-01"}""",
+          """{"_c0":"2000-01-01 01:02:03+00:00"}""",
+          """{"_c0":"2000-01-01 00:02:03+00:00"}""")
+      }
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        checkSingleVariant(Map(),
+          """{"_c0":"2000-01-01"}""",
+          """{"_c0":"2000-01-01 01:02:03-08:00"}""",
+          """{"_c0":"1999-12-31 16:02:03-08:00"}""")
+      }
+
+      // `preferDate` disabled. Row 1/2/3 is timestamp.
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map("preferDate" -> "false"),
+          """{"_c0":"2000-01-01 00:00:00+00:00"}""",
+          """{"_c0":"2000-01-01 01:02:03+00:00"}""",
+          """{"_c0":"2000-01-01 00:02:03+00:00"}""")
+      }
+
+      // Session timestamp type is set to timestamp_ntz. Row 1 is date. Row 2 is timestamp_ntz.
+      // Row 3 is timestamp.
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map(),
+          """{"_c0":"2000-01-01"}""",
+          """{"_c0":"2000-01-01 01:02:03"}""",
+          """{"_c0":"2000-01-01 00:02:03+00:00"}""")
+      }
+
+      // `preferDate` disabled + timestamp_ntz. Row 1/2 is timestamp_ntz. Row 3 is timestamp.
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map("preferDate" -> "false"),
+          """{"_c0":"2000-01-01 00:00:00"}""",
+          """{"_c0":"2000-01-01 01:02:03"}""",
+          """{"_c0":"2000-01-01 00:02:03+00:00"}""")
+      }
+    }
+  }
+
+  test("write variant with csv is disallowed") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("create table test_table(v variant) using csv")
+      },
+      condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+      parameters = Map("columnName" -> "`v`", "columnType" -> "\"VARIANT\"", "format" -> "CSV")
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        withTempPath { path =>
+          spark.sql("select cast(1 as variant) v").write.csv(path.getCanonicalPath)
+        }
+      },
+      condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+      parameters = Map("columnName" -> "`v`", "columnType" -> "\"VARIANT\"", "format" -> "CSV")
+    )
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
@@ -3551,10 +3745,13 @@ class CSVv2Suite extends CSVSuite {
 class CSVLegacyTimeParserSuite extends CSVSuite {
 
   override def excluded: Seq[String] =
-    Seq("Write timestamps correctly in ISO8601 format by default")
+    Seq("Write timestamps correctly in ISO8601 format by default",
+      // The result is different because the date/timestamp parser behavior is different. Not too
+      // much value to test it.
+      "csv with variant")
 
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.LEGACY_TIME_PARSER_POLICY, "legacy")
+      .set(SQLConf.LEGACY_TIME_PARSER_POLICY.key, "legacy")
 }

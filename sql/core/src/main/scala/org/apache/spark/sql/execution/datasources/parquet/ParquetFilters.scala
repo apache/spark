@@ -21,7 +21,7 @@ import java.lang.{Boolean => JBoolean, Byte => JByte, Double => JDouble, Float =
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, Period}
+import java.time.{Duration, Instant, LocalDate, LocalTime, Period}
 import java.util.HashSet
 import java.util.Locale
 
@@ -149,6 +149,8 @@ class ParquetFilters(
     ParquetSchemaType(LogicalTypeAnnotation.timestampType(true, TimeUnit.MICROS), INT64, 0)
   private val ParquetTimestampMillisType =
     ParquetSchemaType(LogicalTypeAnnotation.timestampType(true, TimeUnit.MILLIS), INT64, 0)
+  private val ParquetTimeType =
+    ParquetSchemaType(LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS), INT64, 0)
 
   private def dateToDays(date: Any): Int = {
     val gregorianDays = date match {
@@ -171,6 +173,10 @@ class ParquetFilters(
         rebaseGregorianToJulianMicros(datetimeRebaseSpec.timeZone, gregorianMicros)
       case _ => gregorianMicros
     }
+  }
+
+  private def localTimeToMicros(v: Any): JLong = {
+    DateTimeUtils.localTimeToMicros(v.asInstanceOf[LocalTime])
   }
 
   private def decimalToInt32(decimal: JBigDecimal): Integer = decimal.unscaledValue().intValue()
@@ -207,6 +213,7 @@ class ParquetFilters(
 
   private def toLongValue(v: Any): JLong = v match {
     case d: Duration => IntervalUtils.durationToMicros(d)
+    case lt: LocalTime => DateTimeUtils.localTimeToMicros(lt)
     case l => l.asInstanceOf[JLong]
   }
 
@@ -244,6 +251,10 @@ class ParquetFilters(
       (n: Array[String], v: Any) => FilterApi.eq(
         longColumn(n),
         Option(v).map(timestampToMillis).orNull)
+    case ParquetTimeType =>
+      (n: Array[String], v: Any) => FilterApi.eq(
+        longColumn(n),
+        Option(v).map(localTimeToMicros).orNull)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) => FilterApi.eq(
@@ -293,6 +304,10 @@ class ParquetFilters(
       (n: Array[String], v: Any) => FilterApi.notEq(
         longColumn(n),
         Option(v).map(timestampToMillis).orNull)
+    case ParquetTimeType =>
+      (n: Array[String], v: Any) => FilterApi.notEq(
+        longColumn(n),
+        Option(v).map(localTimeToMicros).orNull)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) => FilterApi.notEq(
@@ -333,6 +348,8 @@ class ParquetFilters(
       (n: Array[String], v: Any) => FilterApi.lt(longColumn(n), timestampToMicros(v))
     case ParquetTimestampMillisType if pushDownTimestamp =>
       (n: Array[String], v: Any) => FilterApi.lt(longColumn(n), timestampToMillis(v))
+    case ParquetTimeType =>
+      (n: Array[String], v: Any) => FilterApi.lt(longColumn(n), localTimeToMicros(v))
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) =>
@@ -370,6 +387,8 @@ class ParquetFilters(
       (n: Array[String], v: Any) => FilterApi.ltEq(longColumn(n), timestampToMicros(v))
     case ParquetTimestampMillisType if pushDownTimestamp =>
       (n: Array[String], v: Any) => FilterApi.ltEq(longColumn(n), timestampToMillis(v))
+    case ParquetTimeType =>
+      (n: Array[String], v: Any) => FilterApi.ltEq(longColumn(n), localTimeToMicros(v))
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) =>
@@ -407,6 +426,8 @@ class ParquetFilters(
       (n: Array[String], v: Any) => FilterApi.gt(longColumn(n), timestampToMicros(v))
     case ParquetTimestampMillisType if pushDownTimestamp =>
       (n: Array[String], v: Any) => FilterApi.gt(longColumn(n), timestampToMillis(v))
+    case ParquetTimeType =>
+      (n: Array[String], v: Any) => FilterApi.gt(longColumn(n), localTimeToMicros(v))
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) =>
@@ -444,6 +465,8 @@ class ParquetFilters(
       (n: Array[String], v: Any) => FilterApi.gtEq(longColumn(n), timestampToMicros(v))
     case ParquetTimestampMillisType if pushDownTimestamp =>
       (n: Array[String], v: Any) => FilterApi.gtEq(longColumn(n), timestampToMillis(v))
+    case ParquetTimeType =>
+      (n: Array[String], v: Any) => FilterApi.gtEq(longColumn(n), localTimeToMicros(v))
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) =>
@@ -530,6 +553,14 @@ class ParquetFilters(
         val set = new HashSet[JLong]()
         for (value <- values) {
           set.add(Option(value).map(timestampToMillis).orNull)
+        }
+        FilterApi.in(longColumn(n), set)
+
+    case ParquetTimeType =>
+      (n: Array[String], values: Array[Any]) =>
+        val set = new HashSet[JLong]()
+        for (value <- values) {
+          set.add(Option(value).map(localTimeToMicros).orNull)
         }
         FilterApi.in(longColumn(n), set)
 
@@ -620,7 +651,8 @@ class ParquetFilters(
         case v: JLong => v.longValue() >= Int.MinValue && v.longValue() <= Int.MaxValue
         case _ => false
       }
-      case ParquetLongType => value.isInstanceOf[JLong] || value.isInstanceOf[Duration]
+      case ParquetLongType =>
+        value.isInstanceOf[JLong] || value.isInstanceOf[Duration]
       case ParquetFloatType => value.isInstanceOf[JFloat]
       case ParquetDoubleType => value.isInstanceOf[JDouble]
       case ParquetStringType => value.isInstanceOf[String]
@@ -629,6 +661,7 @@ class ParquetFilters(
         value.isInstanceOf[Date] || value.isInstanceOf[LocalDate]
       case ParquetTimestampMicrosType | ParquetTimestampMillisType =>
         value.isInstanceOf[Timestamp] || value.isInstanceOf[Instant]
+      case ParquetTimeType => value.isInstanceOf[LocalTime]
       case ParquetSchemaType(decimalType: DecimalLogicalTypeAnnotation, INT32, _) =>
         isDecimalMatched(value, decimalType)
       case ParquetSchemaType(decimalType: DecimalLogicalTypeAnnotation, INT64, _) =>

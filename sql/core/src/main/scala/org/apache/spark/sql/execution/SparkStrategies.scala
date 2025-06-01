@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{WriteFiles, WriteFilesExec}
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
-import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPandasExec}
+import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
@@ -690,8 +690,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  protected lazy val singleRowRdd = session.sparkContext.parallelize(Seq(InternalRow()), 1)
-
   object InMemoryScans extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalOperation(projectList, filters, mem: InMemoryRelation) =>
@@ -792,20 +790,21 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
-   * Strategy to convert [[TransformWithStateInPandas]] logical operator to physical operator
+   * Strategy to convert [[TransformWithStateInPySpark]] logical operator to physical operator
    * in streaming plans.
    */
-  object TransformWithStateInPandasStrategy extends Strategy {
+  object TransformWithStateInPySparkStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case t @ TransformWithStateInPandas(
-        func, _, outputAttrs, outputMode, timeMode, child,
+      case t @ TransformWithStateInPySpark(
+        func, _, outputAttrs, outputMode, timeMode, userFacingDataType, child,
         hasInitialState, initialState, _, initialStateSchema) =>
-        val execPlan = TransformWithStateInPandasExec(
+        val execPlan = TransformWithStateInPySparkExec(
           func, t.leftAttributes, outputAttrs, outputMode, timeMode,
           stateInfo = None,
           batchTimestampMs = None,
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
+          userFacingDataType,
           planLater(child),
           isStreaming = true,
           hasInitialState,
@@ -870,6 +869,20 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           planLater(child),
           ScriptTransformationIOSchema(ioschema)
         ) :: Nil
+      case _ => Nil
+    }
+  }
+
+  object Pipelines extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case cf: CreateFlowCommand =>
+        throw QueryCompilationErrors.unsupportedCreatePipelineFlowQueryExecutionError()
+      case cmv: CreateMaterializedViewAsSelect =>
+        throw QueryCompilationErrors.unsupportedCreatePipelineDatasetQueryExecutionError(
+            pipelineDatasetType = "MATERIALIZED VIEW")
+      case cst: CreateStreamingTableAsSelect =>
+        throw QueryCompilationErrors.unsupportedCreatePipelineDatasetQueryExecutionError(
+            pipelineDatasetType = "STREAMING TABLE")
       case _ => Nil
     }
   }
@@ -976,12 +989,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           keyEncoder, outputObjAttr, planLater(child), hasInitialState,
           initialStateGroupingAttrs, initialStateDataAttrs,
           initialStateDeserializer, planLater(initialState)) :: Nil
-      case t @ TransformWithStateInPandas(
-        func, _, outputAttrs, outputMode, timeMode, child,
+      case t @ TransformWithStateInPySpark(
+        func, _, outputAttrs, outputMode, timeMode, userFacingDataType, child,
         hasInitialState, initialState, _, initialStateSchema) =>
-        TransformWithStateInPandasExec.generateSparkPlanForBatchQueries(func,
-          t.leftAttributes, outputAttrs, outputMode, timeMode, planLater(child), hasInitialState,
-          planLater(initialState), t.rightAttributes, initialStateSchema) :: Nil
+        TransformWithStateInPySparkExec.generateSparkPlanForBatchQueries(func,
+          t.leftAttributes, outputAttrs, outputMode, timeMode, userFacingDataType,
+          planLater(child), hasInitialState, planLater(initialState), t.rightAttributes,
+          initialStateSchema) :: Nil
 
       case _: FlatMapGroupsInPandasWithState =>
         // TODO(SPARK-40443): support applyInPandasWithState in batch query
@@ -1031,12 +1045,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         GlobalLimitExec(child = planLater(child), offset = offset) :: Nil
       case union: logical.Union =>
         execution.UnionExec(union.children.map(planLater)) :: Nil
+      case u @ logical.UnionLoop(id, anchor, recursion, _, limit, maxDepth) =>
+        execution.UnionLoopExec(id, anchor, recursion, u.output, limit, maxDepth) :: Nil
       case g @ logical.Generate(generator, _, outer, _, _, child) =>
         execution.GenerateExec(
           generator, g.requiredChildOutput, outer,
           g.qualifiedGeneratorOutput, planLater(child)) :: Nil
       case _: logical.OneRowRelation =>
-        execution.RDDScanExec(Nil, singleRowRdd, "OneRowRelation") :: Nil
+        execution.OneRowRelationExec() :: Nil
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>

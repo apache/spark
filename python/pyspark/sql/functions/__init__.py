@@ -98,6 +98,7 @@ __all__ = [  # noqa: F405
     "power",
     "radians",
     "rand",
+    # "random": Excluded because of the name conflict with builtin random module
     "randn",
     "rint",
     "round",
@@ -125,6 +126,7 @@ __all__ = [  # noqa: F405
     "char",
     "char_length",
     "character_length",
+    # "chr": Excluded because of the name conflict with builtin chr function
     "collate",
     "collation",
     "concat_ws",
@@ -153,6 +155,7 @@ __all__ = [  # noqa: F405
     "overlay",
     "position",
     "printf",
+    "quote",
     "randstr",
     "regexp_count",
     "regexp_extract",
@@ -490,6 +493,7 @@ __all__ = [  # noqa: F405
     "try_reflect",
     "typeof",
     "user",
+    # "uuid": Excluded because of the name conflict with builtin uuid module
     "version",
     # UDF, UDTF and UDT
     "AnalyzeArgument",

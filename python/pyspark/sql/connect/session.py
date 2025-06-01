@@ -697,7 +697,9 @@ class SparkSession:
                         errorClass="CANNOT_DETERMINE_TYPE", messageParameters={}
                     )
 
-            from pyspark.sql.connect.conversion import LocalDataToArrowConversion
+            from pyspark.sql.conversion import (
+                LocalDataToArrowConversion,
+            )
 
             # Spark Connect will try its best to build the Arrow table with the
             # inferred schema in the client side, and then rename the columns and
@@ -1073,9 +1075,9 @@ class SparkSession:
 
             origin_remote = os.environ.get("SPARK_REMOTE", None)
             try:
+                # So SparkSubmit thinks no remote is set in order to
+                # start the regular PySpark session.
                 if origin_remote is not None:
-                    # So SparkSubmit thinks no remote is set in order to
-                    # start the regular PySpark session.
                     del os.environ["SPARK_REMOTE"]
 
                 # The regular PySpark session is registered as an active session

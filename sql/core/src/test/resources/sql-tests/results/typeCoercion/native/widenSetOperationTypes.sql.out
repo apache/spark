@@ -1366,6 +1366,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"TIMESTAMP\""
@@ -1390,6 +1391,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"DATE\""
@@ -1891,6 +1893,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'2'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BOOLEAN\""
@@ -2193,6 +2196,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'2'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"TIMESTAMP\""
@@ -2478,6 +2482,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'2'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"DATE\""

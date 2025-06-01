@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.util.StringUtils.orderSuggestedIdentifiersBySimilarity
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.Metadata
 
 /**
  * [[NameTarget]] is a result of a multipart name resolution of the
@@ -54,16 +55,22 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * @param aliasName If the candidates size is 1 and it's type is [[ExtractValue]] (which means that
  *   it's a field/value/item from a recursive type), then the `aliasName` should be the name with
  *   which the candidate needs to be aliased. Otherwise, `aliasName` is `None`.
+ * @param aliasMetadata If the candidates were created out of expressions referenced by group by
+ *   alias, store the metadata of the alias. Otherwise, `aliasMetadata` is `None`.
  * @param lateralAttributeReference If the candidate is laterally referencing another column this
  *   field is populated with that column's attribute.
  * @param output [[output]] of a [[NameScope]] that produced this [[NameTarget]]. Used to provide
  *   suggestions for thrown errors.
+ * @param isOuterReference A flag indicating that this [[NameTarget]] resolves to an outer
+ *   reference.
  */
 case class NameTarget(
     candidates: Seq[Expression],
     aliasName: Option[String] = None,
+    aliasMetadata: Option[Metadata] = None,
     lateralAttributeReference: Option[Attribute] = None,
-    output: Seq[Attribute] = Seq.empty) {
+    output: Seq[Attribute] = Seq.empty,
+    isOuterReference: Boolean = false) {
 
   /**
    * Pick a single candidate from `candidates`:

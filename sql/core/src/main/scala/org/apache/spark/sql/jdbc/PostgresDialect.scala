@@ -48,10 +48,17 @@ private case class PostgresDialect()
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "COVAR_POP", "COVAR_SAMP", "CORR",
     "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY")
-  private val supportedFunctions = supportedAggregateFunctions
+  private val supportedStringFunctions = Set("RPAD", "LPAD")
+  private val supportedFunctions = supportedAggregateFunctions ++ supportedStringFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
+
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getSQLState == "42P01" ||
+      e.getSQLState == "3F000" ||
+      e.getSQLState == "42704"
+  }
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
@@ -236,6 +243,11 @@ private case class PostgresDialect()
       s" $indexType (${columnList.mkString(", ")}) $indexProperties"
   }
 
+  // See https://www.postgresql.org/docs/current/errcodes-appendix.html
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    Option(exception.getSQLState).exists(_.startsWith("42"))
+  }
+
   // SHOW INDEX syntax
   // https://www.postgresql.org/docs/14/view-pg-indexes.html
   override def indexExists(
@@ -303,12 +315,24 @@ private case class PostgresDialect()
 
   class PostgresSQLBuilder extends JDBCSQLBuilder {
     override def visitExtract(field: String, source: String): String = {
-      field match {
-        case "DAY_OF_YEAR" => s"EXTRACT(DOY FROM $source)"
-        case "YEAR_OF_WEEK" => s"EXTRACT(YEAR FROM $source)"
-        case "DAY_OF_WEEK" => s"EXTRACT(DOW FROM $source)"
-        case _ => super.visitExtract(field, source)
+      // SECOND, MINUTE, HOUR, DAY, MONTH, QUARTER, YEAR are identical on postgres and spark for
+      // both datetime and interval types.
+      // DAY_OF_WEEK  is DOW, day of week is full compatible with postgres,
+      //              but in V2ExpressionBuilder they converted DAY_OF_WEEK to DAY_OF_WEEK_ISO,
+      //              so we need to push down ISODOW
+      //              (ISO and standard day of weeks differs in starting day,
+      //              Sunday is 0 on standard DOW extraction, while in ISO it's 7)
+      // DAY_OF_YEAR  have same semantic, but different name (On postgres, it is DOY)
+      // WEEK         is a little bit specific function, but both spark and postgres uses ISO week
+      // YEAR_OF_WEEK is ISO year actually. First few days of a calendar year can belong to the
+      //              past year by ISO standard of week counting.
+      val postgresField = field match {
+        case "DAY_OF_WEEK" => "ISODOW"
+        case "DAY_OF_YEAR" => "DOY"
+        case "YEAR_OF_WEEK" => "ISOYEAR"
+        case _ => field
       }
+      super.visitExtract(postgresField, source)
     }
 
     override def visitBinaryArithmetic(name: String, l: String, r: String): String = {

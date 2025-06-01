@@ -52,6 +52,25 @@ class PythonDataSourceV2 extends TableProvider {
     dataSourceInPython
   }
 
+  private var readInfo: PythonDataSourceReadInfo = _
+
+  def getOrCreateReadInfo(
+      shortName: String,
+      options: CaseInsensitiveStringMap,
+      outputSchema: StructType,
+      isStreaming: Boolean
+  ): PythonDataSourceReadInfo = {
+    if (readInfo == null) {
+      val creationResult = getOrCreateDataSourceInPython(shortName, options, Some(outputSchema))
+      readInfo = source.createReadInfoInPython(creationResult, outputSchema, isStreaming)
+    }
+    readInfo
+  }
+
+  def setReadInfo(readInfo: PythonDataSourceReadInfo): Unit = {
+    this.readInfo = readInfo
+  }
+
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
     getOrCreateDataSourceInPython(shortName, options, None).schema
   }

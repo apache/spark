@@ -3371,6 +3371,34 @@ class XmlSuite
     val outputString = writer.toString
     assert(outputString == testString)
   }
+
+  test("from_xml only allow StructType or VariantType") {
+    val xmlData = "<a>1</a>"
+    val df = Seq((8, xmlData)).toDF("number", "payload")
+
+    Seq(
+      "array<string>",
+      "map<string, string>"
+    ).foreach { schema =>
+      val exception = intercept[AnalysisException](
+        df.withColumn(
+            "decoded",
+            from_xml(df.col("payload"), schema, Map[String, String]().asJava)
+          )
+      )
+      assert(exception.getCondition.contains("INVALID_XML_SCHEMA"))
+    }
+
+    Seq(
+      "struct<a:string>",
+      "variant"
+    ).foreach { schema =>
+      df.withColumn(
+        "decoded",
+        from_xml(df.col("payload"), schema, Map[String, String]().asJava)
+      )
+    }
+  }
 }
 
 // Mock file system that checks the number of open files

@@ -17,7 +17,7 @@
 from inspect import Signature
 from typing import Any, Callable, Dict, Optional, Union, TYPE_CHECKING
 
-from pyspark.sql.pandas.utils import require_minimum_pandas_version
+from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.errors import PySparkNotImplementedError, PySparkValueError
 
 if TYPE_CHECKING:
@@ -25,21 +25,29 @@ if TYPE_CHECKING:
         PandasScalarUDFType,
         PandasScalarIterUDFType,
         PandasGroupedAggUDFType,
+        ArrowScalarUDFType,
     )
 
 
 def infer_eval_type(
     sig: Signature, type_hints: Dict[str, Any]
-) -> Union["PandasScalarUDFType", "PandasScalarIterUDFType", "PandasGroupedAggUDFType"]:
+) -> Union[
+    "PandasScalarUDFType",
+    "PandasScalarIterUDFType",
+    "PandasGroupedAggUDFType",
+    "ArrowScalarUDFType",
+]:
     """
     Infers the evaluation type in :class:`pyspark.util.PythonEvalType` from
     :class:`inspect.Signature` instance and type hints.
     """
-    from pyspark.sql.pandas.functions import PandasUDFType
+    from pyspark.sql.pandas.functions import PandasUDFType, ArrowUDFType
 
     require_minimum_pandas_version()
+    require_minimum_pyarrow_version()
 
     import pandas as pd
+    import pyarrow as pa
 
     annotations = {}
     for param in sig.parameters.values():
@@ -73,6 +81,12 @@ def infer_eval_type(
         )
         for a in parameters_sig
     ) and (return_annotation == pd.Series or return_annotation == pd.DataFrame)
+
+    # pa.Array, ... -> pa.Array
+    is_arrow_array = all(
+        a == pa.Array or check_union_annotation(a, parameter_check_func=lambda na: na == pa.Array)
+        for a in parameters_sig
+    ) and (return_annotation == pa.Array)
 
     # Iterator[Tuple[Series, Frame or Union[DataFrame, Series], ...] -> Iterator[Series or Frame]
     is_iterator_tuple_series_or_frame = (
@@ -134,6 +148,8 @@ def infer_eval_type(
 
     if is_series_or_frame:
         return PandasUDFType.SCALAR
+    elif is_arrow_array:
+        return ArrowUDFType.SCALAR
     elif is_iterator_tuple_series_or_frame or is_iterator_series_or_frame:
         return PandasUDFType.SCALAR_ITER
     elif is_series_or_frame_agg:

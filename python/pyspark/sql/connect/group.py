@@ -34,7 +34,7 @@ from typing import (
 from pyspark.util import PythonEvalType
 from pyspark.sql.group import GroupedData as PySparkGroupedData
 from pyspark.sql.pandas.group_ops import PandasCogroupedOps as PySparkPandasCogroupedOps
-from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
+from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
 from pyspark.sql.types import NumericType, StructType
 
 import pyspark.sql.connect.plan as plan
@@ -294,7 +294,7 @@ class GroupedData:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
-        _validate_pandas_udf(func, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
+        _validate_vectorized_udf(func, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
         if isinstance(schema, str):
             schema = cast(StructType, self._df._session._parse_ddl(schema))
         udf_obj = UserDefinedFunction(
@@ -329,7 +329,7 @@ class GroupedData:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
-        _validate_pandas_udf(func, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE)
+        _validate_vectorized_udf(func, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE)
         udf_obj = UserDefinedFunction(
             func,
             returnType=outputStructType,
@@ -373,7 +373,9 @@ class GroupedData:
     ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
-        from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasUdfUtils
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasUdfUtils,
+        )
 
         udf_util = TransformWithStateInPandasUdfUtils(statefulProcessor, timeMode)
         if initialState is None:
@@ -412,13 +414,65 @@ class GroupedData:
 
     transformWithStateInPandas.__doc__ = PySparkGroupedData.transformWithStateInPandas.__doc__
 
+    def transformWithState(
+        self,
+        statefulProcessor: StatefulProcessor,
+        outputStructType: Union[StructType, str],
+        outputMode: str,
+        timeMode: str,
+        initialState: Optional["GroupedData"] = None,
+        eventTimeColumnName: str = "",
+    ) -> "DataFrame":
+        from pyspark.sql.connect.udf import UserDefinedFunction
+        from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasUdfUtils,
+        )
+
+        udf_util = TransformWithStateInPandasUdfUtils(statefulProcessor, timeMode)
+        if initialState is None:
+            udf_obj = UserDefinedFunction(
+                udf_util.transformWithStateUDF,
+                returnType=outputStructType,
+                evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
+            )
+            initial_state_plan = None
+            initial_state_grouping_cols = None
+        else:
+            self._df._check_same_session(initialState._df)
+            udf_obj = UserDefinedFunction(
+                udf_util.transformWithStateWithInitStateUDF,
+                returnType=outputStructType,
+                evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
+            )
+            initial_state_plan = initialState._df._plan
+            initial_state_grouping_cols = initialState._grouping_cols
+
+        return DataFrame(
+            plan.TransformWithStateInPySpark(
+                child=self._df._plan,
+                grouping_cols=self._grouping_cols,
+                function=udf_obj,
+                output_schema=outputStructType,
+                output_mode=outputMode,
+                time_mode=timeMode,
+                event_time_col_name=eventTimeColumnName,
+                cols=self._df.columns,
+                initial_state_plan=initial_state_plan,
+                initial_state_grouping_cols=initial_state_grouping_cols,
+            ),
+            session=self._df._session,
+        )
+
+    transformWithState.__doc__ = PySparkGroupedData.transformWithState.__doc__
+
     def applyInArrow(
         self, func: "ArrowGroupedMapFunction", schema: Union[StructType, str]
     ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
-        _validate_pandas_udf(func, PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF)
+        _validate_vectorized_udf(func, PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF)
         if isinstance(schema, str):
             schema = cast(StructType, self._df._session._parse_ddl(schema))
         udf_obj = UserDefinedFunction(
@@ -463,7 +517,7 @@ class PandasCogroupedOps:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
-        _validate_pandas_udf(func, PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF)
+        _validate_vectorized_udf(func, PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF)
         if isinstance(schema, str):
             schema = cast(StructType, self._gd1._df._session._parse_ddl(schema))
         udf_obj = UserDefinedFunction(
@@ -494,7 +548,7 @@ class PandasCogroupedOps:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
-        _validate_pandas_udf(func, PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF)
+        _validate_vectorized_udf(func, PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF)
         if isinstance(schema, str):
             schema = cast(StructType, self._gd1._df._session._parse_ddl(schema))
         udf_obj = UserDefinedFunction(

@@ -2976,7 +2976,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         (``axis=1``).
 
         See also `Transform and apply a function
-        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/tutorial/pandas_on_spark/transform_apply.html>`_.
 
         .. note:: when `axis` is 0 or 'index', the `func` is unable to access
             to the whole input series. pandas-on-Spark internally splits the input series into
@@ -3302,7 +3302,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         and that has the same length as its input.
 
         See also `Transform and apply a function
-        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/tutorial/pandas_on_spark/transform_apply.html>`_.
 
         .. note:: this API executes the function once to infer the type which is
              potentially expensive, for instance, when the dataset is created after
@@ -13778,11 +13778,32 @@ def _test() -> None:
     import uuid
     from pyspark.sql import SparkSession
     import pyspark.pandas.frame
+    from pyspark.testing.utils import is_ansi_mode_test
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.frame.__dict__.copy()
     globs["ps"] = pyspark.pandas
+
+    if is_ansi_mode_test:
+        del pyspark.pandas.frame.DataFrame.add.__doc__
+        del pyspark.pandas.frame.DataFrame.div.__doc__
+        del pyspark.pandas.frame.DataFrame.floordiv.__doc__
+        del pyspark.pandas.frame.DataFrame.melt.__doc__
+        del pyspark.pandas.frame.DataFrame.mod.__doc__
+        del pyspark.pandas.frame.DataFrame.mul.__doc__
+        del pyspark.pandas.frame.DataFrame.pow.__doc__
+        del pyspark.pandas.frame.DataFrame.radd.__doc__
+        del pyspark.pandas.frame.DataFrame.rdiv.__doc__
+        del pyspark.pandas.frame.DataFrame.rfloordiv.__doc__
+        del pyspark.pandas.frame.DataFrame.rmod.__doc__
+        del pyspark.pandas.frame.DataFrame.rmul.__doc__
+        del pyspark.pandas.frame.DataFrame.rpow.__doc__
+        del pyspark.pandas.frame.DataFrame.rsub.__doc__
+        del pyspark.pandas.frame.DataFrame.rtruediv.__doc__
+        del pyspark.pandas.frame.DataFrame.sub.__doc__
+        del pyspark.pandas.frame.DataFrame.truediv.__doc__
+
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.frame tests").getOrCreate()
     )

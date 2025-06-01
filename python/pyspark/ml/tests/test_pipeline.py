@@ -29,7 +29,7 @@ from pyspark.ml.feature import (
 )
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.classification import LogisticRegression, LogisticRegressionModel
-from pyspark.ml.clustering import KMeans, KMeansModel
+from pyspark.ml.clustering import KMeans, KMeansModel, GaussianMixture
 from pyspark.testing.mlutils import MockDataset, MockEstimator, MockTransformer
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -176,7 +176,7 @@ class PipelineTestsMixin:
 
     def test_model_gc(self):
         spark = self.spark
-        df = spark.createDataFrame(
+        df1 = spark.createDataFrame(
             [
                 Row(label=0.0, weight=0.1, features=Vectors.dense([0.0, 0.0])),
                 Row(label=0.0, weight=0.5, features=Vectors.dense([0.0, 1.0])),
@@ -189,8 +189,107 @@ class PipelineTestsMixin:
             model = lr.fit(df)
             return model.transform(df)
 
-        output = fit_transform(df)
-        self.assertEqual(output.count(), 3)
+        output1 = fit_transform(df1)
+        self.assertEqual(output1.count(), 3)
+
+        df2 = spark.range(10)
+
+        def fit_transform_and_union(df1, df2):
+            output1 = fit_transform(df1)
+            return output1.unionByName(df2, True)
+
+        output2 = fit_transform_and_union(df1, df2)
+        self.assertEqual(output2.count(), 13)
+
+    def test_model_training_summary_gc(self):
+        spark = self.spark
+        df1 = spark.createDataFrame(
+            [
+                Row(label=0.0, weight=0.1, features=Vectors.dense([0.0, 0.0])),
+                Row(label=0.0, weight=0.5, features=Vectors.dense([0.0, 1.0])),
+                Row(label=1.0, weight=1.0, features=Vectors.dense([1.0, 0.0])),
+            ]
+        )
+
+        def fit_predictions(df):
+            lr = LogisticRegression(maxIter=1, regParam=0.01, weightCol="weight")
+            model = lr.fit(df)
+            return model.summary.predictions
+
+        output1 = fit_predictions(df1)
+        self.assertEqual(output1.count(), 3)
+
+        df2 = spark.range(10)
+
+        def fit_predictions_and_union(df1, df2):
+            output1 = fit_predictions(df1)
+            return output1.unionByName(df2, True)
+
+        output2 = fit_predictions_and_union(df1, df2)
+        self.assertEqual(output2.count(), 13)
+
+    def test_model_testing_summary_gc(self):
+        spark = self.spark
+        df1 = spark.createDataFrame(
+            [
+                Row(label=0.0, weight=0.1, features=Vectors.dense([0.0, 0.0])),
+                Row(label=0.0, weight=0.5, features=Vectors.dense([0.0, 1.0])),
+                Row(label=1.0, weight=1.0, features=Vectors.dense([1.0, 0.0])),
+            ]
+        )
+
+        def fit_predictions(df):
+            lr = LogisticRegression(maxIter=1, regParam=0.01, weightCol="weight")
+            model = lr.fit(df)
+            return model.evaluate(df).predictions
+
+        output1 = fit_predictions(df1)
+        self.assertEqual(output1.count(), 3)
+
+        df2 = spark.range(10)
+
+        def fit_predictions_and_union(df1, df2):
+            output1 = fit_predictions(df1)
+            return output1.unionByName(df2, True)
+
+        output2 = fit_predictions_and_union(df1, df2)
+        self.assertEqual(output2.count(), 13)
+
+    def test_model_attr_df_gc(self):
+        spark = self.spark
+        df1 = (
+            spark.createDataFrame(
+                [
+                    (1, 1.0, Vectors.dense([-0.1, -0.05])),
+                    (2, 2.0, Vectors.dense([-0.01, -0.1])),
+                    (3, 3.0, Vectors.dense([0.9, 0.8])),
+                    (4, 1.0, Vectors.dense([0.75, 0.935])),
+                    (5, 1.0, Vectors.dense([-0.83, -0.68])),
+                    (6, 1.0, Vectors.dense([-0.91, -0.76])),
+                ],
+                ["index", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("index")
+            .select("weight", "features")
+        )
+
+        def fit_attr_df(df):
+            gmm = GaussianMixture(k=2, maxIter=2, weightCol="weight", seed=1)
+            model = gmm.fit(df)
+            return model.gaussiansDF
+
+        output1 = fit_attr_df(df1)
+        self.assertEqual(output1.count(), 2)
+
+        df2 = spark.range(10)
+
+        def fit_attr_df_and_union(df1, df2):
+            output1 = fit_attr_df(df1)
+            return output1.unionByName(df2, True)
+
+        output2 = fit_attr_df_and_union(df1, df2)
+        self.assertEqual(output2.count(), 12)
 
 
 class PipelineTests(PipelineTestsMixin, ReusedSQLTestCase):

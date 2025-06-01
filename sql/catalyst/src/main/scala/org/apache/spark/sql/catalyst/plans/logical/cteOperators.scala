@@ -34,17 +34,31 @@ import org.apache.spark.sql.internal.SQLConf
  * @param id The id of the loop, inherited from [[CTERelationDef]] within which the Union lived.
  * @param anchor The plan of the initial element of the loop.
  * @param recursion The plan that describes the recursion with an [[UnionLoopRef]] node.
+ * @param outputAttrIds The ids of UnionLoop's output attributes.
  * @param limit An optional limit that can be pushed down to the node to stop the loop earlier.
+ * @param maxDepth Maximal number of iterations before we report an error.
  */
 case class UnionLoop(
     id: Long,
     anchor: LogicalPlan,
     recursion: LogicalPlan,
-    limit: Option[Int] = None) extends UnionBase {
+    outputAttrIds: Seq[ExprId],
+    limit: Option[Int] = None,
+    maxDepth: Option[Int] = None) extends UnionBase {
   override def children: Seq[LogicalPlan] = Seq(anchor, recursion)
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): UnionLoop =
     copy(anchor = newChildren(0), recursion = newChildren(1))
+
+  override protected def computeOutput(): Seq[Attribute] =
+    Union.mergeChildOutputs(children.map(_.output)).zip(outputAttrIds).map { case (x, id) =>
+      x.withExprId(id)
+    }
+
+  override def argString(maxFields: Int): String = {
+    id.toString + limit.map(", " + _.toString).getOrElse("") +
+      maxDepth.map(", " + _.toString).getOrElse("")
+  }
 }
 
 /**
@@ -86,28 +100,34 @@ case class UnionLoopRef(
  *                                   pushdown to help ensure rule idempotency.
  * @param underSubquery If true, it means we don't need to add a shuffle for this CTE relation as
  *                      subquery reuse will be applied to reuse CTE relation output.
+ * @param maxDepth The maximal depth of a recursion in a recursive CTE.
  */
 case class CTERelationDef(
     child: LogicalPlan,
     id: Long = CTERelationDef.newId,
     originalPlanWithPredicates: Option[(LogicalPlan, Seq[Expression])] = None,
-    underSubquery: Boolean = false) extends UnaryNode {
+    underSubquery: Boolean = false,
+    maxDepth: Option[Int] = None) extends UnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
+
+  override def maxRows: Option[Long] = if (conf.getConf(SQLConf.CTE_RELATION_DEF_MAX_ROWS)) {
+    child.maxRows
+  } else {
+    None
+  }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)
 
   override def output: Seq[Attribute] = if (resolved) child.output else Nil
 
-  lazy val hasSelfReferenceAsCTERef: Boolean = child.exists{
-    case CTERelationRef(this.id, _, _, _, _, true) => true
-    case _ => false
-  }
-  lazy val hasSelfReferenceAsUnionLoopRef: Boolean = child.exists{
+  lazy val hasSelfReferenceAsCTERef: Boolean = child.collectFirstWithSubqueries {
+    case CTERelationRef(this.id, _, _, _, _, true, _) => true
+  }.getOrElse(false)
+  lazy val hasSelfReferenceAsUnionLoopRef: Boolean = child.collectFirstWithSubqueries {
     case UnionLoopRef(this.id, _, _) => true
-    case _ => false
-  }
+  }.getOrElse(false)
 }
 
 object CTERelationDef {
@@ -132,7 +152,8 @@ case class CTERelationRef(
     override val output: Seq[Attribute],
     override val isStreaming: Boolean,
     statsOpt: Option[Statistics] = None,
-    recursive: Boolean = false) extends LeafNode with MultiInstanceRelation {
+    recursive: Boolean = false,
+    override val maxRows: Option[Long] = None) extends LeafNode with MultiInstanceRelation {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
@@ -204,7 +225,7 @@ trait CTEInChildren extends LogicalPlan {
  */
 case class UnresolvedWith(
     child: LogicalPlan,
-    cteRelations: Seq[(String, SubqueryAlias)],
+    cteRelations: Seq[(String, SubqueryAlias, Option[Int])],
     allowRecursion: Boolean = false) extends UnaryNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_WITH)
 

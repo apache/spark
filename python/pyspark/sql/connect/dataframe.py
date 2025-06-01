@@ -71,7 +71,7 @@ from pyspark.errors import (
 from pyspark.util import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 import pyspark.sql.connect.plan as plan
-from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
+from pyspark.sql.conversion import ArrowTableToRowsConversion
 from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.merge import MergeIntoWriter
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
@@ -85,7 +85,7 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
-from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
+from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
 from pyspark.sql.table_arg import TableArg
 
 
@@ -2054,7 +2054,7 @@ class DataFrame(ParentDataFrame):
     ) -> ParentDataFrame:
         from pyspark.sql.connect.udf import UserDefinedFunction
 
-        _validate_pandas_udf(func, evalType)
+        _validate_vectorized_udf(func, evalType)
         if isinstance(schema, str):
             schema = cast(StructType, self._session._parse_ddl(schema))
         udf_obj = UserDefinedFunction(

@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftOuter, LeftSemi, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{Cross, Inner, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
@@ -61,7 +61,6 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
             cteDef
           case cteDef =>
             // Multiple self-references are not allowed within one cteDef.
-            checkNumberOfSelfReferences(cteDef)
             cteDef.child match {
               // If it is a supported recursive CTE query pattern (4 so far), extract the anchor and
               // recursive plans from the Union and rewrite Union with UnionLoop. The recursive CTE
@@ -79,8 +78,32 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                   val loop = UnionLoop(
                     cteDef.id,
                     anchor,
-                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, None))
+                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, None),
+                    anchor.output.map(_.newInstance().exprId),
+                    maxDepth = cteDef.maxDepth)
                   cteDef.copy(child = alias.copy(child = loop))
+                }
+
+              // Simple case of duplicating (UNION ALL) clause.
+              case alias @ SubqueryAlias(_, withCTE @ WithCTE(
+                Union(Seq(anchor, recursion), false, false), innerCteDefs)) =>
+                if (!anchor.resolved) {
+                  cteDef
+                } else {
+                  // We need to check whether any of the inner CTEs has a self reference and replace
+                  // it if needed
+                  val newInnerCteDefs = innerCteDefs.map { innerCteDef =>
+                    innerCteDef.copy(child = rewriteRecursiveCTERefs(
+                      innerCteDef.child, anchor, cteDef.id, None))
+                  }
+                  val loop = UnionLoop(
+                    cteDef.id,
+                    anchor,
+                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, None),
+                    anchor.output.map(_.newInstance().exprId),
+                    maxDepth = cteDef.maxDepth)
+                  cteDef.copy(child = alias.copy(child = withCTE.copy(
+                    plan = loop, cteDefs = newInnerCteDefs)))
                 }
 
               // The case of CTE name followed by a parenthesized list of column name(s), eg.
@@ -96,15 +119,46 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                   val loop = UnionLoop(
                     cteDef.id,
                     anchor,
-                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, Some(colNames)))
+                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, Some(colNames)),
+                    anchor.output.map(_.newInstance().exprId),
+                    maxDepth = cteDef.maxDepth)
                   cteDef.copy(child = alias.copy(child = columnAlias.copy(child = loop)))
                 }
 
-              // If the recursion is described with an UNION (deduplicating) clause then the
+              // The case of CTE name followed by a parenthesized list of column name(s), eg.
+              // WITH RECURSIVE t(n).
+              case alias @ SubqueryAlias(_,
+                   columnAlias @ UnresolvedSubqueryColumnAliases(
+                   colNames,
+                   withCTE @ WithCTE(Union(Seq(anchor, recursion), false, false), innerCteDefs)
+                )) =>
+                if (!anchor.resolved) {
+                  cteDef
+                } else {
+                  // We need to check whether any of the inner CTEs has a self reference and replace
+                  // it if needed
+                  val newInnerCteDefs = innerCteDefs.map { innerCteDef =>
+                    innerCteDef.copy(child = rewriteRecursiveCTERefs(
+                      innerCteDef.child, anchor, cteDef.id, Some(colNames)))
+                  }
+                  val loop = UnionLoop(
+                    cteDef.id,
+                    anchor,
+                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, Some(colNames)),
+                    anchor.output.map(_.newInstance().exprId),
+                    maxDepth = cteDef.maxDepth)
+                  cteDef.copy(child = alias.copy(child = columnAlias.copy(
+                    child = withCTE.copy(plan = loop, cteDefs = newInnerCteDefs))))
+                }
+
+              // If the recursion is described with a UNION (deduplicating) clause then the
               // recursive term should not return those rows that have been calculated previously,
               // and we exclude those rows from the current iteration result.
               case alias @ SubqueryAlias(_,
                   Distinct(Union(Seq(anchor, recursion), false, false))) =>
+                cteDef.failAnalysis(
+                  errorClass = "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+                  messageParameters = Map.empty)
                 if (!anchor.resolved) {
                   cteDef
                 } else {
@@ -115,9 +169,41 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                       rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, None),
                       UnionLoopRef(cteDef.id, anchor.output, true),
                       isAll = false
-                    )
+                    ),
+                    anchor.output.map(_.newInstance().exprId),
+                    maxDepth = cteDef.maxDepth
                   )
                   cteDef.copy(child = alias.copy(child = loop))
+                }
+
+              // UNION case with CTEs inside.
+              case alias @ SubqueryAlias(_, withCTE @ WithCTE(
+                   Distinct(Union(Seq(anchor, recursion), false, false)), innerCteDefs)) =>
+                cteDef.failAnalysis(
+                  errorClass = "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+                  messageParameters = Map.empty)
+                if (!anchor.resolved) {
+                  cteDef
+                } else {
+                  // We need to check whether any of the inner CTEs has a self reference and replace
+                  // it if needed
+                  val newInnerCteDefs = innerCteDefs.map { innerCteDef =>
+                    innerCteDef.copy(child = rewriteRecursiveCTERefs(
+                      innerCteDef.child, anchor, cteDef.id, None))
+                  }
+                  val loop = UnionLoop(
+                    cteDef.id,
+                    Distinct(anchor),
+                    Except(
+                      rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, None),
+                      UnionLoopRef(cteDef.id, anchor.output, true),
+                      isAll = false
+                    ),
+                    anchor.output.map(_.newInstance().exprId),
+                    maxDepth = cteDef.maxDepth
+                  )
+                  cteDef.copy(child = alias.copy(child = withCTE.copy(
+                    plan = loop, cteDefs = newInnerCteDefs)))
                 }
 
               // The case of CTE name followed by a parenthesized list of column name(s).
@@ -126,6 +212,9 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                   colNames,
                   Distinct(Union(Seq(anchor, recursion), false, false))
                 )) =>
+                cteDef.failAnalysis(
+                  errorClass = "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+                  messageParameters = Map.empty)
                 if (!anchor.resolved) {
                   cteDef
                 } else {
@@ -136,9 +225,44 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                       rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, Some(colNames)),
                       UnionLoopRef(cteDef.id, anchor.output, true),
                       isAll = false
-                    )
+                    ),
+                    anchor.output.map(_.newInstance().exprId),
+                    maxDepth = cteDef.maxDepth
                   )
                   cteDef.copy(child = alias.copy(child = columnAlias.copy(child = loop)))
+                }
+
+              // The case of CTE name followed by a parenthesized list of column name(s).
+              case alias @ SubqueryAlias(_,
+                   columnAlias@UnresolvedSubqueryColumnAliases(
+                   colNames,
+                   WithCTE(Distinct(Union(Seq(anchor, recursion), false, false)), innerCteDefs)
+                )) =>
+                cteDef.failAnalysis(
+                  errorClass = "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+                  messageParameters = Map.empty)
+                if (!anchor.resolved) {
+                  cteDef
+                } else {
+                  // We need to check whether any of the inner CTEs has a self reference and replace
+                  // it if needed
+                  val newInnerCteDefs = innerCteDefs.map { innerCteDef =>
+                    innerCteDef.copy(child = rewriteRecursiveCTERefs(
+                      innerCteDef.child, anchor, cteDef.id, Some(colNames)))
+                  }
+                  val loop = UnionLoop(
+                    cteDef.id,
+                    Distinct(anchor),
+                    Except(
+                      rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, Some(colNames)),
+                      UnionLoopRef(cteDef.id, anchor.output, true),
+                      isAll = false
+                    ),
+                    anchor.output.map(_.newInstance().exprId),
+                    maxDepth = cteDef.maxDepth
+                  )
+                  cteDef.copy(child = alias.copy(child = columnAlias.copy(
+                    child = withCTE.copy(plan = loop, cteDefs = newInnerCteDefs))))
                 }
 
               case other =>
@@ -157,7 +281,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       case ref: CTERelationRef if !ref.resolved =>
         cteDefMap.get(ref.cteId).map { cteDef =>
           // cteDef is certainly resolved, otherwise it would not have been in the map.
-          CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+          CTERelationRef(
+            cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming, maxRows = cteDef.maxRows)
         }.getOrElse {
           ref
         }
@@ -179,41 +304,10 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       anchor: LogicalPlan,
       cteDefId: Long,
       columnNames: Option[Seq[String]]) = {
-    recursion.transformWithPruning(_.containsPattern(CTE)) {
+    recursion.transformUpWithSubqueriesAndPruning(_.containsPattern(CTE)) {
       case r: CTERelationRef if r.recursive && r.cteId == cteDefId =>
-        val ref = UnionLoopRef(r.cteId, anchor.output, false)
+        val ref = UnionLoopRef(r.cteId, anchor.output.map(_.newInstance()), false)
         columnNames.map(UnresolvedSubqueryColumnAliases(_, ref)).getOrElse(ref)
-    }
-  }
-
-  /**
-   * Checks if there is any self-reference within subqueries and throws an error
-   * if that is the case.
-   */
-  def checkForSelfReferenceInSubquery(plan: LogicalPlan): Unit = {
-    plan.subqueriesAll.foreach { subquery =>
-      subquery.foreach {
-        case r: CTERelationRef if r.recursive =>
-          throw new AnalysisException(
-            errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
-            messageParameters = Map.empty)
-        case _ =>
-      }
-    }
-  }
-
-  /**
-   * Counts number of self-references in a recursive CTE definition and throws an error
-   * if that number is bigger than 1.
-   */
-  private def checkNumberOfSelfReferences(cteDef: CTERelationDef): Unit = {
-    val numOfSelfRef = cteDef.collectWithSubqueries {
-      case ref: CTERelationRef if ref.cteId == cteDef.id => ref
-    }.length
-    if (numOfSelfRef > 1) {
-      cteDef.failAnalysis(
-        errorClass = "INVALID_RECURSIVE_REFERENCE.NUMBER",
-        messageParameters = Map.empty)
     }
   }
 
@@ -227,6 +321,9 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       cteId: Long,
       allowRecursiveRef: Boolean = true): Unit = plan match {
     case Join(left, right, Inner, _, _) =>
+      checkIfSelfReferenceIsPlacedCorrectly(left, cteId, allowRecursiveRef)
+      checkIfSelfReferenceIsPlacedCorrectly(right, cteId, allowRecursiveRef)
+    case Join(left, right, Cross, _, _) =>
       checkIfSelfReferenceIsPlacedCorrectly(left, cteId, allowRecursiveRef)
       checkIfSelfReferenceIsPlacedCorrectly(right, cteId, allowRecursiveRef)
     case Join(left, right, LeftOuter, _, _) =>

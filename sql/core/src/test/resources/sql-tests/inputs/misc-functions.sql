@@ -41,3 +41,6 @@ SET spark.sql.legacy.raiseErrorWithoutErrorClass=true;
 SELECT assert_true(false);
 SELECT raise_error('hello');
 SET spark.sql.legacy.raiseErrorWithoutErrorClass=false;
+
+-- Implicit alias of assert expression
+SELECT assert_true(col1 <= col2) FROM VALUES ('2025-03-01', '2025-03-10');
