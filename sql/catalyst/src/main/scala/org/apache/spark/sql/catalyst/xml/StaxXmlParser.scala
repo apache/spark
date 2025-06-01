@@ -544,6 +544,11 @@ class StaxXmlParser(
         case ShortType => castTo(value, ShortType)
         case IntegerType => signSafeToInt(value)
         case dt: DecimalType => castTo(value, dt)
+        case VariantType =>
+          val builder = new VariantBuilder(false)
+          StaxXmlParser.appendXMLCharacterToVariant(builder, value, options)
+          val v = builder.result()
+          new VariantVal(v.getValue, v.getMetadata)
         case _ => throw new SparkIllegalArgumentException(
           errorClass = "_LEGACY_ERROR_TEMP_3246",
           messageParameters = Map("dataType" -> dataType.toString))

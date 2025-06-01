@@ -59,7 +59,8 @@ private[sql] object CatalogV2Util {
       TableCatalog.PROP_PROVIDER,
       TableCatalog.PROP_OWNER,
       TableCatalog.PROP_EXTERNAL,
-      TableCatalog.PROP_IS_MANAGED_LOCATION)
+      TableCatalog.PROP_IS_MANAGED_LOCATION,
+      TableCatalog.PROP_TABLE_TYPE)
 
   /**
    * The list of reserved namespace properties, which can not be removed or changed directly by
@@ -72,6 +73,7 @@ private[sql] object CatalogV2Util {
    */
   val NAMESPACE_RESERVED_PROPERTIES =
     Seq(SupportsNamespaces.PROP_COMMENT,
+      SupportsNamespaces.PROP_COLLATION,
       SupportsNamespaces.PROP_LOCATION,
       SupportsNamespaces.PROP_OWNER)
 
@@ -276,16 +278,14 @@ private[sql] object CatalogV2Util {
           }
 
         case update: UpdateColumnDefaultValue =>
-          replace(schema, update.fieldNames.toImmutableArraySeq, field =>
-            // The new DEFAULT value string will be non-empty for any DDL commands that set the
-            // default value, such as "ALTER TABLE t ALTER COLUMN c SET DEFAULT ..." (this is
-            // enforced by the parser). On the other hand, commands that drop the default value such
-            // as "ALTER TABLE t ALTER COLUMN c DROP DEFAULT" will set this string to empty.
-            if (update.newDefaultValue().nonEmpty) {
-              Some(field.withCurrentDefaultValue(update.newDefaultValue()))
+          replace(schema, update.fieldNames.toImmutableArraySeq, field => {
+            val newDefault = update.newCurrentDefault()
+            if (newDefault != null) {
+              Some(field.withCurrentDefaultValue(newDefault.getSql))
             } else {
               Some(field.clearCurrentDefaultValue())
-            })
+            }
+          })
 
         case delete: DeleteColumn =>
           replace(schema, delete.fieldNames.toImmutableArraySeq, _ => None, delete.ifExists)

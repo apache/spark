@@ -283,6 +283,14 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val EVENT_LOG_READER_MAX_STRING_LENGTH =
+    ConfigBuilder("spark.eventLog.readerMaxStringLength")
+      .doc("Limit the maximum string size an eventlog item can have when deserializing it.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(_ > 0, "Maximum string size of an eventLog item should be positive.")
+      .createWithDefault(Int.MaxValue)
+
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite")
       .version("1.0.0")
@@ -1358,7 +1366,7 @@ package object config {
         "spark.io.compression.codec.")
       .version("2.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME =
     ConfigBuilder("spark.rdd.checkpoint.cachePreferredLocsExpireTime")

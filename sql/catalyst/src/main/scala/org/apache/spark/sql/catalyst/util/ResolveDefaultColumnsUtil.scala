@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.AnalysisException
@@ -432,20 +433,20 @@ object ResolveDefaultColumns extends QueryErrorsBase
       targetType: DataType,
       colName: String): Option[Expression] = {
     expr match {
-      case l: Literal if !Seq(targetType, l.dataType).exists(_ match {
+      case e if e.foldable && !Seq(targetType, e.dataType).exists(_ match {
         case _: BooleanType | _: ArrayType | _: StructType | _: MapType => true
         case _ => false
       }) =>
-        val casted = Cast(l, targetType, Some(conf.sessionLocalTimeZone), evalMode = EvalMode.TRY)
+        val casted = Cast(e, targetType, Some(conf.sessionLocalTimeZone), evalMode = EvalMode.TRY)
         try {
           Option(casted.eval(EmptyRow)).map(Literal(_, targetType))
         } catch {
-          case e @ ( _: SparkThrowable | _: RuntimeException) =>
-            logWarning(log"Failed to cast default value '${MDC(COLUMN_DEFAULT_VALUE, l)}' " +
+          case NonFatal(ex) =>
+            logWarning(log"Failed to cast default value '${MDC(COLUMN_DEFAULT_VALUE, e)}' " +
               log"for column ${MDC(COLUMN_NAME, colName)} " +
-              log"from ${MDC(COLUMN_DATA_TYPE_SOURCE, l.dataType)} " +
+              log"from ${MDC(COLUMN_DATA_TYPE_SOURCE, e.dataType)} " +
               log"to ${MDC(COLUMN_DATA_TYPE_TARGET, targetType)} " +
-              log"due to ${MDC(ERROR, e.getMessage)}", e)
+              log"due to ${MDC(ERROR, ex.getMessage)}", ex)
             None
         }
       case _ => None
@@ -583,20 +584,28 @@ object ResolveDefaultColumns extends QueryErrorsBase
       default: DefaultValueExpression,
       statement: String,
       colName: String,
-      targetType: DataType): Unit = {
+      targetTypeOption: Option[DataType]): Unit = {
     if (default.containsPattern(PLAN_EXPRESSION)) {
       throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
         statement, colName, default.originalSQL)
     } else if (default.resolved) {
-      val dataType = CharVarcharUtils.replaceCharVarcharWithString(targetType)
-      if (!Cast.canUpCast(default.child.dataType, dataType) &&
-        defaultValueFromWiderTypeLiteral(default.child, dataType, colName).isEmpty) {
-        throw QueryCompilationErrors.defaultValuesDataTypeError(
-          statement, colName, default.originalSQL, targetType, default.child.dataType)
+      targetTypeOption match {
+        case Some(targetType) =>
+          CharVarcharUtils.replaceCharVarcharWithString(targetType)
+          if (!Cast.canUpCast(default.child.dataType, targetType) &&
+            defaultValueFromWiderTypeLiteral(default.child, targetType, colName).isEmpty) {
+            throw QueryCompilationErrors.defaultValuesDataTypeError(
+              statement, colName, default.originalSQL, targetType, default.child.dataType)
+          }
+        case _ => ()
       }
-      // Our analysis check passes here. We do not further inspect whether the
-      // expression is `foldable` here, as the plan is not optimized yet.
+    } else {
+      throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+        statement, colName, default.originalSQL, null)
     }
+
+    // Our analysis check passes here. We do not further inspect whether the
+    // expression is `foldable` here, as the plan is not optimized yet.
 
     if (default.references.nonEmpty || default.exists(_.isInstanceOf[VariableReference])) {
       // Ideally we should let the rest of `CheckAnalysis` report errors about why the default
@@ -604,6 +613,11 @@ object ResolveDefaultColumns extends QueryErrorsBase
       // expression references columns, which means it's not a constant for sure.
       // Note that, session variable should be considered as non-constant as well.
       throw QueryCompilationErrors.defaultValueNotConstantError(
+        statement, colName, default.originalSQL)
+    }
+
+    if (!default.deterministic) {
+      throw QueryCompilationErrors.defaultValueNonDeterministicError(
         statement, colName, default.originalSQL)
     }
   }

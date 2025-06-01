@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, InterpretedMutableProjection, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, ExpressionWithRandomSeed, InterpretedMutableProjection, Literal}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation.hasUnevaluableExpr
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, LocalRelation, LogicalPlan, OneRowRelation, Project, Union, UnionLoopRef}
@@ -86,7 +86,8 @@ case class UnionLoopExec(
     @transient anchor: LogicalPlan,
     @transient recursion: LogicalPlan,
     override val output: Seq[Attribute],
-    limit: Option[Int] = None) extends LeafExecNode {
+    limit: Option[Int] = None,
+    maxDepth: Option[Int] = None) extends LeafExecNode {
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(anchor, recursion)
 
@@ -155,14 +156,17 @@ case class UnionLoopExec(
     val numOutputRows = longMetric("numOutputRows")
     val numIterations = longMetric("numIterations")
     val numAnchorOutputRows = longMetric("numAnchorOutputRows")
-    val levelLimit = conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT)
+    val levelLimit = maxDepth.getOrElse(conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT))
     val rowLimit = conf.getConf(SQLConf.CTE_RECURSION_ROW_LIMIT)
 
     // currentLimit is initialized from the limit argument, and in each step it is decreased by
     // the number of rows generated in that step.
-    // If limit is not passed down, currentLimit is set to be zero and won't be considered in the
-    // condition of while loop down (limit.isEmpty will be true).
-    var currentLimit = limit.getOrElse(-1)
+    // If limit is not passed down, currentLimit is set to be the row limit set by the
+    // spark.sql.cteRecursionRowLimit flag. If we breach this limit, then we report an error so that
+    // the user knows they aren't getting all the rows they requested.
+    var currentLimit = limit.getOrElse(rowLimit)
+
+    val userSpecifiedLimit = limit.isDefined
 
     val unionChildren = mutable.ArrayBuffer.empty[LogicalPlan]
 
@@ -172,8 +176,6 @@ case class UnionLoopExec(
 
     var currentLevel = 1
 
-    var currentNumRows: Long = 0
-
     var limitReached: Boolean = false
 
     val numPartitions = prevDF.queryExecution.toRdd.partitions.length
@@ -181,11 +183,24 @@ case class UnionLoopExec(
     // Main loop for obtaining the result of the recursive query.
     while (prevCount > 0 && !limitReached) {
       var prevPlan: LogicalPlan = null
+
+      // If the recursive part contains non-deterministic expressions that depends on a seed, we
+      // need to create a new seed since the seed for this expression is set in the analysis, and
+      // we avoid re-triggering the analysis for every iterative step.
+      val recursionReseeded = if (currentLevel == 1 || recursion.deterministic) {
+        recursion
+      } else {
+        recursion.transformAllExpressionsWithSubqueries {
+          case e: ExpressionWithRandomSeed =>
+            e.withShiftedSeed(currentLevel - 1)
+        }
+      }
+
       // the current plan is created by substituting UnionLoopRef node with the project node of
       // the previous plan.
       // This way we support only UNION ALL case. Additional case should be added for UNION case.
       // One way of supporting UNION case can be seen at SPARK-24497 PR from Peter Toth.
-      val newRecursion = recursion.transform {
+      val newRecursion = recursionReseeded.transformWithSubqueries {
         case r: UnionLoopRef if r.loopId == loopId =>
           prevDF.queryExecution.optimizedPlan match {
             case l: LocalRelation =>
@@ -221,20 +236,18 @@ case class UnionLoopExec(
 
       unionChildren += prevPlan
 
-      currentNumRows += prevCount
-
-      if (limit.isDefined) {
+      if (rowLimit != -1) {
         currentLimit -= prevCount.toInt
         if (currentLimit <= 0) {
-          limitReached = true
+          if (userSpecifiedLimit) {
+            limitReached = true
+          } else {
+            throw new SparkException(
+              errorClass = "RECURSION_ROW_LIMIT_EXCEEDED",
+              messageParameters = Map("rowLimit" -> rowLimit.toString),
+              cause = null)
+          }
         }
-      }
-
-      if (rowLimit != -1 && currentNumRows > rowLimit) {
-        throw new SparkException(
-          errorClass = "RECURSION_ROW_LIMIT_EXCEEDED",
-          messageParameters = Map("rowLimit" -> rowLimit.toString),
-          cause = null)
       }
 
       // Update metrics

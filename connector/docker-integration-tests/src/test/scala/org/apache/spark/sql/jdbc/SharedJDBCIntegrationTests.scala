@@ -14,12 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect.common
 
-/**
- * Error thrown when a connect command is not valid.
- */
-final case class InvalidCommandInput(
-    private val message: String = "",
-    private val cause: Throwable = null)
-    extends Exception(message, cause)
+package org.apache.spark.sql.jdbc
+
+import org.apache.spark.SparkException
+import org.apache.spark.sql.QueryTest
+
+trait SharedJDBCIntegrationTests extends QueryTest {
+  protected def jdbcUrl: String
+
+  test("SPARK-52184: Wrap external engine syntax error") {
+    val e = intercept[SparkException] {
+      spark.read.format("jdbc")
+        .option("url", jdbcUrl)
+        .option("query", "THIS IS NOT VALID SQL").load()
+    }
+    assert(e.getCondition.startsWith("JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR"))
+  }
+}

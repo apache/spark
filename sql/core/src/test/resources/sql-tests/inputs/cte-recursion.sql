@@ -1,5 +1,5 @@
---CONFIG_DIM2 spark.sql.adaptive.enabled=false
---CONFIG_DIM2 spark.sql.adaptive.enabled=true
+--SET spark.sql.cteRecursionLevelLimit=25
+--SET spark.sql.cteRecursionRowLimit=50
 
 -- fails due to recursion isn't allowed without RECURSIVE keyword
 WITH r(level) AS (
@@ -54,6 +54,46 @@ WITH RECURSIVE t(n) AS (
     SELECT next FROM t LEFT JOIN ZeroAndOne ON n = current
 )
 SELECT * FROM t;
+
+DROP VIEW ZeroAndOne;
+
+-- limited recursion doesn't fail at spark.sql.cteRecursionLevelLimit by setting MAX RECURSION LEVEL
+WITH RECURSIVE r(level) MAX RECURSION LEVEL 35 AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 30
+  )
+SELECT * FROM r;
+
+-- setting MAX RECURSION LEVEL without keyword RECURSIVE fails
+WITH r(level) MAX RECURSION LEVEL 35 AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 30
+)
+SELECT * FROM r;
+
+-- limited recursion fails at spark.sql.cteRecursionLevelLimit level because it is too low
+WITH RECURSIVE r(level) AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 150
+)
+SELECT * FROM r;
+
+-- unlimited recursion stopped from failing by putting LIMIT
+CREATE TEMPORARY VIEW ZeroAndOne(current, next) AS VALUES
+    (0,0),
+    (0,1),
+    (1,0),
+    (1,1);
+
+WITH RECURSIVE t(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT next FROM t LEFT JOIN ZeroAndOne ON n = current
+    )
+SELECT * FROM t LIMIT 60;
 
 DROP VIEW ZeroAndOne;
 
@@ -127,7 +167,7 @@ WITH RECURSIVE t(col) (
   UNION ALL
   SELECT (SELECT max(col) FROM t)
 )
-SELECT * FROM t;
+SELECT * FROM t LIMIT 5;
 
 -- complicated subquery example: self-reference in subquery in an inner CTE
 WITH
@@ -352,6 +392,8 @@ FROM r
 INSERT INTO rt2 SELECT *
 INSERT INTO rt2 SELECT *;
 
+SELECT * FROM rt2;
+
 DROP TABLE rt2;
 
 -- multiple recursive CTEs
@@ -463,7 +505,7 @@ WITH RECURSIVE t1(a,b,c) AS (
 SELECT a FROM t1 LIMIT 5;
 
 -- CROSS JOIN example
-CREATE TABLE tb (next INT);
+CREATE TABLE tb (next INT) USING json;
 
 INSERT INTO tb VALUES (0), (1);
 
@@ -545,3 +587,77 @@ WITH RECURSIVE t1 AS (
     UNION ALL
     SELECT n+1 FROM t2 WHERE n < 5)
 SELECT * FROM t1;
+
+-- Recursive CTE with multiple of the same reference in the anchor, which get referenced differently subsequent iterations.
+WITH RECURSIVE tmp(x) AS (
+    values (1), (2), (3), (4), (5)
+), rcte(x, y) AS (
+    SELECT x, x FROM tmp WHERE x = 1
+    UNION ALL
+    SELECT x + 1, x FROM rcte WHERE x < 5
+)
+SELECT * FROM rcte;
+
+-- Recursive CTE with multiple of the same reference in the anchor, which get referenced as different variables in subsequent iterations.
+WITH RECURSIVE tmp(x) AS (
+    values (1), (2), (3), (4), (5)
+), rcte(x, y, z, t) AS (
+    SELECT x, x, x, x FROM tmp WHERE x = 1
+    UNION ALL
+    SELECT x + 1, x, y + 1, y FROM rcte WHERE x < 5
+)
+SELECT * FROM rcte;
+
+-- Non-deterministic query with rand with seed
+WITH RECURSIVE randoms(val) AS (
+    SELECT CAST(floor(rand(82374) * 5 + 1) AS INT)
+    UNION ALL
+    SELECT CAST(floor(rand(237685) * 5 + 1) AS INT)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Non-deterministic query with uniform with seed
+WITH RECURSIVE randoms(val) AS (
+    SELECT CAST(UNIFORM(1, 6, 82374) AS INT)
+    UNION ALL
+    SELECT CAST(UNIFORM(1, 6, 237685) AS INT)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Non-deterministic query with randn with seed
+WITH RECURSIVE randoms(val) AS (
+    SELECT CAST(floor(randn(82374) * 5 + 1) AS INT)
+    UNION ALL
+    SELECT CAST(floor(randn(237685) * 5 + 1) AS INT)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Non-deterministic query with randstr
+WITH RECURSIVE randoms(val) AS (
+    SELECT randstr(10, 82374)
+    UNION ALL
+    SELECT randstr(10, 237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Non-deterministic query with UUID
+WITH RECURSIVE randoms(val) AS (
+    SELECT UUID(82374)
+    UNION ALL
+    SELECT UUID(237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Non-deterministic query with shuffle
+WITH RECURSIVE randoms(val) AS (
+    SELECT ARRAY(1,2,3,4,5)
+    UNION ALL
+    SELECT SHUFFLE(ARRAY(1,2,3,4,5), 237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;

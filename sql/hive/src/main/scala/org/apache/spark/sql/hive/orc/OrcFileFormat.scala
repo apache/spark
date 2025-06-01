@@ -143,7 +143,7 @@ case class OrcFileFormat() extends FileFormat with DataSourceRegister with Seria
     }
 
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val ignoreCorruptFiles =
       new OrcOptions(options, sparkSession.sessionState.conf).ignoreCorruptFiles
 

@@ -301,8 +301,10 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
                   log"Falling back to non-Arrow-optimized UDF execution.")
               }
               BatchEvalPython(validUdfs, resultAttrs, child)
-            case PythonEvalType.SQL_SCALAR_PANDAS_UDF | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
-                 | PythonEvalType.SQL_ARROW_BATCHED_UDF =>
+            case PythonEvalType.SQL_SCALAR_PANDAS_UDF
+                 | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
+                 | PythonEvalType.SQL_ARROW_BATCHED_UDF
+                 | PythonEvalType.SQL_SCALAR_ARROW_UDF =>
               ArrowEvalPython(validUdfs, resultAttrs, child, evalType)
             case _ =>
               throw SparkException.internalError("Unexpected UDF evalType")

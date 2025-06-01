@@ -1050,6 +1050,32 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     }
   }
 
+  test("SPARK-48618: Test table does not exists error") {
+    val tbl = s"$catalogName.tbl1"
+    val sqlStatement = s"SELECT * FROM $tbl"
+    val startPos = sqlStatement.indexOf(tbl)
+
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (col1 INT, col2 INT)")
+      sql(s"INSERT INTO $tbl VALUES (1, 2)")
+      val df = sql(sqlStatement)
+      val row = df.collect()
+      assert(row.length === 1)
+
+      // Drop the table
+      sql(s"DROP TABLE IF EXISTS $tbl")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlStatement).collect()
+        },
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> s"`$catalogName`.`tbl1`"),
+        context = ExpectedContext(tbl, startPos, startPos + tbl.length - 1)
+      )
+    }
+  }
+
   def testDatetime(tbl: String): Unit = {}
 
   test("scan with filter push-down with date time functions") {
@@ -1090,6 +1116,21 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       testBinaryLiteral("<=>", binary, 1)
       testBinaryLiteral("<=>", lessThanBinary, 0)
       testBinaryLiteral("<=>", greaterThanBinary, 0)
+    }
+  }
+
+  test("SPARK-52262: FAILED_JDBC.TABLE_EXISTS not thrown on connection error") {
+    val invalidTableName = s"$catalogName.invalid"
+    val originalUrl = spark.conf.get(s"spark.sql.catalog.$catalogName.url")
+    val invalidUrl = originalUrl.replace("localhost", "nonexistenthost")
+      .replace("127.0.0.1", "1.2.3.4")
+
+    withSQLConf(s"spark.sql.catalog.$catalogName.url" -> invalidUrl) {
+      // Ideally we would catch SQLException, but analyzer wraps it
+      val e = intercept[AnalysisException] {
+        sql(s"SELECT * FROM $invalidTableName")
+      }
+      assert(e.getCondition !== "FAILED_JDBC.TABLE_EXISTS")
     }
   }
 }

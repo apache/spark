@@ -15,11 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
+package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.catalog.VariableManager
-import org.apache.spark.util.LexicalThreadLocal
+import org.apache.spark.sql.catalyst.expressions.{Alias, NamedExpression}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
-object SqlScriptingLocalVariableManager extends LexicalThreadLocal[VariableManager] {
-  def create(variableManager: VariableManager): Handle = createHandle(Option(variableManager))
-}
+/**
+ * Stores the result of resolution of lateral column aliases in an [[Aggregate]].
+ * @param resolvedOperator The resolved operator.
+ * @param outputList The output list of the resolved operator.
+ * @param aggregateListAliases List of aliases from aggregate list and all artificially inserted
+ *   [[Project]] nodes.
+ */
+case class AggregateWithLcaResolutionResult(
+    resolvedOperator: LogicalPlan,
+    outputList: Seq[NamedExpression],
+    aggregateListAliases: Seq[Alias])

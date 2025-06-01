@@ -69,8 +69,9 @@ class StateScan(
   extends Scan with Batch {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
-  private val hadoopConfBroadcast = session.sparkContext.broadcast(
-    new SerializableConfiguration(session.sessionState.newHadoopConf()))
+  private val hadoopConfBroadcast =
+    SerializableConfiguration.broadcast(session.sparkContext,
+      session.sessionState.newHadoopConf())
 
   override def readSchema(): StructType = schema
 

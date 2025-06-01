@@ -112,7 +112,7 @@ jobs:
             ui=false
             docs=false
           fi
-          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive"`
+          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
           precondition="
             {
               \"build\": \"$build\",
@@ -246,7 +246,7 @@ jobs:
           - >-
             api, catalyst, hive-thriftserver
           - >-
-            mllib-local, mllib, graphx, profiler
+            mllib-local, mllib, graphx, profiler, pipelines
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
             kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect
@@ -389,6 +389,12 @@ jobs:
       with:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/*.log"
+    - name: Upload yarn app log files
+      if: ${{ !success() && contains(matrix.modules, 'yarn') }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: yarn-app-log-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
+        path: "**/target/test/data/"
 
   infra-image:
     name: "Base image build"
@@ -505,7 +511,7 @@ jobs:
           - >-
             pyspark-core, pyspark-errors, pyspark-streaming, pyspark-logger
           - >-
-            pyspark-mllib, pyspark-ml, pyspark-ml-connect
+            pyspark-mllib, pyspark-ml, pyspark-ml-connect, pyspark-pipelines
           - >-
             pyspark-connect
           - >-

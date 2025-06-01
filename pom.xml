@@ -95,6 +95,7 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
+    <module>sql/pipelines</module>
     <module>sql/connect/server</module>
     <module>sql/connect/common</module>
     <module>sql/connect/client/jvm</module>
@@ -134,11 +135,11 @@
     <!-- Version used in Maven Hive dependency -->
     <hive.version>2.3.10</hive.version>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>3.9.0</kafka.version>
+    <kafka.version>3.9.1</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
-    <parquet.version>1.15.1</parquet.version>
-    <orc.version>2.1.1</orc.version>
+    <parquet.version>1.15.2</parquet.version>
+    <orc.version>2.1.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.25</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
@@ -181,8 +182,8 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.18.2</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.18.2</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.19.0</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.19.0</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.7</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
@@ -217,7 +218,7 @@
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.1.121.Final</netty.version>
     <netty-tcnative.version>2.0.70.Final</netty-tcnative.version>
-    <icu4j.version>76.1</icu4j.version>
+    <icu4j.version>77.1</icu4j.version>
     <junit-jupiter.version>5.12.2</junit-jupiter.version>
     <junit-platform.version>1.12.2</junit-platform.version>
     <!--
@@ -230,13 +231,13 @@
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py,
     ./python/packaging/client/setup.py, and ./python/packaging/connect/setup.py too.
     -->
-    <arrow.version>18.2.0</arrow.version>
+    <arrow.version>18.3.0</arrow.version>
     <ammonite.version>3.0.1</ammonite.version>
     <jjwt.version>0.12.6</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>7.2.0</kubernetes-client.version>
+    <kubernetes-client.version>7.3.1</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -873,7 +874,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.6-10</version>
+        <version>1.5.7-3</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>

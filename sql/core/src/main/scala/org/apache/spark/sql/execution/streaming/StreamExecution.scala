@@ -288,7 +288,14 @@ abstract class StreamExecution(
       // `postEvent` does not throw non fatal exception.
       val startTimestamp = triggerClock.getTimeMillis()
       postEvent(
-        new QueryStartedEvent(id, runId, name, progressReporter.formatTimestamp(startTimestamp)))
+        new QueryStartedEvent(
+          id,
+          runId,
+          name,
+          progressReporter.formatTimestamp(startTimestamp),
+          sparkSession.sparkContext.getJobTags()
+        )
+      )
 
       // Unblock starting thread
       startLatch.countDown()

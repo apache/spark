@@ -202,12 +202,36 @@ abstract class BaseSessionStateBuilder(
       customHintResolutionRules
 
     override val singlePassResolverExtensions: Seq[ResolverExtension] = Seq(
-      new DataSourceResolver(session)
+      new LogicalRelationResolver
     )
 
     override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] = Seq(
+      new DataSourceResolver(session),
       new FileResolver(session)
     )
+
+    override val singlePassPostHocResolutionRules: Seq[Rule[LogicalPlan]] =
+      DetectAmbiguousSelfJoin +:
+      ApplyCharTypePadding +:
+      singlePassCustomPostHocResolutionRules
+
+    override val singlePassExtendedResolutionChecks: Seq[LogicalPlan => Unit] = {
+      val heavyChecks = if (session.conf.get(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_RUN_HEAVY_EXTENDED_RESOLUTION_CHECKS
+        )) {
+        Seq(
+          // [[ViewSyncSchemaToMetaStore]] calls `alterTable` if the view schema needs to be
+          // updated.
+          ViewSyncSchemaToMetaStore
+        )
+      } else {
+        Nil
+      }
+
+      PreReadCheck +:
+      heavyChecks ++:
+      singlePassCustomResolutionChecks
+    }
 
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new ResolveDataSource(session) +:
@@ -240,6 +264,20 @@ abstract class BaseSessionStateBuilder(
         CommandCheck +:
         ViewSyncSchemaToMetaStore +:
         customCheckRules
+  }
+
+  /**
+   * Custom post resolution rules to add to the single-pass Resolver.
+   *
+   * Using this mechanism is discouraged. Prefer to implement a given feature in the single-pass
+   * Resolver directly.
+   */
+  protected def singlePassCustomPostHocResolutionRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildPostHocResolutionRules(session)
+  }
+
+  protected def singlePassCustomResolutionChecks: Seq[LogicalPlan => Unit] = {
+    extensions.buildCheckRules(session)
   }
 
   /**
