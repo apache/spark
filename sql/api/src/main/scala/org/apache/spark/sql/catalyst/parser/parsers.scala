@@ -16,15 +16,18 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import java.util.concurrent.atomic.AtomicReference
+
 import scala.jdk.CollectionConverters._
 
 import org.antlr.v4.runtime._
-import org.antlr.v4.runtime.atn.PredictionMode
+import org.antlr.v4.runtime.atn.{ATN, ParserATNSimulator, PredictionContextCache, PredictionMode}
+import org.antlr.v4.runtime.dfa.DFA
 import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
 import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
 import org.apache.spark.{QueryContext, SparkException, SparkThrowable, SparkThrowableHelper}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, SQLQueryContext, WithOrigin}
 import org.apache.spark.sql.catalyst.util.SparkParserUtils
@@ -62,6 +65,7 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
+    if (conf.manageParserCaches) AbstractParser.installCaches(parser)
     parser.addParseListener(PostProcessor)
     parser.addParseListener(UnclosedCommentProcessor(command, tokenStream))
     parser.removeErrorListeners()
@@ -102,6 +106,19 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
           errorClass = e.getCondition,
           messageParameters = e.getMessageParameters.asScala.toMap,
           queryContext = e.getQueryContext)
+    }
+    finally {
+      // Antlr4 uses caches to make parsing faster but its caches are unbounded and never purged,
+      // which can cause OOMs when parsing a huge number of SQL queries. Clearing these caches too
+      // often will slow down parsing and cause performance regressions, but will prevent OOMs
+      // caused by the parser cache. We use a heuristic and clear the cache if the number of states
+      // in the DFA cache has exceeded the threshold
+      // configured by `spark.sql.parser.parserDfaCacheFlushThreshold`. These states generally
+      // represent the bulk of the memory consumed by the parser, and the size of a single state
+      // is approximately 7KB.
+      //
+      // Negative values mean we should never clear the cache
+      AbstractParser.maybeClearParserCaches(parser, conf)
     }
   }
 
@@ -438,4 +455,96 @@ case class UnclosedCommentProcessor(command: String, tokenStream: CommonTokenStr
 
 object DataTypeParser extends AbstractParser {
   override protected def astBuilder: DataTypeAstBuilder = new DataTypeAstBuilder
+}
+
+object AbstractParser extends Logging {
+  private case class AntlrCaches(atn: ATN) {
+    private[parser] val predictionContextCache: PredictionContextCache = new PredictionContextCache
+    private[parser] val decisionToDFACache: Array[DFA] = AntlrCaches.makeDecisionToDFACache(atn)
+
+    def installManagedParserCaches(parser: SqlBaseParser): Unit = {
+      parser.setInterpreter(
+        new ParserATNSimulator(parser, atn, decisionToDFACache, predictionContextCache))
+    }
+  }
+
+  private object AntlrCaches {
+    /**
+     * Based off of `ParserATNSimulator.clearDFA` in ANTLR4.
+     */
+    private def makeDecisionToDFACache(atn: ATN): Array[DFA] = {
+      val decisionToDFA = new Array[DFA](atn.getNumberOfDecisions)
+      for (i <- 0 until atn.getNumberOfDecisions) {
+        decisionToDFA(i) = new DFA(atn.getDecisionState(i), i)
+      }
+      decisionToDFA
+    }
+  }
+
+  private val parserCaches = new AtomicReference[AntlrCaches](AntlrCaches(SqlBaseParser._ATN))
+
+  private var numDFACacheStates: Int = 0
+  def getDFACacheNumStates: Int = numDFACacheStates
+
+  /**
+   * Returns the number of DFA states in the DFA cache.
+   *
+   * DFA states empirically consume about 7KB of memory each.
+   */
+  private def computeDFACacheNumStates: Int = {
+    parserCaches.get().decisionToDFACache.map(_.states.size).sum
+  }
+
+  /**
+   * Install the managed parser caches into the given parser. Configuring the parser to use the
+   * managed `AntlrCaches` enables us to manage the size of the cache and clear it when required as
+   * the parser caches are unbounded by default.
+   *
+   * This method should be called before parsing any input.
+   */
+  private[parser] def installCaches(parser: SqlBaseParser): Unit = {
+    parserCaches.get().installManagedParserCaches(parser)
+  }
+
+  /**
+   * Drop the existing parser caches and create a new one.
+   *
+   * ANTLR retains caches in its parser that are never released.  This speeds up parsing of future
+   * input, but it can consume a lot of memory depending on the input seen so far.
+   *
+   * This method provides a mechanism to free the retained caches, which can be useful after parsing
+   * very large SQL inputs, especially if those large inputs are unlikely to be similar to future
+   * inputs seen by the driver.
+   */
+  private[parser] def clearParserCaches(parser: SqlBaseParser): Unit = {
+    parserCaches.set(AntlrCaches(SqlBaseParser._ATN))
+    logInfo(log"ANTLR parser caches cleared")
+    numDFACacheStates = 0
+    installCaches(parser)
+  }
+
+  /**
+   * Check cache size and config values to determine if we should clear the parser caches.
+   * Also logs the current cache size and the delta since the last check.
+   * This method should be called after parsing each input.
+   */
+  private[parser] def maybeClearParserCaches(parser: SqlBaseParser, conf: SqlApiConf): Unit = {
+    if (!conf.manageParserCaches) {
+      return
+    }
+
+    val numDFACacheStatesCurrent = computeDFACacheNumStates
+    val numDFACacheStatesDelta = numDFACacheStatesCurrent - numDFACacheStates
+    numDFACacheStates = numDFACacheStatesCurrent
+    logInfo(
+      log"EXPERIMENTAL: Query cached " +
+        log"${MDC(LogKeys.ANTLR_DFA_CACHE_DELTA, numDFACacheStatesDelta)} " +
+        log"DFA states in the parser. Total cached DFA states: " +
+        log"${MDC(LogKeys.ANTLR_DFA_CACHE_SIZE, numDFACacheStatesCurrent)}.")
+
+    if (0 <= conf.parserDfaCacheFlushThreshold &&
+        conf.parserDfaCacheFlushThreshold <= numDFACacheStatesCurrent) {
+      AbstractParser.clearParserCaches(parser)
+    }
+  }
 }
