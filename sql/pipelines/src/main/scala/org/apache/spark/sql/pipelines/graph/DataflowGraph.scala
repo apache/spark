@@ -34,11 +34,11 @@ case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], views: Seq[View])
     extends GraphOperations
     with GraphValidations {
 
-  /** Returns a [[Output]] given its identifier */
+  /** Map of [[Output]]s by their identifiers */
   lazy val output: Map[TableIdentifier, Output] = mapUnique(tables, "output")(_.identifier)
 
   /**
-   * Returns [[Flow]]s in this graph that need to get planned and potentially executed when
+   * [[Flow]]s in this graph that need to get planned and potentially executed when
    * executing the graph. Flows that write to logical views are excluded.
    */
   lazy val materializedFlows: Seq[ResolvedFlow] = {
@@ -47,14 +47,14 @@ case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], views: Seq[View])
     )
   }
 
-  /** Returns the identifiers of [[materializedFlows]]. */
+  /** The identifiers of [[materializedFlows]]. */
   val materializedFlowIdentifiers: Set[TableIdentifier] = materializedFlows.map(_.identifier).toSet
 
-  /** Returns a [[Table]] given its identifier */
+  /** Map of [[Table]]s by their identifiers */
   lazy val table: Map[TableIdentifier, Table] =
     mapUnique(tables, "table")(_.identifier)
 
-  /** Returns a [[Flow]] given its identifier */
+  /** Map of [[Flow]]s by their identifier */
   lazy val flow: Map[TableIdentifier, Flow] = {
     // Better error message than using mapUnique.
     val flowsByIdentifier = flows.groupBy(_.identifier)
@@ -89,20 +89,20 @@ case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], views: Seq[View])
     flowsByIdentifier.view.mapValues(_.head).toMap
   }
 
-  /** Returns a [[View]] given its identifier */
+  /** Map of [[View]]s by their identifiers */
   lazy val view: Map[TableIdentifier, View] = mapUnique(views, "view")(_.identifier)
 
-  /** Returns the [[PersistedView]]s of the graph */
+  /** The [[PersistedView]]s of the graph */
   lazy val persistedViews: Seq[PersistedView] = views.collect {
     case v: PersistedView => v
   }
 
-  /** Returns all the [[Input]]s in the current DataflowGraph. */
+  /** All the [[Input]]s in the current DataflowGraph. */
   lazy val inputIdentifiers: Set[TableIdentifier] = {
     (flows ++ tables).map(_.identifier).toSet
   }
 
-  /** Returns the [[Flow]]s that write to a given destination. */
+  /** The [[Flow]]s that write to a given destination. */
   lazy val flowsTo: Map[TableIdentifier, Seq[Flow]] = flows.groupBy(_.destinationIdentifier)
 
   lazy val resolvedFlows: Seq[ResolvedFlow] = {
@@ -155,7 +155,7 @@ case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], views: Seq[View])
   }
 
   /**
-   * Returns a map of the inferred schema of each table, computed by merging the analyzed schemas
+   * A map of the inferred schema of each table, computed by merging the analyzed schemas
    * of all flows writing to that table.
    */
   lazy val inferredSchema: Map[TableIdentifier, StructType] = {
