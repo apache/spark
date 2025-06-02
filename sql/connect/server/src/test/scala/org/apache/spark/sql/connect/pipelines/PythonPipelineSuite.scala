@@ -50,8 +50,8 @@ import org.apache.spark.sql.pipelines.utils.{
 }
 
 /**
- * Test suite that starts a Spark Connect server with the SparkDeclarativePipelinesPlugin
- * and executes Python code that connects to it.
+ * Test suite that starts a Spark Connect server and executes Spark Declarative Pipelines Python
+ * code to define tables in the pipeline.
  */
 class PythonPipelineSuite
     extends SparkDeclarativePipelinesServerTest
@@ -88,8 +88,6 @@ class PythonPipelineSuite
          |    registry = SparkConnectGraphElementRegistry(spark, dataflow_graph_id)
          |    with graph_element_registration_context(registry):
          |    $indentedPythonText
-         |finally:
-         |    pass  # TODO: stop the SparkSession after the stop() deadlock is resolved
          |""".stripMargin
 
     val (exitCode, output) = executePythonCode(pythonCode)

@@ -200,20 +200,13 @@ class SparkDeclarativePipelinesServerSuite
 
       registerPipelineDatasets(pipeline)
       startPipelineAndWaitForCompletion(graphId)
-      // TODO: Remove the eventually block once startPipelineAndWaitForCompletion actually blocks
-      // on pipeline completion.
-      eventually(timeout(15.seconds)) {
-        // Check that each table has the correct data.
-        assert(spark.table("spark_catalog.default.tableA").count() == 5)
-        assert(spark.table("spark_catalog.default.tableB").count() == 5)
-        assert(spark.table("spark_catalog.default.tableC").count() == 5)
-      }
+      // Check that each table has the correct data.
+      assert(spark.table("spark_catalog.default.tableA").count() == 5)
+      assert(spark.table("spark_catalog.default.tableB").count() == 5)
+      assert(spark.table("spark_catalog.default.tableC").count() == 5)
     }
   }
 
-  // Create a test that creates streaming tables, materialized views, and temporary views.
-  // At least one table should read from a temporary view. At least one temporary view should
-  // be a streaming view.
   test("create streaming tables, materialized views, and temporary views") {
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph

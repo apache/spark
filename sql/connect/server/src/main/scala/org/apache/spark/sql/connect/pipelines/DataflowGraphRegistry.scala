@@ -22,10 +22,16 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.pipelines.graph.GraphRegistrationContext
 
+/**
+ * Tracks the DataflowGraphs that have been registered. DataflowGraphs are registered by the
+ * PipelinesHandler when CreateDataflowGraph is called, and the PipelinesHandler also supports
+ * attaching flows/datasets to a graph.
+ */
 object DataflowGraphRegistry {
 
   private val dataflowGraphs = new ConcurrentHashMap[String, GraphRegistrationContext]()
 
+  /** Registers a DataflowGraph and generates a unique id to associate with the graph */
   def createDataflowGraph(
       defaultCatalog: String,
       defaultDatabase: String,
@@ -39,10 +45,12 @@ object DataflowGraphRegistry {
     graphId
   }
 
-  def getDataflowGraph(pipelineId: String): Option[GraphRegistrationContext] = {
-    Option(dataflowGraphs.get(pipelineId))
+  /** Retrieves the graph for a given id. */
+  def getDataflowGraph(graphId: String): Option[GraphRegistrationContext] = {
+    Option(dataflowGraphs.get(graphId))
   }
 
+  /** Retrieves the graph for a given id, and throws if the id could not be found. */
   def getDataflowGraphOrThrow(dataflowGraphId: String): GraphRegistrationContext =
     DataflowGraphRegistry.getDataflowGraph(dataflowGraphId).getOrElse {
       throw new IllegalArgumentException(
@@ -50,14 +58,17 @@ object DataflowGraphRegistry {
       )
     }
 
-  def dropDataflowGraph(pipelineId: String): Unit = {
-    dataflowGraphs.remove(pipelineId)
+  /** Removes the graph with a given id from the registry. */
+  def dropDataflowGraph(graphId: String): Unit = {
+    dataflowGraphs.remove(graphId)
   }
 
+  /** Returns all graphs in the registry. */
   def getAllDataflowGraphs: Seq[GraphRegistrationContext] = {
     dataflowGraphs.values().asScala.toSeq
   }
 
+  /** Removes all graphs from the registry.  */
   def dropAllDataflowGraphs(): Unit = {
     dataflowGraphs.clear()
   }

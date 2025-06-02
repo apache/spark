@@ -33,24 +33,30 @@ import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.pipelines.Language.Python
 import org.apache.spark.sql.pipelines.QueryOriginType
 import org.apache.spark.sql.pipelines.common.RunState.{CANCELED, FAILED}
-import org.apache.spark.sql.pipelines.graph.{FlowAnalysis, GraphIdentifierManager, IdentifierHelper, QueryContext, QueryOrigin, Table, TemporaryView, UnresolvedFlow}
+import org.apache.spark.sql.pipelines.graph.{
+  FlowAnalysis,
+  GraphIdentifierManager,
+  IdentifierHelper,
+  QueryContext,
+  QueryOrigin,
+  Table,
+  TemporaryView,
+  UnresolvedFlow
+}
 import org.apache.spark.sql.pipelines.logging.{PipelineEvent, RunProgress}
 import org.apache.spark.sql.types.StructType
 
-// PipelinesHandler is a utility to group the handling of all pipelines operations
+/** Handler for SparkConnect PipelineCommands */
 private[connect] object PipelinesHandler extends Logging {
 
   /**
    * Handles the pipeline command
-   * @param sessionHolder Context  about the session state
+   * @param sessionHolder Context about the session state
    * @param cmd Command to be handled
    * @param responseObserver The response observer where the response will be sent
    * @param sparkSession The spark session
    * @param transformRelationFunc Function used to convert a relation to a LogicalPlan. This is
-   *                              used when determining the LogicalPlan that a flow returns. This
-   *                              is kind of a hack to call the transformRelation function in
-   *                              SparkConnectPlanner. We should eventually refactor that class
-   *                              to extract transformRelation into a common helper.
+   *                              used when determining the LogicalPlan that a flow returns.
    * @return The response after handling the command
    */
   def handlePipelinesCommand(
@@ -78,7 +84,7 @@ private[connect] object PipelinesHandler extends Logging {
         DataflowGraphRegistry.dropDataflowGraph(cmd.getDropDataflowGraph.getDataflowGraphId)
         defaultResponse
       case proto.PipelineCommand.CommandTypeCase.DEFINE_DATASET =>
-        logInfo(s"Define pipelines relation cmd received: $cmd")
+        logInfo(s"Define pipelines dataset cmd received: $cmd")
         defineDataset(cmd.getDefineDataset, sparkSession)
         defaultResponse
       case proto.PipelineCommand.CommandTypeCase.DEFINE_FLOW =>
@@ -292,7 +298,7 @@ private[connect] object PipelinesHandler extends Logging {
         // Returns the message associated with a Throwable and all its causes
         def getExceptionMessages(throwable: Throwable): Seq[String] = {
           throwable.getMessage +:
-            Option(throwable.getCause).map(getExceptionMessages).getOrElse(Nil)
+          Option(throwable.getCause).map(getExceptionMessages).getOrElse(Nil)
         }
         val errorMessages = getExceptionMessages(event.error.get)
         s"""${event.message}
@@ -307,15 +313,16 @@ private[connect] object PipelinesHandler extends Logging {
         // does not see the same error twice for a failed run.
         case RunProgress(state) if state == FAILED => runFailureEvent = Some(event)
         case RunProgress(state) if state == CANCELED =>
-           throw new RuntimeException("Pipeline run was canceled.")
-        case _ => responseObserver.onNext(
-          proto.ExecutePlanResponse
-            .newBuilder()
-            .setSessionId(sessionHolder.sessionId)
-            .setServerSideSessionId(sessionHolder.serverSessionId)
-            .setPipelineEventResult(
-              proto.PipelineEventResult.newBuilder
-                .setEvent(
+          throw new RuntimeException("Pipeline run was canceled.")
+        case _ =>
+          responseObserver.onNext(
+            proto.ExecutePlanResponse
+              .newBuilder()
+              .setSessionId(sessionHolder.sessionId)
+              .setServerSideSessionId(sessionHolder.serverSessionId)
+              .setPipelineEventResult(
+                proto.PipelineEventResult.newBuilder
+                  .setEvent(
                     proto.PipelineEvent
                       .newBuilder()
                       .setTimestamp(
@@ -327,10 +334,11 @@ private[connect] object PipelinesHandler extends Logging {
                       )
                       .setMessage(message)
                       .build()
-                ).build()
-            )
-            .build()
-        )
+                  )
+                  .build()
+              )
+              .build()
+          )
       }
     }
     PipelineExecutionHolder.executePipeline(
