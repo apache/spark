@@ -19,12 +19,12 @@ package org.apache.spark.sql.execution
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkConf, SparkThrowable}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedHaving, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition, WindowSpecReference}
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.parser.{AbstractParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.connector.catalog.TableCatalog
@@ -43,6 +43,10 @@ import org.apache.spark.util.ArrayImplicits._
  */
 class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
   import org.apache.spark.sql.catalyst.dsl.expressions._
+
+  override protected def sparkConf: SparkConf =
+    super.sparkConf
+      .set(SQLConf.MANAGE_PARSER_CACHES.key, true.toString)
 
   private lazy val parser = new SparkSqlParser()
 
@@ -1045,8 +1049,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
 
   // TODO: maybe get access to AbstractParser value (instead of relying on metrics)
   test("SPARK-47404: release ANTLR cache after parsing") {
-    withSQLConf(SQLConf.MANAGE_PARSER_CACHES.key -> "true",
-        SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> "1000000") {
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> "1000000") {
       val baselineMemory = getMemoryUsage // On my system, this is about 61 MiB
       parser.parsePlan(s"select ${awfulQuery(8)} from range(10)")
       val estimatedCacheOverhead = getMemoryUsage - baselineMemory // about  119 MiB
@@ -1064,5 +1067,53 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       val memoryUsageWithRelease = getMemoryUsage
         assert(memoryUsageWithRelease < baselineMemory + tolerance * estimatedCacheOverhead)
     }
+  }
+
+  test("Always release Antlr cache when cache limit is 0") {
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> (-1).toString) {
+      parser.parsePlan("select id from range(10)")
+    }
+    val initialCacheSize = AbstractParser.getDFACacheNumStates
+    assert(initialCacheSize > 0)
+
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> 0.toString) {
+      parser.parsePlan("select id from range(10)")
+    }
+    val clearedCacheSize = AbstractParser.getDFACacheNumStates
+    assert(clearedCacheSize == 0)
+  }
+
+  test("Release ANTLR cache based on threshold") {
+    val smallQuery = "select id from range(10)"
+    val bigQuery = s"select ${awfulQuery(8)} from range(10)"
+
+    // Chose this value based on the observed size of the parser cache being ~27k states after
+    // parsing `bigQuery` on my machine.
+    // It would be great if this number came down due to parser improvements. This is just a
+    // threshold to make sure we are testing a case with high cache usage and could be changed with
+    // future improvements.
+    val threshold: Int = 10000
+
+    // Fill the cache a little
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> threshold.toString) {
+      parser.parsePlan(smallQuery)
+    }
+    val smallQueryCacheSize = AbstractParser.getDFACacheNumStates
+    assert(smallQueryCacheSize > 0)
+    assert(smallQueryCacheSize < threshold)
+
+    // Parse a big query to fill the cache
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> (-1).toString) {
+      parser.parsePlan(bigQuery)
+    }
+    val bigQueryCacheSize = AbstractParser.getDFACacheNumStates
+    assert(bigQueryCacheSize > threshold)
+
+    // Parse a small query to release the cache
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> threshold.toString) {
+      parser.parsePlan(smallQuery)
+    }
+    val clearedCacheSize = AbstractParser.getDFACacheNumStates
+    assert(clearedCacheSize == 0)
   }
 }
