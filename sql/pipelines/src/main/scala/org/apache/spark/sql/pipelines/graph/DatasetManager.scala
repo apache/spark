@@ -22,6 +22,7 @@ import scala.util.control.{NonFatal, NoStackTrace}
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connector.catalog.{
   CatalogV2Util,
@@ -151,8 +152,23 @@ object DatasetManager extends Logging {
       virtualizedConnectedGraphWithTables.inferredSchema(table.identifier).asNullable
     )
     val mergedProperties = resolveTableProperties(table, identifier)
+    val partitioning = table.partitionCols.toSeq.flatten.map(Expressions.identity)
 
     val exists = catalog.tableExists(identifier)
+
+    // Error if partitioning doesn't match
+    if (exists) {
+      val existingPartitioning = catalog.loadTable(identifier).partitioning().toSeq
+      if (existingPartitioning != partitioning) {
+        throw new AnalysisException(
+          errorClass = "CANNOT_UPDATE_PARTITION_COLUMNS",
+          messageParameters = Map(
+            "existingPartitionColumns" -> existingPartitioning.mkString(", "),
+            "requestedPartitionColumns" -> partitioning.mkString(", ")
+          )
+        )
+      }
+    }
 
     // Wipe the data if we need to
     if ((isFullRefresh || !table.isStreamingTableOpt.get) && exists) {
@@ -181,7 +197,7 @@ object DatasetManager extends Logging {
         new TableInfo.Builder()
           .withProperties(mergedProperties.asJava)
           .withColumns(CatalogV2Util.structTypeToV2Columns(outputSchema))
-          .withPartitions(table.partitionCols.toSeq.flatten.map(Expressions.identity).toArray)
+          .withPartitions(partitioning.toArray)
           .build()
       )
     }
