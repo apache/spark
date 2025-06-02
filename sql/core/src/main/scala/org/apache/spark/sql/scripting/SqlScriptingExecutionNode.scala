@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.ExceptionHandlerType.Exceptio
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.errors.SqlScriptingErrors
-import org.apache.spark.sql.types.{BooleanType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType}
 
 /**
  * Trait for all SQL scripting execution nodes used during interpretation phase.
@@ -997,13 +997,13 @@ class ForStatementExec(
   private var state = ForState.VariableAssignment
 
   private var queryResult: util.Iterator[Row] = _
-  private var queryResultSchema: StructType = _
+  private var queryColumnNameToDataType: collection.immutable.Map[String, DataType] = _
   private var isResultCacheValid = false
   private def cachedQueryResult(): util.Iterator[Row] = {
     if (!isResultCacheValid) {
       val df = query.buildDataFrame(session)
       queryResult = df.toLocalIterator()
-      queryResultSchema = df.schema
+      queryColumnNameToDataType = df.schema.fields.map(f => f.name -> f.dataType).toMap
 
       query.isExecuted = true
       isResultCacheValid = true
@@ -1172,7 +1172,7 @@ class ForStatementExec(
 
   private def createDeclareVarExec(varName: String): SingleStatementExec = {
     val defaultExpression = DefaultValueExpression(
-      Literal(null, queryResultSchema.nameToDataType(varName)), "null")
+      Literal(null, queryColumnNameToDataType(varName)), "null")
     val declareVariable = CreateVariable(
       UnresolvedIdentifier(Seq(varName)),
       defaultExpression,
