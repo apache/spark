@@ -580,7 +580,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IV](
       eventTimeColumnName: String = ""): Dataset[U] = {
     val outputEncoder = agnosticEncoderFor[U]
     val stateEncoder = agnosticEncoderFor[S]
-    val inputEncoders: Seq[AgnosticEncoder[_]] = Seq(kEncoder, stateEncoder, ivEncoder)
+    val inputEncoders: Seq[AgnosticEncoder[_]] = Seq(grouping.encoder, stateEncoder, ivEncoder)
 
     // SparkUserDefinedFunction is creating a udfPacket where the input function are
     // being java serialized into bytes; we pass in `statefulProcessor` as function so it can be
@@ -590,7 +590,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IV](
     val funcProto = UdfToProtoUtils.toProto(sparkUserDefinedFunc)
 
     val initialStateImpl = if (initialState.isDefined) {
-      initialState.get.asInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]]
+      initialState.get.asInstanceOf[KeyValueGroupedDatasetImpl[K, S, _]]
     } else {
       null
     }
@@ -603,7 +603,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IV](
       }
       twsBuilder
         .setInput(plan.getRoot)
-        .addAllGroupingExpressions(groupingExprs)
+        .addAllGroupingExpressions(grouping.exprs)
         .setFunc(funcProto)
         .setOutputMode(outputMode.toString)
         .setTransformWithStateInfo(
@@ -613,7 +613,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IV](
             .build())
       if (initialStateImpl != null) {
         twsBuilder
-          .addAllInitialGroupingExpressions(initialStateImpl.groupingExprs)
+          .addAllInitialGroupingExpressions(initialStateImpl.grouping.exprs)
           .setInitialInput(initialStateImpl.plan.getRoot)
       }
     }
