@@ -920,14 +920,10 @@ private[spark] class JsonProtocol(sparkConf: SparkConf) extends JsonUtils {
       case `blockUpdate` => blockUpdateFromJson(json)
       case `resourceProfileAdded` => resourceProfileAddedFromJson(json)
       case other =>
-        if (other.startsWith("org.apache.spark")) {
-          val otherClass = Utils.classForName(other)
-          if (classOf[SparkListenerEvent].isAssignableFrom(otherClass)) {
-            mapper.readValue(json.toString, otherClass)
-              .asInstanceOf[SparkListenerEvent]
-          } else {
-            throw new SparkException(s"Unknown event type: $other")
-          }
+        val otherClass = Utils.classForName(other)
+        if (classOf[SparkListenerEvent].isAssignableFrom(otherClass)) {
+          mapper.readValue(json.toString, otherClass)
+            .asInstanceOf[SparkListenerEvent]
         } else {
           throw new SparkException(s"Unknown event type: $other")
         }

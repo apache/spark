@@ -1023,7 +1023,7 @@ class jsonProtocolSuite extends SparkFunSuite {
     ))
   }
 
-  test("SPARK-52381: only read Spark classes") {
+  test("SPARK-52381: handle class not found") {
     val unknownJson =
       """{
         |  "Event" : "com.example.UnknownEvent",
@@ -1031,10 +1031,9 @@ class jsonProtocolSuite extends SparkFunSuite {
         |}""".stripMargin
     try {
       jsonProtocol.sparkEventFromJson(unknownJson)
-      fail("Expected SparkException for unknown event type")
+      fail("Expected ClassNotFoundException for unknown event type")
     } catch {
-      case e: SparkException =>
-        assert(e.getMessage.startsWith("Unknown event type"))
+      case e: ClassNotFoundException =>
     }
   }
 
