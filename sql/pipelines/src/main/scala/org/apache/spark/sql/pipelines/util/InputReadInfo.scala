@@ -27,8 +27,6 @@ sealed trait InputReadOptions
 
 /**
  * Options for a batch read of an input.
- *
- * @param apiLanguage The language of the public API that called this function.
  */
 final case class BatchReadOptions() extends InputReadOptions
 
