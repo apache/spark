@@ -32,6 +32,7 @@ from typing import (
 import numpy as np
 import pandas as pd
 
+from pyspark.pandas.utils import is_ansi_mode_enabled
 from pyspark.sql.types import StringType, BinaryType, ArrayType, LongType, MapType
 from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf
@@ -2031,8 +2032,8 @@ class StringMethods:
         if expand:
             psdf = psser.to_frame()
             scol = psdf._internal.data_spark_columns[0]
-
-            if ps.get_option("compute.ansi_mode_support"):
+            spark_session = self._data._internal.spark_frame.sparkSession
+            if is_ansi_mode_enabled(spark_session):
                 spark_columns = [
                     F.try_element_at(scol, F.lit(i + 1)).alias(str(i)) for i in range(n + 1)
                 ]
@@ -2184,7 +2185,8 @@ class StringMethods:
         if expand:
             psdf = psser.to_frame()
             scol = psdf._internal.data_spark_columns[0]
-            if ps.get_option("compute.ansi_mode_support"):
+            spark_session = self._data._internal.spark_frame.sparkSession
+            if is_ansi_mode_enabled(spark_session):
                 spark_columns = [
                     F.try_element_at(scol, F.lit(i + 1)).alias(str(i)) for i in range(n + 1)
                 ]
