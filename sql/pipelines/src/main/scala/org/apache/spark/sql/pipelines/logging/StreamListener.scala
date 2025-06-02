@@ -24,9 +24,7 @@ import org.apache.spark.sql.pipelines.graph.{DataflowGraph, GraphIdentifierManag
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryListener}
 
 /**
- * A streaming listener that computes a summary of the current status of all streams in the system.
- * This result is continually updated as new data arrives. Updates are also posted in textual form
- * to the console.
+ * A streaming listener that converts streaming events into pipeline events for the relevant flows.
  */
 class StreamListener(
     env: PipelineUpdateContext,

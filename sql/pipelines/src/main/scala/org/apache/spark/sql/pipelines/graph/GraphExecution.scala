@@ -25,7 +25,7 @@ import scala.util.{Failure, Success}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.pipelines.logging.{BatchListener, StreamListener}
+import org.apache.spark.sql.pipelines.logging.StreamListener
 import org.apache.spark.sql.streaming.Trigger
 
 abstract class GraphExecution(
@@ -46,13 +46,6 @@ abstract class GraphExecution(
 
   /**
    * [[FlowExecution]]s currently being executed and tracked by this FlowExecution.
-   *
-   * `BatchListener` needs to use this map to find the `PhysicalFlow` given a flow name in order to
-   * update the observed metrics for the corresponding `PhysicalFlow`. However, as a listener must
-   * not keep a strong reference to any `SparkSession` instance to avoid memory leaks, we use a
-   * `WeakReference` to hold the map in `BatchListener`. This requires that the map must be alive
-   * when an update is not finished yet. The requirement is satisfied because `FlowExecution` has
-   * a strong reference to the map.
    */
   val physicalFlows = new collection.concurrent.TrieMap[TableIdentifier, FlowExecution]
 
@@ -68,8 +61,6 @@ abstract class GraphExecution(
     triggerFor = streamTrigger
   )
 
-  // Listeners to process events and metrics.
-  private val batchListener = new BatchListener()
   private val streamListener = new StreamListener(env, graphForExecution)
 
   /**
@@ -142,7 +133,6 @@ abstract class GraphExecution(
    */
   def start(): Unit = {
     env.spark.listenerManager.clear()
-    env.spark.listenerManager.register(batchListener)
     env.spark.streams.addListener(streamListener)
   }
 
@@ -152,16 +142,6 @@ abstract class GraphExecution(
    * This method may be called multiple times due to race conditions and must be idempotent.
    */
   def stop(): Unit = {
-    // Note: unregistering `batchListener` from `env.spark` is not sufficient to clean up. Each
-    // cloned `SparkSession` from `env.spark` will also register `batchListener` to its
-    // `listenerManager` which is kept in a global queue. It's hard to track all cloned
-    // `SparkSession`s, so we use a weak reference in `batchListener` to avoid keeping a strong
-    // reference to any `SparkSession`. Then, a `SparkSession` can be GCed when it's not used
-    // anywhere, and Spark will automatically clean up its `listenerManager` which holds a reference
-    // to `batchListener`.
-    env.spark.listenerManager.unregister(batchListener)
-    // Unlike `batchListener`, removing `streamListener` from `env.spark` is sufficient as cloned
-    // `SparkSession`s don't copy registered `streamListener`s from the parent `SparkSession`.
     env.spark.streams.removeListener(streamListener)
   }
 
