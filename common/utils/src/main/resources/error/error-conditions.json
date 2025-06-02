@@ -2188,6 +2188,12 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_ATTRIBUTE_NOT_FOUND" : {
+    "message" : [
+      "Could not find <missingAttr> in <inputAttrs>."
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERNAL_ERROR_BROADCAST" : {
     "message" : [
       "<message>"
