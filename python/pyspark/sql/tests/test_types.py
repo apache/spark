@@ -485,10 +485,7 @@ class TypesTestsMixin:
         df = self.spark.createDataFrame(data)
         actual = df.first()["f1"]
 
-        self.assertEqual(
-            type(df.schema["f1"].dataType),
-            VariantType
-        )
+        self.assertEqual(type(df.schema["f1"].dataType), VariantType)
         # As of writing VariantVal can also include bytearray
         self.assertEqual(
             bytes(actual.value),
