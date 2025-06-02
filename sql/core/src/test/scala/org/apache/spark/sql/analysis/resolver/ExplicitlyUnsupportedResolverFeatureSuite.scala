@@ -26,8 +26,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSparkSession {
-  import testImplicits._
-
   test("Unsupported table types") {
     withTable("csv_table") {
       spark.sql("CREATE TABLE csv_table (col1 INT) USING CSV;").collect()
@@ -47,32 +45,19 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSpa
     }
   }
 
-  test("Unsupported char type padding") {
-    withTable("char_type_padding") {
-      spark.sql(s"CREATE TABLE t1 (c1 CHAR(3), c2 STRING) USING PARQUET")
-      checkResolution("SELECT c1 = '12', c1 = '12 ', c1 = '12  ' FROM t1 WHERE c2 = '12'")
-    }
-  }
-
   test("Unsupported star expansion") {
     checkResolution("SELECT * FROM VALUES (1, 2) WHERE 3 IN (*)")
   }
 
-  test("LateralColumnAlias in Aggregate") {
-    checkResolution("SELECT 1 AS a, sum(col1) as sum1, a + sum(col2) FROM VALUES(1, 2)")
+  test("Lateral column alias in Aggregate below a Sort") {
+    checkResolution(
+      "SELECT dept AS d, d, 10 AS d FROM VALUES(1) AS t(dept) GROUP BY dept ORDER BY dept"
+    )
   }
 
   test("Unsupported lambda") {
     checkResolution(
       "SELECT array_sort(array(2, 1), (p1, p2) -> CASE WHEN p1 > p2 THEN 1 ELSE 0 END)"
-    )
-  }
-
-  test("Missing attribute propagation") {
-    val df = Seq(("test1", 0), ("test2", 1)).toDF("name", "id")
-    checkResolution(
-      df.select(df("name")).filter(df("id") === 0).queryExecution.logical,
-      shouldPass = false
     )
   }
 
@@ -92,7 +77,8 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSpa
 
     val resolver = new Resolver(
       spark.sessionState.catalogManager,
-      extensions = spark.sessionState.analyzer.singlePassResolverExtensions
+      extensions = spark.sessionState.analyzer.singlePassResolverExtensions,
+      metadataResolverExtensions = spark.sessionState.analyzer.singlePassMetadataResolverExtensions
     )
     wrapper {
       resolver.lookupMetadataAndResolve(plan)

@@ -195,7 +195,7 @@ private[spark] object HiveUtils extends Logging {
     .createWithDefault(jdbcPrefixes)
 
   private def jdbcPrefixes = Seq(
-    "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc")
+    "com.mysql.jdbc", "com.mysql.cj", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc")
 
   val HIVE_METASTORE_BARRIER_PREFIXES = buildStaticConf("spark.sql.hive.metastore.barrierPrefixes")
     .doc("A comma separated list of class prefixes that should explicitly be reloaded for each " +
@@ -520,5 +520,20 @@ private[spark] object HiveUtils extends Logging {
     name.split(Path.SEPARATOR).map {
       case PATTERN_FOR_KEY_EQ_VAL(_, v) => FileUtils.unescapePathName(v)
     }
+  }
+
+  /**
+   * Determine if a Hive call exception is caused by thrift error.
+   */
+  def causedByThrift(e: Throwable): Boolean = {
+    var target = e
+    while (target != null) {
+      val msg = target.getMessage()
+      if (msg != null && msg.matches("(?s).*(TApplication|TProtocol|TTransport)Exception.*")) {
+        return true
+      }
+      target = target.getCause()
+    }
+    false
   }
 }

@@ -49,7 +49,13 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getMessage.contains("ORA-00942") ||
+      e.getMessage.contains("ORA-39165")
+  }
+
   class OracleSQLBuilder extends JDBCSQLBuilder {
+
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
@@ -64,10 +70,10 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
 
     override def visitBinaryComparison(name: String, le: Expression, re: Expression): String = {
       (le, re) match {
-        case (lhs: Literal[_], rhs: Expression) if lhs.dataType == BinaryType =>
-          compareBlob(lhs, name, rhs)
-        case (lhs: Expression, rhs: Literal[_]) if rhs.dataType == BinaryType =>
-          compareBlob(lhs, name, rhs)
+        case (lit: Literal[_], _) if lit.dataType == BinaryType =>
+          compareBlob(lit, name, re)
+        case (_, lit: Literal[_]) if lit.dataType == BinaryType =>
+          compareBlob(le, name, lit)
         case _ =>
           super.visitBinaryComparison(name, le, re);
       }
@@ -166,6 +172,11 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  // See https://docs.oracle.com/cd/E11882_01/appdev.112/e10827/appd.htm#g642406
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    "42000".equals(exception.getSQLState)
+  }
 
   /**
    * The SQL query used to truncate a table.

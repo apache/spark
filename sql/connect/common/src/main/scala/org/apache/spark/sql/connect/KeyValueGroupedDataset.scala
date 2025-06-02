@@ -140,32 +140,52 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
   }
 
   /** @inheritdoc */
-  private[sql] def transformWithState[U: Encoder](
+  def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
       outputMode: OutputMode): Dataset[U] =
-    unsupported()
+    transformWithStateHelper(statefulProcessor, timeMode, outputMode)
 
   /** @inheritdoc */
-  private[sql] def transformWithState[U: Encoder, S: Encoder](
+  def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeMode: TimeMode,
       outputMode: OutputMode,
       initialState: sql.KeyValueGroupedDataset[K, S]): Dataset[U] =
-    unsupported()
+    transformWithStateHelper(statefulProcessor, timeMode, outputMode, Some(initialState))
 
   /** @inheritdoc */
-  override private[sql] def transformWithState[U: Encoder](
+  override def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       eventTimeColumnName: String,
-      outputMode: OutputMode): Dataset[U] = unsupported()
+      outputMode: OutputMode): Dataset[U] =
+    transformWithStateHelper(
+      statefulProcessor,
+      TimeMode.EventTime(),
+      outputMode,
+      eventTimeColumnName = eventTimeColumnName)
 
   /** @inheritdoc */
-  override private[sql] def transformWithState[U: Encoder, S: Encoder](
+  override def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       eventTimeColumnName: String,
       outputMode: OutputMode,
-      initialState: sql.KeyValueGroupedDataset[K, S]): Dataset[U] = unsupported()
+      initialState: sql.KeyValueGroupedDataset[K, S]): Dataset[U] =
+    transformWithStateHelper(
+      statefulProcessor,
+      TimeMode.EventTime(),
+      outputMode,
+      Some(initialState),
+      eventTimeColumnName)
+
+  // This is an interface, and it should not be used. The real implementation is in the
+  // inherited class.
+  protected[sql] def transformWithStateHelper[U: Encoder, S: Encoder](
+      statefulProcessor: StatefulProcessor[K, V, U],
+      timeMode: TimeMode,
+      outputMode: OutputMode,
+      initialState: Option[sql.KeyValueGroupedDataset[K, S]] = None,
+      eventTimeColumnName: String = ""): Dataset[U] = unsupported()
 
   // Overrides...
   /** @inheritdoc */
@@ -244,29 +264,29 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
     initialState)
 
   /** @inheritdoc */
-  override private[sql] def transformWithState[U: Encoder](
+  override def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
       outputMode: OutputMode,
-      outputEncoder: Encoder[U]) =
+      outputEncoder: Encoder[U]): Dataset[U] =
     super.transformWithState(statefulProcessor, timeMode, outputMode, outputEncoder)
 
   /** @inheritdoc */
-  override private[sql] def transformWithState[U: Encoder](
+  override def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       eventTimeColumnName: String,
       outputMode: OutputMode,
-      outputEncoder: Encoder[U]) =
+      outputEncoder: Encoder[U]): Dataset[U] =
     super.transformWithState(statefulProcessor, eventTimeColumnName, outputMode, outputEncoder)
 
   /** @inheritdoc */
-  override private[sql] def transformWithState[U: Encoder, S: Encoder](
+  override def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeMode: TimeMode,
       outputMode: OutputMode,
       initialState: sql.KeyValueGroupedDataset[K, S],
       outputEncoder: Encoder[U],
-      initialStateEncoder: Encoder[S]) = super.transformWithState(
+      initialStateEncoder: Encoder[S]): Dataset[U] = super.transformWithState(
     statefulProcessor,
     timeMode,
     outputMode,
@@ -275,13 +295,13 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
     initialStateEncoder)
 
   /** @inheritdoc */
-  override private[sql] def transformWithState[U: Encoder, S: Encoder](
+  override def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       outputMode: OutputMode,
       initialState: sql.KeyValueGroupedDataset[K, S],
       eventTimeColumnName: String,
       outputEncoder: Encoder[U],
-      initialStateEncoder: Encoder[S]) = super.transformWithState(
+      initialStateEncoder: Encoder[S]): Dataset[U] = super.transformWithState(
     statefulProcessor,
     outputMode,
     initialState,
@@ -523,7 +543,6 @@ private class KeyValueGroupedDatasetImpl[K, V, IV](
     }
 
     val initialStateImpl = if (initialState.isDefined) {
-      assert(initialState.get.isInstanceOf[KeyValueGroupedDatasetImpl[K, S, _]])
       initialState.get.asInstanceOf[KeyValueGroupedDatasetImpl[K, S, _]]
     } else {
       null
@@ -548,6 +567,53 @@ private class KeyValueGroupedDatasetImpl[K, V, IV](
       if (initialStateImpl != null) {
         groupMapBuilder
           .addAllInitialGroupingExpressions(initialStateImpl.grouping.exprs)
+          .setInitialInput(initialStateImpl.plan.getRoot)
+      }
+    }
+  }
+
+  override protected[sql] def transformWithStateHelper[U: Encoder, S: Encoder](
+      statefulProcessor: StatefulProcessor[K, V, U],
+      timeMode: TimeMode,
+      outputMode: OutputMode,
+      initialState: Option[sql.KeyValueGroupedDataset[K, S]] = None,
+      eventTimeColumnName: String = ""): Dataset[U] = {
+    val outputEncoder = agnosticEncoderFor[U]
+    val stateEncoder = agnosticEncoderFor[S]
+    val inputEncoders: Seq[AgnosticEncoder[_]] = Seq(kEncoder, stateEncoder, ivEncoder)
+
+    // SparkUserDefinedFunction is creating a udfPacket where the input function are
+    // being java serialized into bytes; we pass in `statefulProcessor` as function so it can be
+    // serialized into bytes and deserialized back on connect server
+    val sparkUserDefinedFunc =
+      SparkUserDefinedFunction(statefulProcessor, inputEncoders, outputEncoder)
+    val funcProto = UdfToProtoUtils.toProto(sparkUserDefinedFunc)
+
+    val initialStateImpl = if (initialState.isDefined) {
+      initialState.get.asInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]]
+    } else {
+      null
+    }
+
+    sparkSession.newDataset[U](outputEncoder) { builder =>
+      val twsBuilder = builder.getGroupMapBuilder
+      val twsInfoBuilder = proto.TransformWithStateInfo.newBuilder()
+      if (!eventTimeColumnName.isEmpty) {
+        twsInfoBuilder.setEventTimeColumnName(eventTimeColumnName)
+      }
+      twsBuilder
+        .setInput(plan.getRoot)
+        .addAllGroupingExpressions(groupingExprs)
+        .setFunc(funcProto)
+        .setOutputMode(outputMode.toString)
+        .setTransformWithStateInfo(
+          twsInfoBuilder
+            // we pass time mode as string here and deterministically restored on server
+            .setTimeMode(timeMode.toString)
+            .build())
+      if (initialStateImpl != null) {
+        twsBuilder
+          .addAllInitialGroupingExpressions(initialStateImpl.groupingExprs)
           .setInitialInput(initialStateImpl.plan.getRoot)
       }
     }

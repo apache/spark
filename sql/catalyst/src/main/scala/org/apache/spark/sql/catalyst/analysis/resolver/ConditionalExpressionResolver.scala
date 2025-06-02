@@ -17,34 +17,32 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.{ConditionalExpression, Expression}
 
 /**
  * Resolver for [[If]], [[CaseWhen]] and [[Coalesce]] expressions.
  */
-class ConditionalExpressionResolver(
-    expressionResolver: ExpressionResolver,
-    timezoneAwareExpressionResolver: TimezoneAwareExpressionResolver)
-  extends TreeNodeResolver[ConditionalExpression, Expression]
-  with ResolvesExpressionChildren
-  with SQLConfHelper {
+class ConditionalExpressionResolver(expressionResolver: ExpressionResolver)
+    extends TreeNodeResolver[ConditionalExpression, Expression]
+    with ResolvesExpressionChildren
+    with CoercesExpressionTypes {
 
-  private val typeCoercionTransformations: Seq[Expression => Expression] =
-    if (conf.ansiEnabled) {
-      ConditionalExpressionResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
-    } else {
-      ConditionalExpressionResolver.TYPE_COERCION_TRANSFORMATIONS
-    }
-  private val typeCoercionResolver: TypeCoercionResolver =
-    new TypeCoercionResolver(timezoneAwareExpressionResolver, typeCoercionTransformations)
+  private val traversals = expressionResolver.getExpressionTreeTraversals
+
+  protected override val ansiTransformations: CoercesExpressionTypes.Transformations =
+    ConditionalExpressionResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
+  protected override val nonAnsiTransformations: CoercesExpressionTypes.Transformations =
+    ConditionalExpressionResolver.TYPE_COERCION_TRANSFORMATIONS
 
   override def resolve(unresolvedConditionalExpression: ConditionalExpression): Expression = {
     val conditionalExpressionWithResolvedChildren =
-      withResolvedChildren(unresolvedConditionalExpression, expressionResolver.resolve)
+      withResolvedChildren(unresolvedConditionalExpression, expressionResolver.resolve _)
 
-    typeCoercionResolver.resolve(conditionalExpressionWithResolvedChildren)
+    coerceExpressionTypes(
+      expression = conditionalExpressionWithResolvedChildren,
+      expressionTreeTraversal = traversals.current
+    )
   }
 }
 

@@ -22,13 +22,20 @@ import java.io.{File, FileWriter}
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.execution.FilterExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.DataSourceManager
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.python.PythonScan
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
-abstract class PythonDataSourceSuiteBase extends QueryTest with SharedSparkSession {
+abstract class PythonDataSourceSuiteBase
+    extends QueryTest
+    with SharedSparkSession
+    with AdaptiveSparkPlanHelper {
 
   protected val simpleDataSourceReaderScript: String =
     """
@@ -211,6 +218,77 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
       exception = intercept[AnalysisException](spark.read.format(dataSourceName).load()),
       condition = "INVALID_SCHEMA.NON_STRUCT_TYPE",
       parameters = Map("inputSchema" -> "INT", "dataType" -> "\"INT\""))
+  }
+
+  test("data source reader with filter pushdown") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import (
+         |    DataSource,
+         |    DataSourceReader,
+         |    EqualTo,
+         |    InputPartition,
+         |)
+         |
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def partitions(self):
+         |        return [InputPartition(i) for i in range(2)]
+         |
+         |    def pushFilters(self, filters):
+         |        for filter in filters:
+         |            if filter != EqualTo(("partition",), 0):
+         |                yield filter
+         |
+         |    def read(self, partition):
+         |        yield (0, partition.value)
+         |        yield (1, partition.value)
+         |        yield (2, partition.value)
+         |
+         |class SimpleDataSource(DataSource):
+         |    def schema(self):
+         |        return "id int, partition int"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val schema = StructType.fromDDL("id INT, partition INT")
+    val dataSource =
+      createUserDefinedPythonDataSource(name = dataSourceName, pythonScript = dataSourceScript)
+    withSQLConf(SQLConf.PYTHON_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      spark.dataSource.registerPython(dataSourceName, dataSource)
+      val df =
+        spark.read.format(dataSourceName).schema(schema).load().filter("id = 1 and partition = 0")
+      val plan = df.queryExecution.executedPlan
+
+      /**
+       * == Physical Plan ==
+       * *(1) Project [id#261, partition#262]
+       * +- *(1) Filter ((isnotnull(id#261) AND isnotnull(partition#262)) AND (id#261 = 1))
+       *    +- BatchScan SimpleDataSource[id#261, partition#262] (Python)
+       *       PushedFilters: [EqualTo(partition,0)],
+       *       ReadSchema: struct<id:int,partition:int> RuntimeFilters: []
+       */
+      val filter = collectFirst(df.queryExecution.executedPlan) {
+        case s: FilterExec =>
+          val condition = s.condition.toString
+          assert(!condition.contains("= 0")) // pushed filter is not in FilterExec
+          assert(condition.contains("= 1")) // unsupported filter is in FilterExec
+          s
+      }.getOrElse(
+        fail(s"Filter not found in the plan. Actual plan:\n$plan")
+      )
+
+      collectFirst(filter) {
+        case s: BatchScanExec if s.scan.isInstanceOf[PythonScan] =>
+          val p = s.scan.asInstanceOf[PythonScan]
+          assert(p.getMetaData().get("PushedFilters").contains("[EqualTo(partition,0)]"))
+      }.getOrElse(
+        fail(s"PythonScan not found in the plan. Actual plan:\n$plan")
+      )
+
+      checkAnswer(df, Seq(Row(1, 0), Row(1, 1)))
+    }
   }
 
   test("register data source") {

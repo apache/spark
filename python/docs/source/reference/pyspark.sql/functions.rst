@@ -132,6 +132,7 @@ Mathematical Functions
     radians
     rand
     randn
+    random
     rint
     round
     sec
@@ -164,6 +165,7 @@ String Functions
     char
     char_length
     character_length
+    chr
     collate
     collation
     concat_ws
@@ -192,6 +194,7 @@ String Functions
     overlay
     position
     printf
+    quote
     randstr
     regexp_count
     regexp_extract
@@ -631,6 +634,7 @@ Misc Functions
     try_reflect
     typeof
     user
+    uuid
     version
 
 

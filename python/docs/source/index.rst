@@ -37,6 +37,18 @@ PySpark supports all of Spark's features such as Spark SQL,
 DataFrames, Structured Streaming, Machine Learning (MLlib) and Spark Core.
 
 .. list-table::
+   :widths: 10 80 10
+   :header-rows: 0
+   :class: borderless spec_table
+
+   * -
+     - .. image:: ../../../docs/img/pyspark-python_spark_connect_client.png
+          :target: getting_started/quickstart_connect.html
+          :width: 100%
+          :alt: Python Spark Connect Client
+     -
+
+.. list-table::
    :widths: 10 20 20 20 20 10
    :header-rows: 0
    :class: borderless spec_table
@@ -71,6 +83,19 @@ DataFrames, Structured Streaming, Machine Learning (MLlib) and Spark Core.
           :width: 100%
           :alt: Spark Core and RDDs
      -
+
+.. _Index Page - Python Spark Connect Client:
+
+**Python Spark Connect Client**
+
+Spark Connect is a client-server architecture within Apache Spark that
+enables remote connectivity to Spark clusters from any application.
+PySpark provides the client for the Spark Connect server, allowing
+Spark to be used as a service.
+
+- :ref:`/getting_started/quickstart_connect.ipynb`
+- |binder_connect|_
+- `Spark Connect Overview <https://spark.apache.org/docs/latest/spark-connect-overview.html>`_
 
 .. _Index Page - Spark SQL and DataFrames:
 
@@ -160,6 +185,7 @@ should use for your streaming applications and pipelines.
 
     Overview <self>
     getting_started/index
+    tutorial/index
     user_guide/index
     reference/index
     development/index

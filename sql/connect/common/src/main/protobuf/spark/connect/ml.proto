@@ -36,6 +36,8 @@ message MlCommand {
     Write write = 4;
     Read read = 5;
     Evaluate evaluate = 6;
+    CleanCache clean_cache = 7;
+    GetCacheInfo get_cache_info = 8;
   }
 
   // Command for estimator.fit(dataset)
@@ -48,11 +50,17 @@ message MlCommand {
     Relation dataset = 3;
   }
 
-  // Command to delete the cached object which could be a model
+  // Command to delete the cached objects which could be a model
   // or summary evaluated by a model
   message Delete {
-    ObjectRef obj_ref = 1;
+    repeated ObjectRef obj_refs = 1;
   }
+
+  // Force to clean up all the ML cached objects
+  message CleanCache { }
+
+  // Get the information of all the ML cached objects
+  message GetCacheInfo { }
 
   // Command to write ML operator
   message Write {
@@ -116,5 +124,7 @@ message MlCommandResult {
     optional string uid = 3;
     // (Optional) parameters
     optional MlParams params = 4;
+    // (Optional) warning message generated during the ML command execution
+    optional string warning_message = 5;
   }
 }

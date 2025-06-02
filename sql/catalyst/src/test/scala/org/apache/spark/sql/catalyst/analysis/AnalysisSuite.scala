@@ -799,7 +799,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisErrorCondition(parsePlan("SELECT 'length' (a)"),
       "MULTI_ALIAS_WITHOUT_GENERATOR",
       Map("expr" -> "\"length\"", "names" -> "a"),
-      Array(ExpectedContext("SELECT 'length' (a)", 0, 18))
+      Array(ExpectedContext("'length' (a)", 7, 18))
     )
   }
 
@@ -818,6 +818,25 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       checkAnalysis(input, expected)
     }
   }
+
+  test("CURRENT_TIME should be case insensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val input = Project(Seq(
+        // The user references "current_time" or "CURRENT_TIME" in the query
+        UnresolvedAttribute("current_time"),
+        UnresolvedAttribute("CURRENT_TIME")
+      ), testRelation)
+
+      // The analyzer should resolve both to the same expression: CurrentTime()
+      val expected = Project(Seq(
+        Alias(CurrentTime(), toPrettySQL(CurrentTime()))(),
+        Alias(CurrentTime(), toPrettySQL(CurrentTime()))()
+      ), testRelation).analyze
+
+      checkAnalysis(input, expected)
+    }
+  }
+
 
   test("CTE with non-existing column alias") {
     assertAnalysisErrorCondition(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
@@ -1187,7 +1206,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
               Seq(Literal(3)),
               Project(testRelation.output, testRelation)
             )
-          )
+          ),
+          None
         )
       )
     )

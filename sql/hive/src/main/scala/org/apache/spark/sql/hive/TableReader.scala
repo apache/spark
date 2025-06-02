@@ -89,7 +89,7 @@ class HadoopTableReader(
     sparkSession.sparkContext.conf, hadoopConf)
 
   private val _broadcastedHadoopConf =
-    sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+    SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
 
   override def conf: SQLConf = sparkSession.sessionState.conf
 

@@ -17,7 +17,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, LocalTime, Period}
 import java.util.concurrent.TimeUnit
 
 import scala.language.implicitConversions
@@ -705,7 +705,7 @@ class ExpressionParserSuite extends AnalysisTest {
       parameters = Map(
         "unsupportedType" -> "\"GEO\"",
         "supportedTypes" ->
-        """"DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X""""),
+        """"DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X", "TIME""""),
       context = ExpectedContext(
         fragment = "GEO '(10,-6)'",
         start = 0,
@@ -1194,16 +1194,18 @@ class ExpressionParserSuite extends AnalysisTest {
     }
   }
 
-  test("current date/timestamp braceless expressions") {
+  test("current date/timestamp/time braceless expressions") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
       SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
       assertEqual("current_date", CurrentDate())
       assertEqual("current_timestamp", CurrentTimestamp())
+      assertEqual("current_time", CurrentTime())
     }
 
     def testNonAnsiBehavior(): Unit = {
       assertEqual("current_date", UnresolvedAttribute.quoted("current_date"))
       assertEqual("current_timestamp", UnresolvedAttribute.quoted("current_timestamp"))
+      assertEqual("current_time", UnresolvedAttribute.quoted("current_time"))
     }
     withSQLConf(
       SQLConf.ANSI_ENABLED.key -> "false",
@@ -1237,5 +1239,20 @@ class ExpressionParserSuite extends AnalysisTest {
           start = 2,
           stop = 9 + quantifier.length))
     }
+  }
+
+  test("time literals") {
+    assertEqual("tIme '12:13:14'", Literal(LocalTime.parse("12:13:14")))
+    assertEqual("TIME'23:59:59.999999'", Literal(LocalTime.parse("23:59:59.999999")))
+
+    checkError(
+      exception = parseException("time '12-13.14'"),
+      condition = "INVALID_TYPED_LITERAL",
+      sqlState = "42604",
+      parameters = Map("valueType" -> "\"TIME\"", "value" -> "'12-13.14'"),
+      context = ExpectedContext(
+        fragment = "time '12-13.14'",
+        start = 0,
+        stop = 14))
   }
 }

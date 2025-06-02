@@ -26,7 +26,7 @@ import java.util
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException, TaskContext}
@@ -64,18 +64,21 @@ object JdbcUtils extends Logging with SQLConfHelper {
   def tableExists(conn: Connection, options: JdbcOptionsInWrite): Boolean = {
     val dialect = JdbcDialects.get(options.url)
 
-    // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
-    // SQL database systems using JDBC meta data calls, considering "table" could also include
-    // the database name. Query used to find table exists can be overridden by the dialects.
-    Try {
+    val executionResult = Try {
       val statement = conn.prepareStatement(dialect.getTableExistsQuery(options.table))
       try {
         statement.setQueryTimeout(options.queryTimeout)
-        statement.executeQuery()
+        statement.executeQuery()  // Success means table exists (query executed without error)
       } finally {
         statement.close()
       }
-    }.isSuccess
+    }
+
+    executionResult match {
+      case Success(_) => true
+      case Failure(e: SQLException) if dialect.isObjectNotFoundException(e) => false
+      case Failure(e) => throw e  // Re-throw unexpected exceptions
+    }
   }
 
   /**
@@ -203,7 +206,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC if scale < 0 =>
       DecimalType.bounded(precision - scale, 0)
     case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC =>
-      DecimalPrecisionTypeCoercion.bounded(precision, scale)
+      DecimalPrecisionTypeCoercion.bounded(
+        // A safeguard in case the JDBC scale is larger than the precision that is not supported
+        // by Spark.
+        math.max(precision, scale),
+        scale)
     case java.sql.Types.DOUBLE => DoubleType
     case java.sql.Types.FLOAT => FloatType
     case java.sql.Types.INTEGER => if (signed) IntegerType else LongType
@@ -314,6 +321,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       metadata.putBoolean("isSigned", isSigned)
       metadata.putBoolean("isTimestampNTZ", isTimestampNTZ)
       metadata.putLong("scale", fieldScale)
+      metadata.putString("jdbcClientType", typeName)
       dialect.updateExtraColumnMeta(conn, rsmd, i + 1, metadata)
 
       val columnType =

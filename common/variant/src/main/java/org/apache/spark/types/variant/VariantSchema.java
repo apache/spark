@@ -99,6 +99,9 @@ public class VariantSchema {
   public static final class TimestampNTZType extends ScalarType {
   }
 
+  public static final class UuidType extends ScalarType {
+  }
+
   // The index of the typed_value, value, and metadata fields in the schema, respectively. If a
   // given field is not in the schema, its value must be set to -1 to indicate that it is invalid.
   // The indices of valid fields should be contiguous and start from 0.

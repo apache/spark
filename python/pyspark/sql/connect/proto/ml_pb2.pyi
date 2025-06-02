@@ -111,25 +111,45 @@ class MlCommand(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["params"] | None: ...
 
     class Delete(google.protobuf.message.Message):
-        """Command to delete the cached object which could be a model
+        """Command to delete the cached objects which could be a model
         or summary evaluated by a model
         """
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        OBJ_REF_FIELD_NUMBER: builtins.int
+        OBJ_REFS_FIELD_NUMBER: builtins.int
         @property
-        def obj_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef: ...
+        def obj_refs(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            pyspark.sql.connect.proto.ml_common_pb2.ObjectRef
+        ]: ...
         def __init__(
             self,
             *,
-            obj_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
+            obj_refs: collections.abc.Iterable[pyspark.sql.connect.proto.ml_common_pb2.ObjectRef]
+            | None = ...,
         ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["obj_ref", b"obj_ref"]
-        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["obj_ref", b"obj_ref"]
+            self, field_name: typing_extensions.Literal["obj_refs", b"obj_refs"]
+        ) -> None: ...
+
+    class CleanCache(google.protobuf.message.Message):
+        """Force to clean up all the ML cached objects"""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(
+            self,
+        ) -> None: ...
+
+    class GetCacheInfo(google.protobuf.message.Message):
+        """Get the information of all the ML cached objects"""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(
+            self,
         ) -> None: ...
 
     class Write(google.protobuf.message.Message):
@@ -328,6 +348,8 @@ class MlCommand(google.protobuf.message.Message):
     WRITE_FIELD_NUMBER: builtins.int
     READ_FIELD_NUMBER: builtins.int
     EVALUATE_FIELD_NUMBER: builtins.int
+    CLEAN_CACHE_FIELD_NUMBER: builtins.int
+    GET_CACHE_INFO_FIELD_NUMBER: builtins.int
     @property
     def fit(self) -> global___MlCommand.Fit: ...
     @property
@@ -340,6 +362,10 @@ class MlCommand(google.protobuf.message.Message):
     def read(self) -> global___MlCommand.Read: ...
     @property
     def evaluate(self) -> global___MlCommand.Evaluate: ...
+    @property
+    def clean_cache(self) -> global___MlCommand.CleanCache: ...
+    @property
+    def get_cache_info(self) -> global___MlCommand.GetCacheInfo: ...
     def __init__(
         self,
         *,
@@ -349,10 +375,14 @@ class MlCommand(google.protobuf.message.Message):
         write: global___MlCommand.Write | None = ...,
         read: global___MlCommand.Read | None = ...,
         evaluate: global___MlCommand.Evaluate | None = ...,
+        clean_cache: global___MlCommand.CleanCache | None = ...,
+        get_cache_info: global___MlCommand.GetCacheInfo | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "clean_cache",
+            b"clean_cache",
             "command",
             b"command",
             "delete",
@@ -363,6 +393,8 @@ class MlCommand(google.protobuf.message.Message):
             b"fetch",
             "fit",
             b"fit",
+            "get_cache_info",
+            b"get_cache_info",
             "read",
             b"read",
             "write",
@@ -372,6 +404,8 @@ class MlCommand(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "clean_cache",
+            b"clean_cache",
             "command",
             b"command",
             "delete",
@@ -382,6 +416,8 @@ class MlCommand(google.protobuf.message.Message):
             b"fetch",
             "fit",
             b"fit",
+            "get_cache_info",
+            b"get_cache_info",
             "read",
             b"read",
             "write",
@@ -391,7 +427,10 @@ class MlCommand(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command", b"command"]
     ) -> (
-        typing_extensions.Literal["fit", "fetch", "delete", "write", "read", "evaluate"] | None
+        typing_extensions.Literal[
+            "fit", "fetch", "delete", "write", "read", "evaluate", "clean_cache", "get_cache_info"
+        ]
+        | None
     ): ...
 
 global___MlCommand = MlCommand
@@ -410,6 +449,7 @@ class MlCommandResult(google.protobuf.message.Message):
         NAME_FIELD_NUMBER: builtins.int
         UID_FIELD_NUMBER: builtins.int
         PARAMS_FIELD_NUMBER: builtins.int
+        WARNING_MESSAGE_FIELD_NUMBER: builtins.int
         @property
         def obj_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef:
             """The cached object which could be a model or summary evaluated by a model"""
@@ -422,6 +462,8 @@ class MlCommandResult(google.protobuf.message.Message):
         @property
         def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams:
             """(Optional) parameters"""
+        warning_message: builtins.str
+        """(Optional) warning message generated during the ML command execution"""
         def __init__(
             self,
             *,
@@ -429,6 +471,7 @@ class MlCommandResult(google.protobuf.message.Message):
             name: builtins.str = ...,
             uid: builtins.str | None = ...,
             params: pyspark.sql.connect.proto.ml_common_pb2.MlParams | None = ...,
+            warning_message: builtins.str | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -437,6 +480,8 @@ class MlCommandResult(google.protobuf.message.Message):
                 b"_params",
                 "_uid",
                 b"_uid",
+                "_warning_message",
+                b"_warning_message",
                 "name",
                 b"name",
                 "obj_ref",
@@ -447,6 +492,8 @@ class MlCommandResult(google.protobuf.message.Message):
                 b"type",
                 "uid",
                 b"uid",
+                "warning_message",
+                b"warning_message",
             ],
         ) -> builtins.bool: ...
         def ClearField(
@@ -456,6 +503,8 @@ class MlCommandResult(google.protobuf.message.Message):
                 b"_params",
                 "_uid",
                 b"_uid",
+                "_warning_message",
+                b"_warning_message",
                 "name",
                 b"name",
                 "obj_ref",
@@ -466,6 +515,8 @@ class MlCommandResult(google.protobuf.message.Message):
                 b"type",
                 "uid",
                 b"uid",
+                "warning_message",
+                b"warning_message",
             ],
         ) -> None: ...
         @typing.overload
@@ -476,6 +527,10 @@ class MlCommandResult(google.protobuf.message.Message):
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_uid", b"_uid"]
         ) -> typing_extensions.Literal["uid"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_warning_message", b"_warning_message"]
+        ) -> typing_extensions.Literal["warning_message"] | None: ...
         @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["type", b"type"]

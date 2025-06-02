@@ -137,6 +137,7 @@ if should_test_connect:
             self.req = req
             resp = proto.ExecutePlanResponse()
             resp.session_id = self._session_id
+            resp.operation_id = req.operation_id
 
             pdf = pd.DataFrame(data={"col1": [1, 2]})
             schema = pa.Schema.from_pandas(pdf)
@@ -157,6 +158,11 @@ if should_test_connect:
             resp = proto.InterruptResponse()
             resp.session_id = self._session_id
             return resp
+
+    # The _cleanup_ml_cache invocation will hang in this test (no valid spark cluster)
+    # and it blocks the test process exiting because it is registered as the atexit handler
+    # in `SparkConnectClient` constructor. To bypass the issue, patch the method in the test.
+    SparkConnectClient._cleanup_ml_cache = lambda _: None
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -254,6 +260,16 @@ class SparkConnectClientTestCase(unittest.TestCase):
         chan = DefaultChannelBuilder(f"sc://foo/;session_id={dummy}")
         client = SparkConnectClient(chan)
         self.assertEqual(client._session_id, chan.session_id)
+
+    def test_custom_operation_id(self):
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
+        mock = MockService(client._session_id)
+        client._stub = mock
+        req = client._execute_plan_request_with_metadata(
+            operation_id="10a4c38e-7e87-40ee-9d6f-60ff0751e63b"
+        )
+        for resp in client._stub.ExecutePlan(req, metadata=None):
+            assert resp.operation_id == "10a4c38e-7e87-40ee-9d6f-60ff0751e63b"
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -404,6 +420,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
                     pass
 
             self.assertTrue("RESPONSE_ALREADY_RECEIVED" in e.exception.getMessage())
+            self.assertTrue(error_code in e.exception.getMessage())
 
             def checks():
                 self.assertEqual(1, stub.execute_calls)

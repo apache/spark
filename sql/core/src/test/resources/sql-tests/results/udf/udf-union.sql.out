@@ -44,6 +44,7 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BIGINT\""
@@ -51,9 +52,9 @@ org.apache.spark.SparkNumberFormatException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 243,
-    "fragment" : "SELECT udf(c1) as c1, udf(c2) as c2\nFROM   (SELECT udf(c1) as c1, udf(c2) as c2 FROM t1 WHERE c2 = 'a'\n        UNION ALL\n        SELECT udf(c1) as c1, udf(c2) as c2 FROM t2\n        UNION ALL\n        SELECT udf(c1) as c1, udf(c2) as c2 FROM t2)"
+    "startIndex" : 45,
+    "stopIndex" : 172,
+    "fragment" : "SELECT udf(c1) as c1, udf(c2) as c2 FROM t1 WHERE c2 = 'a'\n        UNION ALL\n        SELECT udf(c1) as c1, udf(c2) as c2 FROM t2"
   } ]
 }
 
@@ -124,6 +125,7 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'str'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BIGINT\""
@@ -150,6 +152,7 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'str'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BIGINT\""

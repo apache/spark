@@ -48,7 +48,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   extends TableCatalog with FunctionCatalog with SupportsNamespaces with SQLConfHelper {
   import V2SessionCatalog._
 
-  override val defaultNamespace: Array[String] = Array(SQLConf.get.defaultDatabase)
+  override val defaultNamespace: Array[String] = Array(conf.defaultDatabase)
 
   override def name: String = CatalogManager.SESSION_CATALOG_NAME
 
@@ -83,7 +83,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   private def hasCustomSessionCatalog: Boolean = {
-    catalog.conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) != "builtin"
+    conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) != "builtin"
   }
 
   override def loadTable(ident: Identifier): Table = {
@@ -302,10 +302,15 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
     val finalProperties = CatalogV2Util.applyClusterByChanges(properties, schema, changes)
     try {
-      catalog.alterTable(
-        catalogTable.copy(
-          properties = finalProperties, schema = schema, owner = owner, comment = comment,
-          collation = collation, storage = storage))
+      if (changes.exists(!_.isInstanceOf[TableChange.ColumnChange])) {
+        catalog.alterTable(
+          catalogTable.copy(
+            properties = finalProperties, schema = schema, owner = owner, comment = comment,
+            collation = collation, storage = storage))
+      }
+      if (changes.exists(_.isInstanceOf[TableChange.ColumnChange])) {
+        catalog.alterTableDataSchema(ident.asTableIdentifier, schema)
+      }
     } catch {
       case _: NoSuchTableException =>
         throw QueryCompilationErrors.noSuchTableError(ident)

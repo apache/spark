@@ -1022,7 +1022,7 @@ WithCTE
 :        +- LocalRelation [col1#x, col2#x]
 +- Aggregate [max(c1#x) AS max(c1)#x]
    +- SubqueryAlias T
-      +- CTERelationRef xxxx, true, [c1#x, c2#x], false, false
+      +- CTERelationRef xxxx, true, [c1#x, c2#x], false, false, 2
 
 
 -- !query
@@ -1041,7 +1041,7 @@ WithCTE
 :        +- LocalRelation [col1#x, col2#x]
 +- Aggregate [max(c1#x) AS max(c1)#x]
    +- SubqueryAlias T
-      +- CTERelationRef xxxx, true, [c1#x, c2#x], false, false
+      +- CTERelationRef xxxx, true, [c1#x, c2#x], false, false, 2
 
 
 -- !query
@@ -1055,7 +1055,7 @@ WithCTE
 :        +- LocalRelation [col1#x, col2#x]
 +- Aggregate [max(c1#x) AS max(c1)#x]
    +- SubqueryAlias ABC
-      +- CTERelationRef xxxx, true, [c1#x, c2#x], false, false
+      +- CTERelationRef xxxx, true, [c1#x, c2#x], false, false, 2
 
 
 -- !query

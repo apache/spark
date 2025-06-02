@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.util.QuotingUtils.toSQLConf
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 
 /**
@@ -35,9 +36,14 @@ import org.apache.spark.sql.test.SharedSparkSession
  */
 class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
   // Helpers
-  private def verifySqlScriptResult(sqlText: String, expected: Seq[Row]): Unit = {
+  private def verifySqlScriptResult(
+      sqlText: String,
+      expected: Seq[Row],
+      expectedSchema: Option[StructType] = None): Unit = {
     val df = spark.sql(sqlText)
     checkAnswer(df, expected)
+
+    assert(expectedSchema.forall(_ === df.schema))
   }
 
   private def verifySqlScriptResultWithNamedParams(
@@ -76,17 +82,17 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE flag INT = -1;
         |  DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
         |  BEGIN
         |    SELECT flag;
-        |    SET VAR flag = 1;
+        |    SET flag = 1;
         |  END;
         |  BEGIN
         |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
         |    BEGIN
         |      SELECT flag;
-        |      SET VAR flag = 2;
+        |      SET flag = 2;
         |    END;
         |    SELECT 5;
         |    SELECT 1/0;
@@ -137,6 +143,24 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
         |END
         |""".stripMargin
     verifySqlScriptResult(sqlScript, Seq.empty)
+  }
+
+  test("SPARK-51284: script with empty result") {
+    withTable("scripting_test_table") {
+      val sqlScript =
+        """
+          |BEGIN
+          |  CREATE TABLE scripting_test_table (id INT);
+          |  SELECT * FROM scripting_test_table;
+          |  DROP TABLE scripting_test_table;
+          |END
+          |""".stripMargin
+      verifySqlScriptResult(
+        sqlScript,
+        Seq.empty,
+        Some(StructType(Seq(StructField("id", IntegerType)).toArray))
+      )
+    }
   }
 
   test("empty script") {

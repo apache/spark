@@ -20,6 +20,7 @@ ARRAY	false
 AS	false
 ASC	false
 AT	false
+ATOMIC	false
 AUTHORIZATION	false
 BEGIN	false
 BETWEEN	false
@@ -108,6 +109,7 @@ DROP	false
 ELSE	false
 ELSEIF	false
 END	false
+ENFORCED	false
 ESCAPE	false
 ESCAPED	false
 EVOLUTION	false
@@ -130,6 +132,7 @@ FILEFORMAT	false
 FILTER	false
 FIRST	false
 FLOAT	false
+FLOW	false
 FOLLOWING	false
 FOR	false
 FOREIGN	false
@@ -177,6 +180,7 @@ ITEMS	false
 ITERATE	false
 JOIN	false
 JSON	false
+KEY	false
 KEYS	false
 LANGUAGE	false
 LAST	false
@@ -185,6 +189,7 @@ LAZY	false
 LEADING	false
 LEAVE	false
 LEFT	false
+LEVEL	false
 LIKE	false
 LIMIT	false
 LINES	false
@@ -200,6 +205,8 @@ LOOP	false
 MACRO	false
 MAP	false
 MATCHED	false
+MATERIALIZED	false
+MAX	false
 MERGE	false
 MICROSECOND	false
 MICROSECONDS	false
@@ -220,6 +227,7 @@ NANOSECONDS	false
 NATURAL	false
 NO	false
 NONE	false
+NORELY	false
 NOT	false
 NULL	false
 NULLS	false
@@ -249,6 +257,8 @@ POSITION	false
 PRECEDING	false
 PRIMARY	false
 PRINCIPALS	false
+PROCEDURE	false
+PROCEDURES	false
 PROPERTIES	false
 PURGE	false
 QUARTER	false
@@ -259,10 +269,12 @@ REAL	false
 RECORDREADER	false
 RECORDWRITER	false
 RECOVER	false
+RECURSION	false
 RECURSIVE	false
 REDUCE	false
 REFERENCES	false
 REFRESH	false
+RELY	false
 RENAME	false
 REPAIR	false
 REPEAT	false
@@ -311,6 +323,8 @@ START	false
 STATISTICS	false
 STORED	false
 STRATIFY	false
+STREAM	false
+STREAMING	false
 STRING	false
 STRUCT	false
 SUBSTR	false

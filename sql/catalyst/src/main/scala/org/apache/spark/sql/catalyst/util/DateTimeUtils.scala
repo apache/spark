@@ -106,11 +106,25 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Returns the hour value of a given TIME (TimeType) value.
+   */
+  def getHoursOfTime(micros: Long): Int = {
+    microsToLocalTime(micros).getHour
+  }
+
+  /**
    * Returns the minute value of a given timestamp value. The timestamp is expressed in
    * microseconds since the epoch.
    */
   def getMinutes(micros: Long, zoneId: ZoneId): Int = {
     getLocalDateTime(micros, zoneId).getMinute
+  }
+
+  /**
+   * Returns the minute value of a given TIME (TimeType) value.
+   */
+  def getMinutesOfTime(micros: Long): Int = {
+    microsToLocalTime(micros).getMinute
   }
 
   /**
@@ -122,10 +136,33 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Returns the second value of a given TIME (TimeType) value.
+   */
+  def getSecondsOfTime(micros: Long): Int = {
+    microsToLocalTime(micros).getSecond
+  }
+  /**
    * Returns the seconds part and its fractional part with microseconds.
    */
   def getSecondsWithFraction(micros: Long, zoneId: ZoneId): Decimal = {
     Decimal(getMicroseconds(micros, zoneId), 8, 6)
+  }
+
+
+  /**
+   * Returns the second value with fraction from a given TIME (TimeType) value.
+   * @param micros
+   *   The number of microseconds since the epoch.
+   * @param precision
+   *   The time fractional seconds precision, which indicates the number of decimal digits
+   *   maintained.
+   */
+  def getSecondsOfTimeWithFraction(micros: Long, precision: Int): Decimal = {
+    val seconds = (micros / MICROS_PER_SECOND) % SECONDS_PER_MINUTE
+    val scaleFactor = math.pow(10, precision).toLong
+    val scaledFraction = (micros % MICROS_PER_SECOND) * scaleFactor / MICROS_PER_SECOND
+    val fraction = scaledFraction.toDouble / scaleFactor
+    Decimal(seconds + fraction, 8, 6)
   }
 
   /**
@@ -747,6 +784,42 @@ object DateTimeUtils extends SparkDateTimeUtils {
       timestampDiffMap(unitInUpperCase)(startLocalTs, endLocalTs)
     } else {
       throw QueryExecutionErrors.invalidDatetimeUnitError("TIMESTAMPDIFF", unit)
+    }
+  }
+
+  /**
+   * Converts separate time fields in a long that represents microseconds since the start of
+   * the day
+   * @param hours the hour, from 0 to 23
+   * @param minutes the minute, from 0 to 59
+   * @param secsAndMicros the second, from 0 to 59.999999
+   * @return A time value represented as microseconds since the start of the day
+   */
+  def timeToMicros(hours: Int, minutes: Int, secsAndMicros: Decimal): Long = {
+    try {
+      val unscaledSecFrac = secsAndMicros.toUnscaledLong
+      val fullSecs = Math.floorDiv(unscaledSecFrac, MICROS_PER_SECOND)
+      // The greater than Int.MaxValue check is needed for the case where the full seconds is
+      // outside of the int range. This will overflow when full seconds is converted from
+      // long to int. The overflow could produce an int in the valid seconds range and return a
+      // wrong value. For overflow values outside of the valid seconds range, it would result in a
+      // misleading error message.
+      // The negative check is needed to throw a better error message. In the negative case,
+      // Math.floorDiv gets the next lower negative integer so the full second value in the
+      // original decimal will not match what is in the error message.
+      if (fullSecs > Int.MaxValue || fullSecs < 0) {
+        // Make this error message consistent with what is thrown by LocalTime.of when the
+        // seconds are invalid
+        throw new DateTimeException(
+          s"Invalid value for SecondOfMinute (valid values 0 - 59): ${secsAndMicros.toLong}")
+      }
+
+      val nanos = Math.floorMod(unscaledSecFrac, MICROS_PER_SECOND) * NANOS_PER_MICROS
+      val lt = LocalTime.of(hours, minutes, fullSecs.toInt, nanos.toInt)
+      localTimeToMicros(lt)
+    } catch {
+      case e @ (_: DateTimeException | _: ArithmeticException) =>
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
     }
   }
 }

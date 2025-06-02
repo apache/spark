@@ -21,13 +21,12 @@ import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.Limit
 import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
+class ParametersSuite extends QueryTest with SharedSparkSession {
 
   test("bind named parameters") {
     val sqlText =
@@ -769,6 +768,39 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
     checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")), Row(1))
     checkAnswer(spark.sql(query("?"), args = Array("t1")), Row(1))
   }
+
+  test("SPARK-50892: parameterized identifier in outer query referencing a recursive CTE") {
+    def query(p: String): String = {
+      s"""
+         |WITH RECURSIVE t1(n) AS (
+         |  SELECT 1
+         |  UNION ALL
+         |  SELECT n+1 FROM t1 WHERE n < 5)
+         |SELECT * FROM IDENTIFIER($p)""".stripMargin
+    }
+
+    checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")),
+      Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
+    checkAnswer(spark.sql(query("?"), args = Array("t1")),
+      Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
+  }
+
+  test("SPARK-50892: parameterized identifier inside a recursive CTE") {
+    def query(p: String): String = {
+      s"""
+         |WITH RECURSIVE t1(n) AS (
+         |  SELECT 1
+         |  UNION ALL
+         |  SELECT n+1 FROM IDENTIFIER($p) WHERE n < 5)
+         |SELECT * FROM t1""".stripMargin
+    }
+
+    checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")),
+      Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
+    checkAnswer(spark.sql(query("?"), args = Array("t1")),
+      Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
+  }
+
 
   test("SPARK-50403: parameterized execute immediate") {
     checkAnswer(spark.sql("execute immediate 'select ?' using ?", Array(1)), Row(1))

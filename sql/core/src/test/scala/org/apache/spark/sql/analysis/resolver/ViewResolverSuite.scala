@@ -18,7 +18,7 @@
 package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{FunctionResolution, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.analysis.resolver.{MetadataResolver, Resolver, ResolverRunner}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -95,9 +95,11 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
               },
               tableName = "`table1`",
               queryContext = ExpectedContext(
-                fragment = "view3",
-                start = 14,
-                stop = 18
+                objectType = "VIEW",
+                objectName = s"$catalogName.default.view1",
+                startIndex = 23,
+                stopIndex = 28,
+                fragment = "table1"
               )
             )
           }
@@ -107,30 +109,36 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Max nested view depth exceeded") {
-    try {
-      spark.sql("CREATE VIEW v0 AS SELECT * FROM VALUES (1);")
-      for (i <- 0 until conf.maxNestedViewDepth) {
-        spark.sql(s"CREATE VIEW v${i + 1} AS SELECT * FROM v$i;")
-      }
+    withSQLConf("spark.sql.view.maxNestedViewDepth" -> "10") {
+      try {
+        spark.sql("CREATE VIEW v0 AS SELECT * FROM VALUES (1);")
+        for (i <- 0 until conf.maxNestedViewDepth) {
+          spark.sql(s"CREATE VIEW v${i + 1} AS SELECT * FROM v$i;")
+        }
 
-      checkError(
-        exception = intercept[AnalysisException] {
-          checkViewResolution(s"SELECT * FROM v${conf.maxNestedViewDepth}")
-        },
-        condition = "VIEW_EXCEED_MAX_NESTED_DEPTH",
-        parameters = Map(
-          "viewName" -> s"`$catalogName`.`default`.`v0`",
-          "maxNestedDepth" -> conf.maxNestedViewDepth.toString
-        ),
-        context = ExpectedContext(
-          fragment = "v100",
-          start = 14,
-          stop = 17
+        checkError(
+          exception = intercept[AnalysisException] {
+            checkViewResolution(s"SELECT * FROM v${conf.maxNestedViewDepth}")
+          },
+          condition = "VIEW_EXCEED_MAX_NESTED_DEPTH",
+          parameters = Map(
+            "viewName" -> s"`$catalogName`.`default`.`v0`",
+            "maxNestedDepth" -> conf.maxNestedViewDepth.toString
+          ),
+          queryContext = Array(
+            ExpectedContext(
+              objectType = "VIEW",
+              objectName = s"$catalogName.default.v1",
+              startIndex = 14,
+              stopIndex = 15,
+              fragment = "v0"
+            )
+          )
         )
-      )
-    } finally {
-      for (i <- 0 until (conf.maxNestedViewDepth + 1)) {
-        spark.sql(s"DROP VIEW v${conf.maxNestedViewDepth - i};")
+      } finally {
+        for (i <- 0 until (conf.maxNestedViewDepth + 1)) {
+          spark.sql(s"DROP VIEW v${conf.maxNestedViewDepth - i};")
+        }
       }
     }
   }
@@ -138,9 +146,11 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
   private def checkViewResolution(
       sqlText: String,
       expectedChild: LogicalPlan = OneRowRelation()) = {
+    val relationResolution = Resolver.createRelationResolution(spark.sessionState.catalogManager)
     val metadataResolver = new MetadataResolver(
       spark.sessionState.catalogManager,
-      Resolver.createRelationResolution(spark.sessionState.catalogManager)
+      relationResolution,
+      new FunctionResolution(spark.sessionState.catalogManager, relationResolution)
     )
 
     val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(sqlText)
@@ -169,7 +179,9 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
       .child
       .asInstanceOf[View]
     assert(resolvedView.isTempView == unresolvedView.isTempView)
-    assert(normalizeExprIds(resolvedView.child) == normalizeExprIds(expectedChild))
+    assert(
+      normalizeExprIds(resolvedView.child).prettyJson == normalizeExprIds(expectedChild).prettyJson
+    )
   }
 
   private def cast(

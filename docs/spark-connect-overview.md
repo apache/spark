@@ -356,7 +356,7 @@ Example:
 import org.apache.spark.sql.connect.client.REPLClassDirMonitor
 // Register a ClassFinder to monitor and upload the classfiles from the build output.
 val classFinder = new REPLClassDirMonitor(<ABSOLUTE_PATH_TO_BUILD_OUTPUT_DIR>)
-spark.registerClassFinder(classfinder)
+spark.registerClassFinder(classFinder)
 
 // Upload JAR dependencies
 spark.addArtifact(<ABSOLUTE_PATH_JAR_DEP>)

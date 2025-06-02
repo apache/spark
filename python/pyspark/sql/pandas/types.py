@@ -261,6 +261,7 @@ def is_variant(at: "pa.DataType") -> bool:
     return any(
         (
             field.name == "metadata"
+            and field.metadata is not None
             and b"variant" in field.metadata
             and field.metadata[b"variant"] == b"true"
         )
@@ -1424,6 +1425,12 @@ def _to_numpy_type(type: DataType) -> Optional["np.dtype"]:
         return np.dtype("float32")
     elif type == DoubleType():
         return np.dtype("float64")
+    elif type == TimestampType():
+        return np.dtype("datetime64[us]")
+    elif type == TimestampNTZType():
+        return np.dtype("datetime64[us]")
+    elif type == DayTimeIntervalType():
+        return np.dtype("timedelta64[us]")
     return None
 
 
@@ -1432,7 +1439,18 @@ def convert_pandas_using_numpy_type(
 ) -> "PandasDataFrameLike":
     for field in schema.fields:
         if isinstance(
-            field.dataType, (ByteType, ShortType, LongType, FloatType, DoubleType, IntegerType)
+            field.dataType,
+            (
+                ByteType,
+                ShortType,
+                IntegerType,
+                LongType,
+                FloatType,
+                DoubleType,
+                TimestampType,
+                TimestampNTZType,
+                DayTimeIntervalType,
+            ),
         ):
             np_type = _to_numpy_type(field.dataType)
             df[field.name] = df[field.name].astype(np_type)

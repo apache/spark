@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.ArrayDeque
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, View}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -34,6 +34,13 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
   private val cteRegistry = resolver.getCteRegistry
   private val sourceUnresolvedRelationStack = new ArrayDeque[UnresolvedRelation]
   private val viewResolutionContextStack = new ArrayDeque[ViewResolutionContext]
+
+  def getCatalogAndNamespace: Option[Seq[String]] =
+    if (viewResolutionContextStack.isEmpty) {
+      None
+    } else {
+      viewResolutionContextStack.peek().catalogAndNamespace
+    }
 
   /**
    * This method preserves the resolved [[UnresolvedRelation]] for the further view resolution
@@ -97,22 +104,30 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
    */
   private def withViewResolutionContext(unresolvedView: View)(
       body: => LogicalPlan): (LogicalPlan, ViewResolutionContext) = {
-    val viewResolutionContext = if (viewResolutionContextStack.isEmpty()) {
-      ViewResolutionContext(
-        nestedViewDepth = 1,
-        maxNestedViewDepth = conf.maxNestedViewDepth
-      )
-    } else {
-      val prevContext = viewResolutionContextStack.peek()
-      prevContext.copy(nestedViewDepth = prevContext.nestedViewDepth + 1)
-    }
-    viewResolutionContext.validate(unresolvedView)
+    AnalysisContext.withAnalysisContext(unresolvedView.desc) {
+      val currentAnalysisContext = AnalysisContext.get
 
-    viewResolutionContextStack.push(viewResolutionContext)
-    try {
-      (body, viewResolutionContext)
-    } finally {
-      viewResolutionContextStack.pop()
+      val prevContext = if (viewResolutionContextStack.isEmpty()) {
+        ViewResolutionContext(
+          nestedViewDepth = 0,
+          maxNestedViewDepth = conf.maxNestedViewDepth
+        )
+      } else {
+        viewResolutionContextStack.peek()
+      }
+
+      val viewResolutionContext = prevContext.copy(
+        nestedViewDepth = prevContext.nestedViewDepth + 1,
+        catalogAndNamespace = Some(unresolvedView.desc.viewCatalogAndNamespace)
+      )
+      viewResolutionContext.validate(unresolvedView)
+
+      viewResolutionContextStack.push(viewResolutionContext)
+      try {
+        (body, viewResolutionContext)
+      } finally {
+        viewResolutionContextStack.pop()
+      }
     }
   }
 
@@ -131,8 +146,12 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
  * @param nestedViewDepth Current nested view depth. Cannot exceed the `maxNestedViewDepth`.
  * @param maxNestedViewDepth Maximum allowed nested view depth. Configured in the upper context
  *   based on [[SQLConf.MAX_NESTED_VIEW_DEPTH]].
+ * @param catalogAndNamespace Catalog and camespace under which the [[View]] was created.
  */
-case class ViewResolutionContext(nestedViewDepth: Int, maxNestedViewDepth: Int) {
+case class ViewResolutionContext(
+    nestedViewDepth: Int,
+    maxNestedViewDepth: Int,
+    catalogAndNamespace: Option[Seq[String]] = None) {
   def validate(unresolvedView: View): Unit = {
     if (nestedViewDepth > maxNestedViewDepth) {
       throw QueryCompilationErrors.viewDepthExceedsMaxResolutionDepthError(

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -61,7 +61,7 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
       input: LogicalPlan,
       tableSpec: TableSpecBase,
       withNewSpec: TableSpecBase => LogicalPlan): LogicalPlan = tableSpec match {
-    case u: UnresolvedTableSpec if u.optionExpression.resolved =>
+    case u: UnresolvedTableSpec if u.childrenResolved =>
       val newOptions: Seq[(String, String)] = u.optionExpression.options.map {
         case (key: String, null) =>
           (key, null)
@@ -86,6 +86,18 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
           }
           (key, newValue)
       }
+
+      u.constraints.foreach {
+        case check: CheckConstraint =>
+          if (!check.child.deterministic) {
+            check.child.failAnalysis(
+              errorClass = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
+              messageParameters = Map("checkCondition" -> check.condition)
+            )
+          }
+        case _ =>
+      }
+
       val newTableSpec = TableSpec(
         properties = u.properties,
         provider = u.provider,
@@ -94,7 +106,8 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
         comment = u.comment,
         collation = u.collation,
         serde = u.serde,
-        external = u.external)
+        external = u.external,
+        constraints = u.constraints.map(_.toV2Constraint))
       withNewSpec(newTableSpec)
     case _ =>
       input

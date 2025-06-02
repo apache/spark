@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: Build / Spark Connect Python-only (master-server, 35-client, Python 3.11)
+name: Build / Python-only, Connect-only (master-server, branch-3.5-client, Python 3.11)
 
 on:
   schedule:
@@ -90,7 +90,8 @@ jobs:
           # Start a Spark Connect server for local
           PYTHONPATH="python/lib/pyspark.zip:python/lib/py4j-0.10.9.9-src.zip:$PYTHONPATH" ./sbin/start-connect-server.sh \
             --driver-java-options "-Dlog4j.configurationFile=file:$GITHUB_WORKSPACE/conf/log4j2.properties" \
-            --jars "`find connector/protobuf/target -name spark-protobuf-*SNAPSHOT.jar`,`find connector/avro/target -name spark-avro*SNAPSHOT.jar`"
+            --jars "`find connector/protobuf/target -name spark-protobuf-*SNAPSHOT.jar`,`find connector/avro/target -name spark-avro*SNAPSHOT.jar`" \
+            --conf spark.sql.execution.arrow.pyspark.validateSchema.enabled=false
 
           # Checkout to branch-3.5 to use the tests in branch-3.5.
           cd ..

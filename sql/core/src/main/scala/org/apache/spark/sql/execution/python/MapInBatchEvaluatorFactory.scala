@@ -20,17 +20,20 @@ package org.apache.spark.sql.execution.python
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, TaskContext}
-import org.apache.spark.api.python.ChainedPythonFunctions
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 class MapInBatchEvaluatorFactory(
     output: Seq[Attribute],
     chainedFunc: Seq[(ChainedPythonFunctions, Long)],
-    outputTypes: StructType,
+    inputSchema: StructType,
+    outputSchema: DataType,
     batchSize: Int,
     pythonEvalType: Int,
     sessionLocalTimeZone: String,
@@ -57,25 +60,36 @@ class MapInBatchEvaluatorFactory(
       // as a DataFrame.
       val wrappedIter = inputIter.map(InternalRow(_))
 
-      // DO NOT use iter.grouped(). See BatchIterator.
-      val batchIter =
-        if (batchSize > 0) new BatchIterator(wrappedIter, batchSize) else Iterator(wrappedIter)
+      val batchIter = Iterator(wrappedIter)
 
-      val columnarBatchIter = new ArrowPythonRunner(
+      val pyRunner = new ArrowPythonRunner(
         chainedFunc,
         pythonEvalType,
         argOffsets,
-        StructType(Array(StructField("struct", outputTypes))),
+        StructType(Array(StructField("struct", inputSchema))),
         sessionLocalTimeZone,
         largeVarTypes,
         pythonRunnerConf,
         pythonMetrics,
         jobArtifactUUID,
-        None).compute(batchIter, context.partitionId(), context)
+        None) with BatchedPythonArrowInput
+      val columnarBatchIter = pyRunner.compute(batchIter, context.partitionId(), context)
 
       val unsafeProj = UnsafeProjection.create(output, output)
 
       columnarBatchIter.flatMap { batch =>
+        if (SQLConf.get.pysparkArrowValidateSchema) {
+          // Ensure the schema matches the expected schema, but allowing nullable fields in the
+          // output schema to become non-nullable in the actual schema.
+          val actualSchema = batch.column(0).dataType()
+          val isCompatible =
+            DataType.equalsIgnoreCompatibleNullability(from = actualSchema, to = outputSchema)
+          if (!isCompatible) {
+            throw QueryExecutionErrors.arrowDataTypeMismatchError(
+              PythonEvalType.toString(pythonEvalType), Seq(outputSchema), Seq(actualSchema))
+          }
+        }
+
         // Scalar Iterator UDF returns a StructType column in ColumnarBatch, select
         // the children here
         val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]

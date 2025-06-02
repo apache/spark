@@ -36,6 +36,7 @@ from collections.abc import Iterable
 from datetime import tzinfo
 from functools import reduce
 from io import BytesIO
+import pickle
 import json
 import warnings
 
@@ -65,6 +66,7 @@ from pyspark.sql.types import (
     StringType,
     DateType,
     StructType,
+    StructField,
     DataType,
 )
 from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
@@ -82,9 +84,11 @@ from pyspark.pandas.utils import (
     validate_axis,
     log_advice,
 )
+from pyspark.pandas.config import get_option
 from pyspark.pandas.frame import DataFrame, _reduce_spark_multi
 from pyspark.pandas.internal import (
     InternalFrame,
+    InternalField,
     DEFAULT_SERIES_NAME,
     HIDDEN_COLUMNS,
     SPARK_INDEX_NAME_FORMAT,
@@ -1128,7 +1132,9 @@ def read_excel(
     """
 
     def pd_read_excel(
-        io_or_bin: Any, sn: Union[str, int, List[Union[str, int]], None]
+        io_or_bin: Any,
+        sn: Union[str, int, List[Union[str, int]], None],
+        nr: Optional[int] = None,
     ) -> pd.DataFrame:
         return pd.read_excel(
             io=BytesIO(io_or_bin) if isinstance(io_or_bin, (bytes, bytearray)) else io_or_bin,
@@ -1143,7 +1149,7 @@ def read_excel(
             true_values=true_values,
             false_values=false_values,
             skiprows=skiprows,
-            nrows=nrows,
+            nrows=nr,
             na_values=na_values,
             keep_default_na=keep_default_na,
             verbose=verbose,
@@ -1155,18 +1161,9 @@ def read_excel(
             **kwds,
         )
 
-    if isinstance(io, str):
-        # 'binaryFile' format is available since Spark 3.0.0.
-        binaries = default_session().read.format("binaryFile").load(io).select("content").head(2)
-        io_or_bin = binaries[0][0]
-        single_file = len(binaries) == 1
-    else:
-        io_or_bin = io
-        single_file = True
-
-    pdf_or_psers = pd_read_excel(io_or_bin, sn=sheet_name)
-
-    if single_file:
+    if not isinstance(io, str):
+        # When io is not a path, always need to load all data to python side
+        pdf_or_psers = pd_read_excel(io, sn=sheet_name, nr=nrows)
         if isinstance(pdf_or_psers, dict):
             return {
                 sn: cast(Union[DataFrame, Series], from_pandas(pdf_or_pser))
@@ -1174,52 +1171,89 @@ def read_excel(
             }
         else:
             return cast(Union[DataFrame, Series], from_pandas(pdf_or_psers))
-    else:
 
-        def read_excel_on_spark(
-            pdf_or_pser: Union[pd.DataFrame, pd.Series],
-            sn: Union[str, int, List[Union[str, int]], None],
-        ) -> Union[DataFrame, Series]:
-            if isinstance(pdf_or_pser, pd.Series):
-                pdf = pdf_or_pser.to_frame()
-            else:
-                pdf = pdf_or_pser
+    spark = default_session()
 
-            psdf = cast(DataFrame, from_pandas(pdf))
-            return_schema = force_decimal_precision_scale(
-                as_nullable_spark_type(psdf._internal.spark_frame.drop(*HIDDEN_COLUMNS).schema)
-            )
+    # Collect the first #nr rows from the first file
+    nr = get_option("compute.max_rows", 1000)
+    if nrows is not None and nrows < nr:
+        nr = nrows
 
-            def output_func(pdf: pd.DataFrame) -> pd.DataFrame:
-                pdf = pd.concat([pd_read_excel(bin, sn=sn) for bin in pdf[pdf.columns[0]]])
+    def sample_data(pdf: pd.DataFrame) -> pd.DataFrame:
+        raw_data = BytesIO(pdf.content[0])
+        pdf_or_dict = pd_read_excel(raw_data, sn=sheet_name, nr=nr)
+        return pd.DataFrame({"sampled": [pickle.dumps(pdf_or_dict)]})
 
-                reset_index = pdf.reset_index()
-                for name, col in reset_index.items():
-                    dt = col.dtype
-                    if is_datetime64_dtype(dt) or isinstance(dt, pd.DatetimeTZDtype):
-                        continue
-                    reset_index[name] = col.replace({np.nan: None})
-                pdf = reset_index
+    # 'binaryFile' format is available since Spark 3.0.0.
+    sampled = (
+        spark.read.format("binaryFile")
+        .load(io)
+        .select("content")
+        .limit(1)  # Read at most 1 file
+        .mapInPandas(func=lambda iterator: map(sample_data, iterator), schema="sampled BINARY")
+        .head()
+    )
+    sampled = pickle.loads(sampled[0])
 
-                # Just positionally map the column names to given schema's.
-                return pdf.rename(columns=dict(zip(pdf.columns, return_schema.names)))
-
-            sdf = (
-                default_session()
-                .read.format("binaryFile")
-                .load(io)
-                .select("content")
-                .mapInPandas(lambda iterator: map(output_func, iterator), schema=return_schema)
-            )
-
-            return DataFrame(psdf._internal.with_new_sdf(sdf))
-
-        if isinstance(pdf_or_psers, dict):
-            return {
-                sn: read_excel_on_spark(pdf_or_pser, sn) for sn, pdf_or_pser in pdf_or_psers.items()
-            }
+    def read_excel_on_spark(
+        pdf_or_pser: Union[pd.DataFrame, pd.Series],
+        sn: Union[str, int, List[Union[str, int]], None],
+    ) -> Union[DataFrame, Series]:
+        if isinstance(pdf_or_pser, pd.Series):
+            pdf = pdf_or_pser.to_frame()
         else:
-            return read_excel_on_spark(pdf_or_psers, sheet_name)
+            pdf = pdf_or_pser
+
+        psdf = cast(DataFrame, from_pandas(pdf))
+
+        raw_schema = psdf._internal.spark_frame.drop(*HIDDEN_COLUMNS).schema
+        index_scol_names = psdf._internal.index_spark_column_names
+        nullable_fields = []
+        for field in raw_schema.fields:
+            if field.name in index_scol_names:
+                nullable_fields.append(field)
+            else:
+                nullable_fields.append(
+                    StructField(
+                        field.name,
+                        as_nullable_spark_type(field.dataType),
+                        nullable=True,
+                        metadata=field.metadata,
+                    )
+                )
+        nullable_schema = StructType(nullable_fields)
+        return_schema = force_decimal_precision_scale(nullable_schema)
+
+        return_data_fields: Optional[List[InternalField]] = None
+        if psdf._internal.data_fields is not None:
+            return_data_fields = [f.normalize_spark_type() for f in psdf._internal.data_fields]
+
+        def output_func(pdf: pd.DataFrame) -> pd.DataFrame:
+            pdf = pd.concat([pd_read_excel(bin, sn=sn, nr=nrows) for bin in pdf[pdf.columns[0]]])
+
+            reset_index = pdf.reset_index()
+            for name, col in reset_index.items():
+                dt = col.dtype
+                if is_datetime64_dtype(dt) or isinstance(dt, pd.DatetimeTZDtype):
+                    continue
+                reset_index[name] = col.replace({np.nan: None})
+            pdf = reset_index
+
+            # Just positionally map the column names to given schema's.
+            return pdf.rename(columns=dict(zip(pdf.columns, return_schema.names)))
+
+        sdf = (
+            spark.read.format("binaryFile")
+            .load(io)
+            .select("content")
+            .mapInPandas(lambda iterator: map(output_func, iterator), schema=return_schema)
+        )
+        return DataFrame(psdf._internal.with_new_sdf(sdf, data_fields=return_data_fields))
+
+    if isinstance(sampled, dict):
+        return {sn: read_excel_on_spark(pdf_or_pser, sn) for sn, pdf_or_pser in sampled.items()}
+    else:
+        return read_excel_on_spark(cast(Union[pd.DataFrame, pd.Series], sampled), sheet_name)
 
 
 def read_html(
@@ -3840,6 +3874,7 @@ def _test() -> None:
     from pyspark.sql import SparkSession
     import pyspark.pandas.namespace
     from pandas.util.version import Version
+    from pyspark.testing.utils import is_ansi_mode_test
 
     os.chdir(os.environ["SPARK_HOME"])
 
@@ -3852,6 +3887,11 @@ def _test() -> None:
     globs = pyspark.pandas.namespace.__dict__.copy()
     globs["ps"] = pyspark.pandas
     globs["sf"] = F
+
+    if is_ansi_mode_test:
+        del pyspark.pandas.namespace.melt.__doc__
+        del pyspark.pandas.namespace.to_numeric.__doc__
+
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.namespace tests")

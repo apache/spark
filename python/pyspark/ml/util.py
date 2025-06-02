@@ -16,7 +16,9 @@
 #
 
 import json
+import logging
 import os
+import threading
 import time
 import uuid
 import functools
@@ -25,6 +27,7 @@ from typing import (
     Callable,
     Dict,
     Generic,
+    Iterator,
     List,
     Optional,
     Sequence,
@@ -34,11 +37,13 @@ from typing import (
     TYPE_CHECKING,
     Union,
 )
+from contextlib import contextmanager
 
 from pyspark import since
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import SparkSession
 from pyspark.sql.utils import is_remote
+from pyspark.storagelevel import StorageLevel
 from pyspark.util import VersionUtils
 
 if TYPE_CHECKING:
@@ -47,6 +52,7 @@ if TYPE_CHECKING:
     from pyspark.ml.base import Params
     from pyspark.ml.wrapper import JavaWrapper
     from pyspark.core.context import SparkContext
+    from pyspark.sql import DataFrame
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
     from pyspark.ml.wrapper import JavaWrapper, JavaEstimator
     from pyspark.ml.evaluation import JavaEvaluator
@@ -63,6 +69,8 @@ FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 ML_CONNECT_HELPER_ID = "______ML_CONNECT_HELPER______"
 
+_logger = logging.getLogger("pyspark.ml.util")
+
 
 def try_remote_intermediate_result(f: FuncT) -> FuncT:
     """Mark the function/property that returns the intermediate result of the remote call.
@@ -71,7 +79,7 @@ def try_remote_intermediate_result(f: FuncT) -> FuncT:
     @functools.wraps(f)
     def wrapped(self: "JavaWrapper") -> Any:
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            return f"{self._java_obj}.{f.__name__}"
+            return f"{str(self._java_obj)}.{f.__name__}"
         else:
             return f(self)
 
@@ -104,15 +112,25 @@ def invoke_remote_attribute_relation(
     from pyspark.ml.connect.proto import AttributeRelation
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+    from pyspark.ml.wrapper import JavaModel
 
     session = SparkSession.getActiveSession()
     assert session is not None
 
-    assert isinstance(instance._java_obj, str)
-
-    methods, obj_ref = _extract_id_methods(instance._java_obj)
+    if isinstance(instance, JavaModel):
+        assert isinstance(instance._java_obj, RemoteModelRef)
+        object_id = instance._java_obj.ref_id
+    else:
+        # model summary
+        object_id = instance._java_obj  # type: ignore
+    methods, obj_ref = _extract_id_methods(object_id)
     methods.append(pb2.Fetch.Method(method=method, args=serialize(session.client, *args)))
     plan = AttributeRelation(obj_ref, methods)
+
+    # To delay the GC of the model, keep a reference to the source instance,
+    # might be a model or a summary.
+    plan.__source_instance__ = instance  # type: ignore[attr-defined]
+
     return ConnectDataFrame(plan, session)
 
 
@@ -128,6 +146,33 @@ def try_remote_attribute_relation(f: FuncT) -> FuncT:
             return f(self, *args, **kwargs)
 
     return cast(FuncT, wrapped)
+
+
+class RemoteModelRef:
+    def __init__(self, ref_id: str) -> None:
+        self._ref_id = ref_id
+        self._ref_count = 1
+        self._lock = threading.Lock()
+
+    @property
+    def ref_id(self) -> str:
+        return self._ref_id
+
+    def add_ref(self) -> None:
+        with self._lock:
+            assert self._ref_count > 0
+            self._ref_count += 1
+
+    def release_ref(self) -> None:
+        with self._lock:
+            assert self._ref_count > 0
+            self._ref_count -= 1
+            if self._ref_count == 0:
+                # Delete the model if possible
+                del_remote_cache(self.ref_id)
+
+    def __str__(self) -> str:
+        return self.ref_id
 
 
 def try_remote_fit(f: FuncT) -> FuncT:
@@ -155,8 +200,10 @@ def try_remote_fit(f: FuncT) -> FuncT:
             )
             (_, properties, _) = client.execute_command(command)
             model_info = deserialize(properties)
-            client.add_ml_cache(model_info.obj_ref.id)
-            model = self._create_model(model_info.obj_ref.id)
+            if warning_msg := getattr(model_info, "warning_message", None):
+                _logger.warning(warning_msg)
+            remote_model_ref = RemoteModelRef(model_info.obj_ref.id)
+            model = self._create_model(remote_model_ref)
             if model.__class__.__name__ not in ["Bucketizer"]:
                 model._resetUid(self.uid)
             return self._copyValues(model)
@@ -183,31 +230,42 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
             if isinstance(self, Model):
                 from pyspark.ml.connect.proto import TransformerRelation
 
-                assert isinstance(self._java_obj, str)
+                assert isinstance(self._java_obj, RemoteModelRef)
                 params = serialize_ml_params(self, session.client)
-                return ConnectDataFrame(
-                    TransformerRelation(
-                        child=dataset._plan, name=self._java_obj, ml_params=params, is_model=True
-                    ),
-                    session,
+                plan = TransformerRelation(
+                    child=dataset._plan,
+                    name=self._java_obj.ref_id,
+                    ml_params=params,
+                    is_model=True,
                 )
             elif isinstance(self, Transformer):
                 from pyspark.ml.connect.proto import TransformerRelation
 
                 assert isinstance(self._java_obj, str)
                 params = serialize_ml_params(self, session.client)
-                return ConnectDataFrame(
-                    TransformerRelation(
-                        child=dataset._plan,
-                        name=self._java_obj,
-                        ml_params=params,
-                        uid=self.uid,
-                        is_model=False,
-                    ),
-                    session,
+                plan = TransformerRelation(
+                    child=dataset._plan,
+                    name=self._java_obj,
+                    ml_params=params,
+                    uid=self.uid,
+                    is_model=False,
                 )
+
             else:
                 raise RuntimeError(f"Unsupported {self}")
+
+            # To delay the GC of the model, keep a reference to the source transformer
+            # in the transformed dataframe and all its descendants.
+            # For this case:
+            #
+            # def fit_transform(df):
+            #     model = estimator.fit(df)
+            #     return model.transform(df)
+            #
+            # output = fit_transform(df)
+            #
+            plan.__source_transformer__ = self  # type: ignore[attr-defined]
+            return ConnectDataFrame(plan=plan, session=session)
         else:
             return f(self, dataset)
 
@@ -226,11 +284,20 @@ def try_remote_call(f: FuncT) -> FuncT:
             from pyspark.sql.connect.session import SparkSession
             from pyspark.ml.connect.util import _extract_id_methods
             from pyspark.ml.connect.serialize import serialize, deserialize
+            from pyspark.ml.wrapper import JavaModel
 
             session = SparkSession.getActiveSession()
             assert session is not None
-            assert isinstance(self._java_obj, str)
-            methods, obj_ref = _extract_id_methods(self._java_obj)
+            if self._java_obj == ML_CONNECT_HELPER_ID:
+                obj_id = ML_CONNECT_HELPER_ID
+            else:
+                if isinstance(self, JavaModel):
+                    assert isinstance(self._java_obj, RemoteModelRef)
+                    obj_id = self._java_obj.ref_id
+                else:
+                    # model summary
+                    obj_id = self._java_obj  # type: ignore
+            methods, obj_ref = _extract_id_methods(obj_id)
             methods.append(pb2.Fetch.Method(method=name, args=serialize(session.client, *args)))
             command = pb2.Command()
             command.ml_command.fetch.CopyFrom(
@@ -240,11 +307,9 @@ def try_remote_call(f: FuncT) -> FuncT:
             ml_command_result = properties["ml_command_result"]
             if ml_command_result.HasField("summary"):
                 summary = ml_command_result.summary
-                session.client.add_ml_cache(summary)
                 return summary
             elif ml_command_result.HasField("operator_info"):
                 model_info = deserialize(properties)
-                session._client.add_ml_cache(model_info.obj_ref.id)
                 # get a new model ref id from the existing model,
                 # it is up to the caller to build the model
                 return model_info.obj_ref.id
@@ -264,7 +329,7 @@ def del_remote_cache(ref_id: str) -> None:
 
             session = SparkSession.getActiveSession()
             if session is not None:
-                session.client.remove_ml_cache(ref_id)
+                session.client._delete_ml_cache([ref_id])
                 return
         except Exception:
             # SparkSession's down.
@@ -281,20 +346,8 @@ def try_remote_del(f: FuncT) -> FuncT:
         except Exception:
             return
 
-        if in_remote:
-            # Delete the model if possible
-            # model_id = self._java_obj
-            # del_remote_cache(model_id)
-            #
-            # Above codes delete the model from the ml cache eagerly, and may cause
-            # NPE in the server side in the case of 'fit_transform':
-            #
-            # def fit_transform(df):
-            #     model = estimator.fit(df)
-            #     return model.transform(df)
-            #
-            # output = fit_transform(df)
-            # output.show()
+        if in_remote and isinstance(self._java_obj, RemoteModelRef):
+            self._java_obj.release_ref()
             return
         else:
             return f(self)
@@ -462,7 +515,7 @@ class BaseReadWrite:
         Returns the user-specified Spark Session or the default.
         """
         if self._sparkSession is None:
-            self._sparkSession = SparkSession._getActiveSessionOrCreate()
+            self._sparkSession = SparkSession.active()
         assert self._sparkSession is not None
         return self._sparkSession
 
@@ -809,10 +862,10 @@ class DefaultParamsWriter(MLWriter):
             If given, this is saved in the "paramMap" field.
         """
         metadataPath = os.path.join(path, "metadata")
+        spark = cast(SparkSession, sc) if hasattr(sc, "createDataFrame") else SparkSession.active()
         metadataJson = DefaultParamsWriter._get_metadata_to_save(
-            instance, sc, extraMetadata, paramMap
+            instance, spark, extraMetadata, paramMap
         )
-        spark = sc if isinstance(sc, SparkSession) else SparkSession._getActiveSessionOrCreate()
         spark.createDataFrame([(metadataJson,)], schema=["value"]).coalesce(1).write.text(
             metadataPath
         )
@@ -932,7 +985,7 @@ class DefaultParamsReader(MLReader[RL]):
             If non empty, this is checked against the loaded metadata.
         """
         metadataPath = os.path.join(path, "metadata")
-        spark = sc if isinstance(sc, SparkSession) else SparkSession._getActiveSessionOrCreate()
+        spark = cast(SparkSession, sc) if hasattr(sc, "createDataFrame") else SparkSession.active()
         metadataStr = spark.read.text(metadataPath).first()[0]  # type: ignore[index]
         loadedVals = DefaultParamsReader._parseMetaData(metadataStr, expectedClassName)
         return loadedVals
@@ -1104,3 +1157,53 @@ def try_remote_functions(f: FuncT) -> FuncT:
             return f(*args, **kwargs)
 
     return cast(FuncT, wrapped)
+
+
+_SPARKML_TEMP_DFS_PATH = "SPARKML_TEMP_DFS_PATH"
+
+
+def _get_temp_dfs_path() -> Optional[str]:
+    return os.environ.get(_SPARKML_TEMP_DFS_PATH)
+
+
+def _remove_dfs_dir(path: str, spark_session: "SparkSession") -> None:
+    from pyspark.ml.wrapper import JavaWrapper
+    from pyspark.sql import is_remote
+
+    if is_remote():
+        from pyspark.ml.util import ML_CONNECT_HELPER_ID
+
+        helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
+        helper._call_java("handleOverwrite", path, True)
+    else:
+        _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.util.FileSystemOverwrite")
+        wrapper = JavaWrapper(_java_obj)
+        wrapper._call_java("handleOverwrite", path, True, spark_session._jsparkSession)
+
+
+@contextmanager
+def _cache_spark_dataset(
+    dataset: "DataFrame",
+    storageLevel: "StorageLevel" = StorageLevel.MEMORY_AND_DISK_DESER,
+    enable: bool = True,
+) -> Iterator[Any]:
+    if not enable:
+        yield dataset
+        return
+
+    spark_session = dataset._session
+    tmp_dfs_path = os.environ.get(_SPARKML_TEMP_DFS_PATH)
+
+    if tmp_dfs_path:
+        tmp_cache_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
+        dataset.write.save(tmp_cache_path)
+        try:
+            yield spark_session.read.load(tmp_cache_path)
+        finally:
+            _remove_dfs_dir(tmp_cache_path, spark_session)
+    else:
+        dataset.persist(storageLevel)
+        try:
+            yield dataset
+        finally:
+            dataset.unpersist()

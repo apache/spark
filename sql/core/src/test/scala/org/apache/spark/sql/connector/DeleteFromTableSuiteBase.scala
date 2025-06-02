@@ -24,6 +24,109 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
   import testImplicits._
 
+  test("delete from table containing added column with default value") {
+    createAndInitTable("pk INT NOT NULL, dep STRING", """{ "pk": 1, "dep": "hr" }""")
+
+    sql(s"ALTER TABLE $tableNameAsString ADD COLUMN txt STRING DEFAULT 'initial-text'")
+
+    append("pk INT, dep STRING",
+      """{ "pk": 2, "dep": "hr" }
+        |{ "pk": 3, "dep": "software" }
+        |{ "pk": 4, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"ALTER TABLE $tableNameAsString ALTER COLUMN txt SET DEFAULT 'new-text'")
+
+    append("pk INT, dep STRING",
+      """{ "pk": 5, "dep": "hr" }
+        |{ "pk": 6, "dep": "hr" }
+        |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, "hr", "initial-text"),
+        Row(2, "hr", "initial-text"),
+        Row(3, "software", "initial-text"),
+        Row(4, "hr", "initial-text"),
+        Row(5, "hr", "new-text"),
+        Row(6, "hr", "new-text")))
+
+    sql(s"DELETE FROM $tableNameAsString WHERE pk IN (2, 5)")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, "hr", "initial-text"),
+        Row(3, "software", "initial-text"),
+        Row(4, "hr", "initial-text"),
+        Row(6, "hr", "new-text")))
+  }
+
+  test("delete from table with table constraints") {
+    sql(
+      s"""
+         |CREATE TABLE $tableNameAsString (
+         | pk INT NOT NULL PRIMARY KEY,
+         | id INT UNIQUE,
+         | dep STRING,
+         | CONSTRAINT pk_check CHECK (pk > 0))
+         | PARTITIONED BY (dep)
+         |""".stripMargin)
+      append("pk INT NOT NULL, id INT, dep STRING",
+        """{ "pk": 1, "id": 2, "dep": "hr" }
+          |{ "pk": 2, "id": 4, "dep": "eng" }
+          |{ "pk": 3, "id": 6, "dep": "eng" }
+          |""".stripMargin)
+      sql(s"DELETE FROM $tableNameAsString WHERE pk < 2")
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(Row(2, 4, "eng"), Row(3, 6, "eng")))
+      sql(s"DELETE FROM $tableNameAsString WHERE pk >=3")
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(Row(2, 4, "eng")))
+  }
+
+  test("delete from table containing struct column with default value") {
+    sql(
+      s"""CREATE TABLE $tableNameAsString (
+         | pk INT NOT NULL,
+         | complex STRUCT<c1:INT,c2:STRING> DEFAULT struct(-1, 'unknown'),
+         | dep STRING)
+         |PARTITIONED BY (dep)
+         |""".stripMargin)
+
+    append("pk INT NOT NULL, dep STRING",
+      """{ "pk": 1, "dep": "hr" }
+        |{ "pk": 2, "dep": "hr" }
+        |{ "pk": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    append("pk INT NOT NULL, complex STRUCT<c1:INT,c2:STRING>, dep STRING",
+      """{ "pk": 4, "dep": "hr" }
+        |{ "pk": 5, "complex": { "c1": 5, "c2": "v5" }, "dep": "hr" }
+        |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, Row(-1, "unknown"), "hr"),
+        Row(2, Row(-1, "unknown"), "hr"),
+        Row(3, Row(-1, "unknown"), "hr"),
+        Row(4, null, "hr"),
+        Row(5, Row(5, "v5"), "hr")))
+
+    sql(s"DELETE FROM $tableNameAsString WHERE pk < 3")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(3, Row(-1, "unknown"), "hr"),
+        Row(4, null, "hr"),
+        Row(5, Row(5, "v5"), "hr")))
+  }
+
   test("EXPLAIN only delete") {
     createAndInitTable("id INT, dep STRING", """{ "id": 1, "dep": "hr" }""")
 
@@ -506,6 +609,45 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(2, 2, 200) :: Row(3, 3, 100) :: Nil)
+    }
+  }
+
+
+  test("delete from table with recursive CTE") {
+    withTempView("source") {
+      sql(
+        s"""CREATE TABLE $tableNameAsString (
+           | val INT)
+           |""".stripMargin)
+
+      append("val INT",
+        """{ "val": 1 }
+          |{ "val": 9 }
+          |{ "val": 8 }
+          |{ "val": 4 }
+          |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1),
+          Row(9),
+          Row(8),
+          Row(4)))
+
+      sql(
+        s"""WITH RECURSIVE s(val) AS (
+           |  SELECT 1
+           |  UNION ALL
+           |  SELECT val + 1 FROM s WHERE val < 5
+           |) DELETE FROM $tableNameAsString WHERE val IN (SELECT val FROM s)
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(9),
+          Row(8)))
     }
   }
 

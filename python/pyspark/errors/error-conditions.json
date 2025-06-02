@@ -14,6 +14,11 @@
       "Arrow legacy IPC format is not supported in PySpark, please unset ARROW_PRE_0_15_IPC_FORMAT."
     ]
   },
+  "ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION": {
+    "message": [
+      "Operations that trigger DataFrame analysis or execution are not allowed in pipeline query functions. Move code outside of the pipeline query function."
+    ]
+  },
   "ATTRIBUTE_NOT_CALLABLE": {
     "message": [
       "Attribute `<attr_name>` in provided object `<obj_name>` is not callable."
@@ -159,8 +164,8 @@
       "Calling property or member '<member>' is not supported in PySpark Classic, please use Spark Connect instead."
     ]
   },
-  "COLLATION_INVALID_PROVIDER" : {
-    "message" : [
+  "COLLATION_INVALID_PROVIDER": {
+    "message": [
       "The value <provider> does not represent a correct collation provider. Supported providers are: [<supportedProviders>]."
     ]
   },
@@ -189,9 +194,19 @@
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
+  "DATA_SOURCE_EXTRANEOUS_FILTERS": {
+    "message": [
+      "<type>.pushFilters() returned filters that are not part of the input. Make sure that each returned filter is one of the input filters by reference."
+    ]
+  },
   "DATA_SOURCE_INVALID_RETURN_TYPE": {
     "message": [
       "Unsupported return type ('<type>') from Python data source '<name>'. Expected types: <supported_types>."
+    ]
+  },
+  "DATA_SOURCE_PUSHDOWN_DISABLED": {
+    "message": [
+      "<type> implements pushFilters() but filter pushdown is disabled because configuration '<conf>' is false. Set it to true to enable filter pushdown."
     ]
   },
   "DATA_SOURCE_RETURN_SCHEMA_MISMATCH": {
@@ -202,6 +217,16 @@
   "DATA_SOURCE_TYPE_MISMATCH": {
     "message": [
       "Expected <expected>, but got <actual>."
+    ]
+  },
+  "DATA_SOURCE_UNSUPPORTED_FILTER": {
+    "message": [
+      "Unexpected filter <name>."
+    ]
+  },
+  "DECORATOR_ARGUMENT_NOT_CALLABLE": {
+    "message": [
+      "The first positional argument passed to @<decorator_name> must be callable. Either add @<decorator_name> with no parameters to your function, or pass options to @<decorator_name> using keyword arguments (e.g. <example_usage>)."
     ]
   },
   "DIFFERENT_PANDAS_DATAFRAME": {
@@ -321,6 +346,11 @@
       "<field_name>: <obj> is not an instance of type <data_type>."
     ]
   },
+  "GRAPH_ELEMENT_DEFINED_OUTSIDE_OF_DECLARATIVE_PIPELINE": {
+    "message": [
+      "APIs that define elements of a declarative pipeline can only be invoked within the context of defining a pipeline."
+    ]
+  },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN": {
     "message": [
       "Function `<func_name>` should return Column, got <return_type>."
@@ -372,8 +402,8 @@
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
     ]
   },
-  "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS" : {
-    "message" : [
+  "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS": {
+    "message": [
       "Collations can only be applied to string types, but the JSON data type is <jsonType>."
     ]
   },
@@ -502,8 +532,8 @@
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
     ]
   },
-  "MALFORMED_VARIANT" : {
-    "message" : [
+  "MALFORMED_VARIANT": {
+    "message": [
       "Variant binary is malformed. Please check the data source is valid."
     ]
   },
@@ -517,7 +547,7 @@
       "A master URL must be set in your configuration."
     ]
   },
-  "MEMORY_PROFILE_INVALID_SOURCE":{
+  "MEMORY_PROFILE_INVALID_SOURCE": {
     "message": [
       "Memory profiler can only be used on editors with line numbers."
     ]
@@ -535,6 +565,11 @@
   "MIXED_TYPE_REPLACEMENT": {
     "message": [
       "Mixed type replacements are not supported."
+    ]
+  },
+  "MULTIPLE_PIPELINE_SPEC_FILES_FOUND": {
+    "message": [
+      "Multiple pipeline spec files found in the directory `<dir_path>`. Please remove one or choose a particular one with the --spec argument."
     ]
   },
   "NEGATIVE_VALUE": {
@@ -812,9 +847,51 @@
       "<package_name> >= <minimum_version> must be installed; however, it was not found."
     ]
   },
-  "PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS" : {
+  "PANDAS_API_ON_SPARK_FAIL_ON_ANSI_MODE": {
+    "message": [
+      "Pandas API on Spark does not properly work on ANSI mode.",
+      "Please set a Spark config 'spark.sql.ansi.enabled' to `false`.",
+      "Alternatively set a pandas-on-spark option 'compute.fail_on_ansi_mode' to `False` to force it to work, although it can cause unexpected behavior."
+    ]
+  },
+  "PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS": {
     "message": [
       "The Pandas SCALAR_ITER UDF outputs more rows than input rows."
+    ]
+  },
+  "PIPELINE_SPEC_DICT_KEY_NOT_STRING": {
+    "message": [
+      "For pipeline spec field `<field_name>`, key should be a string, got <key_type>."
+    ]
+  },
+  "PIPELINE_SPEC_DICT_VALUE_NOT_STRING": {
+    "message": [
+      "For pipeline spec field `<field_name>`, value for key `<key_name>` should be a string, got <value_type>."
+    ]
+  },
+  "PIPELINE_SPEC_FIELD_NOT_DICT": {
+    "message": [
+      "Pipeline spec field `<field_name>` should be a dict, got <field_type>."
+    ]
+  },
+  "PIPELINE_SPEC_FILE_DOES_NOT_EXIST": {
+    "message": [
+      "The pipeline spec file `<spec_path>` does not exist."
+    ]
+  },
+  "PIPELINE_SPEC_FILE_NOT_FOUND": {
+    "message": [
+      "No pipeline.yaml or pipeline.yml file provided in arguments or found in directory `<dir_path>` or readable ancestor directories."
+    ]
+  },
+  "PIPELINE_SPEC_UNEXPECTED_FIELD": {
+    "message": [
+      "Pipeline spec field `<field_name>` is unexpected."
+    ]
+  },
+  "PIPELINE_UNSUPPORTED_DEFINITIONS_FILE_EXTENSION": {
+    "message": [
+      "Pipeline definitions file `<file_path>` has an unsupported extension. Supported extensions are `.py` and `.sql`."
     ]
   },
   "PIPE_FUNCTION_EXITED": {
@@ -865,7 +942,7 @@
   },
   "RESPONSE_ALREADY_RECEIVED": {
     "message": [
-      "OPERATION_NOT_FOUND on the server but responses were already received from it."
+      "<error_type> on the server but responses were already received from it."
     ]
   },
   "RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDF": {
@@ -905,7 +982,7 @@
   },
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF": {
     "message": [
-      "Result vector from pandas_udf was not the required length: expected <expected>, got <actual>."
+      "Result vector from <udf_type> was not the required length: expected <expected>, got <actual>."
     ]
   },
   "SESSION_ALREADY_EXIST": {
@@ -981,6 +1058,11 @@
   "UDTF_ARROW_TYPE_CAST_ERROR": {
     "message": [
       "Cannot convert the output value of the column '<col_name>' with type '<col_type>' to the specified return type of the column: '<arrow_type>'. Please check if the data types match and try again."
+    ]
+  },
+  "UDTF_ARROW_TYPE_CONVERSION_ERROR": {
+    "message": [
+      "Cannot convert the output value of the input '<data>' with type '<schema>' to the specified return type of the column: '<arrow_schema>'. Please check if the data types match and try again."
     ]
   },
   "UDTF_CONSTRUCTOR_INVALID_IMPLEMENTS_ANALYZE_METHOD": {
@@ -1118,6 +1200,11 @@
       "Pie plot requires either a `y` column or `subplots=True`."
     ]
   },
+  "UNSUPPORTED_PIPELINES_DATASET_TYPE": {
+    "message": [
+      "Unsupported pipelines dataset type: <dataset_type>."
+    ]
+  },
   "UNSUPPORTED_PLOT_BACKEND": {
     "message": [
       "`<backend>` is not supported, it should be one of the values from <supported_backends>"
@@ -1126,6 +1213,11 @@
   "UNSUPPORTED_PLOT_BACKEND_PARAM": {
     "message": [
       "`<backend>` does not support `<param>` set to <value>, it should be one of the values from <supported_values>"
+    ]
+  },
+  "UNSUPPORTED_PLOT_KIND": {
+    "message": [
+      "`<plot_type>` is not supported, it should be one of the values from <supported_plot_types>"
     ]
   },
   "UNSUPPORTED_SIGNATURE": {

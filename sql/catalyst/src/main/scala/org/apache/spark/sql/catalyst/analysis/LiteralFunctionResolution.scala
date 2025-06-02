@@ -17,16 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  CurrentDate,
-  CurrentTimestamp,
-  CurrentUser,
-  Expression,
-  GroupingID,
-  NamedExpression,
-  VirtualColumn
-}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTime, CurrentTimestamp, CurrentUser, Expression, GroupingID, NamedExpression, VirtualColumn}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 
 /**
@@ -47,13 +38,15 @@ object LiteralFunctionResolution {
     }
   }
 
-  // support CURRENT_DATE, CURRENT_TIMESTAMP, CURRENT_USER, USER, SESSION_USER and grouping__id
+  // support CURRENT_DATE, CURRENT_TIMESTAMP, CURRENT_TIME,
+  //  CURRENT_USER, USER, SESSION_USER and grouping__id
   private val literalFunctions: Seq[(String, () => Expression, Expression => String)] = Seq(
     (CurrentDate().prettyName, () => CurrentDate(), toPrettySQL(_)),
     (CurrentTimestamp().prettyName, () => CurrentTimestamp(), toPrettySQL(_)),
-    (CurrentUser().prettyName, () => CurrentUser(), toPrettySQL),
-    ("user", () => CurrentUser(), toPrettySQL),
-    ("session_user", () => CurrentUser(), toPrettySQL),
+    (CurrentTime().prettyName, () => CurrentTime(), toPrettySQL(_)),
+    (CurrentUser().prettyName, () => CurrentUser(), toPrettySQL(_)),
+    ("user", () => CurrentUser(), toPrettySQL(_)),
+    ("session_user", () => CurrentUser(), toPrettySQL(_)),
     (VirtualColumn.hiveGroupingIdName, () => GroupingID(Nil), _ => VirtualColumn.hiveGroupingIdName)
   )
 }

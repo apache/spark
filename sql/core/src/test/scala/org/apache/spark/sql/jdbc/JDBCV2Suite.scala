@@ -22,6 +22,7 @@ import java.util.Properties
 
 import scala.util.control.NonFatal
 
+import org.apache.commons.codec.binary.Hex
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
 
 import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException}
@@ -222,9 +223,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
         "('abc_''%def@gmail.com')").executeUpdate()
 
-      conn.prepareStatement("CREATE TABLE \"test\".\"binary1\" (name TEXT(32),b BINARY(20))")
+      conn.prepareStatement("CREATE TABLE \"test\".\"binary_tab\" (name TEXT(32),b BINARY(20))")
         .executeUpdate()
-      val stmt = conn.prepareStatement("INSERT INTO \"test\".\"binary1\" VALUES (?, ?)")
+      val stmt = conn.prepareStatement("INSERT INTO \"test\".\"binary_tab\" VALUES (?, ?)")
       stmt.setString(1, "jen")
       stmt.setBytes(2, testBytes)
       stmt.executeUpdate()
@@ -299,7 +300,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   private def checkLimitRemoved(df: DataFrame, removed: Boolean = true): Unit = {
-    val limits = df.queryExecution.optimizedPlan.collect {
+    val limits = df.queryExecution.optimizedPlan.collectFirst {
       case g: GlobalLimit => g
       case limit: LocalLimit => limit
     }
@@ -381,7 +382,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   private def checkOffsetRemoved(df: DataFrame, removed: Boolean = true): Unit = {
-    val offsets = df.queryExecution.optimizedPlan.collect {
+    val offsets = df.queryExecution.optimizedPlan.collectFirst {
       case offset: Offset => offset
     }
     if (removed) {
@@ -813,7 +814,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   private def checkSortRemoved(df: DataFrame, removed: Boolean = true): Unit = {
-    val sorts = df.queryExecution.optimizedPlan.collect {
+    val sorts = df.queryExecution.optimizedPlan.collectFirst {
       case s: Sort => s
     }
     if (removed) {
@@ -1602,7 +1603,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("scan with filter push-down with misc functions") {
-    val df1 = sql("SELECT name FROM h2.test.binary1 WHERE " +
+    val df1 = sql("SELECT name FROM h2.test.binary_tab WHERE " +
       "md5(b) = '4371fe0aa613bcb081543a37d241adcb'")
     checkFiltersRemoved(df1)
     val expectedPlanFragment1 = "PushedFilters: [B IS NOT NULL, " +
@@ -1610,7 +1611,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedInfo(df1, expectedPlanFragment1)
     checkAnswer(df1, Seq(Row("jen")))
 
-    val df2 = sql("SELECT name FROM h2.test.binary1 WHERE " +
+    val df2 = sql("SELECT name FROM h2.test.binary_tab WHERE " +
       "sha1(b) = 'cf355e86e8666f9300ef12e996acd5c629e0b0a1'")
     checkFiltersRemoved(df2)
     val expectedPlanFragment2 = "PushedFilters: [B IS NOT NULL, " +
@@ -1618,7 +1619,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedInfo(df2, expectedPlanFragment2)
     checkAnswer(df2, Seq(Row("jen")))
 
-    val df3 = sql("SELECT name FROM h2.test.binary1 WHERE " +
+    val df3 = sql("SELECT name FROM h2.test.binary_tab WHERE " +
       "sha2(b, 256) = '911732d10153f859dec04627df38b19290ec707ff9f83910d061421fdc476109'")
     checkFiltersRemoved(df3)
     val expectedPlanFragment3 = "PushedFilters: [B IS NOT NULL, (SHA2(B, 256)) = " +
@@ -1777,7 +1778,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         Row("test", "empty_table", false), Row("test", "employee", false),
         Row("test", "item", false), Row("test", "dept", false),
         Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false),
-        Row("test", "datetime", false), Row("test", "binary1", false),
+        Row("test", "datetime", false), Row("test", "binary_tab", false),
         Row("test", "employee_bonus", false),
         Row("test", "strings_with_nulls", false)))
   }
@@ -1850,7 +1851,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   private def checkAggregateRemoved(df: DataFrame, removed: Boolean = true): Unit = {
-    val aggregates = df.queryExecution.optimizedPlan.collect {
+    val aggregates = df.queryExecution.optimizedPlan.collectFirst {
       case agg: Aggregate => agg
     }
     if (removed) {
@@ -1922,6 +1923,16 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkFiltersRemoved(df8)
     checkPushedInfo(df8, "[(CONCAT(NAME, ',', CAST(SALARY AS string))) = 'cathy,9000.00']")
     checkAnswer(df8, Seq(Row(1, "cathy", 9000, 1200, false)))
+
+    val df9 = sql("SELECT * FROM h2.test.employee WHERE " +
+      "lpad(name, 5, '*') = '**amy'")
+    checkPushedInfo(df9, "[NAME IS NOT NULL, (LPAD(NAME, 5, '*')) = '**amy']")
+    checkAnswer(df9, Seq(Row(1, "amy", 10000, 1000, true)))
+
+    val df10 = sql("SELECT * FROM h2.test.employee WHERE " +
+      "rpad(name, 5, '*') = 'jen**'")
+    checkPushedInfo(df10, "[NAME IS NOT NULL, (RPAD(NAME, 5, '*')) = 'jen**']")
+    checkAnswer(df10, Seq(Row(6, "jen", 12000, 1200, true)))
   }
 
   test("scan with aggregate push-down: MAX AVG with filter and group by") {
@@ -1937,7 +1948,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   private def checkFiltersRemoved(df: DataFrame, removed: Boolean = true): Unit = {
-    val filters = df.queryExecution.optimizedPlan.collect {
+    val filters = df.queryExecution.optimizedPlan.collectFirst {
       case f: Filter => f
     }
     if (removed) {
@@ -2234,7 +2245,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("scan with aggregate push-down: with concat multiple group key in project") {
     val df1 = sql("SELECT concat_ws('#', DEPT, NAME), MAX(SALARY) FROM h2.test.employee" +
       " WHERE dept > 0 GROUP BY DEPT, NAME")
-    val filters1 = df1.queryExecution.optimizedPlan.collect {
+    val filters1 = df1.queryExecution.optimizedPlan.collectFirst {
       case f: Filter => f
     }
     assert(filters1.isEmpty)
@@ -2248,7 +2259,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
     val df2 = sql("SELECT concat_ws('#', DEPT, NAME), MAX(SALARY) + MIN(BONUS)" +
       " FROM h2.test.employee WHERE dept > 0 GROUP BY DEPT, NAME")
-    val filters2 = df2.queryExecution.optimizedPlan.collect {
+    val filters2 = df2.queryExecution.optimizedPlan.collectFirst {
       case f: Filter => f
     }
     assert(filters2.isEmpty)
@@ -3099,19 +3110,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("SPARK-50792: Format binary data as a binary literal in JDBC.") {
-    val tableName = "h2.test.binary_literal"
-    withTable(tableName) {
-      // Create a table with binary column
-      val binary = "X'123456'"
-
-      sql(s"CREATE TABLE $tableName (binary_col BINARY)")
-      sql(s"INSERT INTO $tableName VALUES ($binary)")
-
-      val df = sql(s"SELECT * FROM $tableName WHERE binary_col = $binary")
-      checkFiltersRemoved(df)
-      checkPushedInfo(df, "PushedFilters: [binary_col IS NOT NULL, binary_col = 0x123456]")
-      checkAnswer(df, Row(Array(18, 52, 86)))
-    }
+    val hexBinary = Hex.encodeHexString(testBytes, false)
+    val binary = "X'" + hexBinary + "'"
+    val df = sql(s"SELECT * FROM h2.test.binary_tab WHERE b = $binary")
+    checkFiltersRemoved(df)
+    checkPushedInfo(df, s"PushedFilters: [B IS NOT NULL, B = 0x$hexBinary]")
+    checkAnswer(df,
+      Row("jen", Array(99, -122, -121, -56, -51, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
   }
 
 }

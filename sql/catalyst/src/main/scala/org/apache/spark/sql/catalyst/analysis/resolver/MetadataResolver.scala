@@ -17,11 +17,18 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.ArrayDeque
-
-import org.apache.spark.sql.catalyst.analysis.{RelationResolution, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Expression, PlanExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{AnalysisHelper, LogicalPlan}
+import org.apache.spark.sql.catalyst.analysis.{
+  FunctionResolution,
+  RelationResolution,
+  UnresolvedRelation
+}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  AnalysisHelper,
+  LogicalPlan,
+  SubqueryAlias,
+  UnresolvedWith
+}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{UNRESOLVED_RELATION, UNRESOLVED_WITH}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
@@ -38,6 +45,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 class MetadataResolver(
     override val catalogManager: CatalogManager,
     override val relationResolution: RelationResolution,
+    functionResolution: FunctionResolution,
     override val extensions: Seq[ResolverExtension] = Seq.empty)
     extends RelationMetadataProvider
     with DelegatesResolutionToExtensions {
@@ -54,33 +62,50 @@ class MetadataResolver(
    * calls for the [[UnresolvedRelation]]s present in that tree. During the `unresolvedPlan`
    * traversal we fill [[relationsWithResolvedMetadata]] with resolved metadata by relation id.
    * This map will be used to resolve the plan in single-pass by the [[Resolver]] using
-   * [[getRelationWithResolvedMetadata]]. If the generic metadata resolution using
-   * [[RelationResolution]] wasn't successful, we resort to using [[extensions]].
-   * Otherwise, we fail with an exception.
+   * [[getRelationWithResolvedMetadata]]. We always try to complete the default resolution using
+   * extensions.
    */
   override def resolve(unresolvedPlan: LogicalPlan): Unit = {
-    traverseLogicalPlanTree(unresolvedPlan) {
-      case unresolvedRelation: UnresolvedRelation =>
-        val relationId = relationIdFromUnresolvedRelation(unresolvedRelation)
+    AnalysisHelper.allowInvokingTransformsInAnalyzer {
+      unresolvedPlan.transformDownWithSubqueriesAndPruning(
+        _.containsAnyPattern(UNRESOLVED_RELATION, UNRESOLVED_WITH)
+      ) {
+        case unresolvedRelation: UnresolvedRelation =>
+          handleUnresolvedRelation(
+            unresolvedRelation = unresolvedRelation
+          )
 
-        if (!relationsWithResolvedMetadata.containsKey(relationId)) {
-          val relationWithResolvedMetadata = resolveRelation(unresolvedRelation).orElse {
-            // In case the generic metadata resolution returned `None`, we try to check if any
-            // of the [[extensions]] matches this `unresolvedRelation`, and resolve it using
-            // that extension.
-            tryDelegateResolutionToExtension(unresolvedRelation, prohibitedResolver)
+          unresolvedRelation
+
+        case unresolvedWith: UnresolvedWith =>
+          for (cteRelation <- unresolvedWith.cteRelations) {
+            resolve(unresolvedPlan = cteRelation._2)
           }
 
-          relationWithResolvedMetadata match {
-            case Some(relationWithResolvedMetadata) =>
+          unresolvedWith
+      }
+    }
+  }
+
+  def handleUnresolvedRelation(unresolvedRelation: UnresolvedRelation): Unit = {
+    val relationId = relationIdFromUnresolvedRelation(unresolvedRelation)
+
+    if (!relationsWithResolvedMetadata.containsKey(relationId)) {
+      resolveRelation(unresolvedRelation) match {
+        case relationAfterDefaultResolution =>
+          val relationAfterExtensionResolution = tryDelegateResolutionToExtension(
+            relationAfterDefaultResolution
+          )
+
+          relationAfterExtensionResolution.getOrElse(relationAfterDefaultResolution) match {
+            case _: UnresolvedRelation =>
+            case relationWithResolvedMetadata =>
               relationsWithResolvedMetadata.put(
                 relationId,
                 relationWithResolvedMetadata
               )
-            case None =>
           }
-        }
-      case _ =>
+      }
     }
   }
 
@@ -88,55 +113,27 @@ class MetadataResolver(
    * Resolves the metadata for the given unresolved relation and returns a relation with the
    * resolved metadata. This method is blocking.
    */
-  private def resolveRelation(unresolvedRelation: UnresolvedRelation): Option[LogicalPlan] =
-    AnalysisHelper.allowInvokingTransformsInAnalyzer {
-      relationResolution.resolveRelation(
+  private def resolveRelation(unresolvedRelation: UnresolvedRelation): LogicalPlan = {
+    relationResolution
+      .resolveRelation(
         u = unresolvedRelation
       )
-    }
+      .getOrElse(unresolvedRelation)
+  }
 
-  /**
-   * Traverse the logical plan tree from `root` in a pre-order DFS manner and apply `visitor` to
-   * each node. This function handles the whole operator tree, its child expression subqueries and
-   * inner children (e.g. [[UnresolvedWith]] CTE definitions).
-   */
-  private def traverseLogicalPlanTree(root: LogicalPlan)(visitor: LogicalPlan => Unit) = {
-    val stack = new ArrayDeque[Either[LogicalPlan, Expression]]
-    stack.push(Left(root))
-
-    while (!stack.isEmpty) {
-      stack.pop() match {
-        case Left(logicalPlan) =>
-          visitor(logicalPlan)
-
-          for (child <- logicalPlan.children) {
-            stack.push(Left(child))
-          }
-          for (innerChild <- logicalPlan.innerChildren) {
-            innerChild match {
-              case plan: LogicalPlan =>
-                stack.push(Left(plan))
-              case _ =>
-            }
-          }
-          for (expression <- logicalPlan.expressions) {
-            stack.push(Right(expression))
-          }
-        case Right(expression) =>
-          for (child <- expression.children) {
-            stack.push(Right(child))
-          }
-
-          expression match {
-            case planExpression: PlanExpression[_] =>
-              planExpression.plan match {
-                case plan: LogicalPlan =>
-                  stack.push(Left(plan))
-                case _ =>
-              }
-            case _ =>
-          }
-      }
+  private def tryDelegateResolutionToExtension(
+      relationAfterDefaultResolution: LogicalPlan): Option[LogicalPlan] = {
+    relationAfterDefaultResolution match {
+      case subqueryAlias: SubqueryAlias =>
+        super.tryDelegateResolutionToExtension(subqueryAlias.child, prohibitedResolver).map {
+          relation =>
+            subqueryAlias.copy(child = relation)
+        }
+      case _ =>
+        super.tryDelegateResolutionToExtension(
+          relationAfterDefaultResolution,
+          prohibitedResolver
+        )
     }
   }
 }

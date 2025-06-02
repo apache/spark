@@ -501,6 +501,9 @@ class MicroBatchExecution(
          * i.e., committedBatchId + 1 */
         commitLog.getLatest() match {
           case Some((latestCommittedBatchId, commitMetadata)) =>
+            commitMetadata.stateUniqueIds.foreach {
+              stateUniqueIds => currentStateStoreCkptId ++= stateUniqueIds
+            }
             if (latestBatchId == latestCommittedBatchId) {
               /* The last batch was successfully committed, so we can safely process a
                * new next batch but first:
@@ -520,9 +523,6 @@ class MicroBatchExecution(
               execCtx.startOffsets ++= execCtx.endOffsets
               watermarkTracker.setWatermark(
                 math.max(watermarkTracker.currentWatermark, commitMetadata.nextBatchWatermarkMs))
-              commitMetadata.stateUniqueIds.foreach {
-                stateUniqueIds => currentStateStoreCkptId ++= stateUniqueIds
-              }
             } else if (latestCommittedBatchId == latestBatchId - 1) {
               execCtx.endOffsets.foreach {
                 case (source: Source, end: Offset) =>
@@ -858,7 +858,8 @@ class MicroBatchExecution(
         watermarkPropagator,
         execCtx.previousContext.isEmpty,
         currentStateStoreCkptId,
-        stateSchemaMetadatas)
+        stateSchemaMetadatas,
+        isTerminatingTrigger = trigger.isInstanceOf[AvailableNowTrigger.type])
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
 

@@ -25,7 +25,6 @@ import numpy as np
 from pyspark.util import is_remote_only
 from pyspark.ml.param import Param, Params
 from pyspark.ml.tuning import ParamGridBuilder
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import rand
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import (
@@ -36,6 +35,7 @@ from pyspark.testing.utils import (
     have_torcheval,
     torcheval_requirement_message,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 if should_test_connect:
     import pandas as pd
@@ -201,7 +201,7 @@ class CrossValidatorTestsMixin:
         lorv2 = LORV2(numTrainWorkers=2, featuresCol="scaled_features")
         pipeline = Pipeline(stages=[scaler, lorv2])
 
-        grid2 = ParamGridBuilder().addGrid(lorv2.maxIter, [2, 200]).build()
+        grid2 = ParamGridBuilder().addGrid(lorv2.maxIter, [2, 5]).build()
         cv = CrossValidator(
             estimator=pipeline,
             estimatorParamMaps=grid2,
@@ -219,7 +219,7 @@ class CrossValidatorTestsMixin:
         )
         pd.testing.assert_frame_equal(transformed_result, expected_transformed_result)
 
-        assert cv_model.bestModel.stages[1].getMaxIter() == 200
+        assert cv_model.bestModel.stages[1].getMaxIter() == 5
 
         # trial of index 2 should have better metric value
         # because it sets higher `maxIter` param.
@@ -246,7 +246,7 @@ class CrossValidatorTestsMixin:
             assert cv_model.bestModel.uid == loaded_cv_model.bestModel.uid
             assert cv_model.bestModel.stages[0].uid == loaded_cv_model.bestModel.stages[0].uid
             assert cv_model.bestModel.stages[1].uid == loaded_cv_model.bestModel.stages[1].uid
-            assert loaded_cv_model.bestModel.stages[1].getMaxIter() == 200
+            assert loaded_cv_model.bestModel.stages[1].getMaxIter() == 5
 
             np.testing.assert_allclose(cv_model.avgMetrics, loaded_cv_model.avgMetrics)
             np.testing.assert_allclose(cv_model.stdMetrics, loaded_cv_model.stdMetrics)
@@ -270,7 +270,7 @@ class CrossValidatorTestsMixin:
 
         lorv2 = LORV2(numTrainWorkers=2)
 
-        grid2 = ParamGridBuilder().addGrid(lorv2.maxIter, [2, 200]).build()
+        grid2 = ParamGridBuilder().addGrid(lorv2.maxIter, [2, 5]).build()
         cv = CrossValidator(
             estimator=lorv2,
             estimatorParamMaps=grid2,
@@ -294,12 +294,10 @@ class CrossValidatorTestsMixin:
     or torcheval_requirement_message
     or "pyspark-connect cannot test classic Spark",
 )
-class CrossValidatorTests(CrossValidatorTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[2]").getOrCreate()
-
-    def tearDown(self) -> None:
-        self.spark.stop()
+class CrossValidatorTests(CrossValidatorTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def master(cls):
+        return "local[2]"
 
 
 if __name__ == "__main__":

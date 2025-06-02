@@ -28,12 +28,15 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode, TreeNodeTag}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{OUTER_REFERENCE, PLAN_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
+import org.apache.spark.sql.catalyst.trees.TreePatternBits.toPatternBits
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{BestEffortLazyVal, TransientBestEffortLazyVal}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -603,10 +606,20 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
   /**
    * A variant of `collect`. This method not only apply the given function to all elements in this
-   * plan, also considering all the plans in its (nested) subqueries
+   * plan, also considering all the plans in its (nested) subqueries.
    */
   def collectWithSubqueries[B](f: PartialFunction[PlanType, B]): Seq[B] =
     (this +: subqueriesAll).flatMap(_.collect(f))
+
+  /**
+   * A variant of collectFirst. This method not only apply the given function to all elements in
+   * this plan, also considering all the plans in its (nested) subqueries.
+   */
+  def collectFirstWithSubqueries[B](f: PartialFunction[PlanType, B]): Option[B] = {
+    this.collectFirst(f).orElse {
+      subqueriesAll.foldLeft(None: Option[B]) { (l, r) => l.orElse(r.collectFirst(f)) }
+    }
+  }
 
   override def innerChildren: Seq[QueryPlan[_]] = subqueries
 
@@ -699,6 +712,23 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * significant memory overhead on the driver.
    */
   def allAttributes: AttributeSeq = children.flatMap(_.output)
+
+  final override def validateNodePatterns(): Unit = {
+    if (Utils.isTesting) {
+      assert(
+        !toPatternBits(nodePatterns: _*).intersects(QueryPlanPatternBitMask.mask),
+        s"${this.getClass.getName} returns Expression patterns")
+    }
+  }
+}
+
+object QueryPlanPatternBitMask {
+  val mask: BitSet = {
+    val bits = new BitSet(TreePattern.maxId)
+    bits.clear()
+    bits.setUntil(OPERATOR_START.id)
+    bits
+  }
 }
 
 object QueryPlan extends PredicateHelper {
@@ -787,7 +817,7 @@ object QueryPlan extends PredicateHelper {
    * ""                     -> <fieldName>: None
    */
   def generateFieldString(fieldName: String, values: Any): String = values match {
-    case iter: Iterable[_] if (iter.size == 0) => s"${fieldName}: []"
+    case iter: Iterable[_] if iter.isEmpty => s"${fieldName}: []"
     case iter: Iterable[_] => s"${fieldName} [${iter.size}]: ${iter.mkString("[", ", ", "]")}"
     case str: String if (str == null || str.isEmpty) => s"${fieldName}: None"
     case str: String => s"${fieldName}: ${str}"

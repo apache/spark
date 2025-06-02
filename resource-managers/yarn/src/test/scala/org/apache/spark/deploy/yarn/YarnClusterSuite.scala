@@ -40,6 +40,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Python.PYTHON_UNIX_DOMAIN_SOCKET_ENABLED
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart, SparkListenerExecutorAdded}
@@ -268,11 +269,19 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("run Python application in yarn-client mode") {
-    testPySpark(true)
+    testPySpark(
+      true,
+      // User is unknown in this suite.
+      extraConf = Map(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED.key -> false.toString)
+    )
   }
 
   test("run Python application in yarn-cluster mode") {
-    testPySpark(false)
+    testPySpark(
+      false,
+      // User is unknown in this suite.
+      extraConf = Map(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED.key -> false.toString)
+    )
   }
 
   test("run Python application with Spark Connect in yarn-client mode") {
@@ -290,6 +299,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     testPySpark(
       clientMode = false,
       extraConf = Map(
+        PYTHON_UNIX_DOMAIN_SOCKET_ENABLED.key -> false.toString,  // User is unknown in this suite.
         "spark.yarn.appMasterEnv.PYSPARK_DRIVER_PYTHON"
           -> sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", pythonExecutablePath),
         "spark.yarn.appMasterEnv.PYSPARK_PYTHON"
@@ -765,34 +775,6 @@ private object YarnClasspathTest extends Logging {
     }
   }
 
-}
-
-private object YarnConnectTest extends Logging {
-  def main(args: Array[String]): Unit = {
-    val output = new java.io.PrintStream(new File(args(0)))
-    val clz = Utils.classForName("org.apache.spark.sql.SparkSession$")
-    val moduleField = clz.getDeclaredField("MODULE$")
-    val obj = moduleField.get(null)
-    var builder = clz.getMethod("builder").invoke(obj)
-    builder = builder.getClass().getMethod(
-      "config", classOf[String], classOf[String]).invoke(builder, SPARK_API_MODE.key, "connect")
-    builder = builder.getClass().getMethod("master", classOf[String]).invoke(builder, "yarn")
-    val session = builder.getClass().getMethod("getOrCreate").invoke(builder)
-
-    try {
-      // Check if the current session is a Spark Connect session.
-      session.getClass().getDeclaredField("client")
-      val df = session.getClass().getMethod("range", classOf[Long]).invoke(session, 10)
-      assert(df.getClass().getMethod("count").invoke(df) == 10)
-    } catch {
-      case e: Throwable =>
-        e.printStackTrace(new java.io.PrintStream(output))
-        throw e
-    } finally {
-      session.getClass().getMethod("stop").invoke(session)
-      output.close()
-    }
-  }
 }
 
 private object YarnAddJarTest extends Logging {

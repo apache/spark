@@ -23,6 +23,7 @@ import difflib
 import functools
 from decimal import Decimal
 from time import time, sleep
+import signal
 from typing import (
     Any,
     Optional,
@@ -113,6 +114,12 @@ except Exception as e:
 
 have_pyarrow = pyarrow_requirement_message is None
 
+is_ansi_mode_test = True
+if os.environ.get("SPARK_ANSI_SQL_MODE") == "false":
+    is_ansi_mode_test = False
+
+ansi_mode_not_supported_message = "ANSI mode is not supported" if is_ansi_mode_test else None
+
 
 def read_int(b):
     return struct.unpack("!i", b)[0]
@@ -120,6 +127,26 @@ def read_int(b):
 
 def write_int(i):
     return struct.pack("!i", i)
+
+
+def timeout(seconds):
+    def decorator(func):
+        def handler(signum, frame):
+            raise TimeoutError(f"Function {func.__name__} timed out after {seconds} seconds")
+
+        def wrapper(*args, **kwargs):
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, handler)
+            signal.alarm(seconds)
+            try:
+                result = func(*args, **kwargs)
+            finally:
+                signal.alarm(0)
+            return result
+
+        return wrapper
+
+    return decorator
 
 
 def eventually(
@@ -225,7 +252,11 @@ class ReusedPySparkTestCase(unittest.TestCase):
     def setUpClass(cls):
         from pyspark import SparkContext
 
-        cls.sc = SparkContext("local[4]", cls.__name__, conf=cls.conf())
+        cls.sc = SparkContext(cls.master(), cls.__name__, conf=cls.conf())
+
+    @classmethod
+    def master(cls):
+        return "local[4]"
 
     @classmethod
     def tearDownClass(cls):
@@ -519,6 +550,9 @@ def assertSchemaEqual(
         if dt1.typeName() == dt2.typeName():
             if dt1.typeName() == "array":
                 return compare_datatypes_ignore_nullable(dt1.elementType, dt2.elementType)
+            elif dt1.typeName() == "decimal":
+                # Fix for SPARK-51062: Compare precision and scale for decimal types
+                return dt1.precision == dt2.precision and dt1.scale == dt2.scale
             elif dt1.typeName() == "struct":
                 return compare_schemas_ignore_nullable(dt1, dt2)
             else:

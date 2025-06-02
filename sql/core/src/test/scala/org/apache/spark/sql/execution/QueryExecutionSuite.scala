@@ -422,6 +422,24 @@ class QueryExecutionSuite extends SharedSparkSession {
     mockCallback.assertAnalyzed()
   }
 
+  test("SPARK-51265: IncrementalExecution should set the command execution code correctly") {
+    withTempView("s") {
+      val streamDf = spark.readStream.format("rate").load()
+      streamDf.createOrReplaceTempView("s")
+      withTable("output") {
+        val ex = intercept[AnalysisException] {
+          // Creates a table from streaming source with batch query. This should fail.
+          spark.sql("CREATE TABLE output USING csv AS SELECT * FROM s")
+        }
+        assert(
+          ex.getMessage.contains("Queries with streaming sources must be executed with " +
+            "writeStream.start(), or from a streaming table or flow definition within a Spark " +
+            "Declarative Pipeline.")
+        )
+      }
+    }
+  }
+
   case class MockCallbackEagerCommand(
       var trackerAnalyzed: QueryPlanningTracker = null,
       var trackerReadyForExecution: QueryPlanningTracker = null)

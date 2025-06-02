@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import unittest
 import pandas as pd
 import numpy as np
 import re
@@ -22,6 +22,7 @@ import re
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import is_ansi_mode_test, ansi_mode_not_supported_message
 
 
 class SeriesStringOpsAdvMixin:
@@ -173,6 +174,7 @@ class SeriesStringOpsAdvMixin:
         self.check_func(lambda x: x.str.slice_replace(stop=2, repl="X"))
         self.check_func(lambda x: x.str.slice_replace(start=1, stop=3, repl="X"))
 
+    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_string_split(self):
         self.check_func_on_series(lambda x: repr(x.str.split()), self.pser[:-1])
         self.check_func_on_series(lambda x: repr(x.str.split(r"p*")), self.pser[:-1])
@@ -183,6 +185,7 @@ class SeriesStringOpsAdvMixin:
         with self.assertRaises(NotImplementedError):
             self.check_func(lambda x: x.str.split(expand=True))
 
+    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_string_rsplit(self):
         self.check_func_on_series(lambda x: repr(x.str.rsplit()), self.pser[:-1])
         self.check_func_on_series(lambda x: repr(x.str.rsplit(r"p*")), self.pser[:-1])

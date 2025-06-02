@@ -218,10 +218,10 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
           processInsert("t1", df, overwrite = false, byName = true)
         },
         v1ErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
-        v2ErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        v2ErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
         v1Parameters = Map("tableName" -> "`spark_catalog`.`default`.`t1`",
           "extraColumns" -> "`x1`"),
-        v2Parameters = Map("tableName" -> "`testcat`.`t1`", "colName" -> "`c1`")
+        v2Parameters = Map("tableName" -> "`testcat`.`t1`", "extraColumns" -> "`x1`")
       )
       val df2 = Seq((3, 2, 1, 0)).toDF(Seq("c3", "c2", "c1", "c0"): _*)
       checkV1AndV2Error(
@@ -446,7 +446,8 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
               parameters = Map(
                 "expression" -> "'ansi'",
                 "sourceType" -> "\"STRING\"",
-                "targetType" -> "\"INT\""
+                "targetType" -> "\"INT\"",
+                "ansiConfig" -> "\"spark.sql.ansi.enabled\""
               ),
               context = ExpectedContext("insert into t partition(a='ansi')", 0, 32)
             )
