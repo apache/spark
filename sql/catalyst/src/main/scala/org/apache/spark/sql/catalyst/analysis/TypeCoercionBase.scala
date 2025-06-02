@@ -42,6 +42,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   Project,
   ReplaceTable,
   Union,
+  UnionLoop,
+  UnionLoopRef,
   Unpivot
 }
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -246,6 +248,26 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
           } else {
             val attrMapping = s.children.head.output.zip(newChildren.head.output)
             s.copy(children = newChildren) -> attrMapping
+          }
+
+        case s: UnionLoop
+            if s.childrenResolved &&
+            s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
+          val newChildren: Seq[LogicalPlan] = withOrigin(s.origin) {
+            buildNewChildrenWithWiderTypes(s.children)
+          }
+          if (newChildren.isEmpty) {
+            s -> Nil
+          } else {
+            val attrMapping = s.children.head.output.zip(newChildren.head.output)
+            val anchor = newChildren.head
+            val recursion = newChildren(1).transformUpWithNewOutput ({
+              case UnionLoopRef(s.id, output, accumulated) =>
+                val newOutput = anchor.output.map(_.newInstance())
+                val attrMappingRef = output.zip(newOutput)
+                UnionLoopRef(s.id, newOutput, accumulated) -> attrMappingRef
+            }, mutableOutput = true)
+            s.copy(anchor = anchor, recursion = recursion) -> attrMapping
           }
       }
     }

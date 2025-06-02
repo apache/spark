@@ -1767,3 +1767,103 @@ WITH RECURSIVE randoms(val) AS (
 SELECT val FROM randoms LIMIT 5
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+WITH RECURSIVE t1(n, m) AS (
+    SELECT 1, CAST(1 AS BIGINT)
+    UNION ALL
+    SELECT n+1, n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#x AS n#x, CAST(1 AS BIGINT)#xL AS m#xL]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x, cast(1 as bigint) AS CAST(1 AS BIGINT)#xL]
+:           :  +- OneRowRelation
+:           +- Project [(n + 1)#x, cast((n + 1)#x as bigint) AS (n + 1)#xL]
+:              +- Project [(n#x + 1) AS (n + 1)#x, (n#x + 1) AS (n + 1)#x]
+:                 +- Filter (n#x < 5)
+:                    +- SubqueryAlias t1
+:                       +- Project [1#x AS n#x, CAST(1 AS BIGINT)#xL AS m#xL]
+:                          +- UnionLoopRef xxxx, [1#x, CAST(1 AS BIGINT)#xL], false
++- Project [n#x, m#xL]
+   +- SubqueryAlias t1
+      +- CTERelationRef xxxx, true, [n#x, m#xL], false, false
+
+
+-- !query
+WITH RECURSIVE t1(n, m) AS (
+    SELECT 1, 1
+    UNION ALL
+    SELECT n+1, CAST(n+1 AS BIGINT) FROM t1 WHERE n < 5)
+SELECT * FROM t1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#x AS n#x, 1#xL AS m#xL]
+:        +- UnionLoop xxxx
+:           :- Project [1#x, cast(1#x as bigint) AS 1#xL]
+:           :  +- Project [1 AS 1#x, 1 AS 1#x]
+:           :     +- OneRowRelation
+:           +- Project [(n#x + 1) AS (n + 1)#x, cast((n#x + 1) as bigint) AS CAST((n + 1) AS BIGINT)#xL]
+:              +- Filter (n#x < 5)
+:                 +- SubqueryAlias t1
+:                    +- Project [1#x AS n#x, 1#xL AS m#xL]
+:                       +- UnionLoopRef xxxx, [1#x, 1#xL], false
++- Project [n#x, m#xL]
+   +- SubqueryAlias t1
+      +- CTERelationRef xxxx, true, [n#x, m#xL], false, false
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT CAST(n+1 AS BIGINT) FROM t1 WHERE n < 5)
+SELECT * FROM t1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#xL AS n#xL]
+:        +- UnionLoop xxxx
+:           :- Project [cast(1#x as bigint) AS 1#xL]
+:           :  +- Project [1 AS 1#x]
+:           :     +- OneRowRelation
+:           +- Project [cast((n#xL + cast(1 as bigint)) as bigint) AS CAST((n + 1) AS BIGINT)#xL]
+:              +- Filter (n#xL < cast(5 as bigint))
+:                 +- SubqueryAlias t1
+:                    +- Project [1#xL AS n#xL]
+:                       +- UnionLoopRef xxxx, [1#xL], false
++- Project [n#xL]
+   +- SubqueryAlias t1
+      +- CTERelationRef xxxx, true, [n#xL], false, false
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT CAST(n AS BIGINT)+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#xL AS n#xL]
+:        +- UnionLoop xxxx
+:           :- Project [cast(1#x as bigint) AS 1#xL]
+:           :  +- Project [1 AS 1#x]
+:           :     +- OneRowRelation
+:           +- Project [(cast(n#xL as bigint) + cast(1 as bigint)) AS (CAST(n AS BIGINT) + 1)#xL]
+:              +- Filter (n#xL < cast(5 as bigint))
+:                 +- SubqueryAlias t1
+:                    +- Project [1#xL AS n#xL]
+:                       +- UnionLoopRef xxxx, [1#xL], false
++- Project [n#xL]
+   +- SubqueryAlias t1
+      +- CTERelationRef xxxx, true, [n#xL], false, false

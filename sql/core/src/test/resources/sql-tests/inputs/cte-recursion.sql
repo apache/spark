@@ -661,3 +661,31 @@ WITH RECURSIVE randoms(val) AS (
     FROM randoms
 )
 SELECT val FROM randoms LIMIT 5;
+
+-- Type coercion where the anchor is wider
+WITH RECURSIVE t1(n, m) AS (
+    SELECT 1, CAST(1 AS BIGINT)
+    UNION ALL
+    SELECT n+1, n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
+-- Type coercion where the recursion is wider
+WITH RECURSIVE t1(n, m) AS (
+    SELECT 1, 1
+    UNION ALL
+    SELECT n+1, CAST(n+1 AS BIGINT) FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
+-- Type coercion where the wider recursion depends on a narrower anchor
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT CAST(n+1 AS BIGINT) FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
+-- Type coercion where the recursion is inferred to be wider
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT CAST(n AS BIGINT)+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1;

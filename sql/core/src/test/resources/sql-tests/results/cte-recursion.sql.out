@@ -1621,3 +1621,67 @@ struct<val:array<int>>
 [2,1,5,3,4]
 [4,3,2,5,1]
 [4,5,1,2,3]
+
+
+-- !query
+WITH RECURSIVE t1(n, m) AS (
+    SELECT 1, CAST(1 AS BIGINT)
+    UNION ALL
+    SELECT n+1, n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1
+-- !query schema
+struct<n:int,m:bigint>
+-- !query output
+1	1
+2	2
+3	3
+4	4
+5	5
+
+
+-- !query
+WITH RECURSIVE t1(n, m) AS (
+    SELECT 1, 1
+    UNION ALL
+    SELECT n+1, CAST(n+1 AS BIGINT) FROM t1 WHERE n < 5)
+SELECT * FROM t1
+-- !query schema
+struct<n:int,m:bigint>
+-- !query output
+1	1
+2	2
+3	3
+4	4
+5	5
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT CAST(n+1 AS BIGINT) FROM t1 WHERE n < 5)
+SELECT * FROM t1
+-- !query schema
+struct<n:bigint>
+-- !query output
+1
+2
+3
+4
+5
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT CAST(n AS BIGINT)+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1
+-- !query schema
+struct<n:bigint>
+-- !query output
+1
+2
+3
+4
+5

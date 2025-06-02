@@ -317,11 +317,15 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * @param canGetOutput a boolean condition to indicate if we can get the output of a plan node
    *                     to prune the attributes mapping to be propagated. The default value is true
    *                     as only unresolved logical plan can't get output.
+   * @param mutableOutput a boolean to signify that the output can be changed during the
+   *                      transformation and that this changed output should be passed to the
+   *                      parent.
    */
   def transformUpWithNewOutput(
       rule: PartialFunction[PlanType, (PlanType, Seq[(Attribute, Attribute)])],
       skipCond: PlanType => Boolean = _ => false,
-      canGetOutput: PlanType => Boolean = _ => true): PlanType = {
+      canGetOutput: PlanType => Boolean = _ => true,
+      mutableOutput: Boolean = false): PlanType = {
     def rewrite(plan: PlanType): (PlanType, Seq[(Attribute, Attribute)]) = {
       if (skipCond(plan)) {
         plan -> Nil
@@ -380,7 +384,16 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
         val resultAttrMapping = if (canGetOutput(plan)) {
           // We propagate the attributes mapping to the parent plan node to update attributes, so
           // the `newAttr` must be part of this plan's output.
-          (transferAttrMapping ++ newOtherAttrMapping).filter {
+          val newOutputAttrMapping = if (mutableOutput) {
+            plan.output.zip(newPlan.output).filter {
+              case (a, b) =>
+                // ExprId should be called after checking that a and b are resolved.
+                a.resolved && b.resolved && (a.exprId != b.exprId || a.dataType != b.dataType)
+            }
+          } else {
+            Seq.empty[(Attribute, Attribute)]
+          }
+          (transferAttrMapping ++ newOtherAttrMapping ++ newOutputAttrMapping).filter {
             case (_, newAttr) => planAfterRule.outputSet.contains(newAttr)
           }
         } else {
