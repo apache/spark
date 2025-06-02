@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.pipelines.graph
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 
@@ -37,10 +38,12 @@ case class UnresolvedDatasetException(identifier: TableIdentifier)
  * @param name The name of the table
  * @param cause The cause of the failure
  */
-case class LoadTableException(name: String, override val cause: Option[Throwable])
-    extends AnalysisException(s"Failed to load table '$name'", cause = cause)
-
-
+case class LoadTableException(name: String, cause: Option[Throwable])
+    extends SparkException(
+      errorClass = "INTERNAL_ERROR",
+      messageParameters = Map("message" -> s"Failed to load table '$name'"),
+      cause = cause.orNull
+    )
 
 /**
  * Exception raised when a pipeline has one or more flows that cannot be resolved
