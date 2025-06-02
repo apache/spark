@@ -237,15 +237,16 @@ class BooleanOps(DataTypeOps):
             left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
             spark_session = left._internal.spark_frame.sparkSession
 
-            def safe_rmod(left_col: PySparkColumn, right: Any) -> PySparkColumn:
-                if is_ansi_mode_enabled(spark_session):
-                    return F.when(left_col != 0, F.pmod(F.lit(right), left_col)).otherwise(
+            if is_ansi_mode_enabled(spark_session):
+
+                def safe_rmod(left_col: PySparkColumn, right_val: Any) -> PySparkColumn:
+                    return F.when(left_col != 0, F.pmod(F.lit(right_val), left_col)).otherwise(
                         F.lit(None)
                     )
-                else:
-                    return right % left
 
-            return numpy_column_op(safe_rmod)(left, right)
+                return numpy_column_op(safe_rmod)(left, right)
+            else:
+                return right % left
         else:
             raise TypeError(
                 "Modulo can not be applied to %s and the given type." % self.pretty_name
