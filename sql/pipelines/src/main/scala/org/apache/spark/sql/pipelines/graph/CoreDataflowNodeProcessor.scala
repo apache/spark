@@ -183,8 +183,9 @@ private class FlowResolver(rawGraph: DataflowGraph) extends Logging {
           }
           convertResolvedToTypedFlow(flowToResolve, maybeNewFuncResult)
 
-        // If flow failed due to unresolved dataset, throw a retryable exception, otherwise just
-        // return the failed flow.
+        // If the flow failed due to an UnresolvedDatasetException, it means that one of the
+        // flow's inputs wasn't available. After other flows are resolved, these inputs
+        // may become available, so throw a retryable exception in this case.
         case f =>
           f.dataFrame.failed.toOption.collectFirst {
             case e: UnresolvedDatasetException => e

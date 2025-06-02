@@ -93,23 +93,6 @@ abstract class PipelineTest
   }
 
   /**
-   * Runs the given function with the given spark conf, and resets the conf after the function
-   * completes.
-   */
-  def withSparkConfs[T](confs: Map[String, String])(f: => T): T = {
-    val originalConfs = confs.keys.map(k => k -> spark.conf.getOption(k)).toMap
-    confs.foreach { case (k, v) => spark.conf.set(k, v) }
-    try f
-    finally originalConfs.foreach {
-      case (k, v) =>
-        v match {
-          case Some(v) => spark.conf.set(k, v)
-          case None => spark.conf.unset(k)
-        }
-    }
-  }
-
-  /**
    * This exists temporarily for compatibility with tests that become invalid when multiple
    * executors are available.
    */

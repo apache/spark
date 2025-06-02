@@ -113,7 +113,6 @@ sealed trait TableInput extends Input {
  * @param normalizedPath Normalized storage location for the table based on the user-specified table
  *                       path (if not defined, we will normalize a managed storage path for it).
  * @param properties Table Properties to set in table metadata.
- * @param sqlText For SQL-defined pipelines, the original string of the SELECT query.
  * @param comment User-specified comment that can be placed on the table.
  * @param isStreamingTableOpt if the table is a streaming table, will be None until we have resolved
  *                            flows into table
@@ -124,7 +123,6 @@ case class Table(
     partitionCols: Option[Seq[String]],
     normalizedPath: Option[String],
     properties: Map[String, String] = Map.empty,
-    sqlText: Option[String],
     comment: Option[String],
     baseOrigin: QueryOrigin,
     isStreamingTableOpt: Option[Boolean],
@@ -239,9 +237,6 @@ trait View extends GraphElement {
   /** Properties of this view */
   val properties: Map[String, String]
 
-  /** (SQL-specific) The raw query that defines the [[View]]. */
-  val sqlText: Option[String]
-
   /** User-specified comment that can be placed on the [[View]]. */
   val comment: Option[String]
 }
@@ -251,13 +246,11 @@ trait View extends GraphElement {
  *
  * @param identifier The identifier of this view within the graph.
  * @param properties Properties of the view
- * @param sqlText Raw SQL query that defines the view.
  * @param comment when defining a view
  */
 case class TemporaryView(
     identifier: TableIdentifier,
     properties: Map[String, String],
-    sqlText: Option[String],
     comment: Option[String],
     origin: QueryOrigin
 ) extends View {}
@@ -267,13 +260,11 @@ case class TemporaryView(
  *
  * @param identifier The identifier of this view within the graph.
  * @param properties Properties of the view
- * @param sqlText Raw SQL query that defines the view.
  * @param comment when defining a view
  */
 case class PersistedView(
     identifier: TableIdentifier,
     properties: Map[String, String],
-    sqlText: Option[String],
     comment: Option[String],
     origin: QueryOrigin
 ) extends View {}

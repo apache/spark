@@ -55,7 +55,6 @@ class TestGraphRegistrationContext(
       query: Option[FlowFunction] = None,
       sqlConf: Map[String, String] = Map.empty,
       comment: Option[String] = None,
-      sqlText: Option[String] = None,
       specifiedSchema: Option[StructType] = None,
       partitionCols: Option[Seq[String]] = None,
       properties: Map[String, String] = Map.empty,
@@ -70,7 +69,6 @@ class TestGraphRegistrationContext(
       Table(
         identifier = GraphIdentifierManager.parseTableIdentifier(name, spark),
         comment = comment,
-        sqlText = sqlText,
         specifiedSchema = specifiedSchema,
         partitionCols = partitionCols,
         properties = properties,
@@ -105,7 +103,6 @@ class TestGraphRegistrationContext(
       query: FlowFunction,
       sqlConf: Map[String, String] = Map.empty,
       comment: Option[String] = None,
-      sqlText: Option[String] = None,
       origin: QueryOrigin = QueryOrigin.empty,
       viewType: ViewType = LocalTempView,
       catalog: Option[String] = None,
@@ -121,7 +118,6 @@ class TestGraphRegistrationContext(
           TemporaryView(
             identifier = viewIdentifier,
             comment = comment,
-            sqlText = sqlText,
             origin = origin,
             properties = Map.empty
           )
@@ -129,7 +125,6 @@ class TestGraphRegistrationContext(
           PersistedView(
             identifier = viewIdentifier,
             comment = comment,
-            sqlText = sqlText,
             origin = origin,
             properties = Map.empty
           )
