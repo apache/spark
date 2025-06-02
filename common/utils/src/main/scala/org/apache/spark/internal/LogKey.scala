@@ -915,4 +915,6 @@ private[spark] object LogKeys {
   case object YARN_RESOURCE extends LogKey
   case object YOUNG_GENERATION_GC extends LogKey
   case object ZERO_TIME extends LogKey
+  case object ANTLR_DFA_CACHE_DELTA extends LogKey
+  case object ANTLR_DFA_CACHE_SIZE extends LogKey
 }

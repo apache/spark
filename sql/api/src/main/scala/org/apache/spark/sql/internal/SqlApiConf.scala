@@ -47,6 +47,8 @@ private[sql] trait SqlApiConf {
   def stackTracesInDataFrameContext: Int
   def dataFrameQueryContextEnabled: Boolean
   def legacyAllowUntypedScalaUDFs: Boolean
+  def manageParserCaches: Boolean
+  def parserDfaCacheFlushThreshold: Int
 }
 
 private[sql] object SqlApiConf {
@@ -60,6 +62,9 @@ private[sql] object SqlApiConf {
   val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String = {
     SqlApiConfHelper.LOCAL_RELATION_CACHE_THRESHOLD_KEY
   }
+  val PARSER_DFA_CACHE_FLUSH_THRESHOLD_KEY: String =
+    SqlApiConfHelper.PARSER_DFA_CACHE_FLUSH_THRESHOLD_KEY
+  val MANAGE_PARSER_CACHES_KEY: String = SqlApiConfHelper.MANAGE_PARSER_CACHES_KEY
 
   def get: SqlApiConf = SqlApiConfHelper.getConfGetter.get()()
 
@@ -88,4 +93,6 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def stackTracesInDataFrameContext: Int = 1
   override def dataFrameQueryContextEnabled: Boolean = true
   override def legacyAllowUntypedScalaUDFs: Boolean = false
+  override def manageParserCaches: Boolean = false
+  override def parserDfaCacheFlushThreshold: Int = -1
 }
