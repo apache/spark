@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.lang.reflect.{Method, Modifier}
-
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{FUNCTION_NAME, FUNCTION_PARAM}
 import org.apache.spark.sql.AnalysisException
@@ -30,8 +29,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
-import org.apache.spark.sql.connector.expressions.{BucketTransform, Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, IdentityTransform, Literal => V2Literal, NamedReference, NamedTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder, SortValue, Transform}
-import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, GeneralScalarExpression, IdentityTransform, NamedReference, NamedTransform, SortValue, Transform, Cast => V2Cast, Expression => V2Expression, Literal => V2Literal, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysNull, AlwaysTrue}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
@@ -210,6 +209,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
   def toCatalyst(expr: V2Expression): Option[Expression] = expr match {
     case _: AlwaysTrue => Some(Literal.TrueLiteral)
     case _: AlwaysFalse => Some(Literal.FalseLiteral)
+    case _: AlwaysNull => Some(Literal.NullPredicateLiteral)
     case l: V2Literal[_] => Some(Literal(l.value, l.dataType))
     case r: NamedReference => Some(UnresolvedAttribute(r.fieldNames.toImmutableArraySeq))
     case c: V2Cast => toCatalyst(c.expression).map(Cast(_, c.dataType, ansiEnabled = true))
