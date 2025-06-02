@@ -237,7 +237,7 @@ class BooleanOps(DataTypeOps):
             left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
             spark_session = left._internal.spark_frame.sparkSession
 
-            def safe_rmod(left_col, right):
+            def safe_rmod(left_col: PySparkColumn, right: Any) -> PySparkColumn:
                 if is_ansi_mode_enabled(spark_session):
                     return F.when(left_col != 0, F.pmod(F.lit(right), left_col)).otherwise(
                         F.lit(None)
