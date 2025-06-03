@@ -418,6 +418,8 @@ object SparkBuild extends PomBuild {
 
   enable(HiveThriftServer.settings)(hiveThriftServer)
 
+  enable(SparkDeclarativePipelines.settings)(pipelines)
+
   enable(SparkConnectCommon.settings)(connectCommon)
   enable(SparkConnect.settings)(connect)
   enable(SparkConnectClient.settings)(connectClient)
@@ -874,6 +876,57 @@ object SparkConnectClient {
       ShadeRule.rename("org.codehaus.**" -> "org.sparkproject.connect.client.org.codehaus.@1").inAll,
       ShadeRule.rename("android.annotation.**" -> "org.sparkproject.connect.client.android.annotation.@1").inAll
     ),
+
+    (assembly / assemblyMergeStrategy) := {
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
+      // Drop all proto files that are not needed as artifacts of the build.
+      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
+      case _ => MergeStrategy.first
+    }
+  )
+}
+
+object SparkDeclarativePipelines {
+  import BuildCommons.protoVersion
+
+  lazy val settings = Seq(
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
+      val guavaFailureAccessVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "guava.failureaccess.version").asInstanceOf[String]
+      Seq(
+        "com.google.guava" % "guava" % guavaVersion,
+        "com.google.guava" % "failureaccess" % guavaFailureAccessVersion,
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+
+    (assembly / logLevel) := Level.Info,
+
+    // Exclude `scala-library` from assembly.
+    (assembly / assemblyPackageScala / assembleArtifact) := false,
+
+    // SPARK-46733: Include `spark-connect-*.jar`, `unused-*.jar`,`guava-*.jar`,
+    // `failureaccess-*.jar`, `annotations-*.jar`, `grpc-*.jar`, `protobuf-*.jar`,
+    // `gson-*.jar`, `error_prone_annotations-*.jar`, `j2objc-annotations-*.jar`,
+    // `animal-sniffer-annotations-*.jar`, `perfmark-api-*.jar`,
+    // `proto-google-common-protos-*.jar` in assembly.
+    // This needs to be consistent with the content of `maven-shade-plugin`.
+    (assembly / assemblyExcludedJars) := {
+      val cp = (assembly / fullClasspath).value
+      val validPrefixes = Set("spark-connect", "unused-", "guava-", "failureaccess-",
+        "annotations-", "grpc-", "protobuf-", "gson", "error_prone_annotations",
+        "j2objc-annotations", "animal-sniffer-annotations", "perfmark-api",
+        "proto-google-common-protos")
+      cp filterNot { v =>
+        validPrefixes.exists(v.data.getName.startsWith)
+      }
+    },
 
     (assembly / assemblyMergeStrategy) := {
       case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
