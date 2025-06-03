@@ -1497,6 +1497,41 @@ struct<x:int,y:int>
 
 
 -- !query
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=0
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation	0
+
+
+-- !query
+WITH RECURSIVE tmp(x) AS (
+    values (1), (2), (3), (4), (5)
+), rcte(x, y) AS (
+    SELECT x, x FROM tmp WHERE x = 1
+    UNION ALL
+    SELECT x + 1, x FROM rcte WHERE x < 5
+)
+SELECT * FROM rcte
+-- !query schema
+struct<x:int,y:int>
+-- !query output
+1	1
+2	1
+3	2
+4	3
+5	4
+
+
+-- !query
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation	100
+
+
+-- !query
 WITH RECURSIVE tmp(x) AS (
     values (1), (2), (3), (4), (5)
 ), rcte(x, y, z, t) AS (

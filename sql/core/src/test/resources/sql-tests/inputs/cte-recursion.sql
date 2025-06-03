@@ -598,6 +598,20 @@ WITH RECURSIVE tmp(x) AS (
 )
 SELECT * FROM rcte;
 
+-- Previous query without converting to local relations
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=0;
+
+WITH RECURSIVE tmp(x) AS (
+    values (1), (2), (3), (4), (5)
+), rcte(x, y) AS (
+    SELECT x, x FROM tmp WHERE x = 1
+    UNION ALL
+    SELECT x + 1, x FROM rcte WHERE x < 5
+)
+SELECT * FROM rcte;
+
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100;
+
 -- Recursive CTE with multiple of the same reference in the anchor, which get referenced as different variables in subsequent iterations.
 WITH RECURSIVE tmp(x) AS (
     values (1), (2), (3), (4), (5)
