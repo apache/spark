@@ -252,9 +252,13 @@ trait GraphValidations extends Logging {
           .flatMap(view.get)
           .foreach {
             case tempView: TemporaryView =>
-              throw GraphErrors.persistedViewReadsFromTemporaryView(
-                persistedViewIdentifier = persistedView.identifier,
-                temporaryViewIdentifier = tempView.identifier
+              throw new AnalysisException(
+                errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+                messageParameters = Map(
+                  "persistedViewName" -> persistedView.identifier.toString,
+                  "temporaryViewName" -> tempView.identifier.toString
+                ),
+                cause = null
               )
             case _ =>
           }

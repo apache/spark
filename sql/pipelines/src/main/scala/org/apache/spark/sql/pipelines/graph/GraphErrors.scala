@@ -128,22 +128,4 @@ object GraphErrors {
       cause = Option(cause.orNull)
     )
   }
-
-  /**
-   * Throws an error when a persisted view is trying to read from a temporary view.
-   *
-   * @param persistedViewIdentifier the identifier of the persisted view
-   * @param temporaryViewIdentifier the identifier of the temporary view
-   */
-  def persistedViewReadsFromTemporaryView(
-      persistedViewIdentifier: TableIdentifier,
-      temporaryViewIdentifier: TableIdentifier): AnalysisException = {
-    new AnalysisException(
-      "PERSISTED_VIEW_READS_FROM_TEMPORARY_VIEW",
-      Map(
-        "persistedViewName" -> persistedViewIdentifier.toString,
-        "temporaryViewName" -> temporaryViewIdentifier.toString
-      )
-    )
-  }
 }
