@@ -100,7 +100,6 @@ class BooleanOpsTestsMixin:
             else:
                 self.assertRaises(TypeError, lambda: b_psser * psser)
 
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_truediv(self):
         pdf, psdf = self.pdf, self.psdf
 
@@ -116,14 +115,11 @@ class BooleanOpsTestsMixin:
         for col in self.non_numeric_df_cols:
             self.assertRaises(TypeError, lambda: b_psser / psdf[col])
 
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_floordiv(self):
         pdf, psdf = self.pdf, self.psdf
 
         b_pser, b_psser = pdf["bool"], psdf["bool"]
-
-        # float is always returned in pandas-on-Spark
-        self.assert_eq((b_pser // 1).astype("float"), b_psser // 1)
+        self.assert_eq(b_pser // 1, b_psser // 1)
 
         # in pandas, 1 // 0.1 = 9.0; in pandas-on-Spark, 1 // 0.1 = 10.0
         # self.assert_eq(b_pser // 0.1, b_psser // 0.1)
@@ -132,7 +128,7 @@ class BooleanOpsTestsMixin:
         self.assertRaises(TypeError, lambda: b_psser // b_psser)
         self.assertRaises(TypeError, lambda: b_psser // True)
 
-        self.assert_eq(b_pser // pdf["float"], b_psser // psdf["float"])
+        self.assert_eq((b_pser // pdf["float"]).astype("int"), b_psser // psdf["float"])
 
         for col in self.non_numeric_df_cols:
             self.assertRaises(TypeError, lambda: b_psser // psdf[col])

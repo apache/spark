@@ -21,7 +21,7 @@ from typing import Any, Union
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.pandas.base import column_op, IndexOpsMixin
+from pyspark.pandas.base import column_op, IndexOpsMixin, numpy_column_op
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
@@ -35,6 +35,7 @@ from pyspark.pandas.data_type_ops.base import (
     _is_boolean_type,
 )
 from pyspark.pandas.typedef.typehints import as_spark_type, extension_dtypes, pandas_on_spark_type
+from pyspark.pandas.utils import is_ansi_mode_enabled
 from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import BooleanType, StringType
 from pyspark.errors import PySparkValueError
@@ -122,13 +123,23 @@ class BooleanOps(DataTypeOps):
             raise TypeError(
                 "Floor division can not be applied to %s and the given type." % self.pretty_name
             )
+        spark_session = left._internal.spark_frame.sparkSession
+
+        def safe_floordiv(left_col: PySparkColumn, right_val: Any) -> PySparkColumn:
+            if is_ansi_mode_enabled(spark_session):
+                return F.when(F.lit(right_val == 0), F.lit(None)).otherwise(
+                    F.floor(left_col / right_val)
+                )
+            else:
+                return F.floor(left_col / right_val)
+
         if isinstance(right, numbers.Number):
             left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
-            return left // right
+            return numpy_column_op(safe_floordiv)(left, right)
         else:
             assert isinstance(right, IndexOpsMixin)
             left = transform_boolean_operand_to_numeric(left, spark_type=right.spark.data_type)
-            return left // right
+            return numpy_column_op(safe_floordiv)(left, right)
 
     def mod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
