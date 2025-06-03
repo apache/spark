@@ -112,7 +112,6 @@ object GraphIdentifierManager {
    *
    * @param rawTableIdentifier the raw table identifier
    * @return the parsed table identifier
-   * @throws AnalysisException if the table identifier is not allowed
    */
   @throws[AnalysisException]
   def parseAndQualifyTableIdentifier(
@@ -138,7 +137,6 @@ object GraphIdentifierManager {
    *
    * @param rawViewIdentifier the raw view identifier
    * @return the parsed view identifier
-   * @throws AnalysisException if the view identifier is not allowed
    */
   @throws[AnalysisException]
   def parseAndValidateTemporaryViewIdentifier(
@@ -163,7 +161,6 @@ object GraphIdentifierManager {
    * @param currentCatalog the catalog
    * @param currentDatabase the schema
    * @return the parsed view identifier
-   * @throws AnalysisException if the view identifier is not allowed
    */
   def parseAndValidatePersistedViewIdentifier(
       rawViewIdentifier: TableIdentifier,
@@ -188,7 +185,6 @@ object GraphIdentifierManager {
    *
    * @param rawFlowIdentifier the raw flow identifier
    * @return the parsed flow identifier
-   * @throws AnalysisException if the flow identifier is not allowed
    */
   @throws[AnalysisException]
   def parseAndQualifyFlowIdentifier(
@@ -240,7 +236,6 @@ object IdentifierHelper {
    *
    * @param nameParts the dataset name parts.
    * @return the table identifier constructed from the name parts.
-   * @throws UnsupportedOperationException if the name parts have more than 3 parts.
    */
   @throws[UnsupportedOperationException]
   def toTableIdentifier(nameParts: Seq[String]): TableIdentifier = {
@@ -265,7 +260,6 @@ object IdentifierHelper {
    *
    * @param table the logical plan.
    * @return the table identifier constructed from the logical plan.
-   * @throws SparkException if the table identifier cannot be resolved.
    */
   def toTableIdentifier(table: LogicalPlan): TableIdentifier = {
     val parts = table match {
