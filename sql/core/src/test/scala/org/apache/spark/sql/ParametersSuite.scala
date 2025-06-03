@@ -22,6 +22,7 @@ import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Limit
+import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -832,5 +833,35 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(spark.sql("execute immediate 'select ?' using :param", Map("param" -> 2)), Row(2))
     checkAnswer(spark.sql("execute immediate 'select :param' using ? as param", Array(3)), Row(3))
+  }
+
+  test("SPARK-52388: Handle named/positional parameters under PlanWithUnresolvedIdentifier") {
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryCatalog].getName) {
+      val table = "testcat.schema.testtbl"
+      withTable(table) {
+        spark.sql(s"CREATE TABLE $table (col1 int) using parquet")
+        spark.sql(s"INSERT INTO $table VALUES (3)")
+
+        checkAnswer(spark.sql(s"select * from $table"), Row(3))
+
+        spark.sql(
+          s"""INSERT INTO IDENTIFIER(:tbl)
+            |REPLACE WHERE :b = true
+            |SELECT * FROM VALUES(4) as t(col1)""".stripMargin,
+          Map("tbl" -> table, "b" -> "true")
+        )
+
+        checkAnswer(spark.sql(s"select * from $table"), Row(4))
+
+        spark.sql(
+          s"""INSERT INTO IDENTIFIER(?)
+             |REPLACE WHERE ? = true
+             |SELECT * FROM VALUES(5) as t(col1)""".stripMargin,
+          args = Array(table, "true")
+        )
+
+        checkAnswer(spark.sql(s"select * from $table"), Row(5))
+      }
+    }
   }
 }
