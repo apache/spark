@@ -38,7 +38,7 @@ class BlockSparkConnectAccessTests(ReusedConnectTestCase):
         with block_spark_connect_execution_and_analysis():
             with self.assertRaises(PySparkException) as context:
                 df.schema
-            self.assertEquals(
+            self.assertEqual(
                 context.exception.getCondition(), "ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION"
             )
 
@@ -48,7 +48,7 @@ class BlockSparkConnectAccessTests(ReusedConnectTestCase):
         with block_spark_connect_execution_and_analysis():
             with self.assertRaises(PySparkException) as context:
                 df.collect()
-            self.assertEquals(
+            self.assertEqual(
                 context.exception.getCondition(), "ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION"
             )
 

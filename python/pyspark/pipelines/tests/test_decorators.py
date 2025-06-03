@@ -55,10 +55,10 @@ class DecoratorsTest(unittest.TestCase):
             with self.assertRaises(PySparkTypeError) as context:
                 decorator("table1")
 
-            self.assertEquals(context.exception.getCondition(), "DECORATOR_ARGUMENT_NOT_CALLABLE")
+            self.assertEqual(context.exception.getCondition(), "DECORATOR_ARGUMENT_NOT_CALLABLE")
             message_parameters = context.exception.getMessageParameters()
             assert message_parameters is not None
-            self.assertEquals(message_parameters["decorator_name"], decorator.__name__)
+            self.assertEqual(message_parameters["decorator_name"], decorator.__name__)
             assert message_parameters["example_usage"].startswith(f"@{decorator.__name__}(")
 
 
