@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import scala.annotation.unused
-
 import org.apache.spark.sql.pipelines.logging.{
   ConstructPipelineEvent,
   EventLevel,
@@ -114,18 +112,5 @@ class PipelineExecution(context: PipelineUpdateContext) {
         messageOpt = Option(s"Failed to resolve flow: '${flow.displayName}'.")
       )
     }
-  }
-
-  @unused(
-    "TODO(SPARK-51727): connect this API with spark connect backend and expose it to the user"
-  )
-  def stopPipeline(): Unit = synchronized {
-    graphExecution
-      .getOrElse(
-        throw new IllegalStateException(
-          "Pipeline execution has not started yet."
-        )
-      )
-      .stop()
   }
 }

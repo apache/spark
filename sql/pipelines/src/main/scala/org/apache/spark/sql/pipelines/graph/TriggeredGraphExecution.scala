@@ -110,7 +110,7 @@ class TriggeredGraphExecution(
     val thread = buildTopologicalExecutionThread()
     UncaughtExceptionHandler.addHandler(
       thread, {
-        case _: InterruptedException => // stop from UI leads to InterruptedException. Do nothing.
+        case _: InterruptedException =>
         case _ =>
           try {
             stopInternal(stopTopologicalExecutionThread = false)
