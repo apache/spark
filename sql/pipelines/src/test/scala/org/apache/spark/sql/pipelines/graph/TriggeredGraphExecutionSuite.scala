@@ -463,7 +463,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
       expectedEventLevel = EventLevel.ERROR,
       msgChecker = msg =>
         msg.contains(
-          "Update is FAILED since flow 'spark_catalog.test_db.branch_2' has failed more than " +
+          "Run is FAILED since flow 'spark_catalog.test_db.branch_2' has failed more than " +
           "2 times"
         )
     )
@@ -901,7 +901,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
       expectedEventLevel = EventLevel.ERROR,
       msgChecker = msg =>
         msg.contains(
-          "Update is FAILED since flow 'spark_catalog.test_db.a' has failed more than 2 times"
+          "Run is FAILED since flow 'spark_catalog.test_db.a' has failed more than 2 times"
         )
     )
   }

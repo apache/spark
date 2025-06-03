@@ -184,9 +184,9 @@ abstract class GraphExecution(
   /**
    * Returns the reason why this flow execution has terminated.
    * If the function is called before the flow has not terminated yet, the behavior is undefined,
-   * and may return [[UnexpectedUpdateFailure]].
+   * and may return [[UnexpectedRunFailure]].
    */
-  def getUpdateTerminationReason: UpdateTerminationReason
+  def getUpdateTerminationReason: RunTerminationReason
 
   def maxRetryAttemptsForFlow(flowName: TableIdentifier): Int = {
     val flow = graphForExecution.flow(flowName)
@@ -225,7 +225,7 @@ object GraphExecution extends Logging {
   sealed trait FlowExecutionStopReason {
     def cause: Throwable
     def flowDisplayName: String
-    def updateTerminationReason: UpdateTerminationReason
+    def updateTerminationReason: RunTerminationReason
     def failureMessage: String
     // If true, we record this flow execution as STOPPED with a WARNING instead a FAILED with ERROR.
     def warnInsteadOfError: Boolean = false
@@ -240,7 +240,7 @@ object GraphExecution extends Logging {
       flowDisplayName: String,
       maxAllowedRetries: Int
   ) extends FlowExecutionStopReason {
-    override lazy val updateTerminationReason: UpdateTerminationReason = {
+    override lazy val updateTerminationReason: RunTerminationReason = {
       QueryExecutionFailure(flowDisplayName, maxAllowedRetries, Option(cause))
     }
     override lazy val failureMessage: String = {

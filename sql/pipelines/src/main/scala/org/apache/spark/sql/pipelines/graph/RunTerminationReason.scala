@@ -20,67 +20,47 @@ package org.apache.spark.sql.pipelines.graph
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.pipelines.common.RunState
 
-sealed trait UpdateTerminationReason {
+sealed trait RunTerminationReason {
 
-  /** Terminal state for the given update. */
+  /** Terminal state for the given run. */
   def terminalState: RunState
 
   /**
-   * User visible message associated with update termination. This will also be set as the message
-   * in the associated terminal update progress log.
+   * User visible message associated with run termination. This will also be set as the message
+   * in the associated terminal run progress log.
    */
   def message: String
 
   /**
-   * Exception associated with the given update termination. This exception will be
-   * included in the error details in the associated terminal update progress event.
+   * Exception associated with the given run termination. This exception will be
+   * included in the error details in the associated terminal run progress event.
    */
   def cause: Option[Throwable]
-
-  /**
-   * Whether this termination reason should override the partial execution failure thrown during
-   * flow execution.
-   */
-  def overridesPartialExecutionFailure: Boolean = false
 }
 
 /**
- * Helper exception class that indicates that an update has to be terminated and
+ * Helper exception class that indicates that a run has to be terminated and
  * tracks the associated termination reason.
  */
-case class UpdateTerminationException(reason: UpdateTerminationReason) extends Exception
+case class RunTerminationException(reason: RunTerminationReason) extends Exception
 
 // ===============================================================
-// ============ Graceful update termination states ===============
+// ============ Graceful run termination states ==================
 // ===============================================================
 
-/** Indicates that a triggered update has successfully completed execution. */
-case class UpdateCompletion() extends UpdateTerminationReason {
+/** Indicates that a triggered run has successfully completed execution. */
+case class RunCompletion() extends RunTerminationReason {
   override def terminalState: RunState = RunState.COMPLETED
-  override def message: String = s"Update is $terminalState."
+  override def message: String = s"Run is $terminalState."
   override def cause: Option[Throwable] = None
 }
 
-/**
- * Indicates that the update is being terminated since the schema for a given flow
- * changed during execution.
- */
-case class UpdateSchemaChange(flowName: String, override val cause: Option[Throwable])
-    extends UpdateTerminationReason {
-  override def terminalState: RunState = RunState.CANCELED
-  override def message: String =
-    s"Update has been cancelled due to a schema change in $flowName, " +
-    s"and will be restarted."
-
-  override def overridesPartialExecutionFailure: Boolean = true
-}
-
 // ===============================================================
-// ======================= Update failures =======================
+// ======================= Run failures ==========================
 // ===============================================================
 
-/** Indicates that an update entered the failed state.. */
-abstract sealed class UpdateFailure extends UpdateTerminationReason {
+/** Indicates that an run entered the failed state.. */
+abstract sealed class RunFailure extends RunTerminationReason {
 
   /** Whether or not this failure is considered fatal / irrecoverable. */
   def isFatal: Boolean
@@ -88,25 +68,25 @@ abstract sealed class UpdateFailure extends UpdateTerminationReason {
   override def terminalState: RunState = RunState.FAILED
 }
 
-/** Indicates that update has failed due to a query execution failure. */
+/** Indicates that run has failed due to a query execution failure. */
 case class QueryExecutionFailure(
     flowName: String,
     maxRetries: Int,
     override val cause: Option[Throwable])
-    extends UpdateFailure {
+    extends RunFailure {
   override def isFatal: Boolean = false
 
   override def message: String =
     if (maxRetries == 0) {
-      s"Update is $terminalState since flow '$flowName' has failed."
+      s"Run is $terminalState since flow '$flowName' has failed."
     } else {
-      s"Update is $terminalState since flow '$flowName' has failed more " +
+      s"Run is $terminalState since flow '$flowName' has failed more " +
       s"than $maxRetries times."
     }
 }
 
 /** Abstract class used to identify failures related to failures stopping an operation/timeouts. */
-abstract class FailureStoppingOperation extends UpdateFailure {
+abstract class FailureStoppingOperation extends RunFailure {
 
   /** Name of the operation that failed to stop. */
   def operation: String
@@ -120,22 +100,22 @@ case class FailureStoppingFlow(flowIdentifiers: Seq[TableIdentifier])
   override def message: String = {
     if (flowIdentifiers.nonEmpty) {
       val flowNamesToPrint = flowIdentifiers.map(_.toString).sorted.take(5).mkString(", ")
-      s"Update is $terminalState since following flows have failed to stop: " +
+      s"Run is $terminalState since following flows have failed to stop: " +
       s"$flowNamesToPrint."
     } else {
-      s"Update is $terminalState since stopping flow execution has failed."
+      s"Run is $terminalState since stopping flow execution has failed."
     }
   }
   override def cause: Option[Throwable] = None
 }
 
 /**
- * Update could not be associated with a proper root cause.
+ * Run could not be associated with a proper root cause.
  * This is not expected and likely indicates a bug.
  */
-case class UnexpectedUpdateFailure() extends UpdateFailure {
+case class UnexpectedRunFailure() extends RunFailure {
   override def isFatal: Boolean = false
   override def message: String =
-    s"Update $terminalState unexpectedly."
+    s"Run $terminalState unexpectedly."
   override def cause: Option[Throwable] = None
 }

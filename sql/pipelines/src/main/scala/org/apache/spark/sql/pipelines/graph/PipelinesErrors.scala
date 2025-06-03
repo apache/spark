@@ -155,7 +155,7 @@ object PipelinesErrors extends Logging {
             )
           }
           if (shouldRethrow) {
-            throw UpdateTerminationException(reason.updateTerminationReason)
+            throw RunTerminationException(reason.updateTerminationReason)
           }
       }
     }

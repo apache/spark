@@ -44,7 +44,7 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 class TriggeredGraphExecution(
     graphForExecution: DataflowGraph,
     env: PipelineUpdateContext,
-    onCompletion: UpdateTerminationReason => Unit = _ => (),
+    onCompletion: RunTerminationReason => Unit = _ => (),
     clock: Clock = new SystemClock()
 ) extends GraphExecution(graphForExecution, env) {
 
@@ -118,7 +118,7 @@ class TriggeredGraphExecution(
             case ex: Throwable =>
               logError(s"Exception thrown while stopping the update...", ex)
           } finally {
-            onCompletion(UnexpectedUpdateFailure())
+            onCompletion(UnexpectedRunFailure())
           }
       }
     )
@@ -393,7 +393,7 @@ class TriggeredGraphExecution(
       .map(_.get._1)
 
     if (flowsFailedToStop.nonEmpty) {
-      throw UpdateTerminationException(FailureStoppingFlow(flowsFailedToStop))
+      throw RunTerminationException(FailureStoppingFlow(flowsFailedToStop))
     }
   }
 
@@ -403,11 +403,11 @@ class TriggeredGraphExecution(
 
   override def stop(): Unit = { stopInternal(stopTopologicalExecutionThread = true) }
 
-  override def getUpdateTerminationReason: UpdateTerminationReason = {
+  override def getUpdateTerminationReason: RunTerminationReason = {
     val success =
       pipelineState.valuesIterator.forall(TERMINAL_NON_FAILURE_STREAM_STATES.contains)
     if (success) {
-      return UpdateCompletion()
+      return RunCompletion()
     }
 
     val executionFailureOpt = failureTracker.iterator
@@ -424,7 +424,7 @@ class TriggeredGraphExecution(
           reason.updateTerminationReason
       }
 
-    executionFailureOpt.getOrElse(UnexpectedUpdateFailure())
+    executionFailureOpt.getOrElse(UnexpectedRunFailure())
   }
 }
 
