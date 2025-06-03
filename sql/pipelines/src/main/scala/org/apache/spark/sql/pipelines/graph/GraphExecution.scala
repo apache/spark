@@ -61,6 +61,7 @@ abstract class GraphExecution(
     triggerFor = streamTrigger
   )
 
+  // Listener to process events and metrics.
   private val streamListener = new StreamListener(env, graphForExecution)
 
   /**
@@ -186,7 +187,7 @@ abstract class GraphExecution(
    * If the function is called before the flow has not terminated yet, the behavior is undefined,
    * and may return [[UnexpectedRunFailure]].
    */
-  def getUpdateTerminationReason: RunTerminationReason
+  def getRunTerminationReason: RunTerminationReason
 
   def maxRetryAttemptsForFlow(flowName: TableIdentifier): Int = {
     val flow = graphForExecution.flow(flowName)
@@ -225,7 +226,7 @@ object GraphExecution extends Logging {
   sealed trait FlowExecutionStopReason {
     def cause: Throwable
     def flowDisplayName: String
-    def updateTerminationReason: RunTerminationReason
+    def runTerminationReason: RunTerminationReason
     def failureMessage: String
     // If true, we record this flow execution as STOPPED with a WARNING instead a FAILED with ERROR.
     def warnInsteadOfError: Boolean = false
@@ -240,7 +241,7 @@ object GraphExecution extends Logging {
       flowDisplayName: String,
       maxAllowedRetries: Int
   ) extends FlowExecutionStopReason {
-    override lazy val updateTerminationReason: RunTerminationReason = {
+    override lazy val runTerminationReason: RunTerminationReason = {
       QueryExecutionFailure(flowDisplayName, maxAllowedRetries, Option(cause))
     }
     override lazy val failureMessage: String = {

@@ -255,7 +255,7 @@ class TriggeredGraphExecution(
       }
     }
     if (allFlowsDone) {
-      onCompletion(getUpdateTerminationReason)
+      onCompletion(getRunTerminationReason)
     }
   }
 
@@ -403,7 +403,7 @@ class TriggeredGraphExecution(
 
   override def stop(): Unit = { stopInternal(stopTopologicalExecutionThread = true) }
 
-  override def getUpdateTerminationReason: RunTerminationReason = {
+  override def getRunTerminationReason: RunTerminationReason = {
     val success =
       pipelineState.valuesIterator.forall(TERMINAL_NON_FAILURE_STREAM_STATES.contains)
     if (success) {
@@ -421,7 +421,7 @@ class TriggeredGraphExecution(
       }
       .collectFirst {
         case (_, _, GraphExecution.StopFlowExecution(reason)) =>
-          reason.updateTerminationReason
+          reason.runTerminationReason
       }
 
     executionFailureOpt.getOrElse(UnexpectedRunFailure())

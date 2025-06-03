@@ -68,14 +68,14 @@ case class ResolvedInput(input: Input, aliasIdentifier: AliasIdentifier)
 trait FlowFunction extends Logging {
 
   /**
-   * This function defines the transformations performed by a flow, expressed as a DataFrame.
+   * This function defines the transformations performed by a flow, expressed as a [[DataFrame]].
    *
    * @param allInputs the set of identifiers for all the [[Input]]s defined in the
    *                  [[DataflowGraph]].
    * @param availableInputs the list of all [[Input]]s available to this flow
    * @param configuration the spark configurations that apply to this flow.
    * @param queryContext The context of the query being evaluated.
-   * @return the inputs actually used, and the DataFrame expression for the flow
+   * @return the inputs actually used, and the [[DataFrame]] expression for the flow
    */
   def call(
       allInputs: Set[TableIdentifier],
