@@ -199,7 +199,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  *
  * The [[ExpressionIdAssigner]] is used in the following way:
  *  - When the [[Resolver]] traverses the tree downwards prior to starting bottom-up analysis,
- *    we build the [[mappingStack]] by calling [[withNewMapping]] (i.e. [[mappingStack.push]])
+ *    we build the [[mappingStack]] by calling [[pushMapping]].
  *    for every child of a multi-child operator, so we have a separate stack entry (separate
  *    mapping) for each branch. This way sibling branches' mappings are isolated from each other and
  *    attribute IDs are reused only within the same branch. Initially we push `None`, because
@@ -209,13 +209,14 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  *    [[createMappingForLeafOperator]] is called right after each [[LeafNode]] is resolved, and
  *    first remapped attributes come from that [[LeafNode]]. This is done if leaf operator output
  *    doesn't conflict with `globalExpressionIds`.
- *  - Once the child branch is resolved, [[withNewMapping]] ends by calling [[mappingStack.pop]].
+ *  - Once the child branch is resolved, a code block started with [[pushMapping]] ends by calling
+ *    [[popMapping]].
  *  - After the multi-child operator is resolved, we call [[createMappingFromChildMappings]] to
- *    initialize the mapping with attributes collected in [[withNewMapping]] with
+ *    initialize the mapping with attributes collected in [[popMapping]] with
  *    `collectChildMapping = true`.
  *  - While traversing the expression tree, we may meet a [[SubqueryExpression]] and resolve its
- *    plan. In this case we call [[withNewMapping]] with `isSubqueryRoot = true` to pass the
- *    current mapping as outer mapping to the subquery branches. Any subquery branch may reference
+ *    plan. In this case we call [[pushMapping]] with `isSubqueryRoot = true` to pass the current
+ *    mapping as outer mapping to the subquery branches. Any subquery branch may reference
  *    outer attributes, so if `isSubqueryRoot` is `false`, we pass the previous `outerMapping` to
  *    lower branches. Since we only support one level of correlation, for every subquery level
  *    current `mapping` becomes `outerMapping` for the next level.
@@ -229,22 +230,15 @@ class ExpressionIdAssigner {
   mappingStack.push(ExpressionIdAssigner.StackEntry())
 
   /**
-   * A RAII-wrapper for [[mappingStack.push]] and [[mappingStack.pop]]. [[Resolver]] uses this for
-   * every child of a multi-child operator to ensure that each operator branch uses an isolated
-   * expression ID mapping.
+   * Push new mapping entry into the `mappingStack` to make sure that each operator branch uses an
+   * isolated expression ID mapping.
    *
    * @param isSubqueryRoot whether the new branch is related to a subquery root. In this case we
    *   pass current `mapping` as `outerMapping` to the subquery branches. Otherwise we just
    *   propagate `outerMapping` itself, because any nested subquery operator may reference outer
    *   attributes.
-   * @param collectChildMapping whether to collect a child mapping into the current stack entry.
-   *   This is used in multi-child operators to automatically propagate mapped expression IDs
-   *   upwards using [[createMappingFromChildMappings]].
    */
-  def withNewMapping[R](
-      isSubqueryRoot: Boolean = false,
-      collectChildMapping: Boolean = false
-  )(body: => R): R = {
+  def pushMapping(isSubqueryRoot: Boolean = false): Unit = {
     val currentStackEntry = mappingStack.peek()
 
     mappingStack.push(
@@ -256,23 +250,25 @@ class ExpressionIdAssigner {
         }
       )
     )
+  }
 
-    try {
-      val result = body
+  /**
+   * Pop a mapping from the `mappingStack`.
+   *
+   * @param collectChildMapping whether to collect a child mapping into the current stack entry.
+   *   This is used in multi-child operators to automatically propagate mapped expression IDs
+   *   upwards using [[createMappingFromChildMappings]].
+   */
+  def popMapping(collectChildMapping: Boolean = false): Unit = {
+    val childStackEntry = mappingStack.pop()
 
-      val childStackEntry = mappingStack.peek()
-      if (collectChildMapping) {
-        childStackEntry.mapping match {
-          case Some(childMapping) =>
-            currentStackEntry.childMappings.push(childMapping)
-          case None =>
-            throw SparkException.internalError("Child mapping doesn't exist")
-        }
+    if (collectChildMapping) {
+      childStackEntry.mapping match {
+        case Some(childMapping) =>
+          val currentStackEntry = mappingStack.peek()
+          currentStackEntry.childMappings.push(childMapping)
+        case None =>
       }
-
-      result
-    } finally {
-      mappingStack.pop()
     }
   }
 
@@ -324,7 +320,7 @@ class ExpressionIdAssigner {
 
   /**
    * Create new mapping in current scope based on collected child mappings. The calling code
-   * must pass `collectChildMapping = true` to all the [[withNewMapping]] calls beforehand.
+   * must pass `collectChildMapping = true` to all the [[popMapping]] calls beforehand.
    *
    * In case branches of a multi-child operator that is being resolved contain duplicate IDs, the
    * child mappings will have collisions during this merge operation. We need to decide which of
@@ -519,7 +515,8 @@ class ExpressionIdAssigner {
               newAttribute
             } else {
               throw SparkException.internalError(
-                s"Encountered a dangling attribute reference $attributeReference")
+                s"Encountered a dangling attribute reference $attributeReference"
+              )
             }
           case mappedExpressionId =>
             attributeReference.withExprId(mappedExpressionId)
@@ -550,7 +547,7 @@ class ExpressionIdAssigner {
       } else {
         throw SparkException.internalError(
           "Outer expression ID mapping doesn't exist while remapping outer reference " +
-            s"$attributeReference"
+          s"$attributeReference"
         )
       }
     } else {
