@@ -80,7 +80,7 @@ case class QueryOrigin(
     )
   }
 
-  /** Generates a [[SourceCodeLocation]] using the details present in the query origin. */
+  /** Generates a SourceCodeLocation using the details present in the query origin. */
   def toSourceCodeLocation: SourceCodeLocation = SourceCodeLocation(
     path = fileName,
     // QueryOrigin tracks line numbers using a 1-indexed numbering scheme whereas SourceCodeLocation

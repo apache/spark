@@ -25,7 +25,7 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.pipelines.AnalysisWarning
 
 /**
- * A context used when evaluating a [[Flow]]'s query into a concrete [[DataFrame]].
+ * A context used when evaluating a [[Flow]]'s query into a concrete DataFrame.
  *
  * @param allInputs            Set of identifiers for all [[Input]]s defined in the DataflowGraph.
  * @param availableInputs      Inputs available to be referenced with `read` or `readStream`.
