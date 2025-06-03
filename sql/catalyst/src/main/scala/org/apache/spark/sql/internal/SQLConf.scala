@@ -1197,6 +1197,28 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val PARSER_DFA_CACHE_FLUSH_RATIO =
+    buildConf("spark.sql.parser.parserDfaCacheFlushRatio")
+      .internal()
+      .doc(
+        """Like `spark.sql.parser.parserDfaCacheFlushThreshold`, but uses a threshold that is a
+          |linear function of the memory allocated to the driver process. Represents the percentage
+          |of the driver memory that the DFA cache can consume before it is flushed.
+          |
+          |Estimates the memory used by the DFA cache, assuming each state consumes
+          |`AbstractParser.BYTES_PER_DFA_STATE` bytes. If this value exceeds the product of the
+          |driver memory with the config value (interpreted as a percentage), the cache is flushed.
+          |
+          |Active values should be in the range 0-100, and a negative value disables the feature.
+          |If both this config and `spark.sql.parser.parserDfaCacheFlushThreshold` are set, the
+          |cache is flushed if either condition is met.
+          |Requires `spark.sql.parser.manageParserCachesKillSwitch` to be true to take effect.
+          |""".stripMargin)
+      .version("4.0.0")
+      .doubleConf
+      .checkValue(_ <= 100.0, "The ratio must be less than 100%")
+      .createWithDefault(-1.0)
+
   val PARSER_DFA_CACHE_FLUSH_THRESHOLD =
     buildConf("spark.sql.parser.parserDfaCacheFlushThreshold")
       .internal()
@@ -1210,12 +1232,12 @@ object SQLConf {
           |lead to an accumulation of objects in the cache that are unlikely to be reused, causing
           |high GC overhead and eventually OOMs.
           |
-          |Negative values mean the cache is never released.
-          |Nonnegative values override the behavior of `spark.sql.parser.bypassParserCache`.
+          |If this config is set to a negative value, it is ignored.
+          |If both this config and `spark.sql.parser.parserDfaCacheFlushRatio` are set, the
+          |cache is flushed if either condition is met.
           |Requires `spark.sql.parser.manageParserCachesKillSwitch` to be true to take effect.
           |
-          |Can significantly slow down parsing in exchange for better memory stability. Currently
-          |used to mitigate severe symptoms like OOMs.
+          |Can significantly slow down parsing in exchange for better memory stability.
           |""".stripMargin)
       .version("4.0.0")
       .intConf
@@ -6523,6 +6545,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
   def manageParserCaches: Boolean = getConf(MANAGE_PARSER_CACHES)
+
+  def parserDfaCacheFlushRatio: Double = getConf(PARSER_DFA_CACHE_FLUSH_RATIO)
 
   def parserDfaCacheFlushThreshold: Int = getConf(PARSER_DFA_CACHE_FLUSH_THRESHOLD)
 

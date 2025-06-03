@@ -34,7 +34,8 @@ private[sql] object SqlApiConfHelper {
   val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String = "spark.sql.session.localRelationCacheThreshold"
   val ARROW_EXECUTION_USE_LARGE_VAR_TYPES = "spark.sql.execution.arrow.useLargeVarTypes"
   val PARSER_DFA_CACHE_FLUSH_THRESHOLD_KEY: String = "spark.sql.parser.parserDfaCacheFlushThreshold"
-  val MANAGE_PARSER_CACHES_KEY: String = "spark.sql.parser.manageParserCaches"
+  val PARSER_DFA_CACHE_FLUSH_RATIO_KEY: String = "spark.sql.parser.parserDfaCacheFlushRatio"
+  val MANAGE_PARSER_CACHES_KEY: String = "spark.sql.parser.manageParserCachesKillSwitch"
 
   val confGetter: AtomicReference[() => SqlApiConf] = {
     new AtomicReference[() => SqlApiConf](() => DefaultSqlApiConf)
