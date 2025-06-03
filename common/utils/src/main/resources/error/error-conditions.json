@@ -498,6 +498,13 @@
     },
     "sqlState" : "0A000"
   },
+  "CANNOT_UPDATE_PARTITION_COLUMNS" : {
+    "message" : [
+      "Declared partitioning <requestedPartitionColumns> conflicts with existing table partitioning <existingPartitionColumns>.",
+      "Please delete the table or change the declared partitioning to match its partitions."
+    ],
+    "sqlState" : "42000"
+  },
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [
       "Cannot up cast <expression> from <sourceType> to <targetType>.",
@@ -4606,6 +4613,12 @@
       "Path does not exist: <path>."
     ],
     "sqlState" : "42K03"
+  },
+  "PERSISTED_VIEW_READS_FROM_TEMPORARY_VIEW" : {
+    "message" : [
+      "Persisted view <persistedViewName> cannot reference temporary view <temporaryViewName> that will not be available outside the pipeline scope. Either make the persisted view temporary or persist the temporary view."
+    ],
+    "sqlState" : "42K0F"
   },
   "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [

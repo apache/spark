@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.pipelines.graph
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 
@@ -44,6 +47,120 @@ case class LoadTableException(name: String, cause: Option[Throwable])
       messageParameters = Map("message" -> s"Failed to load table '$name'"),
       cause = cause.orNull
     )
+
+object PipelinesErrors extends Logging {
+
+  /**
+   * Gets the exception chain for a given exception by repeatedly calling getCause.
+   *
+   * @param originalErr The error on which getCause is repeatedly called
+   * @return An ArrayBuffer containing the original error and all the causes in its exception chain.
+   *         For a given exception in the ArrayBuffer, the next element is its cause.
+   */
+  private def getExceptionChain(originalErr: Throwable): ArrayBuffer[Throwable] = {
+    val exceptionChain = ArrayBuffer[Throwable]()
+    var lastException = originalErr
+    while (lastException != null) {
+      exceptionChain += lastException
+      lastException = lastException.getCause
+    }
+    exceptionChain
+  }
+
+  /**
+   * Checks whether a throwable or any of its nested causes meets some condition
+   * @param throwable A Throwable to inspect
+   * @param check Function to run on each cause
+   * @return Whether or not `throwable` or any of its nested causes satisfy the check
+   */
+  private def checkCauses(throwable: Throwable, check: Throwable => Boolean): Boolean = {
+    getExceptionChain(throwable).exists(check)
+  }
+
+  /**
+   * Checks an error for streaming specific handling. This is a pretty messy signature as a result
+   * of unifying some divergences between the triggered caller in TriggeredGraphExecution and the
+   * continuous caller in StreamWatchdog.
+   *
+   * @param ex the error to check
+   * @param env the update context
+   * @param graphExecution the graph execution
+   * @param flow the resolved logical flow
+   * @param shouldRethrow whether to throw an UpdateTerminationException wrapping `ex`. This is set
+   *                      to true for ContinuousFlowExecution so we can eagerly stop the execution.
+   * @param prevFailureCount the number of failures that have occurred so far
+   * @param maxRetries the max retries that were available (whether or not they're exhausted now)
+   */
+  def checkStreamingErrorsAndRetry(
+      ex: Throwable,
+      env: PipelineUpdateContext,
+      graphExecution: GraphExecution,
+      flow: ResolvedFlow,
+      shouldRethrow: Boolean,
+      prevFailureCount: Int,
+      maxRetries: Int,
+      onRetry: => Unit
+  ): Unit = {
+    if (PipelinesErrors.checkCauses(
+        throwable = ex,
+        check = ex => {
+          ex.isInstanceOf[AssertionError] &&
+          ex.getMessage != null &&
+          ex.getMessage.contains("sources in the checkpoint offsets and now there are") &&
+          ex.getMessage.contains("sources requested by the query. Cannot continue.")
+        }
+      )) {
+      val message = s"""
+         |Flow '${flow.displayName}' had streaming sources added or removed. Please perform a
+         |full refresh in order to rebuild '${flow.displayName}' against the current set of
+         |sources.
+         |""".stripMargin
+
+      env.flowProgressEventLogger.recordFailed(
+        flow = flow,
+        exception = ex,
+        logAsWarn = false,
+        messageOpt = Option(message)
+      )
+    } else if (flow.once && ex == null) {
+      // No need to do anything if this is a ONCE flow with no exception. That just means it's done.
+    } else {
+      val actionFromError = GraphExecution.determineFlowExecutionActionFromError(
+        ex = ex,
+        flowDisplayName = flow.displayName,
+        pipelineConf = env.pipelineConf,
+        currentNumTries = prevFailureCount + 1,
+        maxAllowedRetries = maxRetries
+      )
+      actionFromError match {
+        // Simply retry
+        case GraphExecution.RetryFlowExecution => onRetry
+        // Schema change exception
+        case GraphExecution.StopFlowExecution(reason) =>
+          val msg = reason.failureMessage
+          if (reason.warnInsteadOfError) {
+            logWarning(msg, reason.cause)
+            env.flowProgressEventLogger.recordStop(
+              flow = flow,
+              message = Option(msg),
+              cause = Option(reason.cause)
+            )
+          } else {
+            logError(reason.failureMessage, reason.cause)
+            env.flowProgressEventLogger.recordFailed(
+              flow = flow,
+              exception = reason.cause,
+              logAsWarn = false,
+              messageOpt = Option(msg)
+            )
+          }
+          if (shouldRethrow) {
+            throw RunTerminationException(reason.runTerminationReason)
+          }
+      }
+    }
+  }
+}
 
 /**
  * Exception raised when a pipeline has one or more flows that cannot be resolved
