@@ -82,7 +82,7 @@ sealed trait Output {
 
   /**
    * Normalized storage location used for storing materializations for this [[Output]].
-   * If [[None]], it means this [[Output]] has not been normalized yet.
+   * If None, it means this [[Output]] has not been normalized yet.
    */
   def normalizedPath: Option[String]
 
