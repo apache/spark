@@ -1814,7 +1814,7 @@ class SparkSubmitSuite
     val testFile = "test_metrics_config.properties"
     val testPyFile = "test_metrics_system.properties"
     val testJar = "TestUDTF.jar"
-    val testArchives = "log4j2.properties"
+    val testArchives = "archive1.zip#test_archives"
     val clArgs = Seq(
       "--deploy-mode", "client",
       "--proxy-user", "test.user",
@@ -1839,10 +1839,11 @@ class SparkSubmitSuite
     appArgs.jars should be (Utils.resolveURIs(testJar))
     appArgs.archives should be (Utils.resolveURIs(s"src/test/resources/$testArchives"))
 
+    Files.isDirectory(Paths.get("test_archives")) should be(true)
     Files.delete(Paths.get(testFile))
     Files.delete(Paths.get(testPyFile))
     Files.delete(Paths.get(testJar))
-    Files.delete(Paths.get(testArchives))
+    Files.delete(Paths.get("test_archives/archive1.text"))
   }
 
   // Requires Python dependencies for Spark Connect. Should be enabled by default.
