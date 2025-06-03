@@ -1814,6 +1814,7 @@ class SparkSubmitSuite
     val testFile = "test_metrics_config.properties"
     val testPyFile = "test_metrics_system.properties"
     val testJar = "TestUDTF.jar"
+    val testArchives = "log4j2.properties"
     val clArgs = Seq(
       "--deploy-mode", "client",
       "--proxy-user", "test.user",
@@ -1827,19 +1828,21 @@ class SparkSubmitSuite
       "--files", s"src/test/resources/$testFile",
       "--py-files", s"src/test/resources/$testPyFile",
       "--jars", s"src/test/resources/$testJar",
+      "--archives", s"src/test/resources/$testArchives",
       "/home/thejar.jar",
       "arg1")
     val appArgs = new SparkSubmitArguments(clArgs)
     val _ = submit.prepareSubmitEnvironment(appArgs)
 
-    appArgs.files should be (s"file:${Paths.get(testFile).toAbsolutePath}," +
-      s"file:${Paths.get(testPyFile).toAbsolutePath}")
-    appArgs.pyFiles should be (s"file:${Paths.get(testPyFile).toAbsolutePath}")
-    appArgs.jars should be (s"file:${Paths.get(testJar).toAbsolutePath}")
+    appArgs.files should be (Utils.resolveURIs(s"$testFile,$testPyFile"))
+    appArgs.pyFiles should be (Utils.resolveURIs(testPyFile))
+    appArgs.jars should be (Utils.resolveURIs(testJar))
+    appArgs.archives should be (Utils.resolveURIs(s"src/test/resources/$testArchives"))
 
     Files.delete(Paths.get(testFile))
     Files.delete(Paths.get(testPyFile))
     Files.delete(Paths.get(testJar))
+    Files.delete(Paths.get(testArchives))
   }
 
   // Requires Python dependencies for Spark Connect. Should be enabled by default.
