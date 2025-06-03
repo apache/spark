@@ -32,16 +32,22 @@ import org.apache.spark.sql.catalyst.expressions.{
   WindowSpecDefinition
 }
 import org.apache.spark.sql.catalyst.plans.logical.{
+  AddColumns,
+  AlterColumns,
   Call,
+  CreateTable,
   Except,
   Intersect,
   LogicalPlan,
   Project,
+  ReplaceTable,
   Union,
   Unpivot
 }
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.types.DataType
 
@@ -78,6 +84,67 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
           case (arg, expectedType) => implicitCast(arg, expectedType).getOrElse(arg)
         }
         c.copy(args = coercedArgs)
+    }
+  }
+
+  /**
+   * A type coercion rule that implicitly casts default value expression in DDL statements
+   * to expected types.
+   */
+  object DefaultValueExpressionCoercion extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case createTable @ CreateTable(_, cols, _, _, _) if createTable.resolved &&
+        cols.exists(_.defaultValue.isDefined) =>
+        val newCols = cols.map { c =>
+          c.copy(defaultValue = c.defaultValue.map(d =>
+            d.copy(child = ResolveDefaultColumns.coerceDefaultValue(
+              d.child,
+              c.dataType,
+              "CREATE TABLE",
+              c.name,
+              d.originalSQL))))
+        }
+        createTable.copy(columns = newCols)
+
+      case replaceTable @ ReplaceTable(_, cols, _, _, _) if replaceTable.resolved &&
+        cols.exists(_.defaultValue.isDefined) =>
+        val newCols = cols.map { c =>
+          c.copy(defaultValue = c.defaultValue.map(d =>
+            d.copy(child = ResolveDefaultColumns.coerceDefaultValue(
+              d.child,
+              c.dataType,
+              "REPLACE TABLE",
+              c.name,
+              d.originalSQL))))
+        }
+        replaceTable.copy(columns = newCols)
+
+      case addColumns @ AddColumns(_, cols) if addColumns.resolved &&
+        cols.exists(_.default.isDefined) =>
+        val newCols = cols.map { c =>
+          c.copy(default = c.default.map(d =>
+            d.copy(child = ResolveDefaultColumns.coerceDefaultValue(
+              d.child,
+              c.dataType,
+              "ALTER TABLE ADD COLUMNS",
+              c.colName,
+              d.originalSQL))))
+        }
+        addColumns.copy(columnsToAdd = newCols)
+
+      case alterColumns @ AlterColumns(_, specs) if alterColumns.resolved &&
+        specs.exists(_.newDefaultExpression.isDefined) =>
+        val newSpecs = specs.map { c =>
+          val dataType = c.column.asInstanceOf[ResolvedFieldName].field.dataType
+          c.copy(newDefaultExpression = c.newDefaultExpression.map(d =>
+            d.copy(child = ResolveDefaultColumns.coerceDefaultValue(
+              d.child,
+              dataType,
+              "ALTER TABLE ALTER COLUMN",
+              c.column.name.quoted,
+              d.originalSQL))))
+        }
+        alterColumns.copy(specs = newSpecs)
     }
   }
 

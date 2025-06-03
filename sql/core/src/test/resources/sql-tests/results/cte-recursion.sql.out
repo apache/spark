@@ -1475,3 +1475,149 @@ struct<n:int>
 3
 4
 5
+
+
+-- !query
+WITH RECURSIVE tmp(x) AS (
+    values (1), (2), (3), (4), (5)
+), rcte(x, y) AS (
+    SELECT x, x FROM tmp WHERE x = 1
+    UNION ALL
+    SELECT x + 1, x FROM rcte WHERE x < 5
+)
+SELECT * FROM rcte
+-- !query schema
+struct<x:int,y:int>
+-- !query output
+1	1
+2	1
+3	2
+4	3
+5	4
+
+
+-- !query
+WITH RECURSIVE tmp(x) AS (
+    values (1), (2), (3), (4), (5)
+), rcte(x, y, z, t) AS (
+    SELECT x, x, x, x FROM tmp WHERE x = 1
+    UNION ALL
+    SELECT x + 1, x, y + 1, y FROM rcte WHERE x < 5
+)
+SELECT * FROM rcte
+-- !query schema
+struct<x:int,y:int,z:int,t:int>
+-- !query output
+1	1	1	1
+2	1	2	1
+3	2	2	1
+4	3	3	2
+5	4	4	3
+
+
+-- !query
+WITH RECURSIVE randoms(val) AS (
+    SELECT CAST(floor(rand(82374) * 5 + 1) AS INT)
+    UNION ALL
+    SELECT CAST(floor(rand(237685) * 5 + 1) AS INT)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5
+-- !query schema
+struct<val:int>
+-- !query output
+1
+3
+4
+4
+5
+
+
+-- !query
+WITH RECURSIVE randoms(val) AS (
+    SELECT CAST(UNIFORM(1, 6, 82374) AS INT)
+    UNION ALL
+    SELECT CAST(UNIFORM(1, 6, 237685) AS INT)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5
+-- !query schema
+struct<val:int>
+-- !query output
+1
+3
+4
+4
+5
+
+
+-- !query
+WITH RECURSIVE randoms(val) AS (
+    SELECT CAST(floor(randn(82374) * 5 + 1) AS INT)
+    UNION ALL
+    SELECT CAST(floor(randn(237685) * 5 + 1) AS INT)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5
+-- !query schema
+struct<val:int>
+-- !query output
+-2
+2
+2
+5
+6
+
+
+-- !query
+WITH RECURSIVE randoms(val) AS (
+    SELECT randstr(10, 82374)
+    UNION ALL
+    SELECT randstr(10, 237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5
+-- !query schema
+struct<val:string>
+-- !query output
+IpXzdTW03I
+Zj7uI2Ex6e
+dBlWnfo7rO
+fmfDBMf60f
+kFeBV7dQWi
+
+
+-- !query
+WITH RECURSIVE randoms(val) AS (
+    SELECT UUID(82374)
+    UNION ALL
+    SELECT UUID(237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5
+-- !query schema
+struct<val:string>
+-- !query output
+19974dca-21f6-47ef-b58c-73908ab52aa0
+4ea190e3-c088-4ddd-a545-fb431059ae3c
+8b88900e-f862-468c-8d3b-828188116155
+be4f5346-1c7f-4697-8a2c-1343347872c5
+d0032efe-ae60-461b-8582-f6a7c649f238
+
+
+-- !query
+WITH RECURSIVE randoms(val) AS (
+    SELECT ARRAY(1,2,3,4,5)
+    UNION ALL
+    SELECT SHUFFLE(ARRAY(1,2,3,4,5), 237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5
+-- !query schema
+struct<val:array<int>>
+-- !query output
+[1,2,3,4,5]
+[1,2,3,5,4]
+[2,1,5,3,4]
+[4,3,2,5,1]
+[4,5,1,2,3]

@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.connect.common.{InvalidCommandInput, InvalidPlanInput}
+import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.errors.DataTypeErrors.{quoteByDefault, toSQLType}
 import org.apache.spark.sql.types.DataType
 
@@ -213,9 +213,6 @@ object InvalidInputErrors {
 
   def unionByNameAllowMissingColRequiresByName(): InvalidPlanInput =
     InvalidPlanInput("UnionByName `allowMissingCol` can be true only if `byName` is true.")
-
-  def invalidBucketCount(numBuckets: Int): InvalidCommandInput =
-    InvalidCommandInput("INVALID_BUCKET_COUNT", Map("numBuckets" -> numBuckets.toString))
 
   def unsupportedUserDefinedFunctionImplementation(clazz: Class[_]): InvalidPlanInput =
     InvalidPlanInput(s"Unsupported UserDefinedFunction implementation: ${clazz}")
