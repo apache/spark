@@ -64,6 +64,10 @@ import org.apache.spark.util.ArrayImplicits._
  * {{{
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "core/testOnly org.apache.spark.deploy.history.RocksDBBackendHistoryServerSuite"
  * }}}
+ * or
+ * {{{
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "core/testOnly org.apache.spark.deploy.history.LevelDBBackendHistoryServerSuite"
+ * }}}
  *
  * Note that this will blindly generate new expectation files matching the current behavior --
  * the developer must verify that behavior is correct.
