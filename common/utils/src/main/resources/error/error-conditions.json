@@ -5457,12 +5457,6 @@
     ],
     "sqlState" : "58030"
   },
-  "UNABLE_TO_INFER_SCHEMA" : {
-    "message" : [
-      "Unable to infer schema for <format>. It must be specified manually."
-    ],
-    "sqlState" : "42KD9"
-  },
   "UNABLE_TO_INFER_PIPELINE_TABLE_SCHEMA" : {
     "message" : [
       "Failed to infer the schema for table <tableName> from its upstream flows.",
@@ -5473,6 +5467,12 @@
       "",
       "Incompatible schema:",
       "<incompatibleDataSchema>"
+    ],
+    "sqlState" : "42KD9"
+  },
+  "UNABLE_TO_INFER_SCHEMA" : {
+    "message" : [
+      "Unable to infer schema for <format>. It must be specified manually."
     ],
     "sqlState" : "42KD9"
   },
