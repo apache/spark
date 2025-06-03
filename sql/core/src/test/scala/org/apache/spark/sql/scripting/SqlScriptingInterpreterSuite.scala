@@ -3473,7 +3473,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // insert
         Seq.empty[Row], // declare array_column
         Seq.empty[Row], // set array_column
-        Seq(Row(Seq(Row(1, null, Seq(10)), Row(2, "name", Seq.empty)))),
+        Seq(Row(Seq(Row(1, null, Seq(10)), Row(2, "name", Seq.empty))))
       )
       verifySqlScriptResult(sqlScript, expected)
     }
