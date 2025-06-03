@@ -24,13 +24,15 @@ import com.google.protobuf.ByteString
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
-import org.apache.spark.sql.{AnalysisException, Dataset, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
@@ -100,7 +102,8 @@ trait SparkConnectPlanTest extends SharedSparkSession {
         Long.MaxValue,
         Long.MaxValue,
         timeZoneId,
-        true)
+        true,
+        false)
       .next()
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
@@ -477,7 +480,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Empty ArrowBatch") {
     val schema = StructType(Seq(StructField("int", IntegerType)))
-    val data = ArrowConverters.createEmptyArrowBatch(schema, null, true)
+    val data = ArrowConverters.createEmptyArrowBatch(schema, null, true, false)
     val localRelation = proto.Relation
       .newBuilder()
       .setLocalRelation(
@@ -919,5 +922,35 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val fn3 = getUnresolvedFunction(plan3)
     assert(fn3.nameParts.head == "abcde")
     assert(fn3.isInternal)
+  }
+
+  test("SPARK-51820 aggregate list should not contain UnresolvedOrdinal") {
+    val ordinal = proto.Expression
+      .newBuilder()
+      .setLiteral(proto.Expression.Literal.newBuilder().setInteger(1).build())
+      .build()
+
+    val sum =
+      proto.Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          proto.Expression.UnresolvedFunction
+            .newBuilder()
+            .setFunctionName("sum")
+            .addArguments(ordinal))
+        .build()
+
+    val aggregate = proto.Aggregate.newBuilder
+      .setInput(readRel)
+      .addAggregateExpressions(sum)
+      .addGroupingExpressions(ordinal)
+      .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
+      .build()
+
+    val plan =
+      transform(proto.Relation.newBuilder.setAggregate(aggregate).build()).asInstanceOf[Aggregate]
+
+    assert(plan.aggregateExpressions.forall(aggregateExpression =>
+      !aggregateExpression.containsPattern(TreePattern.UNRESOLVED_ORDINAL)))
   }
 }

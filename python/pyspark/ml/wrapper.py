@@ -57,12 +57,15 @@ class JavaWrapper:
 
     @try_remote_del
     def __del__(self) -> None:
-        from pyspark.core.context import SparkContext
+        try:
+            from pyspark.core.context import SparkContext
 
-        if SparkContext._active_spark_context and self._java_obj is not None:
-            SparkContext._active_spark_context._gateway.detach(  # type: ignore[union-attr]
-                self._java_obj
-            )
+            if SparkContext._active_spark_context and self._java_obj is not None:
+                SparkContext._active_spark_context._gateway.detach(  # type: ignore[union-attr]
+                    self._java_obj
+                )
+        except Exception:
+            pass
 
     @classmethod
     def _create_from_java_class(cls: Type[JW], java_class: str, *args: Any) -> JW:
@@ -353,9 +356,15 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         if extra is None:
             extra = dict()
         that = super(JavaParams, self).copy(extra)
-        if self._java_obj is not None and not isinstance(self._java_obj, str):
-            that._java_obj = self._java_obj.copy(self._empty_java_param_map())
-            that._transfer_params_to_java()
+        if self._java_obj is not None:
+            from pyspark.ml.util import RemoteModelRef
+
+            if isinstance(self._java_obj, RemoteModelRef):
+                that._java_obj = self._java_obj
+                self._java_obj.add_ref()
+            elif not isinstance(self._java_obj, str):
+                that._java_obj = self._java_obj.copy(self._empty_java_param_map())
+                that._transfer_params_to_java()
         return that
 
     @try_remote_intercept
@@ -384,7 +393,6 @@ class JavaEstimator(JavaParams, Estimator[JM], metaclass=ABCMeta):
         """
         raise NotImplementedError()
 
-    @try_remote_fit
     def _fit_java(self, dataset: DataFrame) -> "JavaObject":
         """
         Fits a Java model to the input dataset.
@@ -404,6 +412,7 @@ class JavaEstimator(JavaParams, Estimator[JM], metaclass=ABCMeta):
         self._transfer_params_to_java()
         return self._java_obj.fit(dataset._jdf)
 
+    @try_remote_fit
     def _fit(self, dataset: DataFrame) -> JM:
         java_model = self._fit_java(dataset)
         model = self._create_model(java_model)
@@ -449,6 +458,10 @@ class JavaModel(JavaTransformer, Model, metaclass=ABCMeta):
         other ML classes).
         """
         super(JavaModel, self).__init__(java_model)
+        if is_remote() and java_model is not None:
+            from pyspark.ml.util import RemoteModelRef
+
+            assert isinstance(java_model, RemoteModelRef)
         if java_model is not None and not is_remote():
             # SPARK-10931: This is a temporary fix to allow models to own params
             # from estimators. Eventually, these params should be in models through

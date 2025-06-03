@@ -18,8 +18,8 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.UUID
 
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException, StreamingQueryProgress, StreamingQueryStatus}
+import org.apache.spark.sql.classic.{SparkSession, StreamingQuery}
+import org.apache.spark.sql.streaming.{StreamingQueryException, StreamingQueryProgress, StreamingQueryStatus}
 
 /**
  * Wrap non-serializable StreamExecution to make the query serializable as it's easy for it to

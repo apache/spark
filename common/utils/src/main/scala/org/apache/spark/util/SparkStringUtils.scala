@@ -16,11 +16,11 @@
  */
 package org.apache.spark.util
 
-trait SparkStringUtils {
+private[spark] trait SparkStringUtils {
   def stringToSeq(str: String): Seq[String] = {
     import org.apache.spark.util.ArrayImplicits._
     str.split(",").map(_.trim()).filter(_.nonEmpty).toImmutableArraySeq
   }
 }
 
-object SparkStringUtils extends SparkStringUtils
+private[spark] object SparkStringUtils extends SparkStringUtils

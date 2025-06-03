@@ -22,6 +22,12 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Core 4.0 to 4.1
+
+- Since Spark 4.1, Spark Master deamon provides REST API by default. To restore the behavior before Spark 4.1, you can set `spark.master.rest.enabled` to `false`.
+- Since Spark 4.1, Spark will compress RDD checkpoints by default. To restore the behavior before Spark 4.1, you can set `spark.checkpoint.compress` to `false`.
+- Since Spark 4.1, Spark uses Apache Hadoop Magic Committer for all S3 buckets by default. To restore the behavior before Spark 4.0, you can set `spark.hadoop.fs.s3a.committer.magic.enabled=false`.
+
 ## Upgrading from Core 3.5 to 4.0
 
 - Since Spark 4.0, Spark migrated all its internal reference of servlet API from `javax` to `jakarta` 
@@ -35,6 +41,8 @@ license: |
 - Since Spark 4.0, `spark.shuffle.service.db.backend` is set to `ROCKSDB` by default which means Spark will use RocksDB store for shuffle service. To restore the behavior before Spark 4.0, you can set `spark.shuffle.service.db.backend` to `LEVELDB`.
 
 - In Spark 4.0, support for Apache Mesos as a resource manager was removed.
+
+- Since Spark 4.0, Spark will allocate executor pods with a batch size of `10`. To restore the legacy behavior, you can set `spark.kubernetes.allocation.batch.size` to `5`.
 
 - Since Spark 4.0, Spark uses `ReadWriteOncePod` instead of `ReadWriteOnce` access mode in persistence volume claims. To restore the legacy behavior, you can set `spark.kubernetes.legacy.useReadWriteOnceAccessMode` to `true`.
 

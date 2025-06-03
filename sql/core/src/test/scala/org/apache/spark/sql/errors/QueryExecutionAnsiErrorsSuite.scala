@@ -18,9 +18,10 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
-import org.apache.spark.sql.{QueryTest, SparkSession}
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.{CaseWhen, Cast, CheckOverflowInTableInsert, ExpressionProxy, Literal, SubExprEvaluationRuntime}
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
@@ -48,7 +49,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       condition = "CAST_OVERFLOW",
       parameters = Map("value" -> "TIMESTAMP '9999-12-31 04:13:14.56789'",
         "sourceType" -> "\"TIMESTAMP\"",
-        "targetType" -> "\"INT\""),
+        "targetType" -> "\"INT\"",
+        "ansiConfig" -> ansiConf),
       sqlState = "22003")
   }
 
@@ -213,7 +215,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       parameters = Map(
         "expression" -> "'111111111111xe23'",
         "sourceType" -> "\"STRING\"",
-        "targetType" -> "\"DOUBLE\""),
+        "targetType" -> "\"DOUBLE\"",
+        "ansiConfig" -> ansiConf),
       context = ExpectedContext(
         fragment = "CAST('111111111111xe23' AS DOUBLE)",
         start = 7,
@@ -227,7 +230,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       parameters = Map(
         "expression" -> "'111111111111xe23'",
         "sourceType" -> "\"STRING\"",
-        "targetType" -> "\"DOUBLE\""),
+        "targetType" -> "\"DOUBLE\"",
+        "ansiConfig" -> ansiConf),
       context = ExpectedContext(
         fragment = "cast",
         callSitePattern = getCurrentClassCallSitePattern))
@@ -274,7 +278,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       condition = "CAST_OVERFLOW",
       parameters = Map("value" -> "1.2345678901234567E19D",
         "sourceType" -> "\"DOUBLE\"",
-        "targetType" -> ("\"TINYINT\""))
+        "targetType" -> ("\"TINYINT\""),
+        "ansiConfig" -> ansiConf)
     )
   }
 
@@ -292,7 +297,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         condition = "CAST_OVERFLOW",
         parameters = Map("value" -> "-1.2345678901234567E19D",
           "sourceType" -> "\"DOUBLE\"",
-          "targetType" -> "\"TINYINT\""),
+          "targetType" -> "\"TINYINT\"",
+          "ansiConfig" -> ansiConf),
         sqlState = "22003")
     }
   }

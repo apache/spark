@@ -23,6 +23,7 @@ import tempfile
 import unittest
 import datetime
 import io
+import time
 from contextlib import redirect_stdout
 
 from pyspark.sql import SparkSession, Column, Row
@@ -44,12 +45,13 @@ from pyspark.sql.types import (
     VariantVal,
 )
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
+from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     test_compiled,
     test_not_compiled_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.testing.utils import assertDataFrameEqual, timeout
 
 
 class BaseUDFTestsMixin(object):
@@ -1165,6 +1167,26 @@ class BaseUDFTestsMixin(object):
             with self.subTest(with_b=True, query_no=i):
                 assertDataFrameEqual(df, [Row(0), Row(101)])
 
+    def test_num_arguments(self):
+        @udf("long")
+        def f():
+            return 10
+
+        @udf("long")
+        def f2(arg):
+            return arg
+
+        [v1, v2] = self.spark.range(1).select(f(), f2(col("id"))).first()
+        self.assertEqual(v1, 10)
+        self.assertEqual(v2, 0)
+
+        [v1, v2] = self.spark.range(1).select(f2(col("id")), f()).first()
+        self.assertEqual(v1, 0)
+        self.assertEqual(v2, 10)
+
+        [v] = self.spark.range(1).select(f()).first()
+        self.assertEqual(v, 10)
+
     def test_raise_stop_iteration(self):
         @udf("int")
         def test_udf(a):
@@ -1189,6 +1211,22 @@ class BaseUDFTestsMixin(object):
                 import ctypes
 
                 self.spark.range(1).select(udf(lambda x: ctypes.string_at(0))("id")).collect()
+
+    def test_udf_kill_on_timeout(self):
+        with self.sql_conf(
+            {
+                "spark.sql.execution.pyspark.udf.idleTimeoutSeconds": "1s",
+                "spark.sql.execution.pyspark.udf.killOnIdleTimeout": "true",
+            }
+        ):
+
+            @udf
+            def f(x):
+                time.sleep(2)
+                return str(x)
+
+            with self.assertRaisesRegex(Exception, "Python worker exited unexpectedly"):
+                self.spark.range(1).select(f("id")).show()
 
     def test_err_udf_init(self):
         with self.quiet():
@@ -1221,6 +1259,125 @@ class BaseUDFTestsMixin(object):
             errorClass="NOT_INT",
             messageParameters={"arg_name": "evalType", "arg_type": "str"},
         )
+
+    def test_timeout_util_with_udf(self):
+        @udf
+        def f(x):
+            time.sleep(10)
+            return str(x)
+
+        @timeout(1)
+        def timeout_func():
+            self.spark.range(1).select(f("id")).show()
+
+        # causing a py4j.protocol.Py4JNetworkError in pyspark classic
+        # causing a TimeoutError in pyspark connect
+        with self.assertRaises(Exception):
+            timeout_func()
+
+    def test_udf_with_udt(self):
+        row = Row(
+            label=1.0,
+            point=ExamplePoint(1.0, 2.0),
+            points=[ExamplePoint(4.0, 5.0), ExamplePoint(6.0, 7.0)],
+        )
+        df = self.spark.createDataFrame([row])
+
+        @udf(returnType=ExamplePointUDT())
+        def doubleInUDTOut(d):
+            return ExamplePoint(d, 10 * d)
+
+        @udf(returnType=DoubleType())
+        def udtInDoubleOut(e):
+            return e.y
+
+        @udf(returnType=ArrayType(ExamplePointUDT()))
+        def doubleInUDTArrayOut(d):
+            return [ExamplePoint(d + i, 10 * d + i) for i in range(2)]
+
+        @udf(returnType=DoubleType())
+        def udtArrayInDoubleOut(es):
+            return es[-1].y
+
+        @udf(returnType=ExamplePointUDT())
+        def udtInUDTOut(e):
+            return ExamplePoint(e.x * 10.0, e.y * 10.0)
+
+        @udf(returnType=DoubleType())
+        def doubleInDoubleOut(d):
+            return d * 100.0
+
+        queries = [
+            (
+                "double -> UDT",
+                df.select(doubleInUDTOut(df.label)),
+                [Row(ExamplePoint(1.0, 10.0))],
+            ),
+            (
+                "UDT -> double",
+                df.select(udtInDoubleOut(df.point)),
+                [Row(2.0)],
+            ),
+            (
+                "double -> array of UDT",
+                df.select(doubleInUDTArrayOut(df.label)),
+                [Row([ExamplePoint(1.0, 10.0), ExamplePoint(2.0, 11.0)])],
+            ),
+            (
+                "array of UDT -> double",
+                df.select(udtArrayInDoubleOut(df.points)),
+                [Row(7.0)],
+            ),
+            (
+                "double -> UDT -> double",
+                df.select(udtInDoubleOut(doubleInUDTOut(df.label))),
+                [Row(10.0)],
+            ),
+            (
+                "double -> UDT -> UDT",
+                df.select(udtInUDTOut(doubleInUDTOut(df.label))),
+                [Row(ExamplePoint(10.0, 100.0))],
+            ),
+            (
+                "double -> double -> UDT",
+                df.select(doubleInUDTOut(doubleInDoubleOut(df.label))),
+                [Row(ExamplePoint(100.0, 1000.0))],
+            ),
+            (
+                "UDT -> UDT -> double",
+                df.select(udtInDoubleOut(udtInUDTOut(df.point))),
+                [Row(20.0)],
+            ),
+            (
+                "UDT -> UDT -> UDT",
+                df.select(udtInUDTOut(udtInUDTOut(df.point))),
+                [Row(ExamplePoint(100.0, 200.0))],
+            ),
+            (
+                "UDT -> double -> double",
+                df.select(doubleInDoubleOut(udtInDoubleOut(df.point))),
+                [Row(200.0)],
+            ),
+            (
+                "UDT -> double -> UDT",
+                df.select(doubleInUDTOut(udtInDoubleOut(df.point))),
+                [Row(ExamplePoint(2.0, 20.0))],
+            ),
+        ]
+
+        for chain, actual, expected in queries:
+            with self.subTest(chain=chain):
+                assertDataFrameEqual(actual=actual, expected=expected)
+
+    def test_udf_empty_frame(self):
+        empty_df = self.spark.createDataFrame([], "id long")
+
+        @udf("long")
+        def add1(x):
+            return x + 1
+
+        result = empty_df.select(add1("id"))
+        self.assertEqual(result.collect(), [])
 
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):

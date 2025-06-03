@@ -17,47 +17,45 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.{ConditionalExpression, Expression}
 
 /**
  * Resolver for [[If]], [[CaseWhen]] and [[Coalesce]] expressions.
  */
-class ConditionalExpressionResolver(
-    expressionResolver: ExpressionResolver,
-    timezoneAwareExpressionResolver: TimezoneAwareExpressionResolver)
-  extends TreeNodeResolver[ConditionalExpression, Expression]
-  with ResolvesExpressionChildren
-  with SQLConfHelper {
+class ConditionalExpressionResolver(expressionResolver: ExpressionResolver)
+    extends TreeNodeResolver[ConditionalExpression, Expression]
+    with ResolvesExpressionChildren
+    with CoercesExpressionTypes {
 
-  private val typeCoercionRules: Seq[Expression => Expression] =
-    if (conf.ansiEnabled) {
-      ConditionalExpressionResolver.ANSI_TYPE_COERCION_RULES
-    } else {
-      ConditionalExpressionResolver.TYPE_COERCION_RULES
-    }
-  private val typeCoercionResolver: TypeCoercionResolver =
-    new TypeCoercionResolver(timezoneAwareExpressionResolver, typeCoercionRules)
+  private val traversals = expressionResolver.getExpressionTreeTraversals
+
+  protected override val ansiTransformations: CoercesExpressionTypes.Transformations =
+    ConditionalExpressionResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
+  protected override val nonAnsiTransformations: CoercesExpressionTypes.Transformations =
+    ConditionalExpressionResolver.TYPE_COERCION_TRANSFORMATIONS
 
   override def resolve(unresolvedConditionalExpression: ConditionalExpression): Expression = {
     val conditionalExpressionWithResolvedChildren =
-      withResolvedChildren(unresolvedConditionalExpression, expressionResolver.resolve)
+      withResolvedChildren(unresolvedConditionalExpression, expressionResolver.resolve _)
 
-    typeCoercionResolver.resolve(conditionalExpressionWithResolvedChildren)
+    coerceExpressionTypes(
+      expression = conditionalExpressionWithResolvedChildren,
+      expressionTreeTraversal = traversals.current
+    )
   }
 }
 
 object ConditionalExpressionResolver {
   // Ordering in the list of type coercions should be in sync with the list in [[TypeCoercion]].
-  private val TYPE_COERCION_RULES: Seq[Expression => Expression] = Seq(
+  private val TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
     TypeCoercion.CaseWhenTypeCoercion.apply,
     TypeCoercion.FunctionArgumentTypeCoercion.apply,
     TypeCoercion.IfTypeCoercion.apply
   )
 
   // Ordering in the list of type coercions should be in sync with the list in [[AnsiTypeCoercion]].
-  private val ANSI_TYPE_COERCION_RULES: Seq[Expression => Expression] = Seq(
+  private val ANSI_TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
     AnsiTypeCoercion.CaseWhenTypeCoercion.apply,
     AnsiTypeCoercion.FunctionArgumentTypeCoercion.apply,
     AnsiTypeCoercion.IfTypeCoercion.apply

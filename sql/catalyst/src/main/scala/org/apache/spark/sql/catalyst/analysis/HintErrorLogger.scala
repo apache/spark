@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{QUERY_HINT, RELATION_NAME, UNSUPPORTED_HINT_REASON}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{HintErrorHandler, HintInfo}
 
 /**
@@ -27,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{HintErrorHandler, HintInfo}
 object HintErrorLogger extends HintErrorHandler with Logging {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  override def hintNotRecognized(name: String, parameters: Seq[Any]): Unit = {
+  override def hintNotRecognized(name: String, parameters: Seq[Expression]): Unit = {
     logWarning(log"Unrecognized hint: " +
       log"${MDC(QUERY_HINT, hintToPrettyString(name, parameters))}")
   }

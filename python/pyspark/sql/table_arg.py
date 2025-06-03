@@ -15,41 +15,44 @@
 # limitations under the License.
 #
 
+# mypy: disable-error-code="empty-body"
+
 from typing import TYPE_CHECKING
 
 from pyspark.sql.tvf_argument import TableValuedFunctionArgument
-from pyspark.sql.utils import get_active_spark_context
+from pyspark.sql.utils import dispatch_table_arg_method
 
 
 if TYPE_CHECKING:
-    from py4j.java_gateway import JavaObject
     from pyspark.sql._typing import ColumnOrName
 
 
 class TableArg(TableValuedFunctionArgument):
-    def __init__(self, j_table_arg: "JavaObject"):
-        self._j_table_arg = j_table_arg
+    """
+    Represents a table argument in PySpark.
 
+    This class provides methods to specify partitioning, ordering, and
+    single-partition constraints when passing a DataFrame as a table argument
+    to TVF(Table-Valued Function)s including UDTF(User-Defined Table Function)s.
+    """
+
+    @dispatch_table_arg_method
     def partitionBy(self, *cols: "ColumnOrName") -> "TableArg":
-        from pyspark.sql.classic.column import _to_java_column, _to_seq
+        """
+        Partitions the data based on the specified columns.
+        """
+        ...
 
-        sc = get_active_spark_context()
-        if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]
-        j_cols = _to_seq(sc, cols, _to_java_column)
-        new_j_table_arg = self._j_table_arg.partitionBy(j_cols)
-        return TableArg(new_j_table_arg)
-
+    @dispatch_table_arg_method
     def orderBy(self, *cols: "ColumnOrName") -> "TableArg":
-        from pyspark.sql.classic.column import _to_java_column, _to_seq
+        """
+        Orders the data within each partition by the specified columns.
+        """
+        ...
 
-        sc = get_active_spark_context()
-        if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]
-        j_cols = _to_seq(sc, cols, _to_java_column)
-        new_j_table_arg = self._j_table_arg.orderBy(j_cols)
-        return TableArg(new_j_table_arg)
-
+    @dispatch_table_arg_method
     def withSinglePartition(self) -> "TableArg":
-        new_j_table_arg = self._j_table_arg.withSinglePartition()
-        return TableArg(new_j_table_arg)
+        """
+        Forces the data to be processed in a single partition.
+        """
+        ...

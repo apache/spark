@@ -31,7 +31,9 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.LocalSparkSession._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.{CompletionIterator, Utils}
 
@@ -168,7 +170,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
 
       withSparkSession(SparkSession.builder().config(sparkConf).getOrCreate()) { spark =>
         implicit val sqlContext = spark.sqlContext
-        val coordinatorRef = sqlContext.streams.stateStoreCoordinator
+        val coordinatorRef = castToImpl(spark).streams.stateStoreCoordinator
         val storeProviderId1 = StateStoreProviderId(StateStoreId(path, opId, 0), queryRunId)
         val storeProviderId2 = StateStoreProviderId(StateStoreId(path, opId, 1), queryRunId)
         coordinatorRef.reportActiveInstance(storeProviderId1, "host1", "exec1", Seq.empty)
@@ -223,6 +225,32 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
         // Make sure the previous RDD still has the same data.
         assert(rdd1.collect().toSet === Set(("a", 0) -> 2, ("b", 0) -> 1))
       }
+    }
+  }
+
+  test("SPARK-51823: unload on commit") {
+    withSparkSession(
+      SparkSession.builder()
+        .config(sparkConf)
+        .config(SQLConf.STATE_STORE_UNLOAD_ON_COMMIT.key, true)
+        .getOrCreate()) { spark =>
+      val path = Utils.createDirectory(tempDir, Random.nextFloat().toString).toString
+      val rdd1 = makeRDD(spark.sparkContext, Seq(("a", 0), ("b", 0), ("a", 0)))
+        .mapPartitionsWithStateStore(spark.sqlContext, operatorStateInfo(path, version = 0),
+          keySchema, valueSchema,
+          NoPrefixKeyStateEncoderSpec(keySchema))(increment)
+
+      assert(rdd1.collect().toSet === Set(("a", 0) -> 2, ("b", 0) -> 1))
+
+      // Generate next version of stores
+      val rdd2 = makeRDD(spark.sparkContext, Seq(("a", 0), ("c", 0)))
+        .mapPartitionsWithStateStore(spark.sqlContext, operatorStateInfo(path, version = 1),
+          keySchema, valueSchema,
+          NoPrefixKeyStateEncoderSpec(keySchema))(increment)
+      assert(rdd2.collect().toSet === Set(("a", 0) -> 3, ("b", 0) -> 1, ("c", 0) -> 1))
+
+      // Make sure the previous RDD still has the same data.
+      assert(rdd1.collect().toSet === Set(("a", 0) -> 2, ("b", 0) -> 1))
     }
   }
 

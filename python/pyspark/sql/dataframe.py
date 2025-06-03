@@ -756,6 +756,10 @@ class DataFrame:
         -------
         :class:`DataFrame`
 
+        See Also
+        --------
+        DataFrame.subtract : Similar to `exceptAll`, but eliminates duplicates.
+
         Examples
         --------
         >>> df1 = spark.createDataFrame(
@@ -2123,15 +2127,16 @@ class DataFrame:
         Examples
         --------
         >>> from pyspark.sql.functions import col
-        >>> dataset = spark.range(0, 100).select((col("id") % 3).alias("key"))
+        >>> dataset = spark.range(0, 100, 1, 5).select((col("id") % 3).alias("key"))
         >>> sampled = dataset.sampleBy("key", fractions={0: 0.1, 1: 0.2}, seed=0)
         >>> sampled.groupBy("key").count().orderBy("key").show()
         +---+-----+
         |key|count|
         +---+-----+
-        |  0|    3|
-        |  1|    6|
+        |  0|    4|
+        |  1|    9|
         +---+-----+
+
         >>> dataset.sampleBy(col("key"), fractions={2: 1.0}, seed=0).count()
         33
         """
@@ -4762,6 +4767,10 @@ class DataFrame:
         -----
         This is equivalent to `EXCEPT DISTINCT` in SQL.
 
+        See Also
+        --------
+        DataFrame.exceptAll : Similar to `subtract`, but preserves duplicates.
+
         Examples
         --------
         Example 1: Subtracting two DataFrames with the same schema
@@ -5927,7 +5936,7 @@ class DataFrame:
 
     @dispatch_df_method
     def toDF(self, *cols: str) -> "DataFrame":
-        """Returns a new :class:`DataFrame` that with new specified column names
+        """Returns a new :class:`DataFrame` with new specified column names
 
         .. versionadded:: 1.6.0
 
@@ -6603,8 +6612,9 @@ class DataFrame:
 
     def asTable(self) -> TableArg:
         """
-        Converts the DataFrame into a `TableArg` object, which can be used as a table argument
-        in a user-defined table function (UDTF).
+        Converts the DataFrame into a :class:`table_arg.TableArg` object, which can
+        be used as a table argument in a TVF(Table-Valued Function) including UDTF
+        (User-Defined Table Function).
 
         After obtaining a TableArg from a DataFrame using this method, you can specify partitioning
         and ordering for the table argument by calling methods such as `partitionBy`, `orderBy`, and
@@ -6619,7 +6629,7 @@ class DataFrame:
 
         Returns
         -------
-        :class:`TableArg`
+        :class:`table_arg.TableArg`
             A `TableArg` object representing a table argument.
         """
         ...
@@ -6819,13 +6829,13 @@ class DataFrame:
     @property
     def plot(self) -> "PySparkPlotAccessor":
         """
-        Returns a :class:`PySparkPlotAccessor` for plotting functions.
+        Returns a :class:`plot.core.PySparkPlotAccessor` for plotting functions.
 
         .. versionadded:: 4.0.0
 
         Returns
         -------
-        :class:`PySparkPlotAccessor`
+        :class:`plot.core.PySparkPlotAccessor`
 
         Notes
         -----

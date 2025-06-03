@@ -32,7 +32,7 @@ import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
-private[image] class ImageFileFormat extends FileFormat with DataSourceRegister {
+private[image] case class ImageFileFormat() extends FileFormat with DataSourceRegister {
 
   override def inferSchema(
       sparkSession: SparkSession,
@@ -62,7 +62,7 @@ private[image] class ImageFileFormat extends FileFormat with DataSourceRegister 
       "Image data source only produces a single data column named \"image\".")
 
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
 
     val imageSourceOptions = new ImageOptions(options)
 

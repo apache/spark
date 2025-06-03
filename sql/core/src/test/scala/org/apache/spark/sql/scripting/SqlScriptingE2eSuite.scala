@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.util.QuotingUtils.toSQLConf
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 
 /**
@@ -35,9 +36,14 @@ import org.apache.spark.sql.test.SharedSparkSession
  */
 class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
   // Helpers
-  private def verifySqlScriptResult(sqlText: String, expected: Seq[Row]): Unit = {
+  private def verifySqlScriptResult(
+      sqlText: String,
+      expected: Seq[Row],
+      expectedSchema: Option[StructType] = None): Unit = {
     val df = spark.sql(sqlText)
     checkAnswer(df, expected)
+
+    assert(expectedSchema.forall(_ === df.schema))
   }
 
   private def verifySqlScriptResultWithNamedParams(
@@ -50,7 +56,9 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
 
   // Tests setup
   override protected def sparkConf: SparkConf = {
-    super.sparkConf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
+    super.sparkConf
+      .set(SQLConf.ANSI_ENABLED.key, "true")
+      .set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
   }
 
   // Tests
@@ -68,6 +76,33 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
         condition = "UNSUPPORTED_FEATURE.SQL_SCRIPTING",
         parameters = Map("sqlScriptingEnabled" -> toSQLConf(SQLConf.SQL_SCRIPTING_ENABLED.key)))
     }
+  }
+
+  test("Scripting with exception handlers") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag INT = -1;
+        |  DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SELECT flag;
+        |    SET flag = 1;
+        |  END;
+        |  BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 2;
+        |    END;
+        |    SELECT 5;
+        |    SELECT 1/0;
+        |    SELECT 6;
+        |  END;
+        |  SELECT 7;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    verifySqlScriptResult(sqlScript, Seq(Row(2)))
   }
 
   test("single select") {
@@ -105,10 +140,27 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
         |BEGIN
         |  DECLARE x INT;
         |  SET x = 1;
-        |  DROP TEMPORARY VARIABLE x;
         |END
         |""".stripMargin
     verifySqlScriptResult(sqlScript, Seq.empty)
+  }
+
+  test("SPARK-51284: script with empty result") {
+    withTable("scripting_test_table") {
+      val sqlScript =
+        """
+          |BEGIN
+          |  CREATE TABLE scripting_test_table (id INT);
+          |  SELECT * FROM scripting_test_table;
+          |  DROP TABLE scripting_test_table;
+          |END
+          |""".stripMargin
+      verifySqlScriptResult(
+        sqlScript,
+        Seq.empty,
+        Some(StructType(Seq(StructField("id", IntegerType)).toArray))
+      )
+    }
   }
 
   test("empty script") {

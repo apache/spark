@@ -23,15 +23,14 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression, Li
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, ObjectType}
+import org.apache.spark.sql.types.{DataType, ObjectType, StringType}
 
-private[sql] case class SchemaOfAvro(
+case class SchemaOfAvro(
     jsonFormatSchema: String,
     options: Map[String, String])
   extends LeafExpression with RuntimeReplaceable {
 
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def dataType: DataType = StringType
 
   override def nullable: Boolean = false
 

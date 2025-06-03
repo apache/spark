@@ -82,6 +82,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$WrapLateralColumnAliasReference" ::
       "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$AnsiCombinedTypeCoercionRule" ::
       "org.apache.spark.sql.catalyst.analysis.ApplyCharTypePadding" ::
+      "org.apache.spark.sql.catalyst.analysis.CollationTypeCasts" ::
       "org.apache.spark.sql.catalyst.analysis.DeduplicateRelations" ::
       "org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases" ::
       "org.apache.spark.sql.catalyst.analysis.EliminateUnions" ::
@@ -110,6 +111,8 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveUpdateEventTimeWatermarkColumn" ::
       "org.apache.spark.sql.catalyst.expressions.EliminatePipeOperators" ::
       "org.apache.spark.sql.catalyst.expressions.ValidateAndStripPipeExpressions" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveUnresolvedHaving" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveTableConstraints" ::
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseProject" ::

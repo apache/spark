@@ -25,6 +25,7 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.connector.catalog.MetadataColumn
 import org.apache.spark.sql.types.{MetadataBuilder, NumericType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SparkErrorUtils, Utils}
@@ -155,6 +156,14 @@ package object util extends Logging {
    */
   val QUALIFIED_ACCESS_ONLY = "__qualified_access_only"
 
+  /**
+   * If set, this metadata column can only be accessed under [[AggregateExpression]]. This is
+   * important when resolving columns in ORDER BY and HAVING clauses on top of [[Aggregate]].
+   * In this case we can only reference attributes from grouping expressions, or attributes marked
+   * as "__aggregated_access_only" under [[AggregateExpression]].
+   */
+  val AGGREGATED_ACCESS_ONLY = "__aggregated_access_only"
+
   implicit class MetadataColumnHelper(attr: Attribute) {
 
     def isMetadataCol: Boolean = MetadataAttribute.isValid(attr.metadata)
@@ -162,6 +171,10 @@ package object util extends Logging {
     def qualifiedAccessOnly: Boolean = attr.isMetadataCol &&
       attr.metadata.contains(QUALIFIED_ACCESS_ONLY) &&
       attr.metadata.getBoolean(QUALIFIED_ACCESS_ONLY)
+
+    def aggregatedAccessOnly: Boolean = attr.isMetadataCol &&
+      attr.metadata.contains(AGGREGATED_ACCESS_ONLY) &&
+      attr.metadata.getBoolean(AGGREGATED_ACCESS_ONLY)
 
     def markAsQualifiedAccessOnly(): Attribute = attr.withMetadata(
       new MetadataBuilder()
@@ -171,12 +184,21 @@ package object util extends Logging {
         .build()
     )
 
+    def markAsAggregatedAccessOnly(): Attribute = attr.withMetadata(
+      new MetadataBuilder()
+        .withMetadata(attr.metadata)
+        .putString(METADATA_COL_ATTR_KEY, attr.name)
+        .putBoolean(AGGREGATED_ACCESS_ONLY, true)
+        .build()
+    )
+
     def markAsAllowAnyAccess(): Attribute = {
       if (qualifiedAccessOnly) {
         attr.withMetadata(
           new MetadataBuilder()
             .withMetadata(attr.metadata)
             .remove(QUALIFIED_ACCESS_ONLY)
+            .remove(AGGREGATED_ACCESS_ONLY)
             .build()
         )
       } else {
@@ -193,7 +215,10 @@ package object util extends Logging {
     QUALIFIED_ACCESS_ONLY,
     FileSourceMetadataAttribute.FILE_SOURCE_METADATA_COL_ATTR_KEY,
     FileSourceConstantMetadataStructField.FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY,
-    FileSourceGeneratedMetadataStructField.FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY
+    FileSourceGeneratedMetadataStructField.FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY,
+    MetadataColumn.PRESERVE_ON_DELETE,
+    MetadataColumn.PRESERVE_ON_UPDATE,
+    MetadataColumn.PRESERVE_ON_REINSERT
   )
 
   def removeInternalMetadata(schema: StructType): StructType = {

@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -121,7 +122,9 @@ case class TransformWithStateExec(
     val driverProcessorHandle = new DriverStatefulProcessorHandleImpl(timeMode, keyEncoder)
     driverProcessorHandle.setHandleState(StatefulProcessorHandleState.PRE_INIT)
     statefulProcessor.setHandle(driverProcessorHandle)
-    statefulProcessor.init(outputMode, timeMode)
+    withStatefulProcessorErrorHandling("init") {
+      statefulProcessor.init(outputMode, timeMode)
+    }
     driverProcessorHandle
   }
 
@@ -131,7 +134,7 @@ case class TransformWithStateExec(
    * This instance of the stateful processor won't be used again.
    */
   private def closeProcessorHandle(): Unit = {
-    statefulProcessor.close()
+    closeStatefulProcessor()
     statefulProcessor.setHandle(null)
   }
 
@@ -140,7 +143,7 @@ case class TransformWithStateExec(
    * after init is called.
    */
   override def getColFamilySchemas(
-      setNullableFields: Boolean
+      shouldBeNullable: Boolean
   ): Map[String, StateStoreColFamilySchema] = {
     val keySchema = keyExpressions.toStructType
     // we have to add the default column family schema because the RocksDBStateEncoder
@@ -149,8 +152,11 @@ case class TransformWithStateExec(
       0, keyExpressions.toStructType, 0, DUMMY_VALUE_ROW_SCHEMA,
       Some(NoPrefixKeyStateEncoderSpec(keySchema)))
 
+    // For Scala, the user can't explicitly set nullability on schema, so there is
+    // no reason to throw an error, and we can simply set the schema to nullable.
     val columnFamilySchemas = getDriverProcessorHandle()
-      .getColumnFamilySchemas(setNullableFields) ++
+      .getColumnFamilySchemas(
+        shouldCheckNullable = false, shouldSetNullable = shouldBeNullable) ++
         Map(StateStore.DEFAULT_COL_FAMILY_NAME -> defaultSchema)
     closeProcessorHandle()
     columnFamilySchemas
@@ -258,7 +264,7 @@ case class TransformWithStateExec(
 
     val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
 
-    val keyObj = getKeyObj(keyRow)  // convert key to objects
+    val keyObj = getKeyObj(keyRow) // convert key to objects
     val valueObjIter = valueRowIter.map(getValueObj.apply)
 
     // The statefulProcessor's handleInputRows method may create an eager iterator,
@@ -267,11 +273,13 @@ case class TransformWithStateExec(
     // methods on the iterator are invoked. This is done with the wrapper class
     // at the end of this method.
     ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
-    val mappedIterator = statefulProcessor.handleInputRows(
-      keyObj,
-      valueObjIter,
-      new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction)).map { obj =>
-      getOutputRow(obj)
+    val mappedIterator = withStatefulProcessorErrorHandling("handleInputRows") {
+     statefulProcessor.handleInputRows(
+        keyObj,
+        valueObjIter,
+        new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction)).map { obj =>
+        getOutputRow(obj)
+      }
     }
     ImplicitGroupingKeyTracker.removeImplicitKey()
 
@@ -288,14 +296,15 @@ case class TransformWithStateExec(
     val keyObj = getKeyObj(keyRow) // convert key to objects
     ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
     val initStateObjIter = initStateIter.map(getInitStateValueObj.apply)
-
-    initStateObjIter.foreach { initState =>
-      // allow multiple initial state rows on the same grouping key for integration
-      // with state data source reader with initial state
-      statefulProcessor
-        .asInstanceOf[StatefulProcessorWithInitialState[Any, Any, Any, Any]]
-        .handleInitialState(keyObj, initState,
-          new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction))
+    withStatefulProcessorErrorHandling("handleInitialState") {
+      initStateObjIter.foreach { initState =>
+        // allow multiple initial state rows on the same grouping key for integration
+        // with state data source reader with initial state
+        statefulProcessor
+          .asInstanceOf[StatefulProcessorWithInitialState[Any, Any, Any, Any]]
+          .handleInitialState(keyObj, initState,
+            new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction))
+      }
     }
     ImplicitGroupingKeyTracker.removeImplicitKey()
   }
@@ -314,11 +323,13 @@ case class TransformWithStateExec(
       processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
     val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
     ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
-    val mappedIterator = statefulProcessor.handleExpiredTimer(
-      keyObj,
-      new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction),
-      new ExpiredTimerInfoImpl(Some(expiryTimestampMs))).map { obj =>
-      getOutputRow(obj)
+    val mappedIterator = withStatefulProcessorErrorHandling("handleExpiredTimer") {
+      statefulProcessor.handleExpiredTimer(
+        keyObj,
+        new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction),
+        new ExpiredTimerInfoImpl(Some(expiryTimestampMs))).map { obj =>
+        getOutputRow(obj)
+      }
     }
     ImplicitGroupingKeyTracker.removeImplicitKey()
 
@@ -378,7 +389,7 @@ case class TransformWithStateExec(
 
     // If timeout is based on event time, then filter late data based on watermark
     val filteredIter = watermarkPredicateForDataForLateEvents match {
-      case Some(predicate) =>
+      case Some(predicate) if timeMode == TimeMode.EventTime() =>
         applyRemovingRowsOlderThanWatermark(iter, predicate)
       case _ =>
         iter
@@ -432,10 +443,16 @@ case class TransformWithStateExec(
       }
       setStoreMetrics(store)
       setOperatorMetrics()
-      statefulProcessor.close()
+      closeStatefulProcessor()
       statefulProcessor.setHandle(null)
       processorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
     })
+  }
+
+  def closeStatefulProcessor(): Unit = {
+    withStatefulProcessorErrorHandling("close") {
+      statefulProcessor.close()
+    }
   }
 
   // operator specific metrics
@@ -472,8 +489,9 @@ case class TransformWithStateExec(
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
     val info = getStateInfo
+    val stateSchemaDir = stateSchemaDirPath()
     validateAndWriteStateSchema(hadoopConf, batchId, stateSchemaVersion,
-      info, session, operatorStateMetadataVersion, conf.stateStoreEncodingFormat)
+      info, stateSchemaDir, session, operatorStateMetadataVersion, conf.stateStoreEncodingFormat)
   }
 
   /** Metadata of this stateful operator and its states stores. */
@@ -496,8 +514,8 @@ case class TransformWithStateExec(
 
     if (hasInitialState) {
       val storeConf = new StateStoreConf(session.sessionState.conf)
-      val hadoopConfBroadcast = sparkContext.broadcast(
-        new SerializableConfiguration(session.sessionState.newHadoopConf()))
+      val hadoopConfBroadcast =
+        SerializableConfiguration.broadcast(sparkContext, session.sessionState.newHadoopConf())
       child.execute().stateStoreAwareZipPartitions(
         initialState.execute(),
         getStateInfo,
@@ -547,8 +565,8 @@ case class TransformWithStateExec(
       } else {
         // If the query is running in batch mode, we need to create a new StateStore and instantiate
         // a temp directory on the executors in mapPartitionsWithIndex.
-        val hadoopConfBroadcast = sparkContext.broadcast(
-          new SerializableConfiguration(session.sessionState.newHadoopConf()))
+        val hadoopConfBroadcast =
+          SerializableConfiguration.broadcast(sparkContext, session.sessionState.newHadoopConf())
         child.execute().mapPartitionsWithIndex[InternalRow](
           (i: Int, iter: Iterator[InternalRow]) => {
             initNewStateStoreAndProcessData(i, hadoopConfBroadcast) { store =>
@@ -557,6 +575,26 @@ case class TransformWithStateExec(
           }
         )
       }
+    }
+  }
+
+  /**
+   * Executes a block of code with standardized error handling for StatefulProcessor
+   * operations. Rethrows SparkThrowables directly and wraps other exceptions in
+   * TransformWithStateUserFunctionException with the provided function name.
+   *
+   * @param functionName The name of the function being executed (for error reporting)
+   * @param block The code block to execute with error handling
+   * @return The result of the block execution
+   */
+  private def withStatefulProcessorErrorHandling[R](functionName: String)(block: => R): R = {
+    try {
+      block
+    } catch {
+      case st: Exception with SparkThrowable if st.getCondition != null =>
+        throw st
+      case e: Exception =>
+        throw TransformWithStateUserFunctionException(e, functionName)
     }
   }
 
@@ -599,7 +637,7 @@ case class TransformWithStateExec(
     val outputIterator = f(store)
     CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator.iterator, {
       stateStoreProvider.close()
-      statefulProcessor.close()
+      closeStatefulProcessor()
     })
   }
 
@@ -616,7 +654,9 @@ case class TransformWithStateExec(
       isStreaming, batchTimestampMs, metrics)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
-    statefulProcessor.init(outputMode, timeMode)
+    withStatefulProcessorErrorHandling("init") {
+      statefulProcessor.init(outputMode, timeMode)
+    }
     processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
     processDataWithPartition(singleIterator, store, processorHandle)
   }
@@ -630,7 +670,9 @@ case class TransformWithStateExec(
       keyEncoder, timeMode, isStreaming, batchTimestampMs, metrics)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
-    statefulProcessor.init(outputMode, timeMode)
+    withStatefulProcessorErrorHandling("init") {
+      statefulProcessor.init(outputMode, timeMode)
+    }
     processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
 
     val initialStateProcTimeMs = longMetric("initialStateProcessingTimeMs")

@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -35,6 +35,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.SizeEstimator
 
 
 /**
@@ -96,9 +97,8 @@ class BisectingKMeansModel private[ml] (
   extends Model[BisectingKMeansModel] with BisectingKMeansParams with MLWritable
   with HasTrainingSummary[BisectingKMeansSummary] {
 
-  @Since("4.0.0")
-  private[ml] def this() = this(Identifiable.randomUID("bisecting-kmeans"),
-    new MLlibBisectingKMeansModel(null))
+  // For ml connect only
+  private[ml] def this() = this("", null)
 
   @Since("3.0.0")
   lazy val numFeatures: Int = parentModel.clusterCenters.head.size
@@ -142,6 +142,9 @@ class BisectingKMeansModel private[ml] (
   @Since("2.0.0")
   def clusterCenters: Array[Vector] = parentModel.clusterCenters.map(_.asML)
 
+  private[ml] def clusterCenterMatrix: Matrix =
+    Matrices.fromVectors(clusterCenters.toSeq)
+
   /**
    * Computes the sum of squared distances between the input points and their corresponding cluster
    * centers.
@@ -175,6 +178,8 @@ class BisectingKMeansModel private[ml] (
    */
   @Since("2.1.0")
   override def summary: BisectingKMeansSummary = super.summary
+
+  override def estimatedSize: Long = SizeEstimator.estimate(parentModel)
 }
 
 object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {

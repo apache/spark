@@ -21,11 +21,12 @@ import java.io._
 import java.net.URI
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
+import java.time.{LocalDate, LocalDateTime}
 import java.util.UUID
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.avro.{AvroTypeException, Schema, SchemaBuilder}
+import org.apache.avro.{Schema, SchemaBuilder, SchemaFormatter}
 import org.apache.avro.Schema.{Field, Type}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.file.{DataFileReader, DataFileWriter}
@@ -33,7 +34,7 @@ import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWri
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkUpgradeException}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkRuntimeException, SparkThrowable, SparkUpgradeException}
 import org.apache.spark.TestUtils.assertExceptionMsg
 import org.apache.spark.sql._
 import org.apache.spark.sql.TestingUDT.IntervalData
@@ -45,7 +46,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone
 import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SQLConf
@@ -86,7 +87,7 @@ abstract class AvroSuite
   }
 
   def getAvroSchemaStringFromFiles(filePath: String): String = {
-    new DataFileReader({
+    val schema = new DataFileReader({
       val file = new File(filePath)
       if (file.isFile) {
         file
@@ -96,7 +97,16 @@ abstract class AvroSuite
           .filter(_.getName.endsWith("avro"))
           .head
       }
-    }, new GenericDatumReader[Any]()).getSchema.toString(false)
+    }, new GenericDatumReader[Any]()).getSchema
+    SchemaFormatter.format(AvroUtils.JSON_INLINE_FORMAT, schema)
+  }
+
+  private def getRootCause(ex: Throwable): Throwable = {
+    var rootCause = ex
+    while (rootCause.getCause != null) {
+      rootCause = rootCause.getCause
+    }
+    rootCause
   }
 
   // Check whether an Avro schema of union type is converted to SQL in an expected way, when the
@@ -954,6 +964,36 @@ abstract class AvroSuite
     }
   }
 
+  test("SPARK-49082: Widening date to timestampNTZ in AvroDeserializer") {
+    withTempPath { tempPath =>
+      // Since timestampNTZ only supports timestamps from
+      // -290308-12-21 BCE 19:59:06 to +294247-01-10 CE 04:00:54,
+      // dates outside of this range cannot be widened to timestampNTZ
+      // and will throw an ArithmeticException.
+      val datePath = s"$tempPath/date_data"
+      val dateDf =
+        Seq(LocalDate.of(2024, 1, 1),
+          LocalDate.of(2024, 1, 2),
+          LocalDate.of(1312, 2, 27),
+          LocalDate.of(0, 1, 1),
+          LocalDate.of(-1, 12, 31),
+          LocalDate.of(-290308, 12, 22), // minimum timestampNTZ date
+          LocalDate.of(294247, 1, 10)) // maximum timestampNTZ date
+        .toDF("col")
+      dateDf.write.format("avro").save(datePath)
+      checkAnswer(
+        spark.read.schema("col TIMESTAMP_NTZ").format("avro").load(datePath),
+        Seq(Row(LocalDateTime.of(2024, 1, 1, 0, 0)),
+          Row(LocalDateTime.of(2024, 1, 2, 0, 0)),
+          Row(LocalDateTime.of(1312, 2, 27, 0, 0)),
+          Row(LocalDateTime.of(0, 1, 1, 0, 0)),
+          Row(LocalDateTime.of(-1, 12, 31, 0, 0)),
+          Row(LocalDateTime.of(-290308, 12, 22, 0, 0)),
+          Row(LocalDateTime.of(294247, 1, 10, 0, 0)))
+      )
+    }
+  }
+
   test("SPARK-43380: Fix Avro data type conversion" +
     " of DayTimeIntervalType to avoid producing incorrect results") {
     withTempPath { path =>
@@ -1316,7 +1356,16 @@ abstract class AvroSuite
         dfWithNull.write.format("avro")
           .option("avroSchema", avroSchema).save(s"$tempDir/${UUID.randomUUID()}")
       }
-      assertExceptionMsg[AvroTypeException](e1, "value null is not a SuitEnumType")
+
+      val expectedDatatype = "{\"type\":\"enum\",\"name\":\"SuitEnumType\"," +
+        "\"symbols\":[\"SPADES\",\"HEARTS\",\"DIAMONDS\",\"CLUBS\"]}"
+
+      checkError(
+        getRootCause(e1).asInstanceOf[SparkThrowable],
+        condition = "AVRO_CANNOT_WRITE_NULL_FIELD",
+        parameters = Map(
+          "name" -> "`Suit`",
+          "dataType" -> expectedDatatype))
 
       // Writing df containing data not in the enum will throw an exception
       val e2 = intercept[SparkException] {
@@ -1328,6 +1377,50 @@ abstract class AvroSuite
       }
       assertExceptionMsg[IncompatibleSchemaException](e2,
         """"NOT-IN-ENUM" cannot be written since it's not defined in enum""")
+    }
+  }
+
+  test("to_avro nested struct schema nullability mismatch") {
+    Seq((true, false), (false, true)).foreach {
+      case (innerNull, outerNull) =>
+        val innerSchema = StructType(Seq(StructField("field1", IntegerType, innerNull)))
+        val outerSchema = StructType(Seq(StructField("innerStruct", innerSchema, outerNull)))
+        val nestedSchema = StructType(Seq(StructField("outerStruct", outerSchema, false)))
+
+        val rowWithNull = if (innerNull) Row(Row(null)) else Row(null)
+        val data = Seq(Row(Row(Row(1))), Row(rowWithNull), Row(Row(Row(3))))
+        val df = spark.createDataFrame(spark.sparkContext.parallelize(data), nestedSchema)
+
+        val avroTypeStruct = s"""{
+          |  "type": "record",
+          |  "name": "outerStruct",
+          |  "fields": [
+          |    {
+          |      "name": "innerStruct",
+          |      "type": {
+          |        "type": "record",
+          |        "name": "innerStruct",
+          |        "fields": [
+          |          {"name": "field1", "type": "int"}
+          |        ]
+          |      }
+          |    }
+          |  ]
+          |}
+        """.stripMargin // nullability mismatch for innerStruct
+
+        val expectedErrorName = if (outerNull) "`innerStruct`" else "`field1`"
+        val expectedErrorSchema = if (outerNull) "{\"type\":\"record\",\"name\":\"innerStruct\"" +
+          ",\"fields\":[{\"name\":\"field1\",\"type\":\"int\"}]}" else "\"int\""
+
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            df.select(avro.functions.to_avro($"outerStruct", avroTypeStruct)).collect()
+          },
+          condition = "AVRO_CANNOT_WRITE_NULL_FIELD",
+          parameters = Map(
+            "name" -> expectedErrorName,
+            "dataType" -> expectedErrorSchema))
     }
   }
 
@@ -1516,9 +1609,12 @@ abstract class AvroSuite
           .save(s"$tempDir/${UUID.randomUUID()}")
       }
       assert(ex.getCondition == "TASK_WRITE_FAILED")
-      assert(ex.getCause.isInstanceOf[java.lang.NullPointerException])
-      assert(ex.getCause.getMessage.contains(
-        "null value for (non-nullable) string at test_schema.Name"))
+      checkError(
+        ex.getCause.asInstanceOf[SparkThrowable],
+        condition = "AVRO_CANNOT_WRITE_NULL_FIELD",
+        parameters = Map(
+          "name" -> "`Name`",
+          "dataType" -> "\"string\""))
     }
   }
 
@@ -3019,6 +3115,22 @@ abstract class AvroSuite
         val df = spark.read.format("avro").load(file)
         assert(df.count() == 0)
       }
+    }
+  }
+
+  test("SPARK-51590: unsupported the TIME data types in Avro") {
+    withTempDir { dir =>
+      val tempDir = new File(dir, "files").getCanonicalPath
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select time'12:01:02' as t")
+            .write.format("avro").mode("overwrite").save(tempDir)
+        },
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`t`",
+          "columnType" -> s"\"${TimeType().sql}\"",
+          "format" -> "Avro"))
     }
   }
 }

@@ -17,7 +17,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, LocalTime, Period}
 import java.util.concurrent.TimeUnit
 
 import scala.language.implicitConversions
@@ -26,7 +26,7 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Last}
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -705,7 +705,7 @@ class ExpressionParserSuite extends AnalysisTest {
       parameters = Map(
         "unsupportedType" -> "\"GEO\"",
         "supportedTypes" ->
-        """"DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X""""),
+        """"DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X", "TIME""""),
       context = ExpectedContext(
         fragment = "GEO '(10,-6)'",
         start = 0,
@@ -1150,11 +1150,16 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual(complexName2.quotedString, UnresolvedAttribute(Seq("fo``o", "ba``r")))
   }
 
-  test("SPARK-19526 Support ignore nulls keywords for first and last") {
+  test("SPARK-19526: Support ignore nulls keywords for first and last") {
     assertEqual("first(a ignore nulls)", First($"a", true).toAggregateExpression())
     assertEqual("first(a)", First($"a", false).toAggregateExpression())
     assertEqual("last(a ignore nulls)", Last($"a", true).toAggregateExpression())
     assertEqual("last(a)", Last($"a", false).toAggregateExpression())
+  }
+
+  test("SPARK-51241: Add test cases with ignore nulls for ANY_VALUE") {
+    assertEqual("any_value(a ignore nulls)", AnyValue($"a", true).toAggregateExpression())
+    assertEqual("any_value(a)", AnyValue($"a", false).toAggregateExpression())
   }
 
   test("timestamp literals") {
@@ -1189,16 +1194,18 @@ class ExpressionParserSuite extends AnalysisTest {
     }
   }
 
-  test("current date/timestamp braceless expressions") {
+  test("current date/timestamp/time braceless expressions") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
       SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
       assertEqual("current_date", CurrentDate())
       assertEqual("current_timestamp", CurrentTimestamp())
+      assertEqual("current_time", CurrentTime())
     }
 
     def testNonAnsiBehavior(): Unit = {
       assertEqual("current_date", UnresolvedAttribute.quoted("current_date"))
       assertEqual("current_timestamp", UnresolvedAttribute.quoted("current_timestamp"))
+      assertEqual("current_time", UnresolvedAttribute.quoted("current_time"))
     }
     withSQLConf(
       SQLConf.ANSI_ENABLED.key -> "false",
@@ -1232,5 +1239,20 @@ class ExpressionParserSuite extends AnalysisTest {
           start = 2,
           stop = 9 + quantifier.length))
     }
+  }
+
+  test("time literals") {
+    assertEqual("tIme '12:13:14'", Literal(LocalTime.parse("12:13:14")))
+    assertEqual("TIME'23:59:59.999999'", Literal(LocalTime.parse("23:59:59.999999")))
+
+    checkError(
+      exception = parseException("time '12-13.14'"),
+      condition = "INVALID_TYPED_LITERAL",
+      sqlState = "42604",
+      parameters = Map("valueType" -> "\"TIME\"", "value" -> "'12-13.14'"),
+      context = ExpectedContext(
+        fragment = "time '12-13.14'",
+        start = 0,
+        stop = 14))
   }
 }

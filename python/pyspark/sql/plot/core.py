@@ -85,6 +85,13 @@ class PySparkSampledPlotBase:
 
 
 class PySparkPlotAccessor:
+    """
+    Accessor for DataFrame plotting functionality in PySpark.
+
+    Users can call the accessor as ``df.plot(kind="line")`` or use the dedicated
+    methods like ``df.plot.line(...)`` to generate plots.
+    """
+
     plot_data_map = {
         "area": PySparkSampledPlotBase().get_sampled,
         "bar": PySparkTopNPlotBase().get_top_n,
@@ -142,11 +149,14 @@ class PySparkPlotAccessor:
 
         Examples
         --------
-        >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
-        >>> columns = ["category", "int_val", "float_val"]
-        >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.line(x="category", y="int_val")  # doctest: +SKIP
-        >>> df.plot.line(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
+        .. plotly::
+
+            >>> from pyspark.sql import SparkSession
+            >>> spark = SparkSession.builder.getOrCreate()
+            >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
+            >>> columns = ["category", "int_val", "float_val"]
+            >>> df = spark.createDataFrame(data, columns)
+            >>> df.plot.line(x="category", y="int_val")  # doctest: +SKIP
         """
         return self(kind="line", x=x, y=y, **kwargs)
 
@@ -175,11 +185,14 @@ class PySparkPlotAccessor:
 
         Examples
         --------
-        >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
-        >>> columns = ["category", "int_val", "float_val"]
-        >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.bar(x="category", y="int_val")  # doctest: +SKIP
-        >>> df.plot.bar(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
+        .. plotly::
+
+            >>> from pyspark.sql import SparkSession
+            >>> spark = SparkSession.builder.getOrCreate()
+            >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
+            >>> columns = ["category", "int_val", "float_val"]
+            >>> df = spark.createDataFrame(data, columns)
+            >>> df.plot.bar(x="category", y="int_val")  # doctest: +SKIP
         """
         return self(kind="bar", x=x, y=y, **kwargs)
 
@@ -217,13 +230,14 @@ class PySparkPlotAccessor:
 
         Examples
         --------
-        >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
-        >>> columns = ["category", "int_val", "float_val"]
-        >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.barh(x="int_val", y="category")  # doctest: +SKIP
-        >>> df.plot.barh(
-        ...     x=["int_val", "float_val"], y="category"
-        ... )  # doctest: +SKIP
+        .. plotly::
+
+            >>> from pyspark.sql import SparkSession
+            >>> spark = SparkSession.builder.getOrCreate()
+            >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
+            >>> columns = ["category", "int_val", "float_val"]
+            >>> df = spark.createDataFrame(data, columns)
+            >>> df.plot.barh(x="int_val", y="category")  # doctest: +SKIP
         """
         return self(kind="barh", x=x, y=y, **kwargs)
 
@@ -253,10 +267,14 @@ class PySparkPlotAccessor:
 
         Examples
         --------
-        >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
-        >>> columns = ['length', 'width', 'species']
-        >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.scatter(x='length', y='width')  # doctest: +SKIP
+        .. plotly::
+
+            >>> from pyspark.sql import SparkSession
+            >>> spark = SparkSession.builder.getOrCreate()
+            >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
+            >>> columns = ['length', 'width', 'species']
+            >>> df = spark.createDataFrame(data, columns)
+            >>> df.plot.scatter(x='length', y='width')  # doctest: +SKIP
         """
         return self(kind="scatter", x=x, y=y, **kwargs)
 
@@ -281,16 +299,20 @@ class PySparkPlotAccessor:
 
         Examples
         --------
-        >>> from datetime import datetime
-        >>> data = [
-        ...     (3, 5, 20, datetime(2018, 1, 31)),
-        ...     (2, 5, 42, datetime(2018, 2, 28)),
-        ...     (3, 6, 28, datetime(2018, 3, 31)),
-        ...     (9, 12, 62, datetime(2018, 4, 30))
-        ... ]
-        >>> columns = ["sales", "signups", "visits", "date"]
-        >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.area(x='date', y=['sales', 'signups', 'visits'])  # doctest: +SKIP
+        .. plotly::
+
+            >>> from pyspark.sql import SparkSession
+            >>> spark = SparkSession.builder.getOrCreate()
+            >>> from datetime import datetime
+            >>> data = [
+            ...     (3, 5, 20, datetime(2018, 1, 31)),
+            ...     (2, 5, 42, datetime(2018, 2, 28)),
+            ...     (3, 6, 28, datetime(2018, 3, 31)),
+            ...     (9, 12, 62, datetime(2018, 4, 30))
+            ... ]
+            >>> columns = ["sales", "signups", "visits", "date"]
+            >>> df = spark.createDataFrame(data, columns)
+            >>> df.plot.area(x='date', y=['sales', 'signups', 'visits'])  # doctest: +SKIP
         """
         return self(kind="area", x=x, y=y, **kwargs)
 
@@ -316,17 +338,20 @@ class PySparkPlotAccessor:
 
         Examples
         --------
-        >>> from datetime import datetime
-        >>> data = [
-        ...     (3, 5, 20, datetime(2018, 1, 31)),
-        ...     (2, 5, 42, datetime(2018, 2, 28)),
-        ...     (3, 6, 28, datetime(2018, 3, 31)),
-        ...     (9, 12, 62, datetime(2018, 4, 30))
-        ... ]
-        >>> columns = ["sales", "signups", "visits", "date"]
-        >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.pie(x='date', y='sales')  # doctest: +SKIP
-        >>> df.plot.pie(x='date', subplots=True)  # doctest: +SKIP
+        .. plotly::
+
+            >>> from pyspark.sql import SparkSession
+            >>> spark = SparkSession.builder.getOrCreate()
+            >>> from datetime import datetime
+            >>> data = [
+            ...     (3, 5, 20, datetime(2018, 1, 31)),
+            ...     (2, 5, 42, datetime(2018, 2, 28)),
+            ...     (3, 6, 28, datetime(2018, 3, 31)),
+            ...     (9, 12, 62, datetime(2018, 4, 30))
+            ... ]
+            >>> columns = ["sales", "signups", "visits", "date"]
+            >>> df = spark.createDataFrame(data, columns)
+            >>> df.plot.pie(x='date', y='sales')  # doctest: +SKIP
         """
         return self(kind="pie", x=x, y=y, **kwargs)
 
@@ -358,21 +383,23 @@ class PySparkPlotAccessor:
 
         Examples
         --------
-        >>> data = [
-        ...     ("A", 50, 55),
-        ...     ("B", 55, 60),
-        ...     ("C", 60, 65),
-        ...     ("D", 65, 70),
-        ...     ("E", 70, 75),
-        ...     ("F", 10, 15),
-        ...     ("G", 85, 90),
-        ...     ("H", 5, 150),
-        ... ]
-        >>> columns = ["student", "math_score", "english_score"]
-        >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.box()  # doctest: +SKIP
-        >>> df.plot.box(column="math_score")  # doctest: +SKIP
-        >>> df.plot.box(column=["math_score", "english_score"])  # doctest: +SKIP
+        .. plotly::
+
+            >>> from pyspark.sql import SparkSession
+            >>> spark = SparkSession.builder.getOrCreate()
+            >>> data = [
+            ...     ("A", 50, 55),
+            ...     ("B", 55, 60),
+            ...     ("C", 60, 65),
+            ...     ("D", 65, 70),
+            ...     ("E", 70, 75),
+            ...     ("F", 10, 15),
+            ...     ("G", 85, 90),
+            ...     ("H", 5, 150),
+            ... ]
+            >>> columns = ["student", "math_score", "english_score"]
+            >>> df = spark.createDataFrame(data, columns)
+            >>> df.plot.box()  # doctest: +SKIP
         """
         return self(kind="box", column=column, **kwargs)
 
@@ -412,12 +439,14 @@ class PySparkPlotAccessor:
 
         Examples
         --------
-        >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
-        >>> columns = ["length", "width", "species"]
-        >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.kde(bw_method=0.3)  # doctest: +SKIP
-        >>> df.plot.kde(column=["length", "width"], bw_method=0.3)  # doctest: +SKIP
-        >>> df.plot.kde(column="length", bw_method=0.3)  # doctest: +SKIP
+        .. plotly::
+
+            >>> from pyspark.sql import SparkSession
+            >>> spark = SparkSession.builder.getOrCreate()
+            >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
+            >>> columns = ["length", "width", "species"]
+            >>> df = spark.createDataFrame(data, columns)
+            >>> df.plot.kde(bw_method=0.3, ind=100)  # doctest: +SKIP
         """
         return self(kind="kde", column=column, bw_method=bw_method, ind=ind, **kwargs)
 
@@ -447,12 +476,14 @@ class PySparkPlotAccessor:
 
         Examples
         --------
-        >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
-        >>> columns = ["length", "width", "species"]
-        >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.hist(bins=4)  # doctest: +SKIP
-        >>> df.plot.hist(column=["length", "width"])  # doctest: +SKIP
-        >>> df.plot.hist(column="length", bins=4)  # doctest: +SKIP
+        .. plotly::
+
+            >>> from pyspark.sql import SparkSession
+            >>> spark = SparkSession.builder.getOrCreate()
+            >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
+            >>> columns = ["length", "width", "species"]
+            >>> df = spark.createDataFrame(data, columns)
+            >>> df.plot.hist(bins=4)  # doctest: +SKIP
         """
         return self(kind="hist", column=column, bins=bins, **kwargs)
 
@@ -697,29 +728,27 @@ class PySparkBoxPlotBase:
             lfence = q1 - F.lit(whis) * iqr
             ufence = q3 + F.lit(whis) * iqr
 
-            stats_scols.append(
-                F.struct(
-                    F.mean(colname).alias("mean"),
-                    med.alias("med"),
-                    q1.alias("q1"),
-                    q3.alias("q3"),
-                    lfence.alias("lfence"),
-                    ufence.alias("ufence"),
-                ).alias(f"_box_plot_stats_{i}")
-            )
+            stats_scols.append(F.mean(colname).alias(f"mean_{i}"))
+            stats_scols.append(med.alias(f"med_{i}"))
+            stats_scols.append(q1.alias(f"q1_{i}"))
+            stats_scols.append(q3.alias(f"q3_{i}"))
+            stats_scols.append(lfence.alias(f"lfence_{i}"))
+            stats_scols.append(ufence.alias(f"ufence_{i}"))
 
-        sdf_stats = sdf.select(*stats_scols)
+        # compute all stats with a scalar subquery
+        stats_col = "__pyspark_plotting_box_plot_stats__"
+        sdf = sdf.select("*", sdf.select(F.struct(*stats_scols)).scalar().alias(stats_col))
 
         result_scols = []
         for i, colname in enumerate(formatted_colnames):
             value = F.col(colname)
 
-            lfence = F.col(f"_box_plot_stats_{i}.lfence")
-            ufence = F.col(f"_box_plot_stats_{i}.ufence")
-            mean = F.col(f"_box_plot_stats_{i}.mean")
-            med = F.col(f"_box_plot_stats_{i}.med")
-            q1 = F.col(f"_box_plot_stats_{i}.q1")
-            q3 = F.col(f"_box_plot_stats_{i}.q3")
+            lfence = F.col(f"{stats_col}.lfence_{i}")
+            ufence = F.col(f"{stats_col}.ufence_{i}")
+            mean = F.col(f"{stats_col}.mean_{i}")
+            med = F.col(f"{stats_col}.med_{i}")
+            q1 = F.col(f"{stats_col}.q1_{i}")
+            q3 = F.col(f"{stats_col}.q3_{i}")
 
             outlier = ~value.between(lfence, ufence)
 
@@ -751,5 +780,4 @@ class PySparkBoxPlotBase:
                 ).alias(f"_box_plot_results_{i}")
             )
 
-        sdf_result = sdf.join(sdf_stats.hint("broadcast")).select(*result_scols)
-        return sdf_result.first()
+        return sdf.select(*result_scols).first()

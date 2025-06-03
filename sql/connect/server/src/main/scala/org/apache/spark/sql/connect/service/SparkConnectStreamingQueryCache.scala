@@ -186,7 +186,7 @@ private[connect] class SparkConnectStreamingQueryCache(
   private[service] val taggedQueries: ConcurrentMap[String, QueryCacheKeySet] =
     new ConcurrentHashMap[String, QueryCacheKeySet]
 
-  private var scheduledExecutor: AtomicReference[ScheduledExecutorService] =
+  private val scheduledExecutor: AtomicReference[ScheduledExecutorService] =
     new AtomicReference[ScheduledExecutorService]()
 
   /** Schedules periodic checks if it is not already scheduled */
@@ -218,7 +218,7 @@ private[connect] class SparkConnectStreamingQueryCache(
       (k, v) => {
         if (v == null || !v.addKey(queryKey)) {
           // Create a new QueryCacheKeySet if the entry is absent or being removed.
-          var keys = mutable.HashSet.empty[QueryCacheKey]
+          val keys = mutable.HashSet.empty[QueryCacheKey]
           keys.add(queryKey)
           new QueryCacheKeySet(keys = keys)
         } else {

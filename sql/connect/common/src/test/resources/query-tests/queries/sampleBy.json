@@ -20,7 +20,7 @@
           "jvmOrigin": {
             "stackTrace": [{
               "classLoaderName": "app",
-              "declaringClass": "org.apache.spark.sql.DataFrameStatFunctions",
+              "declaringClass": "org.apache.spark.sql.connect.DataFrameStatFunctions",
               "methodName": "sampleBy",
               "fileName": "DataFrameStatFunctions.scala"
             }, {

@@ -363,18 +363,38 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     addTimerColFamily()
   }
 
+  /**
+   * This method returns all column family schemas, and checks and enforces nullability
+   * if need be. The nullability check and set is only set to true when Avro is enabled.
+   * @param shouldCheckNullable Whether we need to check the nullability. This is set to
+   *                            true when using Python, as this is the only avenue through
+   *                            which users can set nullability
+   * @param shouldSetNullable Whether we need to set the fields as nullable. This is set to
+   *                          true when using Scala, as primitive type encoders set the field
+   *                          to non-nullable. Changing fields from non-nullable to nullable
+   *                          does not break anything (and is required for Avro encoding), so
+   *                          we can safely make this change.
+   * @return column family schemas used by this stateful processor.
+   */
   def getColumnFamilySchemas(
-      setNullableFields: Boolean
+      shouldCheckNullable: Boolean,
+      shouldSetNullable: Boolean
   ): Map[String, StateStoreColFamilySchema] = {
     val schemas = columnFamilySchemas.toMap
-    if (setNullableFields) {
-      schemas.map { case (colFamilyName, stateStoreColFamilySchema) =>
-        colFamilyName -> stateStoreColFamilySchema.copy(
-          valueSchema = stateStoreColFamilySchema.valueSchema.toNullable
-        )
+    schemas.map { case (colFamilyName, schema) =>
+      schema.valueSchema.fields.foreach { field =>
+        if (!field.nullable && shouldCheckNullable) {
+          throw StateStoreErrors.twsSchemaMustBeNullable(
+            schema.colFamilyName, schema.valueSchema.toString())
+        }
       }
-    } else {
-      schemas
+      if (shouldSetNullable) {
+        colFamilyName -> schema.copy(
+          valueSchema = schema.valueSchema.toNullable
+        )
+      } else {
+        colFamilyName -> schema
+      }
     }
   }
 
@@ -438,7 +458,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       stateName,
       keyExprEnc.schema
     )
-    null.asInstanceOf[ValueState[T]]
+    new InvalidHandleValueState[T](stateName)
   }
 
   override def getListState[T](
@@ -472,7 +492,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       stateName,
       keyExprEnc.schema
     )
-    null.asInstanceOf[ListState[T]]
+    new InvalidHandleListState[T](stateName)
   }
 
   override def getMapState[K, V](
@@ -502,7 +522,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     val stateVariableInfo = TransformWithStateVariableUtils.
       getMapState(stateName, ttlEnabled = ttlEnabled)
     stateVariableInfos.put(stateName, stateVariableInfo)
-    null.asInstanceOf[MapState[K, V]]
+    new InvalidHandleMapState[K, V](stateName)
   }
 
   /**
@@ -549,7 +569,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       elementKeySchema: StructType): StateStoreColFamilySchema = {
     val countIndexName = s"$$count_$stateName"
     val countValueSchema = StructType(Seq(
-      StructField("count", LongType, nullable = false)
+      StructField("count", LongType)
     ))
 
     StateStoreColFamilySchema(
@@ -634,4 +654,44 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
   override def deleteIfExists(stateName: String): Unit = {
     verifyStateVarOperations("delete_if_exists", PRE_INIT)
   }
+}
+
+private[sql] trait InvalidHandleState {
+  protected val stateName: String
+
+  protected def throwInitPhaseError(operation: String): Nothing = {
+    throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(
+      s"$stateName.$operation", PRE_INIT.toString)
+  }
+}
+
+private[sql] class InvalidHandleValueState[S](override val stateName: String)
+  extends ValueState[S] with InvalidHandleState {
+  override def exists(): Boolean = throwInitPhaseError("exists")
+  override def get(): S = throwInitPhaseError("get")
+  override def update(newState: S): Unit = throwInitPhaseError("update")
+  override def clear(): Unit = throwInitPhaseError("clear")
+}
+
+private[sql] class InvalidHandleListState[S](override val stateName: String)
+  extends ListState[S] with InvalidHandleState {
+  override def exists(): Boolean = throwInitPhaseError("exists")
+  override def get(): Iterator[S] = throwInitPhaseError("get")
+  override def put(newState: Array[S]): Unit = throwInitPhaseError("put")
+  override def appendValue(newState: S): Unit = throwInitPhaseError("appendValue")
+  override def appendList(newState: Array[S]): Unit = throwInitPhaseError("appendList")
+  override def clear(): Unit = throwInitPhaseError("clear")
+}
+
+private[sql] class InvalidHandleMapState[K, V](override val stateName: String)
+  extends MapState[K, V] with InvalidHandleState {
+  override def exists(): Boolean = throwInitPhaseError("exists")
+  override def getValue(key: K): V = throwInitPhaseError("getValue")
+  override def containsKey(key: K): Boolean = throwInitPhaseError("containsKey")
+  override def updateValue(key: K, value: V): Unit = throwInitPhaseError("updateValue")
+  override def iterator(): Iterator[(K, V)] = throwInitPhaseError("iterator")
+  override def keys(): Iterator[K] = throwInitPhaseError("keys")
+  override def values(): Iterator[V] = throwInitPhaseError("values")
+  override def removeKey(key: K): Unit = throwInitPhaseError("removeKey")
+  override def clear(): Unit = throwInitPhaseError("clear")
 }

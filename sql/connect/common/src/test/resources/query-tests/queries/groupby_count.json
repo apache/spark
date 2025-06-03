@@ -53,7 +53,7 @@
                       "fileName": "functions.scala"
                     }, {
                       "classLoaderName": "app",
-                      "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                      "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
                       "methodName": "count",
                       "fileName": "RelationalGroupedDataset.scala"
                     }]
@@ -73,7 +73,7 @@
                   "fileName": "functions.scala"
                 }, {
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
                   "methodName": "count",
                   "fileName": "RelationalGroupedDataset.scala"
                 }]
@@ -93,7 +93,7 @@
               "fileName": "Column.scala"
             }, {
               "classLoaderName": "app",
-              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
               "methodName": "count",
               "fileName": "RelationalGroupedDataset.scala"
             }]

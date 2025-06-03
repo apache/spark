@@ -7,6 +7,7 @@ cache
 .generated-mima-class-excludes
 .generated-mima-member-excludes
 .rat-excludes
+.mvn/jvm.config
 .*md
 .java-version
 derby.log
@@ -47,6 +48,7 @@ jquery.mustache.js
 pyspark-coverage-site/*
 cloudpickle/*
 join.py
+tblib.py
 SparkILoop.scala
 sbt
 sbt-launch-lib.bash

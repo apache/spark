@@ -39,8 +39,8 @@ abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
   protected val storeConf = new StateStoreConf(sessionState.conf, extraOptions)
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
-  protected val hadoopConfBroadcast = dataRDD.context.broadcast(
-    new SerializableConfiguration(sessionState.newHadoopConf()))
+  protected val hadoopConfBroadcast =
+    SerializableConfiguration.broadcast(dataRDD.context, sessionState.newHadoopConf())
 
   /**
    * Set the preferred location of each partition using the executor that has the related
@@ -136,6 +136,13 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
       stateSchemaBroadcast,
       useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
       useMultipleValuesPerKey)
+
+    if (storeConf.unloadOnCommit) {
+      ctxt.addTaskCompletionListener[Unit](_ => {
+        StateStore.doMaintenanceAndUnload(storeProviderId)
+      })
+    }
+
     storeUpdateFunction(store, inputIter)
   }
 }

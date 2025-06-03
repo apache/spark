@@ -28,6 +28,7 @@ import org.apache.spark.internal.LogKeys.{BATCH_ID, ERROR, PATH}
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, FileFormat, FileFormatWriter}
 import org.apache.spark.sql.internal.SQLConf
@@ -133,6 +134,9 @@ class FileStreamSink(
 
   private val hadoopConf = sparkSession.sessionState.newHadoopConf()
   private val basePath = new Path(path)
+  if (!basePath.isAbsolute) {
+    throw QueryExecutionErrors.notAbsolutePathError(basePath)
+  }
   private val logPath = getMetadataLogPath(basePath.getFileSystem(hadoopConf), basePath,
     sparkSession.sessionState.conf)
   private val retention = options.get("retention").map(Utils.timeStringAsMs)

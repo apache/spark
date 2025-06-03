@@ -124,10 +124,9 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
 
   def negativeScaleNotAllowedError(scale: Int): Throwable = {
     val sqlConf = QuotingUtils.toSQLConf("spark.sql.legacy.allowNegativeScaleOfDecimal")
-    SparkException.internalError(
-      s"Negative scale is not allowed: ${scale.toString}." +
-        s" Set the config ${sqlConf}" +
-        " to \"true\" to allow it.")
+    new AnalysisException(
+      errorClass = "NEGATIVE_SCALE_DISALLOWED",
+      messageParameters = Map("scale" -> toSQLValue(scale), "sqlConf" -> sqlConf))
   }
 
   def attributeNameSyntaxError(name: String): Throwable = {
@@ -208,7 +207,8 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       messageParameters = Map(
         "expression" -> convertedValueStr,
         "sourceType" -> toSQLType(StringType),
-        "targetType" -> toSQLType(to)),
+        "targetType" -> toSQLType(to),
+        "ansiConfig" -> toSQLConf("spark.sql.ansi.enabled")),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -226,8 +226,11 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def castingCauseOverflowError(t: String, from: DataType, to: DataType): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "CAST_OVERFLOW",
-      messageParameters =
-        Map("value" -> t, "sourceType" -> toSQLType(from), "targetType" -> toSQLType(to)),
+      messageParameters = Map(
+        "value" -> t,
+        "sourceType" -> toSQLType(from),
+        "targetType" -> toSQLType(to),
+        "ansiConfig" -> toSQLConf("spark.sql.ansi.enabled")),
       context = Array.empty,
       summary = "")
   }
@@ -264,5 +267,12 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1189",
       messageParameters = Map("operation" -> operation))
+  }
+
+  def unsupportedTimePrecisionError(precision: Int): Throwable = {
+    new SparkException(
+      errorClass = "UNSUPPORTED_TIME_PRECISION",
+      messageParameters = Map("precision" -> precision.toString),
+      cause = null)
   }
 }

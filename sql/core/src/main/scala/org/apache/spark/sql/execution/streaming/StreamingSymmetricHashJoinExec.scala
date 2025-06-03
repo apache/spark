@@ -140,7 +140,7 @@ case class StreamingSymmetricHashJoinExec(
     stateWatermarkPredicates: JoinStateWatermarkPredicates,
     stateFormatVersion: Int,
     left: SparkPlan,
-    right: SparkPlan) extends BinaryExecNode with StateStoreWriter {
+    right: SparkPlan) extends BinaryExecNode with StateStoreWriter with SchemaValidationUtils {
 
   def this(
       leftKeys: Seq[Expression],
@@ -190,11 +190,25 @@ case class StreamingSymmetricHashJoinExec(
     "Join keys from two sides should have same length and types")
 
   private val storeConf = new StateStoreConf(conf)
-  private val hadoopConfBcast = sparkContext.broadcast(
-    new SerializableConfiguration(SessionState.newHadoopConf(
-      sparkContext.hadoopConfiguration, conf)))
+  private val hadoopConfBcast =
+    SerializableConfiguration.broadcast(
+      sparkContext,
+      SessionState.newHadoopConf(sparkContext.hadoopConfiguration, conf))
   private val allowMultipleStatefulOperators =
     conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
+
+  private val useVirtualColumnFamilies = stateFormatVersion == 3
+
+  // Determine the store names and metadata version based on format version
+  private val (numStoresPerPartition, _stateStoreNames, _operatorStateMetadataVersion) =
+    if (useVirtualColumnFamilies) {
+      // We have 1 state store using virtual column families
+      (1, Seq(StateStoreId.DEFAULT_STORE_NAME), 2)
+    } else {
+      // We have 4 state stores (2 on either side of the join)
+      val stateStoreNames = SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
+      (stateStoreNames.size, stateStoreNames, 1)
+    }
 
   val nullLeft = new GenericInternalRow(left.output.map(_.withNullability(true)).length)
   val nullRight = new GenericInternalRow(right.output.map(_.withNullability(true)).length)
@@ -224,16 +238,37 @@ case class StreamingSymmetricHashJoinExec(
 
   override def shortName: String = "symmetricHashJoin"
 
-  private val stateStoreNames =
-    SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
+  override val stateStoreNames: Seq[String] = _stateStoreNames
+
+  override def operatorStateMetadataVersion: Int = _operatorStateMetadataVersion
 
   override def operatorStateMetadata(
       stateSchemaPaths: List[List[String]] = List.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
-    val stateStoreInfo =
-      stateStoreNames.map(StateStoreMetadataV1(_, 0, info.numPartitions)).toArray
-    OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
+    if (useVirtualColumnFamilies) {
+      // Use MetadataV2 for join operators that use virtual column families
+      val stateStoreInfo = stateStoreNames.zip(stateSchemaPaths).map {
+        case (storeName, schemaPath) =>
+          StateStoreMetadataV2(storeName, 0, info.numPartitions, schemaPath)
+      }.toArray
+      val properties = StreamingJoinOperatorProperties(useVirtualColumnFamilies)
+      OperatorStateMetadataV2(operatorInfo, stateStoreInfo, properties.json)
+    } else {
+      val stateStoreInfo =
+        stateStoreNames.map(StateStoreMetadataV1(_, 0, info.numPartitions)).toArray
+      OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
+    }
+  }
+
+  override def getColFamilySchemas(
+      shouldBeNullable: Boolean): Map[String, StateStoreColFamilySchema] = {
+    assert(useVirtualColumnFamilies)
+    // We only have one state store for the join, but there are four distinct schemas
+    SymmetricHashJoinStateManager
+      .getSchemasForStateStoreWithColFamily(LeftSide, left.output, leftKeys, stateFormatVersion) ++
+    SymmetricHashJoinStateManager
+      .getSchemasForStateStoreWithColFamily(RightSide, right.output, rightKeys, stateFormatVersion)
   }
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
@@ -252,29 +287,37 @@ case class StreamingSymmetricHashJoinExec(
       hadoopConf: Configuration,
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
-    var result: Map[String, (StructType, StructType)] = Map.empty
-    // get state schema for state stores on left side of the join
-    result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(LeftSide,
-      left.output, leftKeys, stateFormatVersion)
+    if (useVirtualColumnFamilies) {
+      val info = getStateInfo
+      val stateSchemaDir = stateSchemaDirPath()
 
-    // get state schema for state stores on right side of the join
-    result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(RightSide,
-      right.output, rightKeys, stateFormatVersion)
+      validateAndWriteStateSchema(
+        hadoopConf, batchId, stateSchemaVersion, info, stateSchemaDir, session
+      )
+    } else {
+      var result: Map[String, (StructType, StructType)] = Map.empty
+      // get state schema for state stores on left side of the join
+      result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(LeftSide,
+        left.output, leftKeys, stateFormatVersion)
 
-    // validate and maybe evolve schema for all state stores across both sides of the join
-    result.map { case (stateStoreName, (keySchema, valueSchema)) =>
-      // we have to add the default column family schema because the RocksDBStateEncoder
-      // expects this entry to be present in the stateSchemaProvider.
-      val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME, 0,
-        keySchema, 0, valueSchema))
-      StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-        newStateSchema, session.sessionState, stateSchemaVersion, storeName = stateStoreName)
-    }.toList
+      // get state schema for state stores on right side of the join
+      result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(RightSide,
+        right.output, rightKeys, stateFormatVersion)
+
+      // validate and maybe evolve schema for all state stores across both sides of the join
+      result.map { case (stateStoreName, (keySchema, valueSchema)) =>
+        // we have to add the default column family schema because the RocksDBStateEncoder
+        // expects this entry to be present in the stateSchemaProvider.
+        val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME, 0,
+          keySchema, 0, valueSchema))
+        StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+          newStateSchema, session.sessionState, stateSchemaVersion, storeName = stateStoreName)
+      }.toList
+    }
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val stateStoreCoord = session.sessionState.streamingQueryManager.stateStoreCoordinator
-    val stateStoreNames = SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
     metrics // initialize metrics
     left.execute().stateStoreAwareZipPartitions(
       right.execute(), stateInfo.get, stateStoreNames, stateStoreCoord)(processPartitions)
@@ -307,19 +350,25 @@ case class StreamingSymmetricHashJoinExec(
 
     assert(stateInfo.isDefined, "State info not defined")
     val checkpointIds = SymmetricHashJoinStateManager.getStateStoreCheckpointIds(
-      partitionId, stateInfo.get)
+      partitionId, stateInfo.get, useVirtualColumnFamilies)
 
     val inputSchema = left.output ++ right.output
     val postJoinFilter =
       Predicate.create(condition.bothSides.getOrElse(Literal(true)), inputSchema).eval _
-    val leftSideJoiner = new OneSideHashJoiner(
-      LeftSide, left.output, leftKeys, leftInputIter,
-      condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
-      checkpointIds.left.keyToNumValues, checkpointIds.left.valueToNumKeys, skippedNullValueCount)
-    val rightSideJoiner = new OneSideHashJoiner(
-      RightSide, right.output, rightKeys, rightInputIter,
-      condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
-      checkpointIds.right.keyToNumValues, checkpointIds.right.valueToNumKeys, skippedNullValueCount)
+    // Create left and right side hash joiners and store in the joiner manager.
+    // Both sides should use the same store generator if we are re-using the same store instance.
+    val joinStateManagerStoreGenerator = new JoinStateManagerStoreGenerator()
+    val joinerManager = OneSideHashJoinerManager(
+      new OneSideHashJoiner(
+        LeftSide, left.output, leftKeys, leftInputIter,
+        condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
+        checkpointIds.left.keyToNumValues, checkpointIds.left.valueToNumKeys,
+        skippedNullValueCount, joinStateManagerStoreGenerator),
+      new OneSideHashJoiner(
+        RightSide, right.output, rightKeys, rightInputIter,
+        condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
+        checkpointIds.right.keyToNumValues, checkpointIds.right.valueToNumKeys,
+        skippedNullValueCount, joinStateManagerStoreGenerator))
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -338,12 +387,14 @@ case class StreamingSymmetricHashJoinExec(
     //    - Left Semi Join: generates all stored left input rows, from matching new right input
     //      with stored left input, and also stores all the right input. Note only first-time
     //      matched left input rows will be generated, this is to guarantee left semi semantics.
-    val leftOutputIter = leftSideJoiner.storeAndJoinWithOtherSide(rightSideJoiner) {
-      (input: InternalRow, matched: InternalRow) => joinedRow.withLeft(input).withRight(matched)
-    }
-    val rightOutputIter = rightSideJoiner.storeAndJoinWithOtherSide(leftSideJoiner) {
-      (input: InternalRow, matched: InternalRow) => joinedRow.withLeft(matched).withRight(input)
-    }
+    val leftOutputIter =
+      joinerManager.leftSideJoiner.storeAndJoinWithOtherSide(joinerManager.rightSideJoiner) {
+        (input: InternalRow, matched: InternalRow) => joinedRow.withLeft(input).withRight(matched)
+      }
+    val rightOutputIter =
+      joinerManager.rightSideJoiner.storeAndJoinWithOtherSide(joinerManager.leftSideJoiner) {
+        (input: InternalRow, matched: InternalRow) => joinedRow.withLeft(matched).withRight(input)
+      }
 
     // We need to save the time that the one side hash join output iterator completes, since
     // other join output counts as both update and removal time.
@@ -375,17 +426,17 @@ case class StreamingSymmetricHashJoinExec(
         //   flag along with row, which is set to true when there's any matching row on the right.
 
         def matchesWithRightSideState(leftKeyValue: UnsafeRowPair) = {
-          rightSideJoiner.get(leftKeyValue.key).exists { rightValue =>
+          joinerManager.rightSideJoiner.get(leftKeyValue.key).exists { rightValue =>
             postJoinFilter(joinedRow.withLeft(leftKeyValue.value).withRight(rightValue))
           }
         }
 
         val initIterFn = { () =>
-          val removedRowIter = leftSideJoiner.removeOldState()
+          val removedRowIter = joinerManager.leftSideJoiner.removeOldState()
           removedRowIter.filterNot { kv =>
             stateFormatVersion match {
               case 1 => matchesWithRightSideState(new UnsafeRowPair(kv.key, kv.value))
-              case 2 => kv.matched
+              case 2 | 3 => kv.matched
               case _ => throwBadStateFormatVersionException()
             }
           }.map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
@@ -401,17 +452,17 @@ case class StreamingSymmetricHashJoinExec(
       case RightOuter =>
         // See comments for left outer case.
         def matchesWithLeftSideState(rightKeyValue: UnsafeRowPair) = {
-          leftSideJoiner.get(rightKeyValue.key).exists { leftValue =>
+          joinerManager.leftSideJoiner.get(rightKeyValue.key).exists { leftValue =>
             postJoinFilter(joinedRow.withLeft(leftValue).withRight(rightKeyValue.value))
           }
         }
 
         val initIterFn = { () =>
-          val removedRowIter = rightSideJoiner.removeOldState()
+          val removedRowIter = joinerManager.rightSideJoiner.removeOldState()
           removedRowIter.filterNot { kv =>
             stateFormatVersion match {
               case 1 => matchesWithLeftSideState(new UnsafeRowPair(kv.key, kv.value))
-              case 2 => kv.matched
+              case 2 | 3 => kv.matched
               case _ => throwBadStateFormatVersionException()
             }
           }.map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
@@ -427,18 +478,18 @@ case class StreamingSymmetricHashJoinExec(
       case FullOuter =>
         lazy val isKeyToValuePairMatched = (kv: KeyToValuePair) =>
           stateFormatVersion match {
-            case 2 => kv.matched
+            case 2 | 3 => kv.matched
             case _ => throwBadStateFormatVersionException()
           }
 
         val leftSideInitIterFn = { () =>
-          val removedRowIter = leftSideJoiner.removeOldState()
+          val removedRowIter = joinerManager.leftSideJoiner.removeOldState()
           removedRowIter.filterNot(isKeyToValuePairMatched)
             .map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
         }
 
         val rightSideInitIterFn = { () =>
-          val removedRowIter = rightSideJoiner.removeOldState()
+          val removedRowIter = joinerManager.rightSideJoiner.removeOldState()
           removedRowIter.filterNot(isKeyToValuePairMatched)
             .map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
         }
@@ -493,10 +544,9 @@ case class StreamingSymmetricHashJoinExec(
         // For full outer joins, we have already removed unnecessary states from both sides, so
         // nothing needs to be outputted here.
         val cleanupIter = joinType match {
-          case Inner | LeftSemi =>
-            leftSideJoiner.removeOldState() ++ rightSideJoiner.removeOldState()
-          case LeftOuter => rightSideJoiner.removeOldState()
-          case RightOuter => leftSideJoiner.removeOldState()
+          case Inner | LeftSemi => joinerManager.removeOldState()
+          case LeftOuter => joinerManager.rightSideJoiner.removeOldState()
+          case RightOuter => joinerManager.leftSideJoiner.removeOldState()
           case FullOuter => Iterator.empty
           case _ => throwBadJoinTypeException()
         }
@@ -508,32 +558,22 @@ case class StreamingSymmetricHashJoinExec(
 
       // Commit all state changes and update state store metrics
       commitTimeMs += timeTakenMs {
-        val leftSideMetrics = leftSideJoiner.commitStateAndGetMetrics()
-        val rightSideMetrics = rightSideJoiner.commitStateAndGetMetrics()
-        val combinedMetrics = StateStoreMetrics.combine(Seq(leftSideMetrics, rightSideMetrics))
+        joinerManager.commit()
+        val combinedMetrics = joinerManager.metrics
 
         if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(conf)) {
-          val checkpointInfo = SymmetricHashJoinStateManager.mergeStateStoreCheckpointInfo(
-            JoinStateStoreCkptInfo(
-              leftSideJoiner.getLatestCheckpointInfo(),
-              rightSideJoiner.getLatestCheckpointInfo()
-            )
-          )
-          setStateStoreCheckpointInfo(checkpointInfo)
+          setStateStoreCheckpointInfo(joinerManager.getStateStoreCheckpointInfo)
         }
 
         // Update SQL metrics
-        numUpdatedStateRows +=
-          (leftSideJoiner.numUpdatedStateRows + rightSideJoiner.numUpdatedStateRows)
+        numUpdatedStateRows += joinerManager.totalNumUpdatedStateRows
         numTotalStateRows += combinedMetrics.numKeys
         stateMemory += combinedMetrics.memoryUsedBytes
-        combinedMetrics.customMetrics.foreach { case (metric, value) =>
-          longMetric(metric.name) += value
-        }
+        setStoreCustomMetrics(combinedMetrics.customMetrics)
+        setStoreInstanceMetrics(combinedMetrics.instanceMetrics)
       }
 
-      val stateStoreNames = SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide);
-      setOperatorMetrics(numStateStoreInstances = stateStoreNames.length)
+      setOperatorMetrics(numStateStoreInstances = numStoresPerPartition)
     }
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
@@ -561,6 +601,11 @@ case class StreamingSymmetricHashJoinExec(
    *                                state watermarks.
    * @param oneSideStateInfo  Reconstructed state info for this side
    * @param partitionId A partition ID of source RDD.
+   * @param joinStateManagerStoreGenerator The state store generator responsible for getting the
+   *                                       state store for this join side. The generator will
+   *                                       re-use the same store for both sides when the join
+   *                                       implementation uses virtual column families for join
+   *                                       version 3.
    */
   private class OneSideHashJoiner(
       joinSide: JoinSide,
@@ -573,13 +618,14 @@ case class StreamingSymmetricHashJoinExec(
       partitionId: Int,
       keyToNumValuesStateStoreCkptId: Option[String],
       keyWithIndexToValueStateStoreCkptId: Option[String],
-      skippedNullValueCount: Option[SQLMetric]) {
+      skippedNullValueCount: Option[SQLMetric],
+      joinStateManagerStoreGenerator: JoinStateManagerStoreGenerator) {
 
     // Filter the joined rows based on the given condition.
     val preJoinFilter =
       Predicate.create(preJoinFilterExpr.getOrElse(Literal(true)), inputAttributes).eval _
 
-    private val joinStateManager = new SymmetricHashJoinStateManager(
+    private val joinStateManager = SymmetricHashJoinStateManager(
       joinSide = joinSide,
       inputValueAttributes = inputAttributes,
       joinKeys = joinKeys,
@@ -590,7 +636,8 @@ case class StreamingSymmetricHashJoinExec(
       keyToNumValuesStateStoreCkptId = keyToNumValuesStateStoreCkptId,
       keyWithIndexToValueStateStoreCkptId = keyWithIndexToValueStateStoreCkptId,
       stateFormatVersion = stateFormatVersion,
-      skippedNullValueCount = skippedNullValueCount)
+      skippedNullValueCount = skippedNullValueCount,
+      joinStoreGenerator = joinStateManagerStoreGenerator)
 
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
@@ -764,9 +811,13 @@ case class StreamingSymmetricHashJoinExec(
       }
     }
 
-    /** Commit changes to the buffer state and return the state store metrics */
-    def commitStateAndGetMetrics(): StateStoreMetrics = {
+    /** Commit changes to the buffer state */
+    def commitState(): Unit = {
       joinStateManager.commit()
+    }
+
+    /** Return state store metrics for state committed */
+    def getMetrics: StateStoreMetrics = {
       joinStateManager.metrics
     }
 
@@ -775,6 +826,67 @@ case class StreamingSymmetricHashJoinExec(
     }
 
     def numUpdatedStateRows: Long = updatedStateRowsCount
+  }
+
+  /**
+   * Case class used to manage both left and right side's joiners, combining
+   * information from both sides when necessary.
+   */
+  private case class OneSideHashJoinerManager(
+      leftSideJoiner: OneSideHashJoiner, rightSideJoiner: OneSideHashJoiner) {
+
+    def removeOldState(): Iterator[KeyToValuePair] = {
+      leftSideJoiner.removeOldState() ++ rightSideJoiner.removeOldState()
+    }
+
+    def metrics: StateStoreMetrics = {
+      if (useVirtualColumnFamilies) {
+        // Since both sides use the same state store, the metrics are already combined
+        leftSideJoiner.getMetrics
+      } else {
+        StateStoreMetrics.combine(
+          Seq(leftSideJoiner.getMetrics, rightSideJoiner.getMetrics)
+        )
+      }
+    }
+
+    def commit(): Unit = {
+      if (useVirtualColumnFamilies) {
+        // We only have one state store for both sides to commit
+        leftSideJoiner.commitState()
+      } else {
+        // We have to commit stores used on both sides
+        leftSideJoiner.commitState()
+        rightSideJoiner.commitState()
+      }
+    }
+
+    def getStateStoreCheckpointInfo: StatefulOpStateStoreCheckpointInfo = {
+      if (useVirtualColumnFamilies) {
+        // No merging needed, both fields from getLatestCheckpointInfo() should be identical
+        val storeCheckpointInfo = leftSideJoiner.getLatestCheckpointInfo().keyToNumValues
+        StatefulOpStateStoreCheckpointInfo(
+          storeCheckpointInfo.partitionId,
+          storeCheckpointInfo.batchVersion,
+          storeCheckpointInfo.stateStoreCkptId.map(Array(_)),
+          storeCheckpointInfo.baseStateStoreCkptId.map(Array(_))
+        )
+      } else {
+        // Merge checkpoint info from both sides
+        SymmetricHashJoinStateManager.mergeStateStoreCheckpointInfo(
+          JoinStateStoreCkptInfo(
+            leftSideJoiner.getLatestCheckpointInfo(),
+            rightSideJoiner.getLatestCheckpointInfo()
+          )
+        )
+      }
+    }
+
+    def totalNumUpdatedStateRows: Long = {
+      // Regardless of join implementation, combine the number of updated state rows
+      // as these are maintained outside the state store
+      leftSideJoiner.numUpdatedStateRows + rightSideJoiner.numUpdatedStateRows
+    }
   }
 
   override protected def withNewChildrenInternal(

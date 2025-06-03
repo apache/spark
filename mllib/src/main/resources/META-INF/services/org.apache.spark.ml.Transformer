@@ -17,17 +17,44 @@
 
 # Spark Connect ML uses ServiceLoader to find out the supported Spark Ml non-model transformer.
 # So register the supported transformer here if you're trying to add a new one.
+
+########### Transformers
+org.apache.spark.ml.feature.DCT
+org.apache.spark.ml.feature.NGram
+org.apache.spark.ml.feature.Normalizer
+org.apache.spark.ml.feature.Interaction
+org.apache.spark.ml.feature.Binarizer
+org.apache.spark.ml.feature.Bucketizer
 org.apache.spark.ml.feature.VectorAssembler
+org.apache.spark.ml.feature.VectorSlicer
+org.apache.spark.ml.feature.VectorSizeHint
+org.apache.spark.ml.feature.Tokenizer
+org.apache.spark.ml.feature.RegexTokenizer
+org.apache.spark.ml.feature.SQLTransformer
+org.apache.spark.ml.feature.StopWordsRemover
+org.apache.spark.ml.feature.FeatureHasher
+org.apache.spark.ml.feature.ElementwiseProduct
+org.apache.spark.ml.feature.HashingTF
+org.apache.spark.ml.feature.IndexToString
+org.apache.spark.ml.feature.PolynomialExpansion
 
 ########### Model for loading
 # classification
+org.apache.spark.ml.classification.NaiveBayesModel
+org.apache.spark.ml.classification.LinearSVCModel
 org.apache.spark.ml.classification.LogisticRegressionModel
+org.apache.spark.ml.classification.FMClassificationModel
+org.apache.spark.ml.classification.MultilayerPerceptronClassificationModel
 org.apache.spark.ml.classification.DecisionTreeClassificationModel
 org.apache.spark.ml.classification.RandomForestClassificationModel
 org.apache.spark.ml.classification.GBTClassificationModel
 
 # regression
+org.apache.spark.ml.regression.AFTSurvivalRegressionModel
+org.apache.spark.ml.regression.IsotonicRegressionModel
 org.apache.spark.ml.regression.LinearRegressionModel
+org.apache.spark.ml.regression.GeneralizedLinearRegressionModel
+org.apache.spark.ml.regression.FMRegressionModel
 org.apache.spark.ml.regression.DecisionTreeRegressionModel
 org.apache.spark.ml.regression.RandomForestRegressionModel
 org.apache.spark.ml.regression.GBTRegressionModel
@@ -35,6 +62,10 @@ org.apache.spark.ml.regression.GBTRegressionModel
 # clustering
 org.apache.spark.ml.clustering.KMeansModel
 org.apache.spark.ml.clustering.BisectingKMeansModel
+org.apache.spark.ml.clustering.GaussianMixtureModel
+org.apache.spark.ml.clustering.DistributedLDAModel
+org.apache.spark.ml.clustering.LocalLDAModel
+org.apache.spark.ml.clustering.PowerIterationClusteringWrapper
 
 # recommendation
 org.apache.spark.ml.recommendation.ALSModel
@@ -43,6 +74,22 @@ org.apache.spark.ml.recommendation.ALSModel
 org.apache.spark.ml.fpm.FPGrowthModel
 
 # feature
+org.apache.spark.ml.feature.RFormulaModel
+org.apache.spark.ml.feature.ImputerModel
 org.apache.spark.ml.feature.StandardScalerModel
 org.apache.spark.ml.feature.MaxAbsScalerModel
 org.apache.spark.ml.feature.MinMaxScalerModel
+org.apache.spark.ml.feature.RobustScalerModel
+org.apache.spark.ml.feature.ChiSqSelectorModel
+org.apache.spark.ml.feature.UnivariateFeatureSelectorModel
+org.apache.spark.ml.feature.VarianceThresholdSelectorModel
+org.apache.spark.ml.feature.StringIndexerModel
+org.apache.spark.ml.feature.VectorIndexerModel
+org.apache.spark.ml.feature.PCAModel
+org.apache.spark.ml.feature.IDFModel
+org.apache.spark.ml.feature.Word2VecModel
+org.apache.spark.ml.feature.CountVectorizerModel
+org.apache.spark.ml.feature.OneHotEncoderModel
+org.apache.spark.ml.feature.TargetEncoderModel
+org.apache.spark.ml.feature.BucketedRandomProjectionLSHModel
+org.apache.spark.ml.feature.MinHashLSHModel

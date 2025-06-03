@@ -1763,7 +1763,7 @@ class UtilsTestsMixin:
             exception = e
 
         self.assertIsNotNone(exception)
-        self.assertEqual(exception.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
+        self.assertEqual(exception.getCondition(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
         self.assertEqual(exception.getSqlState(), "42703")
         self.assertEqual(exception.getMessageParameters(), {"objectName": "`a`"})
         self.assertIn(
@@ -1785,7 +1785,7 @@ class UtilsTestsMixin:
         try:
             self.spark.sql("""SELECT assert_true(FALSE)""")
         except AnalysisException as e:
-            self.assertIsNone(e.getErrorClass())
+            self.assertIsNone(e.getCondition())
             self.assertIsNone(e.getSqlState())
             self.assertEqual(e.getMessageParameters(), {})
             self.assertEqual(e.getMessage(), "")
@@ -1797,10 +1797,42 @@ class UtilsTestsMixin:
         try:
             assertDataFrameEqual(df1, df2)
         except PySparkAssertionError as e:
-            self.assertEqual(e.getErrorClass(), "UNSUPPORTED_OPERATION")
+            self.assertEqual(e.getCondition(), "UNSUPPORTED_OPERATION")
             exception_thrown = True
 
         self.assertTrue(exception_thrown)
+
+    def test_assert_schema_equal_with_decimal_types(self):
+        """Test assertSchemaEqual with decimal types of different precision and scale
+        (SPARK-51062)."""
+        from pyspark.sql.types import StructType, StructField, DecimalType
+
+        # Same precision and scale - should pass
+        s1 = StructType(
+            [
+                StructField("price", DecimalType(10, 2), True),
+            ]
+        )
+
+        s1_copy = StructType(
+            [
+                StructField("price", DecimalType(10, 2), True),
+            ]
+        )
+
+        # This should pass
+        assertSchemaEqual(s1, s1_copy)
+
+        # Different precision and scale - should fail
+        s2 = StructType(
+            [
+                StructField("price", DecimalType(12, 4), True),
+            ]
+        )
+
+        # This should fail
+        with self.assertRaises(PySparkAssertionError):
+            assertSchemaEqual(s1, s2)
 
 
 class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):

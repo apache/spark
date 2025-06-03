@@ -45,14 +45,13 @@ from pyspark.sql.types import (
     NullType,
     DayTimeIntervalType,
 )
+from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
-    ExamplePoint,
-    ExamplePointUDT,
 )
 from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
 from pyspark.loose_version import LooseVersion
@@ -730,7 +729,11 @@ class ArrowTestsMixin:
     def test_schema_conversion_roundtrip(self):
         from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 
-        arrow_schema = to_arrow_schema(self.schema)
+        arrow_schema = to_arrow_schema(self.schema, prefers_large_types=False)
+        schema_rt = from_arrow_schema(arrow_schema, prefer_timestamp_ntz=True)
+        self.assertEqual(self.schema, schema_rt)
+
+        arrow_schema = to_arrow_schema(self.schema, prefers_large_types=True)
         schema_rt = from_arrow_schema(arrow_schema, prefer_timestamp_ntz=True)
         self.assertEqual(self.schema, schema_rt)
 

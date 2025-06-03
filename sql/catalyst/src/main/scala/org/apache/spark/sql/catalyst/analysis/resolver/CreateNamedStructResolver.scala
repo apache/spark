@@ -31,6 +31,7 @@ class CreateNamedStructResolver(expressionResolver: ExpressionResolver)
   override def resolve(createNamedStruct: CreateNamedStruct): Expression = {
     val createNamedStructWithResolvedChildren =
       withResolvedChildren(createNamedStruct, expressionResolver.resolve)
+        .asInstanceOf[CreateNamedStruct]
     CreateNamedStructResolver.cleanupAliases(createNamedStructWithResolvedChildren)
   }
 }

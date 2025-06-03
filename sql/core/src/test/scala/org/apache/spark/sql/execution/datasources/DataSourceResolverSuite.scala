@@ -18,8 +18,12 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.analysis.resolver.{MetadataResolver, Resolver}
+import org.apache.spark.sql.catalyst.analysis.{FunctionResolution, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.resolver.{
+  MetadataResolver,
+  ProhibitedResolver,
+  Resolver
+}
 import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.test.SharedSparkSession
@@ -85,9 +89,12 @@ class DataSourceResolverSuite extends QueryTest with SharedSparkSession {
       sqlText: String,
       expectedTableName: String,
       expectedTableSchema: StructType) = {
+    val relationResolution =
+      Resolver.createRelationResolution(spark.sessionState.catalogManager)
     val metadataResolver = new MetadataResolver(
       spark.sessionState.catalogManager,
-      Resolver.createRelationResolution(spark.sessionState.catalogManager)
+      relationResolution,
+      new FunctionResolution(spark.sessionState.catalogManager, relationResolution)
     )
     val dataSourceResolver = new DataSourceResolver(spark)
 
@@ -107,7 +114,8 @@ class DataSourceResolverSuite extends QueryTest with SharedSparkSession {
       .child
     assert(partiallyResolvedRelation.isInstanceOf[UnresolvedCatalogRelation])
 
-    val result = dataSourceResolver.resolveOperator(partiallyResolvedRelation)
+    val result =
+      dataSourceResolver.resolveOperator(partiallyResolvedRelation, new ProhibitedResolver).get
 
     val logicalRelation = result.asInstanceOf[LogicalRelation]
     assert(

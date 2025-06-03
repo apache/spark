@@ -33,24 +33,32 @@ message MlParams {
 
 // MLOperator represents the ML operators like (Estimator, Transformer or Evaluator)
 message MlOperator {
-  // The qualified name of the ML operator.
+  // (Required) The qualified name of the ML operator.
   string name = 1;
-  // Unique id of the ML operator
+
+  // (Required) Unique id of the ML operator
   string uid = 2;
-  // Represents what the ML operator is
+
+  // (Required) Represents what the ML operator is
   OperatorType type = 3;
+
   enum OperatorType {
-    UNSPECIFIED = 0;
-    ESTIMATOR = 1;
-    TRANSFORMER = 2;
-    EVALUATOR = 3;
-    MODEL = 4;
+    OPERATOR_TYPE_UNSPECIFIED = 0;
+    // ML estimator
+    OPERATOR_TYPE_ESTIMATOR = 1;
+    // ML transformer (non-model)
+    OPERATOR_TYPE_TRANSFORMER = 2;
+    // ML evaluator
+    OPERATOR_TYPE_EVALUATOR = 3;
+    // ML model
+    OPERATOR_TYPE_MODEL = 4;
   }
 }
 
 // Represents a reference to the cached object which could be a model
 // or summary evaluated by a model
 message ObjectRef {
-  // The ID is used to lookup the object on the server side.
+  // (Required) The ID is used to lookup the object on the server side.
+  // Note it is different from the 'uid' of a ML object.
   string id = 1;
 }

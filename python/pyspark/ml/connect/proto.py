@@ -14,6 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect.utils import check_dependencies
+
+check_dependencies(__name__)
+
 from typing import Optional, TYPE_CHECKING, List
 
 import pyspark.sql.connect.proto as pb2
@@ -50,7 +54,9 @@ class TransformerRelation(LogicalPlan):
             plan.ml_relation.transform.obj_ref.CopyFrom(pb2.ObjectRef(id=self._name))
         else:
             plan.ml_relation.transform.transformer.CopyFrom(
-                pb2.MlOperator(name=self._name, uid=self._uid, type=pb2.MlOperator.TRANSFORMER)
+                pb2.MlOperator(
+                    name=self._name, uid=self._uid, type=pb2.MlOperator.OPERATOR_TYPE_TRANSFORMER
+                )
             )
 
         if self._ml_params is not None:

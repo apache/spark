@@ -94,7 +94,8 @@ object AggUtils {
         child = child)
     } else {
       val objectHashEnabled = child.conf.useObjectHashAggregation
-      val useObjectHash = Aggregate.supportsObjectHashAggregate(aggregateExpressions)
+      val useObjectHash = Aggregate.supportsObjectHashAggregate(
+        aggregateExpressions, groupingExpressions)
 
       if (forceObjHashAggregate || (objectHashEnabled && useObjectHash && !forceSortAggregate)) {
         ObjectHashAggregateExec(

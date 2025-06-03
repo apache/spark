@@ -149,3 +149,43 @@ DataFrame
     DataFrameStatFunctions.crosstab
     DataFrameStatFunctions.freqItems
     DataFrameStatFunctions.sampleBy
+
+
+Table Argument
+--------------
+``DataFrame.asTable`` returns a table argument in PySpark.
+
+This class provides methods to specify partitioning, ordering, and single-partition constraints
+when passing a DataFrame as a table argument to TVF(Table-Valued Function)s including
+UDTF(User-Defined Table Function)s.
+
+.. currentmodule:: pyspark.sql.table_arg
+
+.. autosummary::
+    :toctree: api/
+
+    TableArg.partitionBy
+    TableArg.orderBy
+    TableArg.withSinglePartition
+
+
+Plotting
+--------
+The ``DataFrame.plot`` attribute serves both as a callable method and a namespace, providing access to various
+plotting functions via the ``PySparkPlotAccessor``. Users can call specific plotting methods in the format
+``DataFrame.plot.<kind>``.
+
+.. currentmodule:: pyspark.sql.plot.core
+
+.. autosummary::
+    :toctree: api/
+
+    PySparkPlotAccessor.area
+    PySparkPlotAccessor.bar
+    PySparkPlotAccessor.barh
+    PySparkPlotAccessor.line
+    PySparkPlotAccessor.pie
+    PySparkPlotAccessor.scatter
+    PySparkPlotAccessor.box
+    PySparkPlotAccessor.kde
+    PySparkPlotAccessor.hist

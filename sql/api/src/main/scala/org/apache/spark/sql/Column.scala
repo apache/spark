@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{lit, map}
-import org.apache.spark.sql.internal.ColumnNode
+import org.apache.spark.sql.internal.{ColumnNode, TableValuedFunctionArgument}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -802,6 +802,26 @@ class Column(val node: ColumnNode) extends Logging with TableValuedFunctionArgum
    * @since 2.4.0
    */
   def isInCollection(values: java.lang.Iterable[_]): Column = isInCollection(values.asScala)
+
+  /**
+   * A boolean expression that is evaluated to true if the value of this expression is contained
+   * by the provided Dataset/DataFrame.
+   *
+   * @group subquery
+   * @since 4.1.0
+   */
+  def isin(ds: Dataset[_]): Column = {
+    if (ds == null) {
+      // A single null should be handled as a value.
+      isin(Seq(ds): _*)
+    } else {
+      val values = node match {
+        case internal.UnresolvedFunction("struct", arguments, _, _, _, _) => arguments
+        case _ => Seq(node)
+      }
+      Column(internal.SubqueryExpression(ds, internal.SubqueryType.IN(values)))
+    }
+  }
 
   /**
    * SQL like expression. Returns a boolean column based on a SQL LIKE match.

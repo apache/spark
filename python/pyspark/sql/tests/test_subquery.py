@@ -28,7 +28,7 @@ class SubqueryTestsMixin:
     def df1(self):
         return self.spark.createDataFrame(
             [
-                (1, 1.0),
+                (1, 2.0),
                 (1, 2.0),
                 (2, 1.0),
                 (2, 2.0),
@@ -457,6 +457,211 @@ class SubqueryTestsMixin:
                             or exists (select * from r where l.a = r.c)
                         """
                     ),
+                )
+
+    def test_in_subquery(self):
+        with self.tempView("l", "r", "t"):
+            self.df1.createOrReplaceTempView("l")
+            self.df2.createOrReplaceTempView("r")
+            self.spark.table("r").filter(
+                sf.col("c").isNotNull() & sf.col("d").isNotNull()
+            ).createOrReplaceTempView("t")
+
+            with self.subTest("IN"):
+                assertDataFrameEqual(
+                    self.spark.table("l").where(
+                        sf.col("l.a").isin(self.spark.table("r").select(sf.col("c")))
+                    ),
+                    self.spark.sql("""select * from l where l.a in (select c from r)"""),
+                )
+                assertDataFrameEqual(
+                    self.spark.table("l").where(
+                        sf.col("l.a").isin(
+                            self.spark.table("r")
+                            .where(sf.col("l.b").outer() < sf.col("r.d"))
+                            .select(sf.col("c"))
+                        )
+                    ),
+                    self.spark.sql(
+                        """select * from l where l.a in (select c from r where l.b < r.d)"""
+                    ),
+                )
+                assertDataFrameEqual(
+                    self.spark.table("l").where(
+                        sf.col("l.a").isin(self.spark.table("r").select("c"))
+                        & (sf.col("l.a") > sf.lit(2))
+                        & sf.col("l.b").isNotNull()
+                    ),
+                    self.spark.sql(
+                        """
+                        select * from l
+                        where l.a in (select c from r) and l.a > 2 and l.b is not null
+                        """
+                    ),
+                )
+
+            with self.subTest("IN with struct"), self.tempView("ll", "rr"):
+                self.spark.table("l").select(
+                    "*", sf.struct("a", "b").alias("sab")
+                ).createOrReplaceTempView("ll")
+                self.spark.table("r").select(
+                    "*", sf.struct(sf.col("c").alias("a"), sf.col("d").alias("b")).alias("scd")
+                ).createOrReplaceTempView("rr")
+
+                for col, values in [
+                    (sf.col("sab"), "sab"),
+                    (sf.struct(sf.struct(sf.col("a"), sf.col("b"))), "struct(struct(a, b))"),
+                ]:
+                    for df, query in [
+                        (self.spark.table("rr").select(sf.col("scd")), "select scd from rr"),
+                        (
+                            self.spark.table("rr").select(
+                                sf.struct(sf.col("c").alias("a"), sf.col("d").alias("b"))
+                            ),
+                            "select struct(c as a, d as b) from rr",
+                        ),
+                        (
+                            self.spark.table("rr").select(sf.struct(sf.col("c"), sf.col("d"))),
+                            "select struct(c, d) from rr",
+                        ),
+                    ]:
+                        sql_query = f"""select a, b from ll where {values} in ({query})"""
+                        with self.subTest(sql_query=sql_query):
+                            assertDataFrameEqual(
+                                self.spark.table("ll").where(col.isin(df)).select("a", "b"),
+                                self.spark.sql(sql_query),
+                            )
+
+            with self.subTest("NOT IN"):
+                assertDataFrameEqual(
+                    self.spark.table("l").where(
+                        ~sf.col("a").isin(self.spark.table("r").select("c"))
+                    ),
+                    self.spark.sql("""select * from l where a not in (select c from r)"""),
+                )
+                assertDataFrameEqual(
+                    self.spark.table("l").where(
+                        ~sf.col("a").isin(
+                            self.spark.table("r").where(sf.col("c").isNotNull()).select(sf.col("c"))
+                        )
+                    ),
+                    self.spark.sql(
+                        """select * from l where a not in (select c from r where c is not null)"""
+                    ),
+                )
+                assertDataFrameEqual(
+                    self.spark.table("l").where(
+                        (
+                            ~sf.struct(sf.col("a"), sf.col("b")).isin(
+                                self.spark.table("t").select(sf.col("c"), sf.col("d"))
+                            )
+                        )
+                        & (sf.col("a") < sf.lit(4))
+                    ),
+                    self.spark.sql(
+                        """select * from l where (a, b) not in (select c, d from t) and a < 4"""
+                    ),
+                )
+                assertDataFrameEqual(
+                    self.spark.table("l").where(
+                        ~sf.struct(sf.col("a"), sf.col("b")).isin(
+                            self.spark.table("r")
+                            .where(sf.col("c") > sf.lit(10))
+                            .select(sf.col("c"), sf.col("d"))
+                        )
+                    ),
+                    self.spark.sql(
+                        """select * from l where (a, b) not in (select c, d from r where c > 10)"""
+                    ),
+                )
+
+            with self.subTest("IN within OR"):
+                assertDataFrameEqual(
+                    self.spark.table("l").where(
+                        sf.col("l.a").isin(self.spark.table("r").select("c"))
+                        | (
+                            sf.col("l.a").isin(
+                                self.spark.table("r")
+                                .where(sf.col("l.b").outer() < sf.col("r.d"))
+                                .select(sf.col("c"))
+                            )
+                        )
+                    ),
+                    self.spark.sql(
+                        """
+                        select * from l
+                        where l.a in (select c from r) or l.a in (select c from r where l.b < r.d)
+                        """
+                    ),
+                )
+                assertDataFrameEqual(
+                    self.spark.table("l").where(
+                        (~sf.col("a").isin(self.spark.table("r").select(sf.col("c"))))
+                        | (
+                            ~sf.col("a").isin(
+                                self.spark.table("r")
+                                .where(sf.col("c").isNotNull())
+                                .select(sf.col("c"))
+                            )
+                        )
+                    ),
+                    self.spark.sql(
+                        """
+                        select * from l
+                        where a not in (select c from r)
+                        or a not in (select c from r where c is not null)
+                        """
+                    ),
+                )
+
+            with self.subTest("complex IN"):
+                assertDataFrameEqual(
+                    self.spark.table("l").where(
+                        ~sf.struct(sf.col("a"), sf.col("b")).isin(
+                            self.spark.table("r").select(sf.col("c"), sf.col("d"))
+                        )
+                    ),
+                    self.spark.sql("""select * from l where (a, b) not in (select c, d from r)"""),
+                )
+                assertDataFrameEqual(
+                    self.spark.table("l").where(
+                        (
+                            ~sf.struct(sf.col("a"), sf.col("b")).isin(
+                                self.spark.table("t").select(sf.col("c"), sf.col("d"))
+                            )
+                        )
+                        & ((sf.col("a") + sf.col("b")).isNotNull())
+                    ),
+                    self.spark.sql(
+                        """
+                        select * from l
+                        where (a, b) not in (select c, d from t) and (a + b) is not null
+                        """
+                    ),
+                )
+
+            with self.subTest("same column in subquery"):
+                assertDataFrameEqual(
+                    self.spark.table("l")
+                    .alias("l1")
+                    .where(
+                        sf.col("a").isin(
+                            self.spark.table("l")
+                            .where(sf.col("a") < sf.lit(3))
+                            .groupBy(sf.col("a"))
+                            .agg({})
+                        )
+                    )
+                    .select(sf.col("a")),
+                    self.spark.sql(
+                        """select a from l l1 where a in (select a from l where a < 3 group by a)"""
+                    ),
+                )
+
+            with self.subTest("col IN (NULL)"):
+                assertDataFrameEqual(
+                    self.spark.table("l").where(sf.col("a").isin(None)),
+                    self.spark.sql("""SELECT * FROM l WHERE a IN (NULL)"""),
                 )
 
     def test_scalar_subquery_with_missing_outer_reference(self):

@@ -453,13 +453,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  private def assertRelationNotFound(query: String, relation: String): Unit = {
-    val e = intercept[AnalysisException] {
-      sql(query)
-    }
-    checkErrorTableNotFound(e, relation)
-  }
-
   private def assertRelationNotFound(query: String, relation: String, context: ExpectedContext):
   Unit = {
     val e = intercept[AnalysisException] {

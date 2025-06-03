@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.clustering
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -40,6 +42,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.VersionUtils.majorVersion
 
 /**
@@ -139,9 +142,7 @@ class KMeansModel private[ml] (
     with HasTrainingSummary[KMeansSummary] {
 
   // For ml connect only
-  @Since("4.0.0")
-  private[ml] def this() = this(Identifiable.randomUID("kmeans"),
-    new MLlibKMeansModel(clusterCenters = null))
+  private[ml] def this() = this("", null)
 
   @Since("3.0.0")
   lazy val numFeatures: Int = parentModel.clusterCenters.head.size
@@ -187,6 +188,9 @@ class KMeansModel private[ml] (
   @Since("2.0.0")
   def clusterCenters: Array[Vector] = parentModel.clusterCenters.map(_.asML)
 
+  private[ml] def clusterCenterMatrix: Matrix =
+    Matrices.fromVectors(clusterCenters.toSeq)
+
   /**
    * Returns a [[org.apache.spark.ml.util.GeneralMLWriter]] instance for this ML instance.
    *
@@ -209,11 +213,27 @@ class KMeansModel private[ml] (
    */
   @Since("2.0.0")
   override def summary: KMeansSummary = super.summary
+
+  override def estimatedSize: Long = SizeEstimator.estimate(parentModel.clusterCenters)
 }
 
 /** Helper class for storing model data */
-private case class ClusterData(clusterIdx: Int, clusterCenter: Vector)
+private[ml] case class ClusterData(clusterIdx: Int, clusterCenter: Vector)
 
+private[ml] object ClusterData {
+  private[ml] def serializeData(data: ClusterData, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    dos.writeInt(data.clusterIdx)
+    serializeVector(data.clusterCenter, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): ClusterData = {
+    import ReadWriteUtils._
+    val clusterIdx = dis.readInt()
+    val clusterCenter = deserializeVector(dis)
+    ClusterData(clusterIdx, clusterCenter)
+  }
+}
 
 /** A writer for KMeans that handles the "internal" (or default) format */
 private class InternalKMeansModelWriter extends MLWriterFormat with MLFormatRegister {
@@ -232,7 +252,9 @@ private class InternalKMeansModelWriter extends MLWriterFormat with MLFormatRegi
         ClusterData(idx, center)
     }
     val dataPath = new Path(path, "data").toString
-    sparkSession.createDataFrame(data.toImmutableArraySeq).repartition(1).write.parquet(dataPath)
+    ReadWriteUtils.saveArray[ClusterData](
+      dataPath, data, sparkSession, ClusterData.serializeData
+    )
   }
 }
 
@@ -264,7 +286,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
    * We store all cluster centers in a single row and use this class to store model data by
    * Spark 1.6 and earlier. A model can be loaded from such older data for backward compatibility.
    */
-  private case class OldData(clusterCenters: Array[OldVector])
+  private[ml] case class OldData(clusterCenters: Array[OldVector])
 
   private class KMeansModelReader extends MLReader[KMeansModel] {
 
@@ -280,8 +302,10 @@ object KMeansModel extends MLReadable[KMeansModel] {
       val dataPath = new Path(path, "data").toString
 
       val clusterCenters = if (majorVersion(metadata.sparkVersion) >= 2) {
-        val data: Dataset[ClusterData] = sparkSession.read.parquet(dataPath).as[ClusterData]
-        data.collect().sortBy(_.clusterIdx).map(_.clusterCenter).map(OldVectors.fromML)
+        val data = ReadWriteUtils.loadArray[ClusterData](
+          dataPath, sparkSession, ClusterData.deserializeData
+        )
+        data.sortBy(_.clusterIdx).map(_.clusterCenter).map(OldVectors.fromML)
       } else {
         // Loads KMeansModel stored with the old format used by Spark 1.6 and earlier.
         sparkSession.read.parquet(dataPath).as[OldData].head().clusterCenters

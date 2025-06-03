@@ -20,6 +20,7 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model._
@@ -91,14 +92,20 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
     if (keytab.isEmpty && existingSecretName.isEmpty) {
       val tokenManager = new HadoopDelegationTokenManager(kubernetesConf.sparkConf,
         SparkHadoopUtil.get.newConfiguration(kubernetesConf.sparkConf), null)
-      val creds = UserGroupInformation.getCurrentUser().getCredentials()
-      tokenManager.obtainDelegationTokens(creds)
-      // If no tokens and no secrets are stored in the credentials, make sure nothing is returned,
-      // to avoid creating an unnecessary secret.
-      if (creds.numberOfTokens() > 0 || creds.numberOfSecretKeys() > 0) {
-        SparkHadoopUtil.get.serialize(creds)
-      } else {
-        null
+      try {
+        val creds = UserGroupInformation.getCurrentUser().getCredentials()
+        tokenManager.obtainDelegationTokens(creds)
+        // If no tokens and no secrets are stored in the credentials, make sure nothing is returned,
+        // to avoid creating an unnecessary secret.
+        if (creds.numberOfTokens() > 0 || creds.numberOfSecretKeys() > 0) {
+          SparkHadoopUtil.get.serialize(creds)
+        } else {
+          null
+        }
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Fail to get credentials", e)
+          null
       }
     } else {
       null

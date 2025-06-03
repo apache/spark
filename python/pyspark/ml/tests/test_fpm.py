@@ -18,16 +18,20 @@
 import tempfile
 import unittest
 
-from pyspark.sql import SparkSession
+from pyspark.sql import is_remote, Row
 import pyspark.sql.functions as sf
 from pyspark.ml.fpm import (
     FPGrowth,
     FPGrowthModel,
+    PrefixSpan,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class FPMTestsMixin:
     def test_fp_growth(self):
+        if is_remote():
+            self.skipTest("Do not support Spark Connect.")
         df = self.spark.createDataFrame(
             [
                 ["r z h k p"],
@@ -46,14 +50,8 @@ class FPMTestsMixin:
         self.assertEqual(fp.getMinConfidence(), 0.7)
         self.assertEqual(fp.getNumPartitions(), 1)
 
-        # Estimator save & load
-        with tempfile.TemporaryDirectory(prefix="fp_growth") as d:
-            fp.write().overwrite().save(d)
-            fp2 = FPGrowth.load(d)
-            self.assertEqual(str(fp), str(fp2))
-
         model = fp.fit(df)
-
+        self.assertEqual(fp.uid, model.uid)
         self.assertEqual(model.freqItemsets.columns, ["items", "freq"])
         self.assertEqual(model.freqItemsets.count(), 54)
 
@@ -67,19 +65,45 @@ class FPMTestsMixin:
         self.assertEqual(output.columns, ["items", "prediction"])
         self.assertEqual(output.count(), 6)
 
-        # Model save & load
-        with tempfile.TemporaryDirectory(prefix="fp_growth_model") as d:
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="fp_growth") as d:
+            fp.write().overwrite().save(d)
+            fp2 = FPGrowth.load(d)
+            self.assertEqual(str(fp), str(fp2))
+
             model.write().overwrite().save(d)
             model2 = FPGrowthModel.load(d)
             self.assertEqual(str(model), str(model2))
 
+    def test_prefix_span(self):
+        spark = self.spark
+        df = spark.createDataFrame(
+            [
+                Row(sequence=[[1, 2], [3]]),
+                Row(sequence=[[1], [3, 2], [1, 2]]),
+                Row(sequence=[[1, 2], [5]]),
+                Row(sequence=[[6]]),
+            ]
+        )
 
-class FPMTests(FPMTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[4]").getOrCreate()
+        ps = PrefixSpan()
+        ps.setMinSupport(0.5)
+        ps.setMaxPatternLength(5)
 
-    def tearDown(self) -> None:
-        self.spark.stop()
+        self.assertEqual(ps.getMinSupport(), 0.5)
+        self.assertEqual(ps.getMaxPatternLength(), 5)
+
+        output = ps.findFrequentSequentialPatterns(df)
+        self.assertEqual(output.columns, ["sequence", "freq"])
+        self.assertEqual(output.count(), 5)
+
+        head = output.sort("sequence").head()
+        self.assertEqual(head.sequence, [[1]])
+        self.assertEqual(head.freq, 3)
+
+
+class FPMTests(FPMTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

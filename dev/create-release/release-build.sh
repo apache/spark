@@ -137,6 +137,12 @@ if [[ "$1" == "finalize" ]]; then
     --repository-url https://upload.pypi.org/legacy/ \
     "pyspark_connect-$PYSPARK_VERSION.tar.gz" \
     "pyspark_connect-$PYSPARK_VERSION.tar.gz.asc"
+  svn update "pyspark_client-$RELEASE_VERSION.tar.gz"
+  svn update "pyspark_client-$RELEASE_VERSION.tar.gz.asc"
+  twine upload -u __token__ -p $PYPI_API_TOKEN \
+    --repository-url https://upload.pypi.org/legacy/ \
+    "pyspark_client-$RELEASE_VERSION.tar.gz" \
+    "pyspark_client-$RELEASE_VERSION.tar.gz.asc"
   cd ..
   rm -rf svn-spark
   echo "PySpark uploaded"
@@ -152,9 +158,13 @@ if [[ "$1" == "finalize" ]]; then
   git push origin HEAD:asf-site
   cd ..
   rm -rf spark-website
-  svn rm --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Remove RC artifacts" --no-auth-cache \
-    "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-docs"
   echo "docs uploaded"
+
+  # Moves the docs from dev directory to release directory.
+  echo "Moving Spark docs to the release directory"
+  svn mv --username "$ASF_USERNAME" --password "$ASF_PASSWORD" -m"Apache Spark $RELEASE_VERSION" \
+    --no-auth-cache "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-docs/_site" "$RELEASE_LOCATION/docs/$RELEASE_VERSION"
+  echo "Spark docs moved"
 
   # Moves the binaries from dev directory to release directory.
   echo "Moving Spark binaries to the release directory"
@@ -276,6 +286,10 @@ if [[ "$1" == "package" ]]; then
     if [[ $BUILD_PACKAGE == *"withr"* ]]; then
       R_FLAG="--r"
     fi
+    SPARK_CONNECT_FLAG=""
+    if [[ $BUILD_PACKAGE == *"withconnect"* ]]; then
+      SPARK_CONNECT_FLAG="--connect"
+    fi
 
     echo "Building binary dist $NAME"
     cp -r spark spark-$SPARK_VERSION-bin-$NAME
@@ -295,7 +309,7 @@ if [[ "$1" == "package" ]]; then
 
     echo "Creating distribution"
     ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz \
-      $PIP_FLAG $R_FLAG $FLAGS 2>&1 >  ../binary-release-$NAME.log
+      $PIP_FLAG $R_FLAG $SPARK_CONNECT_FLAG $FLAGS 2>&1 >  ../binary-release-$NAME.log
     cd ..
 
     if [[ -n $R_FLAG ]]; then
@@ -326,6 +340,14 @@ if [[ "$1" == "package" ]]; then
         --output $PYTHON_CONNECT_DIST_NAME.asc \
         --detach-sig $PYTHON_CONNECT_DIST_NAME
       shasum -a 512 $PYTHON_CONNECT_DIST_NAME > $PYTHON_CONNECT_DIST_NAME.sha512
+
+      PYTHON_CLIENT_DIST_NAME=pyspark_client-$PYSPARK_VERSION.tar.gz
+      cp spark-$SPARK_VERSION-bin-$NAME/python/dist/$PYTHON_CLIENT_DIST_NAME .
+
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
+        --output $PYTHON_CLIENT_DIST_NAME.asc \
+        --detach-sig $PYTHON_CLIENT_DIST_NAME
+      shasum -a 512 $PYTHON_CLIENT_DIST_NAME > $PYTHON_CLIENT_DIST_NAME.sha512
     fi
 
     echo "Copying and signing regular binary distribution"
@@ -334,6 +356,16 @@ if [[ "$1" == "package" ]]; then
       --output spark-$SPARK_VERSION-bin-$NAME.tgz.asc \
       --detach-sig spark-$SPARK_VERSION-bin-$NAME.tgz
     shasum -a 512 spark-$SPARK_VERSION-bin-$NAME.tgz > spark-$SPARK_VERSION-bin-$NAME.tgz.sha512
+
+    if [[ -n $SPARK_CONNECT_FLAG ]]; then
+      echo "Copying and signing Spark Connect binary distribution"
+      SPARK_CONNECT_DIST_NAME=spark-$SPARK_VERSION-bin-$NAME-connect.tgz
+      cp spark-$SPARK_VERSION-bin-$NAME/$SPARK_CONNECT_DIST_NAME .
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
+        --output $SPARK_CONNECT_DIST_NAME.asc \
+        --detach-sig $SPARK_CONNECT_DIST_NAME
+      shasum -a 512 $SPARK_CONNECT_DIST_NAME > $SPARK_CONNECT_DIST_NAME.sha512
+    fi
   }
 
   # List of binary packages built. Populates two associative arrays, where the key is the "name" of
@@ -353,7 +385,12 @@ if [[ "$1" == "package" ]]; then
   fi
 
   declare -A BINARY_PKGS_EXTRA
-  BINARY_PKGS_EXTRA["hadoop3"]="withpip,withr"
+  if [[ $SPARK_VERSION > "3.5.99" ]]; then
+    # Since 4.0, we publish a new distribution with Spark Connect enable.
+    BINARY_PKGS_EXTRA["hadoop3"]="withpip,withr,withconnect"
+  else
+    BINARY_PKGS_EXTRA["hadoop3"]="withpip,withr"
+  fi
 
   # This is dead code as Scala 2.12 is no longer supported, but we keep it as a template for
   # adding new Scala version support in the future. This secondary Scala version only has one
@@ -483,7 +520,7 @@ if [[ "$1" == "publish-release" ]]; then
   if ! is_dry_run; then
     echo "Creating Nexus staging repository"
     repo_request="<promoteRequest><data><description>Apache Spark $SPARK_VERSION (commit $git_hash)</description></data></promoteRequest>"
-    out=$(curl -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
+    out=$(curl --retry 10 --retry-all-errors -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
       -H "Content-Type:application/xml" -v \
       $NEXUS_ROOT/profiles/$NEXUS_PROFILE/start)
     staged_repo_id=$(echo $out | sed -e "s/.*\(orgapachespark-[0-9]\{4\}\).*/\1/")
@@ -530,18 +567,38 @@ if [[ "$1" == "publish-release" ]]; then
   if ! is_dry_run; then
     nexus_upload=$NEXUS_ROOT/deployByRepositoryId/$staged_repo_id
     echo "Uploading files to $nexus_upload"
-    for file in $(find . -type f)
-    do
-      # strip leading ./
-      file_short=$(echo $file | sed -e "s/\.\///")
-      dest_url="$nexus_upload/org/apache/spark/$file_short"
-      echo "  Uploading $file_short"
-      curl --retry 3 --retry-all-errors -u $ASF_USERNAME:$ASF_PASSWORD --upload-file $file_short $dest_url
-    done
+
+    # Temp file to track errors
+    error_flag_file=$(mktemp)
+
+    find . -type f | sed -e 's|^\./||' | \
+    xargs -P 4 -n 1 -I {} bash -c '
+      file_short="{}"
+      dest_url="'$NEXUS_ROOT'/deployByRepositoryId/'$staged_repo_id'/org/apache/spark/$file_short"
+      echo "[START] $file_short"
+
+      if curl --retry 10 --retry-all-errors -sS -u "$ASF_USERNAME:$ASF_PASSWORD" \
+          --upload-file "$file_short" "$dest_url"; then
+        echo "[ OK  ] $file_short"
+      else
+        echo "[FAIL ] $file_short"
+        echo "fail" >> '"$error_flag_file"'
+      fi
+    '
+
+    # Check if any failures were recorded
+    if [ -s "$error_flag_file" ]; then
+      echo "One or more uploads failed."
+      rm "$error_flag_file"
+      exit 1
+    else
+      echo "All uploads succeeded."
+      rm "$error_flag_file"
+    fi
 
     echo "Closing nexus staging repository"
     repo_request="<promoteRequest><data><stagedRepositoryId>$staged_repo_id</stagedRepositoryId><description>Apache Spark $SPARK_VERSION (commit $git_hash)</description></data></promoteRequest>"
-    out=$(curl -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
+    out=$(curl --retry 10 --retry-all-errors -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
       -H "Content-Type:application/xml" -v \
       $NEXUS_ROOT/profiles/$NEXUS_PROFILE/finish)
     echo "Closed Nexus staging repository: $staged_repo_id"

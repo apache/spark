@@ -21,7 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
 import org.apache.spark.sql.connector.read.streaming.{AcceptsLatestSeenOffset, MicroBatchStream, Offset}
 import org.apache.spark.sql.execution.datasources.v2.python.PythonMicroBatchStream.nextStreamId
-import org.apache.spark.sql.execution.python.PythonStreamingSourceRunner
+import org.apache.spark.sql.execution.python.streaming.PythonStreamingSourceRunner
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.{PythonStreamBlockId, StorageLevel}
@@ -90,10 +90,7 @@ class PythonMicroBatchStream(
   }
 
   private lazy val readInfo: PythonDataSourceReadInfo = {
-    ds.source.createReadInfoInPython(
-      ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema)),
-      outputSchema,
-      isStreaming = true)
+    ds.getOrCreateReadInfo(shortName, options, outputSchema, isStreaming = true)
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
@@ -120,4 +117,3 @@ object PythonMicroBatchStream {
     currentId
   }
 }
-

@@ -21,7 +21,7 @@
           "jvmOrigin": {
             "stackTrace": [{
               "classLoaderName": "app",
-              "declaringClass": "org.apache.spark.sql.api.Dataset",
+              "declaringClass": "org.apache.spark.sql.Dataset",
               "methodName": "apply",
               "fileName": "Dataset.scala"
             }, {

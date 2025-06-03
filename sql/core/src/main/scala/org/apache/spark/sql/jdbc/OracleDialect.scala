@@ -49,7 +49,13 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getMessage.contains("ORA-00942") ||
+      e.getMessage.contains("ORA-39165")
+  }
+
   class OracleSQLBuilder extends JDBCSQLBuilder {
+
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
@@ -64,10 +70,10 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
 
     override def visitBinaryComparison(name: String, le: Expression, re: Expression): String = {
       (le, re) match {
-        case (lhs: Literal[_], rhs: Expression) if lhs.dataType == BinaryType =>
-          compareBlob(lhs, name, rhs)
-        case (lhs: Expression, rhs: Literal[_]) if rhs.dataType == BinaryType =>
-          compareBlob(lhs, name, rhs)
+        case (lit: Literal[_], _) if lit.dataType == BinaryType =>
+          compareBlob(lit, name, re)
+        case (_, lit: Literal[_]) if lit.dataType == BinaryType =>
+          compareBlob(le, name, lit)
         case _ =>
           super.visitBinaryComparison(name, le, re);
       }
@@ -167,6 +173,11 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
+  // See https://docs.oracle.com/cd/E11882_01/appdev.112/e10827/appd.htm#g642406
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    "42000".equals(exception.getSQLState)
+  }
+
   /**
    * The SQL query used to truncate a table.
    * @param table The table to truncate
@@ -222,8 +233,8 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     extends JdbcSQLQueryBuilder(dialect, options) {
 
     override def build(): String = {
-      val selectStmt = s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
-        s" $whereClause $groupByClause $orderByClause"
+      val selectStmt = s"SELECT $hintClause$columnList FROM ${options.tableOrQuery}" +
+        s" $tableSampleClause $whereClause $groupByClause $orderByClause"
       val finalSelectStmt = if (limit > 0) {
         if (offset > 0) {
           // Because the rownum is calculated when the value is returned,
@@ -255,22 +266,24 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
 
   override def supportsOffset: Boolean = true
 
+  override def supportsHint: Boolean = true
+
   override def classifyException(
       e: Throwable,
-      errorClass: String,
+      condition: String,
       messageParameters: Map[String, String],
       description: String,
       isRuntime: Boolean): Throwable with SparkThrowable = {
     e match {
       case sqlException: SQLException =>
         sqlException.getErrorCode match {
-          case 955 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
+          case 955 if condition == "FAILED_JDBC.RENAME_TABLE" =>
             val newTable = messageParameters("newName")
             throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
           case _ =>
-            super.classifyException(e, errorClass, messageParameters, description, isRuntime)
+            super.classifyException(e, condition, messageParameters, description, isRuntime)
         }
-      case _ => super.classifyException(e, errorClass, messageParameters, description, isRuntime)
+      case _ => super.classifyException(e, condition, messageParameters, description, isRuntime)
     }
   }
 }

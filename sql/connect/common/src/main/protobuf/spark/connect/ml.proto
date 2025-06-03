@@ -36,23 +36,31 @@ message MlCommand {
     Write write = 4;
     Read read = 5;
     Evaluate evaluate = 6;
+    CleanCache clean_cache = 7;
+    GetCacheInfo get_cache_info = 8;
   }
 
   // Command for estimator.fit(dataset)
   message Fit {
-    // Estimator information
+    // (Required) Estimator information (its type should be OPERATOR_TYPE_ESTIMATOR)
     MlOperator estimator = 1;
-    // parameters of the Estimator
-    MlParams params = 2;
-    // the training dataset
+    // (Optional) parameters of the Estimator
+    optional MlParams params = 2;
+    // (Required) the training dataset
     Relation dataset = 3;
   }
 
-  // Command to delete the cached object which could be a model
+  // Command to delete the cached objects which could be a model
   // or summary evaluated by a model
   message Delete {
-    ObjectRef obj_ref = 1;
+    repeated ObjectRef obj_refs = 1;
   }
+
+  // Force to clean up all the ML cached objects
+  message CleanCache { }
+
+  // Get the information of all the ML cached objects
+  message GetCacheInfo { }
 
   // Command to write ML operator
   message Write {
@@ -63,31 +71,31 @@ message MlCommand {
       // The cached model
       ObjectRef obj_ref = 2;
     }
-    // The parameters of operator which could be estimator/evaluator or a cached model
-    MlParams params = 3;
-    // Save the ML instance to the path
+    // (Optional) The parameters of operator which could be estimator/evaluator or a cached model
+    optional MlParams params = 3;
+    // (Required) Save the ML instance to the path
     string path = 4;
-    // Overwrites if the output path already exists.
-    bool should_overwrite = 5;
-    // The options of the writer
+    // (Optional) Overwrites if the output path already exists.
+    optional bool should_overwrite = 5;
+    // (Optional) The options of the writer
     map<string, string> options = 6;
   }
 
   // Command to load ML operator.
   message Read {
-    // ML operator information
+    // (Required) ML operator information
     MlOperator operator = 1;
-    // Load the ML instance from the input path
+    // (Required) Load the ML instance from the input path
     string path = 2;
   }
 
   // Command for evaluator.evaluate(dataset)
   message Evaluate {
-    // Evaluator information
+    // (Required) Evaluator information (its type should be OPERATOR_TYPE_EVALUATOR)
     MlOperator evaluator = 1;
-    // parameters of the Evaluator
-    MlParams params = 2;
-    // the evaluating dataset
+    // (Optional) parameters of the Evaluator
+    optional MlParams params = 2;
+    // (Required) the evaluating dataset
     Relation dataset = 3;
   }
 }
@@ -111,8 +119,12 @@ message MlCommandResult {
       // Operator name
       string name = 2;
     }
-    string uid = 3;
-    MlParams params = 4;
+    // (Optional) the 'uid' of a ML object
+    // Note it is different from the 'id' of a cached object.
+    optional string uid = 3;
+    // (Optional) parameters
+    optional MlParams params = 4;
+    // (Optional) warning message generated during the ML command execution
+    optional string warning_message = 5;
   }
-
 }

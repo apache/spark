@@ -37,6 +37,7 @@ import org.apache.commons.lang3.SystemUtils
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.logging.log4j.Level
 
@@ -526,9 +527,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
     // The following 3 scenarios are only for the method: createDirectory(File)
     // 6. Symbolic link
+    // JAVA_RUNTIME_VERSION is like "17.0.14+7-LTS"
+    lazy val javaVersion = Runtime.Version.parse(SystemUtils.JAVA_RUNTIME_VERSION)
     val scenario6 = java.nio.file.Files.createSymbolicLink(new File(testDir, "scenario6")
       .toPath, scenario1.toPath).toFile
     if (Utils.isJavaVersionAtLeast21) {
+      assert(Utils.createDirectory(scenario6))
+    } else if (javaVersion.feature() == 17 && javaVersion.update() >= 14) {
+      // SPARK-50946: Java 17.0.14 includes JDK-8294193, so scenario6 can succeed.
       assert(Utils.createDirectory(scenario6))
     } else {
       assert(!Utils.createDirectory(scenario6))
@@ -998,11 +1004,19 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   }
 
   test("Set Spark CallerContext") {
-    val context = "test"
-    new CallerContext(context).setCurrentContext()
-    if (CallerContext.callerContextEnabled) {
-      assert(s"SPARK_$context" === HadoopCallerContext.getCurrent.toString)
-    }
+    currentAuditContext.reset
+    new CallerContext("test",
+      Some("upstream"),
+      Some("app"),
+      Some("attempt"),
+      Some(1),
+      Some(2),
+      Some(3),
+      Some(4),
+      Some(5)).setCurrentContext()
+    val expected = s"SPARK_test_app_attempt_JId_1_SId_2_3_TId_4_5_upstream"
+    assert(expected === HadoopCallerContext.getCurrent.toString)
+    assert(expected === currentAuditContext.get("spark"))
   }
 
   test("encodeFileNameToURIRawPath") {

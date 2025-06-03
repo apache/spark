@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
@@ -64,7 +65,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *    LocalRelation [key#2,value#3], []
  * }}}
  */
-package object dsl {
+package object dsl extends SQLConfHelper {
   trait ImplicitOperators {
     def expr: Expression
 
@@ -402,6 +403,8 @@ package object dsl {
 
       def localLimit(limitExpr: Expression): LogicalPlan = LocalLimit(limitExpr, logicalPlan)
 
+      def globalLimit(limitExpr: Expression): LogicalPlan = GlobalLimit(limitExpr, logicalPlan)
+
       def offset(offsetExpr: Expression): LogicalPlan = Offset(offsetExpr, logicalPlan)
 
       def join(
@@ -439,16 +442,42 @@ package object dsl {
           otherPlan)
       }
 
-      def orderBy(sortExprs: SortOrder*): LogicalPlan = Sort(sortExprs, true, logicalPlan)
+      def orderBy(sortExprs: SortOrder*): LogicalPlan = {
+        val sortExpressionsWithOrdinals = sortExprs.map(replaceOrdinalsInSortOrder)
+        Sort(sortExpressionsWithOrdinals, true, logicalPlan)
+      }
 
-      def sortBy(sortExprs: SortOrder*): LogicalPlan = Sort(sortExprs, false, logicalPlan)
+      def sortBy(sortExprs: SortOrder*): LogicalPlan = {
+        val sortExpressionsWithOrdinals = sortExprs.map(replaceOrdinalsInSortOrder)
+        Sort(sortExpressionsWithOrdinals, false, logicalPlan)
+      }
+
+      /**
+       * Replaces top-level integer literals from [[SortOrder]] with [[UnresolvedOrdinal]], if
+       * `orderByOrdinal` is enabled.
+       */
+      private def replaceOrdinalsInSortOrder(sortOrder: SortOrder): SortOrder = sortOrder match {
+        case sortOrderByOrdinal @ SortOrder(literal @ Literal(value: Int, IntegerType), _, _, _)
+            if conf.orderByOrdinal =>
+          val ordinal = CurrentOrigin.withOrigin(literal.origin) { UnresolvedOrdinal(value) }
+          sortOrderByOrdinal
+            .withNewChildren(newChildren = Seq(ordinal))
+            .asInstanceOf[SortOrder]
+        case other => other
+      }
 
       def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*): LogicalPlan = {
+        // Replace top-level integer literals with ordinals, if `groupByOrdinal` is enabled.
+        val groupingExpressionsWithOrdinals = groupingExprs.map {
+          case literal @ Literal(value: Int, IntegerType) if conf.groupByOrdinal =>
+            CurrentOrigin.withOrigin(literal.origin) { UnresolvedOrdinal(value) }
+          case other => other
+        }
         val aliasedExprs = aggregateExprs.map {
           case ne: NamedExpression => ne
           case e => UnresolvedAlias(e)
         }
-        Aggregate(groupingExprs, aliasedExprs, logicalPlan)
+        Aggregate(groupingExpressionsWithOrdinals, aliasedExprs, logicalPlan)
       }
 
       def having(

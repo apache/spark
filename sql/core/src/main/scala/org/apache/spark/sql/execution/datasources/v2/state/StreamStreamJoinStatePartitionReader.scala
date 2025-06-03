@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.Jo
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{JoinSide, LeftSide, RightSide}
-import org.apache.spark.sql.execution.streaming.state.{StateStoreConf, SymmetricHashJoinStateManager}
+import org.apache.spark.sql.execution.streaming.state.{JoinStateManagerStoreGenerator, StateStoreConf, SymmetricHashJoinStateManager}
 import org.apache.spark.sql.types.{BooleanType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
@@ -111,7 +111,7 @@ class StreamStreamJoinStatePartitionReader(
         partition.sourceOptions.stateCheckpointLocation.toString,
         partition.queryId, partition.sourceOptions.operatorId,
         partition.sourceOptions.batchId + 1, -1, None)
-      joinStateManager = new SymmetricHashJoinStateManager(
+      joinStateManager = SymmetricHashJoinStateManager(
         joinSide,
         inputAttributes,
         joinKeys = DataTypeUtils.toAttributes(keySchema),
@@ -125,7 +125,8 @@ class StreamStreamJoinStatePartitionReader(
         skippedNullValueCount = None,
         useStateStoreCoordinator = false,
         snapshotStartVersion =
-          partition.sourceOptions.fromSnapshotOptions.map(_.snapshotStartBatchId + 1)
+          partition.sourceOptions.fromSnapshotOptions.map(_.snapshotStartBatchId + 1),
+        joinStoreGenerator = new JoinStateManagerStoreGenerator()
       )
     }
 

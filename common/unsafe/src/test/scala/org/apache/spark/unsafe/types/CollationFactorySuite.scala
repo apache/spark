@@ -27,13 +27,14 @@ import org.apache.spark.sql.catalyst.util.CollationFactory.fetchCollation
 // scalastyle:off
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.must.Matchers
+import com.ibm.icu.util.VersionInfo.ICU_VERSION
 
 import org.apache.spark.sql.catalyst.util.CollationFactory._
 import org.apache.spark.unsafe.types.UTF8String.{fromString => toUTF8}
 
 class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ignore funsuite
 
-  val currentIcuVersion: String = "76.1"
+  val currentIcuVersion: String = s"${ICU_VERSION.getMajor}.${ICU_VERSION.getMinor}"
 
   test("collationId stability") {
     assert(INDETERMINATE_COLLATION_ID == -1)

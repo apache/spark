@@ -101,6 +101,7 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -141,6 +142,7 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -505,6 +507,7 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'invalid_length'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -529,6 +532,7 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'invalid_length'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -2339,5 +2343,29 @@ abc
 select try_validate_utf8(x'80')
 -- !query schema
 struct<try_validate_utf8(X'80'):string>
+-- !query output
+NULL
+
+
+-- !query
+select quote('Spark')
+-- !query schema
+struct<quote(Spark):string>
+-- !query output
+'Spark'
+
+
+-- !query
+select quote("Don't")
+-- !query schema
+struct<quote(Don't):string>
+-- !query output
+'Don\'t'
+
+
+-- !query
+select quote(NULL)
+-- !query schema
+struct<quote(NULL):string>
 -- !query output
 NULL

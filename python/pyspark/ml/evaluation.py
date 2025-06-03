@@ -311,6 +311,10 @@ class BinaryClassificationEvaluator(
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
+    def isLargerBetter(self) -> bool:
+        """Override this function to make it run on connect"""
+        return True
+
 
 @inherit_doc
 class RegressionEvaluator(
@@ -466,6 +470,10 @@ class RegressionEvaluator(
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    def isLargerBetter(self) -> bool:
+        """Override this function to make it run on connect"""
+        return self.getMetricName() in ["r2", "var"]
 
 
 @inherit_doc
@@ -700,6 +708,15 @@ class MulticlassClassificationEvaluator(
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
+    def isLargerBetter(self) -> bool:
+        """Override this function to make it run on connect"""
+        return not self.getMetricName() in [
+            "weightedFalsePositiveRate",
+            "falsePositiveRateByLabel",
+            "logLoss",
+            "hammingLoss",
+        ]
+
 
 @inherit_doc
 class MultilabelClassificationEvaluator(
@@ -842,6 +859,10 @@ class MultilabelClassificationEvaluator(
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    def isLargerBetter(self) -> bool:
+        """Override this function to make it run on connect"""
+        return self.getMetricName() != "hammingLoss"
 
 
 @inherit_doc
@@ -1002,6 +1023,10 @@ class ClusteringEvaluator(
         """
         return self._set(weightCol=value)
 
+    def isLargerBetter(self) -> bool:
+        """Override this function to make it run on connect"""
+        return True
+
 
 @inherit_doc
 class RankingEvaluator(
@@ -1137,6 +1162,10 @@ class RankingEvaluator(
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    def isLargerBetter(self) -> bool:
+        """Override this function to make it run on connect"""
+        return True
 
 
 if __name__ == "__main__":

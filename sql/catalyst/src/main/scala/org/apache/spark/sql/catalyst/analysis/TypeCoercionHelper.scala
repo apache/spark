@@ -84,7 +84,8 @@ import org.apache.spark.sql.types.{
   StructType,
   TimestampNTZType,
   TimestampType,
-  TimestampTypeExpression
+  TimestampTypeExpression,
+  TimeType
 }
 
 abstract class TypeCoercionHelper {
@@ -239,16 +240,18 @@ abstract class TypeCoercionHelper {
     }
   }
 
-  protected def findWiderDateTimeType(d1: DatetimeType, d2: DatetimeType): DatetimeType =
+  protected def findWiderDateTimeType(d1: DatetimeType, d2: DatetimeType): Option[DatetimeType] =
     (d1, d2) match {
+      case (_, _: TimeType) => None
+      case (_: TimeType, _) => None
       case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
-        TimestampType
+        Some(TimestampType)
 
       case (_: TimestampType, _: TimestampNTZType) | (_: TimestampNTZType, _: TimestampType) =>
-        TimestampType
+        Some(TimestampType)
 
       case (_: TimestampNTZType, _: DateType) | (_: DateType, _: TimestampNTZType) =>
-        TimestampNTZType
+        Some(TimestampNTZType)
     }
 
   /**
@@ -273,15 +276,21 @@ abstract class TypeCoercionHelper {
         // IN subquery expression.
         if (commonTypes.length == lhs.length) {
           val castedRhs = rhs.zip(commonTypes).map {
-            case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
+            case (e, dt) if e.dataType != dt =>
+              Alias(Cast(e, dt).withTimeZone(conf.sessionLocalTimeZone), e.name)()
             case (e, _) => e
           }
           val newLhs = lhs.zip(commonTypes).map {
-            case (e, dt) if e.dataType != dt => Cast(e, dt)
+            case (e, dt) if e.dataType != dt =>
+              Cast(e, dt).withTimeZone(conf.sessionLocalTimeZone)
             case (e, _) => e
           }
 
-          InSubquery(newLhs, l.withNewPlan(Project(castedRhs, l.plan)))
+          if (newLhs != lhs || castedRhs != rhs) {
+            InSubquery(newLhs, l.withNewPlan(Project(castedRhs, l.plan)))
+          } else {
+            i
+          }
         } else {
           i
         }
