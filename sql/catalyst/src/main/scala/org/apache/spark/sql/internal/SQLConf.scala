@@ -5888,8 +5888,8 @@ object SQLConf {
   val PIPELINES_STREAM_STATE_POLLING_INTERVAL: ConfigEntry[Long] = {
     buildConf("spark.sql.pipelines.execution.streamstate.pollingInterval")
       .doc(
-        "Interval at which the stream state is polled for changes. This is used to check " +
-          "if the stream has failed and needs to be restarted."
+        "Interval in second at which the stream state is polled for changes. This is used to " +
+          "check if the stream has failed and needs to be restarted."
       )
       .version("4.1.0")
       .timeConf(TimeUnit.SECONDS)
