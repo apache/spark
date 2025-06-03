@@ -458,6 +458,12 @@ object DataTypeParser extends AbstractParser {
 }
 
 object AbstractParser extends Logging {
+  // Approximation based on experiments. Used to estimate the size of the DFA cache for the
+  // `parserDfaCacheFlushRatio` threshold.
+  final val BYTES_PER_DFA_STATE = 7000
+
+  private val DRIVER_MEMORY = Runtime.getRuntime.maxMemory()
+
   private case class AntlrCaches(atn: ATN) {
     private[parser] val predictionContextCache: PredictionContextCache = new PredictionContextCache
     private[parser] val decisionToDFACache: Array[DFA] = AntlrCaches.makeDecisionToDFACache(atn)
@@ -542,8 +548,14 @@ object AbstractParser extends Logging {
         log"DFA states in the parser. Total cached DFA states: " +
         log"${MDC(LogKeys.ANTLR_DFA_CACHE_SIZE, numDFACacheStatesCurrent)}.")
 
-    if (0 <= conf.parserDfaCacheFlushThreshold &&
-        conf.parserDfaCacheFlushThreshold <= numDFACacheStatesCurrent) {
+    val staticThresholdExceeded = 0 <= conf.parserDfaCacheFlushThreshold &&
+      conf.parserDfaCacheFlushThreshold <= numDFACacheStatesCurrent
+
+    val estCacheBytes = numDFACacheStatesCurrent * BYTES_PER_DFA_STATE
+    val dynamicThresholdExceeded = 0 <= conf.parserDfaCacheFlushRatio &&
+      conf.parserDfaCacheFlushRatio * DRIVER_MEMORY / 100 <= estCacheBytes
+
+    if (staticThresholdExceeded || dynamicThresholdExceeded) {
       AbstractParser.clearParserCaches(parser)
     }
   }
