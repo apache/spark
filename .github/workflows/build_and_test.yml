@@ -975,7 +975,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.m2/repository
-        key: docs-maven-${{ hashFiles('**/pom.xml') }}
+        key: docs-maven-${{ hashFiles('**/pom.xml', 'project/build.properties') }}
         restore-keys: |
           docs-maven-
     - name: Free up disk space
