@@ -9,9 +9,9 @@
     "sparkUser" : "lijunqing",
     "completed" : true,
     "appSparkVersion" : "3.3.0-SNAPSHOT",
-    "startTimeEpoch" : 1642039450519,
     "endTimeEpoch" : 1642039536564,
-    "lastUpdatedEpoch" : 0
+    "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1642039450519
   } ]
 }, {
   "id" : "application_1628109047826_1317105",
@@ -24,9 +24,9 @@
     "sparkUser" : "john",
     "completed" : true,
     "appSparkVersion" : "3.1.1.119",
-    "startTimeEpoch" : 1628637895333,
     "endTimeEpoch" : 1628638170208,
-    "lastUpdatedEpoch" : 0
+    "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1628637895333
   } ]
 }, {
   "id" : "app-20200706201101-0003",
@@ -39,8 +39,8 @@
     "sparkUser" : "terryk",
     "completed" : true,
     "appSparkVersion" : "3.1.0-SNAPSHOT",
-    "startTimeEpoch" : 1594091460235,
     "endTimeEpoch" : 1594091824231,
-    "lastUpdatedEpoch" : 0
+    "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1594091460235
   } ]
 } ]

@@ -54,8 +54,8 @@
   "maxMemory" : 908381388,
   "addTime" : "2016-11-16T22:33:35.320GMT",
   "executorLogs" : {
-    "stdout" : "http://172.22.0.167:51466/logPage/?appId=app-20161116163331-0000&executorId=3&logType=stdout",
-    "stderr" : "http://172.22.0.167:51466/logPage/?appId=app-20161116163331-0000&executorId=3&logType=stderr"
+    "stderr" : "http://172.22.0.167:51466/logPage/?appId=app-20161116163331-0000&executorId=3&logType=stderr",
+    "stdout" : "http://172.22.0.167:51466/logPage/?appId=app-20161116163331-0000&executorId=3&logType=stdout"
   },
   "memoryMetrics" : {
     "usedOnHeapStorageMemory" : 0,
@@ -178,8 +178,8 @@
   "maxMemory" : 908381388,
   "addTime" : "2016-11-16T22:33:35.443GMT",
   "executorLogs" : {
-    "stdout" : "http://172.22.0.167:51467/logPage/?appId=app-20161116163331-0000&executorId=1&logType=stdout",
-    "stderr" : "http://172.22.0.167:51467/logPage/?appId=app-20161116163331-0000&executorId=1&logType=stderr"
+    "stderr" : "http://172.22.0.167:51467/logPage/?appId=app-20161116163331-0000&executorId=1&logType=stderr",
+    "stdout" : "http://172.22.0.167:51467/logPage/?appId=app-20161116163331-0000&executorId=1&logType=stdout"
   },
   "memoryMetrics" : {
     "usedOnHeapStorageMemory" : 0,
@@ -240,8 +240,8 @@
   "maxMemory" : 908381388,
   "addTime" : "2016-11-16T22:33:35.462GMT",
   "executorLogs" : {
-    "stdout" : "http://172.22.0.167:51465/logPage/?appId=app-20161116163331-0000&executorId=0&logType=stdout",
-    "stderr" : "http://172.22.0.167:51465/logPage/?appId=app-20161116163331-0000&executorId=0&logType=stderr"
+    "stderr" : "http://172.22.0.167:51465/logPage/?appId=app-20161116163331-0000&executorId=0&logType=stderr",
+    "stdout" : "http://172.22.0.167:51465/logPage/?appId=app-20161116163331-0000&executorId=0&logType=stdout"
   },
   "memoryMetrics" : {
     "usedOnHeapStorageMemory" : 0,

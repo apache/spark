@@ -32,6 +32,7 @@
   "shuffleRemoteBytesReadToDisk" : 0,
   "shuffleLocalBytesRead" : 0,
   "shuffleReadBytes" : 0,
+  "shuffleReadRecords" : 0,
   "shuffleCorruptMergedBlockChunks" : 0,
   "shuffleMergedFetchFallbackCount" : 0,
   "shuffleMergedRemoteBlocksFetched" : 0,
@@ -42,9 +43,6 @@
   "shuffleMergedLocalBytesRead" : 0,
   "shuffleRemoteReqsDuration" : 0,
   "shuffleMergedRemoteReqsDuration" : 0,
-  "isShufflePushEnabled" : false,
-  "shuffleMergersCount" : 0,
-  "shuffleReadRecords" : 0,
   "shuffleWriteBytes" : 1461,
   "shuffleWriteTime" : 33251697,
   "shuffleWriteRecords" : 30,
@@ -58,7 +56,7 @@
       "taskId" : 0,
       "index" : 0,
       "attempt" : 0,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2018-01-18T18:33:12.816GMT",
       "duration" : 2064,
       "executorId" : "1",
@@ -94,18 +92,18 @@
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
           "recordsRead" : 0,
-          "shufflePushReadMetrics": {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "localMergedBytesRead": 0,
-            "localMergedBlocksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
-            "remoteMergedBlocksFetched": 0,
-            "remoteMergedChunksFetched": 0,
-            "remoteMergedReqsDuration": 0
-          },
-          "remoteReqsDuration": 0
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "localMergedBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 144,
@@ -114,8 +112,8 @@
         }
       },
       "executorLogs" : {
-        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096",
-        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096"
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096"
       },
       "schedulerDelay" : 68,
       "gettingResultTime" : 0
@@ -124,7 +122,7 @@
       "taskId" : 5,
       "index" : 5,
       "attempt" : 0,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2018-01-18T18:33:14.320GMT",
       "duration" : 73,
       "executorId" : "5",
@@ -161,18 +159,18 @@
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
           "recordsRead" : 0,
-          "shufflePushReadMetrics": {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "localMergedBytesRead": 0,
-            "localMergedBlocksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
-            "remoteMergedBlocksFetched": 0,
-            "remoteMergedChunksFetched": 0,
-            "remoteMergedReqsDuration": 0
-          },
-          "remoteReqsDuration": 0
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "localMergedBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 0,
@@ -191,7 +189,7 @@
       "taskId" : 10,
       "index" : 1,
       "attempt" : 1,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2018-01-18T18:33:15.069GMT",
       "duration" : 132,
       "executorId" : "2",
@@ -227,18 +225,18 @@
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
           "recordsRead" : 0,
-          "shufflePushReadMetrics": {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "localMergedBytesRead": 0,
-            "localMergedBlocksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
-            "remoteMergedBlocksFetched": 0,
-            "remoteMergedChunksFetched": 0,
-            "remoteMergedReqsDuration": 0
-          },
-          "remoteReqsDuration": 0
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "localMergedBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 144,
@@ -257,7 +255,7 @@
       "taskId" : 1,
       "index" : 1,
       "attempt" : 0,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2018-01-18T18:33:12.832GMT",
       "duration" : 1506,
       "executorId" : "5",
@@ -294,18 +292,18 @@
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
           "recordsRead" : 0,
-          "shufflePushReadMetrics": {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "localMergedBytesRead": 0,
-            "localMergedBlocksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
-            "remoteMergedBlocksFetched": 0,
-            "remoteMergedChunksFetched": 0,
-            "remoteMergedReqsDuration": 0
-          },
-          "remoteReqsDuration": 0
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "localMergedBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 0,
@@ -324,7 +322,7 @@
       "taskId" : 6,
       "index" : 6,
       "attempt" : 0,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2018-01-18T18:33:14.323GMT",
       "duration" : 67,
       "executorId" : "4",
@@ -361,18 +359,18 @@
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
           "recordsRead" : 0,
-          "shufflePushReadMetrics": {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "localMergedBytesRead": 0,
-            "localMergedBlocksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
-            "remoteMergedBlocksFetched": 0,
-            "remoteMergedChunksFetched": 0,
-            "remoteMergedReqsDuration": 0
-          },
-          "remoteReqsDuration": 0
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "localMergedBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 0,
@@ -381,8 +379,8 @@
         }
       },
       "executorLogs" : {
-        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stdout?start=-4096",
-        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stderr?start=-4096"
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stdout?start=-4096"
       },
       "schedulerDelay" : 16,
       "gettingResultTime" : 0
@@ -391,7 +389,7 @@
       "taskId" : 9,
       "index" : 4,
       "attempt" : 1,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2018-01-18T18:33:14.973GMT",
       "duration" : 96,
       "executorId" : "2",
@@ -427,18 +425,18 @@
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
           "recordsRead" : 0,
-          "shufflePushReadMetrics": {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "localMergedBytesRead": 0,
-            "localMergedBlocksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
-            "remoteMergedBlocksFetched": 0,
-            "remoteMergedChunksFetched": 0,
-            "remoteMergedReqsDuration": 0
-          },
-          "remoteReqsDuration": 0
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "localMergedBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 147,
@@ -457,7 +455,7 @@
       "taskId" : 13,
       "index" : 9,
       "attempt" : 0,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2018-01-18T18:33:15.200GMT",
       "duration" : 76,
       "executorId" : "2",
@@ -493,18 +491,18 @@
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
           "recordsRead" : 0,
-          "shufflePushReadMetrics": {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "localMergedBytesRead": 0,
-            "localMergedBlocksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
-            "remoteMergedBlocksFetched": 0,
-            "remoteMergedChunksFetched": 0,
-            "remoteMergedReqsDuration": 0
-          },
-          "remoteReqsDuration": 0
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "localMergedBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 147,
@@ -523,7 +521,7 @@
       "taskId" : 2,
       "index" : 2,
       "attempt" : 0,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2018-01-18T18:33:12.832GMT",
       "duration" : 1774,
       "executorId" : "3",
@@ -559,18 +557,18 @@
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
           "recordsRead" : 0,
-          "shufflePushReadMetrics": {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "localMergedBytesRead": 0,
-            "localMergedBlocksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
-            "remoteMergedBlocksFetched": 0,
-            "remoteMergedChunksFetched": 0,
-            "remoteMergedReqsDuration": 0
-          },
-          "remoteReqsDuration": 0
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "localMergedBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 144,
@@ -579,8 +577,8 @@
         }
       },
       "executorLogs" : {
-        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000004/attilapiros/stdout?start=-4096",
-        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000004/attilapiros/stderr?start=-4096"
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000004/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000004/attilapiros/stdout?start=-4096"
       },
       "schedulerDelay" : 74,
       "gettingResultTime" : 0
@@ -589,7 +587,7 @@
       "taskId" : 12,
       "index" : 8,
       "attempt" : 0,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2018-01-18T18:33:15.165GMT",
       "duration" : 60,
       "executorId" : "1",
@@ -625,18 +623,18 @@
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
           "recordsRead" : 0,
-          "shufflePushReadMetrics": {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "localMergedBytesRead": 0,
-            "localMergedBlocksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
-            "remoteMergedBlocksFetched": 0,
-            "remoteMergedChunksFetched": 0,
-            "remoteMergedReqsDuration": 0
-          },
-          "remoteReqsDuration": 0
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "localMergedBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 147,
@@ -645,8 +643,8 @@
         }
       },
       "executorLogs" : {
-        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096",
-        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096"
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096"
       },
       "schedulerDelay" : 22,
       "gettingResultTime" : 0
@@ -655,7 +653,7 @@
       "taskId" : 7,
       "index" : 5,
       "attempt" : 1,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2018-01-18T18:33:14.859GMT",
       "duration" : 115,
       "executorId" : "2",
@@ -691,18 +689,18 @@
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
           "recordsRead" : 0,
-          "shufflePushReadMetrics": {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "localMergedBytesRead": 0,
-            "localMergedBlocksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
-            "remoteMergedBlocksFetched": 0,
-            "remoteMergedChunksFetched": 0,
-            "remoteMergedReqsDuration": 0
-          },
-          "remoteReqsDuration": 0
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "localMergedBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 147,
@@ -721,7 +719,7 @@
       "taskId" : 3,
       "index" : 3,
       "attempt" : 0,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2018-01-18T18:33:12.833GMT",
       "duration" : 2027,
       "executorId" : "2",
@@ -757,18 +755,18 @@
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
           "recordsRead" : 0,
-          "shufflePushReadMetrics": {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "localMergedBytesRead": 0,
-            "localMergedBlocksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
-            "remoteMergedBlocksFetched": 0,
-            "remoteMergedChunksFetched": 0,
-            "remoteMergedReqsDuration": 0
-          },
-          "remoteReqsDuration": 0
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "localMergedBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 147,
@@ -787,7 +785,7 @@
       "taskId" : 11,
       "index" : 7,
       "attempt" : 0,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2018-01-18T18:33:15.072GMT",
       "duration" : 93,
       "executorId" : "1",
@@ -823,18 +821,18 @@
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
           "recordsRead" : 0,
-          "shufflePushReadMetrics": {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "localMergedBytesRead": 0,
-            "localMergedBlocksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
-            "remoteMergedBlocksFetched": 0,
-            "remoteMergedChunksFetched": 0,
-            "remoteMergedReqsDuration": 0
-          },
-          "remoteReqsDuration": 0
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "localMergedBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 147,
@@ -843,8 +841,8 @@
         }
       },
       "executorLogs" : {
-        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096",
-        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096"
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096"
       },
       "schedulerDelay" : 12,
       "gettingResultTime" : 0
@@ -853,7 +851,7 @@
       "taskId" : 8,
       "index" : 6,
       "attempt" : 1,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2018-01-18T18:33:14.879GMT",
       "duration" : 194,
       "executorId" : "1",
@@ -889,18 +887,18 @@
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
           "recordsRead" : 0,
-          "shufflePushReadMetrics": {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "localMergedBytesRead": 0,
-            "localMergedBlocksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
-            "remoteMergedBlocksFetched": 0,
-            "remoteMergedChunksFetched": 0,
-            "remoteMergedReqsDuration": 0
-          },
-          "remoteReqsDuration": 0
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "localMergedBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 147,
@@ -909,8 +907,8 @@
         }
       },
       "executorLogs" : {
-        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096",
-        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096"
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096"
       },
       "schedulerDelay" : 84,
       "gettingResultTime" : 0
@@ -919,7 +917,7 @@
       "taskId" : 4,
       "index" : 4,
       "attempt" : 0,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2018-01-18T18:33:12.833GMT",
       "duration" : 1522,
       "executorId" : "4",
@@ -956,18 +954,18 @@
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
           "recordsRead" : 0,
-          "shufflePushReadMetrics": {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "localMergedBytesRead": 0,
-            "localMergedBlocksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
-            "remoteMergedBlocksFetched": 0,
-            "remoteMergedChunksFetched": 0,
-            "remoteMergedReqsDuration": 0
-          },
-          "remoteReqsDuration": 0
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "localMergedBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 0,
@@ -976,8 +974,8 @@
         }
       },
       "executorLogs" : {
-        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stdout?start=-4096",
-        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stderr?start=-4096"
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stdout?start=-4096"
       },
       "schedulerDelay" : 338,
       "gettingResultTime" : 0
@@ -1226,5 +1224,7 @@
     "TotalGCTime" : 0,
     "ConcurrentGCCount" : 0,
     "ConcurrentGCTime" : 0
-  }
+  },
+  "isShufflePushEnabled" : false,
+  "shuffleMergersCount" : 0
 }

@@ -106,8 +106,8 @@
   "maxMemory" : 384093388,
   "addTime" : "2019-07-02T21:02:28.551GMT",
   "executorLogs" : {
-    "stdout" : "http://tomg-test:8042/node/containerlogs/container_1555004656427_0144_01_000002/tgraves/stdout?start=-4096",
-    "stderr" : "http://tomg-test:8042/node/containerlogs/container_1555004656427_0144_01_000002/tgraves/stderr?start=-4096"
+    "stderr" : "http://tomg-test:8042/node/containerlogs/container_1555004656427_0144_01_000002/tgraves/stderr?start=-4096",
+    "stdout" : "http://tomg-test:8042/node/containerlogs/container_1555004656427_0144_01_000002/tgraves/stdout?start=-4096"
   },
   "memoryMetrics" : {
     "usedOnHeapStorageMemory" : 0,
