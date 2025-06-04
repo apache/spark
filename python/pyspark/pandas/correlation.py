@@ -234,22 +234,20 @@ def compute(sdf: SparkDataFrame, groupKeys: List[str], method: str) -> SparkData
             )
             .withColumn(
                 CORRELATION_CORR_OUTPUT_COLUMN,
-                (F.col(CORRELATION_KENDALL_P_COLUMN) - F.col(CORRELATION_KENDALL_Q_COLUMN))
-                / F.sqrt(
-                    (
+                F.try_divide(
+                    F.col(CORRELATION_KENDALL_P_COLUMN) - F.col(CORRELATION_KENDALL_Q_COLUMN),
+                    F.sqrt(
                         (
                             F.col(CORRELATION_KENDALL_P_COLUMN)
                             + F.col(CORRELATION_KENDALL_Q_COLUMN)
-                            + (F.col(CORRELATION_KENDALL_T_COLUMN))
+                            + F.col(CORRELATION_KENDALL_T_COLUMN)
                         )
-                    )
-                    * (
-                        (
+                        * (
                             F.col(CORRELATION_KENDALL_P_COLUMN)
                             + F.col(CORRELATION_KENDALL_Q_COLUMN)
-                            + (F.col(CORRELATION_KENDALL_U_COLUMN))
+                            + F.col(CORRELATION_KENDALL_U_COLUMN)
                         )
-                    )
+                    ),
                 ),
             )
         )
