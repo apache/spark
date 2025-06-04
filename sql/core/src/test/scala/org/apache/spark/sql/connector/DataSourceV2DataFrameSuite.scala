@@ -676,104 +676,107 @@ class DataSourceV2DataFrameSuite
 
   test("create/replace table default value expression should have a cast") {
     val tableName = "testcat.ns1.ns2.tbl"
-    withTable(tableName) {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable(tableName) {
+        val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+          sql(
+            s"""
+               |CREATE TABLE $tableName (
+               |  col1 int,
+               |  col2 timestamp DEFAULT '2018-11-17 13:33:33',
+               |  col3 double DEFAULT 1)
+               |""".stripMargin)
+        }
+        checkDefaultValues(
+          createExec.columns,
+          Array(
+            null,
+            new ColumnDefaultValue(
+              "'2018-11-17 13:33:33'",
+              new LiteralValue(1542490413000000L, TimestampType),
+              new LiteralValue(1542490413000000L, TimestampType)),
+            new ColumnDefaultValue(
+              "1",
+              new V2Cast(LiteralValue(1, IntegerType), IntegerType, DoubleType),
+              LiteralValue(1.0, DoubleType))))
 
-      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
-        sql(
-          s"""
-             |CREATE TABLE $tableName (
-             |  col1 int,
-             |  col2 timestamp DEFAULT '2018-11-17 13:33:33',
-             |  col3 double DEFAULT 1)
-             |""".stripMargin)
+        val replaceExec = executeAndKeepPhysicalPlan[ReplaceTableExec] {
+          sql(
+            s"""
+               |REPLACE TABLE $tableName (
+               |  col1 int,
+               |  col2 timestamp DEFAULT '2022-02-23 05:55:55',
+               |  col3 double DEFAULT (1 + 1))
+               |""".stripMargin)
+        }
+        checkDefaultValues(
+          replaceExec.columns,
+          Array(
+            null,
+            new ColumnDefaultValue(
+              "'2022-02-23 05:55:55'",
+              LiteralValue(1645624555000000L, TimestampType),
+              LiteralValue(1645624555000000L, TimestampType)),
+            new ColumnDefaultValue(
+              "(1 + 1)",
+              new V2Cast(
+                new GeneralScalarExpression("+", Array(LiteralValue(1, IntegerType),
+                  LiteralValue(1, IntegerType))),
+                IntegerType,
+                DoubleType),
+              LiteralValue(2.0, DoubleType))))
       }
-      checkDefaultValues(
-        createExec.columns,
-        Array(
-          null,
-          new ColumnDefaultValue(
-            "'2018-11-17 13:33:33'",
-            new LiteralValue(1542490413000000L, TimestampType),
-            new LiteralValue(1542490413000000L, TimestampType)),
-          new ColumnDefaultValue(
-            "1",
-            new V2Cast(LiteralValue(1, IntegerType), IntegerType, DoubleType),
-            LiteralValue(1.0, DoubleType))))
-
-      val replaceExec = executeAndKeepPhysicalPlan[ReplaceTableExec] {
-        sql(
-          s"""
-             |REPLACE TABLE $tableName (
-             |  col1 int,
-             |  col2 timestamp DEFAULT '2022-02-23 05:55:55',
-             |  col3 double DEFAULT (1 + 1))
-             |""".stripMargin)
-      }
-      checkDefaultValues(
-        replaceExec.columns,
-        Array(
-          null,
-          new ColumnDefaultValue(
-            "'2022-02-23 05:55:55'",
-            LiteralValue(1645624555000000L, TimestampType),
-            LiteralValue(1645624555000000L, TimestampType)),
-          new ColumnDefaultValue(
-            "(1 + 1)",
-            new V2Cast(
-              new GeneralScalarExpression("+", Array(LiteralValue(1, IntegerType),
-                LiteralValue(1, IntegerType))),
-              IntegerType,
-              DoubleType),
-            LiteralValue(2.0, DoubleType))))
     }
   }
 
   test("alter table default value expression should have a cast") {
     val tableName = "testcat.ns1.ns2.tbl"
-    withTable(tableName) {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable(tableName) {
 
-      sql(s"CREATE TABLE $tableName (col1 int) using foo")
-      val alterExec = executeAndKeepPhysicalPlan[AlterTableExec] {
-        sql(
-          s"""
-            |ALTER TABLE $tableName ADD COLUMNS (
-            |  col2 timestamp DEFAULT '2018-11-17 13:33:33',
-            |  col3 double DEFAULT 1)
-            |""".stripMargin)
+        sql(s"CREATE TABLE $tableName (col1 int) using foo")
+        val alterExec = executeAndKeepPhysicalPlan[AlterTableExec] {
+          sql(
+            s"""
+               |ALTER TABLE $tableName ADD COLUMNS (
+               |  col2 timestamp DEFAULT '2018-11-17 13:33:33',
+               |  col3 double DEFAULT 1)
+               |""".stripMargin)
+        }
+
+        checkDefaultValues(
+          alterExec.changes.map(_.asInstanceOf[AddColumn]).toArray,
+          Array(
+            new ColumnDefaultValue(
+              "'2018-11-17 13:33:33'",
+              LiteralValue(1542490413000000L, TimestampType),
+              LiteralValue(1542490413000000L, TimestampType)),
+            new ColumnDefaultValue(
+              "1",
+              new V2Cast(LiteralValue(1, IntegerType), IntegerType, DoubleType),
+              LiteralValue(1.0, DoubleType))))
+
+        val alterCol1 = executeAndKeepPhysicalPlan[AlterTableExec] {
+          sql(
+            s"""
+               |ALTER TABLE $tableName ALTER COLUMN
+               |  col2 SET DEFAULT '2022-02-23 05:55:55',
+               |  col3 SET DEFAULT (1 + 1)
+               |""".stripMargin)
+        }
+        checkDefaultValues(
+          alterCol1.changes.map(_.asInstanceOf[UpdateColumnDefaultValue]).toArray,
+          Array(
+            new DefaultValue("'2022-02-23 05:55:55'",
+              LiteralValue(1645624555000000L, TimestampType)),
+            new DefaultValue(
+              "(1 + 1)",
+              new V2Cast(
+                new GeneralScalarExpression("+", Array(LiteralValue(1, IntegerType),
+                  LiteralValue(1, IntegerType))),
+                IntegerType,
+                DoubleType))))
       }
-
-      checkDefaultValues(
-        alterExec.changes.map(_.asInstanceOf[AddColumn]).toArray,
-        Array(
-          new ColumnDefaultValue(
-            "'2018-11-17 13:33:33'",
-            LiteralValue(1542490413000000L, TimestampType),
-            LiteralValue(1542490413000000L, TimestampType)),
-          new ColumnDefaultValue(
-            "1",
-            new V2Cast(LiteralValue(1, IntegerType), IntegerType, DoubleType),
-            LiteralValue(1.0, DoubleType))))
-
-      val alterCol1 = executeAndKeepPhysicalPlan[AlterTableExec] {
-        sql(
-          s"""
-             |ALTER TABLE $tableName ALTER COLUMN
-             |  col2 SET DEFAULT '2022-02-23 05:55:55',
-             |  col3 SET DEFAULT (1 + 1)
-             |""".stripMargin)
-      }
-      checkDefaultValues(
-        alterCol1.changes.map(_.asInstanceOf[UpdateColumnDefaultValue]).toArray,
-        Array(
-          new DefaultValue("'2022-02-23 05:55:55'",
-            LiteralValue(1645624555000000L, TimestampType)),
-          new DefaultValue(
-            "(1 + 1)",
-            new V2Cast(
-              new GeneralScalarExpression("+", Array(LiteralValue(1, IntegerType),
-                LiteralValue(1, IntegerType))),
-              IntegerType,
-              DoubleType))))
     }
   }
 
