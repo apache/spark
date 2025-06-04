@@ -163,9 +163,9 @@ class TriggeredGraphExecution(
     val runnableFlows: mutable.LinkedHashSet[TableIdentifier] = new mutable.LinkedHashSet()
 
     while (!Thread.interrupted() && !allFlowsDone) {
-      // Since queries are managed by PhysicalFlows, so update state based on [[PhysicalFlow]]s.
+      // Since queries are managed by FlowExecutions, so update state based on [[FlowExecution]]s.
       flowsWithState(StreamState.RUNNING).foreach { flowIdentifier =>
-        physicalFlows(flowIdentifier) match {
+        flowExecutions(flowIdentifier) match {
           case f if !f.isCompleted => // Nothing to be done; let this stream continue.
           case f if f.isCompleted && f.exception.isEmpty =>
             recordSuccess(flowIdentifier)
@@ -381,7 +381,7 @@ class TriggeredGraphExecution(
     val flowsFailedToStop = ThreadUtils
       .parmap(flowsWithState(StreamState.RUNNING).toSeq, "stop-flow", maxThreads = 10) { flowName =>
         pipelineState.put(flowName, StreamState.CANCELED)
-        physicalFlows.get(flowName).map { f =>
+        flowExecutions.get(flowName).map { f =>
           (
             f.identifier,
             Try(stopFlow(f))

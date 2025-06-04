@@ -96,20 +96,20 @@ class FlowProgressEventLogger(eventBuffer: PipelineRunEventBuffer) extends Loggi
    * event will be logged at INFO if the recent flow run had failed otherwise the event will be
    * logged at METRICS. All other cases will be logged at INFO.
    */
-  def recordStart(physicalFlow: FlowExecution): Unit = synchronized {
+  def recordStart(flowExecution: FlowExecution): Unit = synchronized {
     eventBuffer.addEvent(
       ConstructPipelineEvent(
         origin = PipelineEventOrigin(
-          flowName = Option(physicalFlow.displayName),
+          flowName = Option(flowExecution.displayName),
           datasetName = None,
-          sourceCodeLocation = Option(physicalFlow.getOrigin.toSourceCodeLocation)
+          sourceCodeLocation = Option(flowExecution.getOrigin.toSourceCodeLocation)
         ),
         level = EventLevel.INFO,
-        message = s"Flow ${physicalFlow.displayName} is STARTING.",
+        message = s"Flow ${flowExecution.displayName} is STARTING.",
         details = FlowProgress(FlowStatus.STARTING)
       )
     )
-    knownIdleFlows.remove(physicalFlow.identifier)
+    knownIdleFlows.remove(flowExecution.identifier)
   }
 
   /** Records flow progress events with flow status as RUNNING. */
