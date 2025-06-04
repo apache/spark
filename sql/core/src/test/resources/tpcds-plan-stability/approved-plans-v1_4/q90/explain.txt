@@ -55,7 +55,7 @@
 (1) Scan parquet spark_catalog.default.web_sales
 Output [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/web_sales]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)]
 ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
 
@@ -187,7 +187,7 @@ Results [1]: [count(1)#13 AS amc#14]
 (29) Scan parquet spark_catalog.default.web_sales
 Output [4]: [ws_sold_time_sk#15, ws_ship_hdemo_sk#16, ws_web_page_sk#17, ws_sold_date_sk#18]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/web_sales]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)]
 ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
 

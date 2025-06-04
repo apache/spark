@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
+import org.apache.spark.sql.execution.datasources.PruneFileSourcePartitions
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
@@ -334,7 +335,22 @@ class QueryExecution(
 
     mode match {
       case SimpleMode =>
-        queryExecution.simpleString(false, maxFields, append)
+        val originalExcludedRulesOpt = this.sparkSession.conf.getOption(
+          SQLConf.OPTIMIZER_EXCLUDED_RULES.key)
+        val newExcludedRules = originalExcludedRulesOpt.map(
+          old => s"$old,${PruneFileSourcePartitions.ruleName}").getOrElse(
+          PruneFileSourcePartitions.ruleName)
+        try {
+          this.sparkSession.conf.set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, newExcludedRules)
+          queryExecution.simpleString(false, maxFields, append)
+        } finally {
+          if (originalExcludedRulesOpt.isDefined) {
+            originalExcludedRulesOpt.foreach(this.sparkSession.conf.set(
+              SQLConf.OPTIMIZER_EXCLUDED_RULES.key, _))
+          } else {
+            this.sparkSession.conf.unset(SQLConf.OPTIMIZER_EXCLUDED_RULES.key)
+          }
+        }
       case ExtendedMode =>
         queryExecution.toString(maxFields, append)
       case CodegenMode =>
