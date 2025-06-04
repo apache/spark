@@ -452,4 +452,60 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       assert(re.getMessage.contains("INVALID_HANDLE.OPERATION_NOT_FOUND"))
     }
   }
+
+  test("ExecutePlan RPC is idempotent: second ExecutePlan with same operationId reattaches") {
+    withRawBlockingStub { stub =>
+      val operationId = UUID.randomUUID().toString
+      val iter = stub.executePlan(
+        buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY), operationId = operationId))
+      // open the iterator, guarantees that the RPC reached the server,
+      // and get the responseId of the first response
+      val firstResponseId = iter.next().getResponseId
+
+      // send execute plan again, it will attach to the same execution,
+      // instead of throwing INVALID_HANDLE.OPERATION_ALREADY_EXISTS error
+      val iter2 = stub.executePlan(
+        buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY), operationId = operationId))
+      // the first response should be the same as the one we got before, because
+      // lastConsumedResponseId is unset and the server will start from the start of the stream.
+      assert(iter2.next().getResponseId == firstResponseId)
+
+      // should result in INVALID_CURSOR.DISCONNECTED error on the original iterator
+      val e = intercept[StatusRuntimeException] {
+        while (iter.hasNext) iter.next()
+      }
+      assert(e.getMessage.contains("INVALID_CURSOR.DISCONNECTED"))
+
+      // the second iterator should be able to continue
+      while (iter2.hasNext) {
+          iter2.next()
+      }
+    }
+  }
+
+  test("When ExecutePlan idempotency is disabled, second ExecutePlan with same operationId fails") {
+    withRawBlockingStub { stub =>
+      // Disable ExecutePlan idempotency
+      val configCommand =
+        s"SET ${Connect.CONNECT_SESSION_IDEMPOTENT_EXECUTE_PLAN_ENABLED.key}=false"
+      val configCommandIter =
+        stub.executePlan(buildExecutePlanRequest(buildSqlCommandPlan(configCommand)))
+      while (configCommandIter.hasNext) configCommandIter.next()
+
+      val operationId = UUID.randomUUID().toString
+      val iter = stub.executePlan(
+        buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY), operationId = operationId))
+      // open the iterator, guarantees that the RPC reached the server,
+      // and get the responseId of the first response
+      iter.next()
+
+      // send execute plan again, it will fail with INVALID_HANDLE.OPERATION_ALREADY_EXISTS error
+      val iter2 = stub.executePlan(
+        buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY), operationId = operationId))
+      val e = intercept[StatusRuntimeException] {
+        iter2.next()
+      }
+      assert(e.getMessage.contains("INVALID_HANDLE.OPERATION_ALREADY_EXISTS"))
+    }
+  }
 }

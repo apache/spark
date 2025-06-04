@@ -19,32 +19,50 @@ package org.apache.spark.sql.connect.service
 
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.connect.execution.ExecuteGrpcResponseSender
+import org.apache.spark.sql.connect.config.Connect
 
 class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.ExecutePlanResponse])
     extends Logging {
 
   def handle(v: proto.ExecutePlanRequest): Unit = {
-    val executeHolder = SparkConnectService.executionManager.createExecuteHolder(v)
-    try {
-      executeHolder.eventsManager.postStarted()
-      executeHolder.start()
-    } catch {
-      // Errors raised before the execution holder has finished spawning a thread are considered
-      // plan execution failure, and the client should not try reattaching it afterwards.
-      case t: Throwable =>
-        SparkConnectService.executionManager.removeExecuteHolder(executeHolder.key)
-        throw t
+    val previousSessionId = v.hasClientObservedServerSideSessionId match {
+      case true => Some(v.getClientObservedServerSideSessionId)
+      case false => None
     }
+    val sessionHolder = SparkConnectService
+      .getOrCreateIsolatedSession(
+        v.getUserContext.getUserId,
+        v.getSessionId,
+        previousSessionId)
+    val executeKey = ExecuteKey(v, sessionHolder)
+    val idempotentExecutePlanEnabled =
+      sessionHolder.session.conf.get(Connect.CONNECT_SESSION_IDEMPOTENT_EXECUTE_PLAN_ENABLED)
 
-    try {
-      val responseSender =
-        new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](executeHolder, responseObserver)
-      executeHolder.runGrpcResponseSender(responseSender)
-    } finally {
-      executeHolder.afterInitialRPC()
+    SparkConnectService.executionManager.getExecuteHolder(executeKey) match {
+      case Some(executeHolder) if idempotentExecutePlanEnabled =>
+        // If the execute holder already exists and idempotent execution is enabled, reattach to it.
+        if (executeHolder.request.getPlan.equals(v.getPlan)) {
+          SparkConnectService.executionManager
+            .reattachExecuteHolder(executeHolder, responseObserver, None)
+        } else {
+          // Throw an error if the request plan does not match the existing execute holder's plan.
+          throw new SparkSQLException(
+            errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
+            messageParameters = Map("handle" -> executeKey.operationId))
+        }
+      case Some(_) if !idempotentExecutePlanEnabled =>
+        // If the execute holder already exists but idempotent execution is disabled,
+        // throw an INVALID_HANDLE.OPERATION_ALREADY_EXISTS to keep previous behavior.
+        throw new SparkSQLException(
+          errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
+          messageParameters = Map("handle" -> executeKey.operationId))
+      case None =>
+        // Create a new execute holder and attach to it.
+        SparkConnectService.executionManager
+          .createExecuteHolderAndAttach(executeKey, v, sessionHolder, responseObserver)
     }
   }
 }

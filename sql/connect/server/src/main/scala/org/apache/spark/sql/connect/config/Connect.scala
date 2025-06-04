@@ -381,4 +381,16 @@ object Connect {
       .internal()
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("10g")
+
+  val CONNECT_SESSION_IDEMPOTENT_EXECUTE_PLAN_ENABLED =
+    buildConf("spark.connect.session.idempotentExecutePlan.enabled")
+      .doc(
+        "When true, ExecutionPlan RPC is idempotent: when an ExecutePlan request with a " +
+          "previously seen operation_id is received, instead of throwing an " +
+          "INVALID_HANDLE.OPERATION_ALREADY_EXISTS error, the server now reattaches the response " +
+          "stream to the already running execution associated with that operation.")
+      .version("4.1.0")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
 }
