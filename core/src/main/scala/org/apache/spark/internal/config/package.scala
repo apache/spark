@@ -280,6 +280,13 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val EXECUTOR_CONTAINER_METRICS_ENABLED =
+    ConfigBuilder("spark.executor.containerMetrics.enabled")
+      .doc("Whether to collect cgroup based Kubernetes container metrics for Spark executors")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EXECUTOR_METRICS_POLLING_INTERVAL =
     ConfigBuilder("spark.executor.metrics.pollingInterval")
       .doc("How often to collect executor metrics (in milliseconds). " +

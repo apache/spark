@@ -162,6 +162,60 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
   }
 }
 
+case object ContainerCgroupMetrics extends ExecutorMetricType with Logging {
+
+  override val names = Seq(
+    "ContainerCPUMilliCores",
+    "ContainerMemoryWorkingSetBytes"
+  )
+
+  lazy val isAvailable = SparkEnv.get.conf.get(config.EXECUTOR_CONTAINER_METRICS_ENABLED)
+
+  /** read the cumulative CPU usage (ns) of the cgroup (v1 or v2) */
+  private def readCpuUsageNs(): Long = {
+    val v2 = java.nio.file.Paths.get("/sys/fs/cgroup/cpu.stat")
+    val v1 = java.nio.file.Paths.get("/sys/fs/cgroup/cpuacct/cpuacct.usage")
+    if (java.nio.file.Files.exists(v2)) {
+      // cpu.stat line looks like "usage_usec 123456789"
+      java.nio.file.Files.readAllLines(v2).asScala.find(_.startsWith("usage_usec"))
+        .map(_.split("\\s+")(1).toLong * 1000L).getOrElse(0L)
+    } else {
+      java.nio.file.Files.readAllLines(v1).get(0).trim.toLong // already ns
+    }
+  }
+
+  private def readWorkingSetBytes(): Long = {
+    val usage = java.nio.file.Files.readAllLines(
+      java.nio.file.Paths.get("/sys/fs/cgroup/memory.current")).get(0).trim.toLong
+    val inactive = java.nio.file.Files.readAllLines(
+        java.nio.file.Paths.get("/sys/fs/cgroup/memory.stat")).asScala
+      .find(_.startsWith("inactive_file"))
+      .map(_.split("\\s+")(1).toLong).getOrElse(0L)
+    usage - inactive
+  }
+
+  @volatile private var lastUsageNs = readCpuUsageNs()
+  @volatile private var lastTsNs = System.nanoTime()
+
+  override private[spark] def getMetricValues(mm: MemoryManager): Array[Long] = {
+    if (!isAvailable) {
+      return Array(0, 0)
+    }
+
+    val nowUsageNs = readCpuUsageNs()
+    val nowTsNs = System.nanoTime()
+
+    val usageDelta = (nowUsageNs - lastUsageNs).toDouble
+    val timeDelta = (nowTsNs - lastTsNs).toDouble
+    val millicores = if (nowTsNs > lastTsNs) (usageDelta / timeDelta * 1000).round else 0L
+
+    lastUsageNs = nowUsageNs
+    lastTsNs = nowTsNs
+
+    Array(millicores, readWorkingSetBytes())
+  }
+}
+
 case object OnHeapExecutionMemory extends MemoryManagerExecutorMetricType(
   _.onHeapExecutionMemoryUsed)
 
@@ -201,6 +255,7 @@ private[spark] object ExecutorMetricType {
     DirectPoolMemory,
     MappedPoolMemory,
     ProcessTreeMetrics,
+    ContainerCgroupMetrics,
     GarbageCollectionMetrics
   )
 
