@@ -70,7 +70,7 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
       assertTableColumnCollation(testTable, "c2", "UNICODE")
 
       sql(s"ALTER TABLE $testTable ALTER COLUMN c2 TYPE STRING")
-      assertTableColumnCollation(testTable, "c2", "UTF8_BINARY")
+      assertTableColumnCollation(testTable, "c2", "UNICODE")
     }
   }
 
@@ -117,9 +117,25 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
       sql(s"ALTER TABLE $testTable ALTER COLUMN c1 TYPE STRING COLLATE UNICODE_CI")
       assertTableColumnCollation(testTable, "c1", "UNICODE_CI")
 
+      // When using ALTER TABLE ALTER COLUMN TYPE, the column should inherit the table's collation
+      // only if it wasn't a string column before. If the column was already a string, and we're
+      // just changing its type to string (without explicit collation) again, keep the original
+      // collation.
+      sql(s"ALTER TABLE $testTable ALTER COLUMN c1 TYPE STRING")
+      assertTableColumnCollation(testTable, "c1", "UNICODE_CI")
+
       // alter table add columns with explicit collation, check collation for each column
       sql(s"ALTER TABLE $testTable ADD COLUMN c7 STRING COLLATE SR_CI_AI")
       sql(s"ALTER TABLE $testTable ADD COLUMN c8 STRING COLLATE UTF8_BINARY")
+      assertTableColumnCollation(testTable, "c7", "SR_CI_AI")
+      assertTableColumnCollation(testTable, "c8", "UTF8_BINARY")
+
+      // When using ALTER TABLE ALTER COLUMN TYPE, the column should inherit the table's collation
+      // only if it wasn't a string column before. If the column was already a string, and we're
+      // just changing its type to string (without explicit collation) again, keep the original
+      // collation.
+      sql(s"ALTER TABLE $testTable ALTER COLUMN c8 TYPE STRING")
+
       assertTableColumnCollation(testTable, "c1", "UNICODE_CI")
       assertTableColumnCollation(testTable, "c2", "SR")
       assertTableColumnCollation(testTable, "c3", "UTF8_BINARY")
@@ -128,6 +144,24 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
       assertTableColumnCollation(testTable, "c6", "UNICODE")
       assertTableColumnCollation(testTable, "c7", "SR_CI_AI")
       assertTableColumnCollation(testTable, "c8", "UTF8_BINARY")
+    }
+  }
+
+  test("Alter table alter column type with default collation") {
+    // When using ALTER TABLE ALTER COLUMN TYPE, the column should inherit the table's collation
+    // only if it wasn't a string column before. If the column was already a string, and we're
+    // just changing its type to string (without explicit collation) again, keep the original
+    // collation.
+    withTable(testTable) {
+      sql(s"CREATE TABLE $testTable (c1 STRING, c2 STRING COLLATE UTF8_LCASE, c3 STRING)" +
+        s" DEFAULT COLLATION UTF8_LCASE")
+      sql(s"ALTER TABLE $testTable ALTER COLUMN c1 TYPE STRING")
+      sql(s"ALTER TABLE $testTable ALTER COLUMN c2 TYPE STRING")
+      sql(s"ALTER TABLE $testTable ALTER COLUMN c3 TYPE STRING COLLATE UNICODE")
+
+      assertTableColumnCollation(testTable, "c1", "UTF8_LCASE")
+      assertTableColumnCollation(testTable, "c2", "UTF8_LCASE")
+      assertTableColumnCollation(testTable, "c3", "UNICODE")
     }
   }
 
@@ -442,6 +476,28 @@ class DefaultCollationTestSuiteV2 extends DefaultCollationTestSuite with Datasou
       val prefix = "SYSTEM.BUILTIN"
       checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $testTable"), Row(s"$prefix.sr_AI"))
       checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $testTable"), Row(s"$prefix.UTF8_LCASE"))
+    }
+  }
+
+  test("alter char/varchar column to string type") {
+    withTable(testTable) {
+      sql(s"CREATE TABLE $testTable (c1 VARCHAR(10), c2 CHAR(10)) " +
+        s"DEFAULT COLLATION UTF8_LCASE")
+
+      sql(s"ALTER TABLE $testTable ALTER COLUMN c1 TYPE STRING")
+      sql(s"ALTER TABLE $testTable ALTER COLUMN c2 TYPE STRING")
+      assertTableColumnCollation(testTable, "c1", "UTF8_LCASE")
+      assertTableColumnCollation(testTable, "c2", "UTF8_LCASE")
+    }
+
+    withTable(testTable) {
+      sql(s"CREATE TABLE $testTable (c1 VARCHAR(10), c2 CHAR(10)) " +
+        s"DEFAULT COLLATION UTF8_LCASE")
+
+      sql(s"ALTER TABLE $testTable ALTER COLUMN c1 TYPE STRING COLLATE UNICODE")
+      sql(s"ALTER TABLE $testTable ALTER COLUMN c2 TYPE STRING COLLATE UNICODE")
+      assertTableColumnCollation(testTable, "c1", "UNICODE")
+      assertTableColumnCollation(testTable, "c2", "UNICODE")
     }
   }
 }
