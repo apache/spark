@@ -127,10 +127,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       case false => None
     }
     val sessionHolder = SparkConnectService
-      .getOrCreateIsolatedSession(
-        v.getUserContext.getUserId,
-        v.getSessionId,
-        previousSessionId)
+      .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId, previousSessionId)
     val executeKey = ExecuteKey(v, sessionHolder)
     createExecuteHolder(executeKey, v, sessionHolder)
   }
@@ -172,39 +169,36 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
   }
 
   /**
-   * Create a new ExecuteHolder, register it with this global manager and with its session,
-   * and attach the given response observer to it.
+   * Create a new ExecuteHolder, register it with this global manager and with its session, and
+   * attach the given response observer to it.
    */
-   private[connect] def createExecuteHolderAndAttach(
-       executeKey: ExecuteKey,
-       request: proto.ExecutePlanRequest,
-       sessionHolder: SessionHolder,
-       responseObserver: StreamObserver[proto.ExecutePlanResponse]): ExecuteHolder = {
-     val executeHolder = SparkConnectService.executionManager
-       .createExecuteHolder(executeKey, request, sessionHolder)
-     try {
-       executeHolder.eventsManager.postStarted()
-       executeHolder.start()
-     } catch {
-       // Errors raised before the execution holder has finished spawning a thread are considered
-       // plan execution failure, and the client should not try reattaching it afterwards.
-       case t: Throwable =>
-         SparkConnectService.executionManager.removeExecuteHolder(executeHolder.key)
-         throw t
-     }
+  private[connect] def createExecuteHolderAndAttach(
+      executeKey: ExecuteKey,
+      request: proto.ExecutePlanRequest,
+      sessionHolder: SessionHolder,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): ExecuteHolder = {
+    val executeHolder = SparkConnectService.executionManager
+      .createExecuteHolder(executeKey, request, sessionHolder)
+    try {
+      executeHolder.eventsManager.postStarted()
+      executeHolder.start()
+    } catch {
+      // Errors raised before the execution holder has finished spawning a thread are considered
+      // plan execution failure, and the client should not try reattaching it afterwards.
+      case t: Throwable =>
+        SparkConnectService.executionManager.removeExecuteHolder(executeHolder.key)
+        throw t
+    }
 
-     try {
-       val responseSender =
-         new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](
-           executeHolder, responseObserver
-         )
-       executeHolder.runGrpcResponseSender(responseSender)
-     } finally {
-       executeHolder.afterInitialRPC()
-     }
-     executeHolder
-   }
-
+    try {
+      val responseSender =
+        new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](executeHolder, responseObserver)
+      executeHolder.runGrpcResponseSender(responseSender)
+    } finally {
+      executeHolder.afterInitialRPC()
+    }
+    executeHolder
+  }
 
   /**
    * Reattach the given response observer to the given ExecuteHolder.

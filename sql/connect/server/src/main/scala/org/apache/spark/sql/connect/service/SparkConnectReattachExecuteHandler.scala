@@ -62,7 +62,6 @@ class SparkConnectReattachExecuteHandler(
       v.hasLastResponseId match {
         case true => Some(v.getLastResponseId)
         case false => None
-      }
-    )
+      })
   }
 }

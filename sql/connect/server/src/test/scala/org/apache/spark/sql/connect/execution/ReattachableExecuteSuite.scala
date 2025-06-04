@@ -478,12 +478,13 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
 
       // the second iterator should be able to continue
       while (iter2.hasNext) {
-          iter2.next()
+        iter2.next()
       }
     }
   }
 
-  test("When ExecutePlan idempotency is disabled, second ExecutePlan with same operationId fails") {
+  test(
+    "When ExecutePlan idempotency is disabled, second ExecutePlan with same operationId fails") {
     withRawBlockingStub { stub =>
       // Disable ExecutePlan idempotency
       val configCommand =

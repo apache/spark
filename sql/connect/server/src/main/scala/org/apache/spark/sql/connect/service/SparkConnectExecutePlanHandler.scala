@@ -33,10 +33,7 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
       case false => None
     }
     val sessionHolder = SparkConnectService
-      .getOrCreateIsolatedSession(
-        v.getUserContext.getUserId,
-        v.getSessionId,
-        previousSessionId)
+      .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId, previousSessionId)
     val executeKey = ExecuteKey(v, sessionHolder)
     val idempotentExecutePlanEnabled =
       sessionHolder.session.conf.get(Connect.CONNECT_SESSION_IDEMPOTENT_EXECUTE_PLAN_ENABLED)
