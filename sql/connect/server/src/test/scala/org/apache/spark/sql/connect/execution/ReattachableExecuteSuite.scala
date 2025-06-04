@@ -509,4 +509,25 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       assert(e.getMessage.contains("INVALID_HANDLE.OPERATION_ALREADY_EXISTS"))
     }
   }
+
+  test("The second ExecutePlan with same operationId but a different plan will fail") {
+    withRawBlockingStub { stub =>
+      val operationId = UUID.randomUUID().toString
+      val iter = stub.executePlan(
+        buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY), operationId = operationId))
+      // open the iterator, guarantees that the RPC reached the server,
+      // and get the responseId of the first response
+      iter.next()
+
+      // send execute plan has the same operation id but different plan,
+      // it will fail with INVALID_HANDLE.OPERATION_ALREADY_EXISTS error
+      val SMALL_RESULTS_QUERY = "select * from range(1000)"
+      val iter2 = stub.executePlan(
+        buildExecutePlanRequest(buildPlan(SMALL_RESULTS_QUERY), operationId = operationId))
+      val e = intercept[StatusRuntimeException] {
+        iter2.next()
+      }
+      assert(e.getMessage.contains("INVALID_HANDLE.OPERATION_ALREADY_EXISTS"))
+    }
+  }
 }
