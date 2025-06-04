@@ -35,19 +35,14 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
     val sessionHolder = SparkConnectService
       .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId, previousSessionId)
     val executeKey = ExecuteKey(v, sessionHolder)
-    def idempotentExecutePlanEnabled = {
-      sessionHolder.session.conf.get(Connect.CONNECT_SESSION_IDEMPOTENT_EXECUTE_PLAN_ENABLED)
-    }
 
     SparkConnectService.executionManager.getExecuteHolder(executeKey) match {
       case None =>
         // Create a new execute holder and attach to it.
         SparkConnectService.executionManager
           .createExecuteHolderAndAttach(executeKey, v, sessionHolder, responseObserver)
-      case Some(executeHolder) if idempotentExecutePlanEnabled
-        && executeHolder.request.getPlan.equals(v.getPlan) =>
-        // If the execute holder already exists with the same plan and idempotent execution is
-        // enabled, reattach to it.
+      case Some(executeHolder) && executeHolder.request.getPlan.equals(v.getPlan) =>
+        // If the execute holder already exists with the same plan, reattach to it.
         SparkConnectService.executionManager
           .reattachExecuteHolder(executeHolder, responseObserver, None)
       case Some(_) =>

@@ -483,33 +483,6 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
     }
   }
 
-  test(
-    "When ExecutePlan idempotency is disabled, second ExecutePlan with same operationId fails") {
-    withRawBlockingStub { stub =>
-      // Disable ExecutePlan idempotency
-      val configCommand =
-        s"SET ${Connect.CONNECT_SESSION_IDEMPOTENT_EXECUTE_PLAN_ENABLED.key}=false"
-      val configCommandIter =
-        stub.executePlan(buildExecutePlanRequest(buildSqlCommandPlan(configCommand)))
-      while (configCommandIter.hasNext) configCommandIter.next()
-
-      val operationId = UUID.randomUUID().toString
-      val iter = stub.executePlan(
-        buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY), operationId = operationId))
-      // open the iterator, guarantees that the RPC reached the server,
-      // and get the responseId of the first response
-      iter.next()
-
-      // send execute plan again, it will fail with INVALID_HANDLE.OPERATION_ALREADY_EXISTS error
-      val iter2 = stub.executePlan(
-        buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY), operationId = operationId))
-      val e = intercept[StatusRuntimeException] {
-        iter2.next()
-      }
-      assert(e.getMessage.contains("INVALID_HANDLE.OPERATION_ALREADY_EXISTS"))
-    }
-  }
-
   test("The second ExecutePlan with same operationId but a different plan will fail") {
     withRawBlockingStub { stub =>
       val operationId = UUID.randomUUID().toString
