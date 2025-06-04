@@ -115,7 +115,7 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
       // in the DFA cache has exceeded the threshold
       // configured by `spark.sql.parser.parserDfaCacheFlushThreshold`. These states generally
       // represent the bulk of the memory consumed by the parser, and the size of a single state
-      // is approximately 7KB.
+      // is approximately `BYTES_PER_DFA_STATE` bytes.
       //
       // Negative values mean we should never clear the cache
       AbstractParser.maybeClearParserCaches(parser, conf)
@@ -460,7 +460,7 @@ object DataTypeParser extends AbstractParser {
 object AbstractParser extends Logging {
   // Approximation based on experiments. Used to estimate the size of the DFA cache for the
   // `parserDfaCacheFlushRatio` threshold.
-  final val BYTES_PER_DFA_STATE = 7000
+  final val BYTES_PER_DFA_STATE = 9700
 
   private val DRIVER_MEMORY = Runtime.getRuntime.maxMemory()
 
@@ -489,15 +489,15 @@ object AbstractParser extends Logging {
 
   private val parserCaches = new AtomicReference[AntlrCaches](AntlrCaches(SqlBaseParser._ATN))
 
-  private var numDFACacheStates: Int = 0
-  def getDFACacheNumStates: Int = numDFACacheStates
+  private var numDFACacheStates: Long = 0
+  def getDFACacheNumStates: Long = numDFACacheStates
 
   /**
    * Returns the number of DFA states in the DFA cache.
    *
-   * DFA states empirically consume about 7KB of memory each.
+   * DFA states empirically consume about `BYTES_PER_DFA_STATE` bytes of memory each.
    */
-  private def computeDFACacheNumStates: Int = {
+  private def computeDFACacheNumStates: Long = {
     parserCaches.get().decisionToDFACache.map(_.states.size).sum
   }
 
@@ -539,19 +539,23 @@ object AbstractParser extends Logging {
       return
     }
 
-    val numDFACacheStatesCurrent = computeDFACacheNumStates
+    val numDFACacheStatesCurrent: Long = computeDFACacheNumStates
     val numDFACacheStatesDelta = numDFACacheStatesCurrent - numDFACacheStates
     numDFACacheStates = numDFACacheStatesCurrent
     logInfo(
       log"EXPERIMENTAL: Query cached " +
         log"${MDC(LogKeys.ANTLR_DFA_CACHE_DELTA, numDFACacheStatesDelta)} " +
         log"DFA states in the parser. Total cached DFA states: " +
-        log"${MDC(LogKeys.ANTLR_DFA_CACHE_SIZE, numDFACacheStatesCurrent)}.")
+        log"${MDC(LogKeys.ANTLR_DFA_CACHE_SIZE, numDFACacheStatesCurrent)}." +
+        log"Driver memory: ${MDC(LogKeys.DRIVER_JVM_MEMORY, DRIVER_MEMORY)}.")
 
     val staticThresholdExceeded = 0 <= conf.parserDfaCacheFlushThreshold &&
       conf.parserDfaCacheFlushThreshold <= numDFACacheStatesCurrent
 
-    val estCacheBytes = numDFACacheStatesCurrent * BYTES_PER_DFA_STATE
+    val estCacheBytes: Long = numDFACacheStatesCurrent * BYTES_PER_DFA_STATE
+    if (estCacheBytes < 0) {
+      logWarning(log"Estimated cache size is negative, likely due to an integer overflow.")
+    }
     val dynamicThresholdExceeded = 0 <= conf.parserDfaCacheFlushRatio &&
       conf.parserDfaCacheFlushRatio * DRIVER_MEMORY / 100 <= estCacheBytes
 
