@@ -177,8 +177,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       request: proto.ExecutePlanRequest,
       sessionHolder: SessionHolder,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): ExecuteHolder = {
-    val executeHolder = SparkConnectService.executionManager
-      .createExecuteHolder(executeKey, request, sessionHolder)
+    val executeHolder = createExecuteHolder(executeKey, request, sessionHolder)
     try {
       executeHolder.eventsManager.postStarted()
       executeHolder.start()
@@ -186,7 +185,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       // Errors raised before the execution holder has finished spawning a thread are considered
       // plan execution failure, and the client should not try reattaching it afterwards.
       case t: Throwable =>
-        SparkConnectService.executionManager.removeExecuteHolder(executeHolder.key)
+        removeExecuteHolder(executeHolder.key)
         throw t
     }
 
@@ -214,7 +213,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
         messageParameters = Map.empty)
     } else if (executeHolder.isOrphan()) {
       logWarning(log"Reattach to an orphan operation.")
-      SparkConnectService.executionManager.removeExecuteHolder(executeHolder.key)
+      removeExecuteHolder(executeHolder.key)
       throw new IllegalStateException("Operation was orphaned because of an internal error.")
     }
 
