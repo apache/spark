@@ -22,7 +22,7 @@ import java.util.TimeZone
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.plans.logical.Range
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.MULTI_COMMUTATIVE_OP_OPT_THRESHOLD
 import org.apache.spark.sql.types.{BooleanType, Decimal, DecimalType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZType, TimestampType}
@@ -350,6 +350,23 @@ class CanonicalizeSuite extends SparkFunSuite {
     val op = Add(literal1, Add(literal2, literal3))
     assert(op.canonicalized.toJSON.nonEmpty)
     SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, default.toString)
+  }
+
+  test("SPARK-45658: DynamicPruningSubquery canonicalization build keys not canonicalized" +
+    " relative to build query output") {
+    val pruneExprId = NamedExpression.newExprId
+    val pruneKey = AttributeReference("dummy", IntegerType)(pruneExprId)
+    val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
+
+    val buildQueryPlan1 = testRelation.where("a".attr > 10).select($"b".attr * Literal(5)).analyze
+    val buildKeys1 = Seq(buildQueryPlan1.output.head)
+    val dps1 = DynamicPruningSubquery(pruneKey, buildQueryPlan1, buildKeys1, Seq(0), true)
+
+    val buildQueryPlan2 = testRelation.where("a".attr > 10).select($"b".attr * Literal(5)).analyze
+    val buildKeys2 = Seq(buildQueryPlan2.output.head)
+    val dps2 = DynamicPruningSubquery(pruneKey, buildQueryPlan2, buildKeys2, Seq(0), true)
+
+    assert(dps1.canonicalized == dps2.canonicalized)
   }
 
   test("canonicalization of With expressions with one common expression") {
