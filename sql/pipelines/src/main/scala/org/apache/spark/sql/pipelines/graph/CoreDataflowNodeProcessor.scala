@@ -219,9 +219,9 @@ private class FlowResolver(rawGraph: DataflowGraph) extends Logging {
       case _: UnresolvedFlow => new CompleteFlow(flow, funcResult)
     }
     if (!funcResult.resolved) {
-      logError(s"Failed to resolve ${flow.displayName}: ${funcResult.failure.mkString("\n\n\n")}")
+      logError(log"Failed to resolve ${flow.displayName}: ${funcResult.failure.mkString("\n\n\n")}")
     } else {
-      logInfo(s"Successfully resolved ${flow.displayName}")
+      logInfo(log"Successfully resolved ${flow.displayName}")
     }
     typedFlow
   }
