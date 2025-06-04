@@ -56,6 +56,7 @@ trait CodegenSupport extends SparkPlan {
     case _: SortMergeJoinExec => "smj"
     case _: BroadcastNestedLoopJoinExec => "bnlj"
     case _: RDDScanExec => "rdd"
+    case _: OneRowRelationExec => "orr"
     case _: DataSourceScanExec => "scan"
     case _: InMemoryTableScanExec => "memoryScan"
     case _: WholeStageCodegenExec => "wholestagecodegen"

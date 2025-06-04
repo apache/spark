@@ -380,6 +380,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def schemaLevelCollationsNotEnabledError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.SCHEMA_LEVEL_COLLATIONS",
+      messageParameters = Map.empty
+    )
+  }
+
   def trimCollationNotEnabledError(): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.TRIM_COLLATION",
@@ -1269,7 +1276,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidBucketNumberError(bucketingMaxBuckets: Int, numBuckets: Int): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1083",
+      errorClass = "INVALID_BUCKET_COUNT",
       messageParameters = Map(
         "bucketingMaxBuckets" -> bucketingMaxBuckets.toString,
         "numBuckets" -> numBuckets.toString))

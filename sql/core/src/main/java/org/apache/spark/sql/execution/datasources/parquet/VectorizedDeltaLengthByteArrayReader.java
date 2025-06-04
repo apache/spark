@@ -56,7 +56,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     ByteBufferOutputWriter outputWriter = ByteBufferOutputWriter::writeArrayByteBuffer;
     int length;
     for (int i = 0; i < total; i++) {
-      length = lengthsVector.getInt(rowId + i);
+      length = lengthsVector.getInt(currentRow + i);
       try {
         buffer = in.slice(length);
       } catch (EOFException e) {

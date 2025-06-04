@@ -1356,7 +1356,7 @@ private[spark] object jsonProtocolSuite extends Assertions {
       case ((key1, values1: scala.collection.Seq[(String, String)]),
         (key2, values2: scala.collection.Seq[(String, String)])) =>
         assert(key1 === key2)
-        values1.zip(values2).foreach { case (v1, v2) => assert(v1 === v2) }
+        assert(values1.toMap == values2.toMap)
     }
   }
 

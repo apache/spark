@@ -949,6 +949,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  lazy val SCHEMA_LEVEL_COLLATIONS_ENABLED =
+    buildConf("spark.sql.collation.schemaLevel.enabled")
+      .internal()
+      .doc(
+        "Schema level collations feature is under development and its use should be done " +
+          "under this feature flag. The feature allows setting default collation for all " +
+          "underlying objects within that schema, except the ones that were previously created." +
+          "An object with an explicitly set collation will not inherit the collation from the " +
+          "schema."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   lazy val TRIM_COLLATION_ENABLED =
     buildConf("spark.sql.collation.trim.enabled")
       .internal()
@@ -1094,6 +1108,14 @@ object SQLConf {
       .version("3.2.0")
       .stringConf
       .createOptional
+
+  val MAP_ZIP_WITH_USES_JAVA_COLLECTIONS =
+    buildConf("spark.sql.mapZipWithUsesJavaCollections")
+      .doc("When true, the `map_zip_with` function uses Java collections instead of Scala " +
+        "collections. This is useful for avoiding NaN equality issues.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
@@ -2010,6 +2032,15 @@ object SQLConf {
       .doc("When true, fail the Dataset query if it contains ambiguous self-join.")
       .version("3.0.0")
       .internal()
+      .booleanConf
+      .createWithDefault(true)
+
+  val APPLY_SESSION_CONF_OVERRIDES_TO_FUNCTION_RESOLUTION =
+    buildConf("spark.sql.analyzer.sqlFunctionResolution.applyConfOverrides")
+      .internal()
+      .version("4.0.1")
+      .doc("When true, applies the conf overrides for certain feature flags during the " +
+        "resolution of user-defined sql table valued functions, consistent with view resolution.")
       .booleanConf
       .createWithDefault(true)
 
@@ -6177,6 +6208,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def objectLevelCollationsEnabled: Boolean = getConf(OBJECT_LEVEL_COLLATIONS_ENABLED)
 
+  def schemaLevelCollationsEnabled: Boolean = getConf(SCHEMA_LEVEL_COLLATIONS_ENABLED)
+
   def trimCollationEnabled: Boolean = getConf(TRIM_COLLATION_ENABLED)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
@@ -6366,6 +6399,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
    * Returns the error handler for handling hint errors.
    */
   def hintErrorHandler: HintErrorHandler = HintErrorLogger
+
+  def mapZipWithUsesJavaCollections: Boolean =
+    getConf(MAP_ZIP_WITH_USES_JAVA_COLLECTIONS)
 
   def subexpressionEliminationEnabled: Boolean =
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -510,7 +510,7 @@ abstract class UnionBase extends LogicalPlan {
 
   private lazy val lazyOutput: Seq[Attribute] = computeOutput()
 
-  private def computeOutput(): Seq[Attribute] = Union.mergeChildOutputs(children.map(_.output))
+  protected def computeOutput(): Seq[Attribute] = Union.mergeChildOutputs(children.map(_.output))
 
   /**
    * Maps the constraints containing a given (original) sequence of attributes to those with a
@@ -853,33 +853,11 @@ object View {
     // For temporary view, we always use captured sql configs
     if (activeConf.useCurrentSQLConfigsForView && !isTempView) return activeConf
 
-    // We retain below configs from current session because they are not captured by view
-    // as optimization configs but they are still needed during the view resolution.
-    // TODO: remove this `retainedHiveConfigs` after the `RelationConversions` is moved to
-    // optimization phase.
-    val retainedHiveConfigs = Seq(
-      "spark.sql.hive.convertMetastoreParquet",
-      "spark.sql.hive.convertMetastoreOrc",
-      "spark.sql.hive.convertInsertingPartitionedTable",
-      "spark.sql.hive.convertInsertingUnpartitionedTable",
-      "spark.sql.hive.convertMetastoreCtas"
-    )
-
-    val retainedLoggingConfigs = Seq(
-      "spark.sql.planChangeLog.level",
-      "spark.sql.expressionTreeChangeLog.level"
-    )
-
-    val retainedConfigs = activeConf.getAllConfs.filter { case (key, _) =>
-      retainedHiveConfigs.contains(key) || retainedLoggingConfigs.contains(key) || key.startsWith(
-        "spark.sql.catalog."
-      )
-    }
-
     val sqlConf = new SQLConf()
-    for ((k, v) <- configs ++ retainedConfigs) {
+    for ((k, v) <- configs) {
       sqlConf.settings.put(k, v)
     }
+    Analyzer.retainResolutionConfigsForAnalysis(newConf = sqlConf, existingConf = activeConf)
     sqlConf
   }
 }

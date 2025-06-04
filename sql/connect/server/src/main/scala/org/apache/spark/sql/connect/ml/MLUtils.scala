@@ -157,9 +157,22 @@ private[ml] object MLUtils {
           }
 
         case _ =>
-          reconcileParam(
-            p.paramValueClassTag.runtimeClass,
-            LiteralValueProtoConverter.toCatalystValue(literal))
+          val paramValue = LiteralValueProtoConverter.toCatalystValue(literal)
+          val paramType: Class[_] = if (p.dataClass == null) {
+            if (paramValue.isInstanceOf[String]) {
+              classOf[String]
+            } else if (paramValue.isInstanceOf[Boolean]) {
+              classOf[Boolean]
+            } else {
+              throw MlUnsupportedException(
+                "Spark Connect ML requires the customized ML Param class setting 'dataClass' " +
+                  "parameter if the param value type is not String or Boolean type, " +
+                  s"but the param $name does not have the required dataClass.")
+            }
+          } else {
+            p.dataClass
+          }
+          reconcileParam(paramType, paramValue)
       }
       instance.set(p, value)
     }

@@ -366,6 +366,74 @@ class StateResponseWithMapIterator(google.protobuf.message.Message):
 
 global___StateResponseWithMapIterator = StateResponseWithMapIterator
 
+class TimerInfo(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEY_FIELD_NUMBER: builtins.int
+    TIMESTAMPMS_FIELD_NUMBER: builtins.int
+    key: builtins.bytes
+    timestampMs: builtins.int
+    def __init__(
+        self,
+        *,
+        key: builtins.bytes | None = ...,
+        timestampMs: builtins.int = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["_key", b"_key", "key", b"key"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_key", b"_key", "key", b"key", "timestampMs", b"timestampMs"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_key", b"_key"]
+    ) -> typing_extensions.Literal["key"] | None: ...
+
+global___TimerInfo = TimerInfo
+
+class StateResponseWithTimer(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    STATUSCODE_FIELD_NUMBER: builtins.int
+    ERRORMESSAGE_FIELD_NUMBER: builtins.int
+    TIMER_FIELD_NUMBER: builtins.int
+    REQUIRENEXTFETCH_FIELD_NUMBER: builtins.int
+    statusCode: builtins.int
+    errorMessage: builtins.str
+    @property
+    def timer(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___TimerInfo
+    ]: ...
+    requireNextFetch: builtins.bool
+    def __init__(
+        self,
+        *,
+        statusCode: builtins.int = ...,
+        errorMessage: builtins.str = ...,
+        timer: collections.abc.Iterable[global___TimerInfo] | None = ...,
+        requireNextFetch: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "errorMessage",
+            b"errorMessage",
+            "requireNextFetch",
+            b"requireNextFetch",
+            "statusCode",
+            b"statusCode",
+            "timer",
+            b"timer",
+        ],
+    ) -> None: ...
+
+global___StateResponseWithTimer = StateResponseWithTimer
+
 class StatefulProcessorCall(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -634,15 +702,21 @@ global___TimerValueRequest = TimerValueRequest
 class ExpiryTimerRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    ITERATORID_FIELD_NUMBER: builtins.int
     EXPIRYTIMESTAMPMS_FIELD_NUMBER: builtins.int
+    iteratorId: builtins.str
     expiryTimestampMs: builtins.int
     def __init__(
         self,
         *,
+        iteratorId: builtins.str = ...,
         expiryTimestampMs: builtins.int = ...,
     ) -> None: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["expiryTimestampMs", b"expiryTimestampMs"]
+        self,
+        field_name: typing_extensions.Literal[
+            "expiryTimestampMs", b"expiryTimestampMs", "iteratorId", b"iteratorId"
+        ],
     ) -> None: ...
 
 global___ExpiryTimerRequest = ExpiryTimerRequest

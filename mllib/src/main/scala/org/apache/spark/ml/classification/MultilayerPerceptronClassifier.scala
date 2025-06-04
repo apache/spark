@@ -74,8 +74,8 @@ private[classification] trait MultilayerPerceptronParams extends ProbabilisticCl
    * @group expertParam
    */
   @Since("2.0.0")
-  final val initialWeights: Param[Vector] = new Param[Vector](this, "initialWeights",
-    "The initial weights of the model")
+  final val initialWeights: Param[Vector] = new Param[Vector](this.uid, "initialWeights",
+    "The initial weights of the model", classOf[Vector])
 
   /** @group expertGetParam */
   @Since("2.0.0")
