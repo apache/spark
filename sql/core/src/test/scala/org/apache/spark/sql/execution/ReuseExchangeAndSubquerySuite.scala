@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -110,6 +111,43 @@ class ReuseExchangeAndSubquerySuite extends SparkPlanTest with SharedSparkSessio
         assert(reusedExchangeIds.forall(exchangeIds.contains(_)),
           "ReusedExchangeExec should reuse an existing exchange")
       }
+    }
+  }
+
+  test("SPARK-49618: Reuse of exchange not happening with similar union plans") {
+    import testImplicits._
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df1 = Seq(
+        (7L, 45, 2.0f, 3.0d)
+      ).toDF("l", "i", "f", "d")
+
+      val df2 = Seq(
+        (9L, 433, 1.0f, 5.0d)
+      ).toDF("l", "i", "f", "d")
+
+      val df3 = Seq(
+        (55L, 4543, 635.0f)
+      ).toDF("x", "y", "z")
+
+      val df4 = Seq(
+        (837L, 433)
+      ).toDF("m", "p")
+
+      val u1 = df1.select($"l", $"i").unionAll(df2.select($"l" as "a", $"i" as "b"))
+      val u2 = df2.select($"l" as "a", $"i" as "b").unionAll(df1.select($"l", $"i"))
+      val join1 = u1.hint("shuffle_merge").join(df3, $"l" === $"x").select($"l", $"y", $"i").
+        groupBy($"y").agg(sum($"l"), sum($"i"))
+      val join2 = u2.hint("shuffle_merge").join(df4, $"a" === $"m").select($"a", $"p", $"b").
+        groupBy($"p").agg(sum($"a"), sum($"b"))
+      val result = join1.unionAll(join2)
+      val plan = result.queryExecution.executedPlan
+      val exchangeIds = plan.collectWithSubqueries { case e: Exchange => e.id }
+      val reusedExchangeIds = plan.collectWithSubqueries {
+        case re: ReusedExchangeExec => re.child.id
+      }
+      assert(reusedExchangeIds.forall(exchangeIds.contains(_)),
+        "ReusedExchangeExec should reuse an existing exchange")
+      assert(reusedExchangeIds.size == 1)
     }
   }
 }

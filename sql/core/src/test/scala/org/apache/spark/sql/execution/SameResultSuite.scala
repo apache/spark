@@ -136,4 +136,103 @@ class SameResultSuite extends QueryTest with SharedSparkSession {
 
     assert(planUppercase.sameResult(planLowercase))
   }
+
+  test("SPARK-49618: union node equality when order of children is shuffled") {
+    val df1 = Seq(
+      ("Hello", 4, 2.0f, 3.0d)
+    ).toDF("s", "i", "f", "d").select($"s", $"i")
+
+    val df2 = Seq(
+      ("Hello", 4, 2.0f, 3.0d)
+    ).toDF("s", "i", "f", "d").select($"s", $"i")
+
+    val df3 = Seq(
+      ("Hello", 4, 2.0f)
+    ).toDF("s", "i", "f").select($"s", $"i")
+
+    val df4 = Seq(
+      ("Hello", 4)
+    ).toDF("s", "i")
+
+    val u1 = df1.unionAll(df2).unionAll(df3).unionAll(df4)
+    val u2 = df3.unionAll(df2).unionAll(df1).unionAll(df4)
+    val u3 = df4.unionAll(df3).unionAll(df2).unionAll(df1)
+    val u4 = df2.unionAll(df4).unionAll(df3).unionAll(df1)
+    val u5 = df3.unionAll(df2).unionAll(df4).unionAll(df1)
+    val u6 = df4.unionAll(df1).unionAll(df2).unionAll(df3)
+
+    assert(
+      getUnion(u1.queryExecution.sparkPlan) == getUnion(u2.queryExecution.sparkPlan) &&
+      getUnion(u2.queryExecution.sparkPlan) == getUnion(u3.queryExecution.sparkPlan) &&
+      getUnion(u3.queryExecution.sparkPlan) == getUnion(u4.queryExecution.sparkPlan) &&
+      getUnion(u4.queryExecution.sparkPlan) == getUnion(u5.queryExecution.sparkPlan) &&
+      getUnion(u5.queryExecution.sparkPlan) == getUnion(u6.queryExecution.sparkPlan))
+
+    assert(
+      u1.queryExecution.sparkPlan.canonicalized == u2.queryExecution.sparkPlan.canonicalized &&
+      u2.queryExecution.sparkPlan.canonicalized == u3.queryExecution.sparkPlan.canonicalized &&
+      u3.queryExecution.sparkPlan.canonicalized == u4.queryExecution.sparkPlan.canonicalized &&
+      u4.queryExecution.sparkPlan.canonicalized == u5.queryExecution.sparkPlan.canonicalized &&
+      u5.queryExecution.sparkPlan.canonicalized == u6.queryExecution.sparkPlan.canonicalized)
+  }
+
+  test("SPARK-49618: union node inequality when order of children is shuffled with changed" +
+    " attribute names") {
+    val df1 = Seq(
+      ("Hello", 4, 2.0f, 3.0d)
+    ).toDF("s", "i", "f", "d").select($"s", $"i")
+
+    val df2 = Seq(
+      ("Hello", 4, 2.0f, 3.0d)
+    ).toDF("s", "i", "f", "d").select($"s" as "a", $"i" as "b")
+
+    val df3 = Seq(
+      ("Hello", 4, 2.0f)
+    ).toDF("s", "i", "f").select($"s", $"i")
+
+    // These unions are not equal because the head output attributes name are differing
+    val u1 = df1.unionAll(df2).unionAll(df3)
+    val u2 = df2.unionAll(df3).unionAll(df1)
+
+    assert(getUnion(u1.queryExecution.sparkPlan) != getUnion(u2.queryExecution.sparkPlan))
+
+    // but canonicalized form should be same
+    assert(u1.queryExecution.sparkPlan.canonicalized == u2.queryExecution.sparkPlan.canonicalized)
+  }
+
+  test("SPARK-49618: union node canonicalization with similar plans") {
+    val df1 = Seq(
+      (7L, 4, 2.0f, 3.0d)
+    ).toDF("l", "i", "f", "d")
+
+    val df2 = Seq(
+      (7L, 4, 2.0f, 3.0d)
+    ).toDF("l", "i", "f", "d")
+
+    val df3 = Seq(
+      (7L, 4, 2.0f)
+    ).toDF("l", "i", "f")
+
+    val df4 = Seq(
+      (7L, 4)
+    ).toDF("l", "i")
+
+    val u1 = df1.select($"l" + 3 as "l", $"i" + 5 as "i").unionAll(
+      df2.select($"l" * 3 as "l", $"i" * 7 as "i")).unionAll(
+      df3.select($"l" - 5 as "l", $"i" - 11 as "i")).unionAll(df4)
+
+    val u2 = df3.select($"l" - 5 as "l", $"i" - 11 as "i").unionAll(df4).unionAll(
+      df2.select($"l" * 3 as "l", $"i" * 7 as "i")).unionAll(
+      df1.select($"l" + 3 as "l", $"i" + 5 as "i"))
+
+    // The two unions will not be equal because the attribute ids differ
+    assert(getUnion(u1.queryExecution.sparkPlan) != getUnion(u2.queryExecution.sparkPlan))
+
+    // but canonicalized form should be same even though respective ordering is different
+    assert(u1.queryExecution.sparkPlan.canonicalized == u2.queryExecution.sparkPlan.canonicalized)
+  }
+
+  private def getUnion(sp: SparkPlan): UnionExec = sp.collectFirst {
+    case u: UnionExec => u
+  }.get
 }
