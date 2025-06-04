@@ -31,10 +31,10 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * errors.
  */
 class ConnectValidPipelineSuite extends PipelineTest {
-
-  import originalSpark.implicits._
-
   test("Extra simple") {
+    val session = spark
+    import session.implicits._
+
     class P extends TestGraphRegistrationContext(spark) {
       registerView("b", query = dfFlowFunc(Seq(1, 2, 3).toDF("y")))
     }
@@ -44,6 +44,9 @@ class ConnectValidPipelineSuite extends PipelineTest {
   }
 
   test("Simple") {
+    val session = spark
+    import session.implicits._
+
     class P extends TestGraphRegistrationContext(spark) {
       registerView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")))
       registerView("b", query = sqlFlowFunc(spark, "SELECT x as y FROM a"))
@@ -65,6 +68,9 @@ class ConnectValidPipelineSuite extends PipelineTest {
   }
 
   test("Dependencies") {
+    val session = spark
+    import session.implicits._
+
     class P extends TestGraphRegistrationContext(spark) {
       registerView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")))
       registerView("c", query = sqlFlowFunc(spark, "SELECT y as z FROM b"))
@@ -78,6 +84,9 @@ class ConnectValidPipelineSuite extends PipelineTest {
   }
 
   test("Multi-hop schema merging") {
+    val session = spark
+    import session.implicits._
+
     class P extends TestGraphRegistrationContext(spark) {
       registerView(
         "b",
@@ -93,6 +102,9 @@ class ConnectValidPipelineSuite extends PipelineTest {
   }
 
   test("Cross product join merges schema") {
+    val session = spark
+    import session.implicits._
+
     class P extends TestGraphRegistrationContext(spark) {
       registerView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")))
       registerView("b", query = dfFlowFunc(Seq(4, 5, 6).toDF("y")))
@@ -111,6 +123,9 @@ class ConnectValidPipelineSuite extends PipelineTest {
   }
 
   test("Real join merges schema") {
+    val session = spark
+    import session.implicits._
+
     class P extends TestGraphRegistrationContext(spark) {
       registerView("a", query = dfFlowFunc(Seq((1, "a"), (2, "b"), (3, "c")).toDF("x", "y")))
       registerView("b", query = dfFlowFunc(Seq((2, "m"), (3, "n"), (4, "o")).toDF("x", "z")))
@@ -132,6 +147,9 @@ class ConnectValidPipelineSuite extends PipelineTest {
   }
 
   test("Union of streaming and batch Dataframes") {
+    val session = spark
+    import session.implicits._
+
     class P extends TestGraphRegistrationContext(spark) {
       val ints = MemoryStream[Int]
       ints.addData(1, 2, 3, 4)
@@ -170,6 +188,9 @@ class ConnectValidPipelineSuite extends PipelineTest {
   }
 
   test("Union of two streaming Dataframes") {
+    val session = spark
+    import session.implicits._
+
     class P extends TestGraphRegistrationContext(spark) {
       val ints1 = MemoryStream[Int]
       ints1.addData(1, 2, 3, 4)
@@ -214,6 +235,9 @@ class ConnectValidPipelineSuite extends PipelineTest {
   }
 
   test("MultipleInputs") {
+    val session = spark
+    import session.implicits._
+
     class P extends TestGraphRegistrationContext(spark) {
       registerView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")))
       registerView("b", query = dfFlowFunc(Seq(4, 5, 6).toDF("y")))
@@ -228,6 +252,9 @@ class ConnectValidPipelineSuite extends PipelineTest {
   }
 
   test("Connect retains and fuses confs") {
+    val session = spark
+    import session.implicits._
+
     // a -> b \
     //          d
     //      c /
@@ -250,6 +277,9 @@ class ConnectValidPipelineSuite extends PipelineTest {
   }
 
   test("Confs aren't fused past materialization points") {
+    val session = spark
+    import session.implicits._
+
     val p = new TestGraphRegistrationContext(spark) {
       registerView("a", query = dfFlowFunc(Seq(1).toDF("x")), Map("a" -> "a-val"))
       registerTable("b", query = Option(readFlowFunc("a")), Map("b" -> "b-val"))
@@ -276,6 +306,9 @@ class ConnectValidPipelineSuite extends PipelineTest {
   }
 
   test("Setting the same conf with the same value is totally cool") {
+    val session = spark
+    import session.implicits._
+
     val p = new TestGraphRegistrationContext(spark) {
       registerView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")), Map("key" -> "val"))
       registerView("b", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")), Map("key" -> "val"))
@@ -290,6 +323,9 @@ class ConnectValidPipelineSuite extends PipelineTest {
   }
 
   test("Named query only") {
+    val session = spark
+    import session.implicits._
+
     class P extends TestGraphRegistrationContext(spark) {
       registerView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")))
       registerTable("b")
@@ -308,6 +344,9 @@ class ConnectValidPipelineSuite extends PipelineTest {
   }
 
   test("Default query and named query") {
+    val session = spark
+    import session.implicits._
+
     class P extends TestGraphRegistrationContext(spark) {
       val mem = MemoryStream[Int]
       registerView("a", query = dfFlowFunc(mem.toDF()))
@@ -348,6 +387,9 @@ class ConnectValidPipelineSuite extends PipelineTest {
   }
 
   test("Correct types of flows after connection") {
+    val session = spark
+    import session.implicits._
+
     val graph = new TestGraphRegistrationContext(spark) {
       val mem = MemoryStream[Int]
       mem.addData(1, 2)
@@ -402,6 +444,9 @@ class ConnectValidPipelineSuite extends PipelineTest {
   }
 
   test("Pipeline level default spark confs are applied with correct precedence") {
+    val session = spark
+    import session.implicits._
+
     val P = new TestGraphRegistrationContext(
       spark,
       Map("default.conf" -> "value")
