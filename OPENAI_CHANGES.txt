@@ -62,3 +62,4 @@
 - [INTERNAL] Add a new RPC message UpdateAccessTokens
 - [INTERNAL] Fix access token propagation when executors start up
 - [INTERNAL] Add retry to Kakfa Consumer creation for specific transient error
+- [INTERNAL] Track container CPU and memory metrics through cgroups (#10)
