@@ -46,41 +46,41 @@ class GraphElementRegistryTest(unittest.TestCase):
             def flow2():
                 raise NotImplementedError()
 
-        self.assertEquals(len(registry.datasets), 3)
-        self.assertEquals(len(registry.flows), 4)
+        self.assertEqual(len(registry.datasets), 3)
+        self.assertEqual(len(registry.flows), 4)
 
         mv_obj = registry.datasets[0]
-        self.assertEquals(mv_obj.name, "mv")
+        self.assertEqual(mv_obj.name, "mv")
         assert mv_obj.source_code_location.filename.endswith("test_graph_element_registry.py")
 
         mv_flow_obj = registry.flows[0]
-        self.assertEquals(mv_flow_obj.name, "mv")
-        self.assertEquals(mv_flow_obj.target, "mv")
+        self.assertEqual(mv_flow_obj.name, "mv")
+        self.assertEqual(mv_flow_obj.target, "mv")
         assert mv_flow_obj.source_code_location.filename.endswith("test_graph_element_registry.py")
 
         st_obj = registry.datasets[1]
-        self.assertEquals(st_obj.name, "st")
+        self.assertEqual(st_obj.name, "st")
         assert st_obj.source_code_location.filename.endswith("test_graph_element_registry.py")
 
         st_flow_obj = registry.flows[1]
-        self.assertEquals(st_flow_obj.name, "st")
-        self.assertEquals(st_flow_obj.target, "st")
+        self.assertEqual(st_flow_obj.name, "st")
+        self.assertEqual(st_flow_obj.target, "st")
         assert mv_flow_obj.source_code_location.filename.endswith("test_graph_element_registry.py")
 
         st2_obj = registry.datasets[2]
-        self.assertEquals(st2_obj.name, "st2")
+        self.assertEqual(st2_obj.name, "st2")
         assert st2_obj.source_code_location.filename.endswith("test_graph_element_registry.py")
 
         st2_flow1_obj = registry.flows[2]
-        self.assertEquals(st2_flow1_obj.name, "flow1")
-        self.assertEquals(st2_flow1_obj.target, "st2")
-        self.assertEquals(st2_flow1_obj.once, True)
+        self.assertEqual(st2_flow1_obj.name, "flow1")
+        self.assertEqual(st2_flow1_obj.target, "st2")
+        self.assertEqual(st2_flow1_obj.once, True)
         assert mv_flow_obj.source_code_location.filename.endswith("test_graph_element_registry.py")
 
         st2_flow1_obj = registry.flows[3]
-        self.assertEquals(st2_flow1_obj.name, "flow2")
-        self.assertEquals(st2_flow1_obj.target, "st2")
-        self.assertEquals(st2_flow1_obj.once, False)
+        self.assertEqual(st2_flow1_obj.name, "flow2")
+        self.assertEqual(st2_flow1_obj.target, "st2")
+        self.assertEqual(st2_flow1_obj.once, False)
         assert mv_flow_obj.source_code_location.filename.endswith("test_graph_element_registry.py")
 
     def test_definition_without_graph_element_registry(self):
@@ -91,7 +91,7 @@ class GraphElementRegistryTest(unittest.TestCase):
                 def a():
                     raise NotImplementedError()
 
-            self.assertEquals(
+            self.assertEqual(
                 context.exception.getCondition(),
                 "GRAPH_ELEMENT_DEFINED_OUTSIDE_OF_DECLARATIVE_PIPELINE",
             )
@@ -99,7 +99,7 @@ class GraphElementRegistryTest(unittest.TestCase):
         with self.assertRaises(PySparkException) as context:
             sdp.create_streaming_table("st")
 
-        self.assertEquals(
+        self.assertEqual(
             context.exception.getCondition(),
             "GRAPH_ELEMENT_DEFINED_OUTSIDE_OF_DECLARATIVE_PIPELINE",
         )
@@ -110,7 +110,7 @@ class GraphElementRegistryTest(unittest.TestCase):
             def b():
                 raise NotImplementedError()
 
-        self.assertEquals(
+        self.assertEqual(
             context.exception.getCondition(),
             "GRAPH_ELEMENT_DEFINED_OUTSIDE_OF_DECLARATIVE_PIPELINE",
         )
