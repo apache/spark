@@ -1070,6 +1070,13 @@ def xor(df1: PySparkDataFrame, df2: PySparkDataFrame) -> PySparkDataFrame:
     )
 
 
+def is_ansi_mode_enabled(spark: SparkSession) -> bool:
+    return (
+        ps.get_option("compute.ansi_mode_support", spark_session=spark)
+        and spark.conf.get("spark.sql.ansi.enabled") == "true"
+    )
+
+
 def _test() -> None:
     import os
     import doctest

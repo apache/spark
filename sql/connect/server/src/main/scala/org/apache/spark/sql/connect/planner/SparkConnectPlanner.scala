@@ -1516,20 +1516,20 @@ class SparkConnectPlanner(
 
       case proto.Read.ReadTypeCase.DATA_SOURCE if !rel.getIsStreaming =>
         val reader = session.read
+        val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
         if (rel.getDataSource.getFormat == "jdbc" && rel.getDataSource.getPredicatesCount > 0) {
-          if (!rel.getDataSource.getOptionsMap.containsKey(JDBCOptions.JDBC_URL) ||
-            !rel.getDataSource.getOptionsMap.containsKey(JDBCOptions.JDBC_TABLE_NAME)) {
+          if (!localMap.contains(JDBCOptions.JDBC_URL) ||
+            !localMap.contains(JDBCOptions.JDBC_TABLE_NAME)) {
             throw InvalidInputErrors.invalidJdbcParams()
           }
 
-          val url = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_URL)
-          val table = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_TABLE_NAME)
+          val url = localMap.get(JDBCOptions.JDBC_URL).get
+          val table = localMap.get(JDBCOptions.JDBC_TABLE_NAME).get
           val predicates = rel.getDataSource.getPredicatesList.asScala.toArray
           val properties = new Properties()
           properties.putAll(rel.getDataSource.getOptionsMap)
           reader.jdbc(url, table, predicates, properties).queryExecution.analyzed
         } else if (rel.getDataSource.getPredicatesCount == 0) {
-          val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
           if (rel.getDataSource.hasFormat) {
             reader.format(rel.getDataSource.getFormat)
           }
@@ -3077,9 +3077,6 @@ class SparkConnectPlanner(
     if (writeOperation.hasBucketBy) {
       val op = writeOperation.getBucketBy
       val cols = op.getBucketColumnNamesList.asScala
-      if (op.getNumBuckets <= 0) {
-        throw InvalidInputErrors.invalidBucketCount(op.getNumBuckets)
-      }
       w.bucketBy(op.getNumBuckets, cols.head, cols.tail.toSeq: _*)
     }
 

@@ -511,7 +511,7 @@ jobs:
           - >-
             pyspark-core, pyspark-errors, pyspark-streaming, pyspark-logger
           - >-
-            pyspark-mllib, pyspark-ml, pyspark-ml-connect
+            pyspark-mllib, pyspark-ml, pyspark-ml-connect, pyspark-pipelines
           - >-
             pyspark-connect
           - >-
@@ -787,8 +787,6 @@ jobs:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
       NOLINT_ON_COMPILE: false
-      PYSPARK_DRIVER_PYTHON: python3.9
-      PYSPARK_PYTHON: python3.9
       GITHUB_PREV_SHA: ${{ github.event.before }}
     container:
       image: ${{ needs.precondition.outputs.image_lint_url_link }}
@@ -849,10 +847,17 @@ jobs:
       run: ./dev/mima
     - name: Scala linter
       run: ./dev/lint-scala
-    - name: Scala structured logging check
+    - name: Scala structured logging check for branch-3.5 and branch-4.0
+      if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0'
       run: |
         if [ -f ./dev/structured_logging_style.py ]; then
             python3.9 ./dev/structured_logging_style.py
+        fi
+    - name: Scala structured logging check
+      if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0'
+      run: |
+        if [ -f ./dev/structured_logging_style.py ]; then
+            python3.11 ./dev/structured_logging_style.py
         fi
     - name: Java linter
       run: ./dev/lint-java
@@ -865,10 +870,18 @@ jobs:
         # Should delete this section after SPARK 3.5 EOL.
         python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.982' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==22.6.0'
         python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.56.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
-    - name: List Python packages
+    - name: List Python packages for branch-3.5 and branch-4.0
+      if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0'
       run: python3.9 -m pip list
-    - name: Python linter
+    - name: List Python packages
+      if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0'
+      run: python3.11 -m pip list
+    - name: Python linter for branch-3.5 and branch-4.0
+      if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0'
       run: PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
+    - name: Python linter
+      if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0'
+      run: PYTHON_EXECUTABLE=python3.11 ./dev/lint-python
     # Should delete this section after SPARK 3.5 EOL.
     - name: Install dependencies for Python code generation check for branch-3.5
       if: inputs.branch == 'branch-3.5'
