@@ -56,7 +56,7 @@ object PostV2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper
     case r @ DataSourceV2ScanRelation(relation, _, _, _, _)
         if relation.getTagValue(V2_SCAN_BUILDER_HOLDER).nonEmpty =>
       val sHolder = relation.getTagValue(V2_SCAN_BUILDER_HOLDER).get
-      sHolder.originRelation = Some(r)
+      sHolder.cachedScanRelation = Some(r)
       sHolder
   }
 }
@@ -398,14 +398,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
       val wrappedScan = getWrappedScan(scan, sHolder)
 
-      val scanRelation: DataSourceV2ScanRelation = if (sHolder.originRelation.isEmpty) {
+      val scanRelation: DataSourceV2ScanRelation = if (sHolder.cachedScanRelation.isEmpty) {
         val relation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
         // reuse sHolder to support column pruning after optimization
         sHolder.output = output
         sHolder.relation.setTagValue(V2_SCAN_BUILDER_HOLDER, sHolder)
         relation
       } else {
-        sHolder.originRelation.get.copy(scan = wrappedScan, output = output)
+        sHolder.cachedScanRelation.get.copy(scan = wrappedScan, output = output)
       }
 
       val projectionOverSchema =
@@ -592,7 +592,7 @@ case class ScanBuilderHolder(
     var output: Seq[AttributeReference],
     relation: DataSourceV2Relation,
     builder: ScanBuilder,
-    var originRelation: Option[DataSourceV2ScanRelation] = None) extends LeafNode {
+    var cachedScanRelation: Option[DataSourceV2ScanRelation] = None) extends LeafNode {
   var pushedLimit: Option[Int] = None
 
   var pushedOffset: Option[Int] = None
