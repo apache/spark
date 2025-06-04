@@ -282,7 +282,8 @@ package object config {
 
   private[spark] val EXECUTOR_CONTAINER_METRICS_ENABLED =
     ConfigBuilder("spark.executor.containerMetrics.enabled")
-      .doc("Whether to collect cgroup based Kubernetes container metrics for Spark executors")
+      .doc("Whether to collect cgroup based Kubernetes container metrics for Spark executors. " +
+        "Note that this should only be enabled when running in Kubernetes.")
       .version("3.5.0")
       .booleanConf
       .createWithDefault(false)

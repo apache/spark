@@ -194,7 +194,7 @@ case object ContainerCgroupMetrics extends ExecutorMetricType with Logging {
     usage - inactive
   }
 
-  @volatile private var lastUsageNs = readCpuUsageNs()
+  @volatile private var lastUsageNs = if (isAvailable) readCpuUsageNs() else 0
   @volatile private var lastTsNs = System.nanoTime()
 
   override private[spark] def getMetricValues(mm: MemoryManager): Array[Long] = {
