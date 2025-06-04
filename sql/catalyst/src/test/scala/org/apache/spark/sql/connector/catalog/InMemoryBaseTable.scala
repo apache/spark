@@ -497,7 +497,7 @@ abstract class InMemoryBaseTable(
       tableSchema: StructType,
       options: CaseInsensitiveStringMap)
     extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
-
+    private var allFilters: Set[Filter] = Set.empty
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet
       partitioning.flatMap(_.references)
@@ -505,6 +505,7 @@ abstract class InMemoryBaseTable(
     }
 
     override def filter(filters: Array[Filter]): Unit = {
+      allFilters = allFilters ++ filters.toSet
       if (partitioning.length == 1 && partitioning.head.references().length == 1) {
         val ref = partitioning.head.references().head
         filters.foreach {
@@ -525,6 +526,16 @@ abstract class InMemoryBaseTable(
         }
       }
     }
+
+    override def equals(other: Any): Boolean = other match {
+     case imbs: InMemoryBatchScan => this.readSchema == imbs.readSchema &&
+          this.tableSchema == imbs.tableSchema && this.allFilters == imbs.allFilters
+
+     case _ => false
+    }
+
+    override def hashCode: Int = Objects.hashCode(this.readSchema, this.tableSchema,
+      this.allFilters)
   }
 
   abstract class InMemoryWriterBuilder(val info: LogicalWriteInfo)
