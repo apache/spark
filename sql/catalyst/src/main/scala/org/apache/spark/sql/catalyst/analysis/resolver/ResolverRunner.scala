@@ -61,16 +61,11 @@ class ResolverRunner(
       plan: LogicalPlan,
       analyzerBridgeState: Option[AnalyzerBridgeState] = None,
       tracker: QueryPlanningTracker = new QueryPlanningTracker): LogicalPlan = {
-    recordMetrics(tracker) {
+    recordTopLevelMetrics(tracker) {
       AnalysisContext.withNewAnalysisContext {
         val resolvedPlan = resolver.lookupMetadataAndResolve(plan, analyzerBridgeState)
 
         val rewrittenPlan = planRewriter.rewriteWithSubqueries(resolvedPlan)
-
-        if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED)) {
-          val validator = new ResolutionValidator
-          validator.validatePlan(rewrittenPlan)
-        }
 
         runValidator(rewrittenPlan)
 

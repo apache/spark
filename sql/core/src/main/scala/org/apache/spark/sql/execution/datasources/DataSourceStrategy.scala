@@ -324,7 +324,14 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         Seq.empty, append.query, false, append.isByName)
 
     case unresolvedCatalogRelation: UnresolvedCatalogRelation =>
-      resolveUnresolvedCatalogRelation(unresolvedCatalogRelation)
+      val result = resolveUnresolvedCatalogRelation(unresolvedCatalogRelation)
+      // We put the resolved relation into the [[AnalyzerBridgeState]] for
+      // it to be later reused by the single-pass [[Resolver]] to avoid resolving the
+      // relation metadata twice.
+      AnalysisContext.get.getSinglePassResolverBridgeState.map { bridgeState =>
+        bridgeState.catalogRelationsWithResolvedMetadata.put(unresolvedCatalogRelation, result)
+      }
+      result
 
     case s @ StreamingRelationV2(
         _, _, table, extraOptions, _, _, _, Some(UnresolvedCatalogRelation(tableMeta, _, true))) =>
