@@ -76,7 +76,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
     case _ => expr.mapChildren(replace)
   }
 
-  private def prepareEvaluation(expression: Expression): Expression = {
+  private[expressions] def prepareEvaluation(expression: Expression): Expression = {
     val serializer = new JavaSerializer(new SparkConf()).newInstance()
     val resolver = ResolveTimeZone
     val expr = replace(resolver.resolveTimeZones(expression))
