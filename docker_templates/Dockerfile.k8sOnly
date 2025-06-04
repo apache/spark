@@ -1,0 +1,65 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+FROM eclipse-temurin:17-jammy
+
+ARG spark_uid=185
+ARG SPARK_TGZ_FILENAME
+
+RUN groupadd --system --gid=${spark_uid} spark && \
+    useradd --system --uid=${spark_uid} --gid=spark spark
+
+RUN set -ex; \
+    apt-get update; \
+    apt-get install -y bash gnupg2 gosu krb5-user libc6 libnss-wrapper libnss3 libpam-modules net-tools procps tini; \
+    mkdir -p /opt/spark; \
+    mkdir /opt/spark/python; \
+    mkdir -p /opt/spark/examples; \
+    mkdir -p /opt/spark/work-dir; \
+    chmod g+w /opt/spark/work-dir; \
+    touch /opt/spark/RELEASE; \
+    chown -R spark:spark /opt/spark; \
+    echo "auth required pam_wheel.so use_uid" >> /etc/pam.d/su; \
+    rm -rf /var/lib/apt/lists/*
+
+COPY ${SPARK_TGZ_FILENAME} /tmp/spark.tgz
+
+RUN set -ex; \
+    export SPARK_TMP="$(mktemp -d)"; \
+    cd "$SPARK_TMP"; \
+    tar -xf /tmp/spark.tgz --strip-components=1; \
+    chown -R spark:spark .; \
+    mv jars /opt/spark/; \
+    mv RELEASE /opt/spark/; \
+    mv bin /opt/spark/; \
+    mv sbin /opt/spark/; \
+    mv examples /opt/spark/; \
+    ln -s "$(basename /opt/spark/examples/jars/spark-examples_*.jar)" /opt/spark/examples/jars/spark-examples.jar; \
+    mv python/pyspark /opt/spark/python/pyspark/; \
+    mv python/lib /opt/spark/python/lib/; \
+    cd ..; \
+    rm -rf "$SPARK_TMP";
+
+COPY entrypoint.sh /opt/
+RUN chmod +x /opt/entrypoint.sh
+
+ENV SPARK_HOME=/opt/spark
+
+WORKDIR /opt/spark/work-dir
+
+USER spark
+
+ENTRYPOINT [ "/opt/entrypoint.sh" ]
