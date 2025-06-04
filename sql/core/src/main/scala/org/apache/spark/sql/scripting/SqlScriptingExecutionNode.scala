@@ -997,7 +997,7 @@ class ForStatementExec(
   private var state = ForState.VariableAssignment
 
   private var queryResult: util.Iterator[Row] = _
-  private var queryColumnNameToDataType: collection.immutable.Map[String, DataType] = _
+  private var queryColumnNameToDataType: Map[String, DataType] = _
   private var isResultCacheValid = false
   private def cachedQueryResult(): util.Iterator[Row] = {
     if (!isResultCacheValid) {
