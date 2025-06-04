@@ -96,10 +96,12 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       mirrors.distinct :+ "https://archive.apache.org/dist" :+ PROCESS_TABLES.releaseMirror
     logInfo(s"Trying to download Spark $version from $sites")
     for (site <- sites) {
-      val filename = version match {
-        case v if v.startsWith("3") => s"spark-$version-bin-hadoop3-scala2.13.tgz"
-        case _ => s"spark-$version-bin-hadoop3.tgz"
+      val scala_version = version match {
+        case v if v.startsWith("3.") => "-scala2.13"
+        case v if v.startsWith("4.") => ""
+        case _ => fail(s"Spark version $version is unexpected")
       }
+      val filename = s"spark-$version-bin-hadoop3$scala_version.tgz"
       val url = s"$site/spark/spark-$version/$filename"
       logInfo(s"Downloading Spark $version from $url")
       try {
