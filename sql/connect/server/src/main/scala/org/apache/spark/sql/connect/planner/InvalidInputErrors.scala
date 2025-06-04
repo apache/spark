@@ -19,21 +19,12 @@ package org.apache.spark.sql.connect.planner
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.connect.common.{InvalidCommandInput, InvalidPlanInput}
+import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.errors.DataTypeErrors.{quoteByDefault, toSQLType}
 import org.apache.spark.sql.types.DataType
 
 object InvalidInputErrors {
-
-  // invalidPlanInput is a helper function to facilitate the migration of InvalidInputErrors
-  // to support NERF.
-  private def invalidPlanInput(
-      errorCondition: String,
-      messageParameters: Map[String, String] = Map.empty): InvalidPlanInput = {
-    InvalidPlanInput(SparkThrowableHelper.getMessage(errorCondition, messageParameters))
-  }
 
   def unknownRelationNotSupported(rel: proto.Relation): InvalidPlanInput =
     InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -97,7 +88,7 @@ object InvalidInputErrors {
     InvalidPlanInput("Schema for LocalRelation is required when the input data is not provided.")
 
   def invalidSchemaStringNonStructType(schema: String, dataType: DataType): InvalidPlanInput =
-    invalidPlanInput(
+    InvalidPlanInput(
       "INVALID_SCHEMA.NON_STRUCT_TYPE",
       Map("inputSchema" -> quoteByDefault(schema), "dataType" -> toSQLType(dataType)))
 
@@ -114,7 +105,7 @@ object InvalidInputErrors {
     InvalidPlanInput(s"Does not support $what")
 
   def invalidSchemaTypeNonStruct(dataType: DataType): InvalidPlanInput =
-    invalidPlanInput("INVALID_SCHEMA_TYPE_NON_STRUCT", Map("dataType" -> toSQLType(dataType)))
+    InvalidPlanInput("INVALID_SCHEMA_TYPE_NON_STRUCT", Map("dataType" -> toSQLType(dataType)))
 
   def expressionIdNotSupported(exprId: Int): InvalidPlanInput =
     InvalidPlanInput(s"Expression with ID: $exprId is not supported")
@@ -213,9 +204,6 @@ object InvalidInputErrors {
 
   def unionByNameAllowMissingColRequiresByName(): InvalidPlanInput =
     InvalidPlanInput("UnionByName `allowMissingCol` can be true only if `byName` is true.")
-
-  def invalidBucketCount(numBuckets: Int): InvalidCommandInput =
-    InvalidCommandInput("INVALID_BUCKET_COUNT", Map("numBuckets" -> numBuckets.toString))
 
   def unsupportedUserDefinedFunctionImplementation(clazz: Class[_]): InvalidPlanInput =
     InvalidPlanInput(s"Unsupported UserDefinedFunction implementation: ${clazz}")

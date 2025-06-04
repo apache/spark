@@ -31,15 +31,15 @@ trait GraphValidations extends Logging {
 
   /**
    * Validate multi query table correctness.
-   *
-   * @return the multi-query tables by destination
    */
-  protected[graph] def validateMultiQueryTables(): Map[TableIdentifier, Seq[Flow]] = {
+  protected[pipelines] def validateMultiQueryTables(): Map[TableIdentifier, Seq[Flow]] = {
     val multiQueryTables = flowsTo.filter(_._2.size > 1)
     // Non-streaming tables do not support multiflow.
     multiQueryTables
       .find {
-        case (dest, _) => table.get(dest).exists(!_.isStreamingTable)
+        case (dest, flows) =>
+          flows.exists(f => !resolvedFlow(f.identifier).df.isStreaming) &&
+          table.contains(dest)
       }
       .foreach {
         case (dest, flows) =>

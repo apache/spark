@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, InterpretedMutableProjection, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, ExpressionWithRandomSeed, InterpretedMutableProjection, Literal}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation.hasUnevaluableExpr
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, LocalRelation, LogicalPlan, OneRowRelation, Project, Union, UnionLoopRef}
@@ -183,11 +183,24 @@ case class UnionLoopExec(
     // Main loop for obtaining the result of the recursive query.
     while (prevCount > 0 && !limitReached) {
       var prevPlan: LogicalPlan = null
+
+      // If the recursive part contains non-deterministic expressions that depends on a seed, we
+      // need to create a new seed since the seed for this expression is set in the analysis, and
+      // we avoid re-triggering the analysis for every iterative step.
+      val recursionReseeded = if (currentLevel == 1 || recursion.deterministic) {
+        recursion
+      } else {
+        recursion.transformAllExpressionsWithSubqueries {
+          case e: ExpressionWithRandomSeed =>
+            e.withShiftedSeed(currentLevel - 1)
+        }
+      }
+
       // the current plan is created by substituting UnionLoopRef node with the project node of
       // the previous plan.
       // This way we support only UNION ALL case. Additional case should be added for UNION case.
       // One way of supporting UNION case can be seen at SPARK-24497 PR from Peter Toth.
-      val newRecursion = recursion.transformWithSubqueries {
+      val newRecursion = recursionReseeded.transformWithSubqueries {
         case r: UnionLoopRef if r.loopId == loopId =>
           prevDF.queryExecution.optimizedPlan match {
             case l: LocalRelation =>

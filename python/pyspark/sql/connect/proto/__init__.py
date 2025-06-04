@@ -25,3 +25,4 @@ from pyspark.sql.connect.proto.catalog_pb2 import *
 from pyspark.sql.connect.proto.common_pb2 import *
 from pyspark.sql.connect.proto.ml_pb2 import *
 from pyspark.sql.connect.proto.ml_common_pb2 import *
+from pyspark.sql.connect.proto.pipelines_pb2 import *
