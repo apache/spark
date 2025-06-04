@@ -1225,7 +1225,7 @@ object SQLConf {
       .doc(
         """When positive, release ANTLR caches after parsing a SQL query when the number of states
           |in the DFA cache exceeds the value of the config. DFA states empirically consume about
-          |7KB of memory each.
+          |`AbstractParser.BYTES_PER_DFA_STATE` bytes of memory each.
           |
           |ANTLR parsers retain a DFA cache designed to speed up parsing future input. However,
           |there is no limit to how large this cache can become. Parsing large SQL statements can
