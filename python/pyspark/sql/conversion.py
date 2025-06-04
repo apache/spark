@@ -95,7 +95,6 @@ class LocalDataToArrowConversion:
     def _create_converter(
         dataType: DataType,
         nullable: bool = True,
-        variants_as_dicts: bool = False,  # some code paths may require python internal types
     ) -> Callable:
         assert dataType is not None and isinstance(dataType, DataType)
         assert isinstance(nullable, bool)
@@ -118,7 +117,7 @@ class LocalDataToArrowConversion:
 
             field_convs = [
                 LocalDataToArrowConversion._create_converter(
-                    field.dataType, field.nullable, variants_as_dicts
+                    field.dataType, field.nullable
                 )
                 for field in dataType.fields
             ]
@@ -161,7 +160,7 @@ class LocalDataToArrowConversion:
 
         elif isinstance(dataType, ArrayType):
             element_conv = LocalDataToArrowConversion._create_converter(
-                dataType.elementType, dataType.containsNull, variants_as_dicts
+                dataType.elementType, dataType.containsNull
             )
 
             def convert_array(value: Any) -> Any:
@@ -178,7 +177,7 @@ class LocalDataToArrowConversion:
         elif isinstance(dataType, MapType):
             key_conv = LocalDataToArrowConversion._create_converter(dataType.keyType)
             value_conv = LocalDataToArrowConversion._create_converter(
-                dataType.valueType, dataType.valueContainsNull, variants_as_dicts
+                dataType.valueType, dataType.valueContainsNull
             )
 
             def convert_map(value: Any) -> Any:
@@ -288,14 +287,7 @@ class LocalDataToArrowConversion:
                     if not nullable:
                         raise PySparkValueError(f"input for {dataType} must not be None")
                     return None
-                elif (
-                    isinstance(value, dict)
-                    and all(key in value for key in ["value", "metadata"])
-                    and all(isinstance(value[key], bytes) for key in ["value", "metadata"])
-                    and not variants_as_dicts
-                ):
-                    return VariantVal(value["value"], value["metadata"])
-                elif isinstance(value, VariantVal) and variants_as_dicts:
+                elif isinstance(value, VariantVal):
                     return VariantType().toInternal(value)
                 else:
                     raise PySparkValueError(errorClass="MALFORMED_VARIANT")
@@ -326,7 +318,7 @@ class LocalDataToArrowConversion:
 
         column_convs = [
             LocalDataToArrowConversion._create_converter(
-                field.dataType, field.nullable, variants_as_dicts=True
+                field.dataType, field.nullable
             )
             for field in schema.fields
         ]
