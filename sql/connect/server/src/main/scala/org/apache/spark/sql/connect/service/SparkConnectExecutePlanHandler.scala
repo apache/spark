@@ -56,7 +56,7 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
         throw new SparkSQLException(
           errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
           messageParameters = Map("handle" -> executeKey.operationId))
-      case None =>
+      case _ =>
         // Create a new execute holder and attach to it.
         SparkConnectService.executionManager
           .createExecuteHolderAndAttach(executeKey, v, sessionHolder, responseObserver)
