@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst;
 
+import java.io.Serializable;
+
 public class JavaTypeInferenceBeans {
 
   static class JavaBeanWithGenericsA<T> {
@@ -78,5 +80,92 @@ public class JavaTypeInferenceBeans {
   static class JavaBeanWithGenericHierarchy extends JavaBeanWithGenericsABC<Integer> {
 
   }
-}
 
+  static class PersonData {
+    private String id;
+
+    public String getId() {
+      return id;
+    }
+
+    public void setId(String id) {
+      this.id = id;
+    }
+  }
+
+  static class Team<P> {
+    P person;
+
+    public P getPerson() {
+      return person;
+    }
+
+    public void setPerson(P person) {
+      this.person = person;
+    }
+  }
+
+  static class Company<T> {
+    String name;
+    Team<T> team;
+
+    public String getName() {
+      return name;
+    }
+
+    public void setName(String name) {
+      this.name = name;
+    }
+
+    public Team<T> getTeam() {
+      return team;
+    }
+
+    public void setTeam(Team<T> team) {
+      this.team = team;
+    }
+  }
+
+  static class CompanyWrapper extends Company<PersonData> {
+  }
+
+  static class PersonDataSerializable extends PersonData implements Serializable {
+  }
+
+  static class TeamT<T extends Serializable> {
+     T person;
+
+    public T getPerson() {
+      return person;
+    }
+
+    public void setPerson(T person) {
+      this.person = person;
+    }
+  }
+
+  static class CompanyT<T extends Serializable> {
+    String name;
+    TeamT<T> team;
+
+    public String getName() {
+      return name;
+    }
+
+    public void setName(String name) {
+      this.name = name;
+    }
+
+    public TeamT<T> getTeam() {
+      return team;
+    }
+
+    public void setTeam(TeamT<T> team) {
+      this.team = team;
+    }
+  }
+
+  static class CompanyWrapperT extends CompanyT<PersonDataSerializable> {
+  }
+
+}
