@@ -27,6 +27,14 @@ import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 import org.apache.spark.sql.types.{BinaryType, StructType}
 import org.apache.spark.util.NextIterator
 
+/**
+ * This is the base class for physical node that execute `TransformWithState`.
+ *
+ * It contains some common logics like state store metrics handling, co-locate
+ * initial state with the incoming data, and etc. Concrete physical node like
+ * `TransformWithStateInPySparkExec` and `TransformWithStateExec` should extend
+ * this class.
+ */
 abstract class TransformWithStateExecBase(
     groupingAttributes: Seq[Attribute],
     timeMode: TimeMode,
