@@ -59,7 +59,7 @@ class PythonPipelineSuite
     with EventVerificationTestHelpers {
 
   def buildGraph(pythonText: String): DataflowGraph = {
-    val indentedPythonText = pythonText.linesIterator.map("        " + _).mkString("\n")
+    val indentedPythonText = pythonText.linesIterator.map("    " + _).mkString("\n")
     val pythonCode =
       s"""
          |from pyspark.sql import SparkSession
@@ -72,24 +72,24 @@ class PythonPipelineSuite
          |    graph_element_registration_context,
          |)
          |
-         |try:
-         |    spark = SparkSession.builder \\
-         |        .remote("sc://localhost:$serverPort") \\
-         |        .config("spark.connect.grpc.channel.timeout", "5s") \\
-         |        .create()
+         |spark = SparkSession.builder \\
+         |    .remote("sc://localhost:$serverPort") \\
+         |    .config("spark.connect.grpc.channel.timeout", "5s") \\
+         |    .create()
          |
-         |    dataflow_graph_id = create_dataflow_graph(
-         |        spark,
-         |        default_catalog=None,
-         |        default_database=None,
-         |        sql_conf={},
-         |    )
+         |dataflow_graph_id = create_dataflow_graph(
+         |    spark,
+         |    default_catalog=None,
+         |    default_database=None,
+         |    sql_conf={},
+         |)
          |
-         |    registry = SparkConnectGraphElementRegistry(spark, dataflow_graph_id)
-         |    with graph_element_registration_context(registry):
-         |    $indentedPythonText
+         |registry = SparkConnectGraphElementRegistry(spark, dataflow_graph_id)
+         |with graph_element_registration_context(registry):
+         |$indentedPythonText
          |""".stripMargin
 
+    logInfo(s"Running code: $pythonCode")
     val (exitCode, output) = executePythonCode(pythonCode)
 
     if (exitCode != 0) {

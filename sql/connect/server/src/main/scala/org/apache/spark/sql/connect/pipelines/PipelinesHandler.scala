@@ -33,16 +33,7 @@ import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.pipelines.Language.Python
 import org.apache.spark.sql.pipelines.QueryOriginType
 import org.apache.spark.sql.pipelines.common.RunState.{CANCELED, FAILED}
-import org.apache.spark.sql.pipelines.graph.{
-  FlowAnalysis,
-  GraphIdentifierManager,
-  IdentifierHelper,
-  QueryContext,
-  QueryOrigin,
-  Table,
-  TemporaryView,
-  UnresolvedFlow
-}
+import org.apache.spark.sql.pipelines.graph.{FlowAnalysis, GraphIdentifierManager, IdentifierHelper, PipelineUpdateContextImpl, QueryContext, QueryOrigin, Table, TemporaryView, UnresolvedFlow}
 import org.apache.spark.sql.pipelines.logging.{PipelineEvent, RunProgress}
 import org.apache.spark.sql.types.StructType
 
@@ -341,11 +332,11 @@ private[connect] object PipelinesHandler extends Logging {
           )
       }
     }
-    PipelineExecutionHolder.executePipeline(
-      dataflowGraphId,
-      graphElementRegistry.toDataflowGraph,
-      eventCallback
-    )
+    val pipelineUpdateContext = new PipelineUpdateContextImpl(
+      graphElementRegistry.toDataflowGraph, eventCallback)
+    sessionHolder.cachePipelineExecution(dataflowGraphId, pipelineUpdateContext)
+    pipelineUpdateContext.pipelineExecution.runPipeline()
+
     // Rethrow any exceptions that caused the pipeline run to fail so that the exception is
     // propagated back to the SC client / CLI.
     runFailureEvent.foreach { event =>

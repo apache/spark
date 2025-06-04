@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.connect.pipelines
 
-import scala.concurrent.duration.DurationInt
-
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{DatasetType, Expression, PipelineCommand, Relation, UnresolvedTableValuedFunction}
 import org.apache.spark.connect.proto.PipelineCommand.{DefineDataset, DefineFlow}

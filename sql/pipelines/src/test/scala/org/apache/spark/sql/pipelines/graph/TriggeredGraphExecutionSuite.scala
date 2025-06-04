@@ -606,7 +606,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
 
     val graph = pipelineDef.toDataflowGraph
     val updateContext = TestPipelineUpdateContext(spark, graph)
-    updateContext.pipelineExecution.runPipeline()
+    updateContext.pipelineExecution.startPipeline()
 
     val graphExecution = updateContext.pipelineExecution.graphExecution.get
 
@@ -1033,9 +1033,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
     }.toDataflowGraph
 
     val updateContext = TestPipelineUpdateContext(spark = spark, unresolvedGraph = graph)
-    intercept[UnresolvedPipelineException] {
-      updateContext.pipelineExecution.runPipeline()
-    }
+    updateContext.pipelineExecution.runPipeline()
 
     assertFlowProgressEvent(
       updateContext.eventBuffer,

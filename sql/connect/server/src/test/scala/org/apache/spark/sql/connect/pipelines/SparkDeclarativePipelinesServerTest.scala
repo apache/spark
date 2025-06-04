@@ -20,12 +20,14 @@ package org.apache.spark.sql.connect.pipelines
 import org.apache.spark.connect.{proto => sc}
 import org.apache.spark.sql.connect.{SparkConnectServerTest, SparkConnectTestUtils}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
 import org.apache.spark.sql.pipelines.utils.PipelineTest
 
 class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
 
   override def afterEach(): Unit = {
-    PipelineExecutionHolder.stopAllPipelineExecutions()
+    SparkConnectService.sessionManager.getIsolatedSessionIfPresent(
+      SessionKey(defaultUserId, defaultSessionId)).foreach(_.removeAllPipelineExecutions())
     DataflowGraphRegistry.dropAllDataflowGraphs()
     PipelineTest.cleanupMetastore(spark)
     super.afterEach()
