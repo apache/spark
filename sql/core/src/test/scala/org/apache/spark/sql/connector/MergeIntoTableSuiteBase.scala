@@ -24,11 +24,14 @@ import org.apache.spark.sql.catalyst.optimizer.BuildLeft
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.datasources.v2.MergeRowsExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
-abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
+abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
+  with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
@@ -1768,6 +1771,58 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
           Row(-2),
           Row(-3),
           Row(-5)))
+    }
+  }
+
+  test("Emit numTargetRowsCopied metrics") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |{ "pk": 4, "salary": 400, "dep": "marketing" }
+          |{ "pk": 5, "salary": 500, "dep": "executive" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 2).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      val mergeExec = findMergeExec {
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
+           | UPDATE SET salary = -1
+           |""".stripMargin
+      }
+
+      mergeExec.metrics.get("numTargetRowsCopied") match {
+        case Some(metric) => assert(metric.value == 2,
+          "3 rows not matched and among those 2 rows not updated")
+        case None => fail("numCopiedRows metric not found")
+      }
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 100, "hr"),
+          Row(2, 200, "software"),
+          Row(3, 300, "hr"),
+          Row(4, 400, "marketing"),
+          Row(5, -1, "executive"))) // updated
+    }
+  }
+
+  private def findMergeExec(query: String): MergeRowsExec = {
+    val plan = executeAndKeepPlan {
+      sql(query)
+    }
+    collectFirst(plan) {
+      case m: MergeRowsExec => m
+    } match {
+      case Some(m) => m
+      case None =>
+        fail("MergeRowsExec not found in the plan")
     }
   }
 
