@@ -14019,6 +14019,10 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     """
     Concatenates multiple input string columns together into a single string column,
     using the given separator.
+    
+    Non-null columns will be concatenated, while null columns will be skipped.
+    Note that this behavior is different that of :meth:`pyspark.sql.functions.concat`,
+    which returns null if any column is null.
 
     .. versionadded:: 1.5.0
 
@@ -14044,12 +14048,14 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([("abcd", "123")], ["s", "d"])
+    >>> df = spark.createDataFrame([("abcd", "123"), (None, "bla")], ["s", "d"])
     >>> df.select("*", sf.concat_ws("-", df.s, "d", sf.lit("xyz"))).show()
     +----+---+-----------------------+
     |   s|  d|concat_ws(-, s, d, xyz)|
     +----+---+-----------------------+
     |abcd|123|           abcd-123-xyz|
+    +----+---+-----------------------+
+    |null|bla|                bla-xyz|
     +----+---+-----------------------+
     """
     from pyspark.sql.classic.column import _to_seq, _to_java_column
@@ -18370,6 +18376,10 @@ def concat(*cols: "ColumnOrName") -> Column:
     """
     Collection function: Concatenates multiple input columns together into a single column.
     The function works with strings, numeric, binary and compatible array columns.
+
+    The result is null if any of the columns is null.
+    Note that this behavior is different that that of :meth:`pyspark.sql.functions.concat_ws`,
+    which skips the null columns and concatenates the remaining ones.
 
     .. versionadded:: 1.5.0
 
