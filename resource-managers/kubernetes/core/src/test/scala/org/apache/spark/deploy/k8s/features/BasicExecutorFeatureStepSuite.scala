@@ -144,6 +144,21 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
+  test("basic executor pod with ephemeral-storage") {
+    baseConf.set(KUBERNETES_EXECUTOR_REQUEST_EPHEMERAL_STORAGE, "5Gi")
+    initDefaultProfile(baseConf)
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    assert(executor.container.getResources.getRequests.size() === 3)
+    assert(executor.container.getResources.getLimits.size() === 2)
+    assert(amountAndFormat(executor.container.getResources
+      .getRequests.get("ephemeral-storage")) === "5Gi")
+    assert(amountAndFormat(executor.container.getResources
+      .getLimits.get("ephemeral-storage")) === "5Gi")
+  }
+
   test("basic executor pod has reasonable defaults") {
     val conf = newExecutorConf()
     val step = new BasicExecutorFeatureStep(conf, new SecurityManager(baseConf),

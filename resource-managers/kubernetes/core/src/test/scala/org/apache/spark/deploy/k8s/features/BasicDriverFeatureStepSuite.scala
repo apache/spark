@@ -175,6 +175,20 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     }
   }
 
+  test("Check driver pod respects kubernetes driver request ephemeral-storage") {
+    val sparkConf = new SparkConf()
+      .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+
+    val basePod = SparkPod.initialPod()
+    sparkConf.set(KUBERNETES_DRIVER_REQUEST_EPHEMERAL_STORAGE, "5Gi")
+    val requests1 = new BasicDriverFeatureStep(KubernetesTestConf.createDriverConf(sparkConf))
+      .configurePod(basePod)
+      .container.getResources
+      .getRequests.asScala
+    assert(amountAndFormat(requests1("ephemeral-storage")) === "5Gi")
+  }
+
   test("Check appropriate entrypoint rerouting for various bindings") {
     val javaSparkConf = new SparkConf()
       .set(DRIVER_MEMORY.key, "4g")

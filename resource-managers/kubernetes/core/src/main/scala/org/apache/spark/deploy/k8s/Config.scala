@@ -298,6 +298,13 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_DRIVER_REQUEST_EPHEMERAL_STORAGE =
+    ConfigBuilder("spark.kubernetes.driver.request.ephemeral.storage")
+      .doc("Specify the ephemeral storage request for the driver pod")
+      .version("4.1.0")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_DRIVER_SUBMIT_CHECK =
     ConfigBuilder("spark.kubernetes.submitInDriver")
     .internal()
@@ -339,6 +346,13 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.executor.request.cores")
       .doc("Specify the cpu request for each executor pod")
       .version("2.4.0")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_REQUEST_EPHEMERAL_STORAGE =
+    ConfigBuilder("spark.kubernetes.executor.request.ephemeral.storage")
+      .doc("Specify the ephemeral storage request for the executor pod")
+      .version("4.1.0")
       .stringConf
       .createOptional
 

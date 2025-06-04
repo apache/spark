@@ -51,6 +51,10 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
   // Memory settings
   private val driverMemoryMiB = conf.get(DRIVER_MEMORY)
 
+  // Ephemeral storage
+  private val driverEphemeralStorageRequest = conf
+    .get(KUBERNETES_DRIVER_REQUEST_EPHEMERAL_STORAGE)
+
   // The default memory overhead factor to use, derived from the deprecated
   // `spark.kubernetes.memoryOverheadFactor` config or the default overhead values.
   // If the user has not set it, then use a different default for non-JVM apps. This value is
@@ -88,6 +92,9 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     val driverMemoryQuantity = new Quantity(s"${driverMemoryWithOverheadMiB}Mi")
     val maybeCpuLimitQuantity = driverLimitCores.map { limitCores =>
       ("cpu", new Quantity(limitCores))
+    }
+    val maybeEphemeralStorageQuantity = driverEphemeralStorageRequest.map { storageRequest =>
+      ("ephemeral-storage", new Quantity(storageRequest))
     }
 
     val driverResourceQuantities =
@@ -141,6 +148,8 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
         .addToLimits(maybeCpuLimitQuantity.toMap.asJava)
         .addToRequests("memory", driverMemoryQuantity)
         .addToLimits("memory", driverMemoryQuantity)
+        .addToRequests(maybeEphemeralStorageQuantity.toMap.asJava)
+        .addToLimits(maybeEphemeralStorageQuantity.toMap.asJava)
         .addToLimits(driverResourceQuantities.asJava)
         .endResources()
       .build()

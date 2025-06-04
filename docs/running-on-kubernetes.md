@@ -1050,6 +1050,14 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.request.ephemeral.storage</code></td>
+  <td>(none)</td>
+  <td>
+    Specify ephemeral storage <a href="https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#local-ephemeral-storage">request and limit</a> for the driver pod.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.request.cores</code></td>
   <td>(none)</td>
   <td>
@@ -1067,6 +1075,14 @@ See the [configuration page](configuration.html) for information on Spark config
     Specify a hard cpu <a href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">limit</a> for each executor pod launched for the Spark Application.
   </td>
   <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.request.ephemeral.storage</code></td>
+  <td>(none)</td>
+  <td>
+    Specify ephemeral storage <a href="https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#local-ephemeral-storage">request and limit</a> for the executor pod.
+  </td>
+  <td>4.1.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.node.selector.[labelKey]</code></td>
@@ -1848,6 +1864,7 @@ The following affect the driver and executor containers. All other containers in
     The cpu limits are set by <code>spark.kubernetes.{driver,executor}.limit.cores</code>. The cpu is set by
     <code>spark.{driver,executor}.cores</code>. The memory request and limit are set by summing the values of
     <code>spark.{driver,executor}.memory</code> and <code>spark.{driver,executor}.memoryOverhead</code>.
+    The ephemeral-storage is set by <code>spark.kubernetes.{driver,executor}.request.ephemeral.storage</code>.
     Other resource limits are set by <code>spark.{driver,executor}.resources.{resourceName}.*</code> configs.
   </td>
 </tr>

@@ -86,6 +86,8 @@ private[spark] class BasicExecutorFeatureStep(
       execResources.cores.get.toString
     }
   private val executorLimitCores = kubernetesConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
+  private val executorRequestEphemeralStorage =
+    kubernetesConf.get(KUBERNETES_EXECUTOR_REQUEST_EPHEMERAL_STORAGE)
 
   private def buildExecutorResourcesQuantities(
       customResources: Set[ExecutorResourceRequest]): Map[String, Quantity] = {
@@ -122,6 +124,10 @@ private[spark] class BasicExecutorFeatureStep(
     val executorCpuQuantity = new Quantity(executorCoresRequest)
     val executorResourceQuantities =
       buildExecutorResourcesQuantities(execResources.customResources.values.toSet)
+    val maybeEphemeralStorageQuantity = executorRequestEphemeralStorage.map {
+      storageRequest =>
+      ("ephemeral-storage", new Quantity(storageRequest))
+    }
 
     val executorEnv: Seq[EnvVar] = {
       val sparkAuthSecret = Option(secMgr.getSecretKey()).map {
@@ -205,6 +211,8 @@ private[spark] class BasicExecutorFeatureStep(
         .addToRequests("memory", executorMemoryQuantity)
         .addToLimits("memory", executorMemoryQuantity)
         .addToRequests("cpu", executorCpuQuantity)
+        .addToRequests(maybeEphemeralStorageQuantity.toMap.asJava)
+        .addToLimits(maybeEphemeralStorageQuantity.toMap.asJava)
         .addToLimits(executorResourceQuantities.asJava)
         .endResources()
       .addNewEnv()
