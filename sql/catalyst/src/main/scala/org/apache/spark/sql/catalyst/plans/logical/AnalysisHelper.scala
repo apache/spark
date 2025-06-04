@@ -238,10 +238,9 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   override def transformUpWithNewOutput(
       rule: PartialFunction[LogicalPlan, (LogicalPlan, Seq[(Attribute, Attribute)])],
       skipCond: LogicalPlan => Boolean,
-      canGetOutput: LogicalPlan => Boolean,
-      mutableOutput: Boolean): LogicalPlan = {
+      canGetOutput: LogicalPlan => Boolean): LogicalPlan = {
     AnalysisHelper.allowInvokingTransformsInAnalyzer {
-      super.transformUpWithNewOutput(rule, skipCond, canGetOutput, mutableOutput)
+      super.transformUpWithNewOutput(rule, skipCond, canGetOutput)
     }
   }
 
