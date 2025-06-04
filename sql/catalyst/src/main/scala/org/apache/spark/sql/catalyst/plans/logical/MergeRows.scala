@@ -87,7 +87,11 @@ object MergeRows {
     override def dataType: DataType = NullType
   }
 
-  case class Keep(condition: Expression, output: Seq[Expression]) extends Instruction {
+  case class Keep(
+      condition: Expression,
+      output: Seq[Expression],
+      isSystem: Boolean = false)
+    extends Instruction {
     def children: Seq[Expression] = condition +: output
     override def outputs: Seq[Seq[Expression]] = Seq(output)
 
