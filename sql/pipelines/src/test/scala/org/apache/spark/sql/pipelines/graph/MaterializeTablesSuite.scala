@@ -258,7 +258,7 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
         .structTypeToV2Columns(new StructType().add("x", IntegerType))
     )
   }
-//
+
   test("invalid schema merge") {
     val streamInts = MemoryStream[Int]
     streamInts.addData(1, 2)

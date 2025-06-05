@@ -33,7 +33,8 @@ class PipelineRunEventBuffer(eventCallback: PipelineEvent => Unit) extends Loggi
    * A buffer to hold the events emitted during a pipeline run.
    * This buffer is thread-safe and can be accessed concurrently.
    *
-   * TODO: add a limit to the size of the buffer to prevent excessive memory usage.
+   * TODO(SPARK-52409): Deprecate this class to be used in test only and use a more
+   *                    robust event logging system in production.
    */
   private val events = ArrayBuffer[PipelineEvent]()
 
