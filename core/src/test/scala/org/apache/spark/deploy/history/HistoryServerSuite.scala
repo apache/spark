@@ -234,18 +234,17 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
       val goldenFile =
         new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")
-      val cleanedJsonStr = clearLastUpdated(jsonOpt.get)
+      val jsonAst = parse(clearLastUpdated(jsonOpt.get))
 
       if (regenerateGoldenFiles) {
         Utils.tryWithResource(new FileWriter(goldenFile)) { out =>
-          out.write(pretty(render(parse(cleanedJsonStr))))
+          out.write(pretty(render(jsonAst)))
           out.write('\n')
         }
       }
 
       val exp = IOUtils.toString(new FileInputStream(goldenFile), StandardCharsets.UTF_8)
       // compare the ASTs so formatting differences don't cause failures
-      val jsonAst = parse(cleanedJsonStr)
       val expAst = parse(exp)
       assertValidDataInJson(jsonAst, expAst)
     }
