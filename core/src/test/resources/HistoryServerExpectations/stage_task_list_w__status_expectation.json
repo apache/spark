@@ -41,12 +41,12 @@
       "recordsRead" : 0,
       "remoteReqsDuration" : 0,
       "shufflePushReadMetrics" : {
-        "corruptMergedBlockChunks": 0,
-        "mergedFetchFallbackCount": 0,
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
         "remoteMergedBlocksFetched" : 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
         "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
@@ -107,12 +107,12 @@
       "recordsRead" : 0,
       "remoteReqsDuration" : 0,
       "shufflePushReadMetrics" : {
-        "corruptMergedBlockChunks": 0,
-        "mergedFetchFallbackCount": 0,
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
         "remoteMergedBlocksFetched" : 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
         "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
@@ -125,8 +125,8 @@
     }
   },
   "executorLogs" : {
-    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout",
-    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr"
+    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr",
+    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout"
   },
   "schedulerDelay" : 269,
   "gettingResultTime" : 0
@@ -173,12 +173,12 @@
       "recordsRead" : 0,
       "remoteReqsDuration" : 0,
       "shufflePushReadMetrics" : {
-        "corruptMergedBlockChunks": 0,
-        "mergedFetchFallbackCount": 0,
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
         "remoteMergedBlocksFetched" : 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
         "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
@@ -239,12 +239,12 @@
       "recordsRead" : 0,
       "remoteReqsDuration" : 0,
       "shufflePushReadMetrics" : {
-        "corruptMergedBlockChunks": 0,
-        "mergedFetchFallbackCount": 0,
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
         "remoteMergedBlocksFetched" : 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
         "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
@@ -257,8 +257,8 @@
     }
   },
   "executorLogs" : {
-    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout",
-    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr"
+    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr",
+    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout"
   },
   "schedulerDelay" : 237,
   "gettingResultTime" : 0
@@ -305,12 +305,12 @@
       "recordsRead" : 0,
       "remoteReqsDuration" : 0,
       "shufflePushReadMetrics" : {
-        "corruptMergedBlockChunks": 0,
-        "mergedFetchFallbackCount": 0,
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
         "remoteMergedBlocksFetched" : 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
         "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
@@ -371,12 +371,12 @@
       "recordsRead" : 0,
       "remoteReqsDuration" : 0,
       "shufflePushReadMetrics" : {
-        "corruptMergedBlockChunks": 0,
-        "mergedFetchFallbackCount": 0,
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
         "remoteMergedBlocksFetched" : 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
         "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
@@ -389,8 +389,8 @@
     }
   },
   "executorLogs" : {
-    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout",
-    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr"
+    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr",
+    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout"
   },
   "schedulerDelay" : 227,
   "gettingResultTime" : 0
@@ -437,12 +437,12 @@
       "recordsRead" : 0,
       "remoteReqsDuration" : 0,
       "shufflePushReadMetrics" : {
-        "corruptMergedBlockChunks": 0,
-        "mergedFetchFallbackCount": 0,
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
         "remoteMergedBlocksFetched" : 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
         "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
@@ -503,12 +503,12 @@
       "recordsRead" : 0,
       "remoteReqsDuration" : 0,
       "shufflePushReadMetrics" : {
-        "corruptMergedBlockChunks": 0,
-        "mergedFetchFallbackCount": 0,
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
         "remoteMergedBlocksFetched" : 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
         "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
@@ -521,8 +521,8 @@
     }
   },
   "executorLogs" : {
-    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout",
-    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr"
+    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr",
+    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout"
   },
   "schedulerDelay" : 226,
   "gettingResultTime" : 0
@@ -530,7 +530,7 @@
   "taskId" : 19,
   "index" : 11,
   "attempt" : 1,
-  "partitionId": -1,
+  "partitionId" : -1,
   "launchTime" : "2016-11-15T23:20:44.736GMT",
   "duration" : 13,
   "executorId" : "2",
@@ -569,12 +569,12 @@
       "recordsRead" : 0,
       "remoteReqsDuration" : 0,
       "shufflePushReadMetrics" : {
-        "corruptMergedBlockChunks": 0,
-        "mergedFetchFallbackCount": 0,
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
         "remoteMergedBlocksFetched" : 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
         "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
@@ -587,8 +587,8 @@
     }
   },
   "executorLogs" : {
-    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout",
-    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr"
+    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr",
+    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout"
   },
   "schedulerDelay" : 11,
   "gettingResultTime" : 0
@@ -596,7 +596,7 @@
   "taskId" : 20,
   "index" : 15,
   "attempt" : 1,
-  "partitionId": -1,
+  "partitionId" : -1,
   "launchTime" : "2016-11-15T23:20:44.737GMT",
   "duration" : 19,
   "executorId" : "2",
@@ -635,12 +635,12 @@
       "recordsRead" : 0,
       "remoteReqsDuration" : 0,
       "shufflePushReadMetrics" : {
-        "corruptMergedBlockChunks": 0,
-        "mergedFetchFallbackCount": 0,
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
         "remoteMergedBlocksFetched" : 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
         "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
@@ -653,8 +653,8 @@
     }
   },
   "executorLogs" : {
-    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout",
-    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr"
+    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr",
+    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout"
   },
   "schedulerDelay" : 9,
   "gettingResultTime" : 0

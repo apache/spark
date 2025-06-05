@@ -11,8 +11,8 @@
     "completed" : true,
     "appSparkVersion" : "",
     "endTimeEpoch" : 1426633945177,
-    "startTimeEpoch" : 1426633910242,
-    "lastUpdatedEpoch" : 0
+    "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1426633910242
   }, {
     "attemptId" : "1",
     "startTime" : "2015-03-16T19:25:10.242GMT",
@@ -23,7 +23,7 @@
     "completed" : true,
     "appSparkVersion" : "",
     "endTimeEpoch" : 1426533945177,
-    "startTimeEpoch" : 1426533910242,
-    "lastUpdatedEpoch" : 0
+    "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1426533910242
   } ]
 }

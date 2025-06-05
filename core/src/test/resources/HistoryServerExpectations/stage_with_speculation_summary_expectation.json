@@ -32,6 +32,7 @@
   "shuffleRemoteBytesReadToDisk" : 0,
   "shuffleLocalBytesRead" : 0,
   "shuffleReadBytes" : 0,
+  "shuffleReadRecords" : 0,
   "shuffleCorruptMergedBlockChunks" : 0,
   "shuffleMergedFetchFallbackCount" : 0,
   "shuffleMergedRemoteBlocksFetched" : 0,
@@ -42,9 +43,6 @@
   "shuffleMergedLocalBytesRead" : 0,
   "shuffleRemoteReqsDuration" : 0,
   "shuffleMergedRemoteReqsDuration" : 0,
-  "isShufflePushEnabled" : false,
-  "shuffleMergersCount" : 0,
-  "shuffleReadRecords" : 0,
   "shuffleWriteBytes" : 0,
   "shuffleWriteTime" : 0,
   "shuffleWriteRecords" : 0,
@@ -58,7 +56,7 @@
       "taskId" : 0,
       "index" : 0,
       "attempt" : 0,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2021-08-10T23:27:53.885GMT",
       "duration" : 2234,
       "executorId" : "7",
@@ -96,13 +94,13 @@
           "recordsRead" : 0,
           "remoteReqsDuration" : 0,
           "shufflePushReadMetrics" : {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "remoteMergedBlocksFetched": 0,
-            "localMergedBlocksFetched" :  0,
-            "remoteMergedChunksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
             "localMergedBytesRead" : 0,
             "remoteMergedReqsDuration" : 0
           }
@@ -114,8 +112,8 @@
         }
       },
       "executorLogs" : {
-        "stdout" : "http://host-12291:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000008/john/stdout?start=-4096",
-        "stderr" : "http://host-12291:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000008/john/stderr?start=-4096"
+        "stderr" : "http://host-12291:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000008/john/stderr?start=-4096",
+        "stdout" : "http://host-12291:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000008/john/stdout?start=-4096"
       },
       "schedulerDelay" : 111,
       "gettingResultTime" : 0
@@ -124,7 +122,7 @@
       "taskId" : 1,
       "index" : 1,
       "attempt" : 0,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2021-08-10T23:27:53.903GMT",
       "duration" : 2647,
       "executorId" : "5",
@@ -162,13 +160,13 @@
           "recordsRead" : 0,
           "remoteReqsDuration" : 0,
           "shufflePushReadMetrics" : {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "remoteMergedBlocksFetched": 0,
-            "localMergedBlocksFetched" :  0,
-            "remoteMergedChunksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
             "localMergedBytesRead" : 0,
             "remoteMergedReqsDuration" : 0
           }
@@ -190,7 +188,7 @@
       "taskId" : 2,
       "index" : 2,
       "attempt" : 0,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2021-08-10T23:27:53.904GMT",
       "duration" : 5124,
       "executorId" : "8",
@@ -228,13 +226,13 @@
           "recordsRead" : 0,
           "remoteReqsDuration" : 0,
           "shufflePushReadMetrics" : {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "remoteMergedBlocksFetched": 0,
-            "localMergedBlocksFetched" :  0,
-            "remoteMergedChunksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
             "localMergedBytesRead" : 0,
             "remoteMergedReqsDuration" : 0
           }
@@ -246,8 +244,8 @@
         }
       },
       "executorLogs" : {
-        "stdout" : "http://host-25261:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000009/john/stdout?start=-4096",
-        "stderr" : "http://host-25261:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000009/john/stderr?start=-4096"
+        "stderr" : "http://host-25261:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000009/john/stderr?start=-4096",
+        "stdout" : "http://host-25261:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000009/john/stdout?start=-4096"
       },
       "schedulerDelay" : 220,
       "gettingResultTime" : 0
@@ -256,7 +254,7 @@
       "taskId" : 3,
       "index" : 3,
       "attempt" : 0,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2021-08-10T23:27:53.904GMT",
       "duration" : 63773,
       "executorId" : "10",
@@ -294,13 +292,13 @@
           "recordsRead" : 0,
           "remoteReqsDuration" : 0,
           "shufflePushReadMetrics" : {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "remoteMergedBlocksFetched": 0,
-            "localMergedBlocksFetched" :  0,
-            "remoteMergedChunksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
             "localMergedBytesRead" : 0,
             "remoteMergedReqsDuration" : 0
           }
@@ -312,8 +310,8 @@
         }
       },
       "executorLogs" : {
-        "stdout" : "http://host-12413:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000011/john/stdout?start=-4096",
-        "stderr" : "http://host-12413:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000011/john/stderr?start=-4096"
+        "stderr" : "http://host-12413:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000011/john/stderr?start=-4096",
+        "stdout" : "http://host-12413:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000011/john/stdout?start=-4096"
       },
       "schedulerDelay" : 91,
       "gettingResultTime" : 0
@@ -322,7 +320,7 @@
       "taskId" : 4,
       "index" : 3,
       "attempt" : 1,
-      "partitionId": -1,
+      "partitionId" : -1,
       "launchTime" : "2021-08-10T23:28:04.499GMT",
       "duration" : 53201,
       "executorId" : "7",
@@ -361,13 +359,13 @@
           "recordsRead" : 0,
           "remoteReqsDuration" : 0,
           "shufflePushReadMetrics" : {
-            "corruptMergedBlockChunks": 0,
-            "mergedFetchFallbackCount": 0,
-            "remoteMergedBlocksFetched": 0,
-            "localMergedBlocksFetched" :  0,
-            "remoteMergedChunksFetched": 0,
-            "localMergedChunksFetched": 0,
-            "remoteMergedBytesRead": 0,
+            "corruptMergedBlockChunks" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
             "localMergedBytesRead" : 0,
             "remoteMergedReqsDuration" : 0
           }
@@ -379,8 +377,8 @@
         }
       },
       "executorLogs" : {
-        "stdout" : "http://host-12291:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000008/john/stdout?start=-4096",
-        "stderr" : "http://host-12291:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000008/john/stderr?start=-4096"
+        "stderr" : "http://host-12291:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000008/john/stderr?start=-4096",
+        "stdout" : "http://host-12291:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000008/john/stdout?start=-4096"
       },
       "schedulerDelay" : 23,
       "gettingResultTime" : 0
@@ -595,5 +593,7 @@
     "TotalGCTime" : 0,
     "ConcurrentGCCount" : 0,
     "ConcurrentGCTime" : 0
-  }
+  },
+  "isShufflePushEnabled" : false,
+  "shuffleMergersCount" : 0
 }
