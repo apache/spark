@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import java.util.Collections
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
@@ -40,10 +40,13 @@ class DataSourceV2DataFrameSuite
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import testImplicits._
 
+  override protected def sparkConf: SparkConf =
+    // Disable read-side char padding so that the generated code is less than 8000.
+    super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
+
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
     spark.conf.set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
-    spark.conf.set(SQLConf.ANSI_ENABLED.key, "true")
   }
 
   after {
