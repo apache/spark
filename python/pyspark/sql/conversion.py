@@ -116,9 +116,7 @@ class LocalDataToArrowConversion:
             dedup_field_names = _dedup_names(dataType.names)
 
             field_convs = [
-                LocalDataToArrowConversion._create_converter(
-                    field.dataType, field.nullable
-                )
+                LocalDataToArrowConversion._create_converter(field.dataType, field.nullable)
                 for field in dataType.fields
             ]
 
@@ -317,9 +315,7 @@ class LocalDataToArrowConversion:
         column_names = schema.fieldNames()
 
         column_convs = [
-            LocalDataToArrowConversion._create_converter(
-                field.dataType, field.nullable
-            )
+            LocalDataToArrowConversion._create_converter(field.dataType, field.nullable)
             for field in schema.fields
         ]
 
