@@ -24,10 +24,17 @@ import org.apache.spark.internal.Logging
 /**
  * An in-memory buffer which contains the internal events that are emitted during a run of a
  * pipeline.
+ *
  * @param eventCallback A callback function to be called when an event is added to the buffer.
  */
 class PipelineRunEventBuffer(eventCallback: PipelineEvent => Unit) extends Logging {
 
+  /**
+   * A buffer to hold the events emitted during a pipeline run.
+   * This buffer is thread-safe and can be accessed concurrently.
+   *
+   * TODO: add a limit to the size of the buffer to prevent excessive memory usage.
+   */
   private val events = ArrayBuffer[PipelineEvent]()
 
   def addEvent(event: PipelineEvent): Unit = synchronized {
