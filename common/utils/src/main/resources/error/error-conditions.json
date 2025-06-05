@@ -82,6 +82,14 @@
     ],
     "sqlState" : "XX000"
   },
+  "APPEND_ONCE_FROM_BATCH_QUERY" : {
+    "message" : [
+      "Creating a streaming table from a batch query prevents incremental loading of new data from source. Offending table: '<table>'.",
+      "Please use the stream() operator. Example usage:",
+      "CREATE STREAMING TABLE <target table name> ... AS SELECT ... FROM stream(<source table name>) ..."
+    ],
+    "sqlState" : "42000"
+  },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
@@ -1372,6 +1380,12 @@
     },
     "sqlState" : "42734"
   },
+  "DUPLICATE_FLOW_SQL_CONF" : {
+    "message" : [
+      "Found duplicate sql conf for dataset '<datasetName>': '<key>' is defined by both '<flowName1>' and '<flowName2>'"
+    ],
+    "sqlState" : "42710"
+  },
   "DUPLICATE_KEY" : {
     "message" : [
       "Found duplicate keys <keyColumn>."
@@ -1943,6 +1957,12 @@
     ],
     "sqlState" : "42818"
   },
+  "INCOMPATIBLE_BATCH_VIEW_READ" : {
+    "message" : [
+      "View <datasetIdentifier> is a batch view and must be referenced using SparkSession#read. This check can be disabled by setting Spark conf pipelines.incompatibleViewCheck.enabled = false."
+    ],
+    "sqlState" : "42000"
+  },
   "INCOMPATIBLE_COLUMN_TYPE" : {
     "message" : [
       "<operator> can only be performed on tables with compatible column types. The <columnOrdinalNumber> column of the <tableOrdinalNumber> table is <dataType1> type which is not compatible with <dataType2> at the same column of the first table.<hint>."
@@ -2018,6 +2038,12 @@
       "The join types <joinType1> and <joinType2> are incompatible."
     ],
     "sqlState" : "42613"
+  },
+  "INCOMPATIBLE_STREAMING_VIEW_READ" : {
+    "message" : [
+      "View <datasetIdentifier> is a streaming view and must be referenced using SparkSession#readStream. This check can be disabled by setting Spark conf pipelines.incompatibleViewCheck.enabled = false."
+    ],
+    "sqlState" : "42000"
   },
   "INCOMPATIBLE_VIEW_SCHEMA_CHANGE" : {
     "message" : [
@@ -3119,6 +3145,12 @@
     },
     "sqlState" : "KD002"
   },
+  "INVALID_NAME_IN_USE_COMMAND" : {
+    "message" : [
+      "Invalid name '<name>' in <command> command. Reason: <reason>"
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
@@ -3383,6 +3415,12 @@
       "Could not perform regexp_replace for source = \"<source>\", pattern = \"<pattern>\", replacement = \"<replacement>\" and position = <position>."
     ],
     "sqlState" : "22023"
+  },
+  "INVALID_RESETTABLE_DEPENDENCY" : {
+    "message" : [
+      "Tables <upstreamResettableTables> are resettable but have a non-resettable downstream dependency '<downstreamTable>'. `reset` will fail as Spark Streaming does not support deleted source data. You can either remove the <resetAllowedKey>=false property from '<downstreamTable>' or add it to its upstream dependencies."
+    ],
+    "sqlState" : "42000"
   },
   "INVALID_RESET_COMMAND_FORMAT" : {
     "message" : [
@@ -5419,6 +5457,19 @@
     ],
     "sqlState" : "58030"
   },
+  "UNABLE_TO_INFER_PIPELINE_TABLE_SCHEMA" : {
+    "message" : [
+      "Failed to infer the schema for table <tableName> from its upstream flows.",
+      "Please modify the flows that write to this table to make their schemas compatible.",
+      "",
+      "Inferred schema so far:",
+      "<inferredDataSchema>",
+      "",
+      "Incompatible schema:",
+      "<incompatibleDataSchema>"
+    ],
+    "sqlState" : "42KD9"
+  },
   "UNABLE_TO_INFER_SCHEMA" : {
     "message" : [
       "Unable to infer schema for <format>. It must be specified manually."
@@ -5589,6 +5640,12 @@
       "Cannot resolve routine <routineName> on search path <searchPath>."
     ],
     "sqlState" : "42883"
+  },
+  "UNRESOLVED_TABLE_PATH" : {
+    "message" : [
+      "Storage path for table <identifier> cannot be resolved."
+    ],
+    "sqlState" : "22KD1"
   },
   "UNRESOLVED_USING_COLUMN_FOR_JOIN" : {
     "message" : [
@@ -6570,6 +6627,20 @@
       "The `raise_error()` function was used to raise an unknown error class: <errorClass>"
     ],
     "sqlState" : "P0001"
+  },
+  "USER_SPECIFIED_AND_INFERRED_SCHEMA_NOT_COMPATIBLE" : {
+    "message" : [
+      "Table '<tableName>' has a user-specified schema that is incompatible with the schema",
+      "inferred from its query.",
+      "<streamingTableHint>",
+      "",
+      "Declared schema:",
+      "<specifiedSchema>",
+      "",
+      "Inferred schema:",
+      "<inferredDataSchema>"
+    ],
+    "sqlState" : "42000"
   },
   "VARIABLE_ALREADY_EXISTS" : {
     "message" : [
