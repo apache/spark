@@ -96,12 +96,12 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       mirrors.distinct :+ "https://archive.apache.org/dist" :+ PROCESS_TABLES.releaseMirror
     logInfo(s"Trying to download Spark $version from $sites")
     for (site <- sites) {
-      val scala_version = version match {
+      val scalaVersion = version match {
         case v if v.startsWith("3.") => "-scala2.13"
         case v if v.startsWith("4.") => ""
         case _ => fail(s"Spark version $version is unexpected")
       }
-      val filename = s"spark-$version-bin-hadoop3$scala_version.tgz"
+      val filename = s"spark-$version-bin-hadoop3$scalaVersion.tgz"
       val url = s"$site/spark/spark-$version/$filename"
       logInfo(s"Downloading Spark $version from $url")
       try {
@@ -267,13 +267,13 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
   val testingVersions: Seq[String] = if (isPythonVersionAvailable &&
       SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
     import scala.io.Source
-    val SparkVersionPattern = """<a href="spark-(\d.\d.\d)/">""".r
+    val sparkVersionPattern = """<a href="spark-(\d.\d.\d)/">""".r
     try Utils.tryWithResource(
       Source.fromURL(s"$releaseMirror/spark")) { source =>
       source.mkString
         .split("\n")
-        .filter(SparkVersionPattern.unanchored.matches(_))
-        .map(SparkVersionPattern.findFirstMatchIn(_).get.group(1))
+        .filter(sparkVersionPattern.unanchored.matches(_))
+        .map(sparkVersionPattern.findFirstMatchIn(_).get.group(1))
         .filter(_ < org.apache.spark.SPARK_VERSION)
         .filterNot(skipReleaseVersions.contains).toImmutableArraySeq
     } catch {
