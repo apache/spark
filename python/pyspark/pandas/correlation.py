@@ -125,16 +125,21 @@ def compute(sdf: SparkDataFrame, groupKeys: List[str], method: str) -> SparkData
                 )
             )
 
+        spark_session = SparkSession.getActiveSession()
+        if is_ansi_mode_enabled(spark_session):
+            corr_expr = F.try_divide(
+                F.covar_samp(CORRELATION_VALUE_1_COLUMN, CORRELATION_VALUE_2_COLUMN),
+                F.stddev_samp(CORRELATION_VALUE_1_COLUMN)
+                * F.stddev_samp(CORRELATION_VALUE_2_COLUMN),
+            )
+        else:
+            corr_expr = F.corr(CORRELATION_VALUE_1_COLUMN, CORRELATION_VALUE_2_COLUMN)
+
         sdf = sdf.groupby(groupKeys).agg(
-            F.corr(CORRELATION_VALUE_1_COLUMN, CORRELATION_VALUE_2_COLUMN).alias(
-                CORRELATION_CORR_OUTPUT_COLUMN
+            corr_expr.alias(CORRELATION_CORR_OUTPUT_COLUMN),
+            F.count(F.when(~F.isnull(CORRELATION_VALUE_1_COLUMN), 1)).alias(
+                CORRELATION_COUNT_OUTPUT_COLUMN
             ),
-            F.count(
-                F.when(
-                    ~F.isnull(CORRELATION_VALUE_1_COLUMN),
-                    1,
-                )
-            ).alias(CORRELATION_COUNT_OUTPUT_COLUMN),
         )
 
         return sdf
