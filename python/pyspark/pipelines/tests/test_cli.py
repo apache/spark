@@ -25,6 +25,7 @@ from pyspark.testing.connectutils import (
     should_test_connect,
     connect_requirement_message,
 )
+from pyspark.testing.utils import have_yaml, yaml_requirement_message
 
 if should_test_connect:
     from pyspark.pipelines.cli import (
@@ -39,7 +40,10 @@ if should_test_connect:
     from pyspark.pipelines.tests.local_graph_element_registry import LocalGraphElementRegistry
 
 
-@unittest.skipIf(not should_test_connect, connect_requirement_message)
+@unittest.skipIf(
+    not should_test_connect or not have_yaml,
+    connect_requirement_message or yaml_requirement_message,
+)
 class CLIUtilityTests(unittest.TestCase):
     def test_load_pipeline_spec(self):
         with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
