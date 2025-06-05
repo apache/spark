@@ -165,7 +165,10 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
       identifier = fullyQualifiedIdentifier("c", isView = true),
       flowStatus = FlowStatus.STARTING
     )
-    assert(spark.table(s"${fullyQualifiedIdentifier("d")}").count() == 2)
+    checkAnswer(
+      spark.read.table(fullyQualifiedIdentifier("a").toString),
+      Seq(Row(1), Row(2))
+    )
   }
 
   test("three hop pipeline") {
