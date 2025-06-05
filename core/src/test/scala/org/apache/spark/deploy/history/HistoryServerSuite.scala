@@ -238,7 +238,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
       if (regenerateGoldenFiles) {
         Utils.tryWithResource(new FileWriter(goldenFile)) { out =>
-          out.write(cleanedJsonStr)
+          out.write(pretty(render(parse(cleanedJsonStr))))
           out.write('\n')
         }
       }
