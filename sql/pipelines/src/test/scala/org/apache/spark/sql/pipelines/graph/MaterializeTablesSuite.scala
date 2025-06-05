@@ -29,7 +29,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils.exceptionString
 
 /**
- * Local integration tests for materialization of [[Table]]s in a [[DataflowGraph]] to make sure
+ * Local integration tests for materialization of `Table`s in a `DataflowGraph` to make sure
  * tables are written with the appropriate schemas.
  */
 class MaterializeTablesSuite extends BaseCoreExecutionTest {

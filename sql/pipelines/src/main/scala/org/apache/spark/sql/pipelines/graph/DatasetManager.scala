@@ -37,7 +37,7 @@ import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils.diffSchemas
 import org.apache.spark.sql.pipelines.util.SchemaMergingUtils
 
 /**
- * [[DatasetManager]] is responsible for materializing tables in the catalog based on the given
+ * `DatasetManager` is responsible for materializing tables in the catalog based on the given
  * graph. For each table in the graph, it will create a table if none exists (or if this is a
  * full refresh), or merge the schema of an existing table to match the new flows writing to it.
  */

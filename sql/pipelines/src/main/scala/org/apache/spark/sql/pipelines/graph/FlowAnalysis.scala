@@ -31,10 +31,10 @@ import org.apache.spark.sql.pipelines.util.{BatchReadOptions, InputReadOptions, 
 
 object FlowAnalysis {
     /**
-     * Creates a [[FlowFunction]] that attempts to analyze the provided LogicalPlan
+     * Creates a `FlowFunction` that attempts to analyze the provided LogicalPlan
      * using the existing resolved inputs.
      * - If all upstream inputs have been resolved, then analysis succeeds and the
-     *   function returns a [[FlowFunctionResult]] containing the dataframe.
+     *   function returns a `FlowFunctionResult` containing the dataframe.
      * - If any upstream inputs are unresolved, then the function throws an exception.
      *
      * @param plan The user-supplied LogicalPlan defining a flow.
@@ -74,15 +74,15 @@ object FlowAnalysis {
   }
 
   /**
-   * Constructs an analyzed [[DataFrame]] from a [[LogicalPlan]] by resolving Pipelines specific
+   * Constructs an analyzed `DataFrame` from a `LogicalPlan` by resolving Pipelines specific
    * TVFs and datasets that cannot be resolved directly by Catalyst.
    *
    * This function shouldn't call any singleton as it will break concurrent access to graph
    * analysis; or any thread local variables as graph analysis and this function will use
    * different threads in python repl.
    *
-   * @param plan     The [[LogicalPlan]] defining a flow.
-   * @return An analyzed [[DataFrame]].
+   * @param plan     The `LogicalPlan` defining a flow.
+   * @return An analyzed `DataFrame`.
    */
   private def analyze(
       context: FlowAnalysisContext,
@@ -169,7 +169,7 @@ object FlowAnalysis {
    * All the public APIs that read from a dataset should call this function to read the dataset.
    *
    * @param name the name of the Dataset to be read.
-   * @param streamReader The [[DataStreamReader]] that may hold read options specified by the user.
+   * @param streamReader The `DataStreamReader` that may hold read options specified by the user.
    * @param streamingReadOptions Options for this streaming read.
    * @return streaming DataFrame that represents data from the specified Dataset.
    */
@@ -198,7 +198,7 @@ object FlowAnalysis {
   }
 
   /**
-   * Internal helper to reference dataset defined in the same [[DataflowGraph]].
+   * Internal helper to reference dataset defined in the same `DataflowGraph`.
    *
    * @param inputIdentifier The identifier of the Dataset to be read.
    * @param readOptions Options for this read (may be either streaming or batch options)
@@ -226,7 +226,7 @@ object FlowAnalysis {
 
     val inputDF = i.load(readOptions)
     i match {
-      // If the referenced input is a [[Flow]], because the query plans will be fused
+      // If the referenced input is a `Flow`, because the query plans will be fused
       // together, we also need to fuse their confs.
       case f: Flow => f.sqlConf.foreach { case (k, v) => ctx.setConf(k, v) }
       case _ =>
@@ -297,7 +297,7 @@ object FlowAnalysis {
    * Internal helper to reference dataset defined in an external catalog or as a path.
    *
    * @param inputIdentifier The identifier of the dataset to be read.
-   * @param streamReader The [[DataStreamReader]] that may hold additional read options specified by
+   * @param streamReader The `DataStreamReader` that may hold additional read options specified by
    *                     the user.
    * @return streaming or batch DataFrame that represents data from the specified Dataset.
    */

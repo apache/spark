@@ -98,7 +98,7 @@ object QueryOrigin extends Logging {
   val empty: QueryOrigin = QueryOrigin()
 
   /**
-   * An exception that wraps [[QueryOrigin]] and lets us store it in errors as suppressed
+   * An exception that wraps `QueryOrigin` and lets us store it in errors as suppressed
    * exceptions.
    */
   private case class QueryOriginWrapper(origin: QueryOrigin) extends Exception with NoStackTrace
@@ -127,7 +127,7 @@ object QueryOrigin extends Logging {
     }
   }
 
-  /** Returns the [[QueryOrigin]] stored as a suppressed exception in the given throwable.
+  /** Returns the `QueryOrigin` stored as a suppressed exception in the given throwable.
    *
    * @return Some(origin) if the origin is recorded as part of the given throwable, `None`
    *         otherwise.

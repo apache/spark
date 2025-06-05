@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.pipelines.graph.DataflowGraph.mapUnique
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils
 
-/** Validations performed on a [[DataflowGraph]]. */
+/** Validations performed on a `DataflowGraph`. */
 trait GraphValidations extends Logging {
   this: DataflowGraph =>
 

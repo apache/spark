@@ -33,7 +33,7 @@ abstract class GraphExecution(
     env: PipelineUpdateContext
 ) extends Logging {
 
-  /** The [[Trigger]] configuration for a streaming flow. */
+  /** The `Trigger` configuration for a streaming flow. */
   def streamTrigger(flow: Flow): Trigger
 
   protected val pipelineConf: PipelineConf = env.pipelineConf
@@ -45,7 +45,7 @@ abstract class GraphExecution(
   private val flowToNumSuccess = new ConcurrentHashMap[TableIdentifier, Long].asScala
 
   /**
-   * [[FlowExecution]]s currently being executed and tracked by the graph execution.
+   * `FlowExecution`s currently being executed and tracked by the graph execution.
    */
   val flowExecutions = new collection.concurrent.TrieMap[TableIdentifier, FlowExecution]
 
@@ -55,8 +55,8 @@ abstract class GraphExecution(
   }
 
   /**
-   * Planner use to convert each logical dataflow (i.e., [[Flow]]) defined in the
-   * [[DataflowGraph]] into a concrete execution plan [[FlowExecution]] used by the
+   * Planner use to convert each logical dataflow (i.e., `Flow`) defined in the
+   * `DataflowGraph` into a concrete execution plan `FlowExecution` used by the
    * pipeline execution.
    */
   private val flowPlanner = new FlowPlanner(
@@ -69,7 +69,7 @@ abstract class GraphExecution(
   private val streamListener = new StreamListener(env, graphForExecution)
 
   /**
-   * Plans the logical [[ResolvedFlow]] into a [[FlowExecution]] and then starts executing it.
+   * Plans the logical `ResolvedFlow` into a `FlowExecution` and then starts executing it.
    * Implementation note: Thread safe
    *
    * @return None if the flow planner decided that there is no actual update required here.
@@ -137,7 +137,7 @@ abstract class GraphExecution(
   }
 
   /**
-   * Starts the execution of flows in [[graphForExecution]]. Does not block.
+   * Starts the execution of flows in `graphForExecution`. Does not block.
    */
   def start(): Unit = {
     env.spark.listenerManager.clear()
@@ -153,7 +153,7 @@ abstract class GraphExecution(
     env.spark.streams.removeListener(streamListener)
   }
 
-  /** Stops execution of a [[FlowExecution]]. */
+  /** Stops execution of a `FlowExecution`. */
   def stopFlow(pf: FlowExecution): Unit = {
     if (!pf.isCompleted) {
       val flow = graphForExecution.resolvedFlow(pf.identifier)
@@ -192,7 +192,7 @@ abstract class GraphExecution(
   /**
    * Returns the reason why this flow execution has terminated.
    * If the function is called before the flow has not terminated yet, the behavior is undefined,
-   * and may return [[UnexpectedRunFailure]].
+   * and may return `UnexpectedRunFailure`.
    */
   def getRunTerminationReason: RunTerminationReason
 
@@ -242,7 +242,7 @@ object GraphExecution extends Logging {
   }
 
   /**
-   * Represents the [[FlowExecution]] should be stopped due to it failed with some retryable errors
+   * Represents the `FlowExecution` should be stopped due to it failed with some retryable errors
    * and has exhausted all the retry attempts.
    */
   private case class MaxRetryExceeded(

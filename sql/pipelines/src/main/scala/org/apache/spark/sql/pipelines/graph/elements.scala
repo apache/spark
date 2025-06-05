@@ -37,22 +37,22 @@ import org.apache.spark.sql.pipelines.util.{
 }
 import org.apache.spark.sql.types.StructType
 
-/** An element in a [[DataflowGraph]]. */
+/** An element in a `DataflowGraph`. */
 trait GraphElement {
 
   /**
    * Contains provenance to tie back this GraphElement to the user code that defined it.
    *
-   * This must be set when a [[GraphElement]] is directly created by some user code.
+   * This must be set when a `GraphElement` is directly created by some user code.
    * Subsequently, this initial origin must be propagated as is without modification.
-   * If this [[GraphElement]] is copied or converted to a different type, then this origin must be
+   * If this `GraphElement` is copied or converted to a different type, then this origin must be
    * copied as is.
    */
   def origin: QueryOrigin
 
   protected def spark: SparkSession = SparkSession.getActiveSession.get
 
-  /** Returns the unique identifier for this [[GraphElement]]. */
+  /** Returns the unique identifier for this `GraphElement`. */
   def identifier: TableIdentifier
 
   /**
@@ -67,37 +67,37 @@ trait GraphElement {
 trait Input extends GraphElement {
 
   /**
-   * Returns a [[DataFrame]] that is a result of loading data from this [[Input]].
+   * Returns a `DataFrame` that is a result of loading data from this Input`.
    * @param readOptions Type of input. Used to determine streaming/batch
-   * @return Streaming or batch [[DataFrame]] of this Input's data.
+   * @return Streaming or batch `DataFrame` of this Input's data.
    */
   def load(readOptions: InputReadOptions): DataFrame
 }
 
 /**
- * Represents a node in a [[DataflowGraph]] that can be written to by a [[Flow]].
+ * Represents a node in a `DataflowGraph` that can be written to by a `Flow`.
  * Must be backed by a file source.
  */
 sealed trait Output {
 
   /**
-   * Normalized storage location used for storing materializations for this [[Output]].
-   * If [[None]], it means this [[Output]] has not been normalized yet.
+   * Normalized storage location used for storing materializations for this `Output`.
+   * If None, it means this `Output` has not been normalized yet.
    */
   def normalizedPath: Option[String]
 
-  /** Return whether the storage location for this [[Output]] has been normalized. */
+  /** Return whether the storage location for this `Output` has been normalized. */
   final def normalized: Boolean = normalizedPath.isDefined
 
   /**
-   * Return the normalized storage location for this [[Output]] and throw if the
+   * Return the normalized storage location for this `Output` and throw if the
    * storage location has not been normalized.
    */
   @throws[SparkException]
   def path: String
 }
 
-/** A type of [[Input]] where data is loaded from a table. */
+/** A type of `Input` where data is loaded from a table. */
 sealed trait TableInput extends Input {
 
   /** The user-specified schema for this table. */
@@ -105,7 +105,7 @@ sealed trait TableInput extends Input {
 }
 
 /**
- * A table representing a materialized dataset in a [[DataflowGraph]].
+ * A table representing a materialized dataset in a `DataflowGraph`.
  *
  * @param identifier The identifier of this table within the graph.
  * @param specifiedSchema The user-specified schema for this table.
@@ -155,7 +155,7 @@ case class Table(
     }
   }
 
-  /** Returns the normalized storage location to this [[Table]]. */
+  /** Returns the normalized storage location to this `Table`. */
   override def path: String = {
     if (!normalized) {
       throw GraphErrors.unresolvedTablePath(identifier)
@@ -187,8 +187,8 @@ case class Table(
 }
 
 /**
- * A type of [[TableInput]] that returns data from a specified schema or from the inferred
- * [[Flow]]s that write to the table.
+ * A type of `TableInput` that returns data from a specified schema or from the inferred
+ * `Flow`s that write to the table.
  */
 case class VirtualTableInput(
     identifier: TableIdentifier,
@@ -227,22 +227,22 @@ case class VirtualTableInput(
 }
 
 /**
- * Representing a view in the [[DataflowGraph]].
+ * Representing a view in the `DataflowGraph`.
  */
 trait View extends GraphElement {
 
-  /** Returns the unique identifier for this [[View]]. */
+  /** Returns the unique identifier for this `View`. */
   val identifier: TableIdentifier
 
   /** Properties of this view */
   val properties: Map[String, String]
 
-  /** User-specified comment that can be placed on the [[View]]. */
+  /** User-specified comment that can be placed on the `View`. */
   val comment: Option[String]
 }
 
 /**
- * Representing a temporary [[View]] in a [[DataflowGraph]].
+ * Representing a temporary `View` in a `DataflowGraph`.
  *
  * @param identifier The identifier of this view within the graph.
  * @param properties Properties of the view
@@ -256,7 +256,7 @@ case class TemporaryView(
 ) extends View {}
 
 /**
- * Representing a persisted [[View]] in a [[DataflowGraph]].
+ * Representing a persisted `View` in a `DataflowGraph`.
  *
  * @param identifier The identifier of this view within the graph.
  * @param properties Properties of the view

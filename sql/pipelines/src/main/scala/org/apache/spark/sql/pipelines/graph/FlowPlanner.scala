@@ -20,13 +20,13 @@ package org.apache.spark.sql.pipelines.graph
 import org.apache.spark.sql.streaming.Trigger
 
 /**
- * Plans execution of [[Flow]]s in a [[DataflowGraph]] by converting [[Flow]]s into
- * [[FlowExecution]]s.
+ * Plans execution of `Flow`s in a `DataflowGraph` by converting `Flow`s into
+ * 'FlowExecution's.
  *
- * @param graph         [[DataflowGraph]] to help plan based on relationship to other elements.
- * @param updateContext [[PipelineUpdateContext]] for this pipeline update (shared across flows).
+ * @param graph         `DataflowGraph` to help plan based on relationship to other elements.
+ * @param updateContext `PipelineUpdateContext` for this pipeline update (shared across flows).
  * @param triggerFor    Function that returns the correct streaming Trigger for the specified
- *                      [[Flow]].
+ *                      `Flow`.
  */
 class FlowPlanner(
     graph: DataflowGraph,

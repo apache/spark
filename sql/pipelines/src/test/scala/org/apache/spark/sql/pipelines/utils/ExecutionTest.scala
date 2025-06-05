@@ -86,8 +86,6 @@ trait EventVerificationTestHelpers {
    *                     function to return true.
    * @param msgChecker Condition that the event's msg must pass in order for the function to return
    *                   true.
-   * @param expectedNumOfEvents If present, exact number of expected events that satisfy the
-   *                            condition
    * @param cond Predicate to filter the flow progress events by. Useful for more complex event
    *             verification.
    */
@@ -171,7 +169,7 @@ trait EventVerificationTestHelpers {
   }
 
   /**
-   * Asserts that there is no [[FlowProgress]] event
+   * Asserts that there is no `FlowProgress` event
    * in the event log with the specified flow name and status and metrics checkers.
    */
   protected def assertNoFlowProgressEvent(
