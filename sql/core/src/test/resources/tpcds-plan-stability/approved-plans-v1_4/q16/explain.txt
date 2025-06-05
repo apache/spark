@@ -82,15 +82,15 @@ ReadSchema: struct<cs_warehouse_sk:int,cs_order_number:int>
 Input [3]: [cs_warehouse_sk#9, cs_order_number#10, cs_sold_date_sk#11]
 
 (9) Project [codegen id : 3]
-Output [2]: [cs_warehouse_sk#9, cs_order_number#10]
+Output [2]: [cs_order_number#10, cs_warehouse_sk#9]
 Input [3]: [cs_warehouse_sk#9, cs_order_number#10, cs_sold_date_sk#11]
 
 (10) Exchange
-Input [2]: [cs_warehouse_sk#9, cs_order_number#10]
+Input [2]: [cs_order_number#10, cs_warehouse_sk#9]
 Arguments: hashpartitioning(cs_order_number#10, 5), ENSURE_REQUIREMENTS, [plan_id=2]
 
 (11) Sort [codegen id : 4]
-Input [2]: [cs_warehouse_sk#9, cs_order_number#10]
+Input [2]: [cs_order_number#10, cs_warehouse_sk#9]
 Arguments: [cs_order_number#10 ASC NULLS FIRST], false, 0
 
 (12) SortMergeJoin [codegen id : 5]
