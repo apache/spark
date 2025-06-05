@@ -18,7 +18,8 @@
 __all__ = ["SparkConf"]
 
 import sys
-from typing import Dict, Iterable, List, Optional, Tuple, cast, overload, TYPE_CHECKING
+from collections.abc import Iterable
+from typing import Dict, List, Optional, Tuple, cast, overload, TYPE_CHECKING
 
 from pyspark.util import is_remote_only
 from pyspark.errors import PySparkRuntimeError
