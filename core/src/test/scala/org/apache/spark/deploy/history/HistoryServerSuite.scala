@@ -238,7 +238,10 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
       if (regenerateGoldenFiles) {
         Utils.tryWithResource(new FileWriter(goldenFile)) { out =>
-          out.write(pretty(render(jsonAst)))
+          val sortedJson = jsonAst.transform {
+            case JObject(fields) => JObject(fields.sortBy(_._1))
+          }
+          out.write(pretty(render(sortedJson)))
           out.write('\n')
         }
       }
