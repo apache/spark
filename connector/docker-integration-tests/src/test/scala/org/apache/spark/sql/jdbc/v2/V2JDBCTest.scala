@@ -141,11 +141,10 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   }
 
   case class PartitioningInfo(
-    numPartitions: String,
-    lowerBound: String,
-    upperBound: String,
-    partitionColumn: String
-  )
+      numPartitions: String,
+      lowerBound: String,
+      upperBound: String,
+      partitionColumn: String)
   val tableNameToPartinioningOptions: Map[String, PartitioningInfo] = Map(
     "employee" -> PartitioningInfo("4", "1", "8", "dept"),
     // new_table is used in "SPARK-37038: Test TABLESAMPLE" test
@@ -167,8 +166,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   }
 
   private def getTableOptions(
-    tableName: String,
-    partitioningEnabled: Boolean): (String, Option[PartitioningInfo]) = {
+      tableName: String,
+      partitioningEnabled: Boolean): (String, Option[PartitioningInfo]) = {
     if (partitioningEnabled) {
       getPartitioningInfo(tableName)
     } else {
@@ -179,9 +178,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   // This method is used to verify that the number of JDBCRDD partitions is
   // equal to numPartitions
   def multiplePartitionAdditionalCheck(
-    df: DataFrame,
-    partitioningInfo: Option[PartitioningInfo])
-  : Unit = {
+      df: DataFrame,
+      partitioningInfo: Option[PartitioningInfo]): Unit = {
     def getJDBCRDD(rdd: RDD[_]): Option[JDBCRDD] = {
       rdd match {
         case jdbcRdd: JDBCRDD => Some(jdbcRdd)
