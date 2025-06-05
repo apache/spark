@@ -48,7 +48,9 @@ abstract class PipelineTest
 
   final protected val storageRoot = createTempDir()
 
-  var spark: SparkSession = _
+  var spark: SparkSession = createAndInitializeSpark()
+  val originalSpark: SparkSession = spark.cloneSession()
+
 
   implicit def sqlContext: SQLContext = spark.sqlContext
   def sql(text: String): DataFrame = spark.sql(text)

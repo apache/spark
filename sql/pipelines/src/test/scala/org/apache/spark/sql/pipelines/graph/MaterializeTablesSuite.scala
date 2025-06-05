@@ -400,7 +400,7 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
       table.columns().map(_.name()).toSet == new StructType()
         .add("x", BooleanType)
         .add("y", IntegerType)
-        .fields
+        .fieldNames
         .toSet
     )
     assert(table.partitioning().toSeq == Seq(Expressions.identity("x")))
