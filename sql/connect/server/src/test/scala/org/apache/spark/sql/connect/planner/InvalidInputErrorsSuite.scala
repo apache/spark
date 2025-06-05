@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connect.planner
 
-import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -107,18 +106,32 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
           .build()
 
         proto.Relation.newBuilder().setDeduplicate(deduplicate).build()
+      }),
+    TestCase(
+      name = "Catalog not set",
+      expectedErrorCondition = "INTERNAL_ERROR",
+      expectedParameters =
+        Map("message" -> "This oneOf field in spark.connect.Catalog is not set: CATTYPE_NOT_SET"),
+      invalidInput = {
+        val catalog = proto.Catalog
+          .newBuilder()
+          .build()
+
+        proto.Relation
+          .newBuilder()
+          .setCatalog(catalog)
+          .build()
       }))
 
   // Run all test cases
   testCases.foreach { testCase =>
     test(s"${testCase.name}") {
-      val exception = intercept[InvalidPlanInput] {
-        transform(testCase.invalidInput)
-      }
-      val expectedMessage = SparkThrowableHelper.getMessage(
-        testCase.expectedErrorCondition,
-        testCase.expectedParameters)
-      assert(exception.getMessage == expectedMessage)
+      checkError(
+        exception = intercept[InvalidPlanInput] {
+          transform(testCase.invalidInput)
+        },
+        condition = testCase.expectedErrorCondition,
+        parameters = testCase.expectedParameters)
     }
   }
 

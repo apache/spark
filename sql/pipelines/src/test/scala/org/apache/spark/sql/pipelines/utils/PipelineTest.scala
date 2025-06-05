@@ -31,7 +31,7 @@ import org.scalatest.matchers.should.Matchers
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, QueryTest, Row, TypedColumn}
-import org.apache.spark.sql.SparkSession.{clearActiveSession, setActiveSession}
+import org.apache.spark.sql.SparkSession.{clearActiveSession, clearDefaultSession, setActiveSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession, SQLContext}
 import org.apache.spark.sql.execution._
@@ -48,16 +48,11 @@ abstract class PipelineTest
 
   final protected val storageRoot = createTempDir()
 
-  var spark: SparkSession = createAndInitializeSpark()
-  val originalSpark: SparkSession = spark.cloneSession()
+  var spark: SparkSession = _
 
   implicit def sqlContext: SQLContext = spark.sqlContext
   def sql(text: String): DataFrame = spark.sql(text)
 
-  /**
-   * Spark confs for [[originalSpark]]. Spark confs set here will be the default spark confs for
-   * all spark sessions created in tests.
-   */
   protected def sparkConf: SparkConf = {
     new SparkConf()
       .set("spark.sql.shuffle.partitions", "2")
@@ -111,7 +106,7 @@ abstract class PipelineTest
   /** Set up the spark session before each test. */
   protected def initializeSparkBeforeEachTest(): Unit = {
     clearActiveSession()
-    spark = originalSpark.newSession()
+    spark = createAndInitializeSpark()
     setActiveSession(spark)
   }
 
@@ -133,7 +128,23 @@ abstract class PipelineTest
   }
 
   override def afterAll(): Unit = {
-    spark.stop()
+    try {
+      super.afterAll()
+    } finally {
+      try {
+        if (spark != null) {
+          try {
+            spark.sessionState.catalog.reset()
+          } finally {
+            spark.stop()
+            spark = null
+          }
+        }
+      } finally {
+        clearActiveSession()
+        clearDefaultSession()
+      }
+    }
   }
 
   protected def gridTest[A](testNamePrefix: String, testTags: Tag*)(params: Seq[A])(

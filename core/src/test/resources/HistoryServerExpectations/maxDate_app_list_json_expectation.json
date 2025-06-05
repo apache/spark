@@ -10,8 +10,8 @@
     "completed" : true,
     "appSparkVersion" : "",
     "endTimeEpoch" : 1422981788731,
-    "startTimeEpoch" : 1422981779720,
-    "lastUpdatedEpoch" : 0
+    "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1422981779720
   } ]
 }, {
   "id" : "local-1422981759269",
@@ -25,7 +25,7 @@
     "completed" : true,
     "appSparkVersion" : "",
     "endTimeEpoch" : 1422981766912,
-    "startTimeEpoch" : 1422981758277,
-    "lastUpdatedEpoch" : 0
+    "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1422981758277
   } ]
 } ]

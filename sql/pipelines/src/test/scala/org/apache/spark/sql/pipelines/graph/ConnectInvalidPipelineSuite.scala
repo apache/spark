@@ -29,7 +29,6 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
  */
 class ConnectInvalidPipelineSuite extends PipelineTest {
 
-  import originalSpark.implicits._
   test("Missing source") {
     class P extends TestGraphRegistrationContext(spark) {
       registerView("b", query = readFlowFunc("a"))
@@ -144,6 +143,9 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
   }
 
   test("Missing attribute in the schema") {
+    val session = spark
+    import session.implicits._
+
     class P extends TestGraphRegistrationContext(spark) {
       registerView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("z")))
       registerView("b", query = sqlFlowFunc(spark, "SELECT x FROM a"))
@@ -157,6 +159,9 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
   }
 
   test("Joining on a column with different names") {
+    val session = spark
+    import session.implicits._
+
     class P extends TestGraphRegistrationContext(spark) {
       registerView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")))
       registerView("b", query = dfFlowFunc(Seq("a", "b", "c").toDF("y")))
@@ -175,6 +180,9 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
   }
 
   test("Writing to one table by unioning flows with different schemas") {
+    val session = spark
+    import session.implicits._
+
     class P extends TestGraphRegistrationContext(spark) {
       registerView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")))
       registerView("b", query = dfFlowFunc(Seq(true, false).toDF("x")))
@@ -225,6 +233,9 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
   }
 
   test("Cyclic graph") {
+    val session = spark
+    import session.implicits._
+
     class P extends TestGraphRegistrationContext(spark) {
       registerView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")))
       registerView("b", query = sqlFlowFunc(spark, "SELECT * FROM a UNION SELECT * FROM d"))
@@ -246,6 +257,9 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
   }
 
   test("Cyclic graph with materialized nodes") {
+    val session = spark
+    import session.implicits._
+
     class P extends TestGraphRegistrationContext(spark) {
       registerTable("a", query = Option(dfFlowFunc(Seq(1, 2, 3).toDF("x"))))
       registerTable(
@@ -270,6 +284,9 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
   }
 
   test("Cyclic graph - second query makes it cyclic") {
+    val session = spark
+    import session.implicits._
+
     class P extends TestGraphRegistrationContext(spark) {
       registerTable("a", query = Option(dfFlowFunc(Seq(1, 2, 3).toDF("x"))))
       registerTable("b")
@@ -293,6 +310,9 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
   }
 
   test("Cyclic graph - all named queries") {
+    val session = spark
+    import session.implicits._
+
     class P extends TestGraphRegistrationContext(spark) {
       registerTable("a", query = Option(dfFlowFunc(Seq(1, 2, 3).toDF("x"))))
       registerTable("b")
@@ -317,6 +337,9 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
   }
 
   test("view-table conf conflict") {
+    val session = spark
+    import session.implicits._
+
     val p = new TestGraphRegistrationContext(spark) {
       registerView("a", query = dfFlowFunc(Seq(1).toDF()), sqlConf = Map("x" -> "a-val"))
       registerTable("b", query = Option(readFlowFunc("a")), sqlConf = Map("x" -> "b-val"))
@@ -338,6 +361,9 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
   }
 
   test("view-view conf conflict") {
+    val session = spark
+    import session.implicits._
+
     val p = new TestGraphRegistrationContext(spark) {
       registerView("a", query = dfFlowFunc(Seq(1).toDF()), sqlConf = Map("x" -> "a-val"))
       registerView("b", query = dfFlowFunc(Seq(1).toDF()), sqlConf = Map("x" -> "b-val"))
@@ -364,6 +390,9 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
   }
 
   test("reading a complete view incrementally") {
+    val session = spark
+    import session.implicits._
+
     val p = new TestGraphRegistrationContext(spark) {
       registerView("a", query = dfFlowFunc(Seq(1).toDF()))
       registerTable("b", query = Option(readStreamFlowFunc("a")))
@@ -380,6 +409,9 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
   }
 
   test("reading an incremental view completely") {
+    val session = spark
+    import session.implicits._
+
     val p = new TestGraphRegistrationContext(spark) {
       val mem = MemoryStream[Int]
       mem.addData(1)
@@ -398,6 +430,9 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
   }
 
   test("Inferred schema that isn't a subset of user-specified schema") {
+    val session = spark
+    import session.implicits._
+
     val graph1 = new TestGraphRegistrationContext(spark) {
       registerTable(
         "a",
