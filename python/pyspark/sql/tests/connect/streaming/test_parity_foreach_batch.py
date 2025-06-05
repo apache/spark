@@ -20,6 +20,8 @@ import unittest
 from pyspark.sql.tests.streaming.test_streaming_foreach_batch import StreamingTestsForeachBatchMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.errors import PySparkPicklingError
+from pyspark.sql import functions as sf
+from pyspark.sql.dataframe import DataFrame
 
 if should_test_connect:
     from pyspark.errors.exceptions.connect import StreamingPythonRunnerInitializationException
@@ -136,6 +138,29 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
             if q:
                 q.stop()
 
+    def test_streaming_foreach_batch_external_column(self):
+        table_name = "testTable_foreach_batch_external_column"
+
+        def func(df: DataFrame, batch_id: int):
+            # Define 'col' outside the UDF below, so with Spark Connect it'd have to be serialized.
+            col = sf.lit(10)
+
+            @sf.udf("int")
+            def f(x):
+                return col._expr._value
+
+            result_df = df.select(f(sf.col("value")).alias("result"))
+            result_df.write.mode("append").saveAsTable(table_name)
+
+        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+        q = df.writeStream.foreachBatch(func).start()
+        q.processAllAvailable()
+        q.stop()
+
+        collected = self.spark.sql("select * from " + table_name).collect()
+        self.assertTrue(len(collected), 2)
+        for row in collected:
+            self.assertTrue(row["result"] == 10)
 
 if __name__ == "__main__":
     import unittest
