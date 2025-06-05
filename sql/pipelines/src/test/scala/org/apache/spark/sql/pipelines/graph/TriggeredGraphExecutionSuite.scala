@@ -70,61 +70,27 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
     updateContext.pipelineExecution.awaitCompletion()
 
     // start with queued
-    assertFlowProgressEvent(
+    assertFlowProgressStatusInOrder(
       eventBuffer = updateContext.eventBuffer,
       identifier = fullyQualifiedIdentifier("a"),
-      expectedFlowStatus = FlowStatus.QUEUED,
-      expectedEventLevel = EventLevel.INFO
+      expectedFlowProgressStatus = Seq(
+        (EventLevel.INFO, FlowStatus.QUEUED),
+        (EventLevel.INFO, FlowStatus.PLANNING),
+        (EventLevel.INFO, FlowStatus.STARTING),
+        (EventLevel.INFO, FlowStatus.RUNNING),
+        (EventLevel.INFO, FlowStatus.COMPLETED)
+      )
     )
-    assertFlowProgressEvent(
+    assertFlowProgressStatusInOrder(
       eventBuffer = updateContext.eventBuffer,
       identifier = fullyQualifiedIdentifier("b"),
-      expectedFlowStatus = FlowStatus.QUEUED,
-      expectedEventLevel = EventLevel.INFO
-    )
-    // then planning
-    assertFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("a"),
-      expectedFlowStatus = FlowStatus.PLANNING,
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("b"),
-      expectedFlowStatus = FlowStatus.PLANNING,
-      expectedEventLevel = EventLevel.INFO
-    )
-    // then running
-    assertFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("a"),
-      expectedFlowStatus = FlowStatus.RUNNING,
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("b"),
-      expectedFlowStatus = FlowStatus.RUNNING,
-      expectedEventLevel = EventLevel.INFO
-    )
-    // finally completed
-    assertFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("a"),
-      expectedFlowStatus = FlowStatus.COMPLETED,
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("b"),
-      expectedFlowStatus = FlowStatus.COMPLETED,
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertRunProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      state = RunState.COMPLETED,
-      expectedEventLevel = EventLevel.INFO
+      expectedFlowProgressStatus = Seq(
+        (EventLevel.INFO, FlowStatus.QUEUED),
+        (EventLevel.INFO, FlowStatus.PLANNING),
+        (EventLevel.INFO, FlowStatus.STARTING),
+        (EventLevel.INFO, FlowStatus.RUNNING),
+        (EventLevel.INFO, FlowStatus.COMPLETED)
+      )
     )
   }
 
@@ -160,24 +126,44 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
-    assert(updateContext.eventBuffer.getEvents.nonEmpty)
-    assertFlowProgressEvent(
+    assertFlowProgressStatusInOrder(
       eventBuffer = updateContext.eventBuffer,
       identifier = fullyQualifiedIdentifier("a"),
-      expectedFlowStatus = FlowStatus.STARTING,
-      expectedEventLevel = EventLevel.INFO
+      expectedFlowProgressStatus = Seq(
+        (EventLevel.INFO, FlowStatus.QUEUED),
+        (EventLevel.INFO, FlowStatus.PLANNING),
+        (EventLevel.INFO, FlowStatus.STARTING),
+        (EventLevel.INFO, FlowStatus.RUNNING),
+        (EventLevel.INFO, FlowStatus.COMPLETED)
+      )
     )
-    assertFlowProgressEvent(
+    assertFlowProgressStatusInOrder(
       eventBuffer = updateContext.eventBuffer,
       identifier = fullyQualifiedIdentifier("b"),
-      expectedFlowStatus = FlowStatus.STARTING,
-      expectedEventLevel = EventLevel.INFO
+      expectedFlowProgressStatus = Seq(
+        (EventLevel.INFO, FlowStatus.QUEUED),
+        (EventLevel.INFO, FlowStatus.PLANNING),
+        (EventLevel.INFO, FlowStatus.STARTING),
+        (EventLevel.INFO, FlowStatus.RUNNING),
+        (EventLevel.INFO, FlowStatus.COMPLETED)
+      )
     )
-    assertFlowProgressEvent(
+    assertFlowProgressStatusInOrder(
       eventBuffer = updateContext.eventBuffer,
       identifier = fullyQualifiedIdentifier("d"),
-      expectedFlowStatus = FlowStatus.STARTING,
-      expectedEventLevel = EventLevel.INFO
+      expectedFlowProgressStatus = Seq(
+        (EventLevel.INFO, FlowStatus.QUEUED),
+        (EventLevel.INFO, FlowStatus.STARTING),
+        (EventLevel.INFO, FlowStatus.RUNNING),
+        (EventLevel.INFO, FlowStatus.COMPLETED)
+      )
+    )
+
+    // no flow progress event for c, as it is a temporary view
+    assertNoFlowProgressEvent(
+      eventBuffer = updateContext.eventBuffer,
+      identifier = fullyQualifiedIdentifier("c", isView = true),
+      flowStatus = FlowStatus.STARTING
     )
     assert(spark.table(s"${fullyQualifiedIdentifier("d")}").count() == 2)
   }
@@ -207,23 +193,35 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
-    assertFlowProgressEvent(
+    assertFlowProgressStatusInOrder(
       eventBuffer = updateContext.eventBuffer,
       identifier = fullyQualifiedIdentifier("evens"),
-      expectedFlowStatus = FlowStatus.QUEUED,
-      expectedEventLevel = EventLevel.INFO
+      expectedFlowProgressStatus = Seq(
+        (EventLevel.INFO, FlowStatus.QUEUED),
+        (EventLevel.INFO, FlowStatus.STARTING),
+        (EventLevel.INFO, FlowStatus.RUNNING),
+        (EventLevel.INFO, FlowStatus.COMPLETED)
+      )
     )
-    assertFlowProgressEvent(
+    assertFlowProgressStatusInOrder(
       eventBuffer = updateContext.eventBuffer,
       identifier = fullyQualifiedIdentifier("eights"),
-      expectedFlowStatus = FlowStatus.QUEUED,
-      expectedEventLevel = EventLevel.INFO
+      expectedFlowProgressStatus = Seq(
+        (EventLevel.INFO, FlowStatus.QUEUED),
+        (EventLevel.INFO, FlowStatus.STARTING),
+        (EventLevel.INFO, FlowStatus.RUNNING),
+        (EventLevel.INFO, FlowStatus.COMPLETED)
+      )
     )
-    assertFlowProgressEvent(
+    assertFlowProgressStatusInOrder(
       eventBuffer = updateContext.eventBuffer,
       identifier = fullyQualifiedIdentifier("fours"),
-      expectedFlowStatus = FlowStatus.QUEUED,
-      expectedEventLevel = EventLevel.INFO
+      expectedFlowProgressStatus = Seq(
+        (EventLevel.INFO, FlowStatus.QUEUED),
+        (EventLevel.INFO, FlowStatus.STARTING),
+        (EventLevel.INFO, FlowStatus.RUNNING),
+        (EventLevel.INFO, FlowStatus.COMPLETED)
+      )
     )
 
     val graphExecution = updateContext.pipelineExecution.graphExecution.get
@@ -237,66 +235,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
     assert(getFlowsWithState(graphExecution, StreamState.TERMINATED_WITH_ERROR).isEmpty)
     assert(getFlowsWithState(graphExecution, StreamState.SKIPPED).isEmpty)
     assert(getFlowsWithState(graphExecution, StreamState.CANCELED).isEmpty)
-    assertFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("evens"),
-      expectedFlowStatus = FlowStatus.STARTING,
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("eights"),
-      expectedFlowStatus = FlowStatus.STARTING,
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("fours"),
-      expectedFlowStatus = FlowStatus.STARTING,
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("evens"),
-      expectedFlowStatus = FlowStatus.RUNNING,
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("eights"),
-      expectedFlowStatus = FlowStatus.RUNNING,
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("fours"),
-      expectedFlowStatus = FlowStatus.RUNNING,
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("evens"),
-      expectedFlowStatus = FlowStatus.COMPLETED,
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("eights"),
-      expectedFlowStatus = FlowStatus.COMPLETED,
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("fours"),
-      expectedFlowStatus = FlowStatus.COMPLETED,
-      expectedNumOfEvents = Option(1),
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertNoFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("fours"),
-      flowStatus = FlowStatus.FAILED
-    )
+
     checkDatasetUnorderly(getTable(fullyQualifiedIdentifier("evens")), 2L, 4L, 6L, 8L)
     checkDatasetUnorderly(getTable(fullyQualifiedIdentifier("fours")), 4L, 8L, 12L, 16L)
     checkDatasetUnorderly(getTable(fullyQualifiedIdentifier("eights")), 8L, 16L, 24L, 32L)
@@ -317,12 +256,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
     val updateContext = TestPipelineUpdateContext(spark, graph)
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
-    assertFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("evens"),
-      expectedFlowStatus = FlowStatus.QUEUED,
-      expectedEventLevel = EventLevel.INFO
-    )
+
     val graphExecution = updateContext.pipelineExecution.graphExecution.get
     assert(
       getFlowsWithState(graphExecution, StreamState.SUCCESSFUL) == Set(
@@ -332,28 +266,16 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
     assert(getFlowsWithState(graphExecution, StreamState.TERMINATED_WITH_ERROR).isEmpty)
     assert(getFlowsWithState(graphExecution, StreamState.SKIPPED).isEmpty)
     assert(getFlowsWithState(graphExecution, StreamState.CANCELED).isEmpty)
-    assertFlowProgressEvent(
+
+    assertFlowProgressStatusInOrder(
       eventBuffer = updateContext.eventBuffer,
       identifier = fullyQualifiedIdentifier("evens"),
-      expectedFlowStatus = FlowStatus.STARTING,
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("evens"),
-      expectedFlowStatus = FlowStatus.RUNNING,
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("evens"),
-      expectedFlowStatus = FlowStatus.COMPLETED,
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertNoFlowProgressEvent(
-      eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("evens"),
-      flowStatus = FlowStatus.FAILED
+      expectedFlowProgressStatus = Seq(
+        (EventLevel.INFO, FlowStatus.QUEUED),
+        (EventLevel.INFO, FlowStatus.STARTING),
+        (EventLevel.INFO, FlowStatus.RUNNING),
+        (EventLevel.INFO, FlowStatus.COMPLETED)
+      )
     )
 
     checkDatasetUnorderly(getTable(fullyQualifiedIdentifier("evens")))
@@ -412,6 +334,8 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
       )
     )
     assert(getFlowsWithState(graphExecution, StreamState.CANCELED).isEmpty)
+
+    // `input_table` and `branch_1` should succeed, while `branch_2` should fail.
     assertFlowProgressEvent(
       eventBuffer = updateContext.eventBuffer,
       identifier = fullyQualifiedIdentifier("input_table"),
@@ -435,6 +359,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
         }
       }
     )
+    // all the downstream flows of `branch_2` should be skipped.
     assertFlowProgressEvent(
       eventBuffer = updateContext.eventBuffer,
       identifier = fullyQualifiedIdentifier("x"),
@@ -447,9 +372,16 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
       expectedFlowStatus = FlowStatus.SKIPPED,
       expectedEventLevel = EventLevel.INFO
     )
+
+    // since flow `x` and `z` are skipped, we should not see any progress events for them.
     assertNoFlowProgressEvent(
       eventBuffer = updateContext.eventBuffer,
       identifier = fullyQualifiedIdentifier("x"),
+      flowStatus = FlowStatus.STARTING
+    )
+    assertNoFlowProgressEvent(
+      eventBuffer = updateContext.eventBuffer,
+      identifier = fullyQualifiedIdentifier("z"),
       flowStatus = FlowStatus.STARTING
     )
 
@@ -457,6 +389,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
     checkDatasetUnorderly(getTable(fullyQualifiedIdentifier("input_table")), 1L, 2L)
     checkDatasetUnorderly(getTable(fullyQualifiedIdentifier("branch_1")), 1L, 2L)
 
+    // the pipeline run should be marked as failed since `branch_2` has failed.
     assertRunProgressEvent(
       eventBuffer = updateContext.eventBuffer,
       state = RunState.FAILED,
@@ -936,42 +869,37 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
       spark.read.table(fullyQualifiedIdentifier(tableName).toString)
     }
 
-    // only source and all tables are refreshed and have data
+    // only `source` and `all_tables` flows are executed and their table are refreshed and have data
+    assertFlowProgressStatusInOrder(
+      eventBuffer = updateContext1.eventBuffer,
+      identifier = fullyQualifiedIdentifier("source"),
+      expectedFlowProgressStatus = Seq(
+        (EventLevel.INFO, FlowStatus.QUEUED),
+        (EventLevel.INFO, FlowStatus.STARTING),
+        (EventLevel.INFO, FlowStatus.RUNNING),
+        (EventLevel.INFO, FlowStatus.COMPLETED)
+      )
+    )
+    assertFlowProgressStatusInOrder(
+      eventBuffer = updateContext1.eventBuffer,
+      identifier = fullyQualifiedIdentifier("all"),
+      expectedFlowProgressStatus = Seq(
+        (EventLevel.INFO, FlowStatus.QUEUED),
+        (EventLevel.INFO, FlowStatus.STARTING),
+        (EventLevel.INFO, FlowStatus.RUNNING),
+        (EventLevel.INFO, FlowStatus.COMPLETED)
+      )
+    )
     checkAnswer(readTable("source"), Seq(Row(1), Row(2), Row(3)))
     checkAnswer(readTable("all"), Seq(Row(1), Row(2), Row(3)))
-    // max_evens table is not created
-    assert(!spark.catalog.tableExists(fullyQualifiedIdentifier("max_evens").toString))
-
+    // `max_evens` flow shouldn't be executed and the table is not created
     assertFlowProgressEvent(
       eventBuffer = updateContext1.eventBuffer,
       identifier = fullyQualifiedIdentifier("max_evens"),
       expectedFlowStatus = FlowStatus.EXCLUDED,
       expectedEventLevel = EventLevel.INFO
     )
-    assertFlowProgressEvent(
-      eventBuffer = updateContext1.eventBuffer,
-      identifier = fullyQualifiedIdentifier("source"),
-      expectedFlowStatus = FlowStatus.RUNNING,
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertFlowProgressEvent(
-      eventBuffer = updateContext1.eventBuffer,
-      identifier = fullyQualifiedIdentifier("source"),
-      expectedFlowStatus = FlowStatus.COMPLETED,
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertFlowProgressEvent(
-      eventBuffer = updateContext1.eventBuffer,
-      identifier = fullyQualifiedIdentifier("all"),
-      expectedFlowStatus = FlowStatus.RUNNING,
-      expectedEventLevel = EventLevel.INFO
-    )
-    assertFlowProgressEvent(
-      eventBuffer = updateContext1.eventBuffer,
-      identifier = fullyQualifiedIdentifier("all"),
-      expectedFlowStatus = FlowStatus.COMPLETED,
-      expectedEventLevel = EventLevel.INFO
-    )
+    assert(!spark.catalog.tableExists(fullyQualifiedIdentifier("max_evens").toString))
 
     // Second update, which excludes "all" table.
     ints.addData(4)
@@ -986,46 +914,42 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
     updateContext2.pipelineExecution.runPipeline()
     updateContext2.pipelineExecution.awaitCompletion()
     checkAnswer(readTable("source"), Seq(Row(1), Row(2), Row(3), Row(4)))
-    // 'source' table is not refreshed and has old data
+    // `all` flow should not be executed and 'all' table is not refreshed and has old data
     checkAnswer(readTable("all"), Seq(Row(1), Row(2), Row(3)))
     checkAnswer(readTable("max_evens"), Seq(Row(2)))
-
     assertFlowProgressEvent(
       eventBuffer = updateContext2.eventBuffer,
       identifier = fullyQualifiedIdentifier("all"),
       expectedFlowStatus = FlowStatus.EXCLUDED,
       expectedEventLevel = EventLevel.INFO
     )
-    assertFlowProgressEvent(
+    assertNoFlowProgressEvent(
+      eventBuffer = updateContext2.eventBuffer,
+      identifier = fullyQualifiedIdentifier("all"),
+      flowStatus = FlowStatus.STARTING
+    )
+
+    // `max_evens` and `source` flows should be executed and the table is created with new data
+    assertFlowProgressStatusInOrder(
       eventBuffer = updateContext2.eventBuffer,
       identifier = fullyQualifiedIdentifier("max_evens"),
-      expectedFlowStatus = FlowStatus.COMPLETED,
-      expectedEventLevel = EventLevel.INFO,
-      expectedNumOfEvents = Option(1)
+      expectedFlowProgressStatus = Seq(
+        (EventLevel.INFO, FlowStatus.QUEUED),
+        (EventLevel.INFO, FlowStatus.PLANNING),
+        (EventLevel.INFO, FlowStatus.STARTING),
+        (EventLevel.INFO, FlowStatus.RUNNING),
+        (EventLevel.INFO, FlowStatus.COMPLETED)
+      )
     )
-    assertFlowProgressEvent(
+    assertFlowProgressStatusInOrder(
       eventBuffer = updateContext2.eventBuffer,
       identifier = fullyQualifiedIdentifier("source"),
-      expectedFlowStatus = FlowStatus.RUNNING,
-      expectedEventLevel = EventLevel.INFO,
-      expectedNumOfEvents = Option(1)
-    )
-    assertFlowProgressEvent(
-      eventBuffer = updateContext2.eventBuffer,
-      identifier = fullyQualifiedIdentifier("source"),
-      expectedFlowStatus = FlowStatus.COMPLETED,
-      expectedEventLevel = EventLevel.INFO,
-      expectedNumOfEvents = Option(1)
-    )
-    assertNoFlowProgressEvent(
-      eventBuffer = updateContext2.eventBuffer,
-      identifier = fullyQualifiedIdentifier("all"),
-      flowStatus = FlowStatus.RUNNING
-    )
-    assertNoFlowProgressEvent(
-      eventBuffer = updateContext2.eventBuffer,
-      identifier = fullyQualifiedIdentifier("all"),
-      flowStatus = FlowStatus.COMPLETED
+      expectedFlowProgressStatus = Seq(
+        (EventLevel.INFO, FlowStatus.QUEUED),
+        (EventLevel.INFO, FlowStatus.STARTING),
+        (EventLevel.INFO, FlowStatus.RUNNING),
+        (EventLevel.INFO, FlowStatus.COMPLETED)
+      )
     )
   }
 
