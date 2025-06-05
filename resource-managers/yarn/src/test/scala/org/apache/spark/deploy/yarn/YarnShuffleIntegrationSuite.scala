@@ -33,7 +33,7 @@ import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
-import org.apache.spark.tags.{ExtendedLevelDBTest, ExtendedYarnTest}
+import org.apache.spark.tags.ExtendedYarnTest
 
 /**
  * Integration test for the external shuffle service with a yarn mini-cluster
@@ -86,13 +86,6 @@ abstract class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
   }
 }
 
-@ExtendedLevelDBTest
-@ExtendedYarnTest
-class YarnShuffleIntegrationWithLevelDBBackendSuite
-  extends YarnShuffleIntegrationSuite {
-  override protected def dbBackend: DBBackend = DBBackend.LEVELDB
-}
-
 @ExtendedYarnTest
 class YarnShuffleIntegrationWithRocksDBBackendSuite
   extends YarnShuffleIntegrationSuite {
@@ -116,12 +109,6 @@ abstract class YarnShuffleAuthSuite extends YarnShuffleIntegrationSuite {
       NETWORK_CRYPTO_ENABLED.key -> "true"
     )
   }
-}
-
-@ExtendedLevelDBTest
-@ExtendedYarnTest
-class YarnShuffleAuthWithLevelDBBackendSuite extends YarnShuffleAuthSuite {
-  override protected def dbBackend: DBBackend = DBBackend.LEVELDB
 }
 
 @ExtendedYarnTest

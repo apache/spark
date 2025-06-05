@@ -115,19 +115,12 @@ class AppStatusStoreSuite extends SparkFunSuite {
   }
 
   private val cases = {
-    val baseCases = Seq(
+    Seq(
       "disk rocksdb" -> createAppStore(disk = true, HybridStoreDiskBackend.ROCKSDB, live = false),
       "in memory" -> createAppStore(disk = false, live = false),
       "in memory live" -> createAppStore(disk = false, live = true),
       "rocksdb live" -> createAppStore(disk = true, HybridStoreDiskBackend.ROCKSDB, live = true)
     )
-    if (Utils.isMacOnAppleSilicon) {
-      baseCases
-    } else {
-      Seq(
-        "disk leveldb" -> createAppStore(disk = true, HybridStoreDiskBackend.LEVELDB, live = false)
-      ) ++ baseCases
-    }
   }
 
   cases.foreach { case (hint, appStore) =>

@@ -906,10 +906,7 @@ The following extra configuration options are available when the shuffle service
   <td>ROCKSDB</td>
   <td>
     When work-preserving restart is enabled in YARN, this is used to specify the disk-base store used
-    in shuffle service state store, supports `ROCKSDB` and `LEVELDB` (deprecated) with `ROCKSDB` as default value.
-    The original data store in `RocksDB/LevelDB` will not be automatically converted to another kind
-    of storage now. The original data store will be retained and the new type data store will be
-    created when switching storage types.
+    in shuffle service state store, only supported `ROCKSDB` at now.
   </td>
   <td>3.4.0</td>
 </tr>
