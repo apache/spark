@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  * during metadata resolution traversal.
  */
 class ProhibitedResolver extends LogicalPlanResolver {
-  def resolve(plan: LogicalPlan): LogicalPlan = {
+  override def resolve(plan: LogicalPlan): LogicalPlan = {
     throw SparkException.internalError("Resolver cannot be used here")
   }
 }

@@ -223,8 +223,8 @@
   "maxMemory" : 3820172083,
   "addTime" : "2019-04-08T20:39:54.596GMT",
   "executorLogs" : {
-    "stdout" : "http://test-2.vpc.company.com:8042/node/containerlogs/container_1553914137147_0018_01_000002/systest/stdout?start=-4096",
-    "stderr" : "http://test-2.vpc.company.com:8042/node/containerlogs/container_1553914137147_0018_01_000002/systest/stderr?start=-4096"
+    "stderr" : "http://test-2.vpc.company.com:8042/node/containerlogs/container_1553914137147_0018_01_000002/systest/stderr?start=-4096",
+    "stdout" : "http://test-2.vpc.company.com:8042/node/containerlogs/container_1553914137147_0018_01_000002/systest/stdout?start=-4096"
   },
   "memoryMetrics" : {
     "usedOnHeapStorageMemory" : 0,

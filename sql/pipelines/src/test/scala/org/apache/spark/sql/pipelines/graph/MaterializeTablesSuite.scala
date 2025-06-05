@@ -20,7 +20,7 @@ package org.apache.spark.sql.pipelines.graph
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Expressions
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.pipelines.graph.DatasetManager.TableMaterializationException
@@ -48,8 +48,8 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
           "a",
           specifiedSchema = Option(
             new StructType()
-              .add("x", IntegerType, false, "comment1")
-              .add("x2", IntegerType, true, "comment2")
+              .add("x", IntegerType, nullable = false, "comment1")
+              .add("x2", IntegerType, nullable = true, "comment2")
           ),
           comment = Option("p-comment")
         )
@@ -61,9 +61,11 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
     val catalogTable = catalog.loadTable(identifier)
 
     assert(
-      catalogTable.schema == new StructType()
-        .add("x", IntegerType, false, "comment1")
-        .add("x2", IntegerType, true, "comment2")
+      catalogTable.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+        new StructType()
+          .add("x", IntegerType, nullable = false, "comment1")
+          .add("x2", IntegerType, nullable = true, "comment2")
+      )
     )
     assert(catalogTable.properties().get(TableCatalog.PROP_COMMENT) == "p-comment")
 
@@ -78,8 +80,8 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
           "a",
           specifiedSchema = Option(
             new StructType()
-              .add("x", IntegerType, false, "comment3")
-              .add("x2", IntegerType, true, "comment4")
+              .add("x", IntegerType, nullable = false, "comment3")
+              .add("x2", IntegerType, nullable = true, "comment4")
           ),
           comment = Option("p-comment")
         )
@@ -87,9 +89,11 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
     )
     val catalogTable2 = catalog.loadTable(identifier)
     assert(
-      catalogTable2.schema == new StructType()
-        .add("x", IntegerType, false, "comment3")
-        .add("x2", IntegerType, true, "comment4")
+      catalogTable2.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+        new StructType()
+          .add("x", IntegerType, nullable = false, "comment3")
+          .add("x2", IntegerType, nullable = true, "comment4")
+      )
     )
     assert(catalogTable2.properties().get(TableCatalog.PROP_COMMENT) == "p-comment")
 
@@ -104,8 +108,8 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
           "a",
           specifiedSchema = Option(
             new StructType()
-              .add("x", IntegerType, false)
-              .add("x2", IntegerType, true)
+              .add("x", IntegerType, nullable = false)
+              .add("x2", IntegerType, nullable = true)
           ),
           comment = Option("p-comment")
         )
@@ -114,9 +118,11 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     val catalogTable3 = catalog.loadTable(identifier)
     assert(
-      catalogTable3.schema == new StructType()
-        .add("x", IntegerType, false, comment = null)
-        .add("x2", IntegerType, true, comment = null)
+      catalogTable3.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+        new StructType()
+          .add("x", IntegerType, nullable = false, comment = null)
+          .add("x2", IntegerType, nullable = true, comment = null)
+      )
     )
     assert(catalogTable3.properties().get(TableCatalog.PROP_COMMENT) == "p-comment")
   }
@@ -145,8 +151,14 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
     val catalogTable1 = catalog.loadTable(identifier1)
     val catalogTable2 = catalog.loadTable(identifier2)
 
-    assert(catalogTable1.schema == new StructType().add("x", IntegerType))
-    assert(catalogTable2.schema == new StructType().add("y", StringType))
+    assert(
+      catalogTable1.columns() sameElements CatalogV2Util
+        .structTypeToV2Columns(new StructType().add("x", IntegerType))
+    )
+    assert(
+      catalogTable2.columns() sameElements CatalogV2Util
+        .structTypeToV2Columns(new StructType().add("y", StringType))
+    )
   }
 
   test("temporary views don't get materialized") {
@@ -197,7 +209,10 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val b =
       catalog.loadTable(Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "b"))
-    assert(b.schema == new StructType().add("timestamp", LongType))
+    assert(
+      b.columns() sameElements CatalogV2Util
+        .structTypeToV2Columns(new StructType().add("timestamp", LongType))
+    )
 
     class P2 extends TestGraphRegistrationContext(spark) {
       registerTable(
@@ -213,7 +228,10 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
     materializeGraph(new P2().resolveToDataflowGraph())
     val b2 =
       catalog.loadTable(Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "b"))
-    assert(b2.schema == new StructType().add("timestamp", TimestampType))
+    assert(
+      b2.columns() sameElements CatalogV2Util
+        .structTypeToV2Columns(new StructType().add("timestamp", TimestampType))
+    )
   }
 
   test("schema matches existing table schema") {
@@ -221,7 +239,11 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t2")
     val table = catalog.loadTable(identifier)
-    assert(table.schema == new StructType().add("x", IntegerType))
+    assert(
+      table.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+        new StructType().add("x", IntegerType)
+      )
+    )
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
@@ -231,7 +253,10 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
     )
 
     val table2 = catalog.loadTable(identifier)
-    assert(table2.schema == new StructType().add("x", IntegerType))
+    assert(
+      table2.columns() sameElements CatalogV2Util
+        .structTypeToV2Columns(new StructType().add("x", IntegerType))
+    )
   }
 //
   test("invalid schema merge") {
@@ -265,7 +290,11 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t4")
     val table = catalog.loadTable(identifier)
-    assert(table.schema == new StructType().add("x", IntegerType))
+    assert(
+      table.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+        new StructType().add("x", IntegerType)
+      )
+    )
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
@@ -274,8 +303,8 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
           "t4",
           specifiedSchema = Option(
             new StructType()
-              .add("x", IntegerType, true, "this is column x")
-              .add("z", LongType, true, "this is column z")
+              .add("x", IntegerType, nullable = true, "this is column x")
+              .add("z", LongType, nullable = true, "this is column z")
           )
         )
       }.resolveToDataflowGraph()
@@ -283,9 +312,11 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     val table2 = catalog.loadTable(identifier)
     assert(
-      table2.schema == new StructType()
-        .add("x", IntegerType, true, "this is column x")
-        .add("z", LongType, true, "this is column z")
+      table2.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+        new StructType()
+          .add("x", IntegerType, nullable = true, "this is column x")
+          .add("z", LongType, nullable = true, "this is column z")
+      )
     )
   }
 
@@ -294,11 +325,15 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t6")
     val table = catalog.loadTable(identifier)
-    assert(table.schema == new StructType().add("x", BooleanType))
+    assert(
+      table.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+        new StructType().add("x", BooleanType)
+      )
+    )
 
     val ex = intercept[TableMaterializationException] {
       materializeGraph(new TestGraphRegistrationContext(spark) {
-        val source = MemoryStream[Int]
+        val source: MemoryStream[Int] = MemoryStream[Int]
         source.addData(1, 2)
         registerTable(
           "t6",
@@ -321,7 +356,10 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
       )
     }.resolveToDataflowGraph())
     val table2 = catalog.loadTable(identifier)
-    assert(table2.schema == new StructType().add("x", IntegerType))
+    assert(
+      table2.columns() sameElements CatalogV2Util
+        .structTypeToV2Columns(new StructType().add("x", IntegerType))
+    )
   }
 
   test("partition columns with user schema") {
@@ -343,8 +381,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "a")
     val table = catalog.loadTable(identifier)
     assert(
-      table.schema ==
-      new StructType().add("x1", IntegerType).add("x2", IntegerType)
+      table.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+        new StructType().add("x1", IntegerType).add("x2", IntegerType)
+      )
     )
     assert(table.partitioning().toSeq == Seq(Expressions.identity("x2")))
   }
@@ -358,10 +397,10 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t7")
     val table = catalog.loadTable(identifier)
     assert(
-      table.schema.fields.toSet == new StructType()
+      table.columns().map(_.name()).toSet == new StructType()
         .add("x", BooleanType)
         .add("y", IntegerType)
-        .fields
+        .fieldNames
         .toSet
     )
     assert(table.partitioning().toSeq == Seq(Expressions.identity("x")))
@@ -382,7 +421,10 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
     )
 
     val table2 = catalog.loadTable(identifier)
-    assert(table2.schema == new StructType().add("y", IntegerType).add("x", BooleanType))
+    assert(
+      table2.columns() sameElements CatalogV2Util
+        .structTypeToV2Columns(new StructType().add("y", IntegerType).add("x", BooleanType))
+    )
     assert(table2.partitioning().toSeq == Seq(Expressions.identity("x")))
 
     // Don't specify any partition column; should throw.
@@ -401,7 +443,10 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
     assert(ex.cause.asInstanceOf[SparkThrowable].getCondition == "CANNOT_UPDATE_PARTITION_COLUMNS")
 
     val table3 = catalog.loadTable(identifier)
-    assert(table3.schema == new StructType().add("y", IntegerType).add("x", BooleanType))
+    assert(
+      table3.columns() sameElements CatalogV2Util
+        .structTypeToV2Columns(new StructType().add("y", IntegerType).add("x", BooleanType))
+    )
     assert(table3.partitioning().toSeq == Seq(Expressions.identity("x")))
   }
 
@@ -534,7 +579,10 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
       val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "b")
 
       val table = catalog.loadTable(identifier)
-      assert(table.schema == new StructType().add("x", IntegerType))
+      assert(
+        table.columns() sameElements CatalogV2Util
+          .structTypeToV2Columns(new StructType().add("x", IntegerType))
+      )
 
       materializeGraph(
         new TestGraphRegistrationContext(spark) {
@@ -543,7 +591,10 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
         }.resolveToDataflowGraph()
       )
       val table2 = catalog.loadTable(identifier)
-      assert(table2.schema == new StructType().add("y", IntegerType))
+      assert(
+        table2.columns() sameElements CatalogV2Util
+          .structTypeToV2Columns(new StructType().add("y", IntegerType))
+      )
     }
   }
 
@@ -578,7 +629,10 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
       val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
       val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "b")
       val table = catalog.loadTable(identifier)
-      assert(table.schema == new StructType().add("x", IntegerType))
+      assert(
+        table.columns() sameElements CatalogV2Util
+          .structTypeToV2Columns(new StructType().add("x", IntegerType))
+      )
 
       materializeGraph(
         new TestGraphRegistrationContext(spark) {
@@ -592,13 +646,17 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
       if (isFullRefresh) {
         assert(
-          table2.schema == new StructType().add("y", IntegerType)
+          table2.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+            new StructType().add("y", IntegerType)
+          )
         )
       } else {
         assert(
-          table2.schema == new StructType()
-            .add("x", IntegerType)
-            .add("y", IntegerType)
+          table2.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+            new StructType()
+              .add("x", IntegerType)
+              .add("y", IntegerType)
+          )
         )
       }
     }
@@ -635,12 +693,17 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
       catalog.loadTable(Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "c"))
 
     assert(
-      tableA.schema == new StructType()
-        .add("x", IntegerType)
-        .add("y", IntegerType)
+      tableA.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+        new StructType()
+          .add("x", IntegerType)
+          .add("y", IntegerType)
+      )
     )
 
-    assert(tableC.schema == new StructType().add("y", IntegerType))
+    assert(
+      tableC.columns() sameElements CatalogV2Util
+        .structTypeToV2Columns(new StructType().add("y", IntegerType))
+    )
   }
 
   test("tables with arrays and maps") {
@@ -671,13 +734,19 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
       catalog.loadTable(Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "c"))
 
     assert(
-      tableA.schema ==
-      StructType.fromDDL("m MAP<int, struct<col1: string, col2: string>>")
+      tableA.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+        StructType.fromDDL("m MAP<int, struct<col1: string, col2: string>>")
+      )
     )
-    assert(tableB.schema == StructType.fromDDL("arr ARRAY<int>"))
     assert(
-      tableC.schema ==
-      StructType.fromDDL("m MAP<int, struct<col1: string, col2: string>>, arr ARRAY<int>")
+      tableB.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+        StructType.fromDDL("arr ARRAY<int>")
+      )
+    )
+    assert(
+      tableC.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+        StructType.fromDDL("m MAP<int, struct<col1: string, col2: string>>, arr ARRAY<int>")
+      )
     )
   }
 
@@ -713,14 +782,19 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
       catalog.loadTable(Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "c"))
 
     assert(
-      tableA.schema ==
-      StructType.fromDDL("m MAP<int, MAP<int, struct<col1: string, col2: string>>>")
+      tableA.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+        StructType.fromDDL("m MAP<int, MAP<int, struct<col1: string, col2: string>>>")
+      )
     )
-    assert(tableB.schema == StructType.fromDDL("arr ARRAY<ARRAY<string>>"))
     assert(
-      tableC.schema ==
-      StructType.fromDDL(
-        "m MAP<int, MAP<int, struct<col1: string, col2: string>>>, arr ARRAY<ARRAY<string>>"
+      tableB.columns() sameElements CatalogV2Util
+        .structTypeToV2Columns(StructType.fromDDL("arr ARRAY<ARRAY<string>>"))
+    )
+    assert(
+      tableC.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+        StructType.fromDDL(
+          "m MAP<int, MAP<int, struct<col1: string, col2: string>>>, arr ARRAY<ARRAY<string>>"
+        )
       )
     )
   }

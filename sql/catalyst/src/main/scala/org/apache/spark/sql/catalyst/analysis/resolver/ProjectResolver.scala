@@ -62,7 +62,9 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
    * current scope with resolved operators output to expose new names to the parent operators.
    */
   override def resolve(unresolvedProject: Project): LogicalPlan = {
-    val (resolvedOperator, resolvedProjectList) = scopes.withNewScope() {
+    scopes.pushScope()
+
+    val (resolvedOperator, resolvedProjectList) = try {
       val resolvedChild = operatorResolver.resolve(unresolvedProject.child)
       val childReferencedAttributes = expressionResolver.getLastReferencedAttributes
       val resolvedProjectList =
@@ -111,6 +113,8 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
         }
         (projectWithLca, resolvedProjectList)
       }
+    } finally {
+      scopes.popScope()
     }
 
     scopes.overwriteOutputAndExtendHiddenOutput(

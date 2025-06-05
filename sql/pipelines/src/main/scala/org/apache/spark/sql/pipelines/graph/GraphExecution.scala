@@ -22,7 +22,7 @@ import scala.concurrent.ExecutionContext
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.logging.StreamListener
@@ -38,30 +38,34 @@ abstract class GraphExecution(
 
   protected val pipelineConf: PipelineConf = env.pipelineConf
 
-  /** Maps flowName to count of consecutive failures. Used to manage flow retries */
+  /** Maps flow identifier to count of consecutive failures. Used to manage flow retries */
   private val flowToNumConsecutiveFailure = new ConcurrentHashMap[TableIdentifier, Int].asScala
 
   /** Maps flow identifier to count of successful runs. Used to populate batch id. */
   private val flowToNumSuccess = new ConcurrentHashMap[TableIdentifier, Long].asScala
 
   /**
-   * [[FlowExecution]]s currently being executed and tracked by this FlowExecution.
+   * [[FlowExecution]]s currently being executed and tracked by the graph execution.
    */
-  val physicalFlows = new collection.concurrent.TrieMap[TableIdentifier, FlowExecution]
+  val flowExecutions = new collection.concurrent.TrieMap[TableIdentifier, FlowExecution]
 
   /** Increments flow execution retry count for `flow`. */
   private def incrementFlowToNumConsecutiveFailure(flowIdentifier: TableIdentifier): Unit = {
     flowToNumConsecutiveFailure.put(flowIdentifier, flowToNumConsecutiveFailure(flowIdentifier) + 1)
   }
 
-  /** Protected so tests can override. */
+  /**
+   * Planner use to convert each logical dataflow (i.e., [[Flow]]) defined in the
+   * [[DataflowGraph]] into a concrete execution plan [[FlowExecution]] used by the
+   * pipeline execution.
+   */
   private val flowPlanner = new FlowPlanner(
     graph = graphForExecution,
     updateContext = env,
     triggerFor = streamTrigger
   )
 
-  // Listener to process events and metrics.
+  /** Listener to process streaming events and metrics. */
   private val streamListener = new StreamListener(env, graphForExecution)
 
   /**
@@ -73,20 +77,20 @@ abstract class GraphExecution(
    */
   def planAndStartFlow(flow: ResolvedFlow): Option[FlowExecution] = {
     try {
-      val physicalFlow = flowPlanner.plan(
+      val flowExecution = flowPlanner.plan(
         flow = graphForExecution.resolvedFlow(flow.identifier)
       )
 
-      env.flowProgressEventLogger.recordStart(physicalFlow)
+      env.flowProgressEventLogger.recordStart(flowExecution)
 
-      physicalFlow.executeAsync()
-      physicalFlows.put(flow.identifier, physicalFlow)
-      implicit val ec: ExecutionContext = physicalFlow.executionContext
+      flowExecution.executeAsync()
+      flowExecutions.put(flow.identifier, flowExecution)
+      implicit val ec: ExecutionContext = flowExecution.executionContext
 
       // Note: The asynchronous handling here means that completed events might be recorded after
       // initializing events for the next retry of this flow.
-      physicalFlow.getFuture.onComplete {
-        case Failure(ex) if !physicalFlow.isStreaming =>
+      flowExecution.getFuture.onComplete {
+        case Failure(ex) if !flowExecution.isStreaming =>
           incrementFlowToNumConsecutiveFailure(flow.identifier)
           env.flowProgressEventLogger.recordFailed(
             flow = flow,
@@ -100,7 +104,7 @@ abstract class GraphExecution(
         case Success(ExecutionResult.STOPPED) =>
         // We already recorded a STOPPED event in [[FlowExecution.stopFlow()]].
         // We don't need to log another one here.
-        case Success(ExecutionResult.FINISHED) if !physicalFlow.isStreaming =>
+        case Success(ExecutionResult.FINISHED) if !flowExecution.isStreaming =>
           // Reset consecutive failure count on success
           flowToNumConsecutiveFailure.put(flow.identifier, 0)
           flowToNumSuccess.put(
@@ -110,11 +114,14 @@ abstract class GraphExecution(
           env.flowProgressEventLogger.recordCompletion(flow)
         case _ => // Handled by StreamListener
       }
-      Option(physicalFlow)
+      Option(flowExecution)
     } catch {
       // This is if the flow fails to even start.
       case ex: Throwable =>
-        logError(s"Unhandled exception while starting flow:${flow.displayName}", ex)
+        logError(
+          log"Unhandled exception while starting flow:${MDC(LogKeys.FLOW_NAME, flow.displayName)}",
+          ex
+        )
         // InterruptedException is thrown when the thread executing `startFlow` is interrupted.
         if (ex.isInstanceOf[InterruptedException]) {
           env.flowProgressEventLogger.recordStop(flow)
@@ -151,7 +158,7 @@ abstract class GraphExecution(
     if (!pf.isCompleted) {
       val flow = graphForExecution.resolvedFlow(pf.identifier)
       try {
-        logInfo(s"Stopping ${pf.identifier}")
+        logInfo(log"Stopping ${MDC(LogKeys.FLOW_NAME, pf.identifier)}")
         pf.stop()
       } catch {
         case e: Throwable =>
@@ -166,7 +173,7 @@ abstract class GraphExecution(
           throw e
       }
       env.flowProgressEventLogger.recordStop(flow)
-      logInfo(s"Stopped ${pf.identifier}")
+      logInfo(log"Stopped ${MDC(LogKeys.FLOW_NAME, pf.identifier)}")
     } else {
       logWarning(
         s"Flow ${pf.identifier} was not stopped because it was already completed. " +
@@ -217,9 +224,11 @@ object GraphExecution extends Logging {
 
   // Set of states after checking the exception for flow execution retryability analysis.
   sealed trait FlowExecutionAction
-    /** Indicates that the flow execution should be retried. */
+
+  /** Indicates that the flow execution should be retried. */
   case object RetryFlowExecution extends FlowExecutionAction
-    /** Indicates that the flow execution should be stopped with a specific reason. */
+
+  /** Indicates that the flow execution should be stopped with a specific reason. */
   case class StopFlowExecution(reason: FlowExecutionStopReason) extends FlowExecutionAction
 
   /** Represents the reason why a flow execution should be stopped. */

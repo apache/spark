@@ -20,8 +20,25 @@ package org.apache.spark.sql.pipelines.utils
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.pipelines.common.{FlowStatus, RunState}
-import org.apache.spark.sql.pipelines.graph.{AllFlows, AllTables, DataflowGraph, FlowFilter, NoTables, PipelineConf, PipelineUpdateContext, TableFilter}
-import org.apache.spark.sql.pipelines.logging.{ErrorDetail, EventLevel, FlowProgress, FlowProgressEventLogger, PipelineEvent, PipelineRunEventBuffer, RunProgress}
+import org.apache.spark.sql.pipelines.graph.{
+  AllFlows,
+  AllTables,
+  DataflowGraph,
+  FlowFilter,
+  NoTables,
+  PipelineConf,
+  PipelineUpdateContext,
+  TableFilter
+}
+import org.apache.spark.sql.pipelines.logging.{
+  ErrorDetail,
+  EventLevel,
+  FlowProgress,
+  FlowProgressEventLogger,
+  PipelineEvent,
+  PipelineRunEventBuffer,
+  RunProgress
+}
 
 trait ExecutionTest
     extends PipelineTest
@@ -113,6 +130,43 @@ trait EventVerificationTestHelpers {
       expectedNumOfEvents.forall(_ == matchingEvents.size),
       s"Found ${matchingEvents.size} events for $identifier but expected " +
       s"$expectedNumOfEvents events. Logs for $identifier are $flowEvents"
+    )
+  }
+
+  /**
+   * Asserts emitted flow progress event logs for a given flow have the expected sequence of
+   * event levels and flow statuses in the expected order.
+   *
+   * @param eventBuffer The event buffer containing the events.
+   * @param identifier The identifier of the flow to check.
+   * @param expectedFlowProgressStatus A sequence of tuples containing the expected event level
+   *                                   and flow status in the expected order.
+   */
+  protected def assertFlowProgressStatusInOrder(
+      eventBuffer: PipelineRunEventBuffer,
+      identifier: TableIdentifier,
+      expectedFlowProgressStatus: Seq[(EventLevel, FlowStatus)]
+  ): Unit = {
+    // Get all events for the flow. This list is logged if the assertion
+    // fails to help with debugging. Only minimal filtering is done here
+    // so we have a complete list of events to look at for debugging.
+    val actualFlowProgressStatus = eventBuffer.getEvents
+      .filter(_.details.isInstanceOf[FlowProgress])
+      .filter { event =>
+        event.origin.flowName == Option(identifier.unquotedString)
+      }
+      .map { event =>
+        val flowProgress = event.details.asInstanceOf[FlowProgress]
+        (event.level, flowProgress.status)
+      }
+
+    assert(
+      actualFlowProgressStatus == expectedFlowProgressStatus,
+      s"Expected flow progress status for $identifier to be " +
+      s"$expectedFlowProgressStatus but got $actualFlowProgressStatus. " +
+      s"Logs for $identifier are " +
+      s"${eventBuffer.getEvents.filter(_.origin.flowName == Option(identifier.unquotedString))}. " +
+      s"All events in the buffer are ${eventBuffer.getEvents.mkString("\n")}"
     )
   }
 

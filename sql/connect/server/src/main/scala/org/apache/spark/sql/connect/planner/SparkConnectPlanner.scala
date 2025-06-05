@@ -32,7 +32,7 @@ import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.exception.ExceptionUtils
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{SparkClassNotFoundException, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
@@ -98,7 +98,7 @@ class SparkConnectPlanner(
   }
 
   if (!executeHolderOpt.forall { e => e.sessionHolder == sessionHolder }) {
-    throw new IllegalArgumentException("executeHolder does not belong to sessionHolder")
+    throw SparkException.internalError("executeHolder does not belong to sessionHolder")
   }
 
   @Since("4.0.0")
@@ -113,7 +113,7 @@ class SparkConnectPlanner(
   private[connect] def sessionId: String = sessionHolder.sessionId
 
   private lazy val executeHolder = executeHolderOpt.getOrElse {
-    throw new IllegalArgumentException("executeHolder is not set")
+    throw SparkException.internalError("executeHolder is not set")
   }
 
   private lazy val pythonExec =
@@ -220,8 +220,6 @@ class SparkConnectPlanner(
         case proto.Relation.RelTypeCase.COLLECT_METRICS =>
           transformCollectMetrics(rel.getCollectMetrics, rel.getCommon.getPlanId)
         case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
-        case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
-          throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
 
         // Catalog API (internal-only)
         case proto.Relation.RelTypeCase.CATALOG => transformCatalog(rel.getCatalog)
@@ -233,7 +231,9 @@ class SparkConnectPlanner(
         // Handle plugins for Spark Connect Relation types.
         case proto.Relation.RelTypeCase.EXTENSION =>
           transformRelationPlugin(rel.getExtension)
-        case _ => throw InvalidInputErrors.unknownRelationNotSupported(rel)
+
+        case other =>
+          throw InvalidInputErrors.invalidOneOfField(other, rel.getDescriptorForType)
       }
       if (rel.hasCommon && rel.getCommon.hasPlanId) {
         plan.setTagValue(LogicalPlan.PLAN_ID_TAG, rel.getCommon.getPlanId)
@@ -297,7 +297,8 @@ class SparkConnectPlanner(
         transformSetCurrentCatalog(catalog.getSetCurrentCatalog)
       case proto.Catalog.CatTypeCase.LIST_CATALOGS =>
         transformListCatalogs(catalog.getListCatalogs)
-      case other => throw InvalidInputErrors.catalogTypeNotSupported(other)
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, catalog.getDescriptorForType)
     }
   }
 
@@ -610,8 +611,8 @@ class SparkConnectPlanner(
           case _ =>
             throw InvalidInputErrors.functionEvalTypeNotSupported(pythonUdf.evalType)
         }
-      case _ =>
-        throw InvalidInputErrors.functionIdNotSupported(commonUdf.getFunctionCase.getNumber)
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, commonUdf.getDescriptorForType)
     }
   }
 
@@ -667,8 +668,8 @@ class SparkConnectPlanner(
             throw InvalidInputErrors.functionEvalTypeNotSupported(pythonUdf.evalType)
         }
 
-      case _ =>
-        throw InvalidInputErrors.functionIdNotSupported(commonUdf.getFunctionCase.getNumber)
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, commonUdf.getDescriptorForType)
     }
   }
 
@@ -871,8 +872,8 @@ class SparkConnectPlanner(
             throw InvalidInputErrors.functionEvalTypeNotSupported(pythonUdf.evalType)
         }
 
-      case _ =>
-        throw InvalidInputErrors.functionIdNotSupported(commonUdf.getFunctionCase.getNumber)
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, commonUdf.getDescriptorForType)
     }
   }
 
@@ -1180,8 +1181,8 @@ class SparkConnectPlanner(
         function.builder(
           fun.getArgumentsList.asScala.map(transformExpression).toSeq,
           session.sessionState.sqlParser)
-      case _ =>
-        throw InvalidInputErrors.functionIdNotSupported(fun.getFunctionCase.getNumber)
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, fun.getDescriptorForType)
     }
   }
 
@@ -1516,20 +1517,20 @@ class SparkConnectPlanner(
 
       case proto.Read.ReadTypeCase.DATA_SOURCE if !rel.getIsStreaming =>
         val reader = session.read
+        val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
         if (rel.getDataSource.getFormat == "jdbc" && rel.getDataSource.getPredicatesCount > 0) {
-          if (!rel.getDataSource.getOptionsMap.containsKey(JDBCOptions.JDBC_URL) ||
-            !rel.getDataSource.getOptionsMap.containsKey(JDBCOptions.JDBC_TABLE_NAME)) {
+          if (!localMap.contains(JDBCOptions.JDBC_URL) ||
+            !localMap.contains(JDBCOptions.JDBC_TABLE_NAME)) {
             throw InvalidInputErrors.invalidJdbcParams()
           }
 
-          val url = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_URL)
-          val table = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_TABLE_NAME)
+          val url = localMap.get(JDBCOptions.JDBC_URL).get
+          val table = localMap.get(JDBCOptions.JDBC_TABLE_NAME).get
           val predicates = rel.getDataSource.getPredicatesList.asScala.toArray
           val properties = new Properties()
           properties.putAll(rel.getDataSource.getOptionsMap)
           reader.jdbc(url, table, predicates, properties).queryExecution.analyzed
         } else if (rel.getDataSource.getPredicatesCount == 0) {
-          val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
           if (rel.getDataSource.hasFormat) {
             reader.format(rel.getDataSource.getFormat)
           }
@@ -1568,7 +1569,8 @@ class SparkConnectPlanner(
 
         streamDF.queryExecution.analyzed
 
-      case _ => throw InvalidInputErrors.doesNotSupport(rel.getReadTypeCase.name())
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, rel.getDescriptorForType)
     }
   }
 
@@ -1592,7 +1594,7 @@ class SparkConnectPlanner(
         dataFrameReader.csv(ds).queryExecution.analyzed
       case ParseFormat.PARSE_FORMAT_JSON =>
         dataFrameReader.json(ds).queryExecution.analyzed
-      case _ => throw InvalidInputErrors.doesNotSupport(rel.getFormat.name())
+      case other => throw InvalidInputErrors.invalidEnum(other)
     }
   }
 
@@ -1773,8 +1775,8 @@ class SparkConnectPlanner(
         transformTypedAggregateExpression(exp.getTypedAggregateExpression, baseRelationOpt)
       case proto.Expression.ExprTypeCase.SUBQUERY_EXPRESSION =>
         transformSubqueryExpression(exp.getSubqueryExpression)
-      case _ =>
-        throw InvalidInputErrors.expressionIdNotSupported(exp.getExprTypeCase.getNumber)
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, exp.getDescriptorForType)
     }
   }
 
@@ -1880,8 +1882,8 @@ class SparkConnectPlanner(
         transformPythonFuncExpression(fun)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
         transformScalaUDF(fun)
-      case _ =>
-        throw InvalidInputErrors.functionIdNotSupported(fun.getFunctionCase.getNumber)
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, fun.getDescriptorForType)
     }
   }
 
@@ -1922,16 +1924,20 @@ class SparkConnectPlanner(
       case t: Throwable =>
         Throwables.getRootCause(t) match {
           case nsm: NoSuchMethodException =>
-            throw new ClassNotFoundException(
-              s"Failed to load class correctly due to $nsm. " +
-                "Make sure the artifact where the class is defined is installed by calling" +
-                " session.addArtifact.")
+            throw new SparkClassNotFoundException(
+              "INTERNAL_ERROR",
+              Map[String, String](
+                "message" -> (s"Failed to load class correctly due to $nsm. " +
+                  "Make sure the artifact where the class is defined is installed by calling" +
+                  " session.addArtifact.")))
           case cnf: ClassNotFoundException =>
-            throw new ClassNotFoundException(
-              s"Failed to load class: ${cnf.getMessage}. " +
-                "Make sure the artifact where the class is defined is installed by calling" +
-                " session.addArtifact.")
-          case _ => throw t
+            throw new SparkClassNotFoundException(
+              "INTERNAL_ERROR",
+              Map[String, String](
+                "message" -> (s"Failed to load class: ${cnf.getMessage}. " +
+                  "Make sure the artifact where the class is defined is installed by calling" +
+                  " session.addArtifact.")))
+          case _ => throw SparkException.internalError("Failed to unpack scala udf.", t)
         }
     }
   }
@@ -2177,7 +2183,7 @@ class SparkConnectPlanner(
 
         case proto.Expression.Window.WindowFrame.FrameType.FRAME_TYPE_RANGE => RangeFrame
 
-        case other => throw InvalidInputErrors.unknownFrameType(other)
+        case other => throw InvalidInputErrors.invalidEnum(other)
       }
 
       if (!protoFrameSpec.hasLower) {
@@ -2193,7 +2199,10 @@ class SparkConnectPlanner(
         case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.VALUE =>
           transformExpression(protoFrameSpec.getLower.getValue)
 
-        case other => throw InvalidInputErrors.unknownFrameBoundary(other)
+        case other =>
+          throw InvalidInputErrors.invalidOneOfField(
+            other,
+            protoFrameSpec.getLower.getDescriptorForType)
       }
 
       if (!protoFrameSpec.hasUpper) {
@@ -2209,7 +2218,10 @@ class SparkConnectPlanner(
         case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.VALUE =>
           transformExpression(protoFrameSpec.getUpper.getValue)
 
-        case other => throw InvalidInputErrors.unknownFrameBoundary(other)
+        case other =>
+          throw InvalidInputErrors.invalidOneOfField(
+            other,
+            protoFrameSpec.getUpper.getDescriptorForType)
       }
 
       SpecifiedWindowFrame(frameType = frameType, lower = lower, upper = upper)
@@ -2258,8 +2270,8 @@ class SparkConnectPlanner(
           logical.Distinct(union)
         }
 
-      case _ =>
-        throw InvalidInputErrors.unsupportedSetOperation(u.getSetOpTypeValue)
+      case other =>
+        throw InvalidInputErrors.invalidEnum(other)
     }
   }
 
@@ -2314,7 +2326,7 @@ class SparkConnectPlanner(
       case proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER => RightOuter
       case proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI => LeftSemi
       case proto.Join.JoinType.JOIN_TYPE_CROSS => Cross
-      case _ => throw InvalidInputErrors.joinTypeNotSupported(t)
+      case other => throw InvalidInputErrors.invalidEnum(other)
     }
   }
 
@@ -2520,7 +2532,7 @@ class SparkConnectPlanner(
           aggregateExpressions = aliasedAgg,
           child = logicalPlan)
 
-      case other => throw InvalidInputErrors.unknownGroupType(other)
+      case other => throw InvalidInputErrors.invalidEnum(other)
     }
   }
 
@@ -2619,8 +2631,8 @@ class SparkConnectPlanner(
       case proto.MergeAction.ActionType.ACTION_TYPE_UPDATE_STAR =>
         assertPlan(assignments.isEmpty, "UpdateStar action should not have assignment.")
         UpdateStarAction(condition)
-      case _ =>
-        throw InvalidInputErrors.unsupportedMergeActionType(action.getActionType)
+      case other =>
+        throw InvalidInputErrors.invalidEnum(other)
     }
   }
 
@@ -2683,7 +2695,8 @@ class SparkConnectPlanner(
       case proto.Command.CommandTypeCase.EXECUTE_EXTERNAL_COMMAND =>
         handleExecuteExternalCommand(command.getExecuteExternalCommand, responseObserver)
 
-      case _ => throw new UnsupportedOperationException(s"$command not supported.")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, command.getDescriptorForType)
     }
   }
 
@@ -2705,10 +2718,10 @@ class SparkConnectPlanner(
       command: proto.ExecuteExternalCommand,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     if (command.getRunner.isEmpty) {
-      throw InvalidInputErrors.runnerCannotBeEmptyInExecuteExternalCommand()
+      throw InvalidInputErrors.cannotBeEmpty("runner", command.getDescriptorForType)
     }
     if (command.getCommand.isEmpty) {
-      throw InvalidInputErrors.commandCannotBeEmptyInExecuteExternalCommand()
+      throw InvalidInputErrors.cannotBeEmpty("command", command.getDescriptorForType)
     }
     val executor = ExternalCommandExecutor(
       session,
@@ -2929,8 +2942,8 @@ class SparkConnectPlanner(
         handleRegisterJavaUDF(fun)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
         handleRegisterScalaUDF(fun)
-      case _ =>
-        throw InvalidInputErrors.functionIdNotSupported(fun.getFunctionCase.getNumber)
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, fun.getDescriptorForType)
     }
     executeHolder.eventsManager.postFinished()
   }
@@ -2941,8 +2954,8 @@ class SparkConnectPlanner(
       case proto.CommonInlineUserDefinedTableFunction.FunctionCase.PYTHON_UDTF =>
         val function = createPythonUserDefinedTableFunction(fun)
         session.udtf.registerPython(fun.getFunctionName, function)
-      case _ =>
-        throw InvalidInputErrors.functionIdNotSupported(fun.getFunctionCase.getNumber)
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, fun.getDescriptorForType)
     }
     executeHolder.eventsManager.postFinished()
   }
@@ -2954,8 +2967,8 @@ class SparkConnectPlanner(
         val ds = fun.getPythonDataSource
         val dataSource = UserDefinedPythonDataSource(transformPythonDataSource(ds))
         session.dataSource.registerPython(fun.getName, dataSource)
-      case _ =>
-        throw InvalidInputErrors.dataSourceIdNotSupported(fun.getDataSourceCase.getNumber)
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, fun.getDescriptorForType)
     }
     executeHolder.eventsManager.postFinished()
   }
@@ -3104,15 +3117,10 @@ class SparkConnectPlanner(
             w.saveAsTable(tableName)
           case proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO =>
             w.insertInto(tableName)
-          case _ =>
-            throw new UnsupportedOperationException(
-              "WriteOperation:SaveTable:TableSaveMethod not supported "
-                + s"${writeOperation.getTable.getSaveMethodValue}")
+          case other => throw InvalidInputErrors.invalidEnum(other)
         }
-      case _ =>
-        throw new UnsupportedOperationException(
-          "WriteOperation:SaveTypeCase not supported "
-            + s"${writeOperation.getSaveTypeCase.getNumber}")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, writeOperation.getDescriptorForType)
     }
     executeHolder.eventsManager.postFinished()
   }
@@ -3183,9 +3191,8 @@ class SparkConnectPlanner(
         } else {
           w.createOrReplace()
         }
-      case _ =>
-        throw new UnsupportedOperationException(
-          s"WriteOperationV2:ModeValue not supported ${writeOperation.getModeValue}")
+      case other =>
+        throw InvalidInputErrors.invalidEnum(other)
     }
     executeHolder.eventsManager.postFinished()
   }
@@ -3268,8 +3275,10 @@ class SparkConnectPlanner(
             writeOp.getForeachBatch.getScalaFunction.getPayload.toByteArray,
             sessionHolder)
 
-        case StreamingForeachFunction.FunctionCase.FUNCTION_NOT_SET =>
-          throw InvalidInputErrors.unexpectedForeachBatchFunction() // Unreachable
+        case other =>
+          throw InvalidInputErrors.invalidOneOfField(
+            other,
+            writeOp.getForeachBatch.getDescriptorForType)
       }
 
       writer.foreachBatch(foreachBatchFn)
@@ -3373,11 +3382,9 @@ class SparkConnectPlanner(
       case Some(query) if query.runId.toString == runId =>
         query
       case Some(query) =>
-        throw new IllegalArgumentException(
-          s"Run id mismatch for query id $id. Run id in the request $runId " +
-            s"does not match one on the server ${query.runId}. The query might have restarted.")
+        throw InvalidInputErrors.streamingQueryRunIdMismatch(id, runId, query.runId.toString)
       case None =>
-        throw new IllegalArgumentException(s"Streaming query $id is not found")
+        throw InvalidInputErrors.streamingQueryNotFound(id)
     }
 
     command.getCommandCase match {
@@ -3420,7 +3427,7 @@ class SparkConnectPlanner(
           case q: StreamingQueryWrapper =>
             q.streamingQuery.explainInternal(command.getExplain.getExtended)
           case _ =>
-            throw new IllegalStateException(s"Unexpected type for streaming query: $query")
+            throw SparkException.internalError(s"Unexpected type for streaming query: $query")
         }
         val explain = StreamingQueryCommandResult.ExplainResult
           .newBuilder()
@@ -3460,8 +3467,8 @@ class SparkConnectPlanner(
         val terminated = handleStreamingAwaitTermination(query, timeout)
         respBuilder.getAwaitTerminationBuilder.setTerminated(terminated)
 
-      case StreamingQueryCommand.CommandCase.COMMAND_NOT_SET =>
-        throw new IllegalArgumentException("Missing command in StreamingQueryCommand")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, command.getDescriptorForType)
     }
 
     executeHolder.eventsManager.postFinished()
@@ -3598,8 +3605,8 @@ class SparkConnectPlanner(
         respBuilder.getListListenersBuilder
           .addAllListenerIds(sessionHolder.listListenerIds().asJava)
 
-      case StreamingQueryManagerCommand.CommandCase.COMMAND_NOT_SET =>
-        throw new IllegalArgumentException("Missing command in StreamingQueryManagerCommand")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, command.getDescriptorForType)
     }
 
     executeHolder.eventsManager.postFinished()
@@ -4057,7 +4064,7 @@ class SparkConnectPlanner(
             transformExpression(value)
           }.toSeq,
           planId)
-      case other => throw InvalidInputErrors.unknownSubqueryType(other)
+      case other => throw InvalidInputErrors.invalidEnum(other)
     }
   }
 

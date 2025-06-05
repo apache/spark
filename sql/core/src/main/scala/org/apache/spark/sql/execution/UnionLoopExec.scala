@@ -96,7 +96,7 @@ case class UnionLoopExec(
     "numIterations" -> SQLMetrics.createMetric(sparkContext, "number of recursive iterations"),
     "numAnchorOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of anchor output rows"))
 
-  val localRelationLimit =
+  private val localRelationLimit =
     conf.getConf(SQLConf.CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION)
 
   /**
@@ -220,9 +220,9 @@ case class UnionLoopExec(
               val logicalRDD = LogicalRDD.fromDataset(prevDF.queryExecution.toRdd, prevDF,
                   prevDF.isStreaming).newInstance()
               prevPlan = logicalRDD
-              val logicalPlan = prevDF.logicalPlan
               val optimizedPlan = prevDF.queryExecution.optimizedPlan
-              val (stats, constraints) = rewriteStatsAndConstraints(logicalPlan, optimizedPlan)
+              val (stats, constraints) = rewriteStatsAndConstraints(r, optimizedPlan,
+                sameOutput = false)
               logicalRDD.copy(output = r.output)(prevDF.sparkSession, stats, constraints)
           }
       }

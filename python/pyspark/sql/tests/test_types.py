@@ -477,6 +477,25 @@ class TypesTestsMixin:
             df.first(),
         )
 
+    def test_infer_variant_type(self):
+        # SPARK-52355: Test inferring variant type
+        value = VariantVal.parseJson('{"a": 1}')
+
+        data = [Row(f1=value)]
+        df = self.spark.createDataFrame(data)
+        actual = df.first()["f1"]
+
+        self.assertEqual(type(df.schema["f1"].dataType), VariantType)
+        # As of writing VariantVal can also include bytearray
+        self.assertEqual(
+            bytes(actual.value),
+            bytes(value.value),
+        )
+        self.assertEqual(
+            bytes(actual.metadata),
+            bytes(value.metadata),
+        )
+
     def test_create_dataframe_from_dict_respects_schema(self):
         df = self.spark.createDataFrame([{"a": 1}], ["b"])
         self.assertEqual(df.columns, ["b"])

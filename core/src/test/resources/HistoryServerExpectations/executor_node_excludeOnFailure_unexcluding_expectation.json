@@ -48,8 +48,8 @@
   "maxMemory" : 384093388,
   "addTime" : "2016-11-15T23:20:42.711GMT",
   "executorLogs" : {
-    "stdout" : "http://172.22.0.111:64521/logPage/?appId=app-20161115172038-0000&executorId=3&logType=stdout",
-    "stderr" : "http://172.22.0.111:64521/logPage/?appId=app-20161115172038-0000&executorId=3&logType=stderr"
+    "stderr" : "http://172.22.0.111:64521/logPage/?appId=app-20161115172038-0000&executorId=3&logType=stderr",
+    "stdout" : "http://172.22.0.111:64521/logPage/?appId=app-20161115172038-0000&executorId=3&logType=stdout"
   },
   "blacklistedInStages" : [ ],
   "peakMemoryMetrics" : {
@@ -104,8 +104,8 @@
   "maxMemory" : 384093388,
   "addTime" : "2016-11-15T23:20:42.589GMT",
   "executorLogs" : {
-    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout",
-    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr"
+    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr",
+    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout"
   },
   "blacklistedInStages" : [ ],
   "peakMemoryMetrics" : {
@@ -160,8 +160,8 @@
   "maxMemory" : 384093388,
   "addTime" : "2016-11-15T23:20:42.629GMT",
   "executorLogs" : {
-    "stdout" : "http://172.22.0.111:64518/logPage/?appId=app-20161115172038-0000&executorId=1&logType=stdout",
-    "stderr" : "http://172.22.0.111:64518/logPage/?appId=app-20161115172038-0000&executorId=1&logType=stderr"
+    "stderr" : "http://172.22.0.111:64518/logPage/?appId=app-20161115172038-0000&executorId=1&logType=stderr",
+    "stdout" : "http://172.22.0.111:64518/logPage/?appId=app-20161115172038-0000&executorId=1&logType=stdout"
   },
   "blacklistedInStages" : [ ],
   "peakMemoryMetrics" : {

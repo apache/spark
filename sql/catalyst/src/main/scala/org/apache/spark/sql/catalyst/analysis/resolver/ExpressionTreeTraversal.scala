@@ -21,7 +21,7 @@ import java.util.{ArrayDeque, ArrayList, HashMap}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, ExprId}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.internal.SQLConf
 
@@ -35,12 +35,15 @@ import org.apache.spark.sql.internal.SQLConf
  * @param lcaEnabled Whether lateral column alias resolution is enabled.
  * @param groupByAliases Whether the group by aliases resolution is enabled.
  * @param sessionLocalTimeZone The session local time zone.
+ * @param defaultCollation View's default collation if explicitly set.
  * @param invalidExpressionsInTheContextOfOperator The expressions that are invalid in the context
  *   of the current expression tree and its parent operator.
  * @param referencedAttributes All attributes that are referenced during the resolution of
  *   expression trees.
- * @param extractedAggregateExpressionAliases The aliases of the [[AggregateExpressions]] that are
- *   extracted during the resolution of expression trees.
+ * @param isFilterOnTopOfAggregate Whether the current expression tree is below a [[Filter]] on top
+ *   of an [[Aggregate]] operator.
+ * @param isSortOnTopOfAggregate Whether the current expression tree is below a [[Sort]] on top
+ *   of an [[Aggregate]] operator (or on top of a [[Filter]] with an [[Aggregate]] as its child).
  */
 case class ExpressionTreeTraversal(
     parentOperator: LogicalPlan,
@@ -48,9 +51,11 @@ case class ExpressionTreeTraversal(
     lcaEnabled: Boolean,
     groupByAliases: Boolean,
     sessionLocalTimeZone: String,
+    defaultCollation: Option[String] = None,
     invalidExpressionsInTheContextOfOperator: ArrayList[Expression] = new ArrayList[Expression],
     referencedAttributes: HashMap[ExprId, Attribute] = new HashMap[ExprId, Attribute],
-    extractedAggregateExpressionAliases: ArrayList[Alias] = new ArrayList[Alias]
+    isFilterOnTopOfAggregate: Boolean = false,
+    isSortOnTopOfAggregate: Boolean = false
 )
 
 /**
@@ -97,14 +102,21 @@ class ExpressionTreeTraversalStack extends SQLConfHelper {
    * Pushes a new [[ExpressionTreeTraversal]] object, executes the `body` and finally pops the
    * traversal from the stack.
    */
-  def withNewTraversal[R](parentOperator: LogicalPlan)(body: => R): R = {
+  def withNewTraversal[R](
+      parentOperator: LogicalPlan,
+      defaultCollation: Option[String] = None,
+      isFilterOnTopOfAggregate: Boolean = false,
+      isSortOnTopOfAggregate: Boolean = false)(body: => R): R = {
     stack.push(
       ExpressionTreeTraversal(
         parentOperator = parentOperator,
         ansiMode = conf.ansiEnabled,
         lcaEnabled = conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED),
         groupByAliases = conf.groupByAliases,
-        sessionLocalTimeZone = conf.sessionLocalTimeZone
+        sessionLocalTimeZone = conf.sessionLocalTimeZone,
+        defaultCollation = defaultCollation,
+        isFilterOnTopOfAggregate = isFilterOnTopOfAggregate,
+        isSortOnTopOfAggregate = isSortOnTopOfAggregate
       )
     )
     try {

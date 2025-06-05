@@ -39,3 +39,13 @@ SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY sum(v);
 
 -- SPARK-28386: Resolve ORDER BY agg function with HAVING clause, while the agg function does not present on SELECT list
 SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY avg(v);
+
+-- SPARK-52385: Remove TempResolvedColumns from InheritAnalysisRules name
+SELECT sum(v) FROM hav HAVING avg(try_add(v, 1)) = 1;
+SELECT sum(v) FROM hav HAVING sum(try_add(v, 1)) = 1;
+SELECT sum(v) FROM hav HAVING sum(ifnull(v, 1)) = 1;
+SELECT sum(v) FROM hav GROUP BY ALL HAVING sum(ifnull(v, 1)) = 1;
+SELECT sum(v) FROM hav GROUP BY v HAVING sum(ifnull(v, 1)) = 1;
+SELECT v + 1 FROM hav GROUP BY ALL HAVING avg(try_add(v, 1)) = 1;
+SELECT v + 1 FROM hav GROUP BY ALL HAVING avg(try_add(v, 1) + 1) = 1;
+SELECT sum(v) FROM hav GROUP BY ifnull(v, 1) + 1 order by ifnull(v, 1) + 1;

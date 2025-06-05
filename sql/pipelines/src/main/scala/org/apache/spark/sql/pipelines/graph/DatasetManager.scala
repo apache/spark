@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.{NonFatal, NoStackTrace}
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connector.catalog.{
@@ -63,15 +63,17 @@ object DatasetManager extends Logging {
    * Materializes the tables in the given graph. This method will create or update the tables
    * in the catalog based on the given graph and context.
    *
-   * @param virtualizedConnectedGraphWithTables The connected graph.
+   * @param resolvedDataflowGraph The resolved [[DataflowGraph]] with resolved [[Flow]] sorted
+   *                              in topological order.
    * @param context The context for the pipeline update.
    * @return The graph with materialized tables.
    */
   def materializeDatasets(
-      virtualizedConnectedGraphWithTables: DataflowGraph,
-      context: PipelineUpdateContext): DataflowGraph = {
+      resolvedDataflowGraph: DataflowGraph,
+      context: PipelineUpdateContext
+  ): DataflowGraph = {
     val (_, refreshTableIdentsSet, fullRefreshTableIdentsSet) = {
-      DatasetManager.constructFullRefreshSet(virtualizedConnectedGraphWithTables.tables, context)
+      DatasetManager.constructFullRefreshSet(resolvedDataflowGraph.tables, context)
     }
 
     /** Return all the tables that need to be materialized from the given graph. */
@@ -84,22 +86,23 @@ object DatasetManager extends Logging {
         .map(table => TableRefreshType(table, isFullRefresh = false))
     }
 
-    val tablesToMaterialize =
-      tablesToMatz(virtualizedConnectedGraphWithTables).map(t => t.table.identifier -> t).toMap
+    val tablesToMaterialize = {
+      tablesToMatz(resolvedDataflowGraph).map(t => t.table.identifier -> t).toMap
+    }
 
-    // normalized graph where backing tables for all dataset have been created and datasets
-    // are all marked as normalized.
-    val virtualizedMaterializedConnectedGraphWithTables: DataflowGraph = try {
+    // materialized [[DataflowGraph]] where each table has been materialized and each table
+    // has metadata (e.g., normalized table storage path) populated
+    val materializedGraph: DataflowGraph = try {
       DataflowGraphTransformer
-        .withDataflowGraphTransformer(virtualizedConnectedGraphWithTables) { transformer =>
+        .withDataflowGraphTransformer(resolvedDataflowGraph) { transformer =>
           transformer.transformTables { table =>
             if (tablesToMaterialize.keySet.contains(table.identifier)) {
               try {
                 materializeTable(
-                  virtualizedConnectedGraphWithTables,
-                  table,
-                  tablesToMaterialize(table.identifier).isFullRefresh,
-                  context
+                  resolvedDataflowGraph = resolvedDataflowGraph,
+                  table = table,
+                  isFullRefresh = tablesToMaterialize(table.identifier).isFullRefresh,
+                  context = context
                 )
               } catch {
                 case NonFatal(e) =>
@@ -119,25 +122,25 @@ object DatasetManager extends Logging {
       case e: SparkException if e.getCause != null => throw e.getCause
     }
 
-    virtualizedMaterializedConnectedGraphWithTables
+    materializedGraph
   }
 
   /**
    * Materializes a table in the catalog. This method will create or update the table in the
    * catalog based on the given table and context.
-   * @param virtualizedConnectedGraphWithTables The connected graph. Used to infer the table schema.
+   * @param resolvedDataflowGraph The resolved [[DataflowGraph]] used to infer the table schema.
    * @param table The table to be materialized.
    * @param isFullRefresh Whether this table should be full refreshed or not.
    * @param context The context for the pipeline update.
    * @return The materialized table (with additional metadata set).
    */
   private def materializeTable(
-      virtualizedConnectedGraphWithTables: DataflowGraph,
+      resolvedDataflowGraph: DataflowGraph,
       table: Table,
       isFullRefresh: Boolean,
       context: PipelineUpdateContext
   ): Table = {
-    logInfo(s"Materializing metadata for table ${table.identifier}.")
+    logInfo(log"Materializing metadata for table ${MDC(LogKeys.TABLE_NAME, table.identifier)}.")
     val catalogManager = context.spark.sessionState.catalogManager
     val catalog = (table.identifier.catalog match {
       case Some(catalogName) =>
@@ -149,7 +152,7 @@ object DatasetManager extends Logging {
     val identifier =
       Identifier.of(Array(table.identifier.database.get), table.identifier.identifier)
     val outputSchema = table.specifiedSchema.getOrElse(
-      virtualizedConnectedGraphWithTables.inferredSchema(table.identifier).asNullable
+      resolvedDataflowGraph.inferredSchema(table.identifier).asNullable
     )
     val mergedProperties = resolveTableProperties(table, identifier)
     val partitioning = table.partitionCols.toSeq.flatten.map(Expressions.identity)
@@ -203,8 +206,9 @@ object DatasetManager extends Logging {
     }
 
     table.copy(
-      normalizedPath =
-        Option(catalog.loadTable(identifier).properties().get(TableCatalog.PROP_LOCATION))
+      normalizedPath = Option(
+        catalog.loadTable(identifier).properties().get(TableCatalog.PROP_LOCATION)
+      )
     )
   }
 
@@ -269,9 +273,10 @@ object DatasetManager extends Logging {
 
       if (fullRefreshNotAllowed.nonEmpty) {
         logInfo(
-          s"Skipping full refresh on some flows because " +
-          s"${PipelinesTableProperties.resetAllowed.key} was set to false. Flows: " +
-          s"$fullRefreshNotAllowed"
+          log"Skipping full refresh on some tables because " +
+          log"${MDC(LogKeys.PROPERTY_NAME, PipelinesTableProperties.resetAllowed.key)} " +
+          log"was set to false. Tables: " +
+          log"${MDC(LogKeys.TABLE_NAME, fullRefreshNotAllowed.map(_.identifier))}"
         )
       }
 

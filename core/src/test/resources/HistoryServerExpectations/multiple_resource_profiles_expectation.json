@@ -7,17 +7,11 @@
   "sparkProperties" : [ ],
   "hadoopProperties" : [ ],
   "systemProperties" : [ ],
-  "metricsProperties": [ ],
+  "metricsProperties" : [ ],
   "classpathEntries" : [ ],
   "resourceProfiles" : [ {
     "id" : 0,
     "executorResources" : {
-      "cores" : {
-        "resourceName" : "cores",
-        "amount" : 1,
-        "discoveryScript" : "",
-        "vendor" : ""
-      },
       "memory" : {
         "resourceName" : "memory",
         "amount" : 1024,
@@ -28,6 +22,12 @@
         "resourceName" : "gpu",
         "amount" : 1,
         "discoveryScript" : "/home/tgraves/getGpus",
+        "vendor" : ""
+      },
+      "cores" : {
+        "resourceName" : "cores",
+        "amount" : 1,
+        "discoveryScript" : "",
         "vendor" : ""
       }
     },

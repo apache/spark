@@ -24,7 +24,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
@@ -76,16 +76,16 @@ trait FlowExecution {
    */
   def getOrigin: QueryOrigin
 
-  /** Returns true iff this PhysicalFlow has been completed with either success or an exception. */
+  /** Returns true iff this FlowExecution has been completed with either success or an exception. */
   def isCompleted: Boolean = _future.exists(_.isCompleted)
 
-  /** Returns true iff this PhysicalFlow executes using Spark Structured Streaming. */
+  /** Returns true iff this FlowExecution executes using Spark Structured Streaming. */
   def isStreaming: Boolean
 
   /** Retrieves the future that can be used to track execution status. */
   def getFuture: Future[ExecutionResult] = {
     _future.getOrElse(
-      throw new IllegalStateException(s"PhysicalFlow $identifier has not been executed.")
+      throw new IllegalStateException(s"FlowExecution $identifier has not been executed.")
     )
   }
 
@@ -113,7 +113,7 @@ trait FlowExecution {
   def exception: Option[Throwable] = _future.flatMap(_.value).flatMap(_.failed.toOption)
 
   /**
-   * Executes this PhysicalFlow synchronously to perform its intended update.
+   * Executes this FlowExecution synchronously to perform its intended update.
    * This method should be overridden by subclasses to provide the actual execution logic.
    *
    * @return a Future that completes when the execution is finished or stopped.
@@ -121,13 +121,13 @@ trait FlowExecution {
   def executeInternal(): Future[Unit]
 
   /**
-   * Executes this PhysicalFlow asynchronously to perform its intended update. A future that can be
+   * Executes this FlowExecution asynchronously to perform its intended update. A future that can be
    * used to track execution status is saved, and can be retrieved with `getFuture`.
    */
   final def executeAsync(): Unit = {
     if (_future.isDefined) {
       throw new IllegalStateException(
-        s"PhysicalFlow ${identifier.unquotedString} has already been executed."
+        s"FlowExecution ${identifier.unquotedString} has already been executed."
       )
     }
 
@@ -161,6 +161,7 @@ trait FlowExecution {
 }
 
 object FlowExecution {
+
   /** A thread pool used to execute [[FlowExecution]]s. */
   private val threadPool: ThreadPoolExecutor = {
     ThreadUtils.newDaemonCachedThreadPool("FlowExecution")
@@ -188,11 +189,14 @@ trait StreamingFlowExecution extends FlowExecution with Logging {
   protected def startStream(): StreamingQuery
 
   /**
-   * Executes this StreamingPhysicalFlow by starting its stream with the correct scheduling pool
+   * Executes this StreamingFlowExecution by starting its stream with the correct scheduling pool
    * and confs.
    */
   override final def executeInternal(): Future[Unit] = {
-    logInfo(s"Starting ${identifier.unquotedString} with checkpoint location $checkpointPath")
+    logInfo(
+      log"Starting ${MDC(LogKeys.TABLE_NAME, identifier)} with " +
+      log"checkpoint location ${MDC(LogKeys.CHECKPOINT_PATH, checkpointPath)}"
+    )
     val streamingQuery = SparkSessionUtils.withSqlConf(spark, sqlConf.toList: _*)(startStream())
     Future(streamingQuery.awaitTermination())
   }
@@ -227,7 +231,7 @@ class StreamingTableWrite(
 }
 
 /** A [[FlowExecution]] that writes a batch DataFrame to a DLT [[Table]]. */
-class BatchFlowExecution(
+class BatchTableWrite(
     val identifier: TableIdentifier,
     val flow: ResolvedFlow,
     val graph: DataflowGraph,

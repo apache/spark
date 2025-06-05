@@ -814,6 +814,7 @@ private[spark] object LogKeys {
   case object TABLE_NAME extends LogKey
   case object TABLE_TYPE extends LogKey
   case object TABLE_TYPES extends LogKey
+  case object FLOW_NAME extends LogKey
   case object TAG extends LogKey
   case object TARGET_NUM_EXECUTOR extends LogKey
   case object TARGET_NUM_EXECUTOR_DELTA extends LogKey

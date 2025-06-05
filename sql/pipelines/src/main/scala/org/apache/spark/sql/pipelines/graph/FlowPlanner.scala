@@ -41,7 +41,7 @@ class FlowPlanner(
     val output = graph.output(flow.destinationIdentifier)
     flow match {
       case cf: CompleteFlow =>
-        new BatchFlowExecution(
+        new BatchTableWrite(
           graph = graph,
           flow = flow,
           identifier = cf.identifier,

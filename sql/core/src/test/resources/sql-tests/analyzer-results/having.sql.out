@@ -208,3 +208,115 @@ Project [k#x, sum(v)#xL]
                   +- Project [k#x, v#x]
                      +- SubqueryAlias hav
                         +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) FROM hav HAVING avg(try_add(v, 1)) = 1
+-- !query analysis
+Project [sum(v)#xL]
++- Filter (avg(try_add(v, 1))#x = cast(1 as double))
+   +- Aggregate [sum(v#x) AS sum(v)#xL, avg(try_add(tempresolvedcolumn(v#x, v, false), 1)) AS avg(try_add(v, 1))#x]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x, v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) FROM hav HAVING sum(try_add(v, 1)) = 1
+-- !query analysis
+Project [sum(v)#xL]
++- Filter (sum(try_add(v, 1))#xL = cast(1 as bigint))
+   +- Aggregate [sum(v#x) AS sum(v)#xL, sum(try_add(tempresolvedcolumn(v#x, v, false), 1)) AS sum(try_add(v, 1))#xL]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x, v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) FROM hav HAVING sum(ifnull(v, 1)) = 1
+-- !query analysis
+Project [sum(v)#xL]
++- Filter (sum(ifnull(v, 1))#xL = cast(1 as bigint))
+   +- Aggregate [sum(v#x) AS sum(v)#xL, sum(ifnull(tempresolvedcolumn(v#x, v, false), 1)) AS sum(ifnull(v, 1))#xL]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x, v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) FROM hav GROUP BY ALL HAVING sum(ifnull(v, 1)) = 1
+-- !query analysis
+Project [sum(v)#xL]
++- Filter (sum(ifnull(v, 1))#xL = cast(1 as bigint))
+   +- Aggregate [sum(v#x) AS sum(v)#xL, sum(ifnull(tempresolvedcolumn(v#x, v, false), 1)) AS sum(ifnull(v, 1))#xL]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x, v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) FROM hav GROUP BY v HAVING sum(ifnull(v, 1)) = 1
+-- !query analysis
+Project [sum(v)#xL]
++- Filter (sum(ifnull(v, 1))#xL = cast(1 as bigint))
+   +- Aggregate [v#x], [sum(v#x) AS sum(v)#xL, sum(ifnull(tempresolvedcolumn(v#x, v, false), 1)) AS sum(ifnull(v, 1))#xL]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x, v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT v + 1 FROM hav GROUP BY ALL HAVING avg(try_add(v, 1)) = 1
+-- !query analysis
+Project [(v + 1)#x]
++- Filter (avg(try_add(v, 1))#x = cast(1 as double))
+   +- Aggregate [(v#x + 1)], [(v#x + 1) AS (v + 1)#x, avg(try_add(tempresolvedcolumn(v#x, v, false), 1)) AS avg(try_add(v, 1))#x]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x, v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT v + 1 FROM hav GROUP BY ALL HAVING avg(try_add(v, 1) + 1) = 1
+-- !query analysis
+Project [(v + 1)#x]
++- Filter (avg((try_add(v, 1) + 1))#x = cast(1 as double))
+   +- Aggregate [(v#x + 1)], [(v#x + 1) AS (v + 1)#x, avg((try_add(tempresolvedcolumn(v#x, v, false), 1) + 1)) AS avg((try_add(v, 1) + 1))#x]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x, v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) FROM hav GROUP BY ifnull(v, 1) + 1 order by ifnull(v, 1) + 1
+-- !query analysis
+Project [sum(v)#xL]
++- Sort [(ifnull(v, 1) + 1)#x ASC NULLS FIRST], true
+   +- Aggregate [(ifnull(v#x, 1) + 1)], [sum(v#x) AS sum(v)#xL, (ifnull(tempresolvedcolumn(v#x, v, false), 1) + 1) AS (ifnull(v, 1) + 1)#x]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x, v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]

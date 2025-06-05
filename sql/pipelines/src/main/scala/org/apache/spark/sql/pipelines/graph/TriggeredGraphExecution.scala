@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.pipelines.graph.TriggeredGraphExecution._
 import org.apache.spark.sql.pipelines.util.ExponentialBackoffStrategy
@@ -163,9 +164,9 @@ class TriggeredGraphExecution(
     val runnableFlows: mutable.LinkedHashSet[TableIdentifier] = new mutable.LinkedHashSet()
 
     while (!Thread.interrupted() && !allFlowsDone) {
-      // Since queries are managed by PhysicalFlows, so update state based on [[PhysicalFlow]]s.
+      // Since queries are managed by FlowExecutions, so update state based on [[FlowExecution]]s.
       flowsWithState(StreamState.RUNNING).foreach { flowIdentifier =>
-        physicalFlows(flowIdentifier) match {
+        flowExecutions(flowIdentifier) match {
           case f if !f.isCompleted => // Nothing to be done; let this stream continue.
           case f if f.isCompleted && f.exception.isEmpty =>
             recordSuccess(flowIdentifier)
@@ -218,13 +219,13 @@ class TriggeredGraphExecution(
 
       def startFlow(flow: ResolvedFlow): Unit = {
         val flowIdentifier = flow.identifier
-        logInfo(s"Starting flow ${flow.identifier}")
+        logInfo(log"Starting flow ${MDC(LogKeys.FLOW_NAME, flow.identifier)}")
         env.flowProgressEventLogger.recordPlanningForBatchFlow(flow)
         try {
           val flowStarted = planAndStartFlow(flow)
           if (flowStarted.nonEmpty) {
             pipelineState.put(flowIdentifier, StreamState.RUNNING)
-            logInfo(s"Flow $flowIdentifier started.")
+            logInfo(log"Flow ${MDC(LogKeys.FLOW_NAME, flowIdentifier)} started.")
           } else {
             if (flow.once) {
               // ONCE flows are marked as IDLE in the event buffer for consistency with continuous
@@ -265,7 +266,10 @@ class TriggeredGraphExecution(
       concurrencyLimit.release()
       pipelineState.put(flowIdentifier, StreamState.SUCCESSFUL)
     }
-    logInfo(s"Flow $flowIdentifier has COMPLETED in TriggeredFlowExecution.")
+    logInfo(
+      log"Flow ${MDC(LogKeys.FLOW_NAME, flowIdentifier)} has COMPLETED " +
+      log"in TriggeredFlowExecution."
+    )
   }
 
   /**
@@ -277,7 +281,7 @@ class TriggeredGraphExecution(
       flowIdentifier: TableIdentifier,
       e: Throwable
   ): Unit = {
-    logError(s"Flow $flowIdentifier failed", e)
+    logError(log"Flow ${MDC(LogKeys.FLOW_NAME, flowIdentifier)} failed", e)
     concurrencyLimit.synchronized {
       concurrencyLimit.release()
       pipelineState.put(flowIdentifier, StreamState.TERMINATED_WITH_ERROR)
@@ -338,7 +342,10 @@ class TriggeredGraphExecution(
     if (pipelineState(flowIdentifier) != StreamState.EXCLUDED) {
       val flow = graphForExecution.resolvedFlow(flowIdentifier)
       pipelineState.put(flowIdentifier, StreamState.SKIPPED)
-      logWarning(s"Flow $flowIdentifier SKIPPED due to upstream failure(s).")
+      logWarning(
+        log"Flow ${MDC(LogKeys.FLOW_NAME, flowIdentifier)} SKIPPED due " +
+        log"to upstream failure(s)."
+      )
       env.flowProgressEventLogger.recordSkippedOnUpStreamFailure(flow)
     }
   }
@@ -381,7 +388,7 @@ class TriggeredGraphExecution(
     val flowsFailedToStop = ThreadUtils
       .parmap(flowsWithState(StreamState.RUNNING).toSeq, "stop-flow", maxThreads = 10) { flowName =>
         pipelineState.put(flowName, StreamState.CANCELED)
-        physicalFlows.get(flowName).map { f =>
+        flowExecutions.get(flowName).map { f =>
           (
             f.identifier,
             Try(stopFlow(f))
