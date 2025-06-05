@@ -176,8 +176,8 @@ abstract class GraphExecution(
       logInfo(log"Stopped ${MDC(LogKeys.FLOW_NAME, pf.identifier)}")
     } else {
       logWarning(
-        s"Flow ${pf.identifier} was not stopped because it was already completed. " +
-        s"Exception: ${pf.exception}"
+        log"Flow ${MDC(LogKeys.FLOW_NAME, pf.identifier)} was not stopped because it " +
+        log"was already completed. Exception: ${MDC(LogKeys.EXCEPTION, pf.exception)}"
       )
     }
   }
