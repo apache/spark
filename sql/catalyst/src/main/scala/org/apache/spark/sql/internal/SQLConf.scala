@@ -5906,6 +5906,7 @@ object SQLConf {
       )
       .version("4.1.0")
       .timeConf(TimeUnit.SECONDS)
+      .checkValue(v => v > 0, "Watchdog minimum retry time must be at least 1 second.")
       .createWithDefault(5)
   }
 
@@ -5936,6 +5937,7 @@ object SQLConf {
       .doc("Timeout in milliseconds to grab a lock for stopping update - default is 1hr.")
       .version("4.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(v => v > 0L, "Timeout for lock must be at least 1 millisecond.")
       .createWithDefault(60 * 60 * 1000)
   }
 

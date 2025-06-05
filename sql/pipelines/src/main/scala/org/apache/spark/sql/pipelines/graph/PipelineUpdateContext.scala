@@ -62,6 +62,6 @@ trait PipelineUpdateContext {
   /** The unresolved graph for this update. */
   def unresolvedGraph: DataflowGraph
 
-  /** Defines APIs to end to end execute the `DataflowGraph`. */
+  /** Defines operations relates to end to end execution of a `DataflowGraph`. */
   val pipelineExecution: PipelineExecution = new PipelineExecution(context = this)
 }

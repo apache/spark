@@ -62,6 +62,11 @@ class FlowPlanner(
               trigger = triggerFor(sf),
               checkpointPath = output.path
             )
+          case _ =>
+            throw new UnsupportedOperationException(
+              s"Streaming flow ${sf.identifier} cannot write to non-table destination: " +
+              s"${output.getClass.getSimpleName} (${flow.destinationIdentifier})"
+            )
         }
       case _ =>
         throw new UnsupportedOperationException(
