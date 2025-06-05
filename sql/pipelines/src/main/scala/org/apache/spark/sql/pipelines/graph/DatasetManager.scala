@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.{NonFatal, NoStackTrace}
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connector.catalog.{
@@ -140,7 +140,7 @@ object DatasetManager extends Logging {
       isFullRefresh: Boolean,
       context: PipelineUpdateContext
   ): Table = {
-    logInfo(s"Materializing metadata for table ${table.identifier}.")
+    logInfo(log"Materializing metadata for table ${MDC(LogKeys.TABLE_NAME, table.identifier)}.")
     val catalogManager = context.spark.sessionState.catalogManager
     val catalog = (table.identifier.catalog match {
       case Some(catalogName) =>
@@ -273,9 +273,10 @@ object DatasetManager extends Logging {
 
       if (fullRefreshNotAllowed.nonEmpty) {
         logInfo(
-          s"Skipping full refresh on some flows because " +
-          s"${PipelinesTableProperties.resetAllowed.key} was set to false. Flows: " +
-          s"$fullRefreshNotAllowed"
+          log"Skipping full refresh on some tables because " +
+          log"${MDC(LogKeys.PROPERTY_NAME, PipelinesTableProperties.resetAllowed.key)} " +
+          log"was set to false. Tables: " +
+          log"${MDC(LogKeys.TABLE_NAME, fullRefreshNotAllowed.map(_.identifier))}"
         )
       }
 

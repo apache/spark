@@ -24,7 +24,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
@@ -161,6 +161,7 @@ trait FlowExecution {
 }
 
 object FlowExecution {
+
   /** A thread pool used to execute [[FlowExecution]]s. */
   private val threadPool: ThreadPoolExecutor = {
     ThreadUtils.newDaemonCachedThreadPool("FlowExecution")
@@ -192,7 +193,10 @@ trait StreamingFlowExecution extends FlowExecution with Logging {
    * and confs.
    */
   override final def executeInternal(): Future[Unit] = {
-    logInfo(s"Starting ${identifier.unquotedString} with checkpoint location $checkpointPath")
+    logInfo(
+      log"Starting ${MDC(LogKeys.TABLE_NAME, identifier)} with " +
+      log"checkpoint location ${MDC(LogKeys.CHECKPOINT_PATH, checkpointPath)}"
+    )
     val streamingQuery = SparkSessionUtils.withSqlConf(spark, sqlConf.toList: _*)(startStream())
     Future(streamingQuery.awaitTermination())
   }

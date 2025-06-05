@@ -22,7 +22,7 @@ import scala.concurrent.ExecutionContext
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.logging.StreamListener
@@ -118,7 +118,10 @@ abstract class GraphExecution(
     } catch {
       // This is if the flow fails to even start.
       case ex: Throwable =>
-        logError(s"Unhandled exception while starting flow:${flow.displayName}", ex)
+        logError(
+          log"Unhandled exception while starting flow:${MDC(LogKeys.FLOW_NAME, flow.displayName)}",
+          ex
+        )
         // InterruptedException is thrown when the thread executing `startFlow` is interrupted.
         if (ex.isInstanceOf[InterruptedException]) {
           env.flowProgressEventLogger.recordStop(flow)
@@ -155,7 +158,7 @@ abstract class GraphExecution(
     if (!pf.isCompleted) {
       val flow = graphForExecution.resolvedFlow(pf.identifier)
       try {
-        logInfo(s"Stopping ${pf.identifier}")
+        logInfo(log"Stopping ${MDC(LogKeys.FLOW_NAME, pf.identifier)}")
         pf.stop()
       } catch {
         case e: Throwable =>
@@ -170,7 +173,7 @@ abstract class GraphExecution(
           throw e
       }
       env.flowProgressEventLogger.recordStop(flow)
-      logInfo(s"Stopped ${pf.identifier}")
+      logInfo(log"Stopped ${MDC(LogKeys.FLOW_NAME, pf.identifier)}")
     } else {
       logWarning(
         s"Flow ${pf.identifier} was not stopped because it was already completed. " +
