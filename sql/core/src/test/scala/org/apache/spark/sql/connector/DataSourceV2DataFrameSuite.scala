@@ -41,7 +41,6 @@ class DataSourceV2DataFrameSuite
   import testImplicits._
 
   override protected def sparkConf: SparkConf =
-    // Disable read-side char padding so that the generated code is less than 8000.
     super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
 
   before {
