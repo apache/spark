@@ -41,7 +41,7 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
         // Create a new execute holder and attach to it.
         SparkConnectService.executionManager
           .createExecuteHolderAndAttach(executeKey, v, sessionHolder, responseObserver)
-      case Some(executeHolder) && executeHolder.request.getPlan.equals(v.getPlan) =>
+      case Some(executeHolder) if executeHolder.request.getPlan.equals(v.getPlan) =>
         // If the execute holder already exists with the same plan, reattach to it.
         SparkConnectService.executionManager
           .reattachExecuteHolder(executeHolder, responseObserver, None)
