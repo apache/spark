@@ -212,3 +212,41 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "c"
   } ]
 }
+
+
+-- !query
+SELECT 1 AS `2`, 2 FROM VALUES (2) t (`2`) ORDER BY `2`
+-- !query analysis
+Project [2#x, 2#x]
++- Sort [2#x ASC NULLS FIRST], true
+   +- Project [1 AS 2#x, 2 AS 2#x, 2#x]
+      +- SubqueryAlias t
+         +- LocalRelation [2#x]
+
+
+-- !query
+SELECT 2, 1 AS `2` FROM VALUES (2) t (`2`) ORDER BY `2`
+-- !query analysis
+Project [2#x, 2#x]
++- Sort [2#x ASC NULLS FIRST], true
+   +- Project [2 AS 2#x, 1 AS 2#x, 2#x]
+      +- SubqueryAlias t
+         +- LocalRelation [2#x]
+
+
+-- !query
+SELECT 1 AS `2` FROM VALUES (2) t (`2`) ORDER BY `2`
+-- !query analysis
+Sort [2#x ASC NULLS FIRST], true
++- Project [1 AS 2#x]
+   +- SubqueryAlias t
+      +- LocalRelation [2#x]
+
+
+-- !query
+SELECT 2 FROM VALUES (2) t (`2`) ORDER BY `2`
+-- !query analysis
+Sort [2#x ASC NULLS FIRST], true
++- Project [2 AS 2#x]
+   +- SubqueryAlias t
+      +- LocalRelation [2#x]

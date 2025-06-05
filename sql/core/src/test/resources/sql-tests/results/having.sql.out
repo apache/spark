@@ -219,3 +219,75 @@ struct<sum(v):bigint>
 2
 3
 5
+
+
+-- !query
+SELECT 1 AS `2`, 2 FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2
+-- !query schema
+struct<2:int,2:int>
+-- !query output
+
+
+
+-- !query
+SELECT 2, 1 AS `2` FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2
+-- !query schema
+struct<2:int,2:int>
+-- !query output
+
+
+
+-- !query
+SELECT 1 AS `2` FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2
+-- !query schema
+struct<2:int>
+-- !query output
+
+
+
+-- !query
+SELECT 2 FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2
+-- !query schema
+struct<2:int>
+-- !query output
+
+
+
+-- !query
+SELECT SUM(v) + 1 FROM hav HAVING SUM(v) + 1
+-- !query schema
+struct<(sum(v) + 1):bigint>
+-- !query output
+12
+
+
+-- !query
+SELECT 1 + SUM(v) FROM hav HAVING SUM(v) + 1
+-- !query schema
+struct<(1 + sum(v)):bigint>
+-- !query output
+12
+
+
+-- !query
+SELECT SUM(v) + 1 FROM hav HAVING 1 + SUM(v)
+-- !query schema
+struct<(sum(v) + 1):bigint>
+-- !query output
+12
+
+
+-- !query
+SELECT MAX(v) + SUM(v) FROM hav HAVING SUM(v) + MAX(v)
+-- !query schema
+struct<(max(v) + sum(v)):bigint>
+-- !query output
+16
+
+
+-- !query
+SELECT SUM(v) + 1 + MIN(v) FROM hav HAVING 1 + 1 + 1 + MIN(v) + 1 + SUM(v)
+-- !query schema
+struct<((sum(v) + 1) + min(v)):bigint>
+-- !query output
+13
