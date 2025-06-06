@@ -760,4 +760,24 @@ class SqlPipelineSuite extends PipelineTest with SQLTestUtils {
       parameters = Map("identifier" -> fullyQualifiedIdentifier("st").quotedString)
     )
   }
+
+  test("Flow identifiers must be single part") {
+    Seq("a.b", "a.b.c").foreach { flowIdentifier =>
+      val ex = intercept[AnalysisException] {
+        unresolvedDataflowGraphFromSql(
+          sqlText =
+            s"""
+               |CREATE STREAMING TABLE st;
+               |CREATE FLOW $flowIdentifier AS INSERT INTO st BY NAME
+               |SELECT * FROM STREAM $externalTable1Ident
+               |""".stripMargin
+        )
+      }
+      checkError(
+        exception = ex,
+        condition = "MULTIPART_FLOW_NAME_NOT_SUPPORTED",
+        parameters = Map("flowName" -> flowIdentifier)
+      )
+    }
+  }
 }

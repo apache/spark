@@ -4628,12 +4628,6 @@
     ],
     "sqlState" : "42K03"
   },
-  "PERSISTED_VIEW_READS_FROM_TEMPORARY_VIEW" : {
-    "message" : [
-      "Persisted view <persistedViewName> cannot reference temporary view <temporaryViewName> that will not be available outside the pipeline scope. Either make the persisted view temporary or persist the temporary view."
-    ],
-    "sqlState" : "42K0F"
-  },
   "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [
       "Non-grouping expression <expr> is provided as an argument to the |> AGGREGATE pipe operator but does not contain any aggregate function; please update it to include an aggregate function and then retry the query again."
@@ -5524,19 +5518,6 @@
   "UNABLE_TO_INFER_SCHEMA" : {
     "message" : [
       "Unable to infer schema for <format>. It must be specified manually."
-    ],
-    "sqlState" : "42KD9"
-  },
-  "UNABLE_TO_INFER_PIPELINE_TABLE_SCHEMA" : {
-    "message" : [
-      "Failed to infer the schema for table <tableName> from its upstream flows.",
-      "Please modify the flows that write to this table to make their schemas compatible.",
-      "",
-      "Inferred schema so far:",
-      "<inferredDataSchema>",
-      "",
-      "Incompatible schema:",
-      "<incompatibleDataSchema>"
     ],
     "sqlState" : "42KD9"
   },
