@@ -35,6 +35,7 @@ import org.apache.spark.sql.SparkSession.{clearActiveSession, clearDefaultSessio
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession, SQLContext}
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl, SqlGraphRegistrationContext}
 import org.apache.spark.sql.pipelines.utils.PipelineTest.{cleanupMetastore, createTempDir}
 
 abstract class PipelineTest
@@ -55,6 +56,17 @@ abstract class PipelineTest
   implicit def sqlContext: SQLContext = spark.sqlContext
   def sql(text: String): DataFrame = spark.sql(text)
 
+  protected def startPipelineAndWaitForCompletion(unresolvedDataflowGraph: DataflowGraph): Unit = {
+    val updateContext = new PipelineUpdateContextImpl(
+      unresolvedDataflowGraph, eventCallback = _ => ())
+    updateContext.pipelineExecution.runPipeline()
+    updateContext.pipelineExecution.awaitCompletion()
+  }
+
+  /**
+   * Spark confs for [[originalSpark]]. Spark confs set here will be the default spark confs for
+   * all spark sessions created in tests.
+   */
   protected def sparkConf: SparkConf = {
     new SparkConf()
       .set("spark.sql.shuffle.partitions", "2")
@@ -87,6 +99,36 @@ abstract class PipelineTest
         table = name
       )
     }
+  }
+
+  /** Helper class to represent a SQL file by its contents and path. */
+  protected case class TestSqlFile(sqlText: String, sqlFilePath: String)
+
+  /** Construct an unresolved DataflowGraph object from possibly multiple SQL files. */
+  protected def unresolvedDataflowGraphFromSqlFiles(
+      sqlFiles: Seq[TestSqlFile]
+  ): DataflowGraph = {
+    val graphRegistrationContext = new TestGraphRegistrationContext(spark)
+    sqlFiles.foreach { sqlFile =>
+      new SqlGraphRegistrationContext(graphRegistrationContext).processSqlFile(
+        sqlText = sqlFile.sqlText,
+        sqlFilePath = sqlFile.sqlFilePath,
+        spark = spark
+      )
+    }
+    graphRegistrationContext
+      .toDataflowGraph
+  }
+
+  /** Construct an unresolved DataflowGraph object from a single SQL file, given the file contents
+   * and path. */
+  protected def unresolvedDataflowGraphFromSql(
+      sqlText: String,
+      sqlFilePath: String = "dataset.sql"
+  ): DataflowGraph = {
+    unresolvedDataflowGraphFromSqlFiles(
+      Seq(TestSqlFile(sqlText = sqlText, sqlFilePath = sqlFilePath))
+    )
   }
 
   /**
@@ -154,7 +196,7 @@ abstract class PipelineTest
     namedGridTest(testNamePrefix, testTags: _*)(params.map(a => a.toString -> a).toMap)(testFun)
   }
 
-  override def test(testName: String, testTags: Tag*)(testFun: => Any /* Assertion */ )(
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any /* Assertion */ )(
       implicit pos: source.Position): Unit = super.test(testName, testTags: _*) {
     runWithInstrumentation(testFun)
   }

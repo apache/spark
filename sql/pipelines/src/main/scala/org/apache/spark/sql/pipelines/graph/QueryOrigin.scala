@@ -22,10 +22,6 @@ import scala.util.control.{NonFatal, NoStackTrace}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.pipelines.Language
-<<<<<<< HEAD
-=======
-import org.apache.spark.sql.pipelines.logging.SourceCodeLocation
->>>>>>> graph-execution
 
 /**
  * Records information used to track the provenance of a given query to user code.

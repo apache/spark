@@ -921,6 +921,14 @@
     },
     "sqlState" : "21S01"
   },
+  "PIPELINE_SQL_GRAPH_ELEMENT_REGISTRATION_ERROR" : {
+    "message" : [
+      "<message>",
+      "<offendingQuery>",
+      "<codeLocation>"
+    ],
+    "sqlState" : "42000"
+  },
   "DATATYPE_MISMATCH" : {
     "message" : [
       "Cannot resolve <sqlExpr> due to data type mismatch:"
@@ -4129,6 +4137,12 @@
     ],
     "sqlState" : "42P20"
   },
+  "MULTIPART_FLOW_NAME_NOT_SUPPORTED": {
+    "message": [
+      "Flow with multipart name '<flowName>' is not supported."
+    ],
+    "sqlState": "0A000"
+  },
   "MULTIPLE_PRIMARY_KEYS" : {
     "message" : [
       "Multiple primary keys are defined: <columns>. Please ensure that only one primary key is defined for the table."
@@ -4614,6 +4628,12 @@
     ],
     "sqlState" : "42K03"
   },
+  "PERSISTED_VIEW_READS_FROM_TEMPORARY_VIEW" : {
+    "message" : [
+      "Persisted view <persistedViewName> cannot reference temporary view <temporaryViewName> that will not be available outside the pipeline scope. Either make the persisted view temporary or persist the temporary view."
+    ],
+    "sqlState" : "42K0F"
+  },
   "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [
       "Non-grouping expression <expr> is provided as an argument to the |> AGGREGATE pipe operator but does not contain any aggregate function; please update it to include an aggregate function and then retry the query again."
@@ -4625,6 +4645,30 @@
       "Aggregate function <expr> is not allowed when using the pipe operator |> <clause> clause; please use the pipe operator |> AGGREGATE clause instead."
     ],
     "sqlState" : "0A000"
+  },
+  "PIPELINE_DATASET_WITHOUT_FLOW" : {
+    "message" : [
+      "Pipeline dataset <identifier> does not have any defined flows. Please attach a query with the dataset's definition, or explicitly define at least one flow that writes to the dataset."
+    ],
+    "sqlState": "0A000"
+  },
+  "PIPELINE_DUPLICATE_IDENTIFIERS": {
+    "message" : [
+      "A duplicate identifier was found for elements registered in the pipeline's dataflow graph."
+    ],
+    "subClass" : {
+      "DATASET" : {
+        "message" : [
+          "Attempted to register a <datasetType1> with identifier <datasetName>, but a <datasetType2> has already been registered with that identifier. Please ensure all datasets created within this pipeline have unique identifiers."
+        ]
+      },
+      "FLOW" : {
+        "message": [
+          "Flow <flowName> was found in multiple datasets: <datasetNames>"
+        ]
+      }
+    },
+    "sqlState" : "42710"
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [
