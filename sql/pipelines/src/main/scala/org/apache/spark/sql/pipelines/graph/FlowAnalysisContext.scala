@@ -25,9 +25,9 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.pipelines.AnalysisWarning
 
 /**
- * A context used when evaluating a [[Flow]]'s query into a concrete DataFrame.
+ * A context used when evaluating a `Flow`'s query into a concrete DataFrame.
  *
- * @param allInputs            Set of identifiers for all [[Input]]s defined in the DataflowGraph.
+ * @param allInputs            Set of identifiers for all `Input`s defined in the DataflowGraph.
  * @param availableInputs      Inputs available to be referenced with `read` or `readStream`.
  * @param queryContext         The context of the query being evaluated.
  * @param requestedInputs      A mutable buffer populated with names of all inputs that were
@@ -49,7 +49,7 @@ private[pipelines] case class FlowAnalysisContext(
     externalInputs: mutable.HashSet[TableIdentifier] = mutable.HashSet.empty
 ) {
 
-  /** Map from [[Input]] name to the actual [[Input]] */
+  /** Map from `Input` name to the actual `Input` */
   val availableInput: Map[TableIdentifier, Input] =
     availableInputs.map(i => i.identifier -> i).toMap
 

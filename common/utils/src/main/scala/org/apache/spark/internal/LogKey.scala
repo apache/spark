@@ -291,6 +291,7 @@ private[spark] object LogKeys {
   case object FINAL_PATH extends LogKey
   case object FINISH_TIME extends LogKey
   case object FINISH_TRIGGER_DURATION extends LogKey
+  case object FLOW_NAME extends LogKey
   case object FREE_MEMORY_SIZE extends LogKey
   case object FROM_OFFSET extends LogKey
   case object FROM_TIME extends LogKey
@@ -814,7 +815,6 @@ private[spark] object LogKeys {
   case object TABLE_NAME extends LogKey
   case object TABLE_TYPE extends LogKey
   case object TABLE_TYPES extends LogKey
-  case object FLOW_NAME extends LogKey
   case object TAG extends LogKey
   case object TARGET_NUM_EXECUTOR extends LogKey
   case object TARGET_NUM_EXECUTOR_DELTA extends LogKey

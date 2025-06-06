@@ -50,7 +50,7 @@ trait PipelineUpdateContext {
     UnionFlowFilter(flowFilterForTables, resetCheckpointFlows)
   }
 
-  /** [[PipelineConf]] based on the root SparkSession for this update. */
+  /** `PipelineConf` based on the root SparkSession for this update. */
   def pipelineConf: PipelineConf
 
   /** Buffer containing internal events that are emitted during a run of a pipeline. */
@@ -62,6 +62,6 @@ trait PipelineUpdateContext {
   /** The unresolved graph for this update. */
   def unresolvedGraph: DataflowGraph
 
-  /** Defines APIs to end to end execute the [[DataflowGraph]]. */
+  /** Defines operations relates to end to end execution of a `DataflowGraph`. */
   val pipelineExecution: PipelineExecution = new PipelineExecution(context = this)
 }

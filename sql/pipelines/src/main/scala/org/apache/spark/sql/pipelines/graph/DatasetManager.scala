@@ -37,7 +37,7 @@ import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils.diffSchemas
 import org.apache.spark.sql.pipelines.util.SchemaMergingUtils
 
 /**
- * [[DatasetManager]] is responsible for materializing tables in the catalog based on the given
+ * `DatasetManager` is responsible for materializing tables in the catalog based on the given
  * graph. For each table in the graph, it will create a table if none exists (or if this is a
  * full refresh), or merge the schema of an existing table to match the new flows writing to it.
  */
@@ -157,11 +157,15 @@ object DatasetManager extends Logging {
     val mergedProperties = resolveTableProperties(table, identifier)
     val partitioning = table.partitionCols.toSeq.flatten.map(Expressions.identity)
 
-    val exists = catalog.tableExists(identifier)
+    val existingTableOpt = if (catalog.tableExists(identifier)) {
+      Some(catalog.loadTable(identifier))
+    } else {
+      None
+    }
 
     // Error if partitioning doesn't match
-    if (exists) {
-      val existingPartitioning = catalog.loadTable(identifier).partitioning().toSeq
+    if (existingTableOpt.isDefined) {
+      val existingPartitioning = existingTableOpt.get.partitioning().toSeq
       if (existingPartitioning != partitioning) {
         throw new AnalysisException(
           errorClass = "CANNOT_UPDATE_PARTITION_COLUMNS",
@@ -174,13 +178,13 @@ object DatasetManager extends Logging {
     }
 
     // Wipe the data if we need to
-    if ((isFullRefresh || !table.isStreamingTableOpt.get) && exists) {
+    if ((isFullRefresh || !table.isStreamingTableOpt.get) && existingTableOpt.isDefined) {
       context.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
     }
 
     // Alter the table if we need to
-    if (exists) {
-      val existingSchema = catalog.loadTable(identifier).schema()
+    if (existingTableOpt.isDefined) {
+      val existingSchema = existingTableOpt.get.schema()
 
       val targetSchema = if (table.isStreamingTableOpt.get && !isFullRefresh) {
         SchemaMergingUtils.mergeSchemas(existingSchema, outputSchema)
@@ -194,7 +198,7 @@ object DatasetManager extends Logging {
     }
 
     // Create the table if we need to
-    if (!exists) {
+    if (existingTableOpt.isEmpty) {
       catalog.createTable(
         identifier,
         new TableInfo.Builder()

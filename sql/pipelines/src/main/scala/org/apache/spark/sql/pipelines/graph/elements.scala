@@ -67,9 +67,9 @@ trait GraphElement {
 trait Input extends GraphElement {
 
   /**
-   * Returns a [[DataFrame]] that is a result of loading data from this [[Input]].
+   * Returns a DataFrame that is a result of loading data from this [[Input]].
    * @param readOptions Type of input. Used to determine streaming/batch
-   * @return Streaming or batch [[DataFrame]] of this Input's data.
+   * @return Streaming or batch DataFrame of this Input's data.
    */
   def load(readOptions: InputReadOptions): DataFrame
 }
@@ -82,7 +82,7 @@ sealed trait Output {
 
   /**
    * Normalized storage location used for storing materializations for this [[Output]].
-   * If [[None]], it means this [[Output]] has not been normalized yet.
+   * If None, it means this [[Output]] has not been normalized yet.
    */
   def normalizedPath: Option[String]
 

@@ -23,6 +23,7 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Configuration for the pipeline system, which is read from the Spark session's SQL configuration.
  */
+@deprecated("TODO(SPARK-52410): Remove this class in favor of using SqlConf directly")
 class PipelineConf(spark: SparkSession) {
   private val sqlConf: SQLConf = spark.sessionState.conf
 
@@ -33,18 +34,14 @@ class PipelineConf(spark: SparkSession) {
 
   /** Minimum time in seconds between retries for the watchdog. */
   val watchdogMinRetryTimeInSeconds: Long = {
-    val value = sqlConf.getConf(SQLConf.PIPELINES_WATCHDOG_MIN_RETRY_TIME_IN_SECONDS)
-    if (value <= 0L) {
-      throw new IllegalArgumentException(
-        "Watchdog minimum retry time must be at least 1 second."
-      )
-    }
-    value
+    sqlConf.getConf(SQLConf.PIPELINES_WATCHDOG_MIN_RETRY_TIME_IN_SECONDS)
   }
 
   /** Maximum time in seconds for the watchdog to retry before giving up. */
   val watchdogMaxRetryTimeInSeconds: Long = {
     val value = sqlConf.getConf(SQLConf.PIPELINES_WATCHDOG_MAX_RETRY_TIME_IN_SECONDS)
+    // TODO(SPARK-52410): Remove this check and use `checkValue` when defining the conf
+    //                    in `SqlConf`.
     if (value < watchdogMinRetryTimeInSeconds) {
       throw new IllegalArgumentException(
         "Watchdog maximum retry time must be greater than or equal to the watchdog minimum " +
@@ -59,13 +56,7 @@ class PipelineConf(spark: SparkSession) {
 
   /** Timeout in milliseconds for termination join and lock operations. */
   val timeoutMsForTerminationJoinAndLock: Long = {
-    val value = sqlConf.getConf(SQLConf.PIPELINES_TIMEOUT_MS_FOR_TERMINATION_JOIN_AND_LOCK)
-    if (value <= 0L) {
-      throw new IllegalArgumentException(
-        "Timeout for lock must be at least 1 millisecond."
-      )
-    }
-    value
+    sqlConf.getConf(SQLConf.PIPELINES_TIMEOUT_MS_FOR_TERMINATION_JOIN_AND_LOCK)
   }
 
   /** Maximum number of retry attempts for a flow execution. */

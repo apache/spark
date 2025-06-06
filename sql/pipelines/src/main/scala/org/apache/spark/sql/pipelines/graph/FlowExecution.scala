@@ -37,8 +37,8 @@ import org.apache.spark.util.ThreadUtils
  * 1. it may finish performing all of its necessary work, or
  * 2. it may be interrupted by a request from a user to stop it.
  *
- * We use this result to disambiguate these two cases, using [[ExecutionResult.FINISHED]]
- * for the former and [[ExecutionResult.STOPPED]] for the latter.
+ * We use this result to disambiguate these two cases, using 'ExecutionResult.FINISHED'
+ * for the former and 'ExecutionResult.STOPPED' for the latter.
  */
 sealed trait ExecutionResult
 object ExecutionResult {
@@ -46,7 +46,7 @@ object ExecutionResult {
   case object STOPPED extends ExecutionResult
 }
 
-/** A [[FlowExecution]] specifies how to execute a flow and manages its execution. */
+/** A `FlowExecution` specifies how to execute a flow and manages its execution. */
 trait FlowExecution {
 
   /** Identifier of this physical flow */
@@ -76,10 +76,13 @@ trait FlowExecution {
    */
   def getOrigin: QueryOrigin
 
-  /** Returns true iff this FlowExecution has been completed with either success or an exception. */
+  /**
+   * Returns true if and only if this `FlowExecution` has been completed with
+   * either success or an exception.
+   */
   def isCompleted: Boolean = _future.exists(_.isCompleted)
 
-  /** Returns true iff this FlowExecution executes using Spark Structured Streaming. */
+  /** Returns true iff this `FlowExecution` executes using Spark Structured Streaming. */
   def isStreaming: Boolean
 
   /** Retrieves the future that can be used to track execution status. */
@@ -95,13 +98,13 @@ trait FlowExecution {
   /** Context about this pipeline update. */
   def updateContext: PipelineUpdateContext
 
-  /** The thread execution context for the current [[FlowExecution]]. */
+  /** The thread execution context for the current `FlowExecution`. */
   implicit val executionContext: ExecutionContext = {
     ExecutionContext.fromExecutor(FlowExecution.threadPool)
   }
 
   /**
-   * Stops execution of this [[FlowExecution]]. If you override this, please be sure to
+   * Stops execution of this `FlowExecution`. If you override this, please be sure to
    * call `super.stop()` at the beginning of your method, so we can properly handle errors
    * when a user tries to stop a flow.
    */
@@ -153,25 +156,25 @@ trait FlowExecution {
     }
   }
 
-  /** The destination that this [[FlowExecution]] is writing to. */
+  /** The destination that this `FlowExecution` is writing to. */
   def destination: Output
 
-  /** Has this [[FlowExecution]] been stopped? Set by [[FlowExecution.stop()]]. */
+  /** Whether this `FlowExecution` has been stopped. Set by `FlowExecution.stop()`. */
   private val stopped: AtomicBoolean = new AtomicBoolean(false)
 }
 
 object FlowExecution {
 
-  /** A thread pool used to execute [[FlowExecution]]s. */
+  /** A thread pool used to execute `FlowExecutions`. */
   private val threadPool: ThreadPoolExecutor = {
     ThreadUtils.newDaemonCachedThreadPool("FlowExecution")
   }
 }
 
-/** A [[FlowExecution]] that processes data statefully using Structured Streaming. */
+/** A 'FlowExecution' that processes data statefully using Structured Streaming. */
 trait StreamingFlowExecution extends FlowExecution with Logging {
 
-  /** The [[ResolvedFlow]] that this [[StreamingFlowExecution]] is executing. */
+  /** The `ResolvedFlow` that this `StreamingFlowExecution` is executing. */
   def flow: ResolvedFlow
 
   /** Structured Streaming checkpoint. */
@@ -189,7 +192,7 @@ trait StreamingFlowExecution extends FlowExecution with Logging {
   protected def startStream(): StreamingQuery
 
   /**
-   * Executes this StreamingFlowExecution by starting its stream with the correct scheduling pool
+   * Executes this `StreamingFlowExecution` by starting its stream with the correct scheduling pool
    * and confs.
    */
   override final def executeInternal(): Future[Unit] = {
@@ -202,7 +205,7 @@ trait StreamingFlowExecution extends FlowExecution with Logging {
   }
 }
 
-/** A [[StreamingFlowExecution]] that writes a streaming DataFrame to a DLT [[Table]]. */
+/** A `StreamingFlowExecution` that writes a streaming `DataFrame` to a `Table`. */
 class StreamingTableWrite(
     val identifier: TableIdentifier,
     val flow: ResolvedFlow,
@@ -230,7 +233,7 @@ class StreamingTableWrite(
   }
 }
 
-/** A [[FlowExecution]] that writes a batch DataFrame to a DLT [[Table]]. */
+/** A `FlowExecution` that writes a batch `DataFrame` to a `Table`. */
 class BatchTableWrite(
     val identifier: TableIdentifier,
     val flow: ResolvedFlow,

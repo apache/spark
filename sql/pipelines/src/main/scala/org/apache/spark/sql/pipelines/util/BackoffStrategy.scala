@@ -21,7 +21,7 @@ import scala.concurrent.duration._
 import scala.math.{log10, pow}
 
 /**
- * A [[BackoffStrategy]] determines the backoff duration (how long we should wait) for
+ * A `BackoffStrategy` determines the backoff duration (how long we should wait) for
  * retries after failures.
  */
 trait BackoffStrategy {
@@ -31,7 +31,7 @@ trait BackoffStrategy {
 }
 
 /**
- * A [[BackoffStrategy]] where the back-off time grows exponentially for each
+ * A `BackoffStrategy` where the back-off time grows exponentially for each
  * successive retry.
  *
  * The back-off time after `n` failures is min(maxTime, (2 ** n) * stepSize).
