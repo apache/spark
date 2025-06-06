@@ -73,8 +73,7 @@ class ConstructPipelineEventSuite extends SparkFunSuite with BeforeAndAfterEach 
     assert(serializedEx.map(_.message) == Seq("exception 2", "exception 1"))
     assert(serializedEx.head.className == "java.lang.IllegalStateException")
 
-    assert(
-      serializedEx.head.stack.nonEmpty, "Stack trace of main exception should not be empty")
+    assert(serializedEx.head.stack.nonEmpty, "Stack trace of main exception should not be empty")
     assert(serializedEx(1).stack.nonEmpty, "Stack trace of cause should not be empty")
 
     // Get the original and serialized stack traces for comparison
@@ -110,6 +109,7 @@ class ConstructPipelineEventSuite extends SparkFunSuite with BeforeAndAfterEach 
           )
         )
       ),
+      level = EventLevel.INFO,
       message = "Flow 'b' has failed",
       details = FlowProgress(FlowStatus.FAILED),
       eventTimestamp = Some(new Timestamp(1747338049615L))
@@ -117,6 +117,7 @@ class ConstructPipelineEventSuite extends SparkFunSuite with BeforeAndAfterEach 
     assert(event.origin.datasetName.contains("dataset"))
     assert(event.origin.flowName.contains("flow"))
     assert(event.origin.sourceCodeLocation.get.path.contains("path"))
+    assert(event.level == EventLevel.INFO)
     assert(event.message == "Flow 'b' has failed")
     assert(event.details.asInstanceOf[FlowProgress].status == FlowStatus.FAILED)
     assert(event.timestamp == "2025-05-15T19:40:49.615Z")

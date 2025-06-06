@@ -48,7 +48,9 @@ abstract class PipelineTest
 
   final protected val storageRoot = createTempDir()
 
-  var spark: SparkSession = _
+  var spark: SparkSession = createAndInitializeSpark()
+  val originalSpark: SparkSession = spark.cloneSession()
+
 
   implicit def sqlContext: SQLContext = spark.sqlContext
   def sql(text: String): DataFrame = spark.sql(text)
@@ -169,17 +171,17 @@ abstract class PipelineTest
   }
 
   /**
-   * Creates individual tests for all items in [[params]].
+   * Creates individual tests for all items in `params`.
    *
    * The full test name will be "<testNamePrefix> (<paramName> = <param>)" where <param> is one
-   * item in [[params]].
+   * item in `params`.
    *
    * @param testNamePrefix The test name prefix.
    * @param paramName A descriptive name for the parameter.
    * @param testTags Extra tags for the test.
    * @param params The list of parameters for which to generate tests.
    * @param testFun The actual test function. This function will be called with one argument of
-   *                type [[A]].
+   *                type `A`.
    * @tparam A The type of the params.
    */
   protected def gridTest[A](testNamePrefix: String, paramName: String, testTags: Tag*)(
@@ -189,8 +191,8 @@ abstract class PipelineTest
     )(testFun)
 
   /**
-   * Specialized version of gridTest where the params are two boolean values - [[true]] and
-   * [[false]].
+   * Specialized version of gridTest where the params are two boolean values - `true` and
+   * `false`.
    */
   protected def booleanGridTest(testNamePrefix: String, paramName: String, testTags: Tag*)(
       testFun: Boolean => Unit): Unit = {
@@ -244,8 +246,8 @@ abstract class PipelineTest
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    *
-   * @param df the [[DataFrame]] to be executed
-   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   * @param df the `DataFrame` to be executed
+   * @param expectedAnswer the expected result in a `Seq` of `Row`s.
    */
   protected def checkAnswer(df: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     checkAnswerAndPlan(df, expectedAnswer, None)

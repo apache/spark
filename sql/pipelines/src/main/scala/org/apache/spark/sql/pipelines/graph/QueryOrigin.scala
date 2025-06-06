@@ -28,7 +28,7 @@ import org.apache.spark.sql.pipelines.logging.SourceCodeLocation
  * Records information used to track the provenance of a given query to user code.
  *
  * @param language The language used by the user to define the query.
- * @param fileName The file name of the user code that defines the query.
+ * @param filePath Path to the file of the user code that defines the query.
  * @param sqlText The SQL text of the query.
  * @param line The line number of the query in the user code.
  *             Line numbers are 1-indexed.
@@ -38,7 +38,7 @@ import org.apache.spark.sql.pipelines.logging.SourceCodeLocation
  */
 case class QueryOrigin(
     language: Option[Language] = None,
-    fileName: Option[String] = None,
+    filePath: Option[String] = None,
     sqlText: Option[String] = None,
     line: Option[Int] = None,
     startPosition: Option[Int] = None,
@@ -55,7 +55,7 @@ case class QueryOrigin(
   def merge(other: QueryOrigin): QueryOrigin = {
     QueryOrigin(
       language = other.language.orElse(language),
-      fileName = other.fileName.orElse(fileName),
+      filePath = other.filePath.orElse(filePath),
       sqlText = other.sqlText.orElse(sqlText),
       line = other.line.orElse(line),
       startPosition = other.startPosition.orElse(startPosition),
@@ -82,7 +82,7 @@ case class QueryOrigin(
 
   /** Generates a SourceCodeLocation using the details present in the query origin. */
   def toSourceCodeLocation: SourceCodeLocation = SourceCodeLocation(
-    path = fileName,
+    path = filePath,
     // QueryOrigin tracks line numbers using a 1-indexed numbering scheme whereas SourceCodeLocation
     // tracks them using a 0-indexed numbering scheme.
     lineNumber = line.map(_ - 1),
@@ -98,7 +98,7 @@ object QueryOrigin extends Logging {
   val empty: QueryOrigin = QueryOrigin()
 
   /**
-   * An exception that wraps [[QueryOrigin]] and lets us store it in errors as suppressed
+   * An exception that wraps `QueryOrigin` and lets us store it in errors as suppressed
    * exceptions.
    */
   private case class QueryOriginWrapper(origin: QueryOrigin) extends Exception with NoStackTrace
@@ -120,20 +120,21 @@ object QueryOrigin extends Logging {
           t.addSuppressed(QueryOriginWrapper(origin))
         }
       } catch {
-        case NonFatal(e) => logError("Failed to add pipeline context", e)
+        case NonFatal(e) =>
+          logError("Failed to add pipeline context", e)
       }
       t
     }
   }
 
-  /** Returns the [[QueryOrigin]] stored as a suppressed exception in the given throwable.
+  /** Returns the `QueryOrigin` stored as a suppressed exception in the given throwable.
    *
    * @return Some(origin) if the origin is recorded as part of the given throwable, `None`
    *         otherwise.
    */
   def getOrigin(t: Throwable): Option[QueryOrigin] = {
     try {
-      // Wrap in an `Option(_)` first to handle `null` throwables.
+      // Wrap in an `Option(_)` first to handle `null` throwable.
       Option(t).flatMap { ex =>
         ex.getSuppressed.collectFirst {
           case QueryOriginWrapper(context) => context

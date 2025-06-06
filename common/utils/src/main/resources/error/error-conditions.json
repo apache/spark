@@ -498,6 +498,13 @@
     },
     "sqlState" : "0A000"
   },
+  "CANNOT_UPDATE_PARTITION_COLUMNS" : {
+    "message" : [
+      "Declared partitioning <requestedPartitionColumns> conflicts with existing table partitioning <existingPartitionColumns>.",
+      "Please delete the table or change the declared partitioning to match its partitions."
+    ],
+    "sqlState" : "42000"
+  },
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [
       "Cannot up cast <expression> from <sourceType> to <targetType>.",

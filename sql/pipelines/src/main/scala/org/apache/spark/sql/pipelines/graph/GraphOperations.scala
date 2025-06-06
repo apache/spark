@@ -38,7 +38,7 @@ trait GraphOperations {
   private lazy val destinationSet: Set[TableIdentifier] =
     flows.map(_.destinationIdentifier).toSet
 
-  /** A map from flow identifier to [[FlowNode]], which contains the input/output nodes. */
+  /** A map from flow identifier to `FlowNode`, which contains the input/output nodes. */
   lazy val flowNodes: Map[TableIdentifier, FlowNode] = {
     flows.map { f =>
       val identifier = f.identifier
