@@ -77,7 +77,7 @@ class PipelineEventSuite extends SparkFunSuite with Logging {
     // the two events, being created right after one another, should not be far apart
     assert(
       EventHelpers.parseTimestamp(event2.timestamp).getTime -
-        EventHelpers.parseTimestamp(event1.timestamp).getTime < 1000
+      EventHelpers.parseTimestamp(event1.timestamp).getTime < 1000
     )
   }
   test("formatTimestamp / parseTimestamp") {
