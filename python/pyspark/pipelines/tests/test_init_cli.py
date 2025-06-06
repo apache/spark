@@ -35,6 +35,7 @@ if should_test_connect:
     from pyspark.pipelines.tests.local_graph_element_registry import LocalGraphElementRegistry
 
 
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class InitCLITests(ReusedConnectTestCase):
     def test_init(self):
         with tempfile.TemporaryDirectory() as temp_dir:
