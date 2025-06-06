@@ -40,17 +40,13 @@ class DataSourceV2DataFrameSuite
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import testImplicits._
 
-  override protected def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
-
-  before {
-    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
-    spark.conf.set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
-  }
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set(SQLConf.ANSI_ENABLED, true)
+    .set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
 
   after {
     spark.sessionState.catalogManager.reset()
-    spark.sessionState.conf.clear()
   }
 
   override protected val catalogAndNamespace: String = "testcat.ns1.ns2.tbls"
