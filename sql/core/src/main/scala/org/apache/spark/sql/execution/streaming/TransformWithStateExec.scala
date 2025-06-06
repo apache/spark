@@ -82,7 +82,7 @@ case class TransformWithStateExec(
   with ObjectProducerExec
   with TransformWithStateMetadataUtils {
 
-  override def shortName: String = "transformWithStateExec"
+  override def shortName: String = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
 
   // dummy value schema, the real schema will get during state variable init time
   private val DUMMY_VALUE_ROW_SCHEMA = new StructType().add("value", BinaryType)

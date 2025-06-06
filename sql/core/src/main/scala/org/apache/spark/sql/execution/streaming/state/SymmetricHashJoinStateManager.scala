@@ -737,9 +737,9 @@ abstract class SymmetricHashJoinStateManager(
     if (useVirtualColumnFamilies) {
       stateStore.createColFamilyIfAbsent(
         colFamilyName,
-        keySchema,
+        keyWithIndexSchema,
         valueRowConverter.valueAttributes.toStructType,
-        NoPrefixKeyStateEncoderSpec(keySchema)
+        NoPrefixKeyStateEncoderSpec(keyWithIndexSchema)
       )
     }
 
