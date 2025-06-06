@@ -149,7 +149,7 @@ abstract class PipelineTest
     }
   }
 
-  protected def gridTest[A](testNamePrefix: String, testTags: Tag*)(params: Seq[A])(
+  override protected def gridTest[A](testNamePrefix: String, testTags: Tag*)(params: Seq[A])(
       testFun: A => Unit): Unit = {
     namedGridTest(testNamePrefix, testTags: _*)(params.map(a => a.toString -> a).toMap)(testFun)
   }
