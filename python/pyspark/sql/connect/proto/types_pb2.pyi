@@ -33,17 +33,21 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-
 import builtins
 import collections.abc
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.message
+import sys
 import typing
+
+if sys.version_info >= (3, 8):
+    import typing as typing_extensions
+else:
+    import typing_extensions
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
-@typing.final
 class DataType(google.protobuf.message.Message):
     """This message describes the logical [[DataType]] of something. It does not carry the value
     itself but only describes it.
@@ -51,7 +55,6 @@ class DataType(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing.final
     class Boolean(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -64,10 +67,11 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing.Literal["type_variation_reference", b"type_variation_reference"],
+            field_name: typing_extensions.Literal[
+                "type_variation_reference", b"type_variation_reference"
+            ],
         ) -> None: ...
 
-    @typing.final
     class Byte(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -80,10 +84,11 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing.Literal["type_variation_reference", b"type_variation_reference"],
+            field_name: typing_extensions.Literal[
+                "type_variation_reference", b"type_variation_reference"
+            ],
         ) -> None: ...
 
-    @typing.final
     class Short(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -96,10 +101,11 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing.Literal["type_variation_reference", b"type_variation_reference"],
+            field_name: typing_extensions.Literal[
+                "type_variation_reference", b"type_variation_reference"
+            ],
         ) -> None: ...
 
-    @typing.final
     class Integer(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -112,10 +118,11 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing.Literal["type_variation_reference", b"type_variation_reference"],
+            field_name: typing_extensions.Literal[
+                "type_variation_reference", b"type_variation_reference"
+            ],
         ) -> None: ...
 
-    @typing.final
     class Long(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -128,10 +135,11 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing.Literal["type_variation_reference", b"type_variation_reference"],
+            field_name: typing_extensions.Literal[
+                "type_variation_reference", b"type_variation_reference"
+            ],
         ) -> None: ...
 
-    @typing.final
     class Float(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -144,10 +152,11 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing.Literal["type_variation_reference", b"type_variation_reference"],
+            field_name: typing_extensions.Literal[
+                "type_variation_reference", b"type_variation_reference"
+            ],
         ) -> None: ...
 
-    @typing.final
     class Double(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -160,10 +169,11 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing.Literal["type_variation_reference", b"type_variation_reference"],
+            field_name: typing_extensions.Literal[
+                "type_variation_reference", b"type_variation_reference"
+            ],
         ) -> None: ...
 
-    @typing.final
     class String(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -179,12 +189,11 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing.Literal[
+            field_name: typing_extensions.Literal[
                 "collation", b"collation", "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
-    @typing.final
     class Binary(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -197,10 +206,11 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing.Literal["type_variation_reference", b"type_variation_reference"],
+            field_name: typing_extensions.Literal[
+                "type_variation_reference", b"type_variation_reference"
+            ],
         ) -> None: ...
 
-    @typing.final
     class NULL(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -213,10 +223,11 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing.Literal["type_variation_reference", b"type_variation_reference"],
+            field_name: typing_extensions.Literal[
+                "type_variation_reference", b"type_variation_reference"
+            ],
         ) -> None: ...
 
-    @typing.final
     class Timestamp(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -229,10 +240,11 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing.Literal["type_variation_reference", b"type_variation_reference"],
+            field_name: typing_extensions.Literal[
+                "type_variation_reference", b"type_variation_reference"
+            ],
         ) -> None: ...
 
-    @typing.final
     class Date(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -245,10 +257,11 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing.Literal["type_variation_reference", b"type_variation_reference"],
+            field_name: typing_extensions.Literal[
+                "type_variation_reference", b"type_variation_reference"
+            ],
         ) -> None: ...
 
-    @typing.final
     class TimestampNTZ(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -261,10 +274,11 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing.Literal["type_variation_reference", b"type_variation_reference"],
+            field_name: typing_extensions.Literal[
+                "type_variation_reference", b"type_variation_reference"
+            ],
         ) -> None: ...
 
-    @typing.final
     class CalendarInterval(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -277,10 +291,11 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing.Literal["type_variation_reference", b"type_variation_reference"],
+            field_name: typing_extensions.Literal[
+                "type_variation_reference", b"type_variation_reference"
+            ],
         ) -> None: ...
 
-    @typing.final
     class YearMonthInterval(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -299,7 +314,7 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def HasField(
             self,
-            field_name: typing.Literal[
+            field_name: typing_extensions.Literal[
                 "_end_field",
                 b"_end_field",
                 "_start_field",
@@ -312,7 +327,7 @@ class DataType(google.protobuf.message.Message):
         ) -> builtins.bool: ...
         def ClearField(
             self,
-            field_name: typing.Literal[
+            field_name: typing_extensions.Literal[
                 "_end_field",
                 b"_end_field",
                 "_start_field",
@@ -327,14 +342,13 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing.Literal["_end_field", b"_end_field"]
-        ) -> typing.Literal["end_field"] | None: ...
+            self, oneof_group: typing_extensions.Literal["_end_field", b"_end_field"]
+        ) -> typing_extensions.Literal["end_field"] | None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing.Literal["_start_field", b"_start_field"]
-        ) -> typing.Literal["start_field"] | None: ...
+            self, oneof_group: typing_extensions.Literal["_start_field", b"_start_field"]
+        ) -> typing_extensions.Literal["start_field"] | None: ...
 
-    @typing.final
     class DayTimeInterval(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -353,7 +367,7 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def HasField(
             self,
-            field_name: typing.Literal[
+            field_name: typing_extensions.Literal[
                 "_end_field",
                 b"_end_field",
                 "_start_field",
@@ -366,7 +380,7 @@ class DataType(google.protobuf.message.Message):
         ) -> builtins.bool: ...
         def ClearField(
             self,
-            field_name: typing.Literal[
+            field_name: typing_extensions.Literal[
                 "_end_field",
                 b"_end_field",
                 "_start_field",
@@ -381,14 +395,13 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing.Literal["_end_field", b"_end_field"]
-        ) -> typing.Literal["end_field"] | None: ...
+            self, oneof_group: typing_extensions.Literal["_end_field", b"_end_field"]
+        ) -> typing_extensions.Literal["end_field"] | None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing.Literal["_start_field", b"_start_field"]
-        ) -> typing.Literal["start_field"] | None: ...
+            self, oneof_group: typing_extensions.Literal["_start_field", b"_start_field"]
+        ) -> typing_extensions.Literal["start_field"] | None: ...
 
-    @typing.final
     class Char(google.protobuf.message.Message):
         """Start compound types."""
 
@@ -406,12 +419,11 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing.Literal[
+            field_name: typing_extensions.Literal[
                 "length", b"length", "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
-    @typing.final
     class VarChar(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -427,12 +439,11 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing.Literal[
+            field_name: typing_extensions.Literal[
                 "length", b"length", "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
-    @typing.final
     class Decimal(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -451,7 +462,7 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def HasField(
             self,
-            field_name: typing.Literal[
+            field_name: typing_extensions.Literal[
                 "_precision",
                 b"_precision",
                 "_scale",
@@ -464,7 +475,7 @@ class DataType(google.protobuf.message.Message):
         ) -> builtins.bool: ...
         def ClearField(
             self,
-            field_name: typing.Literal[
+            field_name: typing_extensions.Literal[
                 "_precision",
                 b"_precision",
                 "_scale",
@@ -479,14 +490,13 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing.Literal["_precision", b"_precision"]
-        ) -> typing.Literal["precision"] | None: ...
+            self, oneof_group: typing_extensions.Literal["_precision", b"_precision"]
+        ) -> typing_extensions.Literal["precision"] | None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing.Literal["_scale", b"_scale"]
-        ) -> typing.Literal["scale"] | None: ...
+            self, oneof_group: typing_extensions.Literal["_scale", b"_scale"]
+        ) -> typing_extensions.Literal["scale"] | None: ...
 
-    @typing.final
     class StructField(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -495,10 +505,10 @@ class DataType(google.protobuf.message.Message):
         NULLABLE_FIELD_NUMBER: builtins.int
         METADATA_FIELD_NUMBER: builtins.int
         name: builtins.str
-        nullable: builtins.bool
-        metadata: builtins.str
         @property
         def data_type(self) -> global___DataType: ...
+        nullable: builtins.bool
+        metadata: builtins.str
         def __init__(
             self,
             *,
@@ -509,13 +519,13 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def HasField(
             self,
-            field_name: typing.Literal[
+            field_name: typing_extensions.Literal[
                 "_metadata", b"_metadata", "data_type", b"data_type", "metadata", b"metadata"
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
-            field_name: typing.Literal[
+            field_name: typing_extensions.Literal[
                 "_metadata",
                 b"_metadata",
                 "data_type",
@@ -529,22 +539,21 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
         def WhichOneof(
-            self, oneof_group: typing.Literal["_metadata", b"_metadata"]
-        ) -> typing.Literal["metadata"] | None: ...
+            self, oneof_group: typing_extensions.Literal["_metadata", b"_metadata"]
+        ) -> typing_extensions.Literal["metadata"] | None: ...
 
-    @typing.final
     class Struct(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         FIELDS_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
         @property
         def fields(
             self,
         ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
             global___DataType.StructField
         ]: ...
+        type_variation_reference: builtins.int
         def __init__(
             self,
             *,
@@ -553,22 +562,21 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing.Literal[
+            field_name: typing_extensions.Literal[
                 "fields", b"fields", "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
-    @typing.final
     class Array(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         ELEMENT_TYPE_FIELD_NUMBER: builtins.int
         CONTAINS_NULL_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        contains_null: builtins.bool
-        type_variation_reference: builtins.int
         @property
         def element_type(self) -> global___DataType: ...
+        contains_null: builtins.bool
+        type_variation_reference: builtins.int
         def __init__(
             self,
             *,
@@ -577,11 +585,11 @@ class DataType(google.protobuf.message.Message):
             type_variation_reference: builtins.int = ...,
         ) -> None: ...
         def HasField(
-            self, field_name: typing.Literal["element_type", b"element_type"]
+            self, field_name: typing_extensions.Literal["element_type", b"element_type"]
         ) -> builtins.bool: ...
         def ClearField(
             self,
-            field_name: typing.Literal[
+            field_name: typing_extensions.Literal[
                 "contains_null",
                 b"contains_null",
                 "element_type",
@@ -591,7 +599,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing.final
     class Map(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -599,12 +606,12 @@ class DataType(google.protobuf.message.Message):
         VALUE_TYPE_FIELD_NUMBER: builtins.int
         VALUE_CONTAINS_NULL_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        value_contains_null: builtins.bool
-        type_variation_reference: builtins.int
         @property
         def key_type(self) -> global___DataType: ...
         @property
         def value_type(self) -> global___DataType: ...
+        value_contains_null: builtins.bool
+        type_variation_reference: builtins.int
         def __init__(
             self,
             *,
@@ -614,11 +621,14 @@ class DataType(google.protobuf.message.Message):
             type_variation_reference: builtins.int = ...,
         ) -> None: ...
         def HasField(
-            self, field_name: typing.Literal["key_type", b"key_type", "value_type", b"value_type"]
+            self,
+            field_name: typing_extensions.Literal[
+                "key_type", b"key_type", "value_type", b"value_type"
+            ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
-            field_name: typing.Literal[
+            field_name: typing_extensions.Literal[
                 "key_type",
                 b"key_type",
                 "type_variation_reference",
@@ -630,7 +640,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing.final
     class Variant(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -643,10 +652,11 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing.Literal["type_variation_reference", b"type_variation_reference"],
+            field_name: typing_extensions.Literal[
+                "type_variation_reference", b"type_variation_reference"
+            ],
         ) -> None: ...
 
-    @typing.final
     class UDT(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -676,7 +686,7 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         def HasField(
             self,
-            field_name: typing.Literal[
+            field_name: typing_extensions.Literal[
                 "_jvm_class",
                 b"_jvm_class",
                 "_python_class",
@@ -697,7 +707,7 @@ class DataType(google.protobuf.message.Message):
         ) -> builtins.bool: ...
         def ClearField(
             self,
-            field_name: typing.Literal[
+            field_name: typing_extensions.Literal[
                 "_jvm_class",
                 b"_jvm_class",
                 "_python_class",
@@ -720,23 +730,24 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing.Literal["_jvm_class", b"_jvm_class"]
-        ) -> typing.Literal["jvm_class"] | None: ...
+            self, oneof_group: typing_extensions.Literal["_jvm_class", b"_jvm_class"]
+        ) -> typing_extensions.Literal["jvm_class"] | None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing.Literal["_python_class", b"_python_class"]
-        ) -> typing.Literal["python_class"] | None: ...
+            self, oneof_group: typing_extensions.Literal["_python_class", b"_python_class"]
+        ) -> typing_extensions.Literal["python_class"] | None: ...
         @typing.overload
         def WhichOneof(
             self,
-            oneof_group: typing.Literal["_serialized_python_class", b"_serialized_python_class"],
-        ) -> typing.Literal["serialized_python_class"] | None: ...
+            oneof_group: typing_extensions.Literal[
+                "_serialized_python_class", b"_serialized_python_class"
+            ],
+        ) -> typing_extensions.Literal["serialized_python_class"] | None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing.Literal["_sql_type", b"_sql_type"]
-        ) -> typing.Literal["sql_type"] | None: ...
+            self, oneof_group: typing_extensions.Literal["_sql_type", b"_sql_type"]
+        ) -> typing_extensions.Literal["sql_type"] | None: ...
 
-    @typing.final
     class Unparsed(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -749,7 +760,7 @@ class DataType(google.protobuf.message.Message):
             data_type_string: builtins.str = ...,
         ) -> None: ...
         def ClearField(
-            self, field_name: typing.Literal["data_type_string", b"data_type_string"]
+            self, field_name: typing_extensions.Literal["data_type_string", b"data_type_string"]
         ) -> None: ...
 
     NULL_FIELD_NUMBER: builtins.int
@@ -865,7 +876,7 @@ class DataType(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "array",
             b"array",
             "binary",
@@ -922,7 +933,7 @@ class DataType(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing.Literal[
+        field_name: typing_extensions.Literal[
             "array",
             b"array",
             "binary",
@@ -978,9 +989,9 @@ class DataType(google.protobuf.message.Message):
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing.Literal["kind", b"kind"]
+        self, oneof_group: typing_extensions.Literal["kind", b"kind"]
     ) -> (
-        typing.Literal[
+        typing_extensions.Literal[
             "null",
             "binary",
             "boolean",
