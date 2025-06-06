@@ -25,7 +25,7 @@ import java.util.Locale
 import scala.concurrent.duration.MICROSECONDS
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
@@ -56,6 +56,9 @@ abstract class DataSourceV2SQLSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
   with DeleteFromTests with DatasourceV2SQLBase with StatsEstimationTestBase
   with AdaptiveSparkPlanHelper {
+
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
 
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
   override protected val v2Format = v2Source
