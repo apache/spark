@@ -71,6 +71,8 @@ private[spark] object LogKeys {
   case object ALIGNED_TO_TIME extends LogKey
   case object ALPHA extends LogKey
   case object ANALYSIS_ERROR extends LogKey
+  case object ANTLR_DFA_CACHE_DELTA extends LogKey
+  case object ANTLR_DFA_CACHE_SIZE extends LogKey
   case object APP_ATTEMPT_ID extends LogKey
   case object APP_ATTEMPT_SHUFFLE_MERGE_ID extends LogKey
   case object APP_DESC extends LogKey
@@ -916,6 +918,4 @@ private[spark] object LogKeys {
   case object YARN_RESOURCE extends LogKey
   case object YOUNG_GENERATION_GC extends LogKey
   case object ZERO_TIME extends LogKey
-  case object ANTLR_DFA_CACHE_DELTA extends LogKey
-  case object ANTLR_DFA_CACHE_SIZE extends LogKey
 }
