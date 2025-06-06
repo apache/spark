@@ -780,4 +780,76 @@ class SqlPipelineSuite extends PipelineTest with SQLTestUtils {
       )
     }
   }
+
+  test("Duplicate standalone flow identifiers throw an exception") {
+    val ex = intercept[AnalysisException] {
+      // even if flows are defined across multiple files, if there's a duplicate flow identifier an
+      // exception should be thrown.
+      unresolvedDataflowGraphFromSqlFiles(
+        sqlFiles = Seq(
+          TestSqlFile(
+            sqlText =
+              s"""
+                 |CREATE STREAMING TABLE st;
+                 |CREATE FLOW f AS INSERT INTO st BY NAME
+                 |SELECT * FROM STREAM $externalTable1Ident
+                 |""".stripMargin,
+            sqlFilePath = "file1.sql"
+          ),
+          TestSqlFile(
+            sqlText =
+              s"""
+                 |CREATE FLOW f AS INSERT INTO st BY NAME
+                 |SELECT * FROM STREAM $externalTable1Ident
+                 |""".stripMargin,
+            sqlFilePath = "file2.sql"
+          )
+        )
+      )
+    }
+    checkError(
+      exception = ex,
+      condition = "PIPELINE_DUPLICATE_IDENTIFIERS.FLOW",
+      parameters = Map(
+        "flowName" -> fullyQualifiedIdentifier("f").unquotedString,
+        "datasetNames" -> fullyQualifiedIdentifier("st").quotedString
+      )
+    )
+  }
+
+  test("Duplicate standalone implicit flow identifier throws exception") {
+    val ex = intercept[AnalysisException] {
+      // even if flows are defined across multiple files, if there's a duplicate flow identifier an
+      // exception should be thrown.
+      unresolvedDataflowGraphFromSqlFiles(
+        sqlFiles = Seq(
+          TestSqlFile(
+            sqlText =
+              s"""
+                 |CREATE STREAMING TABLE st AS SELECT * FROM STREAM $externalTable1Ident;
+                 |CREATE STREAMING TABLE st2;
+                 |""".stripMargin,
+            sqlFilePath = "file1.sql"
+          ),
+          TestSqlFile(
+            sqlText =
+              s"""
+                 |CREATE FLOW st AS INSERT INTO st2 BY NAME
+                 |SELECT * FROM STREAM $externalTable2Ident
+                 |""".stripMargin,
+            sqlFilePath = "file2.sql"
+          )
+        )
+      )
+    }
+    checkError(
+      exception = ex,
+      condition = "PIPELINE_DUPLICATE_IDENTIFIERS.FLOW",
+      parameters = Map(
+        "flowName" -> fullyQualifiedIdentifier("st").unquotedString,
+        "datasetNames" -> Seq(fullyQualifiedIdentifier("st").quotedString,
+          fullyQualifiedIdentifier("st2").quotedString).mkString(",")
+      )
+    )
+  }
 }
