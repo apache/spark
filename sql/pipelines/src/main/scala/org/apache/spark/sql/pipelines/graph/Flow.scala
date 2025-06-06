@@ -32,12 +32,12 @@ import org.apache.spark.sql.types.StructType
 case class QueryContext(currentCatalog: Option[String], currentDatabase: Option[String])
 
 /**
- * A `Flow` is a node of data transformation in a dataflow graph. It describes the movement
+ * A [[Flow]] is a node of data transformation in a dataflow graph. It describes the movement
  * of data into a particular dataset.
  */
 trait Flow extends GraphElement with Logging {
 
-  /** The `FlowFunction` containing the user's query. */
+  /** The [[FlowFunction]] containing the user's query. */
   def func: FlowFunction
 
   val identifier: TableIdentifier
@@ -64,18 +64,18 @@ trait Flow extends GraphElement with Logging {
 /** A wrapper for a resolved internal input that includes the alias provided by the user. */
 case class ResolvedInput(input: Input, aliasIdentifier: AliasIdentifier)
 
-/** A wrapper for the lambda function that defines a `Flow`. */
+/** A wrapper for the lambda function that defines a [[Flow]]. */
 trait FlowFunction extends Logging {
 
   /**
    * This function defines the transformations performed by a flow, expressed as a DataFrame.
    *
-   * @param allInputs the set of identifiers for all the `Input`s defined in the
-   *                  `DataflowGraph`.
-   * @param availableInputs the list of all `Input`s available to this flow
+   * @param allInputs the set of identifiers for all the [[Input]]s defined in the
+   *                  [[DataflowGraph]].
+   * @param availableInputs the list of all [[Input]]s available to this flow
    * @param configuration the spark configurations that apply to this flow.
    * @param queryContext The context of the query being evaluated.
-   * @return the inputs actually used, and the `DataFrame` expression for the flow
+   * @return the inputs actually used, and the DataFrame expression for the flow
    */
   def call(
       allInputs: Set[TableIdentifier],
@@ -86,7 +86,7 @@ trait FlowFunction extends Logging {
 }
 
 /**
- * Holds the DataFrame returned by a `FlowFunction` along with the inputs used to
+ * Holds the DataFrame returned by a [[FlowFunction]] along with the inputs used to
  * construct it.
  * @param batchInputs the complete inputs read by the flow
  * @param streamingInputs the incremental inputs read by the flow
@@ -103,7 +103,7 @@ case class FlowFunctionResult(
     analysisWarnings: Seq[AnalysisWarning] = Nil) {
 
   /**
-   * Returns the names of all of the `Input`s used when resolving this `Flow`. If the
+   * Returns the names of all of the [[Input]]s used when resolving this [[Flow]]. If the
    * flow failed to resolve, we return the all the datasets that were requested when evaluating the
    * flow.
    */
@@ -111,16 +111,16 @@ case class FlowFunctionResult(
     (batchInputs ++ streamingInputs).map(_.input.identifier)
   }
 
-  /** Returns errors that occurred when attempting to analyze this `Flow`. */
+  /** Returns errors that occurred when attempting to analyze this [[Flow]]. */
   def failure: Seq[Throwable] = {
     dataFrame.failed.toOption.toSeq
   }
 
-  /** Whether this `Flow` is successfully analyzed. */
+  /** Whether this [[Flow]] is successfully analyzed. */
   final def resolved: Boolean = failure.isEmpty // don't override this, override failure
 }
 
-/** A `Flow` whose output schema and dependencies aren't known. */
+/** A [[Flow]] whose output schema and dependencies aren't known. */
 case class UnresolvedFlow(
     identifier: TableIdentifier,
     destinationIdentifier: TableIdentifier,
@@ -133,7 +133,7 @@ case class UnresolvedFlow(
 ) extends Flow
 
 /**
- * A `Flow` whose flow function has been invoked, meaning either:
+ * A [[Flow]] whose flow function has been invoked, meaning either:
  *  - Its output schema and dependencies are known.
  *  - It failed to resolve.
  */
@@ -150,7 +150,7 @@ trait ResolutionCompletedFlow extends Flow {
   def origin: QueryOrigin = flow.origin
 }
 
-/** A `Flow` whose flow function has failed to resolve. */
+/** A [[Flow]] whose flow function has failed to resolve. */
 class ResolutionFailedFlow(val flow: UnresolvedFlow, val funcResult: FlowFunctionResult)
     extends ResolutionCompletedFlow {
   assert(!funcResult.resolved)
@@ -158,34 +158,34 @@ class ResolutionFailedFlow(val flow: UnresolvedFlow, val funcResult: FlowFunctio
   def failure: Seq[Throwable] = funcResult.failure
 }
 
-/** A `Flow` whose flow function has successfully resolved. */
+/** A [[Flow]] whose flow function has successfully resolved. */
 trait ResolvedFlow extends ResolutionCompletedFlow with Input {
   assert(funcResult.resolved)
 
   /** The logical plan for this flow's query. */
   def df: DataFrame = funcResult.dataFrame.get
 
-  /** Returns the schema of the output of this `Flow`. */
+  /** Returns the schema of the output of this [[Flow]]. */
   def schema: StructType = df.schema
   override def load(readOptions: InputReadOptions): DataFrame = df
   def inputs: Set[TableIdentifier] = funcResult.inputs
 }
 
-/** A `Flow` that represents stateful movement of data to some target. */
+/** A [[Flow]] that represents stateful movement of data to some target. */
 class StreamingFlow(
     val flow: UnresolvedFlow,
     val funcResult: FlowFunctionResult,
     val mustBeAppend: Boolean = false
 ) extends ResolvedFlow {}
 
-/** A `Flow` that declares exactly what data should be in the target table. */
+/** A [[Flow]] that declares exactly what data should be in the target table. */
 class CompleteFlow(
     val flow: UnresolvedFlow,
     val funcResult: FlowFunctionResult,
     val mustBeAppend: Boolean = false
 ) extends ResolvedFlow {}
 
-/** A `Flow` that reads source[s] completely and appends data to the target, just once.
+/** A [[Flow]] that reads source[s] completely and appends data to the target, just once.
  */
 class AppendOnceFlow(
     val flow: UnresolvedFlow,
