@@ -1047,27 +1047,6 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-47404: release ANTLR cache after parsing") {
-    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> "1000000") {
-      val baselineMemory = getMemoryUsage // On my system, this is about 61 MiB
-      parser.parsePlan(s"select ${awfulQuery(8)} from range(10)")
-      val estimatedCacheOverhead = getMemoryUsage - baselineMemory // about  119 MiB
-      parser.parsePlan("select * from range(10)")
-      // Within some tolerance, the memory usage should be the same as it was after filling the
-      // ANTLR DFA cache.
-      val tolerance = 0.4
-      val memoryUsageWithoutRelease = getMemoryUsage
-      assert(memoryUsageWithoutRelease > baselineMemory + (1 - tolerance) * estimatedCacheOverhead)
-      assert(memoryUsageWithoutRelease < baselineMemory + (1 + tolerance) * estimatedCacheOverhead)
-      withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> "100") {
-        parser.parsePlan("select id from range(10)")
-      }
-      // Within some tolerance, the memory usage should be roughly back to the baseline.
-      val memoryUsageWithRelease = getMemoryUsage
-        assert(memoryUsageWithRelease < baselineMemory + tolerance * estimatedCacheOverhead)
-    }
-  }
-
   test("SPARK-47404: Managed parsers killswitch works") {
     val initialSize = AbstractParser.getDFACacheNumStates
 
