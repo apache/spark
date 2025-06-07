@@ -21,18 +21,25 @@ import textwrap
 from pathlib import Path
 
 from pyspark.errors import PySparkException
-from pyspark.pipelines.cli import (
-    change_dir,
-    find_pipeline_spec,
-    load_pipeline_spec,
-    register_definitions,
-    unpack_pipeline_spec,
-    DefinitionsGlob,
-    PipelineSpec,
+from pyspark.testing.connectutils import (
+    should_test_connect,
+    connect_requirement_message,
 )
-from pyspark.pipelines.tests.local_graph_element_registry import LocalGraphElementRegistry
+
+if should_test_connect:
+    from pyspark.pipelines.cli import (
+        change_dir,
+        find_pipeline_spec,
+        load_pipeline_spec,
+        register_definitions,
+        unpack_pipeline_spec,
+        DefinitionsGlob,
+        PipelineSpec,
+    )
+    from pyspark.pipelines.tests.local_graph_element_registry import LocalGraphElementRegistry
 
 
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class CLIUtilityTests(unittest.TestCase):
     def test_load_pipeline_spec(self):
         with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
