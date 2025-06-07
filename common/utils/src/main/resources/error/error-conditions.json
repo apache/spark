@@ -1216,6 +1216,12 @@
     ],
     "sqlState" : "42K01"
   },
+  "DATATYPE_OPERATION_UNSUPPORTED" : {
+    "message" : [
+      "The operation `dataType` is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "DATA_SOURCE_ALREADY_EXISTS" : {
     "message" : [
       "Data source '<provider>' already exists. Please choose a different name for the new data source."
@@ -1296,6 +1302,12 @@
       "Failed to execute <statementType> command because DEFAULT values are not supported for target data source with table provider: \"<dataSource>\"."
     ],
     "sqlState" : "42623"
+  },
+  "DEPRECATED_METHOD_CALL" : {
+    "message" : [
+      "The method `<oldMethod>` is deprecated, please use `<newMethod>` instead."
+    ],
+    "sqlState" : "01000"
   },
   "DESCRIBE_JSON_NOT_EXTENDED" : {
     "message" : [
@@ -4072,6 +4084,12 @@
     ],
     "sqlState" : "42803"
   },
+  "MISSING_STATIC_PARTITION_COLUMN" : {
+    "message" : [
+      "Unknown static partition column: <staticName>."
+    ],
+    "sqlState" : "42703"
+  },
   "MISSING_TIMEOUT_CONFIGURATION" : {
     "message" : [
       "The operation has timed out, but no timeout duration is configured. To set a processing time-based timeout, use 'GroupState.setTimeoutDuration()' in your 'mapGroupsWithState' or 'flatMapGroupsWithState' operation. For event-time-based timeout, use 'GroupState.setTimeoutTimestamp()' and define a watermark using 'Dataset.withWatermark()'."
@@ -4125,6 +4143,12 @@
       "Not allowed to implement multiple UDF interfaces, UDF class <className>."
     ],
     "sqlState" : "0A000"
+  },
+  "MUST_OVERRIDE_METHOD" : {
+    "message" : [
+      "You must override one `<methodName>`. It's preferred to not override the deprecated one."
+    ],
+    "sqlState" : "01000"
   },
   "NAMED_PARAMETERS_NOT_SUPPORTED" : {
     "message" : [
@@ -5446,6 +5470,12 @@
   "UNEXPECTED_POSITIONAL_ARGUMENT" : {
     "message" : [
       "Cannot invoke routine <routineName> because it contains positional argument(s) following the named argument assigned to <parameterName>; please rearrange them so the positional arguments come first and then retry the query again."
+    ],
+    "sqlState" : "4274K"
+  },
+  "UNEXPECTED_REQUIRED_PARAMETER" : {
+    "message" : [
+      "Routine <routineName> has an unexpected required argument for the provided routine signature <parameters>. All required arguments should come before optional arguments."
     ],
     "sqlState" : "4274K"
   },
