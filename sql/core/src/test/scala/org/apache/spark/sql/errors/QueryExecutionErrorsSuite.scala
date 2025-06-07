@@ -1281,8 +1281,8 @@ class QueryExecutionErrorsSuite
     import org.apache.spark.sql.types.CalendarIntervalType
 
     // Test PhysicalDataType.ordering() with CalendarIntervalType
-    // It's not to make a sql test that passes Argument verification but fails
-    // Order verification.
+    // It's hard to make a sql test that passes Argument verification but fails
+    // Order verification. So we directly test the error.
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         PhysicalDataType.ordering(CalendarIntervalType)
