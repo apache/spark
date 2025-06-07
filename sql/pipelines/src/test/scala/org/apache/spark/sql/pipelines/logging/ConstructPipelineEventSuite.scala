@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.pipelines.common.FlowStatus
+import org.apache.spark.sql.pipelines.graph.QueryOrigin
 
 class ConstructPipelineEventSuite extends SparkFunSuite with BeforeAndAfterEach {
 
@@ -100,12 +101,10 @@ class ConstructPipelineEventSuite extends SparkFunSuite with BeforeAndAfterEach 
         datasetName = Some("dataset"),
         flowName = Some("flow"),
         sourceCodeLocation = Some(
-          SourceCodeLocation(
-            path = Some("path"),
-            lineNumber = None,
-            columnNumber = None,
-            endingLineNumber = None,
-            endingColumnNumber = None
+          QueryOrigin(
+            filePath = Some("path"),
+            line = None,
+            startPosition = None
           )
         )
       ),
@@ -116,7 +115,7 @@ class ConstructPipelineEventSuite extends SparkFunSuite with BeforeAndAfterEach 
     )
     assert(event.origin.datasetName.contains("dataset"))
     assert(event.origin.flowName.contains("flow"))
-    assert(event.origin.sourceCodeLocation.get.path.contains("path"))
+    assert(event.origin.sourceCodeLocation.get.filePath.contains("path"))
     assert(event.level == EventLevel.INFO)
     assert(event.message == "Flow 'b' has failed")
     assert(event.details.asInstanceOf[FlowProgress].status == FlowStatus.FAILED)

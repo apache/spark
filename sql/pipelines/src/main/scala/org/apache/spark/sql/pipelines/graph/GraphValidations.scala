@@ -166,7 +166,7 @@ trait GraphValidations extends Logging {
 
   /**
    * Validates that all flows are resolved. If there are unresolved flows,
-   * detects a possible cyclic dependency and throw the appropriate execption.
+   * detects a possible cyclic dependency and throw the appropriate exception.
    */
   protected def validateSuccessfulFlowAnalysis(): Unit = {
     // all failed flows with their errors

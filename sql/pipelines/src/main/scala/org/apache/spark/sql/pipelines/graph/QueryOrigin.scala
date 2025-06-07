@@ -22,7 +22,6 @@ import scala.util.control.{NonFatal, NoStackTrace}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.pipelines.Language
-import org.apache.spark.sql.pipelines.logging.SourceCodeLocation
 
 /**
  * Records information used to track the provenance of a given query to user code.
@@ -79,17 +78,6 @@ case class QueryOrigin(
       )
     )
   }
-
-  /** Generates a SourceCodeLocation using the details present in the query origin. */
-  def toSourceCodeLocation: SourceCodeLocation = SourceCodeLocation(
-    path = filePath,
-    // QueryOrigin tracks line numbers using a 1-indexed numbering scheme whereas SourceCodeLocation
-    // tracks them using a 0-indexed numbering scheme.
-    lineNumber = line.map(_ - 1),
-    columnNumber = startPosition,
-    endingLineNumber = None,
-    endingColumnNumber = None
-  )
 }
 
 object QueryOrigin extends Logging {

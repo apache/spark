@@ -17,6 +17,7 @@
 package org.apache.spark.sql.pipelines.logging
 
 import org.apache.spark.sql.pipelines.common.{FlowStatus, RunState}
+import org.apache.spark.sql.pipelines.graph.QueryOrigin
 
 /**
  * An internal event that is emitted during the run of a pipeline.
@@ -47,23 +48,7 @@ case class PipelineEvent(
 case class PipelineEventOrigin(
     datasetName: Option[String],
     flowName: Option[String],
-    sourceCodeLocation: Option[SourceCodeLocation]
-)
-
-/**
- * Describes the location of the source code
- * @param path The path to the source code
- * @param lineNumber The line number of the source code
- * @param columnNumber The column number of the source code
- * @param endingLineNumber The ending line number of the source code
- * @param endingColumnNumber The ending column number of the source code
- */
-case class SourceCodeLocation(
-    path: Option[String],
-    lineNumber: Option[Int],
-    columnNumber: Option[Int],
-    endingLineNumber: Option[Int],
-    endingColumnNumber: Option[Int]
+    sourceCodeLocation: Option[QueryOrigin]
 )
 
 // Additional details about the PipelineEvent
