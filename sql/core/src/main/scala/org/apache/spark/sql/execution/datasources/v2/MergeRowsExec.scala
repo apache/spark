@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.UnaryExecNode
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 
 case class MergeRowsExec(
     isSourceRowPresent: Expression,
@@ -68,6 +69,10 @@ case class MergeRowsExec(
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = {
     copy(child = newChild)
   }
+
+  override lazy val metrics: Map[String, SQLMetric] = Map(
+    "numTargetRowsCopied" -> SQLMetrics.createMetric(sparkContext,
+      "number of target rows rewritten unmodified"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions(processPartition)
@@ -107,8 +112,8 @@ case class MergeRowsExec(
 
   private def planInstructions(instructions: Seq[Instruction]): Seq[InstructionExec] = {
     instructions.map {
-      case Keep(cond, output) =>
-        KeepExec(createPredicate(cond), createProjection(output))
+      case Keep(cond, output, isSystem) =>
+        KeepExec(createPredicate(cond), createProjection(output), isSystem)
 
       case Discard(cond) =>
         DiscardExec(createPredicate(cond))
@@ -127,7 +132,12 @@ case class MergeRowsExec(
     def condition: BasePredicate
   }
 
-  case class KeepExec(condition: BasePredicate, projection: Projection) extends InstructionExec {
+  case class KeepExec(
+      condition: BasePredicate,
+      projection: Projection,
+      // flag marking that row should be considered not matching
+      // any user predicate for metric calculations
+      systemPredicate: Boolean = false) extends InstructionExec {
     def apply(row: InternalRow): InternalRow = projection.apply(row)
   }
 
@@ -221,6 +231,9 @@ case class MergeRowsExec(
         if (instruction.condition.eval(row)) {
           instruction match {
             case keep: KeepExec =>
+              if (keep.systemPredicate) {
+                longMetric("numTargetRowsCopied") += 1
+              }
               return keep.apply(row)
 
             case _: DiscardExec =>
@@ -233,6 +246,7 @@ case class MergeRowsExec(
         }
       }
 
+      longMetric("numTargetRowsCopied") += 1
       null
     }
   }

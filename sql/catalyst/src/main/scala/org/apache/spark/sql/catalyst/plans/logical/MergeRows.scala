@@ -87,7 +87,13 @@ object MergeRows {
     override def dataType: DataType = NullType
   }
 
-  case class Keep(condition: Expression, output: Seq[Expression]) extends Instruction {
+  case class Keep(
+      condition: Expression,
+      output: Seq[Expression],
+      // flag marking that row should be considered not matching
+      // any user predicate for metric calculations
+      systemPredicate: Boolean = false)
+    extends Instruction {
     def children: Seq[Expression] = condition +: output
     override def outputs: Seq[Seq[Expression]] = Seq(output)
 
