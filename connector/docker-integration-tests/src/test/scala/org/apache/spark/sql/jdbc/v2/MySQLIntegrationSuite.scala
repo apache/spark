@@ -19,8 +19,8 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.{Connection, SQLFeatureNotSupportedException}
 
-import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.{SparkConf, SparkException, SparkSQLFeatureNotSupportedException}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.MySQLDatabaseOnDocker
 import org.apache.spark.sql.types._
@@ -313,6 +313,64 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     assert(rows10(0).getString(0) === "amy")
     assert(rows10(1).getString(0) === "alex")
   }
+
+  test("SPARK-50793: MySQL JDBC Connector failed to cast some types") {
+    val tableName = catalogName + ".test_cast_function"
+    withTable(tableName) {
+      val stringValue = "0"
+      val stringLiteral = "'0'"
+      val stringCol = "string_col"
+      val longValue = 0L
+      val longCol = "long_col"
+      val binaryValue = Array[Byte](0x30)
+      val binaryLiteral = "x'30'"
+      val binaryCol = "binary_col"
+      val doubleValue = 0.0
+      val doubleLiteral = "0.0"
+      val doubleCol = "double_col"
+      // CREATE table to use types defined in Spark SQL
+      sql(
+        s"CREATE TABLE $tableName ($stringCol STRING, $longCol LONG, " +
+          s"$binaryCol BINARY, $doubleCol DOUBLE)")
+      sql(
+        s"INSERT INTO $tableName VALUES($stringLiteral, $longValue, $binaryLiteral, $doubleValue)")
+
+      def testCast(
+          castType: String,
+          sourceCol: String,
+          targetCol: String,
+          targetDataType: DataType,
+          targetValue: Any): Unit = {
+        val sql = s"SELECT CAST($sourceCol AS $castType) AS target " +
+          s"FROM $tableName WHERE CAST($sourceCol AS $castType) = $targetCol"
+        val df = spark.sql(sql)
+        castType match {
+          case "SHORT" | "INTEGER" =>
+            checkError(
+              exception = intercept[SparkException] {
+                df.collect()
+              },
+              condition = null)
+          case _ =>
+            checkFilterPushed(df)
+            checkAnswer(df, Seq(Row(targetValue)))
+            val expectedTypes = Array(targetDataType)
+            val resultTypes = df.schema.fields.map(_.dataType)
+            assert(resultTypes === expectedTypes, s"Failed to cast $sourceCol to $castType")
+        }
+      }
+
+      testCast("BINARY", stringCol, binaryCol, BinaryType, binaryValue);
+      testCast("SHORT", stringCol, longCol, LongType, longValue)
+      testCast("INTEGER", stringCol, longCol, LongType, longValue)
+      testCast("LONG", stringCol, longCol, LongType, longValue)
+      testCast("STRING", longCol, stringCol, StringType, stringValue)
+      testCast("STRING", binaryCol, stringCol, StringType, stringValue)
+      testCast("STRING", doubleCol, stringCol, StringType, doubleLiteral)
+      testCast("DOUBLE", stringCol, doubleCol, DoubleType, doubleValue)
+      testCast("DOUBLE", longCol, doubleCol, DoubleType, doubleValue)
+    }
+  }
 }
 
 /**
@@ -341,6 +399,6 @@ class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
   override val db = new MySQLDatabaseOnDocker {
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
-        s"&useSSL=false"
+        s"&useSSL=false&sessionVariables=collation_connection='utf8mb4_0900_ai_ci'"
   }
 }
