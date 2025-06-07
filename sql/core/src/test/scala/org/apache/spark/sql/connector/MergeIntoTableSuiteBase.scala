@@ -1791,21 +1791,22 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
+           |WHEN MATCHED AND salary < 200 THEN
+           | UPDATE SET salary = 1000
            |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
            | UPDATE SET salary = -1
            |""".stripMargin
       }
 
       mergeExec.metrics.get("numTargetRowsCopied") match {
-        case Some(metric) => assert(metric.value == 2,
-          "3 rows not matched and among those 2 rows not updated")
+        case Some(metric) => assert(metric.value == 3, "3 rows copied without updates")
         case None => fail("numCopiedRows metric not found")
       }
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(
-          Row(1, 100, "hr"),
+          Row(1, 1000, "hr"), // updated
           Row(2, 200, "software"),
           Row(3, 300, "hr"),
           Row(4, 400, "marketing"),

@@ -135,7 +135,9 @@ case class MergeRowsExec(
   case class KeepExec(
       condition: BasePredicate,
       projection: Projection,
-      isSystem: Boolean = false) extends InstructionExec {
+      // flag marking that row should be considered not matching
+      // any user predicate for metric calculations
+      systemPredicate: Boolean = false) extends InstructionExec {
     def apply(row: InternalRow): InternalRow = projection.apply(row)
   }
 
@@ -225,20 +227,13 @@ case class MergeRowsExec(
         row: InternalRow,
         instructions: Seq[InstructionExec]): InternalRow = {
 
-      def systemKeep(i: InstructionExec): Boolean = i match {
-        case k: KeepExec if k.isSystem => true
-        case _ => false
-      }
-
-      if (instructions.forall(systemKeep)) {
-        // Track rows with no action instructions or all system pass-through instructions
-        longMetric("numTargetRowsCopied") += 1
-      }
-
       for (instruction <- instructions) {
         if (instruction.condition.eval(row)) {
           instruction match {
             case keep: KeepExec =>
+              if (keep.systemPredicate) {
+                longMetric("numTargetRowsCopied") += 1
+              }
               return keep.apply(row)
 
             case _: DiscardExec =>
@@ -251,6 +246,7 @@ case class MergeRowsExec(
         }
       }
 
+      longMetric("numTargetRowsCopied") += 1
       null
     }
   }
