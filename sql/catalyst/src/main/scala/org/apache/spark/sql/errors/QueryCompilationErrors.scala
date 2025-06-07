@@ -323,7 +323,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def missingStaticPartitionColumn(staticName: String): Throwable = {
-    SparkException.internalError(s"Unknown static partition column: $staticName.")
+    new AnalysisException(
+      errorClass = "MISSING_STATIC_PARTITION_COLUMN",
+      messageParameters = Map("staticName" -> toSQLId(staticName)))
   }
 
   def staticPartitionInUserSpecifiedColumnsError(staticName: String): Throwable = {
@@ -974,7 +976,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def alterV2TableSetLocationWithPartitionNotSupportedError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1045",
+      errorClass = "UNSUPPORTED_FEATURE.ALTER_TABLE_SET_LOCATION_WITH_PARTITION",
       messageParameters = Map.empty)
   }
 
@@ -1233,7 +1235,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidPartitionSpecError(details: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1076",
+      errorClass = "INVALID_PARTITION_SPEC",
       messageParameters = Map("details" -> details))
   }
 
@@ -1270,7 +1272,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def partitionNotSpecifyLocationUriError(specString: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1082",
+      errorClass = "PARTITION_NOT_SPECIFY_LOCATION_URI",
       messageParameters = Map("specString" -> specString))
   }
 
@@ -1487,7 +1489,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def describeDoesNotSupportPartitionForV2TablesError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1111",
+      errorClass = "UNSUPPORTED_FEATURE.DESC_PARTITION_FOR_V2_TABLE",
       messageParameters = Map.empty)
   }
 
@@ -1608,11 +1610,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def tableDoesNotSupportPartitionManagementError(table: Table): Throwable = {
-    tableDoesNotSupportError("partition management", table)
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_PARTITION_MANAGEMENT",
+      messageParameters = Map("tableName" -> toSQLId(table.name())))
   }
 
   def tableDoesNotSupportAtomicPartitionManagementError(table: Table): Throwable = {
-    tableDoesNotSupportError("atomic partition management", table)
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_ATOMIC_PARTITION_MANAGEMENT",
+      messageParameters = Map("tableName" -> toSQLId(table.name())))
   }
 
   def tableIsNotRowLevelOperationTableError(table: Table): Throwable = {
@@ -1681,7 +1687,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def partitionColumnNotSpecifiedError(format: String, partitionColumn: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1128",
+      errorClass = "PARTITION_COLUMN_NOT_SPECIFIED",
       messageParameters = Map(
         "format" -> format,
         "partitionColumn" -> partitionColumn))
@@ -1809,7 +1815,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def invalidPartitionColumnError(
       partKey: String, targetPartitionSchema: StructType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1145",
+      errorClass = "INVALID_PARTITION_COLUMN",
       messageParameters = Map(
         "partKey" -> partKey,
         "partitionColumns" -> targetPartitionSchema.fields.map(_.name).mkString("[", ",", "]")))
@@ -1818,7 +1824,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def multiplePartitionColumnValuesSpecifiedError(
       field: StructField, potentialSpecs: Map[String, String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1146",
+      errorClass = "MULTIPLE_PARTITION_COLUMN_VALUES_SPECIFIED",
       messageParameters = Map(
         "partColumn" -> field.name,
         "values" -> potentialSpecs.mkString("[", ", ", "]")))
@@ -1883,8 +1889,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def partitionColumnNotFoundInSchemaError(col: String, schemaCatalog: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1155",
-      messageParameters = Map("col" -> col, "schemaCatalog" -> schemaCatalog))
+      errorClass = "PARTITION_COLUMN_NOT_FOUND_IN_SCHEMA",
+      messageParameters = Map("column" -> col, "schema" -> schemaCatalog))
   }
 
   def columnNotFoundInSchemaError(
@@ -1955,7 +1961,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       specifiedPartCols: Seq[String],
       existingPartCols: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1163",
+      errorClass = "MISMATCHED_TABLE_PARTITION_COLUMN",
       messageParameters = Map(
         "tableName" -> tableName,
         "specifiedPartCols" -> specifiedPartCols.mkString(", "),
@@ -2716,7 +2722,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       partitionColumnNames: Seq[String],
       tableName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1232",
+      errorClass = "INVALID_PARTITION_SPEC2",
       messageParameters = Map(
         "specKeys" -> specKeys,
         "partitionColumnNames" -> partitionColumnNames.mkString(", "),

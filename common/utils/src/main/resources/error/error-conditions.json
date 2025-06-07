@@ -3336,6 +3336,24 @@
     },
     "sqlState" : "42601"
   },
+  "INVALID_PARTITION_COLUMN" : {
+    "message" : [
+      "<partKey> is not a partition column. Partition columns are <partitionColumns>."
+    ],
+    "sqlState" : "42000"
+  },
+  "INVALID_PARTITION_SPEC" : {
+    "message" : [
+      "Partition spec is invalid. <details>."
+    ],
+    "sqlState" : "42000"
+  },
+  "INVALID_PARTITION_SPEC2" : {
+    "message" : [
+      "Partition spec is invalid. The spec (<specKeys>) must match the partition spec (<partitionColumnNames>) defined in table '<tableName>'."
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_PARTITION_VALUE" : {
     "message" : [
       "Failed to cast value <value> to data type <dataType> for partition column <columnName>. Ensure the value matches the expected data type for this partition column."
@@ -4034,6 +4052,14 @@
     ],
     "sqlState" : "42601"
   },
+  "MISMATCHED_TABLE_PARTITION_COLUMN" : {
+    "message" : [
+      "Specified partitioning does not match that of the existing table <tableName>.",
+      "Specified partition columns: [<specifiedPartCols>].",
+      "Existing partition columns: [<existingPartCols>]."
+    ],
+    "sqlState" : "42000"
+  },
   "MISSING_AGGREGATION" : {
     "message" : [
       "The non-aggregating expression <expression> is based on columns which are not participating in the GROUP BY clause.",
@@ -4078,11 +4104,23 @@
     ],
     "sqlState" : "HY000"
   },
+  "MISSING_STATIC_PARTITION_COLUMN" : {
+    "message" : [
+      "Missing static partition column <staticName>."
+    ],
+    "sqlState" : "42000"
+  },
   "MISSING_WINDOW_SPECIFICATION" : {
     "message" : [
       "Window specification is not defined in the WINDOW clause for <windowName>. For more information about WINDOW clauses, please refer to '<docroot>/sql-ref-syntax-qry-select-window.html'."
     ],
     "sqlState" : "42P20"
+  },
+  "MULTIPLE_PARTITION_COLUMN_VALUES_SPECIFIED" : {
+    "message" : [
+      "Partition column <partColumn> have multiple values specified, <values>. Please only specify a single value."
+    ],
+    "sqlState" : "42000"
   },
   "MULTIPLE_PRIMARY_KEYS" : {
     "message" : [
@@ -4537,6 +4575,12 @@
     ],
     "sqlState" : "428FT"
   },
+  "PARTITION_COLUMN_NOT_SPECIFIED" : {
+    "message" : [
+      "Failed to resolve the schema for <format> for the partition column: <partitionColumn>. It must be specified manually."
+    ],
+    "sqlState" : "42000"
+  },
   "PARTITIONS_NOT_FOUND" : {
     "message" : [
       "The partition(s) <partitionList> cannot be found in table <tableName>.",
@@ -4544,6 +4588,12 @@
       "To tolerate the error on drop use ALTER TABLE … DROP IF EXISTS PARTITION."
     ],
     "sqlState" : "428FT"
+  },
+  "PARTITION_NOT_SPECIFY_LOCATION_URI" : {
+    "message" : [
+      "Partition [<specString>] did not specify locationUri."
+    ],
+    "sqlState" : "42000"
   },
   "PARTITION_COLUMN_NOT_FOUND_IN_SCHEMA" : {
     "message" : [
@@ -5837,6 +5887,11 @@
           "ALTER TABLE SET SERDE is not supported for table <tableName> created with the datasource API. Consider using an external Hive table or updating the table properties with compatible options for your table format."
         ]
       },
+      "ALTER_TABLE_SET_LOCATION_WITH_PARTITION" : {
+        "message" : [
+          "ALTER TABLE SET LOCATION does not support partition for v2 tables."
+        ]
+      },
       "ANALYZE_UNCACHED_TEMP_VIEW" : {
         "message" : [
           "The ANALYZE TABLE FOR COLUMNS command can operate on temporary views that have been cached already. Consider to cache the view <viewName>."
@@ -5900,6 +5955,11 @@
       "DESC_TABLE_COLUMN_PARTITION" : {
         "message" : [
           "DESC TABLE COLUMN for a specific partition."
+        ]
+      },
+      "DESC_PARTITION_FOR_V2_TABLE" : {
+        "message" : [
+          "DESCRIBE does not support partition for v2 tables."
         ]
       },
       "DROP_DATABASE" : {
@@ -6127,6 +6187,16 @@
       "STATE_STORE_TTL" : {
         "message" : [
           "State TTL with <stateStoreProvider> is not supported. Please use RocksDBStateStoreProvider."
+        ]
+      },
+      "TABLE_ATOMIC_PARTITION_MANAGEMENT" : {
+        "message" : [
+          "Table <tableName> does not support atomic partition management."
+        ]
+      },
+      "TABLE_PARTITION_MANAGEMENT" : {
+        "message" : [
+          "Table <tableName> does not support partition management."
         ]
       },
       "TABLE_OPERATION" : {
@@ -6937,11 +7007,6 @@
       "Gap duration expression used in session window must be CalendarIntervalType, but got <dt>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1045" : {
-    "message" : [
-      "ALTER TABLE SET LOCATION does not support partition for v2 tables."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1046" : {
     "message" : [
       "Join strategy hint parameter should be an identifier or string but was <unsupported> (<class>)."
@@ -7017,11 +7082,6 @@
       "RENAME TEMPORARY VIEW from '<oldName>' to '<newName>': cannot specify database name '<db>' in the destination table."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1076" : {
-    "message" : [
-      "Partition spec is invalid. <details>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1079" : {
     "message" : [
       "Resource Type '<resourceType>' is not supported."
@@ -7035,11 +7095,6 @@
   "_LEGACY_ERROR_TEMP_1081" : {
     "message" : [
       "Table <identifier> did not specify locationUri."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1082" : {
-    "message" : [
-      "Partition [<specString>] did not specify locationUri."
     ]
   },
   "_LEGACY_ERROR_TEMP_1083" : {
@@ -7092,11 +7147,6 @@
       "Cannot delete from table <table> where <filters>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1111" : {
-    "message" : [
-      "DESCRIBE does not support partition for v2 tables."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1114" : {
     "message" : [
       "The streaming sources in a query do not have a common supported execution mode.",
@@ -7132,11 +7182,6 @@
   "_LEGACY_ERROR_TEMP_1127" : {
     "message" : [
       "Invalid partitionExprs specified: <sortOrders> For range partitioning use REPARTITION_BY_RANGE instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1128" : {
-    "message" : [
-      "Failed to resolve the schema for <format> for the partition column: <partitionColumn>. It must be specified manually."
     ]
   },
   "_LEGACY_ERROR_TEMP_1132" : {
@@ -7197,16 +7242,6 @@
       "The data to be inserted needs to have the same number of partition columns as the target table: target table has <targetSize> partition column(s) but the inserted data has <providedPartitionsSize> partition columns specified."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1145" : {
-    "message" : [
-      "<partKey> is not a partition column. Partition columns are <partitionColumns>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1146" : {
-    "message" : [
-      "Partition column <partColumn> have multiple values specified, <values>. Please only specify a single value."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1147" : {
     "message" : [
       "The ordering of partition columns is <partColumns>. All partition columns having constant values need to appear before other partition columns that do not have an assigned constant value."
@@ -7220,11 +7255,6 @@
   "_LEGACY_ERROR_TEMP_1151" : {
     "message" : [
       "Fail to resolve data source for the table <table> since the table serde property has the duplicated key <key> with extra options specified for this scan operation. To fix this, you can rollback to the legacy behavior of ignoring the extra options by setting the config <config> to `false`, or address the conflicts of the same config."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1155" : {
-    "message" : [
-      "Partition column `<col>` not found in schema <schemaCatalog>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1158" : {
@@ -7250,13 +7280,6 @@
   "_LEGACY_ERROR_TEMP_1162" : {
     "message" : [
       "Cannot resolve '<col>' given input columns: [<inputColumns>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1163" : {
-    "message" : [
-      "Specified partitioning does not match that of the existing table <tableName>.",
-      "Specified partition columns: [<specifiedPartCols>].",
-      "Existing partition columns: [<existingPartCols>]."
     ]
   },
   "_LEGACY_ERROR_TEMP_1164" : {
@@ -7469,11 +7492,6 @@
   "_LEGACY_ERROR_TEMP_1228" : {
     "message" : [
       "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1232" : {
-    "message" : [
-      "Partition spec is invalid. The spec (<specKeys>) must match the partition spec (<partitionColumnNames>) defined in table '<tableName>'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1237" : {
