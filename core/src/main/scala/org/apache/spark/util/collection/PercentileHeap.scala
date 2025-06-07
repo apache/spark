@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.collection
 
-import java.util.PriorityQueue
+import java.util.{Comparator, PriorityQueue}
 
 /**
  * PercentileHeap tracks the percentile of a collection of numbers.
@@ -34,9 +34,8 @@ private[spark] class PercentileHeap(percentage: Double = 0.5) {
 
   // This is a min-heap so it works out of the box.
   private[this] val largeHeap = new PriorityQueue[Double]
-  // This is a max-heap. If we pass a comparator things get slower because of function call
-  // overhead (>2x slower on insert). Instead we negate values when we offer/poll/peek.
-  private[this] val smallHeap = new PriorityQueue[Double]
+  // This is a max-heap.
+  private[this] val smallHeap = new PriorityQueue[Double](PercentileHeap.reverseComparator)
 
   def isEmpty(): Boolean = smallHeap.isEmpty && largeHeap.isEmpty
 
@@ -59,19 +58,28 @@ private[spark] class PercentileHeap(percentage: Double = 0.5) {
       val growBot = ((size() + 1) * percentage).toInt > smallHeap.size
       if (growBot) {
         if (x < p) {
-          smallHeap.offer(-x)
+          smallHeap.offer(x)
         } else {
           largeHeap.offer(x)
-          smallHeap.offer(-largeHeap.poll)
+          smallHeap.offer(largeHeap.poll)
         }
       } else {
         if (x < p) {
-          smallHeap.offer(-x)
-          largeHeap.offer(-smallHeap.poll)
+          smallHeap.offer(x)
+          largeHeap.offer(smallHeap.poll)
         } else {
           largeHeap.offer(x)
         }
       }
     }
   }
+}
+
+private[collection] object PercentileHeap {
+  /**
+   * Reusable reverse comparator for the small heap (max-heap behavior).
+   * Using a static instance improves JIT optimization compared to creating new comparators.
+   */
+  private val reverseComparator: Comparator[Double] =
+    (a: Double, b: Double) => java.lang.Double.compare(b, a)
 }
