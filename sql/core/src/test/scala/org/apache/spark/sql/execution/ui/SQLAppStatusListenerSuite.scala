@@ -597,9 +597,9 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val metrics = statusStore.executionMetrics(execId)
     val driverMetric = physicalPlan.metrics("dummy")
     val driverMetric2 = physicalPlan.metrics("dummy2")
-    val expectedValue = MetricUtils.stringValue(driverMetric.metricType,
+    val expectedValue = MetricUtils.stringValue(driverMetric.metricType, driverMetric.initValue,
       Array(expectedAccumValue), Array.empty[Long])
-    val expectedValue2 = MetricUtils.stringValue(driverMetric2.metricType,
+    val expectedValue2 = MetricUtils.stringValue(driverMetric2.metricType, driverMetric2.initValue,
       Array(expectedAccumValue2), Array.empty[Long])
 
     assert(metrics.contains(driverMetric.id))
