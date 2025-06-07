@@ -468,12 +468,13 @@ abstract class SymmetricHashJoinStateManager(
 
     def abortIfNeeded(): Unit = {
       if (!stateStore.hasCommitted) {
-        logInfo(log"Aborted store ${MDC(STATE_STORE_ID, stateStore.id)}")
+        logInfo(log"Aborting store ${MDC(STATE_STORE_ID, stateStore.id)}")
         stateStore.abort()
       }
       // If this class manages a state store provider by itself, it should take care of closing
       // provider instance as well.
       if (stateStoreProvider != null) {
+        logInfo(log"Closing provider ${MDC(STATE_STORE_ID, stateStoreProvider.stateStoreId)}")
         stateStoreProvider.close()
       }
     }
