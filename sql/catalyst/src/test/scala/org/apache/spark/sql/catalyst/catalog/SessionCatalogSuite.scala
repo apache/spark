@@ -1000,7 +1000,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl2", Some("db2")),
             Seq(part1, partWithLessColumns), ignoreIfExists = false)
         },
-        condition = "INVALID_PARTITION_SPEC2",
+        condition = "INVALID_PARTITION_SPEC_KEYS",
         parameters = Map(
           "specKeys" -> "a",
           "partitionColumnNames" -> "a, b",
@@ -1011,7 +1011,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl2", Some("db2")),
             Seq(part1, partWithMoreColumns), ignoreIfExists = true)
         },
-        condition = "INVALID_PARTITION_SPEC2",
+        condition = "INVALID_PARTITION_SPEC_KEYS",
         parameters = Map(
           "specKeys" -> "a, b, c",
           "partitionColumnNames" -> "a, b",
@@ -1022,7 +1022,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl2", Some("db2")),
             Seq(partWithUnknownColumns, part1), ignoreIfExists = true)
         },
-        condition = "INVALID_PARTITION_SPEC2",
+        condition = "INVALID_PARTITION_SPEC_KEYS",
         parameters = Map(
           "specKeys" -> "a, unknown",
           "partitionColumnNames" -> "a, b",
@@ -1192,7 +1192,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithLessColumns.spec)
         },
-        condition = "INVALID_PARTITION_SPEC2",
+        condition = "INVALID_PARTITION_SPEC_KEYS",
         parameters = Map(
           "specKeys" -> "a",
           "partitionColumnNames" -> "a, b",
@@ -1201,7 +1201,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithMoreColumns.spec)
         },
-        condition = "INVALID_PARTITION_SPEC2",
+        condition = "INVALID_PARTITION_SPEC_KEYS",
         parameters = Map(
           "specKeys" -> "a, b, c",
           "partitionColumnNames" -> "a, b",
@@ -1210,7 +1210,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithUnknownColumns.spec)
         },
-        condition = "INVALID_PARTITION_SPEC2",
+        condition = "INVALID_PARTITION_SPEC_KEYS",
         parameters = Map(
           "specKeys" -> "a, unknown",
           "partitionColumnNames" -> "a, b",
@@ -1277,7 +1277,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl1", Some("db2")),
             Seq(part1.spec), Seq(partWithLessColumns.spec))
         },
-        condition = "INVALID_PARTITION_SPEC2",
+        condition = "INVALID_PARTITION_SPEC_KEYS",
         parameters = Map(
           "specKeys" -> "a",
           "partitionColumnNames" -> "a, b",
@@ -1288,7 +1288,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl1", Some("db2")),
             Seq(part1.spec), Seq(partWithMoreColumns.spec))
         },
-        condition = "INVALID_PARTITION_SPEC2",
+        condition = "INVALID_PARTITION_SPEC_KEYS",
         parameters = Map(
           "specKeys" -> "a, b, c",
           "partitionColumnNames" -> "a, b",
@@ -1299,7 +1299,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl1", Some("db2")),
             Seq(part1.spec), Seq(partWithUnknownColumns.spec))
         },
-        condition = "INVALID_PARTITION_SPEC2",
+        condition = "INVALID_PARTITION_SPEC_KEYS",
         parameters = Map(
           "specKeys" -> "a, unknown",
           "partitionColumnNames" -> "a, b",
@@ -1364,7 +1364,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithLessColumns))
         },
-        condition = "INVALID_PARTITION_SPEC2",
+        condition = "INVALID_PARTITION_SPEC_KEYS",
         parameters = Map(
           "specKeys" -> "a",
           "partitionColumnNames" -> "a, b",
@@ -1373,7 +1373,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithMoreColumns))
         },
-        condition = "INVALID_PARTITION_SPEC2",
+        condition = "INVALID_PARTITION_SPEC_KEYS",
         parameters = Map(
           "specKeys" -> "a, b, c",
           "partitionColumnNames" -> "a, b",
@@ -1382,7 +1382,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithUnknownColumns))
         },
-        condition = "INVALID_PARTITION_SPEC2",
+        condition = "INVALID_PARTITION_SPEC_KEYS",
         parameters = Map(
           "specKeys" -> "a, unknown",
           "partitionColumnNames" -> "a, b",

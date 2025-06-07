@@ -3381,7 +3381,7 @@
     ],
     "sqlState" : "42000"
   },
-  "INVALID_PARTITION_SPEC2" : {
+  "INVALID_PARTITION_SPEC_KEYS" : {
     "message" : [
       "Partition spec is invalid. The spec (<specKeys>) must match the partition spec (<partitionColumnNames>) defined in table '<tableName>'."
     ],
@@ -6253,14 +6253,9 @@
           "State TTL with <stateStoreProvider> is not supported. Please use RocksDBStateStoreProvider."
         ]
       },
-      "TABLE_ATOMIC_PARTITION_MANAGEMENT" : {
+      "TABLE_MANAGEMENT" : {
         "message" : [
-          "Table <tableName> does not support atomic partition management."
-        ]
-      },
-      "TABLE_PARTITION_MANAGEMENT" : {
-        "message" : [
-          "Table <tableName> does not support partition management."
+          "Table does not support <cmd>: <table>."
         ]
       },
       "TABLE_OPERATION" : {
@@ -7235,11 +7230,6 @@
   "_LEGACY_ERROR_TEMP_1120" : {
     "message" : [
       "Unsupported NamespaceChange <changes> in JDBC catalog."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1121" : {
-    "message" : [
-      "Table does not support <cmd>: <table>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1122" : {

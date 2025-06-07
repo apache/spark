@@ -34,10 +34,12 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
     withNamespaceAndTable("ns", "table") { tbl =>
       spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
         "PARTITIONED BY (id)")
-      val e = intercept[AnalysisException] {
-        sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
-      }
-      assert(e.message === "DESCRIBE does not support partition for v2 tables.")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
+        },
+        condition = "UNSUPPORTED_FEATURE.DESC_PARTITION_FOR_V2_TABLE",
+        parameters = Map.empty)
     }
   }
 

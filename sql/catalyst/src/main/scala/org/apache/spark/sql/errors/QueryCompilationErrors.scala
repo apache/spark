@@ -1587,7 +1587,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   private def tableDoesNotSupportError(cmd: String, table: Table): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1121",
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_MANAGEMENT",
       messageParameters = Map(
         "cmd" -> cmd,
         "table" -> table.name))
@@ -1610,15 +1610,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def tableDoesNotSupportPartitionManagementError(table: Table): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE.TABLE_PARTITION_MANAGEMENT",
-      messageParameters = Map("tableName" -> toSQLId(table.name())))
+    tableDoesNotSupportError("partition management", table)
   }
 
   def tableDoesNotSupportAtomicPartitionManagementError(table: Table): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE.TABLE_ATOMIC_PARTITION_MANAGEMENT",
-      messageParameters = Map("tableName" -> toSQLId(table.name())))
+    tableDoesNotSupportError("atomic partition management", table)
   }
 
   def tableIsNotRowLevelOperationTableError(table: Table): Throwable = {
@@ -2722,7 +2718,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       partitionColumnNames: Seq[String],
       tableName: String): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_PARTITION_SPEC2",
+      errorClass = "INVALID_PARTITION_SPEC_KEYS",
       messageParameters = Map(
         "specKeys" -> specKeys,
         "partitionColumnNames" -> partitionColumnNames.mkString(", "),

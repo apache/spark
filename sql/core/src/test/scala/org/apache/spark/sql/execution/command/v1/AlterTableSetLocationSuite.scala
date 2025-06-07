@@ -127,7 +127,7 @@ trait AlterTableSetLocationSuiteBase extends command.AlterTableSetLocationSuiteB
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t PARTITION (b='2') SET LOCATION '/mister/spark'")
         },
-        condition = "INVALID_PARTITION_SPEC2",
+        condition = "INVALID_PARTITION_SPEC_KEYS",
         parameters = Map(
           "specKeys" -> "b",
           "partitionColumnNames" -> "a, b",
