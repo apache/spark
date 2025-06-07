@@ -121,7 +121,7 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
         Seq(CurrentTime())
       )
     )
-    val resolved = ResolveInlineTables(table)
+    val resolved = ResolveInlineTables(ResolveTimeZone(table))
     assert(resolved.isInstanceOf[ResolvedInlineTable],
       "Expected an inline table to be resolved into a ResolvedInlineTable")
 

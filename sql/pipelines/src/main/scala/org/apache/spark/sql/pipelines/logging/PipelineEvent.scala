@@ -16,13 +16,14 @@
  */
 package org.apache.spark.sql.pipelines.logging
 
-import org.apache.spark.sql.pipelines.common.FlowStatus
+import org.apache.spark.sql.pipelines.common.{FlowStatus, RunState}
 
 /**
  * An internal event that is emitted during the run of a pipeline.
  * @param id A globally unique id
  * @param timestamp The time of the event
  * @param origin Where the event originated from
+ * @param level Security level of the event
  * @param message A user friendly description of the event
  * @param details The details of the event
  * @param error An error that occurred during the event
@@ -31,6 +32,7 @@ case class PipelineEvent(
     id: String,
     timestamp: String,
     origin: PipelineEventOrigin,
+    level: EventLevel,
     message: String,
     details: EventDetails,
     error: Option[ErrorDetail]
@@ -65,10 +67,13 @@ case class SourceCodeLocation(
 )
 
 // Additional details about the PipelineEvent
-trait EventDetails
+sealed trait EventDetails
 
 // An event indicating that a flow has made progress and transitioned to a different state
 case class FlowProgress(status: FlowStatus) extends EventDetails
+
+// An event indicating that a run has made progress and transitioned to a different state
+case class RunProgress(state: RunState) extends EventDetails
 
 // Additional details about the error that occurred during the event
 case class ErrorDetail(exceptions: Seq[SerializedException])
@@ -78,3 +83,11 @@ case class SerializedException(className: String, message: String, stack: Seq[St
 
 // A stack frame of an exception
 case class StackFrame(declaringClass: String, methodName: String)
+
+// The severity level of the event.
+sealed trait EventLevel
+object EventLevel {
+  case object INFO extends EventLevel
+  case object WARN extends EventLevel
+  case object ERROR extends EventLevel
+}

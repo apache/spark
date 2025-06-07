@@ -33,7 +33,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 class InMemoryTable(
     name: String,
-    schema: StructType,
+    columns: Array[Column],
     override val partitioning: Array[Transform],
     override val properties: util.Map[String, String],
     override val constraints: Array[Constraint] = Array.empty,
@@ -43,9 +43,21 @@ class InMemoryTable(
     advisoryPartitionSize: Option[Long] = None,
     isDistributionStrictlyRequired: Boolean = true,
     override val numRowsPerSplit: Int = Int.MaxValue)
-  extends InMemoryBaseTable(name, schema, partitioning, properties, constraints, distribution,
+  extends InMemoryBaseTable(name, columns, partitioning, properties, constraints, distribution,
     ordering, numPartitions, advisoryPartitionSize, isDistributionStrictlyRequired,
     numRowsPerSplit) with SupportsDelete {
+
+  def this(
+      name: String,
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]) = {
+    this(
+      name,
+      CatalogV2Util.structTypeToV2Columns(schema),
+      partitioning,
+      properties)
+  }
 
   override def canDeleteWhere(filters: Array[Filter]): Boolean = {
     InMemoryTable.supportsFilters(filters)
