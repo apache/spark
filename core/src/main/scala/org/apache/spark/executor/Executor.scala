@@ -89,6 +89,8 @@ private[spark] class Executor(
     log"${LogMDC(OS_ARCH, System.getProperty("os.arch"))}")
   logInfo(log"Java version ${LogMDC(JAVA_VERSION, System.getProperty("java.version"))}")
 
+  private var executorThreadDumpCollector: ThreadDumpCollector = _
+
   private val executorShutdown = new AtomicBoolean(false)
   val stopHookReference = ShutdownHookManager.addShutdownHook(
     () => stop()
@@ -326,6 +328,15 @@ private[spark] class Executor(
 
   heartbeater.start()
 
+  // Create and start the thread dump collector for the Spark executor
+  if (conf.get(EXECUTOR_THREAD_DUMP_COLLECTOR_ENABLED)) {
+    executorThreadDumpCollector = new ThreadDumpCollector(
+      () => ThreadDumpCollector.saveThreadDumps(env),
+      "executor-ThreadDumpCollector",
+      conf.get(THREAD_DUMP_COLLECTOR_INTERVAL))
+    executorThreadDumpCollector.start()
+  }
+
   private val appStartTime = conf.getLong("spark.app.startTime", 0)
 
   // To allow users to distribute plugins and their required files
@@ -445,6 +456,15 @@ private[spark] class Executor(
       } catch {
         case NonFatal(e) =>
           logWarning("Unable to stop heartbeater", e)
+      }
+      try {
+        if (conf.get(EXECUTOR_THREAD_DUMP_COLLECTOR_ENABLED) && executorThreadDumpCollector !=
+          null) {
+          executorThreadDumpCollector.stop()
+        }
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Unable to stop the executor thread dump collector", e)
       }
       ShuffleBlockPusher.stop()
       if (threadPool != null) {
