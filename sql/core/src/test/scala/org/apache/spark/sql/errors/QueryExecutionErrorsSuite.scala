@@ -1275,6 +1275,17 @@ class QueryExecutionErrorsSuite
       sql("ALTER TABLE t SET LOCATION '/mister/spark'")
     }
   }
+
+  test("DATATYPE_CANNOT_ORDER: SQL query with unsupported data types for ordering") {
+    // Test using percentile function on CalendarIntervalType which requires ordering
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        sql("SELECT percentile(interval '1 month', 0.5) FROM VALUES (1) AS t(col)").collect()
+      },
+      condition = "DATATYPE_CANNOT_ORDER",
+      parameters = Map("dataType" -> "PhysicalCalendarIntervalType"))
+  }
+
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {
