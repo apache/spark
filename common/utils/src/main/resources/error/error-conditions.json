@@ -4021,6 +4021,12 @@
     ],
     "sqlState" : "22023"
   },
+  "MAP_ZIP_WITH_SIZE_LIMIT_EXCEEDED" : {
+    "message" : [
+      "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
+    ],
+    "sqlState" : "22023"
+  },
   "MERGE_CARDINALITY_VIOLATION" : {
     "message" : [
       "The ON search condition of the MERGE statement matched a single row from the target table with multiple rows of the source table.",
@@ -7739,11 +7745,6 @@
   "_LEGACY_ERROR_TEMP_1338" : {
     "message" : [
       "Sinks cannot request distribution and ordering in continuous execution mode."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2003" : {
-    "message" : [
-      "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2005" : {
