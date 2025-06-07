@@ -44,11 +44,11 @@ object PercentileHeapBenchmark extends BenchmarkBase {
 
   private def percentileHeapBenchmark(): Unit = {
 
-    for (inputSize <- Seq(100, 500, 1000, 5000, 10000)) {
+    for (inputSize <- Seq(10000, 50000, 100000, 200000)) {
       val benchmark = new Benchmark(s"PercentileHeap Operations - Input Size: $inputSize",
         inputSize, output = output)
       for (percentile <- Seq(0.5, 0.9, 0.95, 0.99)) {
-        benchmark.addTimerCase(s"Percentile: $percentile", 1000) { timer =>
+        benchmark.addTimerCase(s"Percentile: $percentile", 3) { timer =>
           performPercentileHeapOperations(inputSize, percentile, timer)
         }
       }
