@@ -18,6 +18,7 @@
 __all__ = ["SparkConf"]
 
 import sys
+from collections.abc import Iterable
 from typing import Dict, List, Optional, Tuple, cast, overload, TYPE_CHECKING
 
 from pyspark.util import is_remote_only
@@ -176,14 +177,14 @@ class SparkConf:
         ...
 
     @overload
-    def setExecutorEnv(self, *, pairs: List[Tuple[str, str]]) -> "SparkConf":
+    def setExecutorEnv(self, *, pairs: Iterable[Tuple[str, str]]) -> "SparkConf":
         ...
 
     def setExecutorEnv(
         self,
         key: Optional[str] = None,
         value: Optional[str] = None,
-        pairs: Optional[List[Tuple[str, str]]] = None,
+        pairs: Optional[Iterable[Tuple[str, str]]] = None,
     ) -> "SparkConf":
         """Set an environment variable to be passed to executors."""
         if (key is not None and pairs is not None) or (key is None and pairs is None):
@@ -198,7 +199,7 @@ class SparkConf:
                 self.set("spark.executorEnv.{}".format(k), v)
         return self
 
-    def setAll(self, pairs: List[Tuple[str, str]]) -> "SparkConf":
+    def setAll(self, pairs: Iterable[Tuple[str, str]]) -> "SparkConf":
         """
         Set multiple parameters, passed as a list of key-value pairs.
 
