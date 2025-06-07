@@ -17,6 +17,7 @@
 
 package org.apache.hive.service.cli.operation;
 
+import java.io.File;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -55,6 +56,11 @@ public class OperationManager extends AbstractService {
 
   private final Map<OperationHandle, Operation> handleToOperation =
       new HashMap<OperationHandle, Operation>();
+
+  private final ThreadLocal<OperationLog> threadLocalOperationLog =
+      ThreadLocal.withInitial(() -> null);
+
+  private final ThreadLocal<File> threadLocalFile = ThreadLocal.withInitial(() -> null);
 
   public OperationManager() {
     super(OperationManager.class.getSimpleName());
@@ -97,20 +103,20 @@ public class OperationManager extends AbstractService {
   }
 
   public GetTypeInfoOperation newGetTypeInfoOperation(HiveSession parentSession) {
-    GetTypeInfoOperation operation = new GetTypeInfoOperation(parentSession);
+    GetTypeInfoOperation operation = new GetTypeInfoOperation(parentSession, this);
     addOperation(operation);
     return operation;
   }
 
   public GetCatalogsOperation newGetCatalogsOperation(HiveSession parentSession) {
-    GetCatalogsOperation operation = new GetCatalogsOperation(parentSession);
+    GetCatalogsOperation operation = new GetCatalogsOperation(parentSession, this);
     addOperation(operation);
     return operation;
   }
 
   public GetSchemasOperation newGetSchemasOperation(HiveSession parentSession,
       String catalogName, String schemaName) {
-    GetSchemasOperation operation = new GetSchemasOperation(parentSession, catalogName, schemaName);
+    GetSchemasOperation operation = new GetSchemasOperation(parentSession, this, catalogName, schemaName);
     addOperation(operation);
     return operation;
   }
@@ -119,20 +125,20 @@ public class OperationManager extends AbstractService {
       String catalogName, String schemaName, String tableName,
       List<String> tableTypes) {
     MetadataOperation operation =
-        new GetTablesOperation(parentSession, catalogName, schemaName, tableName, tableTypes);
+        new GetTablesOperation(parentSession, this, catalogName, schemaName, tableName, tableTypes);
     addOperation(operation);
     return operation;
   }
 
   public GetTableTypesOperation newGetTableTypesOperation(HiveSession parentSession) {
-    GetTableTypesOperation operation = new GetTableTypesOperation(parentSession);
+    GetTableTypesOperation operation = new GetTableTypesOperation(parentSession, this);
     addOperation(operation);
     return operation;
   }
 
   public GetColumnsOperation newGetColumnsOperation(HiveSession parentSession,
       String catalogName, String schemaName, String tableName, String columnName) {
-    GetColumnsOperation operation = new GetColumnsOperation(parentSession,
+    GetColumnsOperation operation = new GetColumnsOperation(parentSession, this,
         catalogName, schemaName, tableName, columnName);
     addOperation(operation);
     return operation;
@@ -140,7 +146,7 @@ public class OperationManager extends AbstractService {
 
   public GetFunctionsOperation newGetFunctionsOperation(HiveSession parentSession,
       String catalogName, String schemaName, String functionName) {
-    GetFunctionsOperation operation = new GetFunctionsOperation(parentSession,
+    GetFunctionsOperation operation = new GetFunctionsOperation(parentSession, this,
         catalogName, schemaName, functionName);
     addOperation(operation);
     return operation;
@@ -148,7 +154,7 @@ public class OperationManager extends AbstractService {
 
   public GetPrimaryKeysOperation newGetPrimaryKeysOperation(HiveSession parentSession,
       String catalogName, String schemaName, String tableName) {
-    GetPrimaryKeysOperation operation = new GetPrimaryKeysOperation(parentSession,
+    GetPrimaryKeysOperation operation = new GetPrimaryKeysOperation(parentSession, this,
       catalogName, schemaName, tableName);
     addOperation(operation);
     return operation;
@@ -158,7 +164,7 @@ public class OperationManager extends AbstractService {
       HiveSession session, String primaryCatalog, String primarySchema,
       String primaryTable, String foreignCatalog, String foreignSchema,
       String foreignTable) {
-   GetCrossReferenceOperation operation = new GetCrossReferenceOperation(session,
+   GetCrossReferenceOperation operation = new GetCrossReferenceOperation(session, this,
      primaryCatalog, primarySchema, primaryTable, foreignCatalog, foreignSchema,
      foreignTable);
    addOperation(operation);
@@ -283,8 +289,22 @@ public class OperationManager extends AbstractService {
     return schema;
   }
 
-  public OperationLog getOperationLogByThread() {
-    return OperationLog.getCurrentOperationLog();
+  public void setCurrentOperationLog(OperationLog log, File file) {
+    threadLocalOperationLog.set(log);
+    threadLocalFile.set(file);
+  }
+
+  public OperationLog getCurrentOperationLog() {
+    return threadLocalOperationLog.get();
+  }
+
+  public File getCurrentOperationLogFile() {
+    return threadLocalFile.get();
+  }
+
+  public void removeCurrentOperationLog() {
+    threadLocalOperationLog.remove();
+    threadLocalFile.remove();
   }
 
   public List<Operation> removeExpiredOperations(OperationHandle[] handles) {

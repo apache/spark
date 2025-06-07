@@ -233,7 +233,7 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
     table.setProperty("columns.types", dataSchema.map(_.dataType.catalogString).mkString(":"))
 
     val serde = new OrcSerde
-    serde.initialize(conf, table)
+    serde.initialize(conf, table, null)
     serde
   }
 
