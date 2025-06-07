@@ -199,7 +199,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     // as the last MATCHED and NOT MATCHED BY SOURCE instruction
     // this logic is specific to data sources that replace groups of data
     val carryoverRowsOutput = Literal(WRITE_WITH_METADATA_OPERATION) +: targetTable.output
-    val keepCarryoverRowsInstruction = Keep(TrueLiteral, carryoverRowsOutput, isSystem = true)
+    val keepCarryoverRowsInstruction = Keep(TrueLiteral, carryoverRowsOutput,
+      systemPredicate = true)
 
     val matchedInstructions = matchedActions.map { action =>
       toInstruction(action, metadataAttrs)
