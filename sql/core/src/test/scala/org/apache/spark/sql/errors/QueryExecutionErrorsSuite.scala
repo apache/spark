@@ -1276,11 +1276,16 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("DATATYPE_CANNOT_ORDER: SQL query with unsupported data types for ordering") {
-    // Test using percentile function on CalendarIntervalType which requires ordering
+  test("SPARK-42841: SQL query with unsupported data types for ordering") {
+    import org.apache.spark.sql.catalyst.types.PhysicalDataType
+    import org.apache.spark.sql.types.CalendarIntervalType
+
+    // Test PhysicalDataType.ordering() with CalendarIntervalType
+    // It's not to make a sql test that passes Argument verification but fails
+    // Order verification.
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
-        sql("SELECT percentile(interval '1 month', 0.5) FROM VALUES (1) AS t(col)").collect()
+        PhysicalDataType.ordering(CalendarIntervalType)
       },
       condition = "DATATYPE_CANNOT_ORDER",
       parameters = Map("dataType" -> "PhysicalCalendarIntervalType"))

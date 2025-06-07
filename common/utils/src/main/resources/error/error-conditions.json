@@ -912,6 +912,12 @@
     },
     "sqlState" : "21S01"
   },
+  "DATATYPE_CANNOT_ORDER" : {
+    "message" : [
+      "Type <dataType> does not support ordered operations."
+    ],
+    "sqlState" : "0A000"
+  },
   "DATATYPE_MISMATCH" : {
     "message" : [
       "Cannot resolve <sqlExpr> due to data type mismatch:"
@@ -1209,12 +1215,6 @@
       }
     },
     "sqlState" : "42K09"
-  },
-  "DATATYPE_CANNOT_ORDER" : {
-    "message" : [
-      "Type <dataType> does not support ordered operations."
-    ],
-    "sqlState" : "0A000"
   },
   "DATATYPE_MISSING_SIZE" : {
     "message" : [
