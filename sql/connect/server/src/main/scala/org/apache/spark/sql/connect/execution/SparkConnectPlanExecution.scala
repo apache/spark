@@ -27,8 +27,8 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
@@ -68,12 +68,9 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       } else {
         DoNotCleanup
       }
+    val rel = request.getPlan.getRoot
     val dataframe =
-      Dataset.ofRows(
-        sessionHolder.session,
-        planner.transformRelation(request.getPlan.getRoot, cachePlan = true),
-        tracker,
-        shuffleCleanupMode)
+      sessionHolder.createDataFrame(rel, planner, Some((tracker, shuffleCleanupMode)))
     responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(dataframe, responseObserver, executeHolder)
     responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, dataframe))
