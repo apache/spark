@@ -1326,7 +1326,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         exception = intercept[AnalysisException] {
           df.write.mode("append").partitionBy("a").saveAsTable("partitionedTable")
         },
-        condition = "_LEGACY_ERROR_TEMP_1163",
+        condition = "MISMATCHED_TABLE_PARTITION_COLUMN",
         parameters = Map(
           "tableName" -> "spark_catalog.default.partitionedtable",
           "specifiedPartCols" -> "a",
@@ -1337,7 +1337,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         exception = intercept[AnalysisException] {
           df.write.mode("append").partitionBy("b", "a").saveAsTable("partitionedTable")
         },
-        condition = "_LEGACY_ERROR_TEMP_1163",
+        condition = "MISMATCHED_TABLE_PARTITION_COLUMN",
         parameters = Map(
           "tableName" -> "spark_catalog.default.partitionedtable",
           "specifiedPartCols" -> "b, a",
@@ -1348,7 +1348,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         exception = intercept[AnalysisException] {
           df.write.mode("append").saveAsTable("partitionedTable")
         },
-        condition = "_LEGACY_ERROR_TEMP_1163",
+        condition = "MISMATCHED_TABLE_PARTITION_COLUMN",
         parameters = Map(
           "tableName" -> "spark_catalog.default.partitionedtable",
           "specifiedPartCols" -> "", "existingPartCols" -> "a, b")
