@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   Project,
   ReplaceTable,
   Union,
+  UnionLoop,
   Unpivot
 }
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -49,6 +50,7 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
+import org.apache.spark.sql.errors.DataTypeErrors.cannotMergeIncompatibleDataTypesError
 import org.apache.spark.sql.types.DataType
 
 abstract class TypeCoercionBase extends TypeCoercionHelper {
@@ -246,6 +248,31 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
           } else {
             val attrMapping = s.children.head.output.zip(newChildren.head.output)
             s.copy(children = newChildren) -> attrMapping
+          }
+
+        case s: UnionLoop
+            if s.childrenResolved && s.anchor.output.length == s.recursion.output.length
+              && !s.resolved =>
+          val incompatibleAttributes = s.anchor.output.zip(s.recursion.output).filter {
+            case (anchorAttr, recursionAttr) =>
+              val commonType = findWiderTypeForTwo(recursionAttr.dataType, anchorAttr.dataType)
+              if (commonType.isDefined) {
+                commonType.get != anchorAttr.dataType
+              } else {
+                true
+              }
+          }
+          if (incompatibleAttributes.isEmpty) {
+            val newRecursion = widenTypes(s.recursion,
+              s.anchor.output.map(x => Some(x.dataType)))
+            val attrMapping = s.children.head.output.zip(s.anchor.output)
+            s.copy(anchor = s.anchor, recursion = newRecursion) -> attrMapping
+          }
+          else {
+            // If it is not possible to cast the recursion results into the anchor results, then we
+            // don't cast and throw an Analysis Exception.
+            throw cannotMergeIncompatibleDataTypesError(incompatibleAttributes.head._1.dataType,
+              incompatibleAttributes.head._2.dataType)
           }
       }
     }

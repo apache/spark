@@ -59,6 +59,11 @@ case class UnionLoop(
     id.toString + limit.map(", " + _.toString).getOrElse("") +
       maxDepth.map(", " + _.toString).getOrElse("")
   }
+
+  override lazy val resolved: Boolean = {
+    // allChildrenCompatible needs to be evaluated after childrenResolved
+    childrenResolved && allChildrenCompatible
+  }
 }
 
 /**
