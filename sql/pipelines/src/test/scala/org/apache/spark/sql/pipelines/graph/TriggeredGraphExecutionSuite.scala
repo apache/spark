@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import org.scalatest.concurrent.Eventually.eventually
-import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.sql.{functions, Row}

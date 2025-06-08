@@ -31,15 +31,16 @@ import org.scalatest.matchers.should.Matchers
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, QueryTest, Row, TypedColumn}
-import org.apache.spark.sql.SparkSession.{clearActiveSession, clearDefaultSession, setActiveSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession, SQLContext}
+import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl, SqlGraphRegistrationContext}
 import org.apache.spark.sql.pipelines.utils.PipelineTest.{cleanupMetastore, createTempDir}
+import org.apache.spark.sql.test.SharedSparkSession
 
 abstract class PipelineTest
     extends SparkFunSuite
+    with SharedSparkSession
     with BeforeAndAfterAll
     with BeforeAndAfterEach
     with Matchers
@@ -49,9 +50,6 @@ abstract class PipelineTest
 
   final protected val storageRoot = createTempDir()
 
-  var spark: SparkSession = createAndInitializeSpark()
-
-  implicit def sqlContext: SQLContext = spark.sqlContext
   def sql(text: String): DataFrame = spark.sql(text)
 
   protected def startPipelineAndWaitForCompletion(unresolvedDataflowGraph: DataflowGraph): Unit = {
@@ -64,8 +62,8 @@ abstract class PipelineTest
   /**
    * Spark confs set here will be the default spark confs for all spark sessions created in tests.
    */
-  protected def sparkConf: SparkConf = {
-    new SparkConf()
+  override def sparkConf: SparkConf = {
+    super.sparkConf
       .set("spark.sql.shuffle.partitions", "2")
       .set("spark.sql.session.timeZone", "UTC")
   }
@@ -128,64 +126,20 @@ abstract class PipelineTest
     )
   }
 
-  /**
-   * This exists temporarily for compatibility with tests that become invalid when multiple
-   * executors are available.
-   */
-  protected def master = "local[*]"
-
-  /** Creates and returns a initialized spark session. */
-  def createAndInitializeSpark(): SparkSession = {
-    val newSparkSession = SparkSession
-      .builder()
-      .config(sparkConf)
-      .master(master)
-      .getOrCreate()
-    newSparkSession
-  }
-
-  /** Set up the spark session before each test. */
-  protected def initializeSparkBeforeEachTest(): Unit = {
-    clearActiveSession()
-    spark = createAndInitializeSpark()
-    setActiveSession(spark)
-  }
-
   override def beforeEach(): Unit = {
     super.beforeEach()
-    initializeSparkBeforeEachTest()
     cleanupMetastore(spark)
     (catalogInPipelineSpec, databaseInPipelineSpec) match {
       case (Some(catalog), Some(schema)) =>
-        sql(s"CREATE DATABASE IF NOT EXISTS `$catalog`.`$schema`")
+        spark.sql(s"CREATE DATABASE IF NOT EXISTS `$catalog`.`$schema`")
       case _ =>
-        databaseInPipelineSpec.foreach(s => sql(s"CREATE DATABASE IF NOT EXISTS `$s`"))
+        databaseInPipelineSpec.foreach(s => spark.sql(s"CREATE DATABASE IF NOT EXISTS `$s`"))
     }
   }
 
   override def afterEach(): Unit = {
     cleanupMetastore(spark)
     super.afterEach()
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      super.afterAll()
-    } finally {
-      try {
-        if (spark != null) {
-          try {
-            spark.sessionState.catalog.reset()
-          } finally {
-            spark.stop()
-            spark = null
-          }
-        }
-      } finally {
-        clearActiveSession()
-        clearDefaultSession()
-      }
-    }
   }
 
   override protected def gridTest[A](testNamePrefix: String, testTags: Tag*)(params: Seq[A])(
