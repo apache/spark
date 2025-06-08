@@ -165,7 +165,7 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndA
     assert(
       sessionHolder.getPipelineExecution(graphId).nonEmpty,
       "pipeline execution was not cached")
-    sessionHolder.close()
+    SparkConnectService.sessionManager.closeSession(sessionHolder.key)
     assert(
       sessionHolder.getPipelineExecution(graphId).isEmpty,
       "pipeline execution was not removed")

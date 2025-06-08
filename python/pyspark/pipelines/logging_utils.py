@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 
 def log_with_curr_timestamp(message: str) -> None:
