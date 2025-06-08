@@ -119,16 +119,20 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
       unresolvedOperator: LogicalPlan): (Seq[LogicalPlan], Seq[NameScope]) = {
     unresolvedOperator.children.zipWithIndex.map {
       case (unresolvedChild, childIndex) =>
-        scopes.withNewScope() {
-          expressionIdAssigner.withNewMapping(collectChildMapping = childIndex == 0) {
-            cteRegistry.withNewScopeUnderMultiChildOperator(
-              unresolvedOperator = unresolvedOperator,
-              unresolvedChild = unresolvedChild
-            ) {
-              val resolvedChild = resolver.resolve(unresolvedChild)
-              (resolvedChild, scopes.current)
-            }
-          }
+        expressionIdAssigner.pushMapping()
+        scopes.pushScope()
+        cteRegistry.pushScopeForMultiChildOperator(
+          unresolvedOperator = unresolvedOperator,
+          unresolvedChild = unresolvedChild
+        )
+
+        try {
+          val resolvedChild = resolver.resolve(unresolvedChild)
+          (resolvedChild, scopes.current)
+        } finally {
+          cteRegistry.popScope()
+          scopes.popScope()
+          expressionIdAssigner.popMapping(collectChildMapping = childIndex == 0)
         }
     }.unzip
   }
@@ -369,9 +373,9 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
         output.find(a => hasMapType(a.dataType)).foreach { mapCol =>
           throwUnsupportedSetOperationOnMapType(mapCol, unresolvedPlan)
         }
-        output.find(a => hasVariantType(a.dataType)).foreach { variantCol =>
-          throwUnsupportedSetOperationOnVariantType(variantCol, unresolvedPlan)
-        }
+          output.find(a => hasVariantType(a.dataType)).foreach { variantCol =>
+            throwUnsupportedSetOperationOnVariantType(variantCol, unresolvedPlan)
+          }
       case _ =>
     }
   }

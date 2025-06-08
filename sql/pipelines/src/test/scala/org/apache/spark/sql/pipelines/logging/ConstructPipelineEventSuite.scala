@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.pipelines.common.FlowStatus
+import org.apache.spark.sql.pipelines.graph.QueryOrigin
 
 class ConstructPipelineEventSuite extends SparkFunSuite with BeforeAndAfterEach {
 
@@ -73,8 +74,7 @@ class ConstructPipelineEventSuite extends SparkFunSuite with BeforeAndAfterEach 
     assert(serializedEx.map(_.message) == Seq("exception 2", "exception 1"))
     assert(serializedEx.head.className == "java.lang.IllegalStateException")
 
-    assert(
-      serializedEx.head.stack.nonEmpty, "Stack trace of main exception should not be empty")
+    assert(serializedEx.head.stack.nonEmpty, "Stack trace of main exception should not be empty")
     assert(serializedEx(1).stack.nonEmpty, "Stack trace of cause should not be empty")
 
     // Get the original and serialized stack traces for comparison
@@ -101,22 +101,22 @@ class ConstructPipelineEventSuite extends SparkFunSuite with BeforeAndAfterEach 
         datasetName = Some("dataset"),
         flowName = Some("flow"),
         sourceCodeLocation = Some(
-          SourceCodeLocation(
-            path = Some("path"),
-            lineNumber = None,
-            columnNumber = None,
-            endingLineNumber = None,
-            endingColumnNumber = None
+          QueryOrigin(
+            filePath = Some("path"),
+            line = None,
+            startPosition = None
           )
         )
       ),
+      level = EventLevel.INFO,
       message = "Flow 'b' has failed",
       details = FlowProgress(FlowStatus.FAILED),
       eventTimestamp = Some(new Timestamp(1747338049615L))
     )
     assert(event.origin.datasetName.contains("dataset"))
     assert(event.origin.flowName.contains("flow"))
-    assert(event.origin.sourceCodeLocation.get.path.contains("path"))
+    assert(event.origin.sourceCodeLocation.get.filePath.contains("path"))
+    assert(event.level == EventLevel.INFO)
     assert(event.message == "Flow 'b' has failed")
     assert(event.details.asInstanceOf[FlowProgress].status == FlowStatus.FAILED)
     assert(event.timestamp == "2025-05-15T19:40:49.615Z")

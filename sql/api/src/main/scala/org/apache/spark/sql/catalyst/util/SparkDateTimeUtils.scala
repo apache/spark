@@ -134,10 +134,16 @@ trait SparkDateTimeUtils {
   }
 
   /**
-   * Gets the number of microseconds since midnight using the session time zone.
+   * Gets the number of microseconds since midnight using the given time zone.
    */
   def instantToMicrosOfDay(instant: Instant, timezone: String): Long = {
-    val zoneId = getZoneId(timezone)
+    instantToMicrosOfDay(instant, getZoneId(timezone))
+  }
+
+  /**
+   * Gets the number of microseconds since midnight using the given time zone.
+   */
+  def instantToMicrosOfDay(instant: Instant, zoneId: ZoneId): Long = {
     val localDateTime = LocalDateTime.ofInstant(instant, zoneId)
     localDateTime.toLocalTime.getLong(MICRO_OF_DAY)
   }

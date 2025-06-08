@@ -61,7 +61,7 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
                 yield a + 1,
 
         with self.assertRaisesRegex(
-            InvalidPlanInput, "Invalid Python user-defined table function return type."
+            InvalidPlanInput, "Invalid schema type. Expect a struct type, but got"
         ):
             TestUDTF(lit(1)).collect()
 

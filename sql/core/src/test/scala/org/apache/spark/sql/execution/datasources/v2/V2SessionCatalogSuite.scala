@@ -590,22 +590,6 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       parameters = Map("fieldName" -> "`missing_col`", "fields" -> "`id`, `data`"))
   }
 
-  test("alterTable: rename top-level column") {
-    val catalog = newCatalog()
-
-    catalog.createTable(testIdent, columns, emptyTrans, emptyProps)
-    val table = catalog.loadTable(testIdent)
-
-    assert(table.columns === columns)
-
-    catalog.alterTable(testIdent, TableChange.renameColumn(Array("id"), "some_id"))
-    val updated = catalog.loadTable(testIdent)
-
-    val expectedSchema = new StructType().add("some_id", IntegerType).add("data", StringType)
-
-    assert(updated.schema == expectedSchema)
-  }
-
   test("alterTable: rename nested column") {
     val catalog = newCatalog()
 
@@ -623,26 +607,6 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     val newPointStruct = new StructType().add("first", DoubleType).add("y", DoubleType)
     val expectedColumns = columns :+ Column.create("point", newPointStruct)
-
-    assert(updated.columns === expectedColumns)
-  }
-
-  test("alterTable: rename struct column") {
-    val catalog = newCatalog()
-
-    val pointStruct = new StructType().add("x", DoubleType).add("y", DoubleType)
-    val tableColumns = columns :+ Column.create("point", pointStruct)
-
-    catalog.createTable(testIdent, tableColumns, emptyTrans, emptyProps)
-    val table = catalog.loadTable(testIdent)
-
-    assert(table.columns === tableColumns)
-
-    catalog.alterTable(testIdent, TableChange.renameColumn(Array("point"), "p"))
-    val updated = catalog.loadTable(testIdent)
-
-    val newPointStruct = new StructType().add("x", DoubleType).add("y", DoubleType)
-    val expectedColumns = columns :+ Column.create("p", newPointStruct)
 
     assert(updated.columns === expectedColumns)
   }
@@ -684,21 +648,6 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val expectedColumns = columns :+ Column.create("point", newPointStruct)
 
     assert(updated.columns === expectedColumns)
-  }
-
-  test("alterTable: delete top-level column") {
-    val catalog = newCatalog()
-
-    catalog.createTable(testIdent, columns, emptyTrans, emptyProps)
-    val table = catalog.loadTable(testIdent)
-
-    assert(table.columns === columns)
-
-    catalog.alterTable(testIdent, TableChange.deleteColumn(Array("id"), false))
-    val updated = catalog.loadTable(testIdent)
-
-    val expectedSchema = new StructType().add("data", StringType)
-    assert(updated.schema == expectedSchema)
   }
 
   test("alterTable: delete nested column") {

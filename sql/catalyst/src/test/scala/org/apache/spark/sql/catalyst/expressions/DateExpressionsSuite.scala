@@ -28,7 +28,7 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkFunSuite, SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
@@ -2139,15 +2139,5 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           TimestampType, TimestampType)
       }
     }
-  }
-
-  test("datetime function CurrentDate and localtimestamp are Unevaluable") {
-    checkError(exception = intercept[SparkException] { CurrentDate(UTC_OPT).eval(EmptyRow) },
-      condition = "INTERNAL_ERROR",
-      parameters = Map("message" -> "Cannot evaluate expression: current_date(Some(UTC))"))
-
-    checkError(exception = intercept[SparkException] { LocalTimestamp(UTC_OPT).eval(EmptyRow) },
-      condition = "INTERNAL_ERROR",
-      parameters = Map("message" -> "Cannot evaluate expression: localtimestamp(Some(UTC))"))
   }
 }

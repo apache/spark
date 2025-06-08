@@ -37,11 +37,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleImplBase, StatefulProcessorHandleState, StateVariableType}
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateResponseWithMapIterator, StateResponseWithMapKeysOrValues, StateResponseWithStringTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, UtilsRequest, ValueStateCall}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateResponseWithMapIterator, StateResponseWithMapKeysOrValues, StateResponseWithStringTypeVal, StateResponseWithTimer, StateVariableRequest, TimerInfo, TimerRequest, TimerStateCallCommand, TimerValueRequest, UtilsRequest, ValueStateCall}
 import org.apache.spark.sql.execution.streaming.state.StateMessage.KeyAndValuePair
 import org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithListGet
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
-import org.apache.spark.sql.types.{BinaryType, LongType, StructField, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
 
@@ -73,7 +73,7 @@ class TransformWithStateInPySparkStateServer(
     iteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null,
     mapStatesMapForTest : mutable.HashMap[String, MapStateInfo] = null,
     keyValueIteratorMapForTest: mutable.HashMap[String, Iterator[(Row, Row)]] = null,
-    expiryTimerIterForTest: Iterator[(Any, Long)] = null,
+    expiryTimerIterForTest: mutable.HashMap[String, Iterator[(Row, Long)]] = null,
     listTimerMapForTest: mutable.HashMap[String, Iterator[Long]] = null)
   extends Runnable with Logging {
 
@@ -131,10 +131,11 @@ class TransformWithStateInPySparkStateServer(
   /** Timer related class variables */
   // An iterator to store all expired timer info. This is meant to be consumed only once per
   // partition. This should be called after finishing handling all input rows.
-  private var expiryTimestampIter: Option[Iterator[(Any, Long)]] =
-    if (expiryTimerIterForTest != null) {
-      Option(expiryTimerIterForTest)
-    } else None
+  private val expiryTimestampIters = if (expiryTimerIterForTest != null) {
+    expiryTimerIterForTest
+  } else {
+    new mutable.HashMap[String, Iterator[(Row, Long)]]()
+  }
 
   // A map to store the iterator id -> Iterator[Long] mapping. This is to keep track of the
   // current iterator position for each iterator id in the same partition for a grouping key in case
@@ -256,23 +257,23 @@ class TransformWithStateInPySparkStateServer(
         assert(statefulProcessorHandle.isInstanceOf[StatefulProcessorHandleImpl])
         val expiryRequest = message.getExpiryTimerRequest()
         val expiryTimestamp = expiryRequest.getExpiryTimestampMs
-        if (!expiryTimestampIter.isDefined) {
-          expiryTimestampIter =
-            Option(statefulProcessorHandle
-              .asInstanceOf[StatefulProcessorHandleImpl].getExpiredTimers(expiryTimestamp))
+        val iteratorId = expiryRequest.getIteratorId
+
+        var iteratorOption = expiryTimestampIters.get(iteratorId)
+        if (iteratorOption.isEmpty) {
+          iteratorOption = Some(
+            statefulProcessorHandle.asInstanceOf[StatefulProcessorHandleImpl]
+              .getExpiredTimers(expiryTimestamp).map { case (k, ts) =>
+                (k.asInstanceOf[Row], ts)
+              }
+          )
+          expiryTimestampIters.put(iteratorId, iteratorOption.get)
         }
-        // expiryTimestampIter could be None in the TWSPySparkServerSuite
-        if (!expiryTimestampIter.isDefined || !expiryTimestampIter.get.hasNext) {
-          // iterator is exhausted, signal the end of iterator on python client
-          sendResponse(1)
+        if (!iteratorOption.get.hasNext) {
+          sendResponse(2, s"No expired timer.")
         } else {
-          sendResponse(0)
-          val outputSchema = new StructType()
-            .add("key", BinaryType)
-            .add(StructField("timestamp", LongType))
-          sendIteratorAsArrowBatches(expiryTimestampIter.get, outputSchema,
-            arrowStreamWriterForTest) { data =>
-            InternalRow(PythonSQLUtils.toPyRow(data._1.asInstanceOf[Row]), data._2)
+          sendResponseWithTimers(0, iter = iteratorOption.get) { case (key, timestamp) =>
+            (key, timestamp)
           }
         }
 
@@ -375,15 +376,10 @@ class TransformWithStateInPySparkStateServer(
             }
             if (!iteratorOption.get.hasNext) {
               sendResponse(2, s"List timer iterator doesn't contain any value.")
-              return
             } else {
-              sendResponse(0)
-            }
-            val outputSchema = new StructType()
-              .add(StructField("timestamp", LongType))
-            sendIteratorAsArrowBatches(iteratorOption.get, outputSchema,
-              arrowStreamWriterForTest) { data =>
-              InternalRow(data)
+              sendResponseWithTimers(0, iter = iteratorOption.get) { timestamp =>
+                (null, timestamp)
+              }
             }
 
           case _ =>
@@ -878,6 +874,53 @@ class TransformWithStateInPySparkStateServer(
           responseMessageBuilder.addKvPair(pairBuilder.build())
 
           pairBuilder.clear()
+
+          rowCount += 1
+        }
+
+        assert(rowCount > 0, s"rowCount should be greater than 0 when status code is 0, " +
+          s"iter.hasNext ${iter.hasNext}")
+
+        responseMessageBuilder.setRequireNextFetch(iter.hasNext)
+      }
+
+      val responseMessage = responseMessageBuilder.build()
+      val responseMessageBytes = responseMessage.toByteArray
+      val byteLength = responseMessageBytes.length
+      outputStream.writeInt(byteLength)
+      outputStream.write(responseMessageBytes)
+    }
+
+    def sendResponseWithTimers[T](
+        status: Int,
+        errorMessage: String = null,
+        iter: Iterator[T] = null)(fn: T => (Row, Long)): Unit = {
+      val responseMessageBuilder = StateResponseWithTimer.newBuilder()
+        .setStatusCode(status)
+      if (status != 0 && errorMessage != null) {
+        responseMessageBuilder.setErrorMessage(errorMessage)
+      }
+
+      if (status == 0) {
+        // Only write a single batch in each GET request. Stops writing row if rowCount reaches
+        // the arrowTransformWithStateInPySparkMaxRecordsPerBatch limit. This is to handle a case
+        // when there are multiple state variables, user tries to access a different state variable
+        // while the current state variable is not exhausted yet.
+        var rowCount = 0
+        val timerBuilder = TimerInfo.newBuilder()
+        while (iter.hasNext && rowCount < arrowTransformWithStateInPySparkMaxRecordsPerBatch) {
+          val data = iter.next()
+
+          val keyTimestampPair = fn(data)
+
+          if (keyTimestampPair._1 != null) {
+            timerBuilder.setKey(
+              ByteString.copyFrom(PythonSQLUtils.toPyRow(keyTimestampPair._1)))
+          }
+
+          timerBuilder.setTimestampMs(keyTimestampPair._2)
+
+          responseMessageBuilder.addTimer(timerBuilder.build())
 
           rowCount += 1
         }

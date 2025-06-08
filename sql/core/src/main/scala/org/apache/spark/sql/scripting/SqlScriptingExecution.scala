@@ -71,6 +71,21 @@ class SqlScriptingExecution(
     contextManagerHandle.runWith(f)
   }
 
+  /**
+   * Helper method to inject leave statement into the execution plan.
+   * @param executionPlan Execution plan to inject leave statement into.
+   * @param label Label of the leave statement.
+   */
+  private def injectLeaveStatement(executionPlan: NonLeafStatementExec, label: String): Unit = {
+    // Go as deep as possible, to find a leaf node. Instead of a statement that
+    //   should be executed next, inject LEAVE statement in its place.
+    var currExecPlan = executionPlan
+    while (currExecPlan.curr.exists(_.isInstanceOf[NonLeafStatementExec])) {
+      currExecPlan = currExecPlan.curr.get.asInstanceOf[NonLeafStatementExec]
+    }
+    currExecPlan.curr = Some(new LeaveStatementExec(label))
+  }
+
   /** Helper method to iterate get next statements from the first available frame. */
   private def getNextStatement: Option[CompoundStatementExec] = {
     // Remove frames that are already executed.
@@ -94,12 +109,8 @@ class SqlScriptingExecution(
           && lastFrame.scopeLabel.get == context.firstHandlerScopeLabel.get) {
           context.firstHandlerScopeLabel = None
         }
-
-        var execPlan: CompoundBodyExec = context.frames.last.executionPlan
-        while (execPlan.curr.exists(_.isInstanceOf[CompoundBodyExec])) {
-          execPlan = execPlan.curr.get.asInstanceOf[CompoundBodyExec]
-        }
-        execPlan.curr = Some(new LeaveStatementExec(lastFrame.scopeLabel.get))
+        // Inject leave statement into the execution plan of the last frame.
+        injectLeaveStatement(context.frames.last.executionPlan, lastFrame.scopeLabel.get)
       }
     }
     // If there are still frames available, get the next statement.
@@ -164,6 +175,7 @@ class SqlScriptingExecution(
         context.frames.append(
           handlerFrame
         )
+        handler.reset()
         handlerFrame.executionPlan.enterScope()
       case None =>
         throw e.asInstanceOf[Throwable]
