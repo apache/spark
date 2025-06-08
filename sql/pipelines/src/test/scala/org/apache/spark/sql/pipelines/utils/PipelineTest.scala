@@ -50,8 +50,6 @@ abstract class PipelineTest
   final protected val storageRoot = createTempDir()
 
   var spark: SparkSession = createAndInitializeSpark()
-  val originalSpark: SparkSession = spark.cloneSession()
-
 
   implicit def sqlContext: SQLContext = spark.sqlContext
   def sql(text: String): DataFrame = spark.sql(text)
@@ -64,8 +62,7 @@ abstract class PipelineTest
   }
 
   /**
-   * Spark confs for [[originalSpark]]. Spark confs set here will be the default spark confs for
-   * all spark sessions created in tests.
+   * Spark confs set here will be the default spark confs for all spark sessions created in tests.
    */
   protected def sparkConf: SparkConf = {
     new SparkConf()
