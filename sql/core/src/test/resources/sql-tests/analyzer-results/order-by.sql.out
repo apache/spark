@@ -375,6 +375,86 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT SUM(a) + 1 FROM testData ORDER BY SUM(a) + 1
+-- !query analysis
+Sort [(sum(a) + 1)#xL ASC NULLS FIRST], true
++- Aggregate [(sum(a#x) + cast(1 as bigint)) AS (sum(a) + 1)#xL]
+   +- SubqueryAlias testdata
+      +- View (`testData`, [a#x, b#x])
+         +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+            +- Project [a#x, b#x]
+               +- SubqueryAlias testData
+                  +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT 1 + SUM(b) FROM testData ORDER BY SUM(b) + 1
+-- !query analysis
+Sort [(1 + sum(b))#xL ASC NULLS FIRST], true
++- Aggregate [(cast(1 as bigint) + sum(b#x)) AS (1 + sum(b))#xL]
+   +- SubqueryAlias testdata
+      +- View (`testData`, [a#x, b#x])
+         +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+            +- Project [a#x, b#x]
+               +- SubqueryAlias testData
+                  +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT SUM(a) + 1 FROM testData ORDER BY 1 + SUM(a)
+-- !query analysis
+Sort [(sum(a) + 1)#xL ASC NULLS FIRST], true
++- Aggregate [(sum(a#x) + cast(1 as bigint)) AS (sum(a) + 1)#xL]
+   +- SubqueryAlias testdata
+      +- View (`testData`, [a#x, b#x])
+         +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+            +- Project [a#x, b#x]
+               +- SubqueryAlias testData
+                  +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT MAX(a) + SUM(b) FROM testData ORDER BY SUM(b) + MAX(a)
+-- !query analysis
+Sort [(max(a) + sum(b))#xL ASC NULLS FIRST], true
++- Aggregate [(cast(max(a#x) as bigint) + sum(b#x)) AS (max(a) + sum(b))#xL]
+   +- SubqueryAlias testdata
+      +- View (`testData`, [a#x, b#x])
+         +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+            +- Project [a#x, b#x]
+               +- SubqueryAlias testData
+                  +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT SUM(a) + 1 + MIN(a) FROM testData ORDER BY 1 + 1 + 1 + MIN(a) + 1 + SUM(a)
+-- !query analysis
+Project [((sum(a) + 1) + min(a))#xL]
++- Sort [(cast(((((1 + 1) + 1) + min(a)#x) + 1) as bigint) + sum(a)#xL) ASC NULLS FIRST], true
+   +- Aggregate [((sum(a#x) + cast(1 as bigint)) + cast(min(a#x) as bigint)) AS ((sum(a) + 1) + min(a))#xL, min(a#x) AS min(a)#x, sum(a#x) AS sum(a)#xL]
+      +- SubqueryAlias testdata
+         +- View (`testData`, [a#x, b#x])
+            +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+               +- Project [a#x, b#x]
+                  +- SubqueryAlias testData
+                     +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT SUM(b) + 1 FROM testData HAVING SUM(b) + 1 > 0 ORDER BY SUM(b) + 1
+-- !query analysis
+Sort [(sum(b) + 1)#xL ASC NULLS FIRST], true
++- Filter ((sum(b) + 1)#xL > cast(0 as bigint))
+   +- Aggregate [(sum(b#x) + cast(1 as bigint)) AS (sum(b) + 1)#xL]
+      +- SubqueryAlias testdata
+         +- View (`testData`, [a#x, b#x])
+            +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+               +- Project [a#x, b#x]
+                  +- SubqueryAlias testData
+                     +- LocalRelation [a#x, b#x]
+
+
+-- !query
 DROP VIEW IF EXISTS testData
 -- !query analysis
 DropTempViewCommand testData

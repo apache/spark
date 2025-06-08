@@ -14,6 +14,11 @@
       "Arrow legacy IPC format is not supported in PySpark, please unset ARROW_PRE_0_15_IPC_FORMAT."
     ]
   },
+  "ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION": {
+    "message": [
+      "Operations that trigger DataFrame analysis or execution are not allowed in pipeline query functions. Move code outside of the pipeline query function."
+    ]
+  },
   "ATTRIBUTE_NOT_CALLABLE": {
     "message": [
       "Attribute `<attr_name>` in provided object `<obj_name>` is not callable."
@@ -219,6 +224,11 @@
       "Unexpected filter <name>."
     ]
   },
+  "DECORATOR_ARGUMENT_NOT_CALLABLE": {
+    "message": [
+      "The first positional argument passed to @<decorator_name> must be callable. Either add @<decorator_name> with no parameters to your function, or pass options to @<decorator_name> using keyword arguments (e.g. <example_usage>)."
+    ]
+  },
   "DIFFERENT_PANDAS_DATAFRAME": {
     "message": [
       "DataFrames are not almost equal:",
@@ -334,6 +344,11 @@
   "FIELD_TYPE_MISMATCH_WITH_NAME": {
     "message": [
       "<field_name>: <obj> is not an instance of type <data_type>."
+    ]
+  },
+  "GRAPH_ELEMENT_DEFINED_OUTSIDE_OF_DECLARATIVE_PIPELINE": {
+    "message": [
+      "APIs that define elements of a declarative pipeline can only be invoked within the context of defining a pipeline."
     ]
   },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN": {
@@ -550,6 +565,11 @@
   "MIXED_TYPE_REPLACEMENT": {
     "message": [
       "Mixed type replacements are not supported."
+    ]
+  },
+  "MULTIPLE_PIPELINE_SPEC_FILES_FOUND": {
+    "message": [
+      "Multiple pipeline spec files found in the directory `<dir_path>`. Please remove one or choose a particular one with the --spec argument."
     ]
   },
   "NEGATIVE_VALUE": {
@@ -837,6 +857,41 @@
   "PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS": {
     "message": [
       "The Pandas SCALAR_ITER UDF outputs more rows than input rows."
+    ]
+  },
+  "PIPELINE_SPEC_DICT_KEY_NOT_STRING": {
+    "message": [
+      "For pipeline spec field `<field_name>`, key should be a string, got <key_type>."
+    ]
+  },
+  "PIPELINE_SPEC_DICT_VALUE_NOT_STRING": {
+    "message": [
+      "For pipeline spec field `<field_name>`, value for key `<key_name>` should be a string, got <value_type>."
+    ]
+  },
+  "PIPELINE_SPEC_FIELD_NOT_DICT": {
+    "message": [
+      "Pipeline spec field `<field_name>` should be a dict, got <field_type>."
+    ]
+  },
+  "PIPELINE_SPEC_FILE_DOES_NOT_EXIST": {
+    "message": [
+      "The pipeline spec file `<spec_path>` does not exist."
+    ]
+  },
+  "PIPELINE_SPEC_FILE_NOT_FOUND": {
+    "message": [
+      "No pipeline.yaml or pipeline.yml file provided in arguments or found in directory `<dir_path>` or readable ancestor directories."
+    ]
+  },
+  "PIPELINE_SPEC_UNEXPECTED_FIELD": {
+    "message": [
+      "Pipeline spec field `<field_name>` is unexpected."
+    ]
+  },
+  "PIPELINE_UNSUPPORTED_DEFINITIONS_FILE_EXTENSION": {
+    "message": [
+      "Pipeline definitions file `<file_path>` has an unsupported extension. Supported extensions are `.py` and `.sql`."
     ]
   },
   "PIPE_FUNCTION_EXITED": {
@@ -1143,6 +1198,11 @@
   "UNSUPPORTED_PIE_PLOT_PARAM": {
     "message": [
       "Pie plot requires either a `y` column or `subplots=True`."
+    ]
+  },
+  "UNSUPPORTED_PIPELINES_DATASET_TYPE": {
+    "message": [
+      "Unsupported pipelines dataset type: <dataset_type>."
     ]
   },
   "UNSUPPORTED_PLOT_BACKEND": {

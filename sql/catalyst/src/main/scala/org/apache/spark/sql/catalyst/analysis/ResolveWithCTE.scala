@@ -79,6 +79,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                     cteDef.id,
                     anchor,
                     rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, None),
+                    anchor.output.map(_.newInstance().exprId),
                     maxDepth = cteDef.maxDepth)
                   cteDef.copy(child = alias.copy(child = loop))
                 }
@@ -99,6 +100,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                     cteDef.id,
                     anchor,
                     rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, None),
+                    anchor.output.map(_.newInstance().exprId),
                     maxDepth = cteDef.maxDepth)
                   cteDef.copy(child = alias.copy(child = withCTE.copy(
                     plan = loop, cteDefs = newInnerCteDefs)))
@@ -118,6 +120,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                     cteDef.id,
                     anchor,
                     rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, Some(colNames)),
+                    anchor.output.map(_.newInstance().exprId),
                     maxDepth = cteDef.maxDepth)
                   cteDef.copy(child = alias.copy(child = columnAlias.copy(child = loop)))
                 }
@@ -142,6 +145,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                     cteDef.id,
                     anchor,
                     rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, Some(colNames)),
+                    anchor.output.map(_.newInstance().exprId),
                     maxDepth = cteDef.maxDepth)
                   cteDef.copy(child = alias.copy(child = columnAlias.copy(
                     child = withCTE.copy(plan = loop, cteDefs = newInnerCteDefs))))
@@ -166,6 +170,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                       UnionLoopRef(cteDef.id, anchor.output, true),
                       isAll = false
                     ),
+                    anchor.output.map(_.newInstance().exprId),
                     maxDepth = cteDef.maxDepth
                   )
                   cteDef.copy(child = alias.copy(child = loop))
@@ -194,6 +199,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                       UnionLoopRef(cteDef.id, anchor.output, true),
                       isAll = false
                     ),
+                    anchor.output.map(_.newInstance().exprId),
                     maxDepth = cteDef.maxDepth
                   )
                   cteDef.copy(child = alias.copy(child = withCTE.copy(
@@ -220,6 +226,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                       UnionLoopRef(cteDef.id, anchor.output, true),
                       isAll = false
                     ),
+                    anchor.output.map(_.newInstance().exprId),
                     maxDepth = cteDef.maxDepth
                   )
                   cteDef.copy(child = alias.copy(child = columnAlias.copy(child = loop)))
@@ -251,6 +258,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                       UnionLoopRef(cteDef.id, anchor.output, true),
                       isAll = false
                     ),
+                    anchor.output.map(_.newInstance().exprId),
                     maxDepth = cteDef.maxDepth
                   )
                   cteDef.copy(child = alias.copy(child = columnAlias.copy(
@@ -298,7 +306,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       columnNames: Option[Seq[String]]) = {
     recursion.transformUpWithSubqueriesAndPruning(_.containsPattern(CTE)) {
       case r: CTERelationRef if r.recursive && r.cteId == cteDefId =>
-        val ref = UnionLoopRef(r.cteId, anchor.output, false)
+        val ref = UnionLoopRef(r.cteId, anchor.output.map(_.newInstance()), false)
         columnNames.map(UnresolvedSubqueryColumnAliases(_, ref)).getOrElse(ref)
     }
   }
