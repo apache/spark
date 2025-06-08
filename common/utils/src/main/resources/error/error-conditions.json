@@ -1760,6 +1760,12 @@
     ],
     "sqlState" : "39000"
   },
+  "FOREACH_WRITER_ABORTED" : {
+    "message" : [
+      "Foreach writer has been aborted due to a task failure."
+    ],
+    "sqlState" : "39000"
+  },
   "FOUND_MULTIPLE_DATA_SOURCES" : {
     "message" : [
       "Detected multiple data sources with the name '<provider>'. Please check the data source isn't simultaneously registered and located in the classpath."
@@ -8530,11 +8536,6 @@
   "_LEGACY_ERROR_TEMP_2255" : {
     "message" : [
       "Epoch marker generation failed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2256" : {
-    "message" : [
-      "Foreach writer has been aborted due to a task failure."
     ]
   },
   "_LEGACY_ERROR_TEMP_2260" : {

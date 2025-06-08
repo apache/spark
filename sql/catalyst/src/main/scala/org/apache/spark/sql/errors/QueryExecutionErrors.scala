@@ -2154,7 +2154,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def foreachWriterAbortedDueToTaskFailureError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2256",
+      errorClass = "FOREACH_WRITER_ABORTED",
       messageParameters = Map.empty,
       cause = null)
   }
