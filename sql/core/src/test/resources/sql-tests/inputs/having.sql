@@ -49,3 +49,16 @@ SELECT sum(v) FROM hav GROUP BY v HAVING sum(ifnull(v, 1)) = 1;
 SELECT v + 1 FROM hav GROUP BY ALL HAVING avg(try_add(v, 1)) = 1;
 SELECT v + 1 FROM hav GROUP BY ALL HAVING avg(try_add(v, 1) + 1) = 1;
 SELECT sum(v) FROM hav GROUP BY ifnull(v, 1) + 1 order by ifnull(v, 1) + 1;
+
+-- HAVING condition should prefer table columns over aliases
+SELECT 1 AS `2`, 2 FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2;
+SELECT 2, 1 AS `2` FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2;
+SELECT 1 AS `2` FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2;
+SELECT 2 FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2;
+
+-- HAVING condition is resolved as a semantically equivalent to one in the SELECT list
+SELECT SUM(v) + 1 FROM hav HAVING SUM(v) + 1;
+SELECT 1 + SUM(v) FROM hav HAVING SUM(v) + 1;
+SELECT SUM(v) + 1 FROM hav HAVING 1 + SUM(v);
+SELECT MAX(v) + SUM(v) FROM hav HAVING SUM(v) + MAX(v);
+SELECT SUM(v) + 1 + MIN(v) FROM hav HAVING 1 + 1 + 1 + MIN(v) + 1 + SUM(v);

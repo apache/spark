@@ -320,3 +320,109 @@ Project [sum(v)#xL]
                +- Project [k#x, v#x]
                   +- SubqueryAlias hav
                      +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT 1 AS `2`, 2 FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2
+-- !query analysis
+Project [2#x, 2#x]
++- Filter (2#x > 2#x)
+   +- Aggregate [2#x], [1 AS 2#x, 2 AS 2#x, 2#x]
+      +- SubqueryAlias t
+         +- LocalRelation [2#x]
+
+
+-- !query
+SELECT 2, 1 AS `2` FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2
+-- !query analysis
+Project [2#x, 2#x]
++- Filter (2#x > 2#x)
+   +- Aggregate [2#x], [2 AS 2#x, 1 AS 2#x, 2#x]
+      +- SubqueryAlias t
+         +- LocalRelation [2#x]
+
+
+-- !query
+SELECT 1 AS `2` FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2
+-- !query analysis
+Project [2#x]
++- Filter (2#x > 2)
+   +- Aggregate [2#x], [1 AS 2#x, 2#x]
+      +- SubqueryAlias t
+         +- LocalRelation [2#x]
+
+
+-- !query
+SELECT 2 FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2
+-- !query analysis
+Project [2#x]
++- Filter (2#x > 2#x)
+   +- Aggregate [2#x], [2 AS 2#x, 2#x]
+      +- SubqueryAlias t
+         +- LocalRelation [2#x]
+
+
+-- !query
+SELECT SUM(v) + 1 FROM hav HAVING SUM(v) + 1
+-- !query analysis
+Filter cast((sum(v) + 1)#xL as boolean)
++- Aggregate [(sum(v#x) + cast(1 as bigint)) AS (sum(v) + 1)#xL]
+   +- SubqueryAlias hav
+      +- View (`hav`, [k#x, v#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias hav
+                  +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT 1 + SUM(v) FROM hav HAVING SUM(v) + 1
+-- !query analysis
+Filter cast((1 + sum(v))#xL as boolean)
++- Aggregate [(cast(1 as bigint) + sum(v#x)) AS (1 + sum(v))#xL]
+   +- SubqueryAlias hav
+      +- View (`hav`, [k#x, v#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias hav
+                  +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT SUM(v) + 1 FROM hav HAVING 1 + SUM(v)
+-- !query analysis
+Filter cast((sum(v) + 1)#xL as boolean)
++- Aggregate [(sum(v#x) + cast(1 as bigint)) AS (sum(v) + 1)#xL]
+   +- SubqueryAlias hav
+      +- View (`hav`, [k#x, v#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias hav
+                  +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT MAX(v) + SUM(v) FROM hav HAVING SUM(v) + MAX(v)
+-- !query analysis
+Filter cast((max(v) + sum(v))#xL as boolean)
++- Aggregate [(cast(max(v#x) as bigint) + sum(v#x)) AS (max(v) + sum(v))#xL]
+   +- SubqueryAlias hav
+      +- View (`hav`, [k#x, v#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias hav
+                  +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT SUM(v) + 1 + MIN(v) FROM hav HAVING 1 + 1 + 1 + MIN(v) + 1 + SUM(v)
+-- !query analysis
+Project [((sum(v) + 1) + min(v))#xL]
++- Filter cast((cast(((((1 + 1) + 1) + min(v)#x) + 1) as bigint) + sum(v)#xL) as boolean)
+   +- Aggregate [((sum(v#x) + cast(1 as bigint)) + cast(min(v#x) as bigint)) AS ((sum(v) + 1) + min(v))#xL, min(v#x) AS min(v)#x, sum(v#x) AS sum(v)#xL]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x, v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]

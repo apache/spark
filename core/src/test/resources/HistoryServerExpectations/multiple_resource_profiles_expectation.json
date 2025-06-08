@@ -1,113 +1,113 @@
 {
+  "classpathEntries" : [ ],
+  "hadoopProperties" : [ ],
+  "metricsProperties" : [ ],
+  "resourceProfiles" : [ {
+    "executorResources" : {
+      "cores" : {
+        "amount" : 1,
+        "discoveryScript" : "",
+        "resourceName" : "cores",
+        "vendor" : ""
+      },
+      "gpu" : {
+        "amount" : 1,
+        "discoveryScript" : "/home/tgraves/getGpus",
+        "resourceName" : "gpu",
+        "vendor" : ""
+      },
+      "memory" : {
+        "amount" : 1024,
+        "discoveryScript" : "",
+        "resourceName" : "memory",
+        "vendor" : ""
+      }
+    },
+    "id" : 0,
+    "taskResources" : {
+      "cpus" : {
+        "amount" : 1.0,
+        "resourceName" : "cpus"
+      },
+      "gpu" : {
+        "amount" : 1.0,
+        "resourceName" : "gpu"
+      }
+    }
+  }, {
+    "executorResources" : {
+      "cores" : {
+        "amount" : 4,
+        "discoveryScript" : "",
+        "resourceName" : "cores",
+        "vendor" : ""
+      },
+      "gpu" : {
+        "amount" : 1,
+        "discoveryScript" : "./getGpus",
+        "resourceName" : "gpu",
+        "vendor" : ""
+      }
+    },
+    "id" : 1,
+    "taskResources" : {
+      "cpus" : {
+        "amount" : 1.0,
+        "resourceName" : "cpus"
+      },
+      "gpu" : {
+        "amount" : 1.0,
+        "resourceName" : "gpu"
+      }
+    }
+  }, {
+    "executorResources" : {
+      "cores" : {
+        "amount" : 2,
+        "discoveryScript" : "",
+        "resourceName" : "cores",
+        "vendor" : ""
+      }
+    },
+    "id" : 2,
+    "taskResources" : {
+      "cpus" : {
+        "amount" : 2.0,
+        "resourceName" : "cpus"
+      }
+    }
+  }, {
+    "executorResources" : {
+      "cores" : {
+        "amount" : 4,
+        "discoveryScript" : "",
+        "resourceName" : "cores",
+        "vendor" : ""
+      },
+      "gpu" : {
+        "amount" : 1,
+        "discoveryScript" : "./getGpus",
+        "resourceName" : "gpu",
+        "vendor" : ""
+      }
+    },
+    "id" : 3,
+    "taskResources" : {
+      "cpus" : {
+        "amount" : 2.0,
+        "resourceName" : "cpus"
+      },
+      "gpu" : {
+        "amount" : 1.0,
+        "resourceName" : "gpu"
+      }
+    }
+  } ],
   "runtime" : {
-    "javaVersion" : "1.8.0_232 (Private Build)",
     "javaHome" : "/usr/lib/jvm/java-8-openjdk-amd64/jre",
+    "javaVersion" : "1.8.0_232 (Private Build)",
     "scalaVersion" : "version 2.12.10"
   },
   "sparkProperties" : [ ],
-  "hadoopProperties" : [ ],
-  "systemProperties" : [ ],
-  "metricsProperties" : [ ],
-  "classpathEntries" : [ ],
-  "resourceProfiles" : [ {
-    "id" : 0,
-    "executorResources" : {
-      "memory" : {
-        "resourceName" : "memory",
-        "amount" : 1024,
-        "discoveryScript" : "",
-        "vendor" : ""
-      },
-      "gpu" : {
-        "resourceName" : "gpu",
-        "amount" : 1,
-        "discoveryScript" : "/home/tgraves/getGpus",
-        "vendor" : ""
-      },
-      "cores" : {
-        "resourceName" : "cores",
-        "amount" : 1,
-        "discoveryScript" : "",
-        "vendor" : ""
-      }
-    },
-    "taskResources" : {
-      "cpus" : {
-        "resourceName" : "cpus",
-        "amount" : 1.0
-      },
-      "gpu" : {
-        "resourceName" : "gpu",
-        "amount" : 1.0
-      }
-    }
-  }, {
-    "id" : 1,
-    "executorResources" : {
-      "cores" : {
-        "resourceName" : "cores",
-        "amount" : 4,
-        "discoveryScript" : "",
-        "vendor" : ""
-      },
-      "gpu" : {
-        "resourceName" : "gpu",
-        "amount" : 1,
-        "discoveryScript" : "./getGpus",
-        "vendor" : ""
-      }
-    },
-    "taskResources" : {
-      "cpus" : {
-        "resourceName" : "cpus",
-        "amount" : 1.0
-      },
-      "gpu" : {
-        "resourceName" : "gpu",
-        "amount" : 1.0
-      }
-    }
-  }, {
-    "id" : 2,
-    "executorResources" : {
-      "cores" : {
-        "resourceName" : "cores",
-        "amount" : 2,
-        "discoveryScript" : "",
-        "vendor" : ""
-      }
-    },
-    "taskResources" : {
-      "cpus" : {
-        "resourceName" : "cpus",
-        "amount" : 2.0
-      }
-    }
-  }, {
-    "id" : 3,
-    "executorResources" : {
-      "cores" : {
-        "resourceName" : "cores",
-        "amount" : 4,
-        "discoveryScript" : "",
-        "vendor" : ""
-      },
-      "gpu" : {
-        "resourceName" : "gpu",
-        "amount" : 1,
-        "discoveryScript" : "./getGpus",
-        "vendor" : ""
-      }
-    },
-    "taskResources" : {
-      "cpus" : {
-        "resourceName" : "cpus",
-        "amount" : 2.0
-      },
-      "gpu" : {
-        "resourceName" : "gpu",
-        "amount" : 1.0
-      }
-    }
-  } ]
+  "systemProperties" : [ ]
 }
