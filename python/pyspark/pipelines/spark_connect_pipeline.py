@@ -19,6 +19,7 @@ from typing import Any, Dict, Mapping, Iterator, Optional, cast
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql import SparkSession
 from pyspark.errors.exceptions.base import PySparkValueError
+from pyspark.sql.pipelines.logging_utils import log_with_provided_timestamp
 
 
 def create_dataflow_graph(
@@ -58,8 +59,9 @@ def handle_pipeline_events(iter: Iterator[Dict[str, Any]]) -> None:
                 "Pipeline logs stream handler received an unexpected result: " f"{result}"
             )
         else:
-            for e in result["pipeline_event_result"].events:
-                print(f"{e.timestamp}: {e.message}")
+            event = result["pipeline_event_result"].event
+            dt = event.timestamp.ToDatetime().replace(tzinfo=timezone.utc)
+            log_with_provided_timestamp(event.message, dt)
 
 
 def start_run(spark: SparkSession, dataflow_graph_id: str) -> Iterator[Dict[str, Any]]:
