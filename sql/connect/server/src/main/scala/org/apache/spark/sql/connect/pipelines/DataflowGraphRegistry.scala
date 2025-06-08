@@ -40,8 +40,7 @@ object DataflowGraphRegistry {
     // TODO: propagate pipeline catalog and schema from pipeline spec here.
     dataflowGraphs.put(
       graphId,
-      new GraphRegistrationContext(defaultCatalog, defaultDatabase, defaultSqlConf)
-    )
+      new GraphRegistrationContext(defaultCatalog, defaultDatabase, defaultSqlConf))
     graphId
   }
 
@@ -54,8 +53,7 @@ object DataflowGraphRegistry {
   def getDataflowGraphOrThrow(dataflowGraphId: String): GraphRegistrationContext =
     DataflowGraphRegistry.getDataflowGraph(dataflowGraphId).getOrElse {
       throw new IllegalArgumentException(
-        s"Pipeline context with ID $dataflowGraphId does not exist."
-      )
+        s"Pipeline context with ID $dataflowGraphId does not exist.")
     }
 
   /** Removes the graph with a given id from the registry. */
@@ -68,7 +66,7 @@ object DataflowGraphRegistry {
     dataflowGraphs.values().asScala.toSeq
   }
 
-  /** Removes all graphs from the registry.  */
+  /** Removes all graphs from the registry. */
   def dropAllDataflowGraphs(): Unit = {
     dataflowGraphs.clear()
   }

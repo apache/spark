@@ -436,8 +436,10 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
   /**
    * Caches the pipeline execution context for a given graph ID.
-   * @param graphId The id of the graph being executed.
-   * @param pipelineUpdateContext The context for the pipeline execution.
+   * @param graphId
+   *   The id of the graph being executed.
+   * @param pipelineUpdateContext
+   *   The context for the pipeline execution.
    */
   private[connect] def cachePipelineExecution(
       graphId: String,
@@ -448,24 +450,24 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
         if (Option(existing).isDefined) {
           throw new IllegalStateException(
             s"Pipeline execution for graph ID $graphId already exists. " +
-            s"Stop the existing execution before starting a new one."
-          )
+              s"Stop the existing execution before starting a new one.")
         }
 
         pipelineUpdateContext
-      }
-    )
+      })
   }
 
   /** Stops the pipeline execution and removes it from the cache. */
   private def removeCachedPipelineExecution(graphId: String): Unit = {
-    pipelineExecutions.compute(graphId, (_, context) => {
-      if (context.pipelineExecution.executionStarted) {
-        context.pipelineExecution.stopPipeline()
-      }
-      // Remove the execution.
-      null
-    })
+    pipelineExecutions.compute(
+      graphId,
+      (_, context) => {
+        if (context.pipelineExecution.executionStarted) {
+          context.pipelineExecution.stopPipeline()
+        }
+        // Remove the execution.
+        null
+      })
   }
 
   /** Stops all pipeline executions and clears the pipeline execution cache. */

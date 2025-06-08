@@ -430,13 +430,14 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     val graphId = "test_graph"
     val pipelineUpdateContext = new PipelineUpdateContextImpl(
       new DataflowGraph(Seq(), Seq(), Seq()),
-      (_: PipelineEvent) => None
-    )
+      (_: PipelineEvent) => None)
     sessionHolder.cachePipelineExecution(graphId, pipelineUpdateContext)
     assert(
-      sessionHolder.getPipelineExecution(graphId).nonEmpty, "pipeline execution was not cached")
+      sessionHolder.getPipelineExecution(graphId).nonEmpty,
+      "pipeline execution was not cached")
     sessionHolder.removeAllPipelineExecutions()
     assert(
-      sessionHolder.getPipelineExecution(graphId).isEmpty, "pipeline execution was not removed")
+      sessionHolder.getPipelineExecution(graphId).isEmpty,
+      "pipeline execution was not removed")
   }
 }

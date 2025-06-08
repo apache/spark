@@ -29,10 +29,7 @@ import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.pipelines.graph.DataflowGraph
-import org.apache.spark.sql.pipelines.utils.{
-  EventVerificationTestHelpers,
-  TestPipelineUpdateContextMixin
-}
+import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
 
 /**
  * Test suite that starts a Spark Connect server and executes Spark Declarative Pipelines Python
@@ -79,8 +76,7 @@ class PythonPipelineSuite
 
     if (exitCode != 0) {
       throw new RuntimeException(
-        s"Python process failed with exit code $exitCode. Output: ${output.mkString("\n")}"
-      )
+        s"Python process failed with exit code $exitCode. Output: ${output.mkString("\n")}")
     }
 
     val dataflowGraphContexts = DataflowGraphRegistry.getAllDataflowGraphs
@@ -107,8 +103,7 @@ class PythonPipelineSuite
 
   test("basic with inverted topological order") {
     // This graph is purposefully in the wrong topological order to test the topological sort
-    val graph = buildGraph(
-      """
+    val graph = buildGraph("""
         |@sdp.table()
         |def b():
         |  return spark.readStream.table("a")
@@ -124,8 +119,7 @@ class PythonPipelineSuite
         |@sdp.table()
         |def a():
         |  return spark.range(5)
-        |""".stripMargin
-    )
+        |""".stripMargin)
     val resolvedGraph = graph.resolve().validate()
     assert(resolvedGraph.tables.size == 4)
     assert(resolvedGraph.resolvedFlows.size == 4)
@@ -147,15 +141,11 @@ class PythonPipelineSuite
     assert(
       graph.flowsTo(graphIdentifier("a")).map(_.identifier).toSet == Set(
         graphIdentifier("a"),
-        graphIdentifier("supplement")
-      )
-    )
+        graphIdentifier("supplement")))
   }
 
-
   test("referencing internal datasets") {
-    val graph = buildGraph(
-      """
+    val graph = buildGraph("""
       |@sdp.materialized_view
       |def src():
       |  return spark.range(5)
@@ -167,41 +157,26 @@ class PythonPipelineSuite
       |@sdp.table
       |def b():
       |  return spark.readStream.table("src")
-      |""".stripMargin
-    ).resolve().validate()
+      |""".stripMargin).resolve().validate()
 
     assert(
       graph.table.keySet == Set(
         graphIdentifier("src"),
         graphIdentifier("a"),
-        graphIdentifier("b")
-      )
-    )
+        graphIdentifier("b")))
     Seq("a", "b").foreach { flowName =>
       // dependency is properly tracked
-      assert(
-        graph.resolvedFlow(graphIdentifier(flowName)).inputs == Set(graphIdentifier("src"))
-      )
+      assert(graph.resolvedFlow(graphIdentifier(flowName)).inputs == Set(graphIdentifier("src")))
     }
 
     val (streamingFlows, batchFlows) = graph.resolvedFlows.partition(_.df.isStreaming)
-    assert(
-      batchFlows.map(_.identifier) == Seq(
-        graphIdentifier("src"),
-        graphIdentifier("a")
-      )
-    )
-    assert(
-      streamingFlows.map(_.identifier) == Seq(
-        graphIdentifier("b")
-      )
-    )
+    assert(batchFlows.map(_.identifier) == Seq(graphIdentifier("src"), graphIdentifier("a")))
+    assert(streamingFlows.map(_.identifier) == Seq(graphIdentifier("b")))
   }
 
   test("referencing external datasets") {
     sql("CREATE TABLE spark_catalog.default.src AS SELECT * FROM RANGE(5)")
-    val graph = buildGraph(
-      """
+    val graph = buildGraph("""
         |@sdp.table
         |def a():
         |  return spark.read.table("spark_catalog.default.src")
@@ -213,33 +188,22 @@ class PythonPipelineSuite
         |@sdp.table
         |def c():
         |  return spark.readStream.table("spark_catalog.default.src")
-        |""".stripMargin
-    ).resolve().validate()
+        |""".stripMargin).resolve().validate()
 
     assert(
       graph.tables.map(_.identifier).toSet == Set(
         graphIdentifier("a"),
         graphIdentifier("b"),
-        graphIdentifier("c")
-      )
-    )
+        graphIdentifier("c")))
     // dependency is not tracked
     assert(graph.resolvedFlows.forall(_.inputs.isEmpty))
     val (streamingFlows, batchFlows) = graph.resolvedFlows.partition(_.df.isStreaming)
-    assert(
-      batchFlows.map(_.identifier).toSet == Set(
-        graphIdentifier("a"),
-        graphIdentifier("b")
-      )
-    )
-    assert(
-      streamingFlows.map(_.identifier) == Seq(graphIdentifier("c"))
-    )
+    assert(batchFlows.map(_.identifier).toSet == Set(graphIdentifier("a"), graphIdentifier("b")))
+    assert(streamingFlows.map(_.identifier) == Seq(graphIdentifier("c")))
   }
 
   test("referencing internal datasets failed") {
-    val graph = buildGraph(
-      """
+    val graph = buildGraph("""
         |@sdp.table
         |def a():
         |  return spark.read.table("src")
@@ -251,8 +215,7 @@ class PythonPipelineSuite
         |@sdp.table
         |def c():
         |  return spark.readStream.table("src")
-        |""".stripMargin
-    ).resolve()
+        |""".stripMargin).resolve()
 
     assert(graph.resolutionFailedFlows.size == 3)
     graph.resolutionFailedFlows.foreach { flow =>
@@ -262,8 +225,7 @@ class PythonPipelineSuite
   }
 
   test("referencing external datasets failed") {
-    val graph = buildGraph(
-      """
+    val graph = buildGraph("""
         |@sdp.table
         |def a():
         |  return spark.read.table("spark_catalog.default.src")
@@ -275,19 +237,15 @@ class PythonPipelineSuite
         |@sdp.table
         |def c():
         |  return spark.readStream.table("spark_catalog.default.src")
-        |""".stripMargin
-    ).resolve()
+        |""".stripMargin).resolve()
     graph.resolutionFailedFlows.foreach { flow =>
-      assert(
-        flow.failure.head.getMessage.contains("[TABLE_OR_VIEW_NOT_FOUND] The table or view")
-      )
+      assert(flow.failure.head.getMessage.contains("[TABLE_OR_VIEW_NOT_FOUND] The table or view"))
     }
   }
 
   test("create dataset with the same name will fail") {
     val ex = intercept[AnalysisException] {
-      buildGraph(
-        s"""
+      buildGraph(s"""
            |@sdp.materialized_view
            |def a():
            |  return spark.range(1)
@@ -295,15 +253,13 @@ class PythonPipelineSuite
            |@sdp.materialized_view(name = "a")
            |def b():
            |  return spark.range(1)
-           |""".stripMargin
-      )
+           |""".stripMargin)
     }
     assert(ex.getCondition == "PIPELINE_DUPLICATE_IDENTIFIERS.DATASET")
   }
 
   test("create datasets with fully/partially qualified names") {
-    val graph = buildGraph(
-      s"""
+    val graph = buildGraph(s"""
          |@sdp.table
          |def mv_1():
          |  return spark.range(5)
@@ -319,8 +275,7 @@ class PythonPipelineSuite
          |@sdp.table(name = "schema_b.st_2")
          |def irrelevant_3():
          |  return spark.readStream.format("rate").load()
-         |""".stripMargin
-    ).resolve()
+         |""".stripMargin).resolve()
 
     // validate these dataset are properly fully qualified
     assert(
@@ -328,55 +283,42 @@ class PythonPipelineSuite
         TableIdentifier(
           catalog = Option("spark_catalog"),
           database = Option("default"),
-          table = "mv_1"
-        ),
+          table = "mv_1"),
         TableIdentifier(
           catalog = Option("spark_catalog"),
           database = Option("schema_a"),
-          table = "mv_2"
-        ),
+          table = "mv_2"),
         TableIdentifier(
           catalog = Option("spark_catalog"),
           database = Option("default"),
-          table = "st_1"
-        ),
+          table = "st_1"),
         TableIdentifier(
           catalog = Option("spark_catalog"),
           database = Option("schema_b"),
-          table = "st_2"
-        )
-      )
-    )
+          table = "st_2")))
     assert(
       graph.flows.map(_.identifier).toSet == Set(
         TableIdentifier(
           catalog = Option("spark_catalog"),
           database = Option("default"),
-          table = "mv_1"
-        ),
+          table = "mv_1"),
         TableIdentifier(
           catalog = Option("spark_catalog"),
           database = Option("schema_a"),
-          table = "mv_2"
-        ),
+          table = "mv_2"),
         TableIdentifier(
           catalog = Option("spark_catalog"),
           database = Option("default"),
-          table = "st_1"
-        ),
+          table = "st_1"),
         TableIdentifier(
           catalog = Option("spark_catalog"),
           database = Option("schema_b"),
-          table = "st_2"
-        )
-      )
-    )
+          table = "st_2")))
   }
 
   test("create datasets with three part names") {
     val graphTry = Try {
-      buildGraph(
-        s"""
+      buildGraph(s"""
            |@sdp.table(name = "some_catalog.some_schema.mv")
            |def irrelevant_1():
            |  return spark.range(5)
@@ -384,27 +326,21 @@ class PythonPipelineSuite
            |@sdp.table(name = "some_catalog.some_schema.st")
            |def irrelevant_2():
            |  return spark.readStream.format("rate").load()
-           |""".stripMargin
-      ).resolve()
+           |""".stripMargin).resolve()
     }
     assert(graphTry.isSuccess)
     assert(
       graphTry.get.tables.map(_.identifier).toSet == Set(
         TableIdentifier("mv", Some("some_schema"), Some("some_catalog")),
-        TableIdentifier("st", Some("some_schema"), Some("some_catalog"))
-      )
-    )
+        TableIdentifier("st", Some("some_schema"), Some("some_catalog"))))
     assert(
       graphTry.get.flows.map(_.identifier).toSet == Set(
         TableIdentifier("mv", Some("some_schema"), Some("some_catalog")),
-        TableIdentifier("st", Some("some_schema"), Some("some_catalog"))
-      )
-    )
+        TableIdentifier("st", Some("some_schema"), Some("some_catalog"))))
   }
 
   test("view works") {
-    val graph = buildGraph(
-      s"""
+    val graph = buildGraph(s"""
          |@sdp.temporary_view
          |def view_1():
          |  return spark.range(5)
@@ -416,20 +352,21 @@ class PythonPipelineSuite
          |@sdp.temporary_view(name= "view_3")
          |def irrelevant_2():
          |  return spark.read.table("view_1")
-         |""".stripMargin
-    ).resolve()
+         |""".stripMargin).resolve()
     // views are temporary views, so they're not fully qualified.
     assert(graph.tables.isEmpty)
-    assert(graph.flows.map(_.identifier.unquotedString).toSet == Set("view_1", "view_2", "view_3"))
+    assert(
+      graph.flows.map(_.identifier.unquotedString).toSet == Set("view_1", "view_2", "view_3"))
     // dependencies are correctly resolved view_2 reading from view_1
-    assert(graph.resolvedFlow(TableIdentifier("view_2")).inputs.contains(TableIdentifier("view_1")))
-    assert(graph.resolvedFlow(TableIdentifier("view_3")).inputs.contains(TableIdentifier("view_1")))
+    assert(
+      graph.resolvedFlow(TableIdentifier("view_2")).inputs.contains(TableIdentifier("view_1")))
+    assert(
+      graph.resolvedFlow(TableIdentifier("view_3")).inputs.contains(TableIdentifier("view_1")))
   }
 
   test("create named flow with multipart name will fail") {
     val ex = intercept[RuntimeException] {
-      buildGraph(
-        s"""
+      buildGraph(s"""
            |@sdp.table
            |def src():
            |  return spark.readStream.table("src0")
@@ -437,12 +374,9 @@ class PythonPipelineSuite
            |@sdp.append_flow(name ="some_schema.some_flow", target = "src")
            |def some_flow():
            |  return spark.readStream.format("rate").load()
-           |""".stripMargin
-      )
+           |""".stripMargin)
     }
-    assert(
-      ex.getMessage.contains("MULTIPART_FLOW_NAME_NOT_SUPPORTED")
-    )
+    assert(ex.getMessage.contains("MULTIPART_FLOW_NAME_NOT_SUPPORTED"))
   }
 
   test("create flow with multipart target and no explicit name succeeds") {
@@ -461,8 +395,7 @@ class PythonPipelineSuite
       graph
         .flowsTo(graphIdentifier("a"))
         .map(_.identifier)
-        .toSet == Set(graphIdentifier("a"), graphIdentifier("supplement"))
-    )
+        .toSet == Set(graphIdentifier("a"), graphIdentifier("supplement")))
   }
 
   test("create named flow with multipart target succeeds") {
@@ -480,15 +413,16 @@ class PythonPipelineSuite
     assert(
       graph
         .flowsTo(graphIdentifier("a"))
-        .map(_.identifier) == Seq(graphIdentifier("a"), graphIdentifier("something"))
-    )
+        .map(_.identifier) == Seq(graphIdentifier("a"), graphIdentifier("something")))
   }
 
   /**
    * Executes Python code in a separate process and returns the exit code.
    *
-   * @param pythonCode The Python code to execute
-   * @return The exit code of the Python process
+   * @param pythonCode
+   *   The Python code to execute
+   * @return
+   *   The exit code of the Python process
    */
   private def executePythonCode(pythonCode: String): (Int, Seq[String]) = {
     val pythonExec =
@@ -501,8 +435,7 @@ class PythonPipelineSuite
     val pythonPath = PythonUtils.mergePythonPaths(
       sourcePath.toString,
       py4jPath.toString,
-      sys.env.getOrElse("PYTHONPATH", "")
-    )
+      sys.env.getOrElse("PYTHONPATH", ""))
 
     val pb = new ProcessBuilder(pythonExec, "-c", pythonCode)
     pb.redirectErrorStream(true)
@@ -512,8 +445,7 @@ class PythonPipelineSuite
 
     // Read the output
     val reader = new BufferedReader(
-      new InputStreamReader(process.getInputStream, StandardCharsets.UTF_8)
-    )
+      new InputStreamReader(process.getInputStream, StandardCharsets.UTF_8))
     val output = new ArrayBuffer[String]()
     var line: String = null
     while ({ line = reader.readLine(); line != null }) {

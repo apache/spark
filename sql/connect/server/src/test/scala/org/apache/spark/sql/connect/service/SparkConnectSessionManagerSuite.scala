@@ -154,20 +154,20 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndA
     assert(closedSessionInfo.get.closedTimeMs.isDefined)
   }
 
-
   test("Pipeline execution cache is cleared when the session holder is closed") {
     val key = SessionKey("user", UUID.randomUUID().toString)
     val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
     val graphId = "test_graph"
     val pipelineUpdateContext = new PipelineUpdateContextImpl(
       new DataflowGraph(Seq(), Seq(), Seq()),
-      (_: PipelineEvent) => None
-    )
+      (_: PipelineEvent) => None)
     sessionHolder.cachePipelineExecution(graphId, pipelineUpdateContext)
     assert(
-      sessionHolder.getPipelineExecution(graphId).nonEmpty, "pipeline execution was not cached")
+      sessionHolder.getPipelineExecution(graphId).nonEmpty,
+      "pipeline execution was not cached")
     sessionHolder.close()
     assert(
-      sessionHolder.getPipelineExecution(graphId).isEmpty, "pipeline execution was not removed")
+      sessionHolder.getPipelineExecution(graphId).isEmpty,
+      "pipeline execution was not removed")
   }
 }

@@ -2725,8 +2725,7 @@ class SparkConnectPlanner(
       command,
       responseObserver,
       session,
-      transformRelation
-    )
+      transformRelation)
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(
       proto.ExecutePlanResponse
@@ -2734,10 +2733,8 @@ class SparkConnectPlanner(
         .setSessionId(sessionId)
         .setServerSideSessionId(sessionHolder.serverSessionId)
         .setPipelineCommandResult(res)
-        .build()
-    )
+        .build())
   }
-
 
   private def handleExecuteExternalCommand(
       command: proto.ExecuteExternalCommand,

@@ -41,8 +41,7 @@ class TestPipelineDefinition(graphId: String) {
       // TODO: Add support for specifiedSchema
       // specifiedSchema: Option[StructType] = None,
       partitionCols: Option[Seq[String]] = None,
-      properties: Map[String, String] = Map.empty
-  ): Unit = {
+      properties: Map[String, String] = Map.empty): Unit = {
     tableDefs += sc.PipelineCommand.DefineDataset
       .newBuilder()
       .setDataflowGraphId(graphId)
@@ -69,8 +68,7 @@ class TestPipelineDefinition(graphId: String) {
   protected def createTable(
       name: String,
       datasetType: sc.DatasetType,
-      sql: Option[String]
-  ): Unit = {
+      sql: Option[String]): Unit = {
     createTable(
       name,
       datasetType,
@@ -78,9 +76,7 @@ class TestPipelineDefinition(graphId: String) {
         sc.Relation
           .newBuilder()
           .setSql(sc.SQL.newBuilder().setQuery(s).build())
-          .build()
-      )
-    )
+          .build()))
   }
 
   protected def createView(
@@ -88,8 +84,7 @@ class TestPipelineDefinition(graphId: String) {
       query: sc.Relation,
       sparkConf: Map[String, String] = Map.empty,
       comment: Option[String] = None,
-      sqlText: Option[String] = None
-  ): Unit = {
+      sqlText: Option[String] = None): Unit = {
     tableDefs += sc.PipelineCommand.DefineDataset
       .newBuilder()
       .setDataflowGraphId(graphId)
@@ -116,8 +111,7 @@ class TestPipelineDefinition(graphId: String) {
       query = sc.Relation
         .newBuilder()
         .setSql(sc.SQL.newBuilder().setQuery(sql).build())
-        .build()
-    )
+        .build())
   }
 
   protected def createFlow(
@@ -125,8 +119,7 @@ class TestPipelineDefinition(graphId: String) {
       destinationName: String,
       query: sc.Relation,
       sparkConf: Map[String, String] = Map.empty,
-      once: Boolean = false
-  ): Unit = {
+      once: Boolean = false): Unit = {
     flowDefs += sc.PipelineCommand.DefineFlow
       .newBuilder()
       .setDataflowGraphId(graphId)

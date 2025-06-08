@@ -42,13 +42,19 @@ private[connect] object PipelinesHandler extends Logging {
 
   /**
    * Handles the pipeline command
-   * @param sessionHolder Context about the session state
-   * @param cmd Command to be handled
-   * @param responseObserver The response observer where the response will be sent
-   * @param sparkSession The spark session
-   * @param transformRelationFunc Function used to convert a relation to a LogicalPlan. This is
-   *                              used when determining the LogicalPlan that a flow returns.
-   * @return The response after handling the command
+   * @param sessionHolder
+   *   Context about the session state
+   * @param cmd
+   *   Command to be handled
+   * @param responseObserver
+   *   The response observer where the response will be sent
+   * @param sparkSession
+   *   The spark session
+   * @param transformRelationFunc
+   *   Function used to convert a relation to a LogicalPlan. This is used when determining the
+   *   LogicalPlan that a flow returns.
+   * @return
+   *   The response after handling the command
    */
   def handlePipelinesCommand(
       sessionHolder: SessionHolder,
@@ -67,8 +73,7 @@ private[connect] object PipelinesHandler extends Logging {
           .setCreateDataflowGraphResult(
             PipelineCommandResult.CreateDataflowGraphResult.newBuilder
               .setDataflowGraphId(createdGraphId)
-              .build()
-          )
+              .build())
           .build()
       case proto.PipelineCommand.CommandTypeCase.DROP_DATAFLOW_GRAPH =>
         logInfo(s"Drop pipeline cmd received: $cmd")
@@ -94,28 +99,19 @@ private[connect] object PipelinesHandler extends Logging {
     }
   }
 
-  private def createDataflowGraph(
-      cmd: proto.PipelineCommand.CreateDataflowGraph
-  ): String = {
+  private def createDataflowGraph(cmd: proto.PipelineCommand.CreateDataflowGraph): String = {
     val defaultCatalog = Option
-      .when(cmd.hasDefaultCatalog)(
-        cmd.getDefaultCatalog
-      )
+      .when(cmd.hasDefaultCatalog)(cmd.getDefaultCatalog)
       .getOrElse {
         logInfo(
-          s"No default catalog was supplied. Falling back to the session catalog `spark_catalog`)."
-        )
+          s"No default catalog was supplied. Falling back to the session catalog `spark_catalog`).")
         "spark_catalog"
       }
 
     val defaultDatabase = Option
-      .when(cmd.hasDefaultDatabase)(
-        cmd.getDefaultDatabase
-      )
+      .when(cmd.hasDefaultDatabase)(cmd.getDefaultDatabase)
       .getOrElse {
-        logInfo(
-          s"No default catalog was supplied. Falling back to `default`)."
-        )
+        logInfo(s"No default catalog was supplied. Falling back to `default`).")
         "default"
       }
 
@@ -124,8 +120,7 @@ private[connect] object PipelinesHandler extends Logging {
     DataflowGraphRegistry.createDataflowGraph(
       defaultCatalog = defaultCatalog,
       defaultDatabase = defaultDatabase,
-      defaultSqlConf = defaultSqlConf
-    )
+      defaultSqlConf = defaultSqlConf)
   }
 
   private def defineSqlGraphElements(
@@ -134,14 +129,8 @@ private[connect] object PipelinesHandler extends Logging {
     val dataflowGraphId = cmd.getDataflowGraphId
 
     val graphElementRegistry = DataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
-    val sqlGraphElementRegistrationContext = new SqlGraphRegistrationContext(
-      graphElementRegistry
-    )
-    sqlGraphElementRegistrationContext.processSqlFile(
-      cmd.getSqlText,
-      cmd.getSqlFilePath,
-      session
-    )
+    val sqlGraphElementRegistrationContext = new SqlGraphRegistrationContext(graphElementRegistry)
+    sqlGraphElementRegistrationContext.processSqlFile(cmd.getSqlText, cmd.getSqlFilePath, session)
   }
 
   private def defineDataset(
@@ -160,24 +149,18 @@ private[connect] object PipelinesHandler extends Logging {
             comment = Option(dataset.getComment),
             specifiedSchema = Option.when(dataset.hasSchema)(
               DataTypeProtoConverter
-                .toCatalystType(
-                  dataset.getSchema
-                )
-                .asInstanceOf[StructType]
-            ),
+                .toCatalystType(dataset.getSchema)
+                .asInstanceOf[StructType]),
             partitionCols = Option(dataset.getPartitionColsList.asScala.toSeq)
               .filter(_.nonEmpty),
             properties = dataset.getTablePropertiesMap.asScala.toMap,
             baseOrigin = QueryOrigin(
               objectType = Option(QueryOriginType.Table.toString),
               objectName = Option(tableIdentifier.unquotedString),
-              language = Option(Python())
-            ),
+              language = Option(Python())),
             format = Option.when(dataset.hasFormat)(dataset.getFormat),
             normalizedPath = None,
-            isStreamingTableOpt = None
-          )
-        )
+            isStreamingTableOpt = None))
       case proto.DatasetType.TEMPORARY_VIEW =>
         val viewIdentifier =
           GraphIdentifierManager.parseTableIdentifier(dataset.getDatasetName, sparkSession)
@@ -189,11 +172,8 @@ private[connect] object PipelinesHandler extends Logging {
             origin = QueryOrigin(
               objectType = Option(QueryOriginType.View.toString),
               objectName = Option(viewIdentifier.unquotedString),
-              language = Option(Python())
-            ),
-            properties = Map.empty
-          )
-        )
+              language = Option(Python())),
+            properties = Map.empty))
       case _ =>
         throw new IllegalArgumentException(s"Unknown dataset type: ${dataset.getDatasetType}")
     }
@@ -209,47 +189,33 @@ private[connect] object PipelinesHandler extends Logging {
     val isImplicitFlow = flow.getFlowName == flow.getTargetDatasetName
 
     val flowIdentifier = GraphIdentifierManager
-      .parseTableIdentifier(
-        name = flow.getFlowName,
-        spark = sparkSession
-      )
+      .parseTableIdentifier(name = flow.getFlowName, spark = sparkSession)
 
     // If the flow is not an implicit flow (i.e. one defined as part of dataset creation), then
     // it must be a single-part identifier.
-    if (!isImplicitFlow && !IdentifierHelper.isSinglePartIdentifier(
-        flowIdentifier
-      )) {
+    if (!isImplicitFlow && !IdentifierHelper.isSinglePartIdentifier(flowIdentifier)) {
       throw new AnalysisException(
         "MULTIPART_FLOW_NAME_NOT_SUPPORTED",
-        Map("flowName" -> flow.getFlowName)
-      )
+        Map("flowName" -> flow.getFlowName))
     }
 
     graphElementRegistry.registerFlow(
       new UnresolvedFlow(
         identifier = flowIdentifier,
         destinationIdentifier = GraphIdentifierManager
-          .parseTableIdentifier(
-            name = flow.getTargetDatasetName,
-            spark = sparkSession
-          ),
-        func = FlowAnalysis.createFlowFunctionFromLogicalPlan(
-          transformRelationFunc(flow.getPlan)
-        ),
+          .parseTableIdentifier(name = flow.getTargetDatasetName, spark = sparkSession),
+        func =
+          FlowAnalysis.createFlowFunctionFromLogicalPlan(transformRelationFunc(flow.getPlan)),
         sqlConf = flow.getSqlConfMap.asScala.toMap,
         once = flow.getOnce,
         queryContext = QueryContext(
           Option(graphElementRegistry.defaultCatalog),
-          Option(graphElementRegistry.defaultDatabase)
-        ),
+          Option(graphElementRegistry.defaultDatabase)),
         comment = None,
         origin = QueryOrigin(
           objectType = Option(QueryOriginType.Flow.toString),
           objectName = Option(flowIdentifier.unquotedString),
-          language = Option(Python())
-        )
-      )
-    )
+          language = Option(Python()))))
   }
 
   private def startRun(
@@ -270,7 +236,7 @@ private[connect] object PipelinesHandler extends Logging {
         // Returns the message associated with a Throwable and all its causes
         def getExceptionMessages(throwable: Throwable): Seq[String] = {
           throwable.getMessage +:
-          Option(throwable.getCause).map(getExceptionMessages).getOrElse(Nil)
+            Option(throwable.getCause).map(getExceptionMessages).getOrElse(Nil)
         }
         val errorMessages = getExceptionMessages(event.error.get)
         s"""${event.message}
@@ -297,24 +263,19 @@ private[connect] object PipelinesHandler extends Logging {
                   .setEvent(
                     proto.PipelineEvent
                       .newBuilder()
-                      .setTimestamp(
-                        ProtoTimestamp
-                          .newBuilder()
-                          .setSeconds(event.timestamp.getTime / 1000)
-                          .setNanos(event.timestamp.getNanos)
-                          .build()
-                      )
+                      .setTimestamp(ProtoTimestamp
+                        .newBuilder()
+                        .setSeconds(event.timestamp.getTime / 1000)
+                        .setNanos(event.timestamp.getNanos)
+                        .build())
                       .setMessage(message)
-                      .build()
-                  )
-                  .build()
-              )
-              .build()
-          )
+                      .build())
+                  .build())
+              .build())
       }
     }
-    val pipelineUpdateContext = new PipelineUpdateContextImpl(
-      graphElementRegistry.toDataflowGraph, eventCallback)
+    val pipelineUpdateContext =
+      new PipelineUpdateContextImpl(graphElementRegistry.toDataflowGraph, eventCallback)
     sessionHolder.cachePipelineExecution(dataflowGraphId, pipelineUpdateContext)
     pipelineUpdateContext.pipelineExecution.runPipeline()
 
