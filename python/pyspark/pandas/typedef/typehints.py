@@ -340,12 +340,14 @@ def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.Dat
     (dtype('O'), ArrayType(BooleanType(), True))
     """
     try:
-        dtype = pandas_dtype(tpe)
-        spark_type = as_spark_type(dtype)
-        # For certain numpy types, preserve the original type instead of pandas-converted dtype
-        # when pandas_dtype changes the type significantly (e.g., np.character -> dtype('O'))
-        if tpe in (np.character, np.bytes_) and dtype == np.dtype('O'):
+        # For certain numpy types, handle them before calling pandas_dtype
+        # as pandas_dtype may raise TypeError for these types
+        if tpe in (np.character, np.bytes_):
+            spark_type = as_spark_type(tpe)
             dtype = tpe
+        else:
+            dtype = pandas_dtype(tpe)
+            spark_type = as_spark_type(dtype)
     except TypeError:
         spark_type = as_spark_type(tpe)
         dtype = spark_type_to_pandas_dtype(spark_type)
