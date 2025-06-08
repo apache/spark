@@ -32,8 +32,7 @@ class SparkDeclarativePipelinesServerSuite
     }
   }
 
-  // TODO: renable when dependency on SQL registration is merged
-  ignore(
+  test(
     "Cross dependency between SQL dataset and non-SQL dataset is valid and can be registered") {
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph

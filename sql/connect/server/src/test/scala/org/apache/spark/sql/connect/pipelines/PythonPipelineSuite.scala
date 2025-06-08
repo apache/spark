@@ -28,22 +28,7 @@ import scala.util.Try
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.pipelines.Language.Python
-import org.apache.spark.sql.pipelines. QueryOriginType
-import org.apache.spark.sql.pipelines.common.FlowStatus.{
-  COMPLETED,
-  FAILED,
-  PLANNING,
-  QUEUED,
-  RUNNING,
-  STARTING
-}
-import org.apache.spark.sql.pipelines.graph.{
-  DataflowGraph,
-  QueryOrigin,
-  UnresolvedPipelineException
-}
-import org.apache.spark.sql.pipelines.logging.EventLevel
+import org.apache.spark.sql.pipelines.graph.DataflowGraph
 import org.apache.spark.sql.pipelines.utils.{
   EventVerificationTestHelpers,
   TestPipelineUpdateContextMixin
@@ -120,148 +105,6 @@ class PythonPipelineSuite
     assert(graph.tables.size == 1)
   }
 
-  // TODO renable when source code location is supported
-  ignore("failed flow progress event has correct python source code location") {
-    // Note that pythonText will be inserted into line 27 of the python script that is run.
-    val unresolvedGraph =
-      buildGraph(pythonText = """
-        |@sdp.table()
-        |def table1():
-        |    df = spark.createDataFrame([(25,), (30,), (45,)], ["age"])
-        |    return df.select("name")
-        |""".stripMargin)
-
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
-    val ex = intercept[UnresolvedPipelineException] {
-      updateContext.pipelineExecution.startPipeline()
-    }
-    val rootCauseExceptions = ex.downstreamFailures ++ ex.directFailures
-    assert(rootCauseExceptions.size == 1)
-
-    assertFlowProgressEvent(
-      updateContext.eventBuffer,
-      identifier = graphIdentifier("table1"),
-      expectedFlowStatus = FAILED,
-      expectedEventLevel = EventLevel.ERROR,
-      cond = flowProgressEvent =>
-        flowProgressEvent.origin.sourceCodeLocation == Option(
-          QueryOrigin(
-            language = Option(Python()),
-            filePath = Option("<string>"),
-            line = Option(28),
-            objectName = Option("spark_catalog.default.table1"),
-            objectType = Option(QueryOriginType.Flow.toString)
-          )
-        ),
-      errorChecker = ex =>
-        ex.getMessage.contains("UNRESOLVED_COLUMN")
-    )
-  }
-
-  // TODO: renable when source code location is supported
-  ignore("flow progress events have correct python source code location") {
-    val unresolvedGraph =
-      buildGraph(pythonText = """
-        |@sdp.table(
-        | comment = 'my table'
-        |)
-        |def table1():
-        |    return spark.readStream.table('mv')
-        |
-        |@sdp.materialized_view
-        |def mv2():
-        |   return spark.range(26, 29)
-        |
-        |@sdp.materialized_view
-        |def mv():
-        |   df = spark.createDataFrame([(25,), (30,), (45,)], ["age"])
-        |   return df.select("age")
-        |
-        |@sdp.append_flow(
-        | target = 'table1'
-        |)
-        |def standalone_flow1():
-        |   return spark.readStream.table('mv2')
-        |""".stripMargin)
-
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
-    updateContext.pipelineExecution.runPipeline()
-    updateContext.pipelineExecution.awaitCompletion()
-
-    Seq(QUEUED, STARTING, PLANNING, RUNNING, COMPLETED).foreach { flowStatus =>
-      assertFlowProgressEvent(
-        updateContext.eventBuffer,
-        identifier = graphIdentifier("mv2"),
-        expectedFlowStatus = flowStatus,
-        expectedEventLevel = EventLevel.INFO,
-        cond = flowProgressEvent =>
-          flowProgressEvent.origin.sourceCodeLocation == Option(
-            QueryOrigin(
-              language = Option(Python()),
-              filePath = Option("<string>"),
-              line = Option(35),
-              objectName = Option("spark_catalog.default.mv2"),
-              objectType = Option(QueryOriginType.Flow.toString)
-            )
-          )
-      )
-
-      assertFlowProgressEvent(
-        updateContext.eventBuffer,
-        identifier = graphIdentifier("mv"),
-        expectedFlowStatus = flowStatus,
-        expectedEventLevel = EventLevel.INFO,
-        cond = flowProgressEvent =>
-          flowProgressEvent.origin.sourceCodeLocation == Option(
-            QueryOrigin(
-              language = Option(Python()),
-              filePath = Option("<string>"),
-              line = Option(39),
-              objectName = Option("spark_catalog.default.mv"),
-              objectType = Option(QueryOriginType.Flow.toString)
-            )
-          )
-      )
-    }
-
-    // Note that streaming flows do not have a PLANNING phase.
-    Seq(QUEUED, STARTING, RUNNING, COMPLETED).foreach { flowStatus =>
-      assertFlowProgressEvent(
-        updateContext.eventBuffer,
-        identifier = graphIdentifier("table1"),
-        expectedFlowStatus = flowStatus,
-        expectedEventLevel = EventLevel.INFO,
-        cond = flowProgressEvent =>
-          flowProgressEvent.origin.sourceCodeLocation == Option(
-            QueryOrigin(
-              language = Option(Python()),
-              filePath = Option("<string>"),
-              line = Option(28),
-              objectName = Option("spark_catalog.default.table1"),
-              objectType = Option(QueryOriginType.Flow.toString)
-            )
-          )
-      )
-
-      assertFlowProgressEvent(
-        updateContext.eventBuffer,
-        identifier = graphIdentifier("standalone_flow1"),
-        expectedFlowStatus = flowStatus,
-        expectedEventLevel = EventLevel.INFO,
-        cond = flowProgressEvent =>
-          flowProgressEvent.origin.sourceCodeLocation == Option(
-            QueryOrigin(
-              language = Option(Python()),
-              filePath = Option("<string>"),
-              line = Option(43),
-              objectName = Option("spark_catalog.default.standalone_flow1"),
-              objectType = Option(QueryOriginType.Flow.toString)
-            )
-          )
-      )
-    }
-  }
-
   test("basic with inverted topological order") {
     // This graph is purposefully in the wrong topological order to test the topological sort
     val graph = buildGraph(
@@ -309,34 +152,6 @@ class PythonPipelineSuite
     )
   }
 
-  // TODO: link ticket
-  ignore("once flow") {
-    val graph = buildGraph("""
-        |@sdp.table()
-        |def a():
-        |  return spark.readStream.format("rate").load()
-        |
-        |@sdp.append_flow(target = "a", once = False)
-        |def extraStream():
-        |  return spark.readStream.format("rate").load()
-        |
-        |@sdp.append_flow(target = "a", once = True)
-        |def extraBatch():
-        |  return spark.range(5)
-        |""".stripMargin).resolve().validate()
-
-    assert(graph.tables.map(_.identifier.table).toSet == Set("a"))
-    assert(
-      graph.flowsTo(graphIdentifier("a")).map(_.identifier).toSet == Set(
-        graphIdentifier("a"),
-        graphIdentifier("extraStream"),
-        graphIdentifier("extraBatch")
-      )
-    )
-    assert(!graph.flow(graphIdentifier("a")).once)
-    assert(!graph.flow(graphIdentifier("extraStream")).once)
-    assert(graph.flow(graphIdentifier("extraBatch")).once)
-  }
 
   test("referencing internal datasets") {
     val graph = buildGraph(
@@ -609,20 +424,6 @@ class PythonPipelineSuite
     // dependencies are correctly resolved view_2 reading from view_1
     assert(graph.resolvedFlow(TableIdentifier("view_2")).inputs.contains(TableIdentifier("view_1")))
     assert(graph.resolvedFlow(TableIdentifier("view_3")).inputs.contains(TableIdentifier("view_1")))
-  }
-
-  // TODO link ticket
-  ignore("create view with multipart name will fail") {
-    val ex = intercept[AnalysisException] {
-      buildGraph(
-        s"""
-           |@sdp.temporary_view(name = "some_schema.some_view")
-           |def view_1():
-           |  return spark.range(5)
-           |""".stripMargin
-      )
-    }
-    assert(ex.getCondition == "MULTIPART_TEMPORARY_VIEW_NAME_NOT_SUPPORTED")
   }
 
   test("create named flow with multipart name will fail") {
