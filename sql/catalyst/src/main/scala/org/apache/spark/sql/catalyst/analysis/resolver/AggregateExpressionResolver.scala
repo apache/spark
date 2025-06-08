@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   CollationTypeCoercion,
   TypeCoercion
 }
-import org.apache.spark.sql.catalyst.expressions.{Expression, OuterReference, SubExprUtils}
+import org.apache.spark.sql.catalyst.expressions.{Expression, OuterReference, SortOrder, SubExprUtils}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, ListAgg}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -227,7 +227,7 @@ class AggregateExpressionResolver(
     throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
       listAgg.prettyName,
       listAgg.child,
-      listAgg.orderExpressions
+      listAgg.orderExpressions.asInstanceOf[Seq[SortOrder]]
     )
   }
 
