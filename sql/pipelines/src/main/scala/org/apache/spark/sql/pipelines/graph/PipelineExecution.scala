@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import scala.annotation.unused
-
+import org.apache.spark.sql.pipelines.common.RunState
 import org.apache.spark.sql.pipelines.logging.{
   ConstructPipelineEvent,
   EventLevel,
   PipelineEventOrigin,
   RunProgress
 }
-import org.apache.spark.sql.pipelines.common.RunState
 
 /**
  * Executes a [[DataflowGraph]] by resolving the graph, materializing datasets, and running the
@@ -141,5 +139,18 @@ class PipelineExecution(context: PipelineUpdateContext) {
         messageOpt = Option(s"Failed to resolve flow: '${flow.displayName}'.")
       )
     }
+  }
+
+  /**
+   * Stops the pipeline execution by stopping the graph execution thread.
+   */
+  def stopPipeline(): Unit = synchronized {
+    graphExecution
+      .getOrElse(
+        throw new IllegalStateException(
+          "Pipeline execution has not started yet."
+        )
+      )
+      .stop()
   }
 }

@@ -31,7 +31,6 @@ import org.apache.spark.sql.pipelines.graph.{
   TableFilter
 }
 import org.apache.spark.sql.pipelines.logging.{
-  ErrorDetail,
   EventLevel,
   FlowProgress,
   FlowProgressEventLogger,

@@ -33,7 +33,7 @@ import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.pipelines.Language.Python
 import org.apache.spark.sql.pipelines.QueryOriginType
 import org.apache.spark.sql.pipelines.common.RunState.{CANCELED, FAILED}
-import org.apache.spark.sql.pipelines.graph.{FlowAnalysis, GraphIdentifierManager, IdentifierHelper, PipelineUpdateContextImpl, QueryContext, QueryOrigin, Table, TemporaryView, UnresolvedFlow}
+import org.apache.spark.sql.pipelines.graph.{FlowAnalysis, GraphIdentifierManager, IdentifierHelper, PipelineUpdateContextImpl, QueryContext, QueryOrigin, SqlGraphRegistrationContext, Table, TemporaryView, UnresolvedFlow}
 import org.apache.spark.sql.pipelines.logging.{PipelineEvent, RunProgress}
 import org.apache.spark.sql.types.StructType
 
@@ -86,10 +86,10 @@ private[connect] object PipelinesHandler extends Logging {
         logInfo(s"Start pipeline cmd received: $cmd")
         startRun(cmd.getStartRun, responseObserver, sessionHolder)
         defaultResponse
-//      case proto.PipelineCommand.CommandTypeCase.DEFINE_SQL_GRAPH_ELEMENTS =>
-//        logInfo(s"Register sql datasets cmd received: $cmd")
-//        defineSqlGraphElements(cmd.getDefineSqlGraphElements, sparkSession)
-//        defaultResponse
+      case proto.PipelineCommand.CommandTypeCase.DEFINE_SQL_GRAPH_ELEMENTS =>
+        logInfo(s"Register sql datasets cmd received: $cmd")
+        defineSqlGraphElements(cmd.getDefineSqlGraphElements, sparkSession)
+        defaultResponse
       case other => throw new UnsupportedOperationException(s"$other not supported")
     }
   }
@@ -127,22 +127,22 @@ private[connect] object PipelinesHandler extends Logging {
       defaultSqlConf = defaultSqlConf
     )
   }
-//
-//  private def defineSqlGraphElements(
-//      cmd: proto.PipelineCommand.DefineSqlGraphElements,
-//      session: SparkSession): Unit = {
-//    val dataflowGraphId = cmd.getDataflowGraphId
-//
-//    val graphElementRegistry = DataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
-//    val sqlGraphElementRegistrationContext = new SqlGraphRegistrationContext(
-//      graphElementRegistry
-//    )
-//    sqlGraphElementRegistrationContext.processSqlFile(
-//      cmd.getSqlText,
-//      cmd.getSqlFilePath,
-//      session
-//    )
-//  }
+
+  private def defineSqlGraphElements(
+      cmd: proto.PipelineCommand.DefineSqlGraphElements,
+      session: SparkSession): Unit = {
+    val dataflowGraphId = cmd.getDataflowGraphId
+
+    val graphElementRegistry = DataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
+    val sqlGraphElementRegistrationContext = new SqlGraphRegistrationContext(
+      graphElementRegistry
+    )
+    sqlGraphElementRegistrationContext.processSqlFile(
+      cmd.getSqlText,
+      cmd.getSqlFilePath,
+      session
+    )
+  }
 
   private def defineDataset(
       dataset: proto.PipelineCommand.DefineDataset,
@@ -158,7 +158,6 @@ private[connect] object PipelinesHandler extends Logging {
           Table(
             identifier = tableIdentifier,
             comment = Option(dataset.getComment),
-            sqlText = None,
             specifiedSchema = Option.when(dataset.hasSchema)(
               DataTypeProtoConverter
                 .toCatalystType(
@@ -170,12 +169,6 @@ private[connect] object PipelinesHandler extends Logging {
               .filter(_.nonEmpty),
             properties = dataset.getTablePropertiesMap.asScala.toMap,
             baseOrigin = QueryOrigin(
-//              filePath = Option.when(dataset.getSourceCodeLocation.hasFileName)(
-//                dataset.getSourceCodeLocation.getFileName
-//              ),
-//              line = Option.when(dataset.getSourceCodeLocation.hasLineNumber)(
-//                dataset.getSourceCodeLocation.getLineNumber
-//              ),
               objectType = Option(QueryOriginType.Table.toString),
               objectName = Option(tableIdentifier.unquotedString),
               language = Option(Python())
@@ -193,14 +186,7 @@ private[connect] object PipelinesHandler extends Logging {
           TemporaryView(
             identifier = viewIdentifier,
             comment = Option(dataset.getComment),
-            sqlText = None,
             origin = QueryOrigin(
-//              filePath = Option.when(dataset.getSourceCodeLocation.hasFileName)(
-//                dataset.getSourceCodeLocation.getFileName
-//              ),
-//              line = Option.when(dataset.getSourceCodeLocation.hasLineNumber)(
-//                dataset.getSourceCodeLocation.getLineNumber
-//              ),
               objectType = Option(QueryOriginType.View.toString),
               objectName = Option(viewIdentifier.unquotedString),
               language = Option(Python())
@@ -258,11 +244,6 @@ private[connect] object PipelinesHandler extends Logging {
         ),
         comment = None,
         origin = QueryOrigin(
-//          filePath = Option
-//            .when(flow.getSourceCodeLocation.hasFileName)(flow.getSourceCodeLocation.getFileName),
-//          line = Option.when(flow.getSourceCodeLocation.hasLineNumber)(
-//            flow.getSourceCodeLocation.getLineNumber
-//          ),
           objectType = Option(QueryOriginType.Flow.toString),
           objectName = Option(flowIdentifier.unquotedString),
           language = Option(Python())

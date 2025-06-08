@@ -63,7 +63,7 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
           "Flow spark_catalog.default.b is STARTING",
           "Flow spark_catalog.default.b is RUNNING",
           "Flow spark_catalog.default.b has COMPLETED",
-          "Update is COMPLETED"
+          "Run is COMPLETED"
         )
         expectedEventMessages.foreach { eventMessage =>
           assert(

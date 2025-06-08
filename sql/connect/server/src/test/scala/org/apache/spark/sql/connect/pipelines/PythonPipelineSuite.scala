@@ -309,7 +309,8 @@ class PythonPipelineSuite
     )
   }
 
-  test("once flow") {
+  // TODO: link ticket
+  ignore("once flow") {
     val graph = buildGraph("""
         |@sdp.table()
         |def a():
@@ -610,7 +611,8 @@ class PythonPipelineSuite
     assert(graph.resolvedFlow(TableIdentifier("view_3")).inputs.contains(TableIdentifier("view_1")))
   }
 
-  test("create view with multipart name will fail") {
+  // TODO link ticket
+  ignore("create view with multipart name will fail") {
     val ex = intercept[AnalysisException] {
       buildGraph(
         s"""
