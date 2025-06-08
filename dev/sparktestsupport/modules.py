@@ -1501,6 +1501,18 @@ pyspark_logger = Module(
     ],
 )
 
+pyspark_pipelines = Module(
+    name="pyspark-pipelines",
+    dependencies=[pyspark_core, pyspark_sql, pyspark_connect],
+    source_file_regexes=["python/pyspark/pipelines"],
+    python_test_goals=[
+        "pyspark.pipelines.tests.test_block_connect_access",
+        "pyspark.pipelines.tests.test_cli",
+        "pyspark.pipelines.tests.test_decorators",
+        "pyspark.pipelines.tests.test_graph_element_registry",
+        "pyspark.pipelines.tests.test_init_cli",
+    ],
+)
 
 sparkr = Module(
     name="sparkr",

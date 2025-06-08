@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.Random
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, Analyzer}
 import org.apache.spark.sql.catalyst.plans.NormalizePlan
@@ -149,7 +147,7 @@ class HybridAnalyzer(
       fixedPointResolutionDuration = Some(resolutionDuration)
       result
     } catch {
-      case NonFatal(e) =>
+      case e: Throwable =>
         fixedPointException = Some(e)
         None
     }
@@ -162,7 +160,7 @@ class HybridAnalyzer(
       singlePassResolutionDuration = Some(resolutionDuration)
       result
     } catch {
-      case NonFatal(e) =>
+      case e: Throwable =>
         singlePassException = Some(e)
         None
     }
@@ -181,11 +179,10 @@ class HybridAnalyzer(
       case None =>
         singlePassException match {
           case Some(singlePassEx: ExplicitlyUnsupportedResolverFeature) =>
-            if (!exposeExplicitlyUnsupportedResolverFeature) {
-              fixedPointResult.get
-            } else {
+            if (exposeExplicitlyUnsupportedResolverFeature) {
               throw singlePassEx
             }
+            fixedPointResult.get
           case Some(singlePassEx) =>
             throw singlePassEx
           case None =>

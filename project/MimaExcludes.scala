@@ -50,6 +50,7 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.spark_project.jetty.*"),
     ProblemFilters.exclude[Problem]("org.sparkproject.jetty.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.internal.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.kafka010.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.unused.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.unsafe.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.memory.*"),
@@ -60,11 +61,16 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.errors.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.classic.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connect.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.scripting.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.types.variant.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.ui.flamegraph.*"),
     // DSv2 catalog and expression APIs are unstable yet. We should enable this back.
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.catalog.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.expressions.*"),
     // Avro source implementation is internal.
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.v2.avro.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.avro.*"),
+
 
     // SPARK-43169: shaded and generated protobuf code
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_core.protobuf.*"),

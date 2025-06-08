@@ -21,21 +21,18 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.SparkThrowable
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
-import org.apache.spark.sql.types.{BinaryType, StructType}
-import org.apache.spark.util.{CompletionIterator, NextIterator, SerializableConfiguration, Utils}
+import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Utils}
 
 /**
  * Physical operator for executing `TransformWithState`
@@ -76,16 +73,18 @@ case class TransformWithStateExec(
     initialStateDataAttrs: Seq[Attribute],
     initialStateDeserializer: Expression,
     initialState: SparkPlan)
-  extends BinaryExecNode
-  with StateStoreWriter
-  with WatermarkSupport
-  with ObjectProducerExec
-  with TransformWithStateMetadataUtils {
+  extends TransformWithStateExecBase(
+    groupingAttributes,
+    timeMode,
+    outputMode,
+    batchTimestampMs,
+    eventTimeWatermarkForEviction,
+    child,
+    initialStateGroupingAttrs,
+    initialState)
+  with ObjectProducerExec {
 
   override def shortName: String = "transformWithStateExec"
-
-  // dummy value schema, the real schema will get during state variable init time
-  private val DUMMY_VALUE_ROW_SCHEMA = new StructType().add("value", BinaryType)
 
   // We need to just initialize key and value deserializer once per partition.
   // The deserializers need to be lazily created on the executor since they
@@ -97,21 +96,6 @@ case class TransformWithStateExec(
 
   private lazy val getValueObj =
     ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
-
-  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
-    if (timeMode == ProcessingTime) {
-      // TODO SPARK-50180: check if we can return true only if actual timers are registered,
-      //  or there is expired state
-      true
-    } else if (outputMode == OutputMode.Append || outputMode == OutputMode.Update) {
-      eventTimeWatermarkForEviction.isDefined &&
-      newInputWatermark > eventTimeWatermarkForEviction.get
-    } else {
-      false
-    }
-  }
-
-  override def operatorStateMetadataVersion: Int = 2
 
   /**
    * We initialize this processor handle in the driver to run the init function
@@ -168,94 +152,12 @@ case class TransformWithStateExec(
     stateVariableInfos
   }
 
-  /**
-   * Controls watermark propagation to downstream modes. If timeMode is
-   * ProcessingTime, the output rows cannot be interpreted in eventTime, hence
-   * this node will not propagate watermark in this timeMode.
-   *
-   * For timeMode EventTime, output watermark is same as input Watermark because
-   * transformWithState does not allow users to set the event time column to be
-   * earlier than the watermark.
-   */
-  override def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = {
-    timeMode match {
-      case ProcessingTime =>
-        None
-      case _ =>
-        Some(inputWatermarkMs)
-    }
-  }
-
-  override def left: SparkPlan = child
-
-  override def right: SparkPlan = initialState
-
   override protected def withNewChildrenInternal(
       newLeft: SparkPlan, newRight: SparkPlan): TransformWithStateExec = {
     if (hasInitialState) {
       copy(child = newLeft, initialState = newRight)
     } else {
       copy(child = newLeft)
-    }
-  }
-
-  override def keyExpressions: Seq[Attribute] = groupingAttributes
-
-  /**
-   * Distribute by grouping attributes - We need the underlying data and the initial state data
-   * to have the same grouping so that the data are co-located on the same task.
-   */
-  override def requiredChildDistribution: Seq[Distribution] = {
-    StatefulOperatorPartitioning.getCompatibleDistribution(
-      groupingAttributes, getStateInfo, conf) ::
-    StatefulOperatorPartitioning.getCompatibleDistribution(
-        initialStateGroupingAttrs, getStateInfo, conf) ::
-    Nil
-  }
-
-  /**
-   * We need the initial state to also use the ordering as the data so that we can co-locate the
-   * keys from the underlying data and the initial state.
-   */
-  override def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq(
-    groupingAttributes.map(SortOrder(_, Ascending)),
-    initialStateGroupingAttrs.map(SortOrder(_, Ascending)))
-
-  // Wrapper to ensure that the implicit key is set when the methods on the iterator
-  // are called. We process all the values for a particular key at a time, so we
-  // only have to set the implicit key when the first call to the iterator is made, and
-  // we have to remove it when the iterator is closed.
-  //
-  // Note: if we ever start to interleave the processing of the iterators we get back
-  // from handleInputRows (i.e. we don't process each iterator all at once), then this
-  // iterator will need to set/unset the implicit key every time hasNext/next is called,
-  // not just at the first and last calls to hasNext.
-  private def iteratorWithImplicitKeySet(
-      key: Any,
-      iter: Iterator[InternalRow],
-      onClose: () => Unit = () => {}
-  ): Iterator[InternalRow] = {
-    new NextIterator[InternalRow] {
-      var hasStarted = false
-
-      override protected def getNext(): InternalRow = {
-        if (!hasStarted) {
-          hasStarted = true
-          ImplicitGroupingKeyTracker.setImplicitKey(key)
-        }
-
-        if (!iter.hasNext) {
-          finished = true
-          null
-        } else {
-          iter.next()
-        }
-      }
-
-      override protected def close(): Unit = {
-        onClose()
-        ImplicitGroupingKeyTracker.removeImplicitKey()
-      }
     }
   }
 
@@ -455,35 +357,6 @@ case class TransformWithStateExec(
     }
   }
 
-  // operator specific metrics
-  override def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] = {
-    Seq(
-      // metrics around initial state
-      StatefulOperatorCustomSumMetric("initialStateProcessingTimeMs",
-        "Number of milliseconds taken to process all initial state"),
-      // metrics around state variables
-      StatefulOperatorCustomSumMetric("numValueStateVars", "Number of value state variables"),
-      StatefulOperatorCustomSumMetric("numListStateVars", "Number of list state variables"),
-      StatefulOperatorCustomSumMetric("numMapStateVars", "Number of map state variables"),
-      StatefulOperatorCustomSumMetric("numDeletedStateVars", "Number of deleted state variables"),
-      // metrics around timers
-      StatefulOperatorCustomSumMetric("timerProcessingTimeMs",
-        "Number of milliseconds taken to process all timers"),
-      StatefulOperatorCustomSumMetric("numRegisteredTimers", "Number of registered timers"),
-      StatefulOperatorCustomSumMetric("numDeletedTimers", "Number of deleted timers"),
-      StatefulOperatorCustomSumMetric("numExpiredTimers", "Number of expired timers"),
-      // metrics around TTL
-      StatefulOperatorCustomSumMetric("numValueStateWithTTLVars",
-        "Number of value state variables with TTL"),
-      StatefulOperatorCustomSumMetric("numListStateWithTTLVars",
-        "Number of list state variables with TTL"),
-      StatefulOperatorCustomSumMetric("numMapStateWithTTLVars",
-        "Number of map state variables with TTL"),
-      StatefulOperatorCustomSumMetric("numValuesRemovedDueToTTLExpiry",
-        "Number of values removed due to TTL expiry")
-    )
-  }
-
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration,
       batchId: Long,
@@ -492,19 +365,6 @@ case class TransformWithStateExec(
     val stateSchemaDir = stateSchemaDirPath()
     validateAndWriteStateSchema(hadoopConf, batchId, stateSchemaVersion,
       info, stateSchemaDir, session, operatorStateMetadataVersion, conf.stateStoreEncodingFormat)
-  }
-
-  /** Metadata of this stateful operator and its states stores. */
-  override def operatorStateMetadata(
-      stateSchemaPaths: List[List[String]]): OperatorStateMetadata = {
-    val info = getStateInfo
-    getOperatorStateMetadata(stateSchemaPaths, info, shortName, timeMode, outputMode)
-  }
-
-  override def validateNewMetadata(
-      oldOperatorMetadata: OperatorStateMetadata,
-      newOperatorMetadata: OperatorStateMetadata): Unit = {
-    validateNewMetadataForTWS(oldOperatorMetadata, newOperatorMetadata)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -577,28 +437,6 @@ case class TransformWithStateExec(
       }
     }
   }
-
-  /**
-   * Executes a block of code with standardized error handling for StatefulProcessor
-   * operations. Rethrows SparkThrowables directly and wraps other exceptions in
-   * TransformWithStateUserFunctionException with the provided function name.
-   *
-   * @param functionName The name of the function being executed (for error reporting)
-   * @param block The code block to execute with error handling
-   * @return The result of the block execution
-   */
-  private def withStatefulProcessorErrorHandling[R](functionName: String)(block: => R): R = {
-    try {
-      block
-    } catch {
-      case st: Exception with SparkThrowable if st.getCondition != null =>
-        throw st
-      case e: Exception =>
-        throw TransformWithStateUserFunctionException(e, functionName)
-    }
-  }
-
-  override def supportsSchemaEvolution: Boolean = true
 
   /**
    * Create a new StateStore for given partitionId and instantiate a temp directory
@@ -692,18 +530,6 @@ case class TransformWithStateExec(
     initialStateProcTimeMs += NANOSECONDS.toMillis(System.nanoTime - initialStateStartTimeNs)
 
     processDataWithPartition(childDataIterator, store, processorHandle)
-  }
-
-  private def validateTimeMode(): Unit = {
-    timeMode match {
-      case ProcessingTime =>
-        TransformWithStateVariableUtils.validateTimeMode(timeMode, batchTimestampMs)
-
-      case EventTime =>
-        TransformWithStateVariableUtils.validateTimeMode(timeMode, eventTimeWatermarkForEviction)
-
-      case _ =>
-    }
   }
 }
 

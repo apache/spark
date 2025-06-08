@@ -1,46 +1,46 @@
 [ {
-  "id" : "local-1642039451826",
-  "name" : "Spark shell",
   "attempts" : [ {
-    "startTime" : "2022-01-13T02:04:10.519GMT",
-    "endTime" : "2022-01-13T02:05:36.564GMT",
-    "lastUpdated" : "",
-    "duration" : 86045,
-    "sparkUser" : "lijunqing",
-    "completed" : true,
     "appSparkVersion" : "3.3.0-SNAPSHOT",
-    "startTimeEpoch" : 1642039450519,
+    "completed" : true,
+    "duration" : 86045,
+    "endTime" : "2022-01-13T02:05:36.564GMT",
     "endTimeEpoch" : 1642039536564,
-    "lastUpdatedEpoch" : 0
-  } ]
-}, {
-  "id" : "application_1628109047826_1317105",
-  "name" : "Spark shell",
-  "attempts" : [ {
-    "startTime" : "2021-08-10T23:24:55.333GMT",
-    "endTime" : "2021-08-10T23:29:30.208GMT",
     "lastUpdated" : "",
-    "duration" : 274875,
-    "sparkUser" : "john",
-    "completed" : true,
+    "lastUpdatedEpoch" : 0,
+    "sparkUser" : "lijunqing",
+    "startTime" : "2022-01-13T02:04:10.519GMT",
+    "startTimeEpoch" : 1642039450519
+  } ],
+  "id" : "local-1642039451826",
+  "name" : "Spark shell"
+}, {
+  "attempts" : [ {
     "appSparkVersion" : "3.1.1.119",
-    "startTimeEpoch" : 1628637895333,
-    "endTimeEpoch" : 1628638170208,
-    "lastUpdatedEpoch" : 0
-  } ]
-}, {
-  "id" : "app-20200706201101-0003",
-  "name" : "Spark shell",
-  "attempts" : [ {
-    "startTime" : "2020-07-07T03:11:00.235GMT",
-    "endTime" : "2020-07-07T03:17:04.231GMT",
-    "lastUpdated" : "",
-    "duration" : 363996,
-    "sparkUser" : "terryk",
     "completed" : true,
+    "duration" : 274875,
+    "endTime" : "2021-08-10T23:29:30.208GMT",
+    "endTimeEpoch" : 1628638170208,
+    "lastUpdated" : "",
+    "lastUpdatedEpoch" : 0,
+    "sparkUser" : "john",
+    "startTime" : "2021-08-10T23:24:55.333GMT",
+    "startTimeEpoch" : 1628637895333
+  } ],
+  "id" : "application_1628109047826_1317105",
+  "name" : "Spark shell"
+}, {
+  "attempts" : [ {
     "appSparkVersion" : "3.1.0-SNAPSHOT",
-    "startTimeEpoch" : 1594091460235,
+    "completed" : true,
+    "duration" : 363996,
+    "endTime" : "2020-07-07T03:17:04.231GMT",
     "endTimeEpoch" : 1594091824231,
-    "lastUpdatedEpoch" : 0
-  } ]
+    "lastUpdated" : "",
+    "lastUpdatedEpoch" : 0,
+    "sparkUser" : "terryk",
+    "startTime" : "2020-07-07T03:11:00.235GMT",
+    "startTimeEpoch" : 1594091460235
+  } ],
+  "id" : "app-20200706201101-0003",
+  "name" : "Spark shell"
 } ]

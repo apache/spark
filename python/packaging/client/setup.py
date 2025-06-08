@@ -111,6 +111,7 @@ if "SPARK_TESTING" in os.environ:
         "pyspark.pandas.tests.connect.reshape",
         "pyspark.pandas.tests.connect.series",
         "pyspark.pandas.tests.connect.window",
+        "pyspark.pipelines.tests",
         "pyspark.logger.tests",
         "pyspark.logger.tests.connect",
     ]
@@ -182,6 +183,7 @@ try:
         "pyspark.pandas.spark",
         "pyspark.pandas.typedef",
         "pyspark.pandas.usage_logging",
+        "pyspark.pipelines",
         "pyspark.testing",
         "pyspark.resource",
         "pyspark.errors",
