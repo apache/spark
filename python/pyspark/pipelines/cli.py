@@ -169,7 +169,8 @@ def register_definitions(
                 glob_expression = definition_glob.include
                 matching_files = [p for p in path.glob(glob_expression) if p.is_file()]
                 log_with_curr_timestamp(
-                    f"Found {len(matching_files)} files matching glob '{glob_expression}'")
+                    f"Found {len(matching_files)} files matching glob '{glob_expression}'"
+                )
                 for file in matching_files:
                     if file.suffix == ".py":
                         log_with_curr_timestamp(f"Importing {file}...")
