@@ -75,12 +75,12 @@ trait TestPipelineUpdateContextMixin {
 trait EventVerificationTestHelpers {
 
   /**
-   * Asserts that there is a [[FlowProgress]] event in the event log with the specified flow name
+   * Asserts that there is a FlowProgress event in the event log with the specified flow name
    * and status and matching the specified error condition.
    *
    * @param identifier Flow identifier to look for events for
-   * @param expectedFlowStatus Expected [[FlowStatus]]
-   * @param expectedEventLevel Expected [[EventLevel]] of the event.
+   * @param expectedFlowStatus Expected FlowStatus
+   * @param expectedEventLevel Expected EventLevel of the event.
    * @param errorChecker Condition that the event's exception, if any, must pass in order for this
    *                     function to return true.
    * @param msgChecker Condition that the event's msg must pass in order for the function to return
@@ -187,7 +187,7 @@ trait EventVerificationTestHelpers {
     )
   }
 
-  /** Returns a map of flow names to their latest [[FlowStatus]]es. */
+  /** Returns a map of flow names to their latest FlowStatus. */
   protected def latestFlowStatuses(eventBuffer: PipelineRunEventBuffer): Map[String, FlowStatus] = {
     eventBuffer.getEvents
       .filter(_.details.isInstanceOf[FlowProgress])
@@ -228,11 +228,11 @@ trait EventVerificationTestHelpers {
   }
 
   /**
-   * Asserts that there is an [[RunProgress]] event in the event log with the specified id
+   * Asserts that there is a RunProgress event in the event log with the specified id
    * and state and matching the specified error condition.
    *
-   * @param state        Expected [[RunState]]
-   * @param expectedEventLevel Expected [[EventLevel]] of the event.
+   * @param state        Expected RunState
+   * @param expectedEventLevel Expected EventLevel of the event.
    * @param errorChecker Condition that the event's exception, if any, must pass in order for this
    *                     function to return true.
    * @param msgChecker   Condition that the event's msg must pass in order for the function to
