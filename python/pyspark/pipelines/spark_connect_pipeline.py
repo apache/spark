@@ -14,12 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from datetime import timezone
 from typing import Any, Dict, Mapping, Iterator, Optional, cast
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql import SparkSession
 from pyspark.errors.exceptions.base import PySparkValueError
-from pyspark.sql.pipelines.logging_utils import log_with_provided_timestamp
+from pyspark.pipelines.logging_utils import log_with_provided_timestamp
 
 
 def create_dataflow_graph(

@@ -37,7 +37,7 @@ from pyspark.pipelines.graph_element_registry import (
     GraphElementRegistry,
 )
 from pyspark.pipelines.init_cli import init
-from pyspark.sql.pipelines.logging_utils import log_with_curr_timestamp
+from pyspark.pipelines.logging_utils import log_with_curr_timestamp
 from pyspark.pipelines.spark_connect_graph_element_registry import (
     SparkConnectGraphElementRegistry,
 )
