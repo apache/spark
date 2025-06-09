@@ -749,12 +749,22 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       }
     }
 
-    def convertInToOr(name: String, values: Seq[String]): String = {
-      values.map(value => s"$name = $value").mkString("(", " or ", ")")
+    def convertInToOrOrDirect(
+      name: String, values: Seq[String], useDirectInFlag: Boolean): String = {
+      if (useDirectInFlag) {
+        s"$name in (${values.mkString(", ")})"
+      } else {
+        values.map(value => s"$name = $value").mkString("(", " or ", ")")
+      }
     }
 
-    def convertNotInToAnd(name: String, values: Seq[String]): String = {
-      values.map(value => s"$name != $value").mkString("(", " and ", ")")
+    def convertNotInToAndOrDirect(
+      name: String, values: Seq[String], useDirectInFlag: Boolean): String = {
+      if (useDirectInFlag) {
+        s"$name not in (${values.mkString(", ")})"
+      } else {
+        values.map(value => s"$name != $value").mkString("(", " and ", ")")
+      }
     }
 
     def hasNullLiteral(list: Seq[Expression]): Boolean = list.exists {
@@ -764,6 +774,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
 
     val useAdvanced = SQLConf.get.advancedPartitionPredicatePushdownEnabled
     val inSetThreshold = SQLConf.get.metastorePartitionPruningInSetThreshold
+    val useDirectIn = SQLConf.get.metastorePartitionPruningDirectInEnabled
 
     object ExtractAttribute {
       @scala.annotation.tailrec
@@ -786,11 +797,11 @@ private[client] class Shim_v2_0 extends Shim with Logging {
 
       case In(ExtractAttribute(SupportedAttribute(name)), ExtractableLiterals(values))
           if useAdvanced =>
-        Some(convertInToOr(name, values))
+        Some(convertInToOrOrDirect(name, values, useDirectIn))
 
       case Not(In(ExtractAttribute(SupportedAttribute(name)), ExtractableLiterals(values)))
           if useAdvanced =>
-        Some(convertNotInToAnd(name, values))
+        Some(convertNotInToAndOrDirect(name, values, useDirectIn))
 
       case InSet(child, values) if useAdvanced && values.size > inSetThreshold =>
         val dataType = child.dataType
@@ -802,19 +813,19 @@ private[client] class Shim_v2_0 extends Shim with Logging {
 
       case InSet(child @ ExtractAttribute(SupportedAttribute(name)), ExtractableDateValues(values))
           if useAdvanced && child.dataType == DateType =>
-        Some(convertInToOr(name, values))
+        Some(convertInToOrOrDirect(name, values, useDirectIn))
 
       case Not(InSet(child @ ExtractAttribute(SupportedAttribute(name)),
         ExtractableDateValues(values))) if useAdvanced && child.dataType == DateType =>
-        Some(convertNotInToAnd(name, values))
+        Some(convertNotInToAndOrDirect(name, values, useDirectIn))
 
       case InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values))
           if useAdvanced =>
-        Some(convertInToOr(name, values))
+        Some(convertInToOrOrDirect(name, values, useDirectIn))
 
       case Not(InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values)))
           if useAdvanced =>
-        Some(convertNotInToAnd(name, values))
+        Some(convertNotInToAndOrDirect(name, values, useDirectIn))
 
       case op @ SpecialBinaryComparison(
           ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>

@@ -250,5 +250,106 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
     }
   }
 
+  test("SPARK-33538: Direct IN predicate pushdown to Hive metastore") {
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(
+        SQLConf.ADVANCED_PARTITION_PREDICATE_PUSHDOWN.key -> "true",
+        SQLConf.HIVE_METASTORE_PARTITION_PRUNING_DIRECT_IN_ENABLED.key -> enabled.toString) {
+
+        // Test In expression with direct IN pushdown (integer)
+        val inFilter = In(a("intcol", IntegerType), Seq(Literal(1), Literal(2), Literal(3)))
+        val inConverted = shim.convertFilters(testTable, Seq(inFilter))
+        if (enabled) {
+          assert(inConverted == "intcol in (1, 2, 3)")
+        } else {
+          assert(inConverted == "(intcol = 1 or intcol = 2 or intcol = 3)")
+        }
+
+        // Test InSet expression with direct IN pushdown (integer)
+        val insetIntFilter = InSet(a("intcol", IntegerType), Set(1, 2, 3))
+        val insetIntConverted = shim.convertFilters(testTable, Seq(insetIntFilter))
+        if (enabled) {
+          assert(insetIntConverted == "intcol in (1, 2, 3)")
+        } else {
+          assert(insetIntConverted == "(intcol = 1 or intcol = 2 or intcol = 3)")
+        }
+
+        // Test InSet expression with direct IN pushdown (string) - using eval() for UTF8String
+        val insetStringFilter = InSet(a("stringcol", StringType),
+          Set(Literal("aa").eval(), Literal("bb").eval(), Literal("cc").eval()))
+        val insetStringConverted = shim.convertFilters(testTable, Seq(insetStringFilter))
+        if (enabled) {
+          assert(insetStringConverted == """stringcol in ("aa", "bb", "cc")""")
+        } else {
+          assert(insetStringConverted ==
+            """(stringcol = "aa" or stringcol = "bb" or stringcol = "cc")""")
+        }
+
+        // Test InSet date filter with direct IN pushdown
+        val dateFilter = InSet(a("datecol", DateType),
+          Set(
+            Literal(Date.valueOf("2020-01-01")).eval(),
+            Literal(Date.valueOf("2021-01-01")).eval()))
+        val dateConverted = shim.convertFilters(testTable, Seq(dateFilter))
+        if (enabled) {
+          assert(dateConverted == """datecol in ("2020-01-01", "2021-01-01")""")
+        } else {
+          assert(dateConverted == """(datecol = "2020-01-01" or datecol = "2021-01-01")""")
+        }
+      }
+    }
+  }
+
+  test("SPARK-33538: Direct NOT IN predicate pushdown to Hive metastore") {
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(
+        SQLConf.ADVANCED_PARTITION_PREDICATE_PUSHDOWN.key -> "true",
+        SQLConf.HIVE_METASTORE_PARTITION_PRUNING_DIRECT_IN_ENABLED.key -> enabled.toString) {
+
+        // Test Not(In) expression with direct NOT IN pushdown (integer)
+        val notInFilter = Not(In(a("intcol", IntegerType), Seq(Literal(1), Literal(2), Literal(3))))
+        val notInConverted = shim.convertFilters(testTable, Seq(notInFilter))
+        if (enabled) {
+          assert(notInConverted == "intcol not in (1, 2, 3)")
+        } else {
+          assert(notInConverted == "(intcol != 1 and intcol != 2 and intcol != 3)")
+        }
+
+        // Test Not(InSet) expression with direct NOT IN pushdown (integer)
+        val notInSetIntFilter = Not(InSet(a("intcol", IntegerType), Set(1, 2, 3)))
+        val notInSetIntConverted = shim.convertFilters(testTable, Seq(notInSetIntFilter))
+        if (enabled) {
+          assert(notInSetIntConverted == "intcol not in (1, 2, 3)")
+        } else {
+          assert(notInSetIntConverted == "(intcol != 1 and intcol != 2 and intcol != 3)")
+        }
+
+        // Test Not(InSet) expression with direct NOT IN pushdown (string)
+        val notInSetStringFilter = Not(InSet(a("stringcol", StringType),
+          Set(Literal("aa").eval(), Literal("bb").eval(), Literal("cc").eval())))
+        val notInSetStringConverted = shim.convertFilters(testTable, Seq(notInSetStringFilter))
+        if (enabled) {
+          assert(notInSetStringConverted == """stringcol not in ("aa", "bb", "cc")""")
+        } else {
+          assert(notInSetStringConverted ==
+            """(stringcol != "aa" and stringcol != "bb" and stringcol != "cc")""")
+        }
+
+        // Test Not(InSet) date filter with direct NOT IN pushdown
+        val notInSetDateFilter = Not(InSet(a("datecol", DateType),
+          Set(
+            Literal(Date.valueOf("2020-01-01")).eval(),
+            Literal(Date.valueOf("2021-01-01")).eval())))
+        val notInSetDateConverted = shim.convertFilters(testTable, Seq(notInSetDateFilter))
+        if (enabled) {
+          assert(notInSetDateConverted == """datecol not in ("2020-01-01", "2021-01-01")""")
+        } else {
+          assert(notInSetDateConverted
+            == """(datecol != "2020-01-01" and datecol != "2021-01-01")""")
+        }
+      }
+    }
+  }
+
   private def a(name: String, dataType: DataType) = AttributeReference(name, dataType)()
 }
