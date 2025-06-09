@@ -77,7 +77,7 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   # Install R packages and dependencies used when building.
   # R depends on pandoc*, libssl (which are installed above).
   # Note that PySpark doc generation also needs pandoc due to nbsphinx
-  $APT_INSTALL r-base r-base-dev && \
+  $APT_INSTALL r-base r-base-dev msmtp && \
   $APT_INSTALL libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev && \
   $APT_INSTALL texlive-latex-base texlive texlive-fonts-extra texinfo qpdf texlive-latex-extra && \
   $APT_INSTALL libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev && \
