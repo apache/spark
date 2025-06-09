@@ -61,6 +61,7 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   apt-get update && \
   $APT_INSTALL software-properties-common && \
   apt-get update && \
+  $APT_INSTALL msmtp && \
   # Install openjdk 8.
   $APT_INSTALL openjdk-8-jdk && \
   update-alternatives --set java $(ls /usr/lib/jvm/java-8-openjdk-*/jre/bin/java) && \
