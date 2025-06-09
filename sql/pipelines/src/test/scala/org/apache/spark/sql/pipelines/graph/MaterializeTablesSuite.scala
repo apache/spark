@@ -33,10 +33,10 @@ import org.apache.spark.util.Utils.exceptionString
  * tables are written with the appropriate schemas.
  */
 class MaterializeTablesSuite extends BaseCoreExecutionTest {
-
-  import originalSpark.implicits._
-
   test("basic") {
+    val session = spark
+    import session.implicits._
+
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
         registerFlow(
@@ -128,6 +128,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("multiple") {
+    val session = spark
+    import session.implicits._
+
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
         registerFlow(
@@ -162,6 +165,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("temporary views don't get materialized") {
+    val session = spark
+    import session.implicits._
+
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
         registerFlow(
@@ -235,6 +241,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("schema matches existing table schema") {
+    val session = spark
+    import session.implicits._
+
     sql(s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t2(x INT)")
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t2")
@@ -260,6 +269,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("invalid schema merge") {
+    val session = spark
+    import session.implicits._
+
     val streamInts = MemoryStream[Int]
     streamInts.addData(1, 2)
 
@@ -286,6 +298,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("table materialized with specified schema, even if different from inferred") {
+    val session = spark
+    import session.implicits._
+
     sql(s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t4(x INT)")
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t4")
@@ -321,6 +336,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("specified schema incompatible with existing table") {
+    val session = spark
+    import session.implicits._
+
     sql(s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t6(x BOOLEAN)")
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t6")
@@ -363,6 +381,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("partition columns with user schema") {
+    val session = spark
+    import session.implicits._
+
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
         registerTable(
@@ -389,6 +410,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("specifying partition column with existing partitioned table") {
+    val session = spark
+    import session.implicits._
+
     sql(
       s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t7(x BOOLEAN, y INT) " +
       s"PARTITIONED BY (x)"
@@ -451,11 +475,13 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("specifying partition column different from existing partitioned table") {
+    val session = spark
+    import session.implicits._
+
     sql(
       s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t8(x BOOLEAN, y INT) " +
       s"PARTITIONED BY (x)"
     )
-    Seq((true, 1), (false, 1)).toDF("x", "y").write.mode("append").saveAsTable("t8")
 
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t8")
@@ -513,6 +539,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("Invalid table properties error during table materialization") {
+    val session = spark
+    import session.implicits._
+
     // Invalid pipelines property
     val graph1 =
       new TestGraphRegistrationContext(spark) {
@@ -550,6 +579,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
     test(
       s"Complete tables should not evolve schema - isFullRefresh = $isFullRefresh"
     ) {
+      val session = spark
+      import session.implicits._
+
       val rawGraph =
         new TestGraphRegistrationContext(spark) {
           registerView("a", query = dfFlowFunc(Seq((1, 2), (2, 3)).toDF("x", "y")))
@@ -602,6 +634,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
     test(
       s"Streaming tables should evolve schema only if not full refresh = $isFullRefresh"
     ) {
+      val session = spark
+      import session.implicits._
+
       val streamInts = MemoryStream[Int]
       streamInts.addData(1 until 5: _*)
 
@@ -665,6 +700,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   test(
     "materialize only selected tables"
   ) {
+    val session = spark
+    import session.implicits._
+
     val graph = new TestGraphRegistrationContext(spark) {
       registerTable("a", query = Option(dfFlowFunc(Seq((1, 2), (2, 3)).toDF("x", "y"))))
       registerTable("b", query = Option(sqlFlowFunc(spark, "SELECT x FROM a")))
@@ -707,6 +745,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("tables with arrays and maps") {
+    val session = spark
+    import session.implicits._
+
     val rawGraph =
       new TestGraphRegistrationContext(spark) {
         registerTable("a", query = Option(sqlFlowFunc(spark, "select map(1, struct('a', 'b')) m")))
@@ -800,6 +841,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("materializing no tables doesn't throw") {
+    val session = spark
+    import session.implicits._
+
     val graph1 =
       new DataflowGraph(flows = Seq.empty, tables = Seq.empty, views = Seq.empty)
     val graph2 = new TestGraphRegistrationContext(spark) {
