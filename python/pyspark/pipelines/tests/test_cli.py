@@ -27,7 +27,7 @@ from pyspark.testing.connectutils import (
 )
 from pyspark.testing.utils import have_yaml, yaml_requirement_message
 
-if should_test_connect:
+if should_test_connect and have_yaml:
     from pyspark.pipelines.cli import (
         change_dir,
         find_pipeline_spec,
