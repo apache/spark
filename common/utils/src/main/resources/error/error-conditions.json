@@ -1777,7 +1777,7 @@
   },
   "FOREACH_WRITER_ABORTED" : {
     "message" : [
-      "Foreach writer has been aborted due to a task failure."
+      "Foreach writer has been aborted due to a task failure. <numErrors> error(s) occurred: <errorDetails>"
     ],
     "sqlState" : "39000"
   },
