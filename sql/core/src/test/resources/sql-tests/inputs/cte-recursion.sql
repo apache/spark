@@ -676,6 +676,7 @@ WITH RECURSIVE randoms(val) AS (
 )
 SELECT val FROM randoms LIMIT 5;
 
+-- Recursive CTE with nullable recursion and non-recursive anchor
 WITH RECURSIVE t1(n) AS (
     SELECT 1
     UNION ALL
