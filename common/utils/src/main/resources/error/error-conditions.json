@@ -4888,6 +4888,12 @@
     ],
     "sqlState" : "07501"
   },
+  "STAGE_MATERIALIZATION_MULTIPLE_FAILURES" : {
+    "message" : [
+      "Multiple failures (<failureCount>) in stage materialization: <failureDetails>"
+    ],
+    "sqlState" : "XX000"
+  },
   "STAR_GROUP_BY_POS" : {
     "message" : [
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
@@ -8445,11 +8451,6 @@
   "_LEGACY_ERROR_TEMP_2234" : {
     "message" : [
       "Failed to set original ACL <aclEntries> back to the created path: <path>. Exception: <message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2235" : {
-    "message" : [
-      "Multiple failures in stage materialization."
     ]
   },
   "_LEGACY_ERROR_TEMP_2236" : {
