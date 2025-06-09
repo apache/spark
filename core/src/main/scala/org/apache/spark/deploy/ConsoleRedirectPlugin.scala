@@ -35,7 +35,6 @@ import org.apache.spark.internal.config._
 class ConsoleRedirectPlugin extends SparkPlugin {
   override def driverPlugin(): DriverPlugin = new DriverConsoleRedirectPlugin()
 
-  // No-op
   override def executorPlugin(): ExecutorPlugin = new ExecConsoleRedirectPlugin()
 }
 
