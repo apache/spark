@@ -307,7 +307,7 @@ def spark_type_to_pandas_dtype(
         return np.dtype(to_arrow_type(spark_type, prefers_large_var_types).to_pandas_dtype())
 
 
-def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.DataType]:
+def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Union[str, type, Dtype], types.DataType]:
     """
     Convert input into a pandas only dtype object or a numpy dtype object,
     and its corresponding Spark DataType.
@@ -318,7 +318,7 @@ def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.Dat
 
     Returns
     -------
-    tuple of np.dtype or a pandas dtype, and Spark DataType
+    tuple of (str, type, np.dtype or pandas dtype), and Spark DataType
 
     Raises
     ------
@@ -340,8 +340,6 @@ def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.Dat
     (dtype('O'), ArrayType(BooleanType(), True))
     """
     try:
-        # For certain numpy types, handle them before calling pandas_dtype
-        # as pandas_dtype may raise TypeError for these types
         if tpe in (np.character, np.bytes_):
             spark_type = as_spark_type(tpe)
             dtype = tpe
