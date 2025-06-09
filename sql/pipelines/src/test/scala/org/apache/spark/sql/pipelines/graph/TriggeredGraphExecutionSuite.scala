@@ -969,7 +969,8 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
       expectedEventLevel = EventLevel.WARN,
       msgChecker = _.contains("Failed to resolve flow: 'spark_catalog.test_db.table1'"),
       errorChecker = _.getMessage.contains(
-        "The table or view `spark_catalog`.`test_db`.`nonexistent_src1` cannot be found")
+        "The table or view `spark_catalog`.`test_db`.`nonexistent_src1` cannot be found"
+      )
     )
 
     assertFlowProgressEvent(
@@ -979,8 +980,8 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
       expectedEventLevel = EventLevel.WARN,
       msgChecker = _.contains("Failed to resolve flow: 'spark_catalog.test_db.table2'"),
       errorChecker = _.getMessage.contains(
-            "The table or view `spark_catalog`.`test_db`.`nonexistent_src2` cannot be found"
-          )
+        "The table or view `spark_catalog`.`test_db`.`nonexistent_src2` cannot be found"
+      )
     )
 
     assertFlowProgressEvent(
@@ -993,9 +994,9 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
       ),
       errorChecker = { ex =>
         ex.getMessage.contains(
-            "Failed to read dataset 'spark_catalog.test_db.table1'. Dataset is defined in the " +
-            "pipeline but could not be resolved."
-          )
+          "Failed to read dataset 'spark_catalog.test_db.table1'. Dataset is defined in the " +
+          "pipeline but could not be resolved."
+        )
       }
     )
   }
