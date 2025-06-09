@@ -4860,6 +4860,7 @@ object SQLConf {
       .stringConf
       .createWithDefault(
         sys.env.getOrElse("DEFAULT_ARTIFACT_REPOSITORY",
+          "https://repository.apache.org/content/repositories/orgapachehadoop-1437," +
           "https://maven-central.storage-download.googleapis.com/maven2/"))
 
   val LEGACY_FROM_DAYTIME_STRING =
