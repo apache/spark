@@ -661,17 +661,6 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
-  test("ListAgg should be able to handle multiple distinct aggregations") {
-    withTable("tbl") {
-      sql("CREATE TABLE tbl (col1 STRING, col2 STRING) USING parquet")
-      sql("INSERT INTO tbl VALUES ('A', 'x'), ('A', 'y'), ('B', 'y')")
-      val lag1 = "LISTAGG(DISTINCT col1) WITHIN GROUP (ORDER BY col1)"
-      val lag2 = "LISTAGG(DISTINCT col2) WITHIN GROUP (ORDER BY col2)"
-      val query = sql(s"SELECT $lag1, $lag2 FROM tbl")
-      checkAnswer(query, Seq(Row("AB", "xy")))
-    }
-  }
-
   test("SPARK-31500: collect_set() of BinaryType returns duplicate elements") {
     val bytesTest1 = "test1".getBytes
     val bytesTest2 = "test2".getBytes

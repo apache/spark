@@ -190,6 +190,86 @@ struct<len(col1):int,regexp_count(col1, 1):int,regexp_count(col1, 2):int,regexp_
 
 
 -- !query
+SELECT
+  LISTAGG(DISTINCT col1) WITHIN GROUP (ORDER BY col1),
+  LISTAGG(DISTINCT col2) WITHIN GROUP (ORDER BY col2)
+FROM df
+-- !query schema
+struct<listagg(DISTINCT col1, NULL) WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST):string,listagg(DISTINCT col2, NULL) WITHIN GROUP (ORDER BY col2 ASC NULLS FIRST):string>
+-- !query output
+ab	bcd
+
+
+-- !query
+SELECT
+  LISTAGG(DISTINCT col1) WITHIN GROUP (ORDER BY col1),
+  LISTAGG(DISTINCT col2, '|') WITHIN GROUP (ORDER BY col2)
+FROM df
+-- !query schema
+struct<listagg(DISTINCT col1, NULL) WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST):string,listagg(DISTINCT col2, |) WITHIN GROUP (ORDER BY col2 ASC NULLS FIRST):string>
+-- !query output
+ab	b|c|d
+
+
+-- !query
+SELECT
+  LISTAGG(DISTINCT col1) WITHIN GROUP (ORDER BY col1),
+  LISTAGG(DISTINCT col2) WITHIN GROUP (ORDER BY col2 DESC)
+FROM df
+-- !query schema
+struct<listagg(DISTINCT col1, NULL) WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST):string,listagg(DISTINCT col2, NULL) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST):string>
+-- !query output
+ab	dcb
+
+
+-- !query
+SELECT
+  LISTAGG(DISTINCT col1) WITHIN GROUP (ORDER BY col1),
+  LISTAGG(DISTINCT col2) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST)
+FROM df
+-- !query schema
+struct<listagg(DISTINCT col1, NULL) WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST):string,listagg(DISTINCT col2, NULL) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST):string>
+-- !query output
+ab	dcb
+
+
+-- !query
+SELECT
+  LISTAGG(DISTINCT col1) WITHIN GROUP (ORDER BY col1),
+  LISTAGG(DISTINCT col2) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST)
+FROM df WHERE col1 > 'a' AND col2 > 'b'
+-- !query schema
+struct<listagg(DISTINCT col1, NULL) WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST):string,listagg(DISTINCT col2, NULL) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST):string>
+-- !query output
+b	dc
+
+
+-- !query
+SELECT
+  LISTAGG(DISTINCT col1) WITHIN GROUP (ORDER BY col1),
+  COUNT(DISTINCT col2)
+FROM df
+-- !query schema
+struct<listagg(DISTINCT col1, NULL) WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST):string,count(DISTINCT col2):bigint>
+-- !query output
+ab	3
+
+
+-- !query
+SELECT
+  col1,
+  LISTAGG(DISTINCT col2) WITHIN GROUP (ORDER BY col2 DESC),
+  COUNT(DISTINCT col3)
+FROM (VALUES ('A', 'x', '1'), ('A', 'y', '2'), ('B', 'y', '2'), ('B', 'z', '3')) AS tbl(col1, col2, col3)
+GROUP BY col1
+-- !query schema
+struct<col1:string,listagg(DISTINCT col2, NULL) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST):string,count(DISTINCT col3):bigint>
+-- !query output
+A	yx	2
+B	zy	2
+
+
+-- !query
 SELECT listagg(c1) FROM (VALUES (ARRAY('a', 'b'))) AS t(c1)
 -- !query schema
 struct<>
