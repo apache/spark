@@ -398,12 +398,22 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
       val wrappedScan = getWrappedScan(scan, sHolder)
 
+      def sameOutput(
+        cachedOutput: Seq[AttributeReference], newOutput: Seq[AttributeReference]): Boolean = {
+        cachedOutput.size == newOutput.size &&
+          cachedOutput.zip(newOutput).forall { case (cachedField, newField) =>
+            cachedField.canonicalized.semanticEquals(newField.canonicalized)
+          }
+      }
+
       val scanRelation: DataSourceV2ScanRelation = if (sHolder.cachedScanRelation.isEmpty) {
         val relation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
         // reuse sHolder to support column pruning after optimization
         sHolder.output = output
         sHolder.relation.setTagValue(V2_SCAN_BUILDER_HOLDER, sHolder)
         relation
+      } else if (sameOutput(sHolder.output, output)) {
+        sHolder.cachedScanRelation.get
       } else {
         sHolder.cachedScanRelation.get.copy(scan = wrappedScan, output = output)
       }
