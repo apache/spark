@@ -24,6 +24,7 @@ import "spark/connect/types.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
+option go_package = "internal/generated";
 
 // Dispatch object for pipelines commands. See each individual command for documentation.
 message PipelineCommand {
