@@ -50,9 +50,6 @@ trait PipelineUpdateContext {
     UnionFlowFilter(flowFilterForTables, resetCheckpointFlows)
   }
 
-  /** `PipelineConf` based on the root SparkSession for this update. */
-  def pipelineConf: PipelineConf
-
   /** Buffer containing internal events that are emitted during a run of a pipeline. */
   def eventBuffer: PipelineRunEventBuffer
 

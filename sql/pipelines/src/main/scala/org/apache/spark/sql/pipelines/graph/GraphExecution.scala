@@ -36,8 +36,6 @@ abstract class GraphExecution(
   /** The `Trigger` configuration for a streaming flow. */
   def streamTrigger(flow: Flow): Trigger
 
-  protected val pipelineConf: PipelineConf = env.pipelineConf
-
   /** Maps flow identifier to count of consecutive failures. Used to manage flow retries */
   private val flowToNumConsecutiveFailure = new ConcurrentHashMap[TableIdentifier, Int].asScala
 
@@ -202,7 +200,7 @@ abstract class GraphExecution(
       .get(SQLConf.PIPELINES_MAX_FLOW_RETRY_ATTEMPTS.key)
       .map(_.toInt) // Flow-level conf
       // Pipeline-level conf, else default flow retry limit
-      .getOrElse(pipelineConf.maxFlowRetryAttempts)
+      .getOrElse(env.spark.sessionState.conf.maxFlowRetryAttempts)
   }
 
   /**
@@ -211,7 +209,7 @@ abstract class GraphExecution(
   def stopThread(thread: Thread): Unit = {
     // Don't wait to join if current thread is the thread to stop
     if (thread.getId != Thread.currentThread().getId) {
-      thread.join(env.pipelineConf.timeoutMsForTerminationJoinAndLock)
+      thread.join(env.spark.sessionState.conf.timeoutMsForTerminationJoinAndLock)
       // thread is alive after we join.
       if (thread.isAlive) {
         throw new TimeoutException("Failed to stop the update due to a hanging control thread.")
@@ -268,14 +266,12 @@ object GraphExecution extends Logging {
    *  matching logic.
    * @param ex Exception to analyze.
    * @param flowDisplayName The user facing flow name with the error.
-   * @param pipelineConf Pipeline configuration.
    * @param currentNumTries Number of times the flow has been tried.
    * @param maxAllowedRetries Maximum number of retries allowed for the flow.
    */
   def determineFlowExecutionActionFromError(
       ex: => Throwable,
       flowDisplayName: => String,
-      pipelineConf: => PipelineConf,
       currentNumTries: => Int,
       maxAllowedRetries: => Int
   ): FlowExecutionAction = {

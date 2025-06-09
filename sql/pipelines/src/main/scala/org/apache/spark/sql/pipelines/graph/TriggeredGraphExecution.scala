@@ -69,8 +69,8 @@ class TriggeredGraphExecution(
 
   /** Back-off strategy used to determine duration between retries. */
   private val backoffStrategy = ExponentialBackoffStrategy(
-    maxTime = (pipelineConf.watchdogMaxRetryTimeInSeconds * 1000).millis,
-    stepSize = (pipelineConf.watchdogMinRetryTimeInSeconds * 1000).millis
+    maxTime = (env.spark.sessionState.conf.watchdogMaxRetryTimeInSeconds * 1000).millis,
+    stepSize = (env.spark.sessionState.conf.watchdogMinRetryTimeInSeconds * 1000).millis
   )
 
   override def streamTrigger(flow: Flow): Trigger = {
@@ -128,7 +128,9 @@ class TriggeredGraphExecution(
   }
 
   /** Used to control how many flows are executing at once. */
-  private val concurrencyLimit: Semaphore = new Semaphore(pipelineConf.maxConcurrentFlows)
+  private val concurrencyLimit: Semaphore = new Semaphore(
+    env.spark.sessionState.conf.maxConcurrentFlows
+  )
 
   /**
    * Runs the pipeline in a topological order.
@@ -180,11 +182,11 @@ class TriggeredGraphExecution(
       val (runningFlows, availablePermits) = concurrencyLimit.synchronized {
         (flowsWithState(StreamState.RUNNING).size, concurrencyLimit.availablePermits)
       }
-      if ((runningFlows + availablePermits) < pipelineConf.maxConcurrentFlows) {
+      if ((runningFlows + availablePermits) < env.spark.sessionState.conf.maxConcurrentFlows) {
         val errorStr =
-          s"The max concurrency is ${pipelineConf.maxConcurrentFlows}, but there are only " +
-          s"$availablePermits permits available with $runningFlows flows running. If this " +
-          s"happens consistently, it's possible we're leaking permits."
+          s"The max concurrency is ${env.spark.sessionState.conf.maxConcurrentFlows}, but " +
+          s"there are only $availablePermits permits available with $runningFlows flows running. " +
+          s"If this happens consistently, it's possible we're leaking permits."
         logError(errorStr)
         if (Utils.isTesting) {
           throw new IllegalStateException(errorStr)
@@ -250,7 +252,7 @@ class TriggeredGraphExecution(
       try {
         // Put thread to sleep for the configured polling interval to avoid busy-waiting
         // and holding one CPU core.
-        Thread.sleep(pipelineConf.streamStatePollingInterval * 1000)
+        Thread.sleep(env.spark.sessionState.conf.streamStatePollingInterval * 1000)
       } catch {
         case _: InterruptedException => return
       }
@@ -298,7 +300,6 @@ class TriggeredGraphExecution(
         lastExceptionAction = GraphExecution.determineFlowExecutionActionFromError(
           ex = e,
           flowDisplayName = flow.displayName,
-          pipelineConf = pipelineConf,
           currentNumTries = prevFailureCount + 1,
           maxAllowedRetries = maxRetryAttemptsForFlow(flowIdentifier)
         )
