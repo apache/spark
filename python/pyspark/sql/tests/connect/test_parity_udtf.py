@@ -54,9 +54,7 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
             def eval(self, a: int):
                 yield a + 1,
 
-        with self.assertRaisesRegex(
-            SparkConnectGrpcException, "Invalid Python user-defined table function return type."
-        ):
+        with self.assertRaisesRegex(InvalidPlanInput, "Invalid.*type"):
             TestUDTF(lit(1)).collect()
 
     @unittest.skipIf(
