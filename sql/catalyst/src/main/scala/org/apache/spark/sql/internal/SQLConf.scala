@@ -1546,7 +1546,7 @@ object SQLConf {
         "for backward compatibility.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION =
     buildConf("spark.sql.hive.metastorePartitionPruningFallbackOnException")
