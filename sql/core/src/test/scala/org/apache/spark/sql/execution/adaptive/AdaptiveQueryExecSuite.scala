@@ -3138,8 +3138,7 @@ class AdaptiveQueryExecSuite
 
   test("SPARK-42322: STAGE_MATERIALIZATION_MULTIPLE_FAILURES error class validation") {
     withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
 
       withTempView("test_table1", "test_table2") {
         import java.lang.reflect.InvocationTargetException
