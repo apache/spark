@@ -349,9 +349,9 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       assert(allEvents.size === 1)
       assert(allEvents(0)(0) === ForeachWriterSuite.Open(partition = 0, version = 0))
       assert(allEvents(0)(1) === ForeachWriterSuite.Process(value = 1))
-                        // `close` should be called with the error containing specific error details
-      val errorEvent = allEvents(0)(2).asInstanceOf[ForeachWriterSuite.Close]
+
       // The error should be the IllegalArgumentException that was thrown in process()
+      val errorEvent = allEvents(0)(2).asInstanceOf[ForeachWriterSuite.Close]
       val error = errorEvent.error.get
       assert(error.isInstanceOf[IllegalArgumentException],
         s"Expected IllegalArgumentException, got ${error.getClass}")
