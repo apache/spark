@@ -50,6 +50,7 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     libtiff5-dev \
     libxml2-dev \
+    msmtp \
     nodejs \
     npm \
     openjdk-17-jdk-headless \
