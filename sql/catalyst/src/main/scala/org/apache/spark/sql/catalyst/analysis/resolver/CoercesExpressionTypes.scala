@@ -54,21 +54,31 @@ trait CoercesExpressionTypes extends SQLConfHelper {
    * {{{ SELECT '1' + '1' }}}
    *
    * fixed-point analyzer requires two passes to resolve types.
+   *
+   * In the end, we apply [[DefaultCollationTypeCoercion]].
+   * See [[DefaultCollationTypeCoercion]] doc for more info.
    */
   def coerceExpressionTypes(
       expression: Expression,
       expressionTreeTraversal: ExpressionTreeTraversal): Expression = {
-    val withTypeCoercedOnce = applyTypeCoercion(
+    val coercedExpressionOnce = applyTypeCoercion(
       expression = expression,
       expressionTreeTraversal = expressionTreeTraversal
     )
     // This is a hack necessary because fixed-point analyzer sometimes requires multiple passes to
     // resolve type coercion. Instead, in single pass, we apply type coercion twice on the same
     // node in order to ensure that types are resolved.
-    applyTypeCoercion(
-      expression = withTypeCoercedOnce,
+    val coercedExpressionTwice = applyTypeCoercion(
+      expression = coercedExpressionOnce,
       expressionTreeTraversal = expressionTreeTraversal
     )
+
+    expressionTreeTraversal.defaultCollation match {
+      case Some(defaultCollation) =>
+        DefaultCollationTypeCoercion(coercedExpressionTwice, defaultCollation)
+      case None =>
+        coercedExpressionTwice
+    }
   }
 
   /**

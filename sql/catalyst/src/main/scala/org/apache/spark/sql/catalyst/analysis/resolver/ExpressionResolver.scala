@@ -89,14 +89,6 @@ class ExpressionResolver(
   private var lastInvalidExpressionsInTheContextOfOperator: Option[Seq[Expression]] = None
 
   /**
-   * This field contains the aliases of [[AggregateExpression]]s that were extracted during the
-   * most recent expression tree resolution. It is populated in
-   * [[resolveExpressionTreeInOperatorImpl]] when [[ExpressionTreeTraversal]] is popped from the
-   * stack.
-   */
-  private var lastExtractedAggregateExpressionAliases: Option[Seq[Alias]] = None
-
-  /**
    * This is a flag indicating that we are re-analyzing a resolved [[OuterReference]] subtree. It's
    * managed by [[handleResolvedOuterReference]].
    */
@@ -192,13 +184,6 @@ class ExpressionResolver(
    */
   def getLastInvalidExpressionsInTheContextOfOperator: Seq[Expression] =
     lastInvalidExpressionsInTheContextOfOperator.getOrElse(Seq.empty)
-
-  /**
-   * Returns all aliases of [[AggregateExpression]]s that were extracted during the most recent
-   * expression tree resolution.
-   */
-  def getLastExtractedAggregateExpressionAliases: Seq[Alias] =
-    lastExtractedAggregateExpressionAliases.getOrElse(Seq.empty)
 
   /**
    * Resolve `unresolvedExpression` which is a child of `parentOperator`. This is the main entry
@@ -541,12 +526,17 @@ class ExpressionResolver(
    * Validate if `expression` is under supported operator or not. In case it's not, add `expression`
    * to the [[ExpressionTreeTraversal.invalidExpressionsInTheContextOfOperator]] list to throw
    * error later, when [[getLastInvalidExpressionsInTheContextOfOperator]] is called by the
-   * [[Resolver]].
+   * [[Resolver]]. Here, we avoid adding [[AggregateExpressions]] when they are under a [[Sort]] or
+   * [[Filter]] on top of [[Aggregate]] as they are not transformed to attributes at the moment.
+   * Please see [[UnsupportedExpressionInOperatorValidation.isExpressionInUnsupportedOperator]] for
+   * more info.
    */
   def validateExpressionUnderSupportedOperator(expression: Expression): Unit = {
     if (UnsupportedExpressionInOperatorValidation.isExpressionInUnsupportedOperator(
-        expression,
-        traversals.current.parentOperator
+        expression = expression,
+        operator = traversals.current.parentOperator,
+        isFilterOnTopOfAggregate = traversals.current.isFilterOnTopOfAggregate,
+        isSortOnTopOfAggregate = traversals.current.isSortOnTopOfAggregate
       )) {
       traversals.current.invalidExpressionsInTheContextOfOperator.add(expression)
     }
@@ -558,7 +548,12 @@ class ExpressionResolver(
       inProjectList: Boolean = false,
       resolvingGroupingExpressions: Boolean = false
   ): (Expression, ExpressionResolutionContext) = {
-    traversals.withNewTraversal(parentOperator) {
+    traversals.withNewTraversal(
+      parentOperator = parentOperator,
+      defaultCollation = resolver.getViewResolver.getDefaultCollation,
+      isFilterOnTopOfAggregate = isFilterOnTopOfAggregate(parentOperator),
+      isSortOnTopOfAggregate = isSortOnTopOfAggregate(parentOperator)
+    ) {
       expressionResolutionContextStack.push(
         new ExpressionResolutionContext(
           isRoot = true,
@@ -573,8 +568,6 @@ class ExpressionResolver(
         lastReferencedAttributes = Some(traversals.current.referencedAttributes)
         lastInvalidExpressionsInTheContextOfOperator =
           Some(traversals.current.invalidExpressionsInTheContextOfOperator.asScala.toSeq)
-        lastExtractedAggregateExpressionAliases =
-          Some(traversals.current.extractedAggregateExpressionAliases.asScala.toSeq)
 
         (resolvedExpression, expressionResolutionContextStack.peek())
       } finally {
@@ -675,10 +668,11 @@ class ExpressionResolver(
         ),
         canResolveNameByHiddenOutput = canResolveNameByHiddenOutput,
         shouldPreferTableColumnsOverAliases = shouldPreferTableColumnsOverAliases,
+        shouldPreferHiddenOutput = traversals.current.isFilterOnTopOfAggregate,
+        canResolveNameByHiddenOutputInSubquery =
+          subqueryRegistry.currentScope.aggregateExpressionsExtractor.isDefined,
         canReferenceAggregatedAccessOnlyAttributes =
-          expressionResolutionContextStack.peek().resolvingTreeUnderAggregateExpression,
-        shouldReplaceHiddenOutputCandidatesWitAggregateListAliases =
-          shouldReplaceHiddenOutputCandidatesWitAggregateListAliases
+          expressionResolutionContextStack.peek().resolvingTreeUnderAggregateExpression
       )
 
       val candidate = nameTarget.pickCandidate(unresolvedAttribute)
@@ -724,6 +718,21 @@ class ExpressionResolver(
       }
     }
 
+  private def isFilterOnTopOfAggregate(parentOperator: LogicalPlan): Boolean = {
+    parentOperator match {
+      case _ @Filter(_, _: Aggregate) => true
+      case _ => false
+    }
+  }
+
+  private def isSortOnTopOfAggregate(parentOperator: LogicalPlan): Boolean = {
+    parentOperator match {
+      case _ @Sort(_, _, _: Aggregate, _) => true
+      case _ @Sort(_, _, _ @Filter(_, _: Aggregate), _) => true
+      case _ => false
+    }
+  }
+
   private def canResolveNameByHiddenOutput = traversals.current.parentOperator match {
     case operator @ (_: Filter | _: Sort) => true
     case other => false
@@ -733,12 +742,6 @@ class ExpressionResolver(
     case _: Sort => true
     case _ => false
   }
-
-  private def shouldReplaceHiddenOutputCandidatesWitAggregateListAliases =
-    traversals.current.parentOperator match {
-      case _: Sort => true
-      case _ => false
-    }
 
   /**
    * [[AttributeReference]] is already resolved if it's passed to us from DataFrame `col(...)`
@@ -808,9 +811,20 @@ class ExpressionResolver(
   }
 
   /**
-   * [[Literal]] resolution doesn't require any specific resolution logic at this point.
+   * [[Literal]]s inside a View's body with an explicitly set default collation
+   * should be resolved by modifying their [[Literal.dataType]], replacing all occurrences of
+   * the companion object [[StringType]] with a [[StringType]] with default collation.
+   *
+   * In other cases, no specific resolution logic is required.
    */
-  private def resolveLiteral(literal: Literal): Expression = literal
+  private def resolveLiteral(literal: Literal): Expression = {
+    traversals.current.defaultCollation match {
+      case Some(defaultCollation) =>
+        DefaultCollationTypeCoercion(literal, defaultCollation)
+      case None =>
+        literal
+    }
+  }
 
   /**
    * [[SubqueryExpression]]s are special case of [[Predicate and require special resolution logic.

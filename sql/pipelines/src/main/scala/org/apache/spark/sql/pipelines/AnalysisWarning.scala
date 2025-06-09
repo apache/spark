@@ -14,23 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect.common
 
-import scala.jdk.CollectionConverters._
+package org.apache.spark.sql.pipelines
 
-import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
+/** Represents a warning generated as part of graph analysis. */
+sealed trait AnalysisWarning
 
-/**
- * Error thrown when a connect command is not valid.
- */
-final case class InvalidCommandInput(
-    private val errorCondition: String,
-    private val messageParameters: Map[String, String] = Map.empty,
-    private val cause: Throwable = null)
-    extends Exception(SparkThrowableHelper.getMessage(errorCondition, messageParameters), cause)
-    with SparkThrowable {
+object AnalysisWarning {
 
-  override def getCondition: String = errorCondition
-
-  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
+  /**
+   * Warning that some streaming reader options are being dropped
+   *
+   * @param sourceName Source for which reader options are being dropped.
+   * @param droppedOptions Set of reader options that are being dropped for a specific source.
+   */
+  case class StreamingReaderOptionsDropped(sourceName: String, droppedOptions: Seq[String])
+      extends AnalysisWarning
 }
