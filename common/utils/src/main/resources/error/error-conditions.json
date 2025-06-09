@@ -921,6 +921,12 @@
     },
     "sqlState" : "21S01"
   },
+  "DATAFLOW_GRAPH_NOT_FOUND": {
+    "message": [
+      "Dataflow graph with id <graphId> could not be found"
+    ],
+    "sqlState": "KD011"
+  },
   "DATATYPE_MISMATCH" : {
     "message" : [
       "Cannot resolve <sqlExpr> due to data type mismatch:"

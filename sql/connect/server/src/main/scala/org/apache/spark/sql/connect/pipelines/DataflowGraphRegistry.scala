@@ -20,6 +20,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.pipelines.graph.GraphRegistrationContext
 
 /**
@@ -27,6 +28,9 @@ import org.apache.spark.sql.pipelines.graph.GraphRegistrationContext
  * PipelinesHandler when CreateDataflowGraph is called, and the PipelinesHandler also supports
  * attaching flows/datasets to a graph.
  */
+// TODO(SPARK-51727): Currently DataflowGraphRegistry is a singleton, but it should instead be
+//  scoped to a single SparkSession for proper isolation between pipelines that are run on the
+//  same cluster.
 object DataflowGraphRegistry {
 
   private val dataflowGraphs = new ConcurrentHashMap[String, GraphRegistrationContext]()
@@ -52,8 +56,11 @@ object DataflowGraphRegistry {
   /** Retrieves the graph for a given id, and throws if the id could not be found. */
   def getDataflowGraphOrThrow(dataflowGraphId: String): GraphRegistrationContext =
     DataflowGraphRegistry.getDataflowGraph(dataflowGraphId).getOrElse {
-      throw new IllegalArgumentException(
-        s"Pipeline context with ID $dataflowGraphId does not exist.")
+      throw new SparkException(
+        errorClass = "DATAFLOW_GRAPH_NOT_FOUND",
+        messageParameters = Map("graphId" -> dataflowGraphId),
+        cause = null
+      )
     }
 
   /** Removes the graph with a given id from the registry. */

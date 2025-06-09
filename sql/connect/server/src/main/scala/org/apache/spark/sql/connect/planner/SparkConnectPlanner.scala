@@ -2724,7 +2724,6 @@ class SparkConnectPlanner(
       sessionHolder,
       command,
       responseObserver,
-      session,
       transformRelation)
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(
