@@ -2838,4 +2838,40 @@ package object config {
       .checkValues(Set("connect", "classic"))
       .createWithDefault(
         if (sys.env.get("SPARK_CONNECT_MODE").contains("1")) "connect" else "classic")
+
+  private[spark] val DRIVER_REDIRECT_STDOUT_TO_LOG_ENABLED =
+    ConfigBuilder("spark.driver.log.redirectStdout.enabled")
+      .doc("Whether to redirect the driver's stdout to logging system. " +
+        s"It only takes affect when `${PLUGINS.key}` is configured with " +
+        "`org.apache.spark.deploy.ConsoleRedirectPlugin`.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val DRIVER_REDIRECT_STDERR_TO_LOG_ENABLED =
+    ConfigBuilder("spark.driver.log.redirectStderr.enabled")
+      .doc("Whether to redirect the driver's stderr to logging system. " +
+        s"It only takes affect when `${PLUGINS.key}` is configured with " +
+        "`org.apache.spark.deploy.ConsoleRedirectPlugin`.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EXEC_REDIRECT_STDOUT_TO_LOG_ENABLED =
+    ConfigBuilder("spark.executor.log.redirectStdout.enabled")
+      .doc("Whether to redirect the executor's stdout to logging system. " +
+        s"It only takes affect when `${PLUGINS.key}` is configured with " +
+        "`org.apache.spark.deploy.ConsoleRedirectPlugin`.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EXEC_REDIRECT_STDERR_TO_LOG_ENABLED =
+    ConfigBuilder("spark.executor.log.redirectStderr.enabled")
+      .doc("Whether to redirect the executor's stderr to logging system. " +
+        s"It only takes affect when `${PLUGINS.key}` is configured with " +
+        "`org.apache.spark.deploy.ConsoleRedirectPlugin`.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
 }
