@@ -1538,16 +1538,6 @@ object SQLConf {
       .checkValue(_ > 0, "The value of metastorePartitionPruningInSetThreshold must be positive")
       .createWithDefault(1000)
 
-  val HIVE_METASTORE_PARTITION_PRUNING_DIRECT_IN_ENABLED =
-    buildConf("spark.sql.hive.metastorePartitionPruningDirectInEnabled")
-      .doc("When true, IN predicates will be pushed down to Hive Metastore directly as 'column " +
-        "IN (value1, value2, ...)' instead of converting to OR predicates. This requires Hive " +
-        "2.0+ for proper support. When false, IN predicates will be converted to OR predicates " +
-        "for backward compatibility.")
-      .version("4.1.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION =
     buildConf("spark.sql.hive.metastorePartitionPruningFallbackOnException")
       .doc("Whether to fallback to get all partitions from Hive metastore and perform partition " +
@@ -6494,9 +6484,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def advancedPartitionPredicatePushdownEnabled: Boolean =
     getConf(ADVANCED_PARTITION_PREDICATE_PUSHDOWN)
-
-  def metastorePartitionPruningDirectInEnabled: Boolean =
-    getConf(HIVE_METASTORE_PARTITION_PRUNING_DIRECT_IN_ENABLED)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
 
