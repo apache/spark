@@ -675,3 +675,10 @@ WITH RECURSIVE randoms(val) AS (
     FROM randoms
 )
 SELECT val FROM randoms LIMIT 5;
+
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT CASE WHEN n < 5 THEN n + 1 ELSE NULL END FROM t1
+)
+SELECT * FROM t1 LIMIT 25;
