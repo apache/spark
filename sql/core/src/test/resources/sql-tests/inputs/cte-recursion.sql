@@ -182,6 +182,13 @@ WITH
   )
 SELECT * FROM t2;
 
+-- Self reference is inside OneRowSubquery
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT (SELECT n+1 FROM t1 WHERE n<5)
+)
+SELECT * FROM t1 LIMIT 5;
 
 -- recursive reference in a nested CTE
 WITH RECURSIVE
