@@ -18,18 +18,25 @@ import unittest
 import tempfile
 from pathlib import Path
 
-from pyspark.pipelines.cli import (
-    change_dir,
-    find_pipeline_spec,
-    load_pipeline_spec,
-    init,
-    register_definitions,
+from pyspark.testing.connectutils import (
+    ReusedConnectTestCase,
+    should_test_connect,
+    connect_requirement_message,
 )
-from pyspark.pipelines.tests.local_graph_element_registry import LocalGraphElementRegistry
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+
+if should_test_connect:
+    from pyspark.pipelines.cli import (
+        change_dir,
+        find_pipeline_spec,
+        load_pipeline_spec,
+        init,
+        register_definitions,
+    )
+    from pyspark.pipelines.tests.local_graph_element_registry import LocalGraphElementRegistry
 
 
-class InitCLITests(ReusedSQLTestCase):
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
+class InitCLITests(ReusedConnectTestCase):
     def test_init(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             project_name = "test_project"
