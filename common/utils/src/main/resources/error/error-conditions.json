@@ -3416,14 +3416,9 @@
       "Invalid recursive reference found inside WITH RECURSIVE clause."
     ],
     "subClass" : {
-      "NUMBER" : {
-        "message" : [
-          "Multiple self-references to one recursive CTE are not allowed."
-        ]
-      },
       "PLACE" : {
         "message" : [
-          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins, in aggregates, and in subquery expressions."
+          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins and in aggregates"
         ]
       }
     },
