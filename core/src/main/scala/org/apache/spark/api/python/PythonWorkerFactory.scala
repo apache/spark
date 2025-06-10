@@ -110,10 +110,9 @@ private[spark] class PythonWorkerFactory(
   private val daemonWorkers = new mutable.WeakHashMap[PythonWorker, ProcessHandle]()
   @GuardedBy("self")
   private var daemonSockPath: String = _
+  // FIFO with wroker, time of being added to idle workers list (ns).
   @GuardedBy("self")
-  private val idleWorkers = new mutable.Queue[PythonWorker]()
-  @GuardedBy("self")
-  private var lastActivityNs = 0L
+  private val idleWorkers = new mutable.Queue[(PythonWorker, Long)]()
   new MonitorThread().start()
 
   @GuardedBy("self")
@@ -129,7 +128,7 @@ private[spark] class PythonWorkerFactory(
       self.synchronized {
         // Pull from idle workers until we one that is alive, otherwise create a new one.
         while (idleWorkers.nonEmpty) {
-          val worker = idleWorkers.dequeue()
+          val (worker, _) = idleWorkers.dequeue()
           val workerHandle = daemonWorkers(worker)
           if (workerHandle.isAlive()) {
             try {
@@ -414,25 +413,40 @@ private[spark] class PythonWorkerFactory(
     override def run(): Unit = {
       while (true) {
         self.synchronized {
-          if (IDLE_WORKER_TIMEOUT_NS < System.nanoTime() - lastActivityNs) {
-            cleanupIdleWorkers()
-            lastActivityNs = System.nanoTime()
+          if (idleWorkers.isEmpty) {
+            self.wait()
+          }
+          if (idleWorkers.nonEmpty) {
+            val (_, idleAt) = idleWorkers.front
+            val curNanos = System.nanoTime
+            if ((idleAt + IDLE_WORKER_TIMEOUT_NS) >= curNanos) {
+              cleanupOneIdle();
+            } else {
+              // We know when to wake up next time.
+              Thread.sleep(TimeUnit.NANOSECONDS.toMillis(
+                (idleAt + IDLE_WORKER_TIMEOUT_NS) - curNanos))
+            }
           }
         }
-        Thread.sleep(10000)
       }
     }
   }
 
-  private def cleanupIdleWorkers(): Unit = {
-    while (idleWorkers.nonEmpty) {
-      val worker = idleWorkers.dequeue()
+  private def cleanupOneIdle(): Unit = {
+    if (idleWorkers.nonEmpty) {
+      val (worker, _) = idleWorkers.dequeue()
       try {
         worker.stop()
       } catch {
         case e: Exception =>
           logWarning("Failed to stop worker socket", e)
       }
+    }
+  }
+
+  private def cleanupIdleWorkers(): Unit = {
+    while (idleWorkers.nonEmpty) {
+      cleanupOneIdle()
     }
   }
 
@@ -481,8 +495,8 @@ private[spark] class PythonWorkerFactory(
   def releaseWorker(worker: PythonWorker): Unit = {
     if (useDaemon) {
       self.synchronized {
-        lastActivityNs = System.nanoTime()
-        idleWorkers.enqueue(worker)
+        idleWorkers.enqueue((worker, System.nanoTime()))
+        self.notifyAll()
       }
     } else {
       try {
