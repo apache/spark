@@ -14,11 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from datetime import timezone
 from typing import Any, Dict, Mapping, Iterator, Optional, cast
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql import SparkSession
 from pyspark.errors.exceptions.base import PySparkValueError
+from pyspark.pipelines.logging_utils import log_with_provided_timestamp
 
 
 def create_dataflow_graph(
@@ -53,13 +55,14 @@ def handle_pipeline_events(iter: Iterator[Dict[str, Any]]) -> None:
             # We expect to get a pipeline_command_result back in response to the initial StartRun
             # command.
             continue
-        elif "pipeline_events_result" not in result.keys():
+        elif "pipeline_event_result" not in result.keys():
             raise PySparkValueError(
                 "Pipeline logs stream handler received an unexpected result: " f"{result}"
             )
         else:
-            for e in result["pipeline_events_result"].events:
-                print(f"{e.timestamp}: {e.message}")
+            event = result["pipeline_event_result"].event
+            dt = event.timestamp.ToDatetime().replace(tzinfo=timezone.utc)
+            log_with_provided_timestamp(event.message, dt)
 
 
 def start_run(spark: SparkSession, dataflow_graph_id: str) -> Iterator[Dict[str, Any]]:
