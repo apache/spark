@@ -754,8 +754,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       s"$name in (${values.mkString(", ")})"
     }
 
-    def convertNotIn(
-      name: String, values: Seq[String]): String = {
+    def convertNotIn(name: String, values: Seq[String]): String = {
       s"$name not in (${values.mkString(", ")})"
     }
 
