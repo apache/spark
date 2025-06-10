@@ -1646,14 +1646,10 @@ WITH RECURSIVE t1(n, m) AS (
     SELECT n+1, CAST(n+1 AS BIGINT) FROM t1 WHERE n < 5)
 SELECT * FROM t1
 -- !query schema
-struct<>
+struct<n:int,m:int>
 -- !query output
-org.apache.spark.SparkException
-{
-  "errorClass" : "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
-  "sqlState" : "42825",
-  "messageParameters" : {
-    "left" : "\"INT\"",
-    "right" : "\"BIGINT\""
-  }
-}
+1	1
+2	2
+3	3
+4	4
+5	5

@@ -300,15 +300,22 @@ UNION ALL
 )
 SELECT n FROM t
 -- !query analysis
-org.apache.spark.SparkException
-{
-  "errorClass" : "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
-  "sqlState" : "42825",
-  "messageParameters" : {
-    "left" : "\"STRING\"",
-    "right" : "\"BIGINT\""
-  }
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [7#x AS n#x]
+:        +- UnionLoop xxxx
+:           :- Project [7 AS 7#x]
+:           :  +- OneRowRelation
+:           +- Project [cast((n + 1)#xL as string) AS 7#x]
+:              +- Project [(cast(n#x as bigint) + cast(1 as bigint)) AS (n + 1)#xL]
+:                 +- Filter (cast(n#x as bigint) < cast(10 as bigint))
+:                    +- SubqueryAlias t
+:                       +- Project [7#x AS n#x]
+:                          +- UnionLoopRef xxxx, [7#x], false
++- Project [n#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [n#x], false, false
 
 
 -- !query
@@ -1508,15 +1515,24 @@ WITH RECURSIVE foo(i) AS
    SELECT cast((i+1) AS decimal(10,0)) FROM foo WHERE i < 10)
 SELECT * FROM foo
 -- !query analysis
-org.apache.spark.SparkException
-{
-  "errorClass" : "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
-  "sqlState" : "42825",
-  "messageParameters" : {
-    "left" : "\"INT\"",
-    "right" : "\"DECIMAL(10,0)\""
-  }
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias foo
+:     +- Project [i#x AS i#x]
+:        +- UnionLoop xxxx
+:           :- Project [i#x]
+:           :  +- SubqueryAlias t
+:           :     +- Project [col1#x AS i#x]
+:           :        +- LocalRelation [col1#x]
+:           +- Project [cast(CAST((i + 1) AS DECIMAL(10,0))#x as int) AS i#x]
+:              +- Project [cast((i#x + 1) as decimal(10,0)) AS CAST((i + 1) AS DECIMAL(10,0))#x]
+:                 +- Filter (i#x < 10)
+:                    +- SubqueryAlias foo
+:                       +- Project [i#x AS i#x]
+:                          +- UnionLoopRef xxxx, [i#x], false
++- Project [i#x]
+   +- SubqueryAlias foo
+      +- CTERelationRef xxxx, true, [i#x], false, false
 
 
 -- !query

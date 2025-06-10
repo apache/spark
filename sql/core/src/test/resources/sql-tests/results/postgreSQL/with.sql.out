@@ -206,17 +206,12 @@ UNION ALL
 )
 SELECT n FROM t
 -- !query schema
-struct<>
+struct<n:string>
 -- !query output
-org.apache.spark.SparkException
-{
-  "errorClass" : "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
-  "sqlState" : "42825",
-  "messageParameters" : {
-    "left" : "\"STRING\"",
-    "right" : "\"BIGINT\""
-  }
-}
+10
+7
+8
+9
 
 
 -- !query
@@ -1379,17 +1374,27 @@ WITH RECURSIVE foo(i) AS
    SELECT cast((i+1) AS decimal(10,0)) FROM foo WHERE i < 10)
 SELECT * FROM foo
 -- !query schema
-struct<>
+struct<i:int>
 -- !query output
-org.apache.spark.SparkException
-{
-  "errorClass" : "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
-  "sqlState" : "42825",
-  "messageParameters" : {
-    "left" : "\"INT\"",
-    "right" : "\"DECIMAL(10,0)\""
-  }
-}
+1
+10
+10
+2
+2
+3
+3
+4
+4
+5
+5
+6
+6
+7
+7
+8
+8
+9
+9
 
 
 -- !query
