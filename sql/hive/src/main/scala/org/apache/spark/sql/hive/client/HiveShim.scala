@@ -749,12 +749,12 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       }
     }
 
-    def convertInDirectly(
+    def convertIn(
       name: String, values: Seq[String]): String = {
       s"$name in (${values.mkString(", ")})"
     }
 
-    def convertNotInDirectly(
+    def convertNotIn(
       name: String, values: Seq[String]): String = {
       s"$name not in (${values.mkString(", ")})"
     }
@@ -788,11 +788,11 @@ private[client] class Shim_v2_0 extends Shim with Logging {
 
       case In(ExtractAttribute(SupportedAttribute(name)), ExtractableLiterals(values))
           if useAdvanced =>
-        Some(convertInDirectly(name, values))
+        Some(convertIn(name, values))
 
       case Not(In(ExtractAttribute(SupportedAttribute(name)), ExtractableLiterals(values)))
           if useAdvanced =>
-        Some(convertNotInDirectly(name, values))
+        Some(convertNotIn(name, values))
 
       case InSet(child, values) if useAdvanced && values.size > inSetThreshold =>
         val dataType = child.dataType
@@ -804,19 +804,19 @@ private[client] class Shim_v2_0 extends Shim with Logging {
 
       case InSet(child @ ExtractAttribute(SupportedAttribute(name)), ExtractableDateValues(values))
           if useAdvanced && child.dataType == DateType =>
-        Some(convertInDirectly(name, values))
+        Some(convertIn(name, values))
 
       case Not(InSet(child @ ExtractAttribute(SupportedAttribute(name)),
         ExtractableDateValues(values))) if useAdvanced && child.dataType == DateType =>
-        Some(convertNotInDirectly(name, values))
+        Some(convertNotIn(name, values))
 
       case InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values))
           if useAdvanced =>
-        Some(convertInDirectly(name, values))
+        Some(convertIn(name, values))
 
       case Not(InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values)))
           if useAdvanced =>
-        Some(convertNotInDirectly(name, values))
+        Some(convertNotIn(name, values))
 
       case op @ SpecialBinaryComparison(
           ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
