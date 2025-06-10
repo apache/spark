@@ -705,11 +705,12 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     // Continue only after the mock calls onBlockFetchFailure
     sem.acquire()
 
-    // The first block should be returned without an exception, and the last two should throw
-    // FetchFailedExceptions (due to failure)
+    // There are one success fetch and 2 failures. Since failures are consumed firstly so
+    // the first 2 should throw FetchFailedExceptions (due to failure) and the last block
+    // should be returned without an exception.
+    intercept[FetchFailedException] { iterator.next() }
+    intercept[FetchFailedException] { iterator.next() }
     iterator.next()
-    intercept[FetchFailedException] { iterator.next() }
-    intercept[FetchFailedException] { iterator.next() }
   }
 
   private def mockCorruptBuffer(size: Long = 1L, corruptAt: Int = 0): ManagedBuffer = {
@@ -1506,10 +1507,11 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
         Seq(ShuffleMergedBlockId(0, 0, 2)), 2L, SHUFFLE_PUSH_MAP_ID)))
     val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress,
       blockManager = Some(blockManager))
-    // 1st instance of iterator.next() returns the original shuffle block (0, 0, 2)
-    assert(iterator.next()._1 === ShuffleBlockId(0, 0, 2))
-    // 2nd instance of iterator.next() throws FetchFailedException
+    // Fall back to fetch 2 local blocks with one success and one failure.
+    // Failures consumed first so 1st instance of iterator.next() throws FetchFailedException
     intercept[FetchFailedException] { iterator.next() }
+    // 2nd instance of iterator.next() returns the original shuffle block (0, 0, 2)
+    assert(iterator.next()._1 === ShuffleBlockId(0, 0, 2))
   }
 
   test("SPARK-32922: failure to fetch push-merged-local block should fallback to fetch " +
