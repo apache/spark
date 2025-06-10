@@ -1205,7 +1205,8 @@ class SparkSession(SparkConversionMixin):
 
         elif isinstance(schema, StructType):
             struct = schema
-            tupled_data = data
+            converter = _create_converter(struct)
+            tupled_data: Iterable[Tuple] = map(converter, data)
 
         else:
             raise PySparkTypeError(

@@ -2510,6 +2510,9 @@ def _need_converter(dataType: DataType) -> bool:
         return _need_converter(dataType.keyType) or _need_converter(dataType.valueType)
     elif isinstance(dataType, NullType):
         return True
+    elif isinstance(dataType, StringType):
+        # Coercion to StringType is allowed, e.g. dict -> str
+        return True
     else:
         return False
 
@@ -2530,6 +2533,10 @@ def _create_converter(dataType: DataType) -> Callable:
 
     elif isinstance(dataType, NullType):
         return lambda x: None
+
+    elif isinstance(dataType, StringType):
+        # Coercion to StringType is allowed, e.g. dict -> str
+        return lambda x: str(x) if x is not None else None
 
     elif not isinstance(dataType, StructType):
         return lambda x: x
