@@ -53,7 +53,6 @@ object SparkPipelines extends Logging {
     val sparkSubmitArgs = new ArrayBuffer[String]()
     val pipelinesArgs = new ArrayBuffer[String]()
     var remote = "local"
-    var name: Option[String] = None
 
     new SparkSubmitArgumentsParser() {
       parse(util.Arrays.asList(args: _*))
@@ -72,8 +71,11 @@ object SparkPipelines extends Logging {
             "Declarative Pipelines currently only supports Spark Connect."
           )
           throw SparkUserAppException(1)
-        } else if (opt == "--name") {
-          name = Option(value)
+        } else if (Seq("--name", "-h", "--help").contains(opt)) {
+          pipelinesArgs += opt
+          if (value != null && value.nonEmpty) {
+            pipelinesArgs += value
+          }
         } else {
           sparkSubmitArgs += opt
           if (value != null) {
@@ -98,10 +100,6 @@ object SparkPipelines extends Logging {
     sparkSubmitArgs += "spark.api.mode=connect"
     sparkSubmitArgs += "--remote"
     sparkSubmitArgs += remote
-    if (name.isDefined) {
-      pipelinesArgs += "--name"
-      pipelinesArgs += name.get
-    }
     (sparkSubmitArgs.toSeq, pipelinesArgs.toSeq)
   }
 
