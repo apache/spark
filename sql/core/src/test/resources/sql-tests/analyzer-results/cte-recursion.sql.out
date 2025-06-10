@@ -471,24 +471,11 @@ WITH RECURSIVE t(col) (
 )
 SELECT * FROM t LIMIT 5
 -- !query analysis
-WithCTE
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias t
-:     +- Project [1#x AS col#x]
-:        +- UnionLoop xxxx
-:           :- Project [1 AS 1#x]
-:           :  +- OneRowRelation
-:           +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
-:              :  +- Aggregate [max(col#x) AS max(col)#x]
-:              :     +- SubqueryAlias t
-:              :        +- Project [1#x AS col#x]
-:              :           +- UnionLoopRef xxxx, [1#x], false
-:              +- OneRowRelation
-+- GlobalLimit 5
-   +- LocalLimit 5
-      +- Project [col#x]
-         +- SubqueryAlias t
-            +- CTERelationRef xxxx, true, [col#x], false, false
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836"
+}
 
 
 -- !query
@@ -509,6 +496,35 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
   "sqlState" : "42836"
 }
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT (SELECT n+1 FROM t1 WHERE n<5)
+)
+SELECT * FROM t1 LIMIT 5
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#x AS n#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
+:              :  +- Project [(n#x + 1) AS (n + 1)#x]
+:              :     +- Filter (n#x < 5)
+:              :        +- SubqueryAlias t1
+:              :           +- Project [1#x AS n#x]
+:              :              +- UnionLoopRef xxxx, [1#x], false
+:              +- OneRowRelation
++- GlobalLimit 5
+   +- LocalLimit 5
+      +- Project [n#x]
+         +- SubqueryAlias t1
+            +- CTERelationRef xxxx, true, [n#x], false, false
 
 
 -- !query
