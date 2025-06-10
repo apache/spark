@@ -25,9 +25,9 @@ import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, LiteralValue, NullOrdering, SortDirection, SortValue, UserDefinedScalarFunc}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
-import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysNull, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, StringType}
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, NullType, StringType}
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
@@ -78,6 +78,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       expr: Expression, isPredicate: Boolean = false): Option[V2Expression] = expr match {
     case Literal(true, BooleanType) => Some(new AlwaysTrue())
     case Literal(false, BooleanType) => Some(new AlwaysFalse())
+    case Cast(Literal(null, NullType), BooleanType, _, _) if isPredicate => Some(new AlwaysNull())
     case Literal(value, dataType) => Some(LiteralValue(value, dataType))
     case col @ ColumnOrField(nameParts) =>
       val ref = FieldReference(nameParts)

@@ -8,7 +8,7 @@ import org.apache.spark.sql.types.DataTypes;
 /**
  * A predicate that always evaluates to {@code null}.
  *
- * @since 3.3.0
+ * @since 4.1.0
  */
 @Evolving
 public final class AlwaysNull extends Predicate implements Literal<Boolean> {

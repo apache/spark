@@ -910,9 +910,10 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
-  test("Check constraint with constant expression should be optimized out") {
+  test("Check constraint with constant valid expression should be optimized out") {
     Seq(
       "1 > 0",
+      "abs(-99) < 100",
       "null",
       "current_date() > DATE'2023-01-01'"
     ).foreach { constant =>
@@ -925,6 +926,29 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           case f: Filter => f
         }
         assert(filter.isEmpty)
+      }
+    }
+  }
+
+  test("Check constraint with constant invalid expression should throw error") {
+    Seq(
+      "1 < 0",
+      "abs(-99) > 100",
+      "current_date() < DATE'2023-01-01'"
+    ).foreach { constant =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, value INT," +
+          s" CONSTRAINT positive_id CHECK ($constant)) $defaultUsing")
+        val error = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO $t VALUES (1, 10), (2, 20)")
+        }
+        checkError(
+          exception = error,
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters = Map("constraintName" -> "positive_id", "expression" -> constant,
+            "values" -> "")
+        )
       }
     }
   }

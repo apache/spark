@@ -65,7 +65,7 @@ object Literal {
 
   val FalseLiteral: Literal = Literal(false, BooleanType)
 
-  val NullPredicateLiteral: Literal = Literal(null, NullType)
+  val NullPredicateLiteral: Literal = Literal(null, BooleanType)
 
   def apply(v: Any): Literal = v match {
     case i: Int => Literal(i, IntegerType)
