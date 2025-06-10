@@ -415,8 +415,7 @@ private[spark] class PythonWorkerFactory(
         self.synchronized {
           if (idleWorkers.isEmpty) {
             self.wait()
-          }
-          if (idleWorkers.nonEmpty) {
+          } else {
             val (_, idleAt) = idleWorkers.front
             val curNanos = System.nanoTime
             if ((idleAt + IDLE_WORKER_TIMEOUT_NS) >= curNanos) {
