@@ -237,8 +237,8 @@ jobs:
             cp "$file" "$file.bak"
             for pattern in "${PATTERNS[@]}"; do
               [ -n "$pattern" ] || continue  # Skip empty patterns
-              regex="${pattern//\*/.*}"
-              sed -i "s|$regex|***|g" "$file"
+              escaped_pattern=$(printf '%s\n' "$pattern" | sed 's/[\/&]/\\&/g')
+              sed -i "s/${escaped_pattern}/***/g" "$file"
             done
           done
 
