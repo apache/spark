@@ -26,7 +26,6 @@ import org.apache.spark.sql.pipelines.graph.{
   DataflowGraph,
   FlowFilter,
   NoTables,
-  PipelineConf,
   PipelineUpdateContext,
   TableFilter
 }
@@ -62,7 +61,6 @@ trait TestPipelineUpdateContextMixin {
       refreshTables: TableFilter = AllTables,
       resetCheckpointFlows: FlowFilter = AllFlows
   ) extends PipelineUpdateContext {
-    val pipelineConf: PipelineConf = new PipelineConf(spark)
     val eventBuffer = new PipelineRunEventBuffer(eventCallback = _ => ())
 
     override def flowProgressEventLogger: FlowProgressEventLogger = {

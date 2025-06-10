@@ -144,6 +144,7 @@ function get_release_info {
   if [ -n "$SPARK_RC_COUNT" ]; then
     RC_COUNT=$SPARK_RC_COUNT
   fi
+  export SPARK_RC_COUNT=$RC_COUNT
 
   # Check if the RC already exists, and if re-creating the RC, skip tag creation.
   RELEASE_TAG="v${RELEASE_VERSION}-rc${RC_COUNT}"
