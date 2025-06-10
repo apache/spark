@@ -1194,10 +1194,11 @@ class SparkSession(SparkConversionMixin):
         if not isinstance(data, list):
             data = list(data)
 
+        tupled_data: Iterable[Tuple]
         if schema is None or isinstance(schema, (list, tuple)):
             struct = self._inferSchemaFromList(data, names=schema)
             converter = _create_converter(struct)
-            tupled_data: Iterable[Tuple] = map(converter, data)
+            tupled_data = map(converter, data)
             if isinstance(schema, (list, tuple)):
                 for i, name in enumerate(schema):
                     struct.fields[i].name = name
@@ -1206,7 +1207,7 @@ class SparkSession(SparkConversionMixin):
         elif isinstance(schema, StructType):
             struct = schema
             converter = _create_converter(struct)
-            tupled_data: Iterable[Tuple] = map(converter, data)
+            tupled_data = map(converter, data)
 
         else:
             raise PySparkTypeError(
