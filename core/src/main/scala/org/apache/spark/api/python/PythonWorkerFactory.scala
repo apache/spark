@@ -415,12 +415,11 @@ private[spark] class PythonWorkerFactory(
         self.synchronized {
           if (idleWorkers.isEmpty) {
             self.wait()
-          }
-          if (idleWorkers.nonEmpty) {
-            val (_, idleAt) = idleWorkers.front
+          } else {
+            val (worker, idleAt) = idleWorkers.front
             val curNanos = System.nanoTime
             if ((idleAt + IDLE_WORKER_TIMEOUT_NS) >= curNanos) {
-              cleanupOneIdle();
+              stopWorkerInternal(worker);
             } else {
               // We know when to wake up next time.
               Thread.sleep(TimeUnit.NANOSECONDS.toMillis(
@@ -432,21 +431,18 @@ private[spark] class PythonWorkerFactory(
     }
   }
 
-  private def cleanupOneIdle(): Unit = {
-    if (idleWorkers.nonEmpty) {
-      val (worker, _) = idleWorkers.dequeue()
-      try {
-        worker.stop()
-      } catch {
-        case e: Exception =>
-          logWarning("Failed to stop worker socket", e)
-      }
+  private def stopWorkerInternal(worker: PythonWorker): Unit = {
+    try {
+      worker.stop()
+    } catch {
+      case e: Exception =>
+        logWarning("Failed to stop worker socket", e)
     }
   }
 
   private def cleanupIdleWorkers(): Unit = {
     while (idleWorkers.nonEmpty) {
-      cleanupOneIdle()
+      stopWorkerInternal(idleWorkers.dequeue()._1)
     }
   }
 
@@ -499,12 +495,7 @@ private[spark] class PythonWorkerFactory(
         self.notifyAll()
       }
     } else {
-      try {
-        worker.stop()
-      } catch {
-        case e: Exception =>
-          logWarning("Failed to close worker", e)
-      }
+      stopWorkerInternal(worker)
     }
   }
 
