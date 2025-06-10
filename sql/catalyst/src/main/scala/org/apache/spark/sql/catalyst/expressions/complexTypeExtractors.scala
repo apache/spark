@@ -36,6 +36,27 @@ import org.apache.spark.sql.types._
 
 object ExtractValue {
   /**
+   * Returns the resolved `ExtractValue` using the `extractValue` method call. In case the method
+   * returns `None`, it throws.
+   *
+   * See `extractValue` doc for more info.
+   */
+  def apply(
+      child: Expression,
+      extraction: Expression,
+      resolver: Resolver): Expression = {
+    extractValue(child, extraction, resolver) match {
+      case Some(expression) => expression
+      case None =>
+        throw QueryCompilationErrors.dataTypeUnsupportedByExtractValueError(
+          child.dataType,
+          extraction,
+          child
+        )
+    }
+  }
+
+  /**
    * Returns the resolved `ExtractValue`. It will return one kind of concrete `ExtractValue`,
    * depend on the type of `child` and `extraction`.
    *
@@ -46,30 +67,34 @@ object ExtractValue {
    *    Array       |   Integral type    |         GetArrayItem
    *     Map        |   map key type     |         GetMapValue
    */
-  def apply(
+  def extractValue(
       child: Expression,
       extraction: Expression,
-      resolver: Resolver): Expression = {
-
+      resolver: Resolver): Option[Expression] = {
     (child.dataType, extraction) match {
       case (StructType(fields), NonNullLiteral(v, _: StringType)) =>
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
-        GetStructField(child, ordinal, Some(fieldName))
+        Some(GetStructField(child, ordinal, Some(fieldName)))
 
       case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, _: StringType)) =>
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
-        GetArrayStructFields(child, fields(ordinal).copy(name = fieldName),
-          ordinal, fields.length, containsNull || fields(ordinal).nullable)
+        Some(
+          GetArrayStructFields(
+            child,
+            fields(ordinal).copy(name = fieldName),
+            ordinal,
+            fields.length,
+            containsNull || fields(ordinal).nullable
+          )
+        )
 
-      case (_: ArrayType, _) => GetArrayItem(child, extraction)
+      case (_: ArrayType, _) => Some(GetArrayItem(child, extraction))
 
-      case (MapType(_, _, _), _) => GetMapValue(child, extraction)
+      case (MapType(_, _, _), _) => Some(GetMapValue(child, extraction))
 
-      case (otherType, _) =>
-        throw QueryCompilationErrors.dataTypeUnsupportedByExtractValueError(
-          otherType, extraction, child)
+      case (otherType, _) => None
     }
   }
 
