@@ -39,6 +39,7 @@ import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
+import google.protobuf.timestamp_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
@@ -559,6 +560,75 @@ class PipelineCommand(google.protobuf.message.Message):
             oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
         ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
 
+    class DefineSqlGraphElements(google.protobuf.message.Message):
+        """Parses the SQL file and registers all datasets and flows."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
+        SQL_FILE_PATH_FIELD_NUMBER: builtins.int
+        SQL_TEXT_FIELD_NUMBER: builtins.int
+        dataflow_graph_id: builtins.str
+        """The graph to attach this dataset to."""
+        sql_file_path: builtins.str
+        """The full path to the SQL file. Can be relative or absolute."""
+        sql_text: builtins.str
+        """The contents of the SQL file."""
+        def __init__(
+            self,
+            *,
+            dataflow_graph_id: builtins.str | None = ...,
+            sql_file_path: builtins.str | None = ...,
+            sql_text: builtins.str | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_dataflow_graph_id",
+                b"_dataflow_graph_id",
+                "_sql_file_path",
+                b"_sql_file_path",
+                "_sql_text",
+                b"_sql_text",
+                "dataflow_graph_id",
+                b"dataflow_graph_id",
+                "sql_file_path",
+                b"sql_file_path",
+                "sql_text",
+                b"sql_text",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_dataflow_graph_id",
+                b"_dataflow_graph_id",
+                "_sql_file_path",
+                b"_sql_file_path",
+                "_sql_text",
+                b"_sql_text",
+                "dataflow_graph_id",
+                b"dataflow_graph_id",
+                "sql_file_path",
+                b"sql_file_path",
+                "sql_text",
+                b"sql_text",
+            ],
+        ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
+        ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_sql_file_path", b"_sql_file_path"]
+        ) -> typing_extensions.Literal["sql_file_path"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_sql_text", b"_sql_text"]
+        ) -> typing_extensions.Literal["sql_text"] | None: ...
+
     CREATE_DATAFLOW_GRAPH_FIELD_NUMBER: builtins.int
     DEFINE_DATASET_FIELD_NUMBER: builtins.int
     DEFINE_FLOW_FIELD_NUMBER: builtins.int
@@ -576,7 +646,7 @@ class PipelineCommand(google.protobuf.message.Message):
     @property
     def start_run(self) -> global___PipelineCommand.StartRun: ...
     @property
-    def define_sql_graph_elements(self) -> global___DefineSqlGraphElements: ...
+    def define_sql_graph_elements(self) -> global___PipelineCommand.DefineSqlGraphElements: ...
     def __init__(
         self,
         *,
@@ -585,7 +655,7 @@ class PipelineCommand(google.protobuf.message.Message):
         define_flow: global___PipelineCommand.DefineFlow | None = ...,
         drop_dataflow_graph: global___PipelineCommand.DropDataflowGraph | None = ...,
         start_run: global___PipelineCommand.StartRun | None = ...,
-        define_sql_graph_elements: global___DefineSqlGraphElements | None = ...,
+        define_sql_graph_elements: global___PipelineCommand.DefineSqlGraphElements | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -640,76 +710,6 @@ class PipelineCommand(google.protobuf.message.Message):
     ): ...
 
 global___PipelineCommand = PipelineCommand
-
-class DefineSqlGraphElements(google.protobuf.message.Message):
-    """Parses the SQL file and registers all datasets and flows."""
-
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
-    SQL_FILE_PATH_FIELD_NUMBER: builtins.int
-    SQL_TEXT_FIELD_NUMBER: builtins.int
-    dataflow_graph_id: builtins.str
-    """The graph to attach this dataset to."""
-    sql_file_path: builtins.str
-    """The full path to the SQL file. Can be relative or absolute."""
-    sql_text: builtins.str
-    """The contents of the SQL file."""
-    def __init__(
-        self,
-        *,
-        dataflow_graph_id: builtins.str | None = ...,
-        sql_file_path: builtins.str | None = ...,
-        sql_text: builtins.str | None = ...,
-    ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_dataflow_graph_id",
-            b"_dataflow_graph_id",
-            "_sql_file_path",
-            b"_sql_file_path",
-            "_sql_text",
-            b"_sql_text",
-            "dataflow_graph_id",
-            b"dataflow_graph_id",
-            "sql_file_path",
-            b"sql_file_path",
-            "sql_text",
-            b"sql_text",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_dataflow_graph_id",
-            b"_dataflow_graph_id",
-            "_sql_file_path",
-            b"_sql_file_path",
-            "_sql_text",
-            b"_sql_text",
-            "dataflow_graph_id",
-            b"dataflow_graph_id",
-            "sql_file_path",
-            b"sql_file_path",
-            "sql_text",
-            b"sql_text",
-        ],
-    ) -> None: ...
-    @typing.overload
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"]
-    ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
-    @typing.overload
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_sql_file_path", b"_sql_file_path"]
-    ) -> typing_extensions.Literal["sql_file_path"] | None: ...
-    @typing.overload
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_sql_text", b"_sql_text"]
-    ) -> typing_extensions.Literal["sql_text"] | None: ...
-
-global___DefineSqlGraphElements = DefineSqlGraphElements
 
 class PipelineCommandResult(google.protobuf.message.Message):
     """Dispatch object for pipelines command results."""
@@ -806,55 +806,35 @@ class PipelineEventResult(google.protobuf.message.Message):
 global___PipelineEventResult = PipelineEventResult
 
 class PipelineEvent(google.protobuf.message.Message):
-    """An event emitted during the run of a graph."""
-
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     TIMESTAMP_FIELD_NUMBER: builtins.int
     MESSAGE_FIELD_NUMBER: builtins.int
-    timestamp: builtins.str
-    """The time of the event."""
+    @property
+    def timestamp(self) -> google.protobuf.timestamp_pb2.Timestamp:
+        """The timestamp corresponding to when the event occurred."""
     message: builtins.str
     """The message that should be displayed to users."""
     def __init__(
         self,
         *,
-        timestamp: builtins.str | None = ...,
+        timestamp: google.protobuf.timestamp_pb2.Timestamp | None = ...,
         message: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "_message",
-            b"_message",
-            "_timestamp",
-            b"_timestamp",
-            "message",
-            b"message",
-            "timestamp",
-            b"timestamp",
+            "_message", b"_message", "message", b"message", "timestamp", b"timestamp"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_message",
-            b"_message",
-            "_timestamp",
-            b"_timestamp",
-            "message",
-            b"message",
-            "timestamp",
-            b"timestamp",
+            "_message", b"_message", "message", b"message", "timestamp", b"timestamp"
         ],
     ) -> None: ...
-    @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_message", b"_message"]
     ) -> typing_extensions.Literal["message"] | None: ...
-    @typing.overload
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_timestamp", b"_timestamp"]
-    ) -> typing_extensions.Literal["timestamp"] | None: ...
 
 global___PipelineEvent = PipelineEvent

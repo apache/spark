@@ -102,7 +102,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         self._client.execute_command(command)
 
     def register_sql(self, sql_text: str, file_path: Path) -> None:
-        inner_command = pb2.DefineSqlGraphElements(
+        inner_command = pb2.PipelineCommand.DefineSqlGraphElements(
             dataflow_graph_id=self._dataflow_graph_id,
             sql_text=sql_text,
             sql_file_path=str(file_path),

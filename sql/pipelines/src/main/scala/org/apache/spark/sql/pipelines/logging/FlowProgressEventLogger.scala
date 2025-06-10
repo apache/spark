@@ -152,7 +152,7 @@ class FlowProgressEventLogger(eventBuffer: PipelineRunEventBuffer) extends Loggi
         level = if (logAsWarn) EventLevel.WARN else EventLevel.ERROR,
         message = eventLogMessage,
         details = FlowProgress(FlowStatus.FAILED),
-        exception = exception
+        exception = Option(exception)
       )
     )
     // Since the flow failed, remove the flow from runningFlows.
@@ -242,7 +242,7 @@ class FlowProgressEventLogger(eventBuffer: PipelineRunEventBuffer) extends Loggi
         level = EventLevel.INFO,
         message = message.getOrElse(s"Flow '${flow.displayName}' has STOPPED."),
         details = FlowProgress(FlowStatus.STOPPED),
-        exception = cause.orNull
+        exception = cause
       )
     )
     // Once a flow is stopped, remove it from running and idle.
