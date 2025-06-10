@@ -33,18 +33,7 @@ import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.pipelines.Language.Python
 import org.apache.spark.sql.pipelines.QueryOriginType
 import org.apache.spark.sql.pipelines.common.RunState.{CANCELED, FAILED}
-import org.apache.spark.sql.pipelines.graph.{
-  FlowAnalysis,
-  GraphIdentifierManager,
-  IdentifierHelper,
-  PipelineUpdateContextImpl,
-  QueryContext,
-  QueryOrigin,
-  SqlGraphRegistrationContext,
-  Table,
-  TemporaryView,
-  UnresolvedFlow
-}
+import org.apache.spark.sql.pipelines.graph.{FlowAnalysis, GraphIdentifierManager, IdentifierHelper, PipelineUpdateContextImpl, QueryContext, QueryOrigin, SqlGraphRegistrationContext, Table, TemporaryView, UnresolvedFlow}
 import org.apache.spark.sql.pipelines.logging.{PipelineEvent, RunProgress}
 import org.apache.spark.sql.types.StructType
 
@@ -77,17 +66,14 @@ private[connect] object PipelinesHandler extends Logging {
     val defaultResponse = PipelineCommandResult.getDefaultInstance
     cmd.getCommandTypeCase match {
       case proto.PipelineCommand.CommandTypeCase.CREATE_DATAFLOW_GRAPH =>
-        val createdGraphId = createDataflowGraph(
-          cmd.getCreateDataflowGraph,
-          sessionHolder.session
-        )
+        val createdGraphId =
+          createDataflowGraph(cmd.getCreateDataflowGraph, sessionHolder.session)
         PipelineCommandResult
           .newBuilder()
           .setCreateDataflowGraphResult(
             PipelineCommandResult.CreateDataflowGraphResult.newBuilder
               .setDataflowGraphId(createdGraphId)
-              .build()
-          )
+              .build())
           .build()
       case proto.PipelineCommand.CommandTypeCase.DROP_DATAFLOW_GRAPH =>
         logInfo(s"Drop pipeline cmd received: $cmd")
@@ -119,9 +105,7 @@ private[connect] object PipelinesHandler extends Logging {
     val defaultCatalog = Option
       .when(cmd.hasDefaultCatalog)(cmd.getDefaultCatalog)
       .getOrElse {
-        logInfo(
-          s"No default catalog was supplied. Falling back to the current catalog."
-        )
+        logInfo(s"No default catalog was supplied. Falling back to the current catalog.")
         spark.catalog.currentCatalog()
       }
 
@@ -137,8 +121,7 @@ private[connect] object PipelinesHandler extends Logging {
     DataflowGraphRegistry.createDataflowGraph(
       defaultCatalog = defaultCatalog,
       defaultDatabase = defaultDatabase,
-      defaultSqlConf = defaultSqlConf
-    )
+      defaultSqlConf = defaultSqlConf)
   }
 
   private def defineSqlGraphElements(
@@ -168,21 +151,17 @@ private[connect] object PipelinesHandler extends Logging {
             specifiedSchema = Option.when(dataset.hasSchema)(
               DataTypeProtoConverter
                 .toCatalystType(dataset.getSchema)
-                .asInstanceOf[StructType]
-            ),
+                .asInstanceOf[StructType]),
             partitionCols = Option(dataset.getPartitionColsList.asScala.toSeq)
               .filter(_.nonEmpty),
             properties = dataset.getTablePropertiesMap.asScala.toMap,
             baseOrigin = QueryOrigin(
               objectType = Option(QueryOriginType.Table.toString),
               objectName = Option(tableIdentifier.unquotedString),
-              language = Option(Python())
-            ),
+              language = Option(Python())),
             format = Option.when(dataset.hasFormat)(dataset.getFormat),
             normalizedPath = None,
-            isStreamingTableOpt = None
-          )
-        )
+            isStreamingTableOpt = None))
       case proto.DatasetType.TEMPORARY_VIEW =>
         val viewIdentifier =
           GraphIdentifierManager.parseTableIdentifier(dataset.getDatasetName, sparkSession)
@@ -194,11 +173,8 @@ private[connect] object PipelinesHandler extends Logging {
             origin = QueryOrigin(
               objectType = Option(QueryOriginType.View.toString),
               objectName = Option(viewIdentifier.unquotedString),
-              language = Option(Python())
-            ),
-            properties = Map.empty
-          )
-        )
+              language = Option(Python())),
+            properties = Map.empty))
       case _ =>
         throw new IllegalArgumentException(s"Unknown dataset type: ${dataset.getDatasetType}")
     }
@@ -221,8 +197,7 @@ private[connect] object PipelinesHandler extends Logging {
     if (!isImplicitFlow && !IdentifierHelper.isSinglePartIdentifier(flowIdentifier)) {
       throw new AnalysisException(
         "MULTIPART_FLOW_NAME_NOT_SUPPORTED",
-        Map("flowName" -> flow.getFlowName)
-      )
+        Map("flowName" -> flow.getFlowName))
     }
 
     graphElementRegistry.registerFlow(
@@ -230,21 +205,18 @@ private[connect] object PipelinesHandler extends Logging {
         identifier = flowIdentifier,
         destinationIdentifier = GraphIdentifierManager
           .parseTableIdentifier(name = flow.getTargetDatasetName, spark = sparkSession),
-        func = FlowAnalysis.createFlowFunctionFromLogicalPlan(transformRelationFunc(flow.getPlan)),
+        func =
+          FlowAnalysis.createFlowFunctionFromLogicalPlan(transformRelationFunc(flow.getPlan)),
         sqlConf = flow.getSqlConfMap.asScala.toMap,
         once = flow.getOnce,
         queryContext = QueryContext(
           Option(graphElementRegistry.defaultCatalog),
-          Option(graphElementRegistry.defaultDatabase)
-        ),
+          Option(graphElementRegistry.defaultDatabase)),
         comment = None,
         origin = QueryOrigin(
           objectType = Option(QueryOriginType.Flow.toString),
           objectName = Option(flowIdentifier.unquotedString),
-          language = Option(Python())
-        )
-      )
-    )
+          language = Option(Python()))))
   }
 
   private def startRun(
@@ -265,7 +237,7 @@ private[connect] object PipelinesHandler extends Logging {
         // Returns the message associated with a Throwable and all its causes
         def getExceptionMessages(throwable: Throwable): Seq[String] = {
           throwable.getMessage +:
-          Option(throwable.getCause).map(getExceptionMessages).getOrElse(Nil)
+            Option(throwable.getCause).map(getExceptionMessages).getOrElse(Nil)
         }
         val errorMessages = getExceptionMessages(event.error.get)
         s"""${event.message}
@@ -301,15 +273,11 @@ private[connect] object PipelinesHandler extends Logging {
                           // lost or double-counted.
                           .setSeconds(event.timestamp.getTime / 1000)
                           .setNanos(event.timestamp.getNanos)
-                          .build()
-                      )
+                          .build())
                       .setMessage(message)
-                      .build()
-                  )
-                  .build()
-              )
-              .build()
-          )
+                      .build())
+                  .build())
+              .build())
       }
     }
     val pipelineUpdateContext =

@@ -59,8 +59,7 @@ object DataflowGraphRegistry {
       throw new SparkException(
         errorClass = "DATAFLOW_GRAPH_NOT_FOUND",
         messageParameters = Map("graphId" -> dataflowGraphId),
-        cause = null
-      )
+        cause = null)
     }
 
   /** Removes the graph with a given id from the registry. */

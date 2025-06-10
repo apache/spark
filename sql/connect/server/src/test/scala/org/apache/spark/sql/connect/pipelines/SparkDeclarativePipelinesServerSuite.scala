@@ -33,19 +33,13 @@ class SparkDeclarativePipelinesServerSuite
 
   test("create dataflow graph falls back to current database in session") {
     withRawBlockingStub { implicit stub =>
-      sendPlan(
-        buildSqlCommandPlan("CREATE DATABASE test_db")
-      )
-      sendPlan(
-        buildSqlCommandPlan("USE DATABASE test_db")
-      )
+      sendPlan(buildSqlCommandPlan("CREATE DATABASE test_db"))
+      sendPlan(buildSqlCommandPlan("USE DATABASE test_db"))
       val graphId = sendPlan(
         buildCreateDataflowGraphPlan(
           proto.PipelineCommand.CreateDataflowGraph
             .newBuilder()
-            .build()
-        )
-      ).getPipelineCommandResult.getCreateDataflowGraphResult.getDataflowGraphId
+            .build())).getPipelineCommandResult.getCreateDataflowGraphResult.getDataflowGraphId
       val definition =
         DataflowGraphRegistry
           .getDataflowGraphOrThrow(graphId)
@@ -65,18 +59,16 @@ class SparkDeclarativePipelinesServerSuite
                   .newBuilder()
                   .setDataflowGraphId("random-graph-id-that-dne")
                   .setDatasetName("mv")
-                  .setDatasetType(DatasetType.MATERIALIZED_VIEW)
-              )
-              .build()
-          )
-        )
+                  .setDatasetType(DatasetType.MATERIALIZED_VIEW))
+              .build()))
       }
     }
     assert(ex.getMessage.contains("DATAFLOW_GRAPH_NOT_FOUND"))
 
   }
 
-  test("Cross dependency between SQL dataset and non-SQL dataset is valid and can be registered") {
+  test(
+    "Cross dependency between SQL dataset and non-SQL dataset is valid and can be registered") {
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       sendPlan(
@@ -88,11 +80,8 @@ class SparkDeclarativePipelinesServerSuite
                 .newBuilder()
                 .setDataflowGraphId(graphId)
                 .setDatasetName("mv")
-                .setDatasetType(DatasetType.MATERIALIZED_VIEW)
-            )
-            .build()
-        )
-      )
+                .setDatasetType(DatasetType.MATERIALIZED_VIEW))
+            .build()))
 
       sendPlan(
         buildPlanFromPipelineCommand(
@@ -111,27 +100,19 @@ class SparkDeclarativePipelinesServerSuite
                       UnresolvedTableValuedFunction
                         .newBuilder()
                         .setFunctionName("range")
-                        .addArguments(
-                          Expression
-                            .newBuilder()
-                            .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
-                            .build()
-                        )
-                        .build()
-                    )
-                    .build()
-                )
-            )
-            .build()
-        )
-      )
+                        .addArguments(Expression
+                          .newBuilder()
+                          .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
+                          .build())
+                        .build())
+                    .build()))
+            .build()))
       registerGraphElementsFromSql(
         graphId = graphId,
         sql = """
                 |CREATE MATERIALIZED VIEW mv2 AS SELECT 2;
                 |CREATE FLOW f AS INSERT INTO mv2 BY NAME SELECT * FROM mv
-                |""".stripMargin
-      )
+                |""".stripMargin)
 
       val definition =
         DataflowGraphRegistry
@@ -171,14 +152,12 @@ class SparkDeclarativePipelinesServerSuite
         createTable(
           name = "tableA",
           datasetType = DatasetType.MATERIALIZED_VIEW,
-          sql = Some("SELECT * FROM RANGE(5)")
-        )
+          sql = Some("SELECT * FROM RANGE(5)"))
         createView(name = "viewB", sql = "SELECT * FROM tableA")
         createTable(
           name = "tableC",
           datasetType = DatasetType.TABLE,
-          sql = Some("SELECT * FROM tableA, viewB")
-        )
+          sql = Some("SELECT * FROM tableA, viewB"))
       }
 
       val definition =
@@ -198,8 +177,7 @@ class SparkDeclarativePipelinesServerSuite
           .filter(_.identifier.unquotedString == "spark_catalog.default.tableC")
           .head
       assert(
-        tableCFlow.inputs.map(_.unquotedString) == Set("viewB", "spark_catalog.default.tableA")
-      )
+        tableCFlow.inputs.map(_.unquotedString) == Set("viewB", "spark_catalog.default.tableA"))
 
       val viewBFlow =
         graph.resolvedFlows.filter(_.identifier.unquotedString == "viewB").head
@@ -221,18 +199,15 @@ class SparkDeclarativePipelinesServerSuite
         createTable(
           name = "tableA",
           datasetType = DatasetType.MATERIALIZED_VIEW,
-          sql = Some("SELECT * FROM RANGE(5)")
-        )
+          sql = Some("SELECT * FROM RANGE(5)"))
         createTable(
           name = "tableB",
           datasetType = DatasetType.TABLE,
-          sql = Some("SELECT * FROM STREAM tableA")
-        )
+          sql = Some("SELECT * FROM STREAM tableA"))
         createTable(
           name = "tableC",
           datasetType = DatasetType.TABLE,
-          sql = Some("SELECT * FROM tableB")
-        )
+          sql = Some("SELECT * FROM tableB"))
       }
 
       registerPipelineDatasets(pipeline)
@@ -255,19 +230,16 @@ class SparkDeclarativePipelinesServerSuite
         createTable(
           name = "curr.tableA",
           datasetType = proto.DatasetType.MATERIALIZED_VIEW,
-          sql = Some("SELECT * FROM RANGE(5)")
-        )
+          sql = Some("SELECT * FROM RANGE(5)"))
         createTable(
           name = "curr.tableB",
           datasetType = proto.DatasetType.TABLE,
-          sql = Some("SELECT * FROM STREAM curr.tableA")
-        )
+          sql = Some("SELECT * FROM STREAM curr.tableA"))
         createView(name = "viewC", sql = "SELECT * FROM curr.tableB")
         createTable(
           name = "other.tableD",
           datasetType = proto.DatasetType.TABLE,
-          sql = Some("SELECT * FROM viewC")
-        )
+          sql = Some("SELECT * FROM viewC"))
       }
 
       registerPipelineDatasets(pipeline)
