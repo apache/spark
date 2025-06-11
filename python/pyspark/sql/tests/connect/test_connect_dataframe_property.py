@@ -72,6 +72,11 @@ class SparkConnectDataFramePropertyTests(ReusedMixedTestCase, PandasOnSparkTestU
             df_columns.remove(col)
         assert len(df.columns) == 4
 
+        df_schema = df.schema
+        assert len(df_schema.fields) == 4
+        df_schema.fields.pop(0)
+        assert len(df.schema.fields) == 4
+
     def test_cached_schema_to(self):
         rows = [Row(id=x, name=str(x)) for x in range(100)]
         cdf = self.connect.createDataFrame(rows)
