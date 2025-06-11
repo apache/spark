@@ -326,7 +326,7 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
 
     val conf = getLoggingConf(testDirPath, None)
     conf.set(EVENT_LOG_ENABLE_ROLLING, true)
-    conf.set(EVENT_LOG_ROLLING_MAX_FILE_SIZE.key, "9m")
+    conf.set(EVENT_LOG_ROLLING_MAX_FILE_SIZE.key, "1m")
 
     val e = intercept[IllegalArgumentException] {
       createWriter(appId, attemptId, testDirPath.toUri, conf,
