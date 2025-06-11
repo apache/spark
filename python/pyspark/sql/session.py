@@ -54,6 +54,7 @@ from pyspark.sql.types import (
     DataType,
     StructField,
     StructType,
+    VariantVal,
     _make_type_verifier,
     _infer_schema,
     _has_nulltype,
@@ -1193,6 +1194,9 @@ class SparkSession(SparkConversionMixin):
         # make sure data could consumed multiple times
         if not isinstance(data, list):
             data = list(data)
+
+        if any(isinstance(d, VariantVal) for d in data):
+            raise PySparkValueError("Rows cannot be of type VariantVal")
 
         tupled_data: Iterable[Tuple]
         if schema is None or isinstance(schema, (list, tuple)):
