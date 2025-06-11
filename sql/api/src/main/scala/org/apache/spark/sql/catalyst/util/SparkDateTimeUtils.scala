@@ -84,6 +84,12 @@ trait SparkDateTimeUtils {
   }
 
   /**
+   * Converts the time to microseconds since midnight. In Spark time values have
+   * nanoseconds precision, so this conversion is lossy.
+   */
+  def nanosToMicros(nanos: Long): Long = Math.floorDiv(nanos, MICROS_PER_MILLIS)
+
+  /**
    * Converts the timestamp to milliseconds since epoch. In Spark timestamp values have
    * microseconds precision, so this conversion is lossy.
    */
@@ -100,6 +106,11 @@ trait SparkDateTimeUtils {
   def millisToMicros(millis: Long): Long = {
     Math.multiplyExact(millis, MICROS_PER_MILLIS)
   }
+
+  /**
+   * Converts microseconds since the midnight to nanoseconds.
+   */
+  def microsToNanos(micros: Long): Long = Math.multiplyExact(micros, NANOS_PER_MICROS)
 
   // See issue SPARK-35679
   // min second cause overflow in instant to micro
