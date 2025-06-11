@@ -24,7 +24,7 @@ import scala.util.Random
 import org.apache.spark.{SPARK_DOC_ROOT, SparkDateTimeException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToLocalTime
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.nanosToLocalTime
 
 class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
 
@@ -108,7 +108,7 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
     data.foreach { micros =>
       val str = formatter.format(micros)
       assert(parser.parse(str) === micros, s"micros = $micros")
-      assert(formatter.format(microsToLocalTime(micros)) === str)
+      assert(formatter.format(nanosToLocalTime(micros)) === str)
     }
   }
 
@@ -121,7 +121,7 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
       900000 -> "00:00:00.9",
       1000000 -> "00:00:01").foreach { case (micros, tsStr) =>
       assert(formatter.format(micros) === tsStr)
-      assert(formatter.format(microsToLocalTime(micros)) === tsStr)
+      assert(formatter.format(nanosToLocalTime(micros)) === tsStr)
     }
   }
 

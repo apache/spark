@@ -377,7 +377,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     val encoder = ExpressionEncoder(schema).resolveAndBind()
     val localTime = java.time.LocalTime.parse("20:38:45.123456")
     val row = toRow(encoder, Row(localTime))
-    assert(row.getLong(0) === DateTimeUtils.localTimeToMicros(localTime))
+    assert(row.getLong(0) === DateTimeUtils.localTimeToNanos(localTime))
     val readback = fromRow(encoder, row)
     assert(readback.get(0).equals(localTime))
   }

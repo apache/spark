@@ -175,8 +175,8 @@ class ParquetFilters(
     }
   }
 
-  private def localTimeToMicros(v: Any): JLong = {
-    DateTimeUtils.localTimeToMicros(v.asInstanceOf[LocalTime])
+  private def localTimeToNanos(v: Any): JLong = {
+    DateTimeUtils.localTimeToNanos(v.asInstanceOf[LocalTime])
   }
 
   private def decimalToInt32(decimal: JBigDecimal): Integer = decimal.unscaledValue().intValue()
@@ -213,7 +213,7 @@ class ParquetFilters(
 
   private def toLongValue(v: Any): JLong = v match {
     case d: Duration => IntervalUtils.durationToMicros(d)
-    case lt: LocalTime => DateTimeUtils.localTimeToMicros(lt)
+    case lt: LocalTime => DateTimeUtils.localTimeToNanos(lt)
     case l => l.asInstanceOf[JLong]
   }
 
@@ -254,7 +254,7 @@ class ParquetFilters(
     case ParquetTimeType =>
       (n: Array[String], v: Any) => FilterApi.eq(
         longColumn(n),
-        Option(v).map(localTimeToMicros).orNull)
+        Option(v).map(localTimeToNanos).orNull)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) => FilterApi.eq(
@@ -307,7 +307,7 @@ class ParquetFilters(
     case ParquetTimeType =>
       (n: Array[String], v: Any) => FilterApi.notEq(
         longColumn(n),
-        Option(v).map(localTimeToMicros).orNull)
+        Option(v).map(localTimeToNanos).orNull)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) => FilterApi.notEq(
@@ -349,7 +349,7 @@ class ParquetFilters(
     case ParquetTimestampMillisType if pushDownTimestamp =>
       (n: Array[String], v: Any) => FilterApi.lt(longColumn(n), timestampToMillis(v))
     case ParquetTimeType =>
-      (n: Array[String], v: Any) => FilterApi.lt(longColumn(n), localTimeToMicros(v))
+      (n: Array[String], v: Any) => FilterApi.lt(longColumn(n), localTimeToNanos(v))
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) =>
@@ -388,7 +388,7 @@ class ParquetFilters(
     case ParquetTimestampMillisType if pushDownTimestamp =>
       (n: Array[String], v: Any) => FilterApi.ltEq(longColumn(n), timestampToMillis(v))
     case ParquetTimeType =>
-      (n: Array[String], v: Any) => FilterApi.ltEq(longColumn(n), localTimeToMicros(v))
+      (n: Array[String], v: Any) => FilterApi.ltEq(longColumn(n), localTimeToNanos(v))
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) =>
@@ -427,7 +427,7 @@ class ParquetFilters(
     case ParquetTimestampMillisType if pushDownTimestamp =>
       (n: Array[String], v: Any) => FilterApi.gt(longColumn(n), timestampToMillis(v))
     case ParquetTimeType =>
-      (n: Array[String], v: Any) => FilterApi.gt(longColumn(n), localTimeToMicros(v))
+      (n: Array[String], v: Any) => FilterApi.gt(longColumn(n), localTimeToNanos(v))
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) =>
@@ -466,7 +466,7 @@ class ParquetFilters(
     case ParquetTimestampMillisType if pushDownTimestamp =>
       (n: Array[String], v: Any) => FilterApi.gtEq(longColumn(n), timestampToMillis(v))
     case ParquetTimeType =>
-      (n: Array[String], v: Any) => FilterApi.gtEq(longColumn(n), localTimeToMicros(v))
+      (n: Array[String], v: Any) => FilterApi.gtEq(longColumn(n), localTimeToNanos(v))
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) =>
@@ -560,7 +560,7 @@ class ParquetFilters(
       (n: Array[String], values: Array[Any]) =>
         val set = new HashSet[JLong]()
         for (value <- values) {
-          set.add(Option(value).map(localTimeToMicros).orNull)
+          set.add(Option(value).map(localTimeToNanos).orNull)
         }
         FilterApi.in(longColumn(n), set)
 

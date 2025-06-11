@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 import java.lang.invoke.{MethodHandles, MethodType}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZonedDateTime, ZoneId, ZoneOffset}
-import java.time.temporal.ChronoField.MICRO_OF_DAY
+import java.time.temporal.ChronoField.{MICRO_OF_DAY, NANO_OF_DAY}
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit.{MICROSECONDS, NANOSECONDS}
 import java.util.regex.Pattern
@@ -27,6 +27,7 @@ import java.util.regex.Pattern
 import scala.util.control.NonFatal
 
 import org.apache.spark.QueryContext
+
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, rebaseJulianToGregorianDays, rebaseJulianToGregorianMicros}
 import org.apache.spark.sql.errors.ExecutionErrors
@@ -225,17 +226,15 @@ trait SparkDateTimeUtils {
   }
 
   /**
-   * Converts the local time to the number of microseconds within the day, from 0 to (24 * 60 * 60
-   * * 1000000) - 1.
+   * Converts the local time to the number of nanoseconds within the day, from 0 to (24 * 60 * 60
+   * * 1000 * 1000 * 1000) - 1.
    */
-  def localTimeToMicros(localTime: LocalTime): Long = localTime.getLong(MICRO_OF_DAY)
+  def localTimeToNanos(localTime: LocalTime): Long = localTime.getLong(NANO_OF_DAY)
 
   /**
-   * Converts the number of microseconds within the day to the local time.
+   * Converts the number of nanoseconds within the day to the local time.
    */
-  def microsToLocalTime(micros: Long): LocalTime = {
-    LocalTime.ofNanoOfDay(Math.multiplyExact(micros, NANOS_PER_MICROS))
-  }
+  def nanosToLocalTime(nanos: Long): LocalTime = LocalTime.ofNanoOfDay(nanos)
 
   /**
    * Converts a local date at the default JVM time zone to the number of days since 1970-01-01 in
@@ -716,7 +715,7 @@ trait SparkDateTimeUtils {
       }
       val nanoseconds = MICROSECONDS.toNanos(segments(6))
       val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
-      Some(localTimeToMicros(localTime))
+      Some(localTimeToNanos(localTime))
     } catch {
       case NonFatal(_) => None
     }

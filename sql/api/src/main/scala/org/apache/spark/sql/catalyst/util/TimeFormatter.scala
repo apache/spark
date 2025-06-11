@@ -47,7 +47,7 @@ class Iso8601TimeFormatter(pattern: String, locale: Locale, isParsing: Boolean)
 
   override def parse(s: String): Long = {
     val localTime = toLocalTime(formatter.parse(s))
-    localTimeToMicros(localTime)
+    localTimeToNanos(localTime)
   }
 
   override def format(localTime: LocalTime): String = {
@@ -55,7 +55,7 @@ class Iso8601TimeFormatter(pattern: String, locale: Locale, isParsing: Boolean)
   }
 
   override def format(micros: Long): String = {
-    format(microsToLocalTime(micros))
+    format(nanosToLocalTime(micros))
   }
 
   override def validatePatternString(): Unit = {
