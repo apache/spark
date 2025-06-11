@@ -601,7 +601,7 @@ EOF
       echo "https://dist.apache.org/repos/dist/dev/spark/${GIT_REF}-bin/"
       echo
       echo "Signatures used for Spark RCs can be found in this file:"
-      echo "https://dist.apache.org/repos/dist/dev/spark/KEYS"
+      echo "https://downloads.apache.org/spark/KEYS"
       echo
       echo "The staging repository for this release can be found at:"
       echo "https://repository.apache.org/content/repositories/${staged_repo_id}/"
