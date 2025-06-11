@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiTypeCoercion, ApplyCharTypePaddingHelper, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -1701,7 +1701,13 @@ case class SubqueryAlias(
 
   override def metadataOutput: Seq[Attribute] = {
     // Propagate metadata columns from leaf nodes through a chain of `SubqueryAlias`.
-    if (child.isInstanceOf[LeafNode] || child.isInstanceOf[SubqueryAlias]) {
+    // Also propagate metadata columns through `Project`s inserted by `ApplyCharTypePadding`.
+    val shouldPropagate = child match {
+      case _: LeafNode | _: SubqueryAlias => true
+      case p: Project if ApplyCharTypePaddingHelper.isReadSidePadding(p) => true
+      case _ => false
+    }
+    if (shouldPropagate) {
       val qualifierList = identifier.qualifier :+ alias
       val nonHiddenMetadataOutput = child.metadataOutput.filter(!_.qualifiedAccessOnly)
       nonHiddenMetadataOutput.map(_.withQualifier(qualifierList))

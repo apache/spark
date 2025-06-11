@@ -22,6 +22,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.functions.{col, struct}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 class MetadataColumnSuite extends DatasourceV2SQLBase {
@@ -354,6 +355,22 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       assert(cols.head.name() == "index")
       assert(cols.head.dataType() == IntegerType)
       assert(cols.head.metadataInJSON() == null)
+    }
+  }
+
+  test("SPARK-49110: Project a metadata column while reading a padded char column") {
+    withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "true") {
+      withTable(tbl) {
+        sql(s"CREATE TABLE $tbl (id bigint, data char(1)) PARTITIONED BY (bucket(4, id), id)")
+        sql(s"INSERT INTO $tbl VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+        val sqlQuery = sql(s"SELECT id, data, index, _partition FROM $tbl")
+        val dfQuery = spark.table(tbl).select("id", "data", "index", "_partition")
+
+        Seq(sqlQuery, dfQuery).foreach { query =>
+          checkAnswer(
+            query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
+        }
+      }
     }
   }
 }

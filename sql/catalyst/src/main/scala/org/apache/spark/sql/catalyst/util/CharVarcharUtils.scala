@@ -243,6 +243,14 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
     }.getOrElse(attr)
   }
 
+  private[sql] def containsPaddingForScan(e: Expression): Boolean = e.exists {
+    case s: StaticInvoke =>
+      s.staticObject == classOf[CharVarcharCodegenUtils] &&
+      s.functionName == "readSidePadding"
+    case _ =>
+      false
+  }
+
   /**
    * Return expressions to apply char type padding for the string comparison between the given
    * attributes. When comparing two char type columns/fields, we need to pad the shorter one to
