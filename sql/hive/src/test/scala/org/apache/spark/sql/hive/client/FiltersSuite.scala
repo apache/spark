@@ -97,7 +97,7 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
 
   filterTest("SPARK-24879 null literals should be ignored for IN constructs",
     (a("intcol", IntegerType) in (Literal(1), Literal(null))) :: Nil,
-    "intcol in (1)")
+    "(intcol) in (1)")
 
   filterTest("NOT: int and string filters",
     (a("intcol", IntegerType) =!= Literal(1)) :: (Literal("a") =!= a("strcol", IntegerType)) :: Nil,
@@ -139,7 +139,7 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
     (Not(InSet(a("datecol", DateType),
       Set(Literal(Date.valueOf("2020-01-01")).eval(),
         Literal(Date.valueOf("2020-01-02")).eval())))) :: Nil,
-    """datecol not in ("2020-01-01", "2020-01-02")""")
+    """(datecol) not in ("2020-01-01", "2020-01-02")""")
 
   filterTest("not-inset, date filter with null",
     (Not(InSet(a("datecol", DateType),
@@ -239,14 +239,14 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
     withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD.key -> "3") {
       val intFilter = InSet(a("p", IntegerType), Set(null, 1, 2))
       val intConverted = shim.convertFilters(testTable, Seq(intFilter))
-      assert(intConverted == "p in (1, 2)")
+      assert(intConverted == "(p) in (1, 2)")
     }
 
     withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD.key -> "3") {
       val dateFilter = InSet(a("p", DateType), Set(null,
         Literal(Date.valueOf("2020-01-01")).eval(), Literal(Date.valueOf("2021-01-01")).eval()))
       val dateConverted = shim.convertFilters(testTable, Seq(dateFilter))
-      assert(dateConverted == "p in (\"2020-01-01\", \"2021-01-01\")")
+      assert(dateConverted == "(p) in (\"2020-01-01\", \"2021-01-01\")")
     }
   }
 
