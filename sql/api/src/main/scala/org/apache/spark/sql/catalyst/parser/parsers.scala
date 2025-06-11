@@ -106,8 +106,7 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
           errorClass = e.getCondition,
           messageParameters = e.getMessageParameters.asScala.toMap,
           queryContext = e.getQueryContext)
-    }
-    finally {
+    } finally {
       // Antlr4 uses caches to make parsing faster but its caches are unbounded and never purged,
       // which can cause OOMs when parsing a huge number of SQL queries. Clearing these caches too
       // often will slow down parsing and cause performance regressions, but will prevent OOMs
@@ -465,7 +464,8 @@ object AbstractParser extends Logging {
   private val DRIVER_MEMORY = Runtime.getRuntime.maxMemory()
 
   private case class AntlrCaches(atn: ATN) {
-    private[parser] val predictionContextCache: PredictionContextCache = new PredictionContextCache
+    private[parser] val predictionContextCache: PredictionContextCache =
+      new PredictionContextCache
     private[parser] val decisionToDFACache: Array[DFA] = AntlrCaches.makeDecisionToDFACache(atn)
 
     def installManagedParserCaches(parser: SqlBaseParser): Unit = {
@@ -475,9 +475,6 @@ object AbstractParser extends Logging {
   }
 
   private object AntlrCaches {
-    /**
-     * Based off of `ParserATNSimulator.clearDFA` in ANTLR4.
-     */
     private def makeDecisionToDFACache(atn: ATN): Array[DFA] = {
       val decisionToDFA = new Array[DFA](atn.getNumberOfDecisions)
       for (i <- 0 until atn.getNumberOfDecisions) {
@@ -503,8 +500,8 @@ object AbstractParser extends Logging {
 
   /**
    * Install the managed parser caches into the given parser. Configuring the parser to use the
-   * managed `AntlrCaches` enables us to manage the size of the cache and clear it when required as
-   * the parser caches are unbounded by default.
+   * managed `AntlrCaches` enables us to manage the size of the cache and clear it when required
+   * as the parser caches are unbounded by default.
    *
    * This method should be called before parsing any input.
    */
@@ -515,12 +512,12 @@ object AbstractParser extends Logging {
   /**
    * Drop the existing parser caches and create a new one.
    *
-   * ANTLR retains caches in its parser that are never released.  This speeds up parsing of future
+   * ANTLR retains caches in its parser that are never released. This speeds up parsing of future
    * input, but it can consume a lot of memory depending on the input seen so far.
    *
-   * This method provides a mechanism to free the retained caches, which can be useful after parsing
-   * very large SQL inputs, especially if those large inputs are unlikely to be similar to future
-   * inputs seen by the driver.
+   * This method provides a mechanism to free the retained caches, which can be useful after
+   * parsing very large SQL inputs, especially if those large inputs are unlikely to be similar to
+   * future inputs seen by the driver.
    */
   private[parser] def clearParserCaches(parser: SqlBaseParser): Unit = {
     parserCaches.set(AntlrCaches(SqlBaseParser._ATN))
@@ -530,9 +527,9 @@ object AbstractParser extends Logging {
   }
 
   /**
-   * Check cache size and config values to determine if we should clear the parser caches.
-   * Also logs the current cache size and the delta since the last check.
-   * This method should be called after parsing each input.
+   * Check cache size and config values to determine if we should clear the parser caches. Also
+   * logs the current cache size and the delta since the last check. This method should be called
+   * after parsing each input.
    */
   private[parser] def maybeClearParserCaches(parser: SqlBaseParser, conf: SqlApiConf): Unit = {
     if (!conf.manageParserCaches) {
