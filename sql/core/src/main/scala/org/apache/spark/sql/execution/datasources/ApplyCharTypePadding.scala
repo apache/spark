@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.analysis.ApplyCharTypePaddingHelper
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -55,6 +55,10 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
             val cleanedPartCols = r.partitionCols.map(CharVarcharUtils.cleanAttrMetadata)
             r.copy(dataCols = cleanedDataCols, partitionCols = cleanedPartCols)
           })
+        case SubqueryAlias(identifier, project: Project)
+            if conf.readSideCharPaddingAfterAlias && project.getTagValue(
+              ApplyCharTypePaddingHelper.READ_SIDE_PADDING_PROJECT_TAG).isDefined =>
+          project.copy(child = SubqueryAlias(identifier, project.child)) -> Nil
       }
       ApplyCharTypePaddingHelper.paddingForStringComparison(newPlan, padCharCol = false)
     } else {

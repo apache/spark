@@ -6026,6 +6026,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val READ_SIDE_CHAR_PADDING_AFTER_SUBQUERY_ALIAS =
+    buildConf("spark.sql.readSideCharPadding.afterSubqueryAlias")
+      .doc("When true, Spark applies the project used for string padding when reading CHAR " +
+        "columns fields, after the SubqueryAlias instead of before it.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_NO_CHAR_PADDING_IN_PREDICATE = buildConf("spark.sql.legacy.noCharPaddingInPredicate")
     .internal()
     .doc("When true, Spark will not apply char type padding for CHAR type columns in string " +
@@ -7894,6 +7902,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def preserveCharVarcharTypeInfo: Boolean = getConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO)
 
   def readSideCharPadding: Boolean = getConf(SQLConf.READ_SIDE_CHAR_PADDING)
+
+  def readSideCharPaddingAfterAlias: Boolean =
+    getConf(SQLConf.READ_SIDE_CHAR_PADDING_AFTER_SUBQUERY_ALIAS)
 
   def cliPrintHeader: Boolean = getConf(SQLConf.CLI_PRINT_HEADER)
 
