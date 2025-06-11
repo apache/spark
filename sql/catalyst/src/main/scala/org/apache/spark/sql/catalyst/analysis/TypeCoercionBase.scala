@@ -259,7 +259,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
               if (widerType.isDefined && widerType.get == dt) {
                 Alias(Cast(attr, dt), attr.name)()
               } else {
-                throw cannotMergeIncompatibleDataTypesError(attr.dataType, dt)
+                throw cannotMergeIncompatibleDataTypesError(dt, attr.dataType)
               }
           }
           s.copy(recursion = Project(projectList, s.recursion)) -> Nil

@@ -788,11 +788,11 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
   test("SPARK-50892: parameterized identifier inside a recursive CTE") {
     def query(p: String): String = {
       s"""
-         |WITH RECURSIVE t1(n, m) AS (
-         |    SELECT 1, CAST(1 AS BIGINT)
-         |    UNION ALL
-         |    SELECT n + 1, n + 1 FROM t1)
-         |SELECT n FROM t1 LIMIT 5;""".stripMargin
+         |WITH RECURSIVE t1(n) AS (
+         |  SELECT 1
+         |  UNION ALL
+         |  SELECT n+1 FROM IDENTIFIER($p) WHERE n < 5)
+         |SELECT * FROM t1""".stripMargin
     }
 
     checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")),

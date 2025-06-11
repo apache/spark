@@ -1653,7 +1653,7 @@ org.apache.spark.SparkException
   "errorClass" : "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
-    "left" : "\"BIGINT\"",
-    "right" : "\"INT\""
+    "left" : "\"INT\"",
+    "right" : "\"BIGINT\""
   }
 }
