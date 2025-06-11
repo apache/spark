@@ -84,8 +84,8 @@ trait SparkDateTimeUtils {
   }
 
   /**
-   * Converts the time to microseconds since midnight. In Spark time values have
-   * nanoseconds precision, so this conversion is lossy.
+   * Converts the time to microseconds since midnight. In Spark time values have nanoseconds
+   * precision, so this conversion is lossy.
    */
   def nanosToMicros(nanos: Long): Long = Math.floorDiv(nanos, MICROS_PER_MILLIS)
 
