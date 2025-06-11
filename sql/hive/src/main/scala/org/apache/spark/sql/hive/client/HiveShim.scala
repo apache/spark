@@ -750,11 +750,11 @@ private[client] class Shim_v2_0 extends Shim with Logging {
     }
 
     def convertIn(name: String, values: Seq[String]): String = {
-      s"$name in (${values.mkString(", ")})"
+      s"($name) in (${values.mkString(", ")})"
     }
 
     def convertNotIn(name: String, values: Seq[String]): String = {
-      s"$name not in (${values.mkString(", ")})"
+      s"($name) not in (${values.mkString(", ")})"
     }
 
     def hasNullLiteral(list: Seq[Expression]): Boolean = list.exists {
