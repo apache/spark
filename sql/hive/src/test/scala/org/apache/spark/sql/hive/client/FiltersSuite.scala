@@ -71,7 +71,7 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
   filterTest("date filter with IN predicate",
     (a("datecol", DateType) in
       (Literal(Date.valueOf("2019-01-01")), Literal(Date.valueOf("2019-01-07")))) :: Nil,
-    "datecol in (\"2019-01-01\", \"2019-01-07\")")
+    "(datecol) in (\"2019-01-01\", \"2019-01-07\")")
 
   filterTest("date and string filter",
     (Literal(Date.valueOf("2019-01-01")) === a("datecol", DateType)) ::
@@ -84,7 +84,7 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
 
   filterTest("string filter with InSet predicate",
     InSet(a("strcol", StringType), Set("1", "2").map(s => UTF8String.fromString(s))) :: Nil,
-    "strcol in (\"1\", \"2\")")
+    "(strcol) in (\"1\", \"2\")")
 
   filterTest("skip varchar",
     (Literal("") === a("varchar", StringType)) :: Nil,
@@ -109,7 +109,7 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
 
   filterTest("not-in, string filter",
     (Not(In(a("strcol", StringType), Seq(Literal("a"), Literal("b"))))) :: Nil,
-    """strcol not in ("a", "b")""")
+    """(strcol) not in ("a", "b")""")
 
   filterTest("not-in, string filter with null",
     (Not(In(a("strcol", StringType), Seq(Literal("a"), Literal("b"), Literal(null))))) :: Nil,
@@ -118,7 +118,7 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
   filterTest("not-in, date filter",
     (Not(In(a("datecol", DateType),
       Seq(Literal(Date.valueOf("2021-01-01")), Literal(Date.valueOf("2021-01-02")))))) :: Nil,
-    """datecol not in ("2021-01-01", "2021-01-02")""")
+    """(datecol) not in ("2021-01-01", "2021-01-02")""")
 
   filterTest("not-in, date filter with null",
     (Not(In(a("datecol", DateType),
@@ -128,7 +128,7 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
 
   filterTest("not-inset, string filter",
     (Not(InSet(a("strcol", StringType), Set(Literal("a").eval(), Literal("b").eval())))) :: Nil,
-    """strcol not in ("a", "b")""")
+    """(strcol) not in ("a", "b")""")
 
   filterTest("not-inset, string filter with null",
     (Not(InSet(a("strcol", StringType),
