@@ -1783,7 +1783,7 @@ WithCTE
 :        +- UnionLoop xxxx
 :           :- Project [1 AS 1#x, cast(1 as bigint) AS CAST(1 AS BIGINT)#xL]
 :           :  +- OneRowRelation
-:           +- Project [(n + 1)#x AS 1#x, cast((n + 1)#x as bigint) AS CAST(1 AS BIGINT)#xL]
+:           +- Project [cast((n + 1)#x as int) AS (n + 1)#x, cast((n + 1)#x as bigint) AS (n + 1)#xL]
 :              +- Project [(n#x + 1) AS (n + 1)#x, (n#x + 1) AS (n + 1)#x]
 :                 +- Filter (n#x < 5)
 :                    +- SubqueryAlias t1
@@ -1801,19 +1801,12 @@ WITH RECURSIVE t1(n, m) AS (
     SELECT n+1, CAST(n+1 AS BIGINT) FROM t1 WHERE n < 5)
 SELECT * FROM t1
 -- !query analysis
-WithCTE
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias t1
-:     +- Project [1#x AS n#x, 1#x AS m#x]
-:        +- UnionLoop xxxx
-:           :- Project [1 AS 1#x, 1 AS 1#x]
-:           :  +- OneRowRelation
-:           +- Project [(n + 1)#x AS 1#x, cast(CAST((n + 1) AS BIGINT)#xL as int) AS 1#x]
-:              +- Project [(n#x + 1) AS (n + 1)#x, cast((n#x + 1) as bigint) AS CAST((n + 1) AS BIGINT)#xL]
-:                 +- Filter (n#x < 5)
-:                    +- SubqueryAlias t1
-:                       +- Project [1#x AS n#x, 1#x AS m#x]
-:                          +- UnionLoopRef xxxx, [1#x, 1#x], false
-+- Project [n#x, m#x]
-   +- SubqueryAlias t1
-      +- CTERelationRef xxxx, true, [n#x, m#x], false, false
+org.apache.spark.SparkException
+{
+  "errorClass" : "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "left" : "\"BIGINT\"",
+    "right" : "\"INT\""
+  }
+}

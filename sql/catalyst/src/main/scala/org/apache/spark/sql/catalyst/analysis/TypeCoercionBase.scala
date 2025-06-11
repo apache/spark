@@ -50,6 +50,7 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
+import org.apache.spark.sql.errors.DataTypeErrors.cannotMergeIncompatibleDataTypesError
 import org.apache.spark.sql.types.DataType
 
 abstract class TypeCoercionBase extends TypeCoercionHelper {
@@ -252,11 +253,14 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
         case s: UnionLoop
             if s.childrenResolved && s.anchor.output.length == s.recursion.output.length
               && !s.resolved =>
-          val casts = s.recursion.output.zip(s.anchor.output.map(_.dataType)).map {
-            case (attr, dt) => implicitCast(attr, dt).getOrElse(attr)
-          }
-          val projectList = casts.zip(s.anchor.output.map(_.name)).map {
-            case (attr, name) => Alias(attr, name)()
+          val projectList = s.recursion.output.zip(s.anchor.output.map(_.dataType)).map {
+            case (attr, dt) =>
+              val widerType = findWiderTypeForTwo(attr.dataType, dt)
+              if (widerType.isDefined && widerType.get == dt) {
+                Alias(Cast(attr, dt), attr.name)()
+              } else {
+                throw cannotMergeIncompatibleDataTypesError(attr.dataType, dt)
+              }
           }
           s.copy(recursion = Project(projectList, s.recursion)) -> Nil
       }
