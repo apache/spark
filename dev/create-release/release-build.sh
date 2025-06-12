@@ -230,6 +230,26 @@ if [[ "$1" == "finalize" ]]; then
     -d "{\"data\": {\"stagedRepositoryIds\": [\"$REPO_ID\"], \"description\": \"Dropped after release\"}}"
 
   echo "Done."
+
+  # TODO: Test it in the actual official release
+  # Remove old releases from the mirror
+  # Extract major.minor prefix
+  RELEASE_SERIES=$(echo "$RELEASE_VERSION" | cut -d. -f1-2)
+  
+  # Fetch existing dist URLs
+  OLD_VERSION=$(svn ls https://dist.apache.org/repos/dist/release/spark/ | \
+    grep "^spark-$RELEASE_SERIES" | \
+    grep -v "^spark-$RELEASE_VERSION/" | \
+    sed 's#/##' | sed 's/^spark-//' | \
+    sort -V | tail -n 1)
+  
+  if [[ -n "$OLD_VERSION" ]]; then
+    echo "Removing old version: spark-$OLD_VERSION"
+    svn rm "https://dist.apache.org/repos/dist/release/spark/spark-$OLD_VERSION" -m "Remove older $RELEASE_SERIES release after $RELEASE_VERSION"
+  else
+    echo "No previous $RELEASE_SERIES version found to remove. Manually remove it if there is."
+  fi
+
   exit 0
 fi
 
