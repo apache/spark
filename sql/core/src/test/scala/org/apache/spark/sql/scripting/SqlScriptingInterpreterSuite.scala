@@ -3450,4 +3450,32 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       verifySqlScriptResult(commands, expected)
     }
   }
+
+  test("for statement - structs in array have different values") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          | CREATE TABLE t(
+          |   array_column ARRAY<STRUCT<id: INT, strCol: STRING, intArrayCol: ARRAY<INT>>>
+          | );
+          | INSERT INTO t VALUES
+          |  Array(Struct(1, null, Array(10)),
+          |        Struct(2, "name", Array()));
+          | FOR SELECT * FROM t DO
+          |   SELECT array_column;
+          | END FOR;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // create table
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // declare array_column
+        Seq.empty[Row], // set array_column
+        Seq(Row(Seq(Row(1, null, Seq(10)), Row(2, "name", Seq.empty))))
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
 }

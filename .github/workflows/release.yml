@@ -228,6 +228,20 @@ jobs:
           wait $RELEASE_PID
           kill $TAIL_PID1 $TAIL_PID2 || true
 
+          # Redact sensitive information in log files
+          shopt -s globstar nullglob
+          FILES=("$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/"*.log)
+          PATTERNS=("$ASF_USERNAME" "$ASF_PASSWORD" "$GPG_PRIVATE_KEY" "$GPG_PASSPHRASE" "$PYPI_API_TOKEN")
+          for file in "${FILES[@]}"; do
+            [ -f "$file" ] || continue
+            cp "$file" "$file.bak"
+            for pattern in "${PATTERNS[@]}"; do
+              [ -n "$pattern" ] || continue  # Skip empty patterns
+              escaped_pattern=$(printf '%s\n' "$pattern" | sed 's/[\/&]/\\&/g')
+              sed -i "s/${escaped_pattern}/***/g" "$file"
+            done
+          done
+
           # Zip logs/output
           if [ "$DRYRUN_MODE" = "1" ]; then
             zip logs.zip "$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/"*.log

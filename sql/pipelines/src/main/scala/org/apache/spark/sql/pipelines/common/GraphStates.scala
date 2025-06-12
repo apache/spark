@@ -43,6 +43,22 @@ object FlowStatus {
   case object IDLE extends FlowStatus
 }
 
+sealed trait RunState
+
+object RunState {
+  // Run is currently executing queries.
+  case object RUNNING extends RunState
+
+  // Run is complete and all necessary resources are cleaned up.
+  case object COMPLETED extends RunState
+
+  // Run has run into an error that could not be recovered from.
+  case object FAILED extends RunState
+
+  // Run was canceled.
+  case object CANCELED extends RunState
+}
+
 // The type of the dataset.
 sealed trait DatasetType
 object DatasetType {

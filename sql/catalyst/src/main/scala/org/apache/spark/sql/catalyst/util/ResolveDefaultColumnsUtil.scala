@@ -263,7 +263,12 @@ object ResolveDefaultColumns extends QueryErrorsBase
       field: StructField,
       statementType: String,
       metadataKey: String = CURRENT_DEFAULT_COLUMN_METADATA_KEY): Expression = {
-    analyze(field.name, field.dataType, field.metadata.getString(metadataKey), statementType)
+    field.metadata.getExpression[Expression](metadataKey) match {
+      case (sql, Some(expr)) =>
+        analyze(field.name, field.dataType, expr, sql, statementType)
+      case (sql, _) =>
+        analyze(field.name, field.dataType, sql, statementType)
+    }
   }
 
   /**

@@ -2307,6 +2307,8 @@ def _infer_type(
                 errorClass="UNSUPPORTED_DATA_TYPE",
                 messageParameters={"data_type": f"array({obj.typecode})"},
             )
+    elif isinstance(obj, VariantVal):
+        return VariantType()
     else:
         try:
             return _infer_schema(

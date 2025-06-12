@@ -58,18 +58,30 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
 
+  // Following tests are disabled for both single and multiple partition read
   override def excluded: Seq[String] = Seq(
-    "scan with aggregate push-down: VAR_POP with DISTINCT",
-    "scan with aggregate push-down: VAR_SAMP with DISTINCT",
-    "scan with aggregate push-down: STDDEV_POP with DISTINCT",
-    "scan with aggregate push-down: STDDEV_SAMP with DISTINCT",
-    "scan with aggregate push-down: COVAR_POP with DISTINCT",
-    "scan with aggregate push-down: COVAR_SAMP with DISTINCT",
-    "scan with aggregate push-down: CORR with DISTINCT",
-    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT",
-    "scan with aggregate push-down: REGR_SLOPE with DISTINCT",
-    "scan with aggregate push-down: REGR_R2 with DISTINCT",
-    "scan with aggregate push-down: REGR_SXY with DISTINCT")
+    "scan with aggregate push-down: VAR_POP with DISTINCT (false)",
+    "scan with aggregate push-down: VAR_POP with DISTINCT (true)",
+    "scan with aggregate push-down: VAR_SAMP with DISTINCT (false)",
+    "scan with aggregate push-down: VAR_SAMP with DISTINCT (true)",
+    "scan with aggregate push-down: STDDEV_POP with DISTINCT (false)",
+    "scan with aggregate push-down: STDDEV_POP with DISTINCT (true)",
+    "scan with aggregate push-down: STDDEV_SAMP with DISTINCT (false)",
+    "scan with aggregate push-down: STDDEV_SAMP with DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_POP with DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_POP with DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT (true)",
+    "scan with aggregate push-down: CORR with DISTINCT (false)",
+    "scan with aggregate push-down: CORR with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT (true)")
 
   override val catalogName: String = "oracle"
   override val namespaceOpt: Option[String] = Some("SYSTEM")

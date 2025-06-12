@@ -82,6 +82,14 @@
     ],
     "sqlState" : "XX000"
   },
+  "APPEND_ONCE_FROM_BATCH_QUERY" : {
+    "message" : [
+      "Creating a streaming table from a batch query prevents incremental loading of new data from source. Offending table: '<table>'.",
+      "Please use the stream() operator. Example usage:",
+      "CREATE STREAMING TABLE <target table name> ... AS SELECT ... FROM stream(<source table name>) ..."
+    ],
+    "sqlState" : "42000"
+  },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
@@ -489,6 +497,13 @@
       }
     },
     "sqlState" : "0A000"
+  },
+  "CANNOT_UPDATE_PARTITION_COLUMNS" : {
+    "message" : [
+      "Declared partitioning <requestedPartitionColumns> conflicts with existing table partitioning <existingPartitionColumns>.",
+      "Please delete the table or change the declared partitioning to match its partitions."
+    ],
+    "sqlState" : "42000"
   },
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [
@@ -905,6 +920,12 @@
       }
     },
     "sqlState" : "21S01"
+  },
+  "DATAFLOW_GRAPH_NOT_FOUND" : {
+    "message" : [
+      "Dataflow graph with id <graphId> could not be found"
+    ],
+    "sqlState" : "KD011"
   },
   "DATATYPE_MISMATCH" : {
     "message" : [
@@ -1371,6 +1392,12 @@
       }
     },
     "sqlState" : "42734"
+  },
+  "DUPLICATE_FLOW_SQL_CONF" : {
+    "message" : [
+      "Found duplicate sql conf for dataset '<datasetName>': '<key>' is defined by both '<flowName1>' and '<flowName2>'"
+    ],
+    "sqlState" : "42710"
   },
   "DUPLICATE_KEY" : {
     "message" : [
@@ -1943,6 +1970,12 @@
     ],
     "sqlState" : "42818"
   },
+  "INCOMPATIBLE_BATCH_VIEW_READ" : {
+    "message" : [
+      "View <datasetIdentifier> is a batch view and must be referenced using SparkSession#read. This check can be disabled by setting Spark conf pipelines.incompatibleViewCheck.enabled = false."
+    ],
+    "sqlState" : "42000"
+  },
   "INCOMPATIBLE_COLUMN_TYPE" : {
     "message" : [
       "<operator> can only be performed on tables with compatible column types. The <columnOrdinalNumber> column of the <tableOrdinalNumber> table is <dataType1> type which is not compatible with <dataType2> at the same column of the first table.<hint>."
@@ -2018,6 +2051,12 @@
       "The join types <joinType1> and <joinType2> are incompatible."
     ],
     "sqlState" : "42613"
+  },
+  "INCOMPATIBLE_STREAMING_VIEW_READ" : {
+    "message" : [
+      "View <datasetIdentifier> is a streaming view and must be referenced using SparkSession#readStream. This check can be disabled by setting Spark conf pipelines.incompatibleViewCheck.enabled = false."
+    ],
+    "sqlState" : "42000"
   },
   "INCOMPATIBLE_VIEW_SCHEMA_CHANGE" : {
     "message" : [
@@ -2185,6 +2224,12 @@
   "INTERNAL_ERROR" : {
     "message" : [
       "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_ATTRIBUTE_NOT_FOUND" : {
+    "message" : [
+      "Could not find <missingAttr> in <inputAttrs>."
     ],
     "sqlState" : "XX000"
   },
@@ -3119,6 +3164,12 @@
     },
     "sqlState" : "KD002"
   },
+  "INVALID_NAME_IN_USE_COMMAND" : {
+    "message" : [
+      "Invalid name '<name>' in <command> command. Reason: <reason>"
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
@@ -3365,14 +3416,9 @@
       "Invalid recursive reference found inside WITH RECURSIVE clause."
     ],
     "subClass" : {
-      "NUMBER" : {
-        "message" : [
-          "Multiple self-references to one recursive CTE are not allowed."
-        ]
-      },
       "PLACE" : {
         "message" : [
-          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins, in aggregates, and in subquery expressions."
+          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins and in aggregates"
         ]
       }
     },
@@ -3383,6 +3429,12 @@
       "Could not perform regexp_replace for source = \"<source>\", pattern = \"<pattern>\", replacement = \"<replacement>\" and position = <position>."
     ],
     "sqlState" : "22023"
+  },
+  "INVALID_RESETTABLE_DEPENDENCY" : {
+    "message" : [
+      "Tables <upstreamResettableTables> are resettable but have a non-resettable downstream dependency '<downstreamTable>'. `reset` will fail as Spark Streaming does not support deleted source data. You can either remove the <resetAllowedKey>=false property from '<downstreamTable>' or add it to its upstream dependencies."
+    ],
+    "sqlState" : "42000"
   },
   "INVALID_RESET_COMMAND_FORMAT" : {
     "message" : [
@@ -4084,6 +4136,12 @@
     ],
     "sqlState" : "42P20"
   },
+  "MULTIPART_FLOW_NAME_NOT_SUPPORTED" : {
+    "message" : [
+      "Flow with multipart name '<flowName>' is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "MULTIPLE_PRIMARY_KEYS" : {
     "message" : [
       "Multiple primary keys are defined: <columns>. Please ensure that only one primary key is defined for the table."
@@ -4568,6 +4626,38 @@
       "Path does not exist: <path>."
     ],
     "sqlState" : "42K03"
+  },
+  "PIPELINE_DATASET_WITHOUT_FLOW" : {
+    "message" : [
+      "Pipeline dataset <identifier> does not have any defined flows. Please attach a query with the dataset's definition, or explicitly define at least one flow that writes to the dataset."
+    ],
+    "sqlState" : "0A000"
+  },
+  "PIPELINE_DUPLICATE_IDENTIFIERS" : {
+    "message" : [
+      "A duplicate identifier was found for elements registered in the pipeline's dataflow graph."
+    ],
+    "subClass" : {
+      "DATASET" : {
+        "message" : [
+          "Attempted to register a <datasetType1> with identifier <datasetName>, but a <datasetType2> has already been registered with that identifier. Please ensure all datasets created within this pipeline have unique identifiers."
+        ]
+      },
+      "FLOW" : {
+        "message" : [
+          "Flow <flowName> was found in multiple datasets: <datasetNames>"
+        ]
+      }
+    },
+    "sqlState" : "42710"
+  },
+  "PIPELINE_SQL_GRAPH_ELEMENT_REGISTRATION_ERROR" : {
+    "message" : [
+      "<message>",
+      "<offendingQuery>",
+      "<codeLocation>"
+    ],
+    "sqlState" : "42000"
   },
   "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [
@@ -5419,6 +5509,19 @@
     ],
     "sqlState" : "58030"
   },
+  "UNABLE_TO_INFER_PIPELINE_TABLE_SCHEMA" : {
+    "message" : [
+      "Failed to infer the schema for table <tableName> from its upstream flows.",
+      "Please modify the flows that write to this table to make their schemas compatible.",
+      "",
+      "Inferred schema so far:",
+      "<inferredDataSchema>",
+      "",
+      "Incompatible schema:",
+      "<incompatibleDataSchema>"
+    ],
+    "sqlState" : "42KD9"
+  },
   "UNABLE_TO_INFER_SCHEMA" : {
     "message" : [
       "Unable to infer schema for <format>. It must be specified manually."
@@ -5589,6 +5692,12 @@
       "Cannot resolve routine <routineName> on search path <searchPath>."
     ],
     "sqlState" : "42883"
+  },
+  "UNRESOLVED_TABLE_PATH" : {
+    "message" : [
+      "Storage path for table <identifier> cannot be resolved."
+    ],
+    "sqlState" : "22KD1"
   },
   "UNRESOLVED_USING_COLUMN_FOR_JOIN" : {
     "message" : [
@@ -6570,6 +6679,20 @@
       "The `raise_error()` function was used to raise an unknown error class: <errorClass>"
     ],
     "sqlState" : "P0001"
+  },
+  "USER_SPECIFIED_AND_INFERRED_SCHEMA_NOT_COMPATIBLE" : {
+    "message" : [
+      "Table '<tableName>' has a user-specified schema that is incompatible with the schema",
+      "inferred from its query.",
+      "<streamingTableHint>",
+      "",
+      "Declared schema:",
+      "<specifiedSchema>",
+      "",
+      "Inferred schema:",
+      "<inferredDataSchema>"
+    ],
+    "sqlState" : "42000"
   },
   "VARIABLE_ALREADY_EXISTS" : {
     "message" : [

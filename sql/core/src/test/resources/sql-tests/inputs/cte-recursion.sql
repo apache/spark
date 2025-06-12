@@ -182,6 +182,13 @@ WITH
   )
 SELECT * FROM t2;
 
+-- Self reference is inside OneRowSubquery
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT (SELECT n+1 FROM t1 WHERE n<5)
+)
+SELECT * FROM t1 LIMIT 5;
 
 -- recursive reference in a nested CTE
 WITH RECURSIVE
@@ -598,6 +605,20 @@ WITH RECURSIVE tmp(x) AS (
 )
 SELECT * FROM rcte;
 
+-- Previous query without converting to local relations
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=0;
+
+WITH RECURSIVE tmp(x) AS (
+    values (1), (2), (3), (4), (5)
+), rcte(x, y) AS (
+    SELECT x, x FROM tmp WHERE x = 1
+    UNION ALL
+    SELECT x + 1, x FROM rcte WHERE x < 5
+)
+SELECT * FROM rcte;
+
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100;
+
 -- Recursive CTE with multiple of the same reference in the anchor, which get referenced as different variables in subsequent iterations.
 WITH RECURSIVE tmp(x) AS (
     values (1), (2), (3), (4), (5)
@@ -675,3 +696,11 @@ WITH RECURSIVE t1(n, m) AS (
     UNION ALL
     SELECT n+1, CAST(n+1 AS BIGINT) FROM t1 WHERE n < 5)
 SELECT * FROM t1;
+
+-- Recursive CTE with nullable recursion and non-recursive anchor
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT CASE WHEN n < 5 THEN n + 1 ELSE NULL END FROM t1
+)
+SELECT * FROM t1 LIMIT 25;

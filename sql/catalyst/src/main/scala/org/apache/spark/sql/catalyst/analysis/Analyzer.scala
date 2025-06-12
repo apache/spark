@@ -49,7 +49,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.{View => _, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -2962,7 +2962,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         expr match {
           case ae: AggregateExpression =>
             val cleaned = trimTempResolvedColumn(ae)
-            val alias = Alias(cleaned, toPrettySQL(cleaned))()
+            val alias =
+              Alias(cleaned, toPrettySQL(e = cleaned, shouldTrimTempResolvedColumn = true))()
             aggExprList += alias
             alias.toAttribute
           case grouping: Expression if agg.groupingExpressions.exists(grouping.semanticEquals) =>
@@ -2971,7 +2972,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 aggExprList += ne
                 ne.toAttribute
               case other =>
-                val alias = Alias(other, toPrettySQL(other))()
+                val alias =
+                  Alias(other, toPrettySQL(e = other, shouldTrimTempResolvedColumn = true))()
                 aggExprList += alias
                 alias.toAttribute
             }
@@ -2999,10 +3001,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             other.withNewChildren(other.children.map(buildAggExprList(_, agg, aggExprList)))
         }
       }
-    }
-
-    private def trimTempResolvedColumn(input: Expression): Expression = input.transform {
-      case t: TempResolvedColumn => t.child
     }
 
     def resolveOperatorWithAggregate(

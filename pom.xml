@@ -117,7 +117,7 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <java.version>17</java.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
-    <maven.version>3.9.9</maven.version>
+    <maven.version>3.9.10</maven.version>
     <exec-maven-plugin.version>3.5.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.8</asm.version>
@@ -163,7 +163,7 @@
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
     <!-- Do not use 3.0.0: https://github.com/GoogleCloudDataproc/hadoop-connectors/issues/1114 -->
-    <gcs-connector.version>hadoop3-2.2.26</gcs-connector.version>
+    <gcs-connector.version>hadoop3-2.2.28</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
@@ -216,8 +216,8 @@
     <bouncycastle.version>1.80</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.1.121.Final</netty.version>
-    <netty-tcnative.version>2.0.70.Final</netty-tcnative.version>
+    <netty.version>4.1.122.Final</netty.version>
+    <netty-tcnative.version>2.0.72.Final</netty-tcnative.version>
     <icu4j.version>77.1</icu4j.version>
     <junit-jupiter.version>5.12.2</junit-jupiter.version>
     <junit-platform.version>1.12.2</junit-platform.version>
@@ -2808,6 +2808,7 @@
               <javacArg>--release</javacArg>
               <javacArg>${java.version}</javacArg>
               <javacArg>-Xlint:all,-serial,-path,-try</javacArg>
+              <javacArg>-proc:full</javacArg>
             </javacArgs>
           </configuration>
         </plugin>

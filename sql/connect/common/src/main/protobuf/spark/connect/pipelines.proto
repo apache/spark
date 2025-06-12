@@ -19,11 +19,13 @@ syntax = "proto3";
 
 package spark.connect;
 
+import "google/protobuf/timestamp.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
+option go_package = "internal/generated";
 
 // Dispatch object for pipelines commands. See each individual command for documentation.
 message PipelineCommand {
@@ -115,19 +117,20 @@ message PipelineCommand {
     // The graph to start.
     optional string dataflow_graph_id = 1;
   }
+
+  // Parses the SQL file and registers all datasets and flows.
+  message DefineSqlGraphElements {
+    // The graph to attach this dataset to.
+    optional string dataflow_graph_id = 1;
+
+    // The full path to the SQL file. Can be relative or absolute.
+    optional string sql_file_path = 2;
+
+    // The contents of the SQL file.
+    optional string sql_text = 3;
+  }
 }
 
-// Parses the SQL file and registers all datasets and flows.
-message DefineSqlGraphElements {
-  // The graph to attach this dataset to.
-  optional string dataflow_graph_id = 1;
-
-  // The full path to the SQL file. Can be relative or absolute.
-  optional string sql_file_path = 2;
-
-  // The contents of the SQL file.
-  optional string sql_text = 3;
-}
 
 // Dispatch object for pipelines command results.
 message PipelineCommandResult {
@@ -157,10 +160,9 @@ message PipelineEventResult {
   PipelineEvent event = 1;
 }
 
-// An event emitted during the run of a graph.
 message PipelineEvent {
-  // The time of the event.
-  optional string timestamp = 1;
+  // The timestamp corresponding to when the event occurred.
+  google.protobuf.Timestamp timestamp = 1;
   // The message that should be displayed to users.
   optional string message = 2;
 }
