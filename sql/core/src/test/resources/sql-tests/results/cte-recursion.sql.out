@@ -1673,3 +1673,40 @@ struct<val:array<int>>
 [2,1,5,3,4]
 [4,3,2,5,1]
 [4,5,1,2,3]
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT CASE WHEN n < 5 THEN n + 1 ELSE NULL END FROM t1
+)
+SELECT * FROM t1 LIMIT 25
+-- !query schema
+struct<n:int>
+-- !query output
+1
+2
+3
+4
+5
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL

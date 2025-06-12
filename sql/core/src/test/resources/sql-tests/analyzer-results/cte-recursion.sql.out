@@ -1828,3 +1828,29 @@ WITH RECURSIVE randoms(val) AS (
 SELECT val FROM randoms LIMIT 5
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT CASE WHEN n < 5 THEN n + 1 ELSE NULL END FROM t1
+)
+SELECT * FROM t1 LIMIT 25
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#x AS n#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [CASE WHEN (n#x < 5) THEN (n#x + 1) ELSE cast(null as int) END AS CASE WHEN (n < 5) THEN (n + 1) ELSE NULL END#x]
+:              +- SubqueryAlias t1
+:                 +- Project [1#x AS n#x]
+:                    +- UnionLoopRef xxxx, [1#x], false
++- GlobalLimit 25
+   +- LocalLimit 25
+      +- Project [n#x]
+         +- SubqueryAlias t1
+            +- CTERelationRef xxxx, true, [n#x], false, false
