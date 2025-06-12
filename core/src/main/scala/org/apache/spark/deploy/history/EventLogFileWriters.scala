@@ -60,7 +60,7 @@ abstract class EventLogFileWriter(
   protected val shouldCompress = sparkConf.get(EVENT_LOG_COMPRESS) &&
       !sparkConf.get(EVENT_LOG_COMPRESSION_CODEC).equalsIgnoreCase("none")
   protected val excludedPatterns = sparkConf.get(EVENT_LOG_EXCLUDED_PATTERNS)
-      .toSeq.flatMap(Utils.stringToSeq).map(name => s"""{"Event":"$name"""")
+      .map(name => s"""{"Event":"$name"""")
   protected val shouldOverwrite = sparkConf.get(EVENT_LOG_OVERWRITE)
   protected val outputBufferSize = sparkConf.get(EVENT_LOG_OUTPUT_BUFFER_SIZE).toInt * 1024
   protected val fileSystem = Utils.getHadoopFileSystem(logBaseDir, hadoopConf)

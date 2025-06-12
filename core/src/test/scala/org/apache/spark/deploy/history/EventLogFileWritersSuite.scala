@@ -117,7 +117,7 @@ abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkCon
     val attemptId = None
 
     val conf = getLoggingConf(testDirPath, None)
-    conf.set(EVENT_LOG_EXCLUDED_PATTERNS, "B,C")
+    conf.set(EVENT_LOG_EXCLUDED_PATTERNS, Seq("B", "C"))
 
     val writer = createWriter(appId, attemptId, testDirPath.toUri, conf,
       SparkHadoopUtil.get.newConfiguration(conf))
