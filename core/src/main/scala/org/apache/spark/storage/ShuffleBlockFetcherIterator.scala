@@ -33,10 +33,10 @@ import io.netty.util.internal.OutOfDirectMemoryError
 import org.apache.commons.io.IOUtils
 import org.roaringbitmap.RoaringBitmap
 
-import org.apache.spark.{MapOutputTracker, SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{MapOutputTracker, SparkException, TaskContext}
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
@@ -102,6 +102,7 @@ final class ShuffleBlockFetcherIterator(
     checksumAlgorithm: String,
     shuffleMetrics: ShuffleReadMetricsReporter,
     doBatchFetch: Boolean,
+    fallbackStorage: Option[FallbackStorage],
   clock: Clock = new SystemClock())
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
@@ -980,10 +981,9 @@ final class ShuffleBlockFetcherIterator(
               log"${MDC(MAX_ATTEMPTS, maxAttemptsOnNettyOOM)} retries due to Netty OOM"
             logError(logMessage)
             errorMsg = logMessage.message
-          } else if (
-            SparkEnv.get.conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+          } else if (fallbackStorage.isDefined) {
             try {
-              val buf = FallbackStorage.read(SparkEnv.get.conf, blockId)
+              val buf = fallbackStorage.get.read(blockId)
               results.put(SuccessFetchResult(blockId, mapIndex, address, buf.size(), buf,
                 isNetworkReqDone = false))
               result = null
