@@ -1396,7 +1396,7 @@ object SQLConf {
   val BROADCAST_TABLE_SIZE_LIMIT = buildConf("spark.sql.broadcast.tableSizeLimit")
     .doc("The maximum table size (based on stats) that can be broadcast, in broadcast joins.")
     .version("4.0.0")
-    .longConf
+    .bytesConf(ByteUnit.BYTE)
     .createWithDefault(8L << 30)
 
   // This is only used for the thriftserver

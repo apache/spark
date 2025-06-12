@@ -135,11 +135,18 @@ case class BroadcastExchangeExec(
             sparkContext.setInterruptOnCancel(true)
             val beforeCollect = System.nanoTime()
             // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
-            val (numRows, input) = child.executeCollectIterator()
+            val (numRows, totalSizeInBytes, input) = child.executeCollectorIteratorWithSize()
             longMetric("numOutputRows") += numRows
             if (numRows >= maxBroadcastRows) {
               throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableRowsError(
                 maxBroadcastRows, numRows)
+            }
+
+            val maxBroadcastTableBytes = conf.broadcastMaxTableSize
+            if (totalSizeInBytes >= maxBroadcastTableBytes) {
+              throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(
+                maxBroadcastTableBytes, totalSizeInBytes
+              )
             }
 
             val beforeBuild = System.nanoTime()
@@ -158,7 +165,6 @@ case class BroadcastExchangeExec(
                   s"type: ${relation.getClass.getName}")
             }
 
-            val maxBroadcastTableBytes = conf.broadcastMaxTableSize
             longMetric("dataSize") += dataSize
             if (dataSize >= maxBroadcastTableBytes) {
               throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(

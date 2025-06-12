@@ -400,6 +400,38 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
+   * Similar to the above [[getByteArrayRdd]], but also returns the total number of bytes
+   * from the input UnSafeRows.
+   */
+  private def getByteArrayRddWithSize(): RDD[(Long, Long, ChunkedByteBuffer)] = {
+    execute().mapPartitionsInternal { iter =>
+      var count = 0
+      var totalSizeInBytes = 0
+
+      val buffer = new Array[Byte](4 << 10) // 4K
+      val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
+      val cbbos = new ChunkedByteBufferOutputStream(1024 * 1024, ByteBuffer.allocate)
+      val out = new DataOutputStream(codec.compressedOutputStream(cbbos))
+
+      // `iter.hasNext` may produce one row and buffer it, we should only call it when the
+      // limit is not hit.
+      while (iter.hasNext) {
+        val row = iter.next().asInstanceOf[UnsafeRow]
+        count += 1
+        totalSizeInBytes += row.getSizeInBytes
+        out.writeInt(row.getSizeInBytes)
+        row.writeToStream(out, buffer)
+      }
+
+      out.writeInt(-1)
+      out.flush()
+      out.close()
+
+      Iterator((count, totalSizeInBytes, cbbos.toChunkedByteBuffer))
+    }
+  }
+
+  /**
    * Decodes the byte arrays back to UnsafeRows and put them into buffer.
    */
   private def decodeUnsafeRows(bytes: ChunkedByteBuffer): Iterator[InternalRow] = {
@@ -456,6 +488,14 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     val total = countsAndBytes.map(_._1).sum
     val rows = countsAndBytes.iterator.flatMap(countAndBytes => decodeUnsafeRows(countAndBytes._2))
     (total, rows)
+  }
+
+  private[spark] def executeCollectorIteratorWithSize(): (Long, Long, Iterator[InternalRow]) = {
+    val countAndSizeAndBytes = getByteArrayRddWithSize().collect()
+    val totalRowCount = countAndSizeAndBytes.map(_._1).sum
+    val totalSizeInBytes = countAndSizeAndBytes.map(_._2).sum
+    val rows = countAndSizeAndBytes.iterator.flatMap(t => decodeUnsafeRows(t._3))
+    (totalRowCount, totalSizeInBytes, rows)
   }
 
   /**
