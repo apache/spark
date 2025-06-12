@@ -113,10 +113,10 @@ class SQLAppStatusListener(
     // Record the accumulator IDs and metric types for the stages of this job, so that the code
     // that keeps track of the metrics knows which accumulators to look at.
     val accumIdsAndType = exec.metricAccumulatorIdToMetricType
-    if (accumIdsAndType.nonEmpty) {
+    if (accumIdsAndType.asScala.nonEmpty) {
       event.stageInfos.foreach { stage =>
         stageMetrics.put(stage.stageId, new LiveStageMetrics(stage.stageId, 0,
-          stage.numTasks, accumIdsAndType))
+          stage.numTasks, accumIdsAndType.asScala))
       }
     }
 
@@ -207,12 +207,12 @@ class SQLAppStatusListener(
   private def aggregateMetrics(exec: LiveExecutionData): Map[Long, String] = {
     val accumIds = exec.metrics.map(_.accumulatorId).toSet
 
-    val metricAggregationMap = new mutable.HashMap[String, (Array[Long], Array[Long]) => String]()
+    val metricAggregationMap = new ConcurrentHashMap[String, (Array[Long], Array[Long]) => String]()
     val metricAggregationMethods = exec.metrics.map { m =>
       val optClassName = CustomMetrics.parseV2CustomMetricType(m.metricType)
       val metricAggMethod = optClassName.map { className =>
         if (metricAggregationMap.contains(className)) {
-          metricAggregationMap(className)
+          metricAggregationMap.get(className)
         } else {
           // Try to initiate custom metric object
           try {
@@ -247,41 +247,42 @@ class SQLAppStatusListener(
 
     val maxMetrics = liveStageMetrics.flatMap(_.maxMetricValues())
 
-    val allMetrics = new mutable.HashMap[Long, Array[Long]]()
+    val allMetrics = new ConcurrentHashMap[Long, Array[Long]]()
 
-    val maxMetricsFromAllStages = new mutable.HashMap[Long, Array[Long]]()
+    val maxMetricsFromAllStages = new ConcurrentHashMap[Long, Array[Long]]()
 
     taskMetrics.filter(m => accumIds.contains(m._1)).foreach { case (id, values) =>
-      val prev = allMetrics.getOrElse(id, null)
+      val prev = allMetrics.getOrDefault(id, null)
       val updated = if (prev != null) {
         prev ++ values
       } else {
         values
       }
-      allMetrics(id) = updated
+      allMetrics.put(id, updated)
     }
 
     // Find the max for each metric id between all stages.
     val validMaxMetrics = maxMetrics.filter(m => accumIds.contains(m._1))
     validMaxMetrics.foreach { case (id, value, taskId, stageId, attemptId) =>
-      val updated = maxMetricsFromAllStages.getOrElse(id, Array(value, stageId, attemptId, taskId))
+      val updated = maxMetricsFromAllStages
+        .getOrDefault(id, Array(value, stageId, attemptId, taskId))
       if (value > updated(0)) {
         updated(0) = value
         updated(1) = stageId
         updated(2) = attemptId
         updated(3) = taskId
       }
-      maxMetricsFromAllStages(id) = updated
+      maxMetricsFromAllStages.put(id, updated)
     }
 
     exec.driverAccumUpdates.foreach { case (id, value) =>
       if (accumIds.contains(id)) {
-        val prev = allMetrics.getOrElse(id, null)
+        val prev = allMetrics.getOrDefault(id, null)
         val updated = if (prev != null) {
           // If the driver updates same metrics as tasks and has higher value then remove
           // that entry from maxMetricsFromAllStage. This would make stringValue function default
           // to "driver" that would be displayed on UI.
-          if (maxMetricsFromAllStages.contains(id) && value > maxMetricsFromAllStages(id)(0)) {
+          if (maxMetricsFromAllStages.contains(id) && value > maxMetricsFromAllStages.get(id)(0)) {
             maxMetricsFromAllStages.remove(id)
           }
           val _copy = Arrays.copyOf(prev, prev.length + 1)
@@ -290,12 +291,12 @@ class SQLAppStatusListener(
         } else {
           Array(value)
         }
-        allMetrics(id) = updated
+        allMetrics.put(id, updated)
       }
     }
 
-    val aggregatedMetrics = allMetrics.map { case (id, values) =>
-      id -> metricAggregationMethods(id)(values, maxMetricsFromAllStages.getOrElse(id,
+    val aggregatedMetrics = allMetrics.asScala.map { case (id, values) =>
+      id -> metricAggregationMethods(id)(values, maxMetricsFromAllStages.getOrDefault(id,
         Array.empty[Long]))
     }.toMap
 
@@ -496,7 +497,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   // This mapping is shared across all LiveStageMetrics instances associated with
   // this LiveExecutionData, helping to reduce memory overhead by avoiding waste
   // from separate immutable maps with largely overlapping sets of entries.
-  val metricAccumulatorIdToMetricType = new mutable.HashMap[Long, String]()
+  val metricAccumulatorIdToMetricType = new ConcurrentHashMap[Long, String]()
   var submissionTime = -1L
   var completionTime: Option[Date] = None
   var errorMessage: Option[String] = None
