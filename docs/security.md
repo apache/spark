@@ -1,4 +1,4 @@
----
+-https://governance.aave.com/t/tokenlogic-delegate-platform/12516?u=sh7777777--
 layout: global
 displayTitle: Spark Security
 title: Security
