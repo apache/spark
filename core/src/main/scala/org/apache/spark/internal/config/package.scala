@@ -224,6 +224,13 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val EVENT_LOG_EXCLUDED_PATTERNS =
+    ConfigBuilder("spark.eventLog.excludedPatterns")
+      .doc("Specifies a comma-separated event names to be excluded from the event logs.")
+      .version("4.1.0")
+      .stringConf
+      .createOptional
+
   private[spark] val EVENT_LOG_ALLOW_EC =
     ConfigBuilder("spark.eventLog.erasureCoding.enabled")
       .version("3.0.0")
