@@ -196,7 +196,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       checksumEnabled: Boolean = true,
       checksumAlgorithm: String = "ADLER32",
       shuffleMetrics: Option[ShuffleReadMetricsReporter] = None,
-      doBatchFetch: Boolean = false): ShuffleBlockFetcherIterator = {
+      doBatchFetch: Boolean = false,
+      fallbackStorage: Option[FallbackStorage] = None): ShuffleBlockFetcherIterator = {
     val tContext = taskContext.getOrElse(TaskContext.empty())
     new ShuffleBlockFetcherIterator(
       tContext,
@@ -222,7 +223,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       checksumEnabled,
       checksumAlgorithm,
       shuffleMetrics.getOrElse(tContext.taskMetrics().createTempShuffleReadMetrics()),
-      doBatchFetch)
+      doBatchFetch,
+      fallbackStorage)
   }
   // scalastyle:on argcount
 
@@ -1125,6 +1127,54 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       iterator.next()
     }
     assert(e.getMessage.contains("fetch failed after 10 retries due to Netty OOM"))
+  }
+
+  test("SPARK-52507: missing blocks attempts to read from fallback storage") {
+    val blockManager = createMockBlockManager()
+
+    configureMockTransfer(Map.empty)
+    val remoteBmId = BlockManagerId("test-remote-client-1", "test-remote-host", 2)
+    val blockId = ShuffleBlockId(0, 0, 0)
+    val blocksByAddress = Map[BlockManagerId, Seq[(BlockId, Long, Int)]](
+      (remoteBmId, Seq((blockId, 1L, 0)))
+    )
+
+    // iterator with no FallbackStorage cannot find the block
+    {
+      val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress = blocksByAddress)
+      val e = intercept[FetchFailedException] {
+        iterator.next()
+      }
+      assert(e.getCause != null)
+      assert(e.getCause.isInstanceOf[BlockNotFoundException])
+      assert(e.getCause.getMessage.contains("Block shuffle_0_0_0 not found"))
+    }
+
+    // iterator with FallbackStorage that does not store the block cannot find it either
+    val fallbackStorage = mock(classOf[FallbackStorage])
+
+    {
+      when(fallbackStorage.read(ShuffleBlockId(0, 0, 1))).thenReturn(new TestManagedBuffer(127))
+      val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress = blocksByAddress,
+        fallbackStorage = Some(fallbackStorage))
+      val e = intercept[FetchFailedException] {
+        iterator.next()
+      }
+      assert(e.getCause != null)
+      assert(e.getCause.isInstanceOf[BlockNotFoundException])
+      assert(e.getCause.getMessage.contains("Block shuffle_0_0_0 not found"))
+    }
+
+    // iterator with FallbackStorage that stores the block can find it
+    {
+      when(fallbackStorage.read(ShuffleBlockId(0, 0, 0))).thenReturn(new TestManagedBuffer(127))
+      val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress = blocksByAddress,
+        fallbackStorage = Some(fallbackStorage))
+      assert(iterator.hasNext)
+      val (id, _) = iterator.next()
+      assert(id === ShuffleBlockId(0, 0, 0))
+      assert(!iterator.hasNext)
+    }
   }
 
   /**
