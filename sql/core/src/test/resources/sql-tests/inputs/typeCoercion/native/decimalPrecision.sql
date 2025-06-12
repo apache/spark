@@ -1446,3 +1446,7 @@ SELECT cast(1 as decimal(3, 0))  <> cast('2017-12-11 09:30:00' as date) FROM t;
 SELECT cast(1 as decimal(5, 0))  <> cast('2017-12-11 09:30:00' as date) FROM t;
 SELECT cast(1 as decimal(10, 0)) <> cast('2017-12-11 09:30:00' as date) FROM t;
 SELECT cast(1 as decimal(20, 0)) <> cast('2017-12-11 09:30:00' as date) FROM t;
+
+SELECT SUM(col1) AS col1 FROM values(DECIMAL(1)) GROUP BY ALL HAVING col1 = 1;
+SELECT SUM(col1) AS col1 FROM values(DECIMAL(2)) GROUP BY ALL HAVING col1 + 1 = 1;
+SELECT SUM(col1) AS col1 FROM values(DECIMAL(3)) HAVING 1 = 1 + col1;

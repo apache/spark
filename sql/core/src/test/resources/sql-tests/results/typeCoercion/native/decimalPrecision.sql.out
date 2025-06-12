@@ -15029,3 +15029,27 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "cast(1 as decimal(20, 0)) <> cast('2017-12-11 09:30:00' as date)"
   } ]
 }
+
+
+-- !query
+SELECT SUM(col1) AS col1 FROM values(DECIMAL(1)) GROUP BY ALL HAVING col1 = 1
+-- !query schema
+struct<col1:decimal(20,0)>
+-- !query output
+1
+
+
+-- !query
+SELECT SUM(col1) AS col1 FROM values(DECIMAL(2)) GROUP BY ALL HAVING col1 + 1 = 1
+-- !query schema
+struct<col1:decimal(20,0)>
+-- !query output
+
+
+
+-- !query
+SELECT SUM(col1) AS col1 FROM values(DECIMAL(3)) HAVING 1 = 1 + col1
+-- !query schema
+struct<col1:decimal(20,0)>
+-- !query output
+
