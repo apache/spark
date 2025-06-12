@@ -1573,7 +1573,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       case u @ Union(children, _, _)
         // if there are duplicate output columns, give them unique expr ids
-          if children.exists(c => c.output.map(_.exprId).distinct.length < c.output.length) =>
+        if (u.allChildrenCompatible &&
+          conf.getConf(SQLConf.ENFORCE_TYPE_COERCION_BEFORE_UNION_DEDUPLICATION)) &&
+          children.exists(c => c.output.map(_.exprId).distinct.length < c.output.length) =>
         val newChildren = children.map { c =>
           if (c.output.map(_.exprId).distinct.length < c.output.length) {
             val existingExprIds = mutable.HashSet[ExprId]()
