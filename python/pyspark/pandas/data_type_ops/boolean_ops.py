@@ -127,9 +127,7 @@ class BooleanOps(DataTypeOps):
 
         def safe_floordiv(left_col: PySparkColumn, right_val: Any) -> PySparkColumn:
             if is_ansi_mode_enabled(spark_session):
-                return F.when(F.lit(right_val == 0), F.lit(None)).otherwise(
-                    F.floor(left_col / right_val)
-                )
+                return F.floor(F.try_divide(left_col, F.lit(right_val)))
             else:
                 return F.floor(left_col / right_val)
 
