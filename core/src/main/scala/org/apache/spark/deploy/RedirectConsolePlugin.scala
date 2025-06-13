@@ -38,15 +38,22 @@ class RedirectConsolePlugin extends SparkPlugin {
   override def executorPlugin(): ExecutorPlugin = new ExecRedirectConsolePlugin()
 }
 
+object RedirectConsolePlugin {
+
+  def redirectConsoleToLog(): Unit = {
+    val stdoutLogger = LoggerFactory.getLogger("stdout")
+    System.setOut(new LoggingPrintStream(stdoutLogger.info))
+    val stderrLogger = LoggerFactory.getLogger("stderr")
+    System.setErr(new LoggingPrintStream(stderrLogger.error))
+  }
+}
+
 class DriverRedirectConsolePlugin extends DriverPlugin with Logging {
 
   override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
     if (sc.conf.get(DRIVER_REDIRECT_CONSOLE_TO_LOG_ENABLED)) {
       logInfo("Redirect driver's stdout/stderr to logging system")
-      val stdoutLogger = LoggerFactory.getLogger("stdout")
-      System.setOut(new LoggingPrintStream(stdoutLogger.info))
-      val stderrLogger = LoggerFactory.getLogger("stderr")
-      System.setErr(new LoggingPrintStream(stderrLogger.error))
+      RedirectConsolePlugin.redirectConsoleToLog()
     }
     Map.empty[String, String].asJava
   }
@@ -57,10 +64,7 @@ class ExecRedirectConsolePlugin extends ExecutorPlugin with Logging {
   override def init(ctx: PluginContext, extraConf: JMap[String, String]): Unit = {
     if (ctx.conf.get(EXEC_REDIRECT_CONSOLE_TO_LOG_ENABLED)) {
       logInfo("Redirect executor's stdout/stdout to logging system")
-      val stdoutLogger = LoggerFactory.getLogger("stdout")
-      System.setOut(new LoggingPrintStream(stdoutLogger.info))
-      val stderrLogger = LoggerFactory.getLogger("stderr")
-      System.setErr(new LoggingPrintStream(stderrLogger.error))
+      RedirectConsolePlugin.redirectConsoleToLog()
     }
   }
 }
