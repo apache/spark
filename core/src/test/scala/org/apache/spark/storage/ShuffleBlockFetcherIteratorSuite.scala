@@ -197,7 +197,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       checksumEnabled: Boolean = true,
       checksumAlgorithm: String = "ADLER32",
       shuffleMetrics: Option[ShuffleReadMetricsReporter] = None,
-      doBatchFetch: Boolean = false): ShuffleBlockFetcherIterator = {
+      doBatchFetch: Boolean = false,
+      fastFailOnFetchFailureEnabled: Boolean = false): ShuffleBlockFetcherIterator = {
     val tContext = taskContext.getOrElse(TaskContext.empty())
     new ShuffleBlockFetcherIterator(
       tContext,
@@ -223,7 +224,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       checksumEnabled,
       checksumAlgorithm,
       shuffleMetrics.getOrElse(tContext.taskMetrics().createTempShuffleReadMetrics()),
-      doBatchFetch)
+      doBatchFetch,
+      fastFailOnFetchFailureEnabled)
   }
   // scalastyle:on argcount
 
@@ -710,12 +712,11 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     // Continue only after the mock calls onBlockFetchFailure
     sem.acquire()
 
-    // There are one success fetch and 2 failures. Since failures are consumed firstly so
-    // the first 2 should throw FetchFailedExceptions (due to failure) and the last block
-    // should be returned without an exception.
-    intercept[FetchFailedException] { iterator.next() }
-    intercept[FetchFailedException] { iterator.next() }
+    // The first block should be returned without an exception, and the last two should throw
+    // FetchFailedExceptions (due to failure)
     iterator.next()
+    intercept[FetchFailedException] { iterator.next() }
+    intercept[FetchFailedException] { iterator.next() }
   }
 
   private def mockCorruptBuffer(size: Long = 1L, corruptAt: Int = 0): ManagedBuffer = {
@@ -1512,12 +1513,10 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
         Seq(ShuffleMergedBlockId(0, 0, 2)), 2L, SHUFFLE_PUSH_MAP_ID)))
     val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress,
       blockManager = Some(blockManager))
-    // Fall back to fetch 2 local blocks with one success and one failure.
-    // Failures will be consumed firstly so the 1st instance of iterator.next()
-    // throws FetchFailedException
-    intercept[FetchFailedException] { iterator.next() }
-    // The 2nd instance of iterator.next() returns the original shuffle block (0, 0, 2)
+    // 1st instance of iterator.next() returns the original shuffle block (0, 0, 2)
     assert(iterator.next()._1 === ShuffleBlockId(0, 0, 2))
+    // 2nd instance of iterator.next() throws FetchFailedException
+    intercept[FetchFailedException] { iterator.next() }
   }
 
   test("SPARK-32922: failure to fetch push-merged-local block should fallback to fetch " +
@@ -1996,7 +1995,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
 
     val iterator = createShuffleBlockIteratorWithDefaults(
       Map(localBmId -> toBlockList(localBlocks.keys, 1L, 0)),
-      blockManager = Some(blockManager)
+      blockManager = Some(blockManager),
+      fastFailOnFetchFailureEnabled = true
     )
 
     // Fetch failure should be placed in the head of results, exception should be thrown for the
@@ -2027,7 +2027,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
 
     val iterator = createShuffleBlockIteratorWithDefaults(
       Map(hostLocalBmId -> toBlockList(hostLocalBlocks.keys, 1L, 0)),
-      blockManager = Some(blockManager)
+      blockManager = Some(blockManager),
+      fastFailOnFetchFailureEnabled = true
     )
 
     // Fetch failure should be placed in the head of results, exception should be thrown for the
@@ -2067,7 +2068,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
         localBmId -> toBlockList(localBlocks.keys, 1L, 0),
         hostLocalBmId -> toBlockList(hostLocalBlocks.keys, 1L, 1)
       ),
-      blockManager = Some(blockManager)
+      blockManager = Some(blockManager),
+      fastFailOnFetchFailureEnabled = true
     )
 
     verify(blockManager, times(0)).getHostLocalShuffleData(any(), any())
@@ -2078,5 +2080,47 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     assert(iterator.next()._1 === ShuffleBlockId(0, 0, 0))
     assert(iterator.next()._1 === ShuffleBlockId(0, 1, 0))
     assert(!iterator.hasNext)
+  }
+
+  test("SPARK-52395: fast fail when fetch failure happens for remote blocks") {
+    // Make sure remote blocks would return
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 2, 0) -> createMockManagedBuffer()
+    )
+
+    // Semaphore to coordinate event sequence in two different threads.
+    val sem = new Semaphore(0)
+
+    answerFetchBlocks { invocation =>
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      Future {
+        // Return the first block, and then fail.
+        listener.onBlockFetchSuccess(
+          ShuffleBlockId(0, 0, 0).toString, blocks(ShuffleBlockId(0, 0, 0)))
+        listener.onBlockFetchFailure(
+          ShuffleBlockId(0, 1, 0).toString, new BlockNotFoundException("blah"))
+        listener.onBlockFetchFailure(
+          ShuffleBlockId(0, 2, 0).toString, new BlockNotFoundException("blah"))
+        sem.release()
+      }
+    }
+
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0)),
+      fastFailOnFetchFailureEnabled = true
+    )
+
+    // Continue only after the mock calls onBlockFetchFailure
+    sem.acquire()
+
+    // There are one success fetch and 2 failures. Since failures are consumed firstly so
+    // the first 2 should throw FetchFailedExceptions (due to failure) and the last block
+    // should be returned without an exception.
+    intercept[FetchFailedException] { iterator.next() }
+    intercept[FetchFailedException] { iterator.next() }
+    iterator.next()
   }
 }
