@@ -216,7 +216,7 @@ class KMeansModel private[ml] (
 
   override def estimatedSize: Long = SizeEstimator.estimate(parentModel.clusterCenters)
 
-  override private[ml] def createSummary(predictions: DataFrame, args: Array[Any]): Unit = {
+  override private[spark] def createSummary(predictions: DataFrame, args: Array[Any]): Unit = {
     val numIter = args(0).asInstanceOf[Int]
     val trainingCost = args(1).asInstanceOf[Double]
     val summary = new KMeansSummary(
@@ -228,6 +228,10 @@ class KMeansModel private[ml] (
       trainingCost)
 
     setSummary(Some(summary))
+  }
+
+  override private[spark] def createSummaryArgTypes(): Array[Class[_]] = {
+    Array(classOf[Int], classOf[Double])
   }
 }
 

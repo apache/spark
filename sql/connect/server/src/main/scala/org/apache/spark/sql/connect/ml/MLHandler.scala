@@ -402,6 +402,21 @@ private[connect] object MLHandler extends Logging {
           .setParam(LiteralValueProtoConverter.toLiteralProto(metric))
           .build()
 
+      case proto.MlCommand.CommandCase.CREATE_SUMMARY =>
+        val createSummaryCmd = mlCommand.getCreateSummary
+        val refId = createSummaryCmd.getModelRef.getId
+        val model = sessionHolder.mlCache.get(refId).asInstanceOf[HasTrainingSummary[_]]
+        val predictions = MLUtils.parseRelationProto(createSummaryCmd.getPredictions, sessionHolder)
+        val argTypes = model.createSummaryArgTypes()
+        val args = createSummaryCmd.getParamsList.asScala.toArray.zip(argTypes).map {
+          case (value, paramType) => MLUtils.reconcileParam(paramType, value)
+        }
+        model.createSummary(predictions, args)
+        proto.MlCommandResult
+          .newBuilder()
+          .setParam(LiteralValueProtoConverter.toLiteralProto(true))
+          .build()
+
       case other => throw MlUnsupportedException(s"$other not supported")
     }
   }

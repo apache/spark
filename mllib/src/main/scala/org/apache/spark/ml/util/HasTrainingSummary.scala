@@ -51,8 +51,16 @@ private[spark] trait HasTrainingSummary[T] {
     this
   }
 
-  private[ml] def createSummary(predictions: DataFrame, args: Array[Any]): Unit = {
+  private[spark] def createSummary(
+    predictions: DataFrame,
+    args: Array[Any]
+  ): Unit = {
     throw new SparkException(
       s"No createSummary implementation for this ${this.getClass.getSimpleName}")
+  }
+
+  private[spark] def createSummaryArgTypes(): Array[Class[_]] = {
+    throw new SparkException(
+      s"No createSummaryArgTypes implementation for this ${this.getClass.getSimpleName}")
   }
 }
