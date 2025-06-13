@@ -264,7 +264,7 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
     "https://dist.apache.org/repos/dist/release")
   // Tests the latest version of every release line if Java version is at most 17.
   val testingVersions: Seq[String] = if (isPythonVersionAvailable &&
-    Utils.isJavaVersionAtMost17) {
+      Utils.isJavaVersionAtMost17) {
     import scala.io.Source
     val sparkVersionPattern = """<a href="spark-(\d.\d.\d)/">""".r
     try Utils.tryWithResource(
