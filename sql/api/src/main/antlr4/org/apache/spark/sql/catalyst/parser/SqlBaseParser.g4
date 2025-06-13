@@ -2015,6 +2015,7 @@ ansiNonReserved
     | WEEKS
     | WHILE
     | WINDOW
+    | WITHOUT
     | YEAR
     | YEARS
     | ZONE
@@ -2425,6 +2426,7 @@ nonReserved
     | WINDOW
     | WITH
     | WITHIN
+    | WITHOUT
     | YEAR
     | YEARS
     | ZONE

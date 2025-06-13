@@ -390,7 +390,7 @@ WHILE	false
 WINDOW	false
 WITH	false
 WITHIN	false
-WITHOUT	true
+WITHOUT	false
 X	false
 YEAR	false
 YEARS	false
@@ -402,4 +402,4 @@ SELECT keyword from SQL_KEYWORDS() WHERE reserved
 -- !query schema
 struct<keyword:string>
 -- !query output
-WITHOUT
+
