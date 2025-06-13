@@ -65,10 +65,8 @@ class ExecRedirectConsolePlugin extends ExecutorPlugin with Logging {
   }
 }
 
-private[spark] class LoggingPrintStream(
-    redirect: String => Unit,
-    lineMaxBytes: Long = 4 * 1024 * 1024)
-  extends PrintStream(new LineBuffer(lineMaxBytes)) {
+private[spark] class LoggingPrintStream(redirect: String => Unit)
+  extends PrintStream(new LineBuffer(4 * 1024 * 1024)) {
 
   override def write(b: Int): Unit = {
     super.write(b)
