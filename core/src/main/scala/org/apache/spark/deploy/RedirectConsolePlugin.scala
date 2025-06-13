@@ -32,41 +32,33 @@ import org.apache.spark.internal.config._
 /**
  * A built-in plugin to allow redirecting stdout/stderr to logging system (SLF4J).
  */
-class ConsoleRedirectPlugin extends SparkPlugin {
-  override def driverPlugin(): DriverPlugin = new DriverConsoleRedirectPlugin()
+class RedirectConsolePlugin extends SparkPlugin {
+  override def driverPlugin(): DriverPlugin = new DriverRedirectConsolePlugin()
 
-  override def executorPlugin(): ExecutorPlugin = new ExecConsoleRedirectPlugin()
+  override def executorPlugin(): ExecutorPlugin = new ExecRedirectConsolePlugin()
 }
 
-class DriverConsoleRedirectPlugin extends DriverPlugin with Logging {
+class DriverRedirectConsolePlugin extends DriverPlugin with Logging {
 
   override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
-    if (sc.conf.get(DRIVER_REDIRECT_STDOUT_TO_LOG_ENABLED)) {
-      logInfo("Redirect driver's stdout to logging system")
+    if (sc.conf.get(DRIVER_REDIRECT_CONSOLE_TO_LOG_ENABLED)) {
+      logInfo("Redirect driver's stdout/stderr to logging system")
       val stdoutLogger = LoggerFactory.getLogger("stdout")
-      System.setOut(new LoggingPrintStream(stdoutLogger.info))
-    }
-
-    if (sc.conf.get(DRIVER_REDIRECT_STDERR_TO_LOG_ENABLED)) {
-      logInfo("Redirect driver's stderr to logging system")
       val stderrLogger = LoggerFactory.getLogger("stderr")
+      System.setOut(new LoggingPrintStream(stdoutLogger.info))
       System.setErr(new LoggingPrintStream(stderrLogger.error))
     }
     Map.empty[String, String].asJava
   }
 }
 
-class ExecConsoleRedirectPlugin extends ExecutorPlugin with Logging {
+class ExecRedirectConsolePlugin extends ExecutorPlugin with Logging {
 
   override def init(ctx: PluginContext, extraConf: JMap[String, String]): Unit = {
-    if (ctx.conf.get(EXEC_REDIRECT_STDOUT_TO_LOG_ENABLED)) {
-      logInfo("Redirect executor's stdout to logging system")
+    if (ctx.conf.get(EXEC_REDIRECT_CONSOLE_TO_LOG_ENABLED)) {
+      logInfo("Redirect executor's stdout/stdout to logging system")
       val stdoutLogger = LoggerFactory.getLogger("stdout")
       System.setOut(new LoggingPrintStream(stdoutLogger.info))
-    }
-
-    if (ctx.conf.get(EXEC_REDIRECT_STDERR_TO_LOG_ENABLED)) {
-      logInfo("Redirect executor's stderr to logging system")
       val stderrLogger = LoggerFactory.getLogger("stderr")
       System.setErr(new LoggingPrintStream(stderrLogger.error))
     }
