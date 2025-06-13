@@ -216,7 +216,7 @@ private[ml] object MLUtils {
    * byte/short/int/long/float/double/string and array. Note that, array of array is not supported
    * yet.
    */
-  private def reconcileParam(paramType: Class[_], value: Any): Any = {
+  private[ml] def reconcileParam(paramType: Class[_], value: Any): Any = {
     // Some cases the param type might be mismatched with the value type.
     // Because in python side we only have int / float type for numeric params.
     // e.g.:

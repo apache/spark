@@ -853,6 +853,11 @@
           "Please fit or load a model smaller than <modelMaxSize> bytes."
         ]
       },
+      "MODEL_SUMMARY_LOST": {
+        "message" : [
+          "The model <objectName> summary is lost because the cached model is offloaded."
+         ]
+      },
       "UNSUPPORTED_EXCEPTION" : {
         "message" : [
           "<message>"

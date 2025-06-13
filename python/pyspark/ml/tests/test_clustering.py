@@ -103,6 +103,12 @@ class ClusteringTestsMixin:
         self.assertEqual(summary.predictions.columns, expected_cols)
         self.assertEqual(summary.predictions.count(), 6)
 
+        self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+        try:
+            self.assertEqual(model.summary.numIter, 2)
+        except Exception as e:
+            raise RuntimeError(e.getErrorClass())
+
         # save & load
         with tempfile.TemporaryDirectory(prefix="kmeans_model") as d:
             km.write().overwrite().save(d)

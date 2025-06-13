@@ -229,9 +229,7 @@ private[connect] object MLHandler extends Logging {
         if (obj != null && obj.isInstanceOf[HasTrainingSummary[_]]
           && methods(0).getMethod == "summary"
           && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
-          throw MLCacheInvalidException(
-            objRefId,
-            sessionHolder.mlCache.getOffloadingTimeoutMinute)
+          throw MLModelSummaryLostException(objRefId)
         }
         val helper = AttributeHelper(sessionHolder, objRefId, methods)
         val attrResult = helper.getAttribute

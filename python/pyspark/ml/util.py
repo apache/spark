@@ -52,6 +52,7 @@ if TYPE_CHECKING:
     from pyspark.ml.base import Params
     from pyspark.ml.wrapper import JavaWrapper
     from pyspark.core.context import SparkContext
+    from pyspark.errors.exceptions.connect import SparkException
     from pyspark.sql import DataFrame
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
     from pyspark.ml.wrapper import JavaWrapper, JavaEstimator
@@ -278,8 +279,7 @@ def try_remote_call(f: FuncT) -> FuncT:
 
     @functools.wraps(f)
     def wrapped(self: "JavaWrapper", name: str, *args: Any) -> Any:
-        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            # Launch a remote call if possible
+        def remote_call():
             import pyspark.sql.connect.proto as pb2
             from pyspark.sql.connect.session import SparkSession
             from pyspark.ml.connect.util import _extract_id_methods
@@ -315,6 +315,15 @@ def try_remote_call(f: FuncT) -> FuncT:
                 return model_info.obj_ref.id
             else:
                 return deserialize(properties)
+
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            # Launch a remote call if possible
+            try:
+                return remote_call()
+            except SparkException as e:
+                if e.getErrorClass() == "CONNECT_ML.MODEL_SUMMARY_LOST":
+                    # restore model.summary
+                    return remote_call()
         else:
             return f(self, name, *args)
 
@@ -1076,6 +1085,8 @@ class HasTrainingSummary(Generic[T]):
         Indicates whether a training summary exists for this model
         instance.
         """
+        if is_remote():
+            return True
         return cast("JavaWrapper", self)._call_java("hasSummary")
 
     @property
