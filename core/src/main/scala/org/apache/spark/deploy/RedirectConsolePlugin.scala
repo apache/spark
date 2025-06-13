@@ -18,9 +18,7 @@
 package org.apache.spark.deploy
 
 import java.io.{ByteArrayOutputStream, PrintStream}
-import java.util.{Map => JMap}
-
-import scala.jdk.CollectionConverters._
+import java.util.{Collections, Map => JMap}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
@@ -61,7 +59,7 @@ class DriverRedirectConsolePlugin extends DriverPlugin with Logging {
       }
       RedirectConsolePlugin.redirectConsoleToLog()
     }
-    Map.empty[String, String].asJava
+    Collections.emptyMap
   }
 }
 
