@@ -786,6 +786,18 @@
       "Exceeds char/varchar type length limitation: <limit>."
     ]
   },
+  "EXCEPT_NESTED_COLUMN_INVALID_TYPE" : {
+    "message" : [
+      "EXCEPT column <columnName> was resolved and expected to be StructType, but found type <dataType>."
+    ],
+    "sqlState" : "428H2"
+  },
+  "EXCEPT_OVERLAPPING_COLUMNS" : {
+    "message" : [
+      "Columns in an EXCEPT list must be distinct and non-overlapping, but got (<columns>)."
+    ],
+    "sqlState" : "42702"
+  },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
