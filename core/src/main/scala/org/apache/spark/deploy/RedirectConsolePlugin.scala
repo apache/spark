@@ -22,12 +22,12 @@ import java.util.{Map => JMap}
 
 import scala.jdk.CollectionConverters._
 
-import org.slf4j.LoggerFactory
-
 import org.apache.spark.SparkContext
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC, SparkLoggerFactory}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI.UI_SHOW_CONSOLE_PROGRESS
 
 /**
  * A built-in plugin to allow redirecting stdout/stderr to logging system (SLF4J).
@@ -41,9 +41,9 @@ class RedirectConsolePlugin extends SparkPlugin {
 object RedirectConsolePlugin {
 
   def redirectConsoleToLog(): Unit = {
-    val stdoutLogger = LoggerFactory.getLogger("stdout")
+    val stdoutLogger = SparkLoggerFactory.getLogger("stdout")
     System.setOut(new LoggingPrintStream(stdoutLogger.info))
-    val stderrLogger = LoggerFactory.getLogger("stderr")
+    val stderrLogger = SparkLoggerFactory.getLogger("stderr")
     System.setErr(new LoggingPrintStream(stderrLogger.error))
   }
 }
@@ -53,6 +53,12 @@ class DriverRedirectConsolePlugin extends DriverPlugin with Logging {
   override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
     if (sc.conf.get(DRIVER_REDIRECT_CONSOLE_TO_LOG_ENABLED)) {
       logInfo("Redirect driver's stdout/stderr to logging system")
+      if (sc.conf.get(UI_SHOW_CONSOLE_PROGRESS)) {
+        logWarning(log"Redirect driver's stderr to logging system may affect " +
+          log"console progress bar, consider disabling either " +
+          log"${MDC(CONFIG, DRIVER_REDIRECT_CONSOLE_TO_LOG_ENABLED.key)} or " +
+          log"${MDC(CONFIG2, UI_SHOW_CONSOLE_PROGRESS.key)}.")
+      }
       RedirectConsolePlugin.redirectConsoleToLog()
     }
     Map.empty[String, String].asJava
