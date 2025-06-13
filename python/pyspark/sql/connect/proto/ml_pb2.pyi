@@ -118,21 +118,39 @@ class MlCommand(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         OBJ_REFS_FIELD_NUMBER: builtins.int
+        EVICTONLY_FIELD_NUMBER: builtins.int
         @property
         def obj_refs(
             self,
         ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
             pyspark.sql.connect.proto.ml_common_pb2.ObjectRef
         ]: ...
+        evictOnly: builtins.bool
+        """if set `evictOnly` to true, only evict the cached model from memory,
+        but keep the offloaded model in Spark driver local disk.
+        """
         def __init__(
             self,
             *,
             obj_refs: collections.abc.Iterable[pyspark.sql.connect.proto.ml_common_pb2.ObjectRef]
             | None = ...,
+            evictOnly: builtins.bool | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_evictOnly", b"_evictOnly", "evictOnly", b"evictOnly"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["obj_refs", b"obj_refs"]
+            self,
+            field_name: typing_extensions.Literal[
+                "_evictOnly", b"_evictOnly", "evictOnly", b"evictOnly", "obj_refs", b"obj_refs"
+            ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_evictOnly", b"_evictOnly"]
+        ) -> typing_extensions.Literal["evictOnly"] | None: ...
 
     class CleanCache(google.protobuf.message.Message):
         """Force to clean up all the ML cached objects"""

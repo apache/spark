@@ -215,6 +215,20 @@ class KMeansModel private[ml] (
   override def summary: KMeansSummary = super.summary
 
   override def estimatedSize: Long = SizeEstimator.estimate(parentModel.clusterCenters)
+
+  override private[ml] def createSummary(predictions: DataFrame, args: Array[Any]): Unit = {
+    val numIter = args(0).asInstanceOf[Int]
+    val trainingCost = args(1).asInstanceOf[Double]
+    val summary = new KMeansSummary(
+      predictions,
+      $(predictionCol),
+      $(featuresCol),
+      $(k),
+      numIter,
+      trainingCost)
+
+    setSummary(Some(summary))
+  }
 }
 
 /** Helper class for storing model data */
@@ -414,16 +428,9 @@ class KMeans @Since("1.5.0") (
     }
 
     val model = copyValues(new KMeansModel(uid, oldModel).setParent(this))
-    val summary = new KMeansSummary(
-      model.transform(dataset),
-      $(predictionCol),
-      $(featuresCol),
-      $(k),
-      oldModel.numIter,
-      oldModel.trainingCost)
 
-    model.setSummary(Some(summary))
-    instr.logNamedValue("clusterSizes", summary.clusterSizes)
+    model.createSummary(model.transform(dataset), Array(oldModel.numIter, oldModel.trainingCost))
+    instr.logNamedValue("clusterSizes", model.summary.clusterSizes)
     model
   }
 

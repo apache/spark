@@ -19,6 +19,7 @@ package org.apache.spark.ml.util
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
+import org.apache.spark.sql.DataFrame
 
 
 /**
@@ -48,5 +49,10 @@ private[spark] trait HasTrainingSummary[T] {
   private[ml] def setSummary(summary: Option[T]): this.type = {
     this.trainingSummary = summary
     this
+  }
+
+  private[ml] def createSummary(predictions: DataFrame, args: Array[Any]): Unit = {
+    throw new SparkException(
+      s"No createSummary implementation for this ${this.getClass.getSimpleName}")
   }
 }

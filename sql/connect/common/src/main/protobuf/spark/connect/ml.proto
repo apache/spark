@@ -54,6 +54,9 @@ message MlCommand {
   // or summary evaluated by a model
   message Delete {
     repeated ObjectRef obj_refs = 1;
+    // if set `evictOnly` to true, only evict the cached model from memory,
+    // but keep the offloaded model in Spark driver local disk.
+    optional bool evictOnly = 2;
   }
 
   // Force to clean up all the ML cached objects
