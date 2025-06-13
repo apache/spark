@@ -180,6 +180,76 @@ if [[ "$1" == "finalize" ]]; then
   echo "KEYS sync'ed"
   rm -rf svn-spark
 
+  # TODO: Test it in the actual release
+  # Release artifacts in the Nexus repository
+  # Find latest orgapachespark-* repo for this release version
+  REPO_ID=$(curl --retry 10 --retry-all-errors -s -u "$ASF_USERNAME:$ASF_PASSWORD" \
+    https://repository.apache.org/service/local/staging/profile_repositories | \
+    grep -A 5 "<repositoryId>orgapachespark-" | \
+    awk '/<repositoryId>/ { id = $0 } /<description>/ && $0 ~ /Apache Spark '"$RELEASE_VERSION"'/ { print id }' | \
+    grep -oP '(?<=<repositoryId>)orgapachespark-[0-9]+(?=</repositoryId>)' | \
+    sort -V | tail -n 1)
+
+  if [[ -z "$REPO_ID" ]]; then
+    echo "No matching staging repository found for Apache Spark $RELEASE_VERSION"
+    exit 1
+  fi
+
+  echo "Using repository ID: $REPO_ID"
+
+  # Release the repository
+  curl --retry 10 --retry-all-errors -s -u "$APACHE_USERNAME:$APACHE_PASSWORD" \
+    -H "Content-Type: application/json" \
+    -X POST https://repository.apache.org/service/local/staging/bulk/promote \
+    -d "{\"data\": {\"stagedRepositoryIds\": [\"$REPO_ID\"], \"description\": \"Apache Spark $RELEASE_VERSION\"}}"
+
+  # Wait for release to complete
+  echo "Waiting for release to complete..."
+  while true; do
+    STATUS=$(curl --retry 10 --retry-all-errors -s -u "$APACHE_USERNAME:$APACHE_PASSWORD" \
+      https://repository.apache.org/service/local/staging/repository/$REPO_ID | \
+      grep -oPm1 "(?<=<type>)[^<]+")
+    echo "Current state: $STATUS"
+    if [[ "$STATUS" == "released" ]]; then
+      echo "Release complete."
+      break
+    elif [[ "$STATUS" == "release_failed" || "$STATUS" == "error" ]]; then
+      echo "Release failed."
+      exit 1
+    elif [[ "$STATUS" == "open" ]]; then
+      echo "Repository is still open. Cannot release. Please close it first."
+      exit 1
+    fi
+    sleep 10
+  done
+
+  # Drop the repository after release
+  curl --retry 10 --retry-all-errors -s -u "$APACHE_USERNAME:$APACHE_PASSWORD" \
+    -H "Content-Type: application/json" \
+    -X POST https://repository.apache.org/service/local/staging/bulk/drop \
+    -d "{\"data\": {\"stagedRepositoryIds\": [\"$REPO_ID\"], \"description\": \"Dropped after release\"}}"
+
+  echo "Done."
+
+  # TODO: Test it in the actual official release
+  # Remove old releases from the mirror
+  # Extract major.minor prefix
+  RELEASE_SERIES=$(echo "$RELEASE_VERSION" | cut -d. -f1-2)
+  
+  # Fetch existing dist URLs
+  OLD_VERSION=$(svn ls https://dist.apache.org/repos/dist/release/spark/ | \
+    grep "^spark-$RELEASE_SERIES" | \
+    grep -v "^spark-$RELEASE_VERSION/" | \
+    sed 's#/##' | sed 's/^spark-//' | \
+    sort -V | tail -n 1)
+  
+  if [[ -n "$OLD_VERSION" ]]; then
+    echo "Removing old version: spark-$OLD_VERSION"
+    svn rm "https://dist.apache.org/repos/dist/release/spark/spark-$OLD_VERSION" -m "Remove older $RELEASE_SERIES release after $RELEASE_VERSION"
+  else
+    echo "No previous $RELEASE_SERIES version found to remove. Manually remove it if there is."
+  fi
+
   exit 0
 fi
 

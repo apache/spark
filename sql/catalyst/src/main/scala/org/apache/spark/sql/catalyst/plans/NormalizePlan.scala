@@ -21,7 +21,6 @@ import java.util.HashMap
 
 import org.apache.spark.sql.catalyst.analysis.{
   DeduplicateRelations,
-  GetViewColumnByNameAndOrdinal,
   NormalizeableRelation
 }
 import org.apache.spark.sql.catalyst.expressions._
@@ -160,14 +159,12 @@ object NormalizePlan extends PredicateHelper {
           innerProject.child
         )
         aggregate.copy(child = newInnerProject)
-      case Project(outerProjectList, innerProject: Project) =>
+      case project @ Project(_, innerProject: Project) =>
         val newInnerProject = Project(
           innerProject.projectList.sortBy(_.name),
           innerProject.child
         )
-        Project(normalizeProjectList(outerProjectList), newInnerProject)
-      case Project(projectList, child) =>
-        Project(normalizeProjectList(projectList), child)
+        project.copy(child = newInnerProject)
       case c: KeepAnalyzedQuery => c.storeAnalyzedQuery()
       case localRelation: LocalRelation if !localRelation.data.isEmpty =>
         /**
@@ -202,16 +199,6 @@ object NormalizePlan extends PredicateHelper {
     case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
     case LessThanOrEqual(l, r) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
     case _ => condition // Don't reorder.
-  }
-
-  private def normalizeProjectList(projectList: Seq[NamedExpression]): Seq[NamedExpression] = {
-    projectList
-      .map { e =>
-        e.transformUp {
-          case g: GetViewColumnByNameAndOrdinal => g.copy(viewDDL = None)
-        }
-      }
-      .asInstanceOf[Seq[NamedExpression]]
   }
 }
 
