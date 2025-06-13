@@ -3498,7 +3498,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         runSqlScript(sqlScript)
       },
       condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
-      parameters = Map.empty
+      parameters = Map("condition" -> "SQLEXCEPTION")
     )
   }
 
@@ -3520,7 +3520,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         runSqlScript(sqlScript)
       },
       condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
-      parameters = Map.empty
+      parameters = Map("condition" -> "NOT FOUND")
     )
   }
 }
