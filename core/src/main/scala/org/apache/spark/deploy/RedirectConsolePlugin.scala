@@ -44,8 +44,8 @@ class DriverRedirectConsolePlugin extends DriverPlugin with Logging {
     if (sc.conf.get(DRIVER_REDIRECT_CONSOLE_TO_LOG_ENABLED)) {
       logInfo("Redirect driver's stdout/stderr to logging system")
       val stdoutLogger = LoggerFactory.getLogger("stdout")
-      val stderrLogger = LoggerFactory.getLogger("stderr")
       System.setOut(new LoggingPrintStream(stdoutLogger.info))
+      val stderrLogger = LoggerFactory.getLogger("stderr")
       System.setErr(new LoggingPrintStream(stderrLogger.error))
     }
     Map.empty[String, String].asJava
