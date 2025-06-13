@@ -1,5 +1,5 @@
 @echo off
-
+@text
 rem
 rem Licensed to the Apache Software Foundation (ASF) under one or more
 rem contributor license agreements.  See the NOTICE file distributed with
