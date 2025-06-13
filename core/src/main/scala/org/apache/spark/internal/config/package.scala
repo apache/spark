@@ -2843,8 +2843,7 @@ package object config {
     ConfigBuilder("spark.driver.log.redirectConsole.enabled")
       .doc("Whether to redirect the driver's stdout/stderr to logging system. " +
         s"It only takes affect when `${PLUGINS.key}` is configured with " +
-        "`org.apache.spark.deploy.RedirectConsolePlugin`. Note, enabling this " +
-        "feature may affect the shell console progress bar.")
+        "`org.apache.spark.deploy.RedirectConsolePlugin`.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
