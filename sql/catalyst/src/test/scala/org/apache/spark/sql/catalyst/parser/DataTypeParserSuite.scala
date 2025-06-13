@@ -212,7 +212,7 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
         CatalystSqlParser.parseDataType("time(0) WITHOUT TIMEZONE")
       },
       condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'TIMEZONE'", "hint" -> ""))
+      parameters = Map("error" -> "'WITHOUT'", "hint" -> ""))
     checkError(
       exception = intercept[ParseException] {
         CatalystSqlParser.parseDataType("time(0) WITH TIME ZONE")
