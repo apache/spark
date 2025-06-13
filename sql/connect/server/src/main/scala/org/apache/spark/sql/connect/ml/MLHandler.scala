@@ -264,9 +264,13 @@ private[connect] object MLHandler extends Logging {
 
       case proto.MlCommand.CommandCase.DELETE =>
         val ids = mutable.ArrayBuilder.make[String]
-        mlCommand.getDelete.getObjRefsList.asScala.toArray.foreach { objId =>
+        val deleteCmd = mlCommand.getDelete
+        val evictOnly = if (deleteCmd.hasEvictOnly) {
+          deleteCmd.getEvictOnly
+        } else { false }
+        deleteCmd.getObjRefsList.asScala.toArray.foreach { objId =>
           if (!objId.getId.contains(".")) {
-            if (mlCache.remove(objId.getId)) {
+            if (mlCache.remove(objId.getId, evictOnly)) {
               ids += objId.getId
             }
           }

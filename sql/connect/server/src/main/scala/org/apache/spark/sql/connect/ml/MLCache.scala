@@ -194,11 +194,11 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     }
   }
 
-  def _removeModel(refId: String): Boolean = {
+  def _removeModel(refId: String, evictOnly: Boolean): Boolean = {
     verifyObjectId(refId)
     val removedModel = cachedModel.remove(refId)
     val removedFromMem = removedModel != null
-    val removedFromDisk = if (removedModel != null && getMemoryControlEnabled) {
+    val removedFromDisk = if (!evictOnly && removedModel != null && getMemoryControlEnabled) {
       totalMLCacheSizeBytes.addAndGet(-removedModel.sizeBytes)
       val removePath = offloadedModelsDir.resolve(refId)
       require(removePath.startsWith(offloadedModelsDir))
@@ -220,8 +220,8 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
    * @param refId
    *   the key used to look up the corresponding object
    */
-  def remove(refId: String): Boolean = {
-    val modelIsRemoved = _removeModel(refId)
+  def remove(refId: String, evictOnly: Boolean = false): Boolean = {
+    val modelIsRemoved = _removeModel(refId, evictOnly)
 
     modelIsRemoved
   }
