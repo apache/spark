@@ -464,6 +464,34 @@ class SparkSubmitSuite
     conf.get("spark.kubernetes.driver.container.image") should be ("bar")
   }
 
+  test("handles external cluster mode") {
+    val clArgs = Seq(
+      "--deploy-mode", "cluster",
+      "--proxy-user", "test.user",
+      "--master", "myclusterManager",
+      "--executor-memory", "5g",
+      "--class", "org.SomeClass",
+      "--driver-memory", "4g",
+      "--conf", "spark.submit.external.class=org.apache.spark.submit.ArmadaClusterSubmit",
+      "/home/thejar.jar",
+      "arg1")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (childArgs, classpath, conf, mainClass) = submit.prepareSubmitEnvironment(appArgs)
+
+    val childArgsMap = childArgs.grouped(2).map(a => a(0) -> a(1)).toMap
+    childArgsMap.get("--primary-java-resource").get should endWith ("/home/thejar.jar")
+    childArgsMap.get("--main-class") should be (Some("org.SomeClass"))
+    childArgsMap.get("--arg") should be (Some("arg1"))
+    childArgsMap.get("--proxy-user") should be (Some("test.user"))
+    mainClass should be ("org.apache.spark.submit.ArmadaClusterSubmit")
+    classpath should have length (0)
+    conf.get("spark.master") should be ("myclusterManager")
+    conf.get("spark.executor.memory") should be ("5g")
+    conf.get("spark.driver.memory") should be ("4g")
+    conf.get("spark.submit.external.class") should be(
+      "org.apache.spark.submit.ArmadaClusterSubmit")
+  }
+
   test("SPARK-35084: include jars of the --packages" +
     " in k8s client mode & driver runs inside a POD") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
@@ -810,6 +838,28 @@ class SparkSubmitSuite
         assert(!line.contains("secret_password"))
       }
     }
+  }
+
+  test("launch simple application with spark-submit and external master in client mode") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val jar1 = TestUtils.createJarWithClasses(Seq("ExternalClusterSubmit"))
+    val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
+    val jarsString = Seq(jar1, jar2).map(j => j.toString).mkString(",")
+    val args = Seq(
+      "--name", "testApp",
+      "--master", "myclusterManager",
+      "--deploy-mode", "client",
+//      "--proxy-user", "test.user",
+      "--jars", jarsString,
+      "--executor-memory", "5g",
+      "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
+      "--driver-memory", "4g",
+      "--conf", "spark.submit.external.class=ExternalClusterSubmit",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      unusedJar.toString, "SparkSubmitClassA"
+    )
+    runSparkSubmit(args)
   }
 
   test("includes jars passed in through --jars") {
