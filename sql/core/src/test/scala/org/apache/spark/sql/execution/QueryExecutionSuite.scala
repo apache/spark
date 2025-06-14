@@ -238,7 +238,8 @@ class QueryExecutionSuite extends SharedSparkSession {
       }
     }
     Seq("=== Applying Rule org.apache.spark.sql.execution",
-        "=== Result of Batch Preparations ===").foreach { expectedMsg =>
+        "=== Result of Batch Preparations ===",
+        "Output Information:").foreach { expectedMsg =>
       assert(testAppender.loggingEvents.exists(
         _.getMessage.getFormattedMessage.contains(expectedMsg)))
     }
