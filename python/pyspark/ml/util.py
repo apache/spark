@@ -213,12 +213,12 @@ def try_remote_fit(f: FuncT) -> FuncT:
             if isinstance(model, HasTrainingSummary):
                 predictions = model.transform(dataset)
 
-                summary = model._summaryCls(f"{str(self._java_obj)}.summary")
+                summary = model._summaryCls()(f"{str(model._java_obj)}.summary")
                 summary._predictions = predictions
-                summary._model_ref_id = str(self._java_obj)
+                summary._model_ref_id = str(model._java_obj)
                 summary.__source_transformer__ = model  # type: ignore[attr-defined]
 
-                self._summary = summary
+                model._summary = summary
             if model.__class__.__name__ not in ["Bucketizer"]:
                 model._resetUid(self.uid)
             return self._copyValues(model)
