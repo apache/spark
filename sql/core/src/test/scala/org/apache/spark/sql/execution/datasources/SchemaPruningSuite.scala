@@ -658,13 +658,66 @@ abstract class SchemaPruningSuite
             |where not exists (select null from employees e where e.name.first = c.name.first
             |  and e.employer.name = c.employer.company.name)
             |""".stripMargin)
-        checkScan(query,
-          "struct<name:struct<first:string,middle:string,last:string>," +
-            "employer:struct<id:int,company:struct<name:string,address:string>>>",
-          "struct<name:struct<first:string,middle:string,last:string>," +
-            "employer:struct<name:string,address:string>>")
+        // TODO: SPARK-51381: Fix the schema pruning for V1 nested columns
+        if (SQLConf.get.getConf(SQLConf.USE_V1_SOURCE_LIST).contains(dataSourceName)) {
+          checkScan(query,
+            "struct<name:struct<first:string,middle:string,last:string>," +
+              "employer:struct<id:int,company:struct<name:string,address:string>>>",
+            "struct<name:struct<first:string,middle:string,last:string>," +
+              "employer:struct<name:string,address:string>>")
+        } else {
+          checkScan(query,
+            "struct<name:struct<first:string>," +
+              "employer:struct<company:struct<name:string>>>",
+            "struct<name:struct<first:string>," +
+              "employer:struct<name:string>>")
+        }
         checkAnswer(query, Row(3))
       }
+    }
+  }
+
+  testSchemaPruning("SPARK-51831: Column pruning with exists Join") {
+    withTempPath { dir =>
+      spark.range(100)
+        .withColumn("col1", col("id") + 1)
+        .withColumn("col2", col("id") + 2)
+        .withColumn("col3", col("id") + 3)
+        .withColumn("col4", col("id") + 4)
+        .withColumn("col5", col("id") + 5)
+        .withColumn("col6", col("id") + 6)
+        .withColumn("col7", col("id") + 7)
+        .withColumn("col8", col("id") + 8)
+        .withColumn("col9", col("id") + 9)
+        .write
+        .mode("overwrite")
+        .format(dataSourceName)
+        .save(dir.getCanonicalPath + "/t1")
+      spark.range(10)
+        .write
+        .mode("overwrite")
+        .format(dataSourceName)
+        .save(dir.getCanonicalPath + "/t2")
+
+      spark.read
+        .format(dataSourceName)
+        .load(dir.getCanonicalPath + "/t1")
+        .createOrReplaceTempView("t1")
+      spark.read
+        .format(dataSourceName)
+        .load(dir.getCanonicalPath + "/t2")
+        .createOrReplaceTempView("t2")
+      val query = sql(
+        """
+          |select sum(t1.id) as sum_id
+          |from t1, t2
+          |where t1.id == t2.id
+          |      and exists(select * from t1 where t1.id == t2.id and t1.col1>5)
+          |""".stripMargin)
+      checkScan(query,
+        "struct<id:long>",
+        "struct<id:long>",
+        "struct<id:long, col1:long>")
     }
   }
 
