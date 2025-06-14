@@ -319,15 +319,7 @@ abstract class PipelineTest
 
   /**
    * Helper method to verify unresolved column error message. We expect three elements to be present
-   * in the message: error class, unresolved column name, list of suggested columns. There are three
-   * significant differences between different versions of DBR:
-   * - Error class changed in DBR 11.3 from `MISSING_COLUMN` to `UNRESOLVED_COLUMN.WITH_SUGGESTION`
-   * - Name parts in suggested columns are escaped with backticks starting from DBR 11.3,
-   *   e.g. table.column => `table`.`column`
-   * - Starting from DBR 13.1 suggested columns qualification matches unresolved column, i.e. if
-   *   unresolved column is a single-part identifier then suggested column will be as well. E.g.
-   *   for unresolved column `x` suggested columns will omit catalog/schema or `LIVE` qualifier. For
-   *   this reason we verify only last part of suggested column name.
+   * in the message: error class, unresolved column name, list of suggested columns.
    */
   protected def verifyUnresolveColumnError(
       errorMessage: String,
