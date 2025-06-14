@@ -279,7 +279,7 @@ class CatalogSuite extends SparkFunSuite {
     val loaded = catalog.loadTable(testIdent)
 
     assert(table.name == loaded.name)
-    assert(table.schema == loaded.schema)
+    assert(table.columns == loaded.columns)
     assert(table.properties == loaded.properties)
   }
 
@@ -307,7 +307,7 @@ class CatalogSuite extends SparkFunSuite {
     val loaded = catalog.loadTable(testIdent)
 
     assert(table.name == loaded.name)
-    assert(table.schema == loaded.schema)
+    assert(table.columns == loaded.columns)
     assert(table.properties == loaded.properties)
   }
 
@@ -544,8 +544,8 @@ class CatalogSuite extends SparkFunSuite {
 
     val updated = catalog.alterTable(testIdent, TableChange.updateColumnType(Array("id"), LongType))
 
-    val expectedSchema = new StructType().add("id", LongType).add("data", StringType)
-    assert(updated.schema == expectedSchema)
+    val expectedColumns = Array(Column.create("id", LongType), Column.create("data", StringType))
+    assert(updated.columns sameElements expectedColumns)
   }
 
   test("alterTable: update column nullability") {
@@ -566,8 +566,9 @@ class CatalogSuite extends SparkFunSuite {
     val updated = catalog.alterTable(testIdent,
       TableChange.updateColumnNullability(Array("id"), true))
 
-    val expectedSchema = new StructType().add("id", IntegerType).add("data", StringType)
-    assert(updated.schema == expectedSchema)
+    val expectedColumns = Array(
+      Column.create("id", IntegerType, true), Column.create("data", StringType))
+    assert(updated.columns sameElements expectedColumns)
   }
 
   test("alterTable: update missing column fails") {
@@ -606,10 +607,11 @@ class CatalogSuite extends SparkFunSuite {
     val updated = catalog.alterTable(testIdent,
       TableChange.updateColumnComment(Array("id"), "comment text"))
 
-    val expectedSchema = new StructType()
-        .add("id", IntegerType, nullable = true, "comment text")
-        .add("data", StringType)
-    assert(updated.schema == expectedSchema)
+    val expectedColumns = Array(
+      Column.create("id", IntegerType, true, "comment text", null),
+      Column.create("data", StringType)
+    )
+    assert(updated.columns sameElements expectedColumns)
   }
 
   test("alterTable: replace comment") {
@@ -626,14 +628,14 @@ class CatalogSuite extends SparkFunSuite {
 
     catalog.alterTable(testIdent, TableChange.updateColumnComment(Array("id"), "comment text"))
 
-    val expectedSchema = new StructType()
-        .add("id", IntegerType, nullable = true, "replacement comment")
-        .add("data", StringType)
-
+    val expectedColumns = Array(
+      Column.create("id", IntegerType, true, "replacement comment", null),
+      Column.create("data", StringType)
+    )
     val updated = catalog.alterTable(testIdent,
       TableChange.updateColumnComment(Array("id"), "replacement comment"))
 
-    assert(updated.schema == expectedSchema)
+    assert(updated.columns sameElements expectedColumns)
   }
 
   test("alterTable: add comment to missing column fails") {
@@ -671,9 +673,9 @@ class CatalogSuite extends SparkFunSuite {
 
     val updated = catalog.alterTable(testIdent, TableChange.renameColumn(Array("id"), "some_id"))
 
-    val expectedSchema = new StructType().add("some_id", IntegerType).add("data", StringType)
-
-    assert(updated.schema == expectedSchema)
+    val expectedColumns = Array(
+      Column.create("some_id", IntegerType), Column.create("data", StringType))
+    assert(updated.columns sameElements expectedColumns)
   }
 
   test("alterTable: rename nested column") {
@@ -785,8 +787,8 @@ class CatalogSuite extends SparkFunSuite {
     val updated = catalog.alterTable(testIdent,
       TableChange.deleteColumn(Array("id"), false))
 
-    val expectedSchema = new StructType().add("data", StringType)
-    assert(updated.schema == expectedSchema)
+    val expectedColumns = Array(Column.create("data", StringType))
+    assert(updated.columns sameElements expectedColumns)
   }
 
   test("alterTable: delete nested column") {
