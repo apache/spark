@@ -2746,7 +2746,11 @@ object TryMakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create timestamp from year, month, day, hour, min, sec and timezone fields. The result data type is consistent with the value of configuration `spark.sql.timestampType`. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.",
+  usage = """
+    _FUNC_(year, month, day, hour, min, sec[, timezone]) - Create timestamp from year, month, day, hour, min, sec and timezone fields. The result data type is consistent with the value of configuration `spark.sql.timestampType`. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.
+
+    _FUNC_(date, time[, timezone]) - Create timestamp from date and time.
+    """,
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
@@ -2758,6 +2762,8 @@ object TryMakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
               The value can be either an integer like 13 , or a fraction like 13.123.
               If the sec argument equals to 60, the seconds field is set
               to 0 and 1 minute is added to the final timestamp.
+      * date - a date to represent, from 0001-01-01 to 9999-12-31
+      * time - a local time to represent, from 00:00:00 to 23:59:59.999999
       * timezone - the time zone identifier. For example, CET, UTC and etc.
   """,
   examples = """
@@ -2772,6 +2778,10 @@ object TryMakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
        2019-06-30 23:59:01
       > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
        NULL
+      > SELECT _FUNC_(make_date(2014, 12, 28), make_time(6, 30, 45.887));
+       2014-12-28 06:30:45.887
+      > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887', 'CET');
+       2014-12-27 21:30:45.887
   """,
   group = "datetime_funcs",
   since = "3.0.0")
@@ -2811,6 +2821,17 @@ case class MakeTimestamp(
       timezone: Expression) = {
     this(year, month, day, hour, min, sec, Some(timezone), None, SQLConf.get.ansiEnabled,
       SQLConf.get.timestampType)
+  }
+
+  def this(date: Expression, time: Expression) = {
+    this(Year(date), Month(date), DayOfMonth(date),
+      HoursOfTime(time), MinutesOfTime(time), SecondsOfTimeWithFraction(time))
+  }
+
+  def this(date: Expression, time: Expression, timezone: Expression) = {
+    this(Year(date), Month(date), DayOfMonth(date),
+      HoursOfTime(time), MinutesOfTime(time), SecondsOfTimeWithFraction(time),
+      timezone)
   }
 
   override def children: Seq[Expression] = Seq(year, month, day, hour, min, sec) ++ timezone

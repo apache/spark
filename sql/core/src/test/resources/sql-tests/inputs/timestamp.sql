@@ -169,3 +169,8 @@ select timediff(SECOND, date'2022-02-15', timestamp'2022-02-14 23:59:59');
 
 select timediff('MINUTE', timestamp'2023-02-14 01:02:03', timestamp'2023-02-14 02:00:03');
 select timediff('YEAR', date'2020-02-15', date'2023-02-15');
+
+-- Construct timestamp from date and time
+SELECT make_timestamp(DATE'0001-01-01', TIME'0:0:0');
+SELECT make_timestamp(DATE'2025-06-14', TIME'17:25:30.5', 'CET');
+SELECT make_timestamp(DATE'9999-12-31', TIME'23:59:59.123456');

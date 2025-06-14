@@ -943,3 +943,21 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "fragment" : "timediff('YEAR', date'2020-02-15', date'2023-02-15')"
   } ]
 }
+
+
+-- !query
+SELECT make_timestamp(DATE'0001-01-01', TIME'0:0:0')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(DATE'2025-06-14', TIME'17:25:30.5', 'CET')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(DATE'9999-12-31', TIME'23:59:59.123456')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
