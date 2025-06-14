@@ -71,6 +71,8 @@ private[spark] object LogKeys {
   case object ALIGNED_TO_TIME extends LogKey
   case object ALPHA extends LogKey
   case object ANALYSIS_ERROR extends LogKey
+  case object ANTLR_DFA_CACHE_DELTA extends LogKey
+  case object ANTLR_DFA_CACHE_SIZE extends LogKey
   case object APP_ATTEMPT_ID extends LogKey
   case object APP_ATTEMPT_SHUFFLE_MERGE_ID extends LogKey
   case object APP_DESC extends LogKey
@@ -209,6 +211,7 @@ private[spark] object LogKeys {
   case object DIFF_DELTA extends LogKey
   case object DIVISIBLE_CLUSTER_INDICES_SIZE extends LogKey
   case object DRIVER_ID extends LogKey
+  case object DRIVER_JVM_MEMORY extends LogKey
   case object DRIVER_MEMORY_SIZE extends LogKey
   case object DRIVER_STATE extends LogKey
   case object DROPPED_PARTITIONS extends LogKey
