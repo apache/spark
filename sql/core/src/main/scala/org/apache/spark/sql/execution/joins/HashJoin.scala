@@ -101,7 +101,7 @@ trait HashJoin extends JoinCodegenSupport {
       }
   }
 
-  protected lazy val (buildPlan, streamedPlan) = buildSide match {
+  protected[sql] lazy val (buildPlan, streamedPlan) = buildSide match {
     case BuildLeft => (left, right)
     case BuildRight => (right, left)
   }
