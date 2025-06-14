@@ -629,9 +629,15 @@ case class CatalogTable(
       if (lastAccessTime <= 0) JString("UNKNOWN")
       else JLong(lastAccessTime)
 
-    val viewQueryOutputColumns: JValue =
-      if (viewQueryColumnNames.nonEmpty) JArray(viewQueryColumnNames.map(JString).toList)
-      else JNull
+    val viewQueryOutputColumns: JValue = {
+      if (viewSchemaMode == SchemaEvolution) {
+        JArray(schema.map(_.name).map(JString).toList)
+      } else if (viewQueryColumnNames.nonEmpty) {
+        JArray(viewQueryColumnNames.map(JString).toList)
+      } else {
+        JNull
+      }
+    }
 
     val map = mutable.LinkedHashMap[String, JValue]()
 
