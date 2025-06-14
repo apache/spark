@@ -104,6 +104,9 @@ class ClusteringTestsMixin:
         self.assertEqual(summary.predictions.count(), 6)
 
         self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+        self.assertEqual(model.summary.cluster.count(), 2)
+        breakpoint()
+        self.assertEqual(model.summary.numIter, 2)
         try:
             self.assertEqual(model.summary.numIter, 2)
         except Exception as e:

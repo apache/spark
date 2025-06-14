@@ -40,6 +40,7 @@ from typing import (
 from contextlib import contextmanager
 
 from pyspark import since
+from pyspark.errors.exceptions.connect import SparkException
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import SparkSession
 from pyspark.sql.utils import is_remote
@@ -52,7 +53,6 @@ if TYPE_CHECKING:
     from pyspark.ml.base import Params
     from pyspark.ml.wrapper import JavaWrapper
     from pyspark.core.context import SparkContext
-    from pyspark.errors.exceptions.connect import SparkException
     from pyspark.sql import DataFrame
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
     from pyspark.ml.wrapper import JavaWrapper, JavaEstimator
@@ -205,6 +205,10 @@ def try_remote_fit(f: FuncT) -> FuncT:
                 _logger.warning(warning_msg)
             remote_model_ref = RemoteModelRef(model_info.obj_ref.id)
             model = self._create_model(remote_model_ref)
+            if isinstance(model, HasTrainingSummary):
+                predictions = model.transform(dataset)
+                model._setup_remote_summary(predictions)
+                model._summary.__source_transformer__ = model  # type: ignore[attr-defined]
             if model.__class__.__name__ not in ["Bucketizer"]:
                 model._resetUid(self.uid)
             return self._copyValues(model)
@@ -212,6 +216,28 @@ def try_remote_fit(f: FuncT) -> FuncT:
             return f(self, dataset)
 
     return cast(FuncT, wrapped)
+
+
+def _do_remote_call_with_model_summary_restoration(self, remote_call, session):
+    import pyspark.sql.connect.proto as pb2
+    from pyspark.ml.connect.serialize import serialize_param
+
+    try:
+        return remote_call()
+    except SparkException as e:
+        if e.getErrorClass() == "CONNECT_ML.MODEL_SUMMARY_LOST":
+            # the model summary is lost because the remote model was offloaded,
+            # send request to restore model.summary
+            create_summary_command = pb2.Command()
+            create_summary_command.ml_command.create_summary.CopyFrom(
+                pb2.MlCommand.CreateSummary(
+                    model_ref=pb2.ObjectRef(id=self._model_ref_id),
+                    predictions=self._predictions._plan.plan(session.client),
+                )
+            )
+            session.client.execute_command(create_summary_command)
+
+            return remote_call()
 
 
 def try_remote_transform_relation(f: FuncT) -> FuncT:
@@ -279,14 +305,16 @@ def try_remote_call(f: FuncT) -> FuncT:
 
     @functools.wraps(f)
     def wrapped(self: "JavaWrapper", name: str, *args: Any) -> Any:
+        import pyspark.sql.connect.proto as pb2
+        from pyspark.sql.connect.session import SparkSession
+
+        session = SparkSession.getActiveSession()
+
         def remote_call():
-            import pyspark.sql.connect.proto as pb2
-            from pyspark.sql.connect.session import SparkSession
             from pyspark.ml.connect.util import _extract_id_methods
             from pyspark.ml.connect.serialize import serialize, deserialize
             from pyspark.ml.wrapper import JavaModel
 
-            session = SparkSession.getActiveSession()
             assert session is not None
             if self._java_obj == ML_CONNECT_HELPER_ID:
                 obj_id = ML_CONNECT_HELPER_ID
@@ -317,13 +345,7 @@ def try_remote_call(f: FuncT) -> FuncT:
                 return deserialize(properties)
 
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            # Launch a remote call if possible
-            try:
-                return remote_call()
-            except SparkException as e:
-                if e.getErrorClass() == "CONNECT_ML.MODEL_SUMMARY_LOST":
-                    # restore model.summary
-                    return remote_call()
+            return _do_remote_call_with_model_summary_restoration(self, remote_call, session)
         else:
             return f(self, name, *args)
 
@@ -1085,19 +1107,28 @@ class HasTrainingSummary(Generic[T]):
         Indicates whether a training summary exists for this model
         instance.
         """
-        if is_remote():
-            return True
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            return hasattr(self, "_summary")
         return cast("JavaWrapper", self)._call_java("hasSummary")
 
     @property
     @since("2.1.0")
-    @try_remote_intermediate_result
     def summary(self) -> T:
         """
         Gets summary of the model trained on the training set. An exception is thrown if
         no summary exists.
         """
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            if hasattr(self, "_summary"):
+                return self._summary
+            else:
+                raise RuntimeError(
+                    "No training summary available for this %s" % self.__class__.__name__
+                )
         return cast("JavaWrapper", self)._call_java("summary")
+
+    def _setup_remote_summary(self, predictions):
+        raise NotImplementedError()
 
 
 class MetaAlgorithmReadWrite:

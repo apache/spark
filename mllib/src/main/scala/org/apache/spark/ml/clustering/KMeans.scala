@@ -216,9 +216,9 @@ class KMeansModel private[ml] (
 
   override def estimatedSize: Long = SizeEstimator.estimate(parentModel.clusterCenters)
 
-  override private[spark] def createSummary(predictions: DataFrame, args: Array[Any]): Unit = {
-    val numIter = args(0).asInstanceOf[Int]
-    val trainingCost = args(1).asInstanceOf[Double]
+  private[spark] def createSummary(
+    predictions: DataFrame, numIter: Int, trainingCost: Double
+  ): Unit = {
     val summary = new KMeansSummary(
       predictions,
       $(predictionCol),
@@ -230,8 +230,26 @@ class KMeansModel private[ml] (
     setSummary(Some(summary))
   }
 
-  override private[spark] def createSummaryArgTypes(): Array[Class[_]] = {
-    Array(classOf[Int], classOf[Double])
+  override private[spark] def saveSummary(path: String): Unit = {
+    ReadWriteUtils.saveObjectToLocal[(Int, Double)](
+      path, (summary.numIter, summary.trainingCost),
+      (data, dos) => {
+        dos.writeInt(data._1)
+        dos.writeDouble(data._2)
+      }
+    )
+  }
+
+  override private[spark] def loadSummary(path: String, predictions: DataFrame): Unit = {
+    val (numIter: Int, trainingCost: Double) = ReadWriteUtils.loadObjectFromLocal[(Int, Double)](
+      path,
+      dis => {
+        val numIter = dis.readInt()
+        val trainingCost = dis.readDouble()
+        (numIter, trainingCost)
+      }
+    )
+    createSummary(predictions, numIter, trainingCost)
   }
 }
 
@@ -433,7 +451,7 @@ class KMeans @Since("1.5.0") (
 
     val model = copyValues(new KMeansModel(uid, oldModel).setParent(this))
 
-    model.createSummary(model.transform(dataset), Array(oldModel.numIter, oldModel.trainingCost))
+    model.createSummary(model.transform(dataset), oldModel.numIter, oldModel.trainingCost)
     instr.logNamedValue("clusterSizes", model.summary.clusterSizes)
     model
   }

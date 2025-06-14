@@ -115,6 +115,9 @@ message MlRelation {
     Transform transform = 1;
     Fetch fetch = 2;
   }
+  // (Optional) the predictions dataset for restoring the model
+  optional Relation model_summary_predictions = 3;
+
   // Relation to represent transform(input) of the operator
   // which could be a cached model or a new transformer
   message Transform {

@@ -705,22 +705,11 @@ class KMeansModel(
         """
         return self._call_java("numFeatures")
 
-    @property
-    @since("2.1.0")
-    def summary(self) -> KMeansSummary:
-        """
-        Gets summary (cluster assignments, cluster sizes) of the model trained on the
-        training set. An exception is thrown if no summary exists.
-        """
-        if self.hasSummary:
-            s = KMeansSummary(super(KMeansModel, self).summary)
-            if is_remote():
-                s.__source_transformer__ = self  # type: ignore[attr-defined]
-            return s
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
+    def _setup_remote_summary(self, predictions):
+        s = KMeansSummary(f"{str(self._java_obj)}.summary")
+        s._predictions = predictions
+        s._model_ref_id = str(self._java_obj)
+        self._summary = s
 
     @since("3.0.0")
     def predict(self, value: Vector) -> int:

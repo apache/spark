@@ -404,21 +404,26 @@ private[connect] object MLHandler extends Logging {
 
       case proto.MlCommand.CommandCase.CREATE_SUMMARY =>
         val createSummaryCmd = mlCommand.getCreateSummary
-        val refId = createSummaryCmd.getModelRef.getId
-        val model = sessionHolder.mlCache.get(refId).asInstanceOf[HasTrainingSummary[_]]
-        val predictions = MLUtils.parseRelationProto(createSummaryCmd.getPredictions, sessionHolder)
-        val argTypes = model.createSummaryArgTypes()
-        val args = createSummaryCmd.getParamsList.asScala.toArray.zip(argTypes).map {
-          case (value, paramType) => MLUtils.reconcileParam(paramType, value)
-        }
-        model.createSummary(predictions, args)
-        proto.MlCommandResult
-          .newBuilder()
-          .setParam(LiteralValueProtoConverter.toLiteralProto(true))
-          .build()
+        createModelSummary(sessionHolder, createSummaryCmd)
 
       case other => throw MlUnsupportedException(s"$other not supported")
     }
+  }
+
+  private def createModelSummary(
+    sessionHolder: SessionHolder,
+    createSummaryCmd: proto.MlCommand.CreateSummary
+  ): proto.MlCommandResult = {
+    val refId = createSummaryCmd.getModelRef.getId
+    val model = sessionHolder.mlCache.get(refId).asInstanceOf[HasTrainingSummary[_]]
+    val predictions = MLUtils.parseRelationProto(createSummaryCmd.getPredictions, sessionHolder)
+    val modelPath = sessionHolder.mlCache.getModelOffloadingPath(refId)
+    val summaryPath = modelPath.resolve("summary").toString
+    model.loadSummary(summaryPath, predictions)
+    proto.MlCommandResult
+      .newBuilder()
+      .setParam(LiteralValueProtoConverter.toLiteralProto(true))
+      .build()
   }
 
   def transformMLRelation(relation: proto.MlRelation, sessionHolder: SessionHolder): DataFrame = {
@@ -450,10 +455,27 @@ private[connect] object MLHandler extends Logging {
 
       // Get the attribute from a cached object which could be a model or summary
       case proto.MlRelation.MlTypeCase.FETCH =>
-        val helper = AttributeHelper(
-          sessionHolder,
-          relation.getFetch.getObjRef.getId,
-          relation.getFetch.getMethodsList.asScala.toArray)
+        val objRefId = relation.getFetch.getObjRef.getId
+        val methods = relation.getFetch.getMethodsList.asScala.toArray
+        val obj = sessionHolder.mlCache.get(objRefId)
+        if (obj != null && obj.isInstanceOf[HasTrainingSummary[_]]
+          && methods(0).getMethod == "summary"
+          && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
+
+          if (relation.hasModelSummaryPredictions) {
+            val predictions = MLUtils.parseRelationProto(
+              relation.getModelSummaryPredictions, sessionHolder
+            )
+            val modelPath = sessionHolder.mlCache.getModelOffloadingPath(objRefId)
+            val summaryPath = modelPath.resolve("summary").toString
+            obj.asInstanceOf[HasTrainingSummary[_]].loadSummary(summaryPath, predictions)
+          } else {
+            // For old Spark client backward compatibility.
+            throw MLModelSummaryLostException(objRefId)
+          }
+        }
+
+        val helper = AttributeHelper(sessionHolder, objRefId, methods)
         helper.getAttribute.asInstanceOf[DataFrame]
 
       case other => throw MlUnsupportedException(s"$other not supported")

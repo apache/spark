@@ -108,7 +108,6 @@ message MlCommand {
   message CreateSummary {
     ObjectRef model_ref = 1;
     Relation predictions = 2;
-    repeated Expression.Literal params = 3;
   }
 }
 

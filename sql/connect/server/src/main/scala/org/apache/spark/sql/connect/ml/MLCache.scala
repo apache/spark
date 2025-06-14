@@ -30,7 +30,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.Model
-import org.apache.spark.ml.util.{ConnectHelper, MLWritable, Summary}
+import org.apache.spark.ml.util.{ConnectHelper, HasTrainingSummary, MLWritable, Summary}
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.SessionHolder
 
@@ -115,6 +115,12 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     }
   }
 
+  private[spark] def getModelOffloadingPath(refId: String): Path = {
+    val path = offloadedModelsDir.resolve(refId)
+    require(path.startsWith(offloadedModelsDir))
+    path
+  }
+
   /**
    * Cache an object into a map of MLCache, and return its key
    * @param obj
@@ -137,9 +143,11 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       }
       cachedModel.put(objectId, CacheItem(obj, sizeBytes))
       if (getMemoryControlEnabled) {
-        val savePath = offloadedModelsDir.resolve(objectId)
-        require(savePath.startsWith(offloadedModelsDir))
+        val savePath = getModelOffloadingPath(objectId)
         obj.asInstanceOf[MLWritable].write.saveToLocal(savePath.toString)
+        if (obj.isInstanceOf[HasTrainingSummary[_]]) {
+          obj.asInstanceOf[HasTrainingSummary[_]].saveSummary(savePath.resolve("summary").toString)
+        }
         Files.writeString(savePath.resolve(modelClassNameFile), obj.getClass.getName)
         totalMLCacheInMemorySizeBytes.addAndGet(sizeBytes)
         totalMLCacheSizeBytes.addAndGet(sizeBytes)
@@ -176,8 +184,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       verifyObjectId(refId)
       var obj: Object = Option(cachedModel.get(refId)).map(_.obj).getOrElse(null)
       if (obj == null && getMemoryControlEnabled) {
-        val loadPath = offloadedModelsDir.resolve(refId)
-        require(loadPath.startsWith(offloadedModelsDir))
+        val loadPath = getModelOffloadingPath(refId)
         if (Files.isDirectory(loadPath)) {
           val className = Files.readString(loadPath.resolve(modelClassNameFile))
           obj = MLUtils.loadTransformer(
@@ -200,8 +207,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     val removedFromMem = removedModel != null
     val removedFromDisk = if (!evictOnly && removedModel != null && getMemoryControlEnabled) {
       totalMLCacheSizeBytes.addAndGet(-removedModel.sizeBytes)
-      val removePath = offloadedModelsDir.resolve(refId)
-      require(removePath.startsWith(offloadedModelsDir))
+      val removePath = getModelOffloadingPath(refId)
       val offloadingPath = new File(removePath.toString)
       if (offloadingPath.exists()) {
         FileUtils.deleteDirectory(offloadingPath)
