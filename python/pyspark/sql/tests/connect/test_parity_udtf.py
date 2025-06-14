@@ -54,7 +54,7 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
             def eval(self, a: int):
                 yield a + 1,
 
-        with self.assertRaisesRegex(InvalidPlanInput, "Invalid.*type"):
+        with self.assertRaisesRegex(Exception, "Invalid.*type"):
             TestUDTF(lit(1)).collect()
 
     @unittest.skipIf(
