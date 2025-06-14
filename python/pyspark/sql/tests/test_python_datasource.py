@@ -20,7 +20,7 @@ import tempfile
 import unittest
 from datetime import datetime
 from decimal import Decimal
-from typing import Callable, Iterable, List, Union
+from typing import Callable, Iterable, List, Optional, Union
 
 from pyspark.errors import AnalysisException, PythonException
 from pyspark.sql.datasource import (
@@ -46,7 +46,7 @@ from pyspark.sql.datasource import (
     StringStartsWith,
     WriterCommitMessage,
 )
-from pyspark.sql.functions import spark_partition_id
+from pyspark.sql.functions import explode, spark_partition_id
 from pyspark.sql.session import SparkSession
 from pyspark.sql.types import Row, StructType, VariantVal
 from pyspark.testing import assertDataFrameEqual
@@ -289,6 +289,249 @@ class BasePythonDataSourceTestsMixin:
         assertDataFrameEqual(df, [Row(x=0, y="0"), Row(x=1, y="1")])
         self.assertEqual(df.select(spark_partition_id()).distinct().count(), 2)
 
+    def test_column_pruning(self):
+        full_schema = StructType.fromDDL("a int, b array<struct<c: int, d: int>>")
+        required_schema = StructType.fromDDL("b array<struct<c: int>>")
+
+        class TestDataSourceReader(DataSourceReader):
+            def __init__(self, schema):
+                assert schema == full_schema
+                self.pruned = False
+
+            def pruneColumns(self, requiredSchema: StructType) -> Optional[StructType]:
+                self.pruned = True
+                assert requiredSchema == required_schema
+                return requiredSchema
+
+            def read(self, partition):
+                assert self.pruned
+                yield [[{"c": 1}, {"c": 2}]]
+                yield [[{"c": 3}]]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return full_schema
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader(schema)
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load()
+            df = df.select(explode("b").alias("col")).select("col.c")
+            assertDataFrameEqual(df, [Row(c=1), Row(c=2), Row(c=3)])
+
+    def test_no_column_pruning_inside_map(self):
+        required_ddl = "a map<struct<b: int, c: int>, struct<d: int, e: int>>"
+        full_ddl = f"{required_ddl}, f: int"
+        required_schema = StructType.fromDDL(required_ddl)
+        full_schema = StructType.fromDDL(full_ddl)
+
+        class TestDataSourceReader(DataSourceReader):
+            pruned = False
+
+            def pruneColumns(self, requiredSchema: StructType) -> Optional[StructType]:
+                self.pruned = True
+                assert requiredSchema == required_schema
+                return full_schema
+
+            def read(self, partition):
+                assert self.pruned
+                yield from []
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return full_schema
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load()
+            df = df.select(explode("a")).select("key.b", "value.d")
+            assertDataFrameEqual(df, [])
+
+    def load_df_with_column_pruning(self, full_ddl: str, actual_ddl: str, rows: List[Row] = None):
+        actual_schema = StructType.fromDDL(actual_ddl)
+
+        class TestDataSourceReader(DataSourceReader):
+            def pruneColumns(self, requiredSchema: StructType) -> Optional[StructType]:
+                return actual_schema
+
+            def read(self, partition):
+                yield from rows or []
+
+        class TestDataSource(DataSource):
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        self.spark.dataSource.register(TestDataSource)
+        df = self.spark.read.format("TestDataSource").schema(full_ddl).load()
+        return df
+
+    def test_column_pruning_missing_column(self):
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            df = self.load_df_with_column_pruning("a int, foo int", "a int")
+            with self.assertRaisesRegex(
+                Exception, "DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUPERSET.*foo"
+            ):
+                df.select("foo").collect()
+
+    def test_column_pruning_wrong_type(self):
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            df = self.load_df_with_column_pruning("a int, foo int", "foo double")
+            with self.assertRaisesRegex(
+                Exception, "DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUPERSET.*foo"
+            ):
+                df.select("foo").collect()
+
+    def test_column_pruning_nullability_narrow(self):
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            df = self.load_df_with_column_pruning("a int, foo int", "foo int not null")
+            df.select("foo").collect()
+
+    def test_column_pruning_nullability_widen(self):
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            df = self.load_df_with_column_pruning("a int, foo int not null", "foo int")
+            with self.assertRaisesRegex(
+                Exception, "DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUBSET.*foo"
+            ):
+                df.select("foo").collect()
+
+    def test_column_pruning_extraneous(self):
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            df = self.load_df_with_column_pruning("a int, foo int", "foo int, bar int")
+            with self.assertRaisesRegex(
+                Exception, "DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUBSET.*bar"
+            ):
+                df.select("foo").collect()
+
+    def test_column_pruning_missing_nested(self):
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            df = self.load_df_with_column_pruning("a struct<b int, c int>", "a struct<c int>")
+            with self.assertRaisesRegex(
+                Exception, r"DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUPERSET.*a\.b"
+            ):
+                df.select("a.b").collect()
+
+    def test_column_pruning_missing_nested_array(self):
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            df = self.load_df_with_column_pruning(
+                "a array<struct<b int, c int>>", "a array<struct<c int>>"
+            )
+            with self.assertRaisesRegex(
+                Exception, r"DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUPERSET.*a\.b"
+            ):
+                df.select("a.b").collect()
+
+    def test_column_pruning_reorder(self):
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            df = self.load_df_with_column_pruning(
+                "a string, b int, c int", "b int, a string", rows=[Row(a="hi", b=1)]
+            )
+            df = df.select("a", "b")
+            assertDataFrameEqual(df, [Row(a="hi", b=1)])
+
+    def test_column_pruning_case_insensitive(self):
+        with self.sql_conf(
+            {
+                "spark.sql.python.filterPushdown.enabled": True,
+                "spark.sql.caseSensitive": False,
+            }
+        ):
+            df = self.load_df_with_column_pruning(
+                "aBc string, d string", "aBc string", rows=[Row(aBc="hi")]
+            )
+            df = df.select("abC")
+            assertDataFrameEqual(df, [Row(aBc="hi")])
+
+    def test_combined_workers_column_pruning(self):
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+
+            class TestDataSourceReader(DataSourceReader):
+                def __init__(self):
+                    self.pickle_count = 0
+
+                def __getstate__(self):
+                    self.pickle_count += 1
+                    return self.__dict__
+
+                def pruneColumns(self, requiredSchema: StructType) -> Optional[StructType]:
+                    return None
+
+                def read(self, partition):
+                    assert self.pickle_count == 1
+                    yield from []
+
+            class TestDataSource(DataSource):
+                def reader(self, schema) -> "DataSourceReader":
+                    return TestDataSourceReader()
+
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").schema("a int, b int").load()
+            df = df.select("a")
+            assertDataFrameEqual(df, [])
+
+    def test_combined_workers_filter_pushdown(self):
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+
+            class TestDataSourceReader(DataSourceReader):
+                def __init__(self):
+                    self.pickle_count = 0
+
+                def __getstate__(self):
+                    self.pickle_count += 1
+                    return self.__dict__
+
+                def pushFilters(self, filters):
+                    return filters
+
+                def read(self, partition):
+                    assert self.pickle_count == 1
+                    yield from []
+
+            class TestDataSource(DataSource):
+                def reader(self, schema) -> "DataSourceReader":
+                    return TestDataSourceReader()
+
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").schema("a int").load()
+            df = df.filter("a = 1")
+            assertDataFrameEqual(df, [])
+
+    def test_combined_workers_filter_pushdown_column_pruning(self):
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+
+            class TestDataSourceReader(DataSourceReader):
+                def __init__(self):
+                    self.pickle_count = 0
+
+                def __getstate__(self):
+                    self.pickle_count += 1
+                    return self.__dict__
+
+                def pushFilters(self, filters):
+                    assert self.pickle_count == 0
+                    return filters
+
+                def pruneColumns(self, requiredSchema: StructType) -> Optional[StructType]:
+                    assert self.pickle_count == 1
+                    return None
+
+                def read(self, partition):
+                    assert self.pickle_count == 2
+                    yield from []
+
+            class TestDataSource(DataSource):
+                def reader(self, schema) -> "DataSourceReader":
+                    return TestDataSourceReader()
+
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").schema("a int, b int").load()
+            df = df.filter("a = 1").select("a")
+            assertDataFrameEqual(df, [])
+
     def test_filter_pushdown(self):
         class TestDataSourceReader(DataSourceReader):
             def __init__(self):
@@ -400,6 +643,24 @@ class BasePythonDataSourceTestsMixin:
             self.spark.dataSource.register(TestDataSource)
             df = self.spark.read.format("TestDataSource").schema("x int").load()
             with self.assertRaisesRegex(Exception, "DATA_SOURCE_PUSHDOWN_DISABLED"):
+                df.show()
+
+    def test_column_pruning_disabled(self):
+        class TestDataSourceReader(DataSourceReader):
+            def pruneColumns(self, requiredSchema: StructType) -> Optional[StructType]:
+                assert False
+
+            def read(self, partition):
+                assert False
+
+        class TestDataSource(DataSource):
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": False}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").schema("x int").load()
+            with self.assertRaisesRegex(Exception, "DATA_SOURCE_COLUMN_PRUNING_DISABLED"):
                 df.show()
 
     def _check_filters(self, sql_type, sql_filter, python_filters):
