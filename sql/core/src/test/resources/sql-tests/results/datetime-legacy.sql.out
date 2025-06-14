@@ -2495,3 +2495,27 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "fragment" : "timediff('YEAR', date'2020-02-15', date'2023-02-15')"
   } ]
 }
+
+
+-- !query
+SELECT make_timestamp(DATE'0001-01-01', TIME'0:0:0')
+-- !query schema
+struct<make_timestamp(year(DATE '0001-01-01'), month(DATE '0001-01-01'), dayofmonth(DATE '0001-01-01'), hour(TIME '00:00:00'), minute(TIME '00:00:00'), secondsoftimewithfraction(TIME '00:00:00')):timestamp>
+-- !query output
+0001-01-01 00:00:00
+
+
+-- !query
+SELECT make_timestamp(DATE'2025-06-14', TIME'17:25:30.5', 'CET')
+-- !query schema
+struct<make_timestamp(year(DATE '2025-06-14'), month(DATE '2025-06-14'), dayofmonth(DATE '2025-06-14'), hour(TIME '17:25:30.5'), minute(TIME '17:25:30.5'), secondsoftimewithfraction(TIME '17:25:30.5'), CET):timestamp>
+-- !query output
+2025-06-14 08:25:30.5
+
+
+-- !query
+SELECT make_timestamp(DATE'9999-12-31', TIME'23:59:59.123456')
+-- !query schema
+struct<make_timestamp(year(DATE '9999-12-31'), month(DATE '9999-12-31'), dayofmonth(DATE '9999-12-31'), hour(TIME '23:59:59.123456'), minute(TIME '23:59:59.123456'), secondsoftimewithfraction(TIME '23:59:59.123456')):timestamp>
+-- !query output
+9999-12-31 23:59:59.123456
