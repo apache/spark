@@ -1345,6 +1345,7 @@ dataType
       (TO to=(HOUR | MINUTE | SECOND))?                         #dayTimeIntervalDataType
     | TIME (LEFT_PAREN precision=INTEGER_VALUE RIGHT_PAREN)?
       (WITHOUT TIME ZONE)?                                      #timeDataType
+    | (TIMESTAMP_NTZ | TIMESTAMP WITHOUT TIME ZONE)             #timestampNtzDataType
     | type (LEFT_PAREN INTEGER_VALUE
       (COMMA INTEGER_VALUE)* RIGHT_PAREN)?                      #primitiveDataType
     ;
