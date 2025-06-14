@@ -7725,7 +7725,7 @@ Project [(cast(cast(1 as tinyint) as decimal(3,0)) = cast(1 as decimal(3,0))) AS
 -- !query
 SELECT cast(1 as tinyint) = cast(1 as decimal(5, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0)) = cast(1 as decimal(5,0))) AS (CAST(1 AS TINYINT) = CAST(1 AS DECIMAL(5,0)))#x]
+Project [(cast(cast(1 as tinyint) as decimal(5,0)) = cast(1 as decimal(5,0))) AS (CAST(1 AS TINYINT) = CAST(1 AS DECIMAL(5,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -7736,7 +7736,7 @@ Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0)) = cast(
 -- !query
 SELECT cast(1 as tinyint) = cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0)) = cast(1 as decimal(10,0))) AS (CAST(1 AS TINYINT) = CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(cast(1 as tinyint) as decimal(10,0)) = cast(1 as decimal(10,0))) AS (CAST(1 AS TINYINT) = CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -7747,7 +7747,7 @@ Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0)) = cast
 -- !query
 SELECT cast(1 as tinyint) = cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(20,0)) = cast(1 as decimal(20,0))) AS (CAST(1 AS TINYINT) = CAST(1 AS DECIMAL(20,0)))#x]
+Project [(cast(cast(1 as tinyint) as decimal(20,0)) = cast(1 as decimal(20,0))) AS (CAST(1 AS TINYINT) = CAST(1 AS DECIMAL(20,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -7780,7 +7780,7 @@ Project [(cast(cast(1 as smallint) as decimal(5,0)) = cast(1 as decimal(5,0))) A
 -- !query
 SELECT cast(1 as smallint) = cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0)) = cast(1 as decimal(10,0))) AS (CAST(1 AS SMALLINT) = CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(cast(1 as smallint) as decimal(10,0)) = cast(1 as decimal(10,0))) AS (CAST(1 AS SMALLINT) = CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -7791,7 +7791,7 @@ Project [(cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0)) = cas
 -- !query
 SELECT cast(1 as smallint) = cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(20,0)) = cast(1 as decimal(20,0))) AS (CAST(1 AS SMALLINT) = CAST(1 AS DECIMAL(20,0)))#x]
+Project [(cast(cast(1 as smallint) as decimal(20,0)) = cast(1 as decimal(20,0))) AS (CAST(1 AS SMALLINT) = CAST(1 AS DECIMAL(20,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -7835,7 +7835,7 @@ Project [(cast(cast(1 as int) as decimal(10,0)) = cast(1 as decimal(10,0))) AS (
 -- !query
 SELECT cast(1 as int) = cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as int) as decimal(10,0)) as decimal(20,0)) = cast(1 as decimal(20,0))) AS (CAST(1 AS INT) = CAST(1 AS DECIMAL(20,0)))#x]
+Project [(cast(cast(1 as int) as decimal(20,0)) = cast(1 as decimal(20,0))) AS (CAST(1 AS INT) = CAST(1 AS DECIMAL(20,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -8297,7 +8297,7 @@ Project [(cast(1 as decimal(3,0)) = cast(cast(1 as tinyint) as decimal(3,0))) AS
 -- !query
 SELECT cast(1 as decimal(5, 0))  = cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(5,0)) = cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) = CAST(1 AS TINYINT))#x]
+Project [(cast(1 as decimal(5,0)) = cast(cast(1 as tinyint) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) = CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -8308,7 +8308,7 @@ Project [(cast(1 as decimal(5,0)) = cast(cast(cast(1 as tinyint) as decimal(3,0)
 -- !query
 SELECT cast(1 as decimal(10, 0)) = cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) = cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) = CAST(1 AS TINYINT))#x]
+Project [(cast(1 as decimal(10,0)) = cast(cast(1 as tinyint) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) = CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -8319,7 +8319,7 @@ Project [(cast(1 as decimal(10,0)) = cast(cast(cast(1 as tinyint) as decimal(3,0
 -- !query
 SELECT cast(1 as decimal(20, 0)) = cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) = cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) = CAST(1 AS TINYINT))#x]
+Project [(cast(1 as decimal(20,0)) = cast(cast(1 as tinyint) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) = CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -8352,7 +8352,7 @@ Project [(cast(1 as decimal(5,0)) = cast(cast(1 as smallint) as decimal(5,0))) A
 -- !query
 SELECT cast(1 as decimal(10, 0)) = cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) = cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) = CAST(1 AS SMALLINT))#x]
+Project [(cast(1 as decimal(10,0)) = cast(cast(1 as smallint) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) = CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -8363,7 +8363,7 @@ Project [(cast(1 as decimal(10,0)) = cast(cast(cast(1 as smallint) as decimal(5,
 -- !query
 SELECT cast(1 as decimal(20, 0)) = cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) = cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) = CAST(1 AS SMALLINT))#x]
+Project [(cast(1 as decimal(20,0)) = cast(cast(1 as smallint) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) = CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -8407,7 +8407,7 @@ Project [(cast(1 as decimal(10,0)) = cast(cast(1 as int) as decimal(10,0))) AS (
 -- !query
 SELECT cast(1 as decimal(20, 0)) = cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) = cast(cast(cast(1 as int) as decimal(10,0)) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) = CAST(1 AS INT))#x]
+Project [(cast(1 as decimal(20,0)) = cast(cast(1 as int) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) = CAST(1 AS INT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -9001,7 +9001,7 @@ Project [(cast(cast(1 as tinyint) as decimal(3,0)) <=> cast(1 as decimal(3,0))) 
 -- !query
 SELECT cast(1 as tinyint) <=> cast(1 as decimal(5, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0)) <=> cast(1 as decimal(5,0))) AS (CAST(1 AS TINYINT) <=> CAST(1 AS DECIMAL(5,0)))#x]
+Project [(cast(cast(1 as tinyint) as decimal(5,0)) <=> cast(1 as decimal(5,0))) AS (CAST(1 AS TINYINT) <=> CAST(1 AS DECIMAL(5,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -9012,7 +9012,7 @@ Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0)) <=> cas
 -- !query
 SELECT cast(1 as tinyint) <=> cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0)) <=> cast(1 as decimal(10,0))) AS (CAST(1 AS TINYINT) <=> CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(cast(1 as tinyint) as decimal(10,0)) <=> cast(1 as decimal(10,0))) AS (CAST(1 AS TINYINT) <=> CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -9023,7 +9023,7 @@ Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0)) <=> ca
 -- !query
 SELECT cast(1 as tinyint) <=> cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(20,0)) <=> cast(1 as decimal(20,0))) AS (CAST(1 AS TINYINT) <=> CAST(1 AS DECIMAL(20,0)))#x]
+Project [(cast(cast(1 as tinyint) as decimal(20,0)) <=> cast(1 as decimal(20,0))) AS (CAST(1 AS TINYINT) <=> CAST(1 AS DECIMAL(20,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -9056,7 +9056,7 @@ Project [(cast(cast(1 as smallint) as decimal(5,0)) <=> cast(1 as decimal(5,0)))
 -- !query
 SELECT cast(1 as smallint) <=> cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0)) <=> cast(1 as decimal(10,0))) AS (CAST(1 AS SMALLINT) <=> CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(cast(1 as smallint) as decimal(10,0)) <=> cast(1 as decimal(10,0))) AS (CAST(1 AS SMALLINT) <=> CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -9067,7 +9067,7 @@ Project [(cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0)) <=> c
 -- !query
 SELECT cast(1 as smallint) <=> cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(20,0)) <=> cast(1 as decimal(20,0))) AS (CAST(1 AS SMALLINT) <=> CAST(1 AS DECIMAL(20,0)))#x]
+Project [(cast(cast(1 as smallint) as decimal(20,0)) <=> cast(1 as decimal(20,0))) AS (CAST(1 AS SMALLINT) <=> CAST(1 AS DECIMAL(20,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -9111,7 +9111,7 @@ Project [(cast(cast(1 as int) as decimal(10,0)) <=> cast(1 as decimal(10,0))) AS
 -- !query
 SELECT cast(1 as int) <=> cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as int) as decimal(10,0)) as decimal(20,0)) <=> cast(1 as decimal(20,0))) AS (CAST(1 AS INT) <=> CAST(1 AS DECIMAL(20,0)))#x]
+Project [(cast(cast(1 as int) as decimal(20,0)) <=> cast(1 as decimal(20,0))) AS (CAST(1 AS INT) <=> CAST(1 AS DECIMAL(20,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -9573,7 +9573,7 @@ Project [(cast(1 as decimal(3,0)) <=> cast(cast(1 as tinyint) as decimal(3,0))) 
 -- !query
 SELECT cast(1 as decimal(5, 0))  <=> cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(5,0)) <=> cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) <=> CAST(1 AS TINYINT))#x]
+Project [(cast(1 as decimal(5,0)) <=> cast(cast(1 as tinyint) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) <=> CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -9584,7 +9584,7 @@ Project [(cast(1 as decimal(5,0)) <=> cast(cast(cast(1 as tinyint) as decimal(3,
 -- !query
 SELECT cast(1 as decimal(10, 0)) <=> cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) <=> cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) <=> CAST(1 AS TINYINT))#x]
+Project [(cast(1 as decimal(10,0)) <=> cast(cast(1 as tinyint) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) <=> CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -9595,7 +9595,7 @@ Project [(cast(1 as decimal(10,0)) <=> cast(cast(cast(1 as tinyint) as decimal(3
 -- !query
 SELECT cast(1 as decimal(20, 0)) <=> cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) <=> cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) <=> CAST(1 AS TINYINT))#x]
+Project [(cast(1 as decimal(20,0)) <=> cast(cast(1 as tinyint) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) <=> CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -9628,7 +9628,7 @@ Project [(cast(1 as decimal(5,0)) <=> cast(cast(1 as smallint) as decimal(5,0)))
 -- !query
 SELECT cast(1 as decimal(10, 0)) <=> cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) <=> cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) <=> CAST(1 AS SMALLINT))#x]
+Project [(cast(1 as decimal(10,0)) <=> cast(cast(1 as smallint) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) <=> CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -9639,7 +9639,7 @@ Project [(cast(1 as decimal(10,0)) <=> cast(cast(cast(1 as smallint) as decimal(
 -- !query
 SELECT cast(1 as decimal(20, 0)) <=> cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) <=> cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) <=> CAST(1 AS SMALLINT))#x]
+Project [(cast(1 as decimal(20,0)) <=> cast(cast(1 as smallint) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) <=> CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -9683,7 +9683,7 @@ Project [(cast(1 as decimal(10,0)) <=> cast(cast(1 as int) as decimal(10,0))) AS
 -- !query
 SELECT cast(1 as decimal(20, 0)) <=> cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) <=> cast(cast(cast(1 as int) as decimal(10,0)) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) <=> CAST(1 AS INT))#x]
+Project [(cast(1 as decimal(20,0)) <=> cast(cast(1 as int) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) <=> CAST(1 AS INT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -10277,7 +10277,7 @@ Project [(cast(cast(1 as tinyint) as decimal(3,0)) < cast(1 as decimal(3,0))) AS
 -- !query
 SELECT cast(1 as tinyint) < cast(1 as decimal(5, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0)) < cast(1 as decimal(5,0))) AS (CAST(1 AS TINYINT) < CAST(1 AS DECIMAL(5,0)))#x]
+Project [(cast(cast(1 as tinyint) as decimal(5,0)) < cast(1 as decimal(5,0))) AS (CAST(1 AS TINYINT) < CAST(1 AS DECIMAL(5,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -10288,7 +10288,7 @@ Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0)) < cast(
 -- !query
 SELECT cast(1 as tinyint) < cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0)) < cast(1 as decimal(10,0))) AS (CAST(1 AS TINYINT) < CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(cast(1 as tinyint) as decimal(10,0)) < cast(1 as decimal(10,0))) AS (CAST(1 AS TINYINT) < CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -10299,7 +10299,7 @@ Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0)) < cast
 -- !query
 SELECT cast(1 as tinyint) < cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(20,0)) < cast(1 as decimal(20,0))) AS (CAST(1 AS TINYINT) < CAST(1 AS DECIMAL(20,0)))#x]
+Project [(cast(cast(1 as tinyint) as decimal(20,0)) < cast(1 as decimal(20,0))) AS (CAST(1 AS TINYINT) < CAST(1 AS DECIMAL(20,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -10332,7 +10332,7 @@ Project [(cast(cast(1 as smallint) as decimal(5,0)) < cast(1 as decimal(5,0))) A
 -- !query
 SELECT cast(1 as smallint) < cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0)) < cast(1 as decimal(10,0))) AS (CAST(1 AS SMALLINT) < CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(cast(1 as smallint) as decimal(10,0)) < cast(1 as decimal(10,0))) AS (CAST(1 AS SMALLINT) < CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -10343,7 +10343,7 @@ Project [(cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0)) < cas
 -- !query
 SELECT cast(1 as smallint) < cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(20,0)) < cast(1 as decimal(20,0))) AS (CAST(1 AS SMALLINT) < CAST(1 AS DECIMAL(20,0)))#x]
+Project [(cast(cast(1 as smallint) as decimal(20,0)) < cast(1 as decimal(20,0))) AS (CAST(1 AS SMALLINT) < CAST(1 AS DECIMAL(20,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -10387,7 +10387,7 @@ Project [(cast(cast(1 as int) as decimal(10,0)) < cast(1 as decimal(10,0))) AS (
 -- !query
 SELECT cast(1 as int) < cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as int) as decimal(10,0)) as decimal(20,0)) < cast(1 as decimal(20,0))) AS (CAST(1 AS INT) < CAST(1 AS DECIMAL(20,0)))#x]
+Project [(cast(cast(1 as int) as decimal(20,0)) < cast(1 as decimal(20,0))) AS (CAST(1 AS INT) < CAST(1 AS DECIMAL(20,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -10849,7 +10849,7 @@ Project [(cast(1 as decimal(3,0)) < cast(cast(1 as tinyint) as decimal(3,0))) AS
 -- !query
 SELECT cast(1 as decimal(5, 0))  < cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(5,0)) < cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) < CAST(1 AS TINYINT))#x]
+Project [(cast(1 as decimal(5,0)) < cast(cast(1 as tinyint) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) < CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -10860,7 +10860,7 @@ Project [(cast(1 as decimal(5,0)) < cast(cast(cast(1 as tinyint) as decimal(3,0)
 -- !query
 SELECT cast(1 as decimal(10, 0)) < cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) < cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) < CAST(1 AS TINYINT))#x]
+Project [(cast(1 as decimal(10,0)) < cast(cast(1 as tinyint) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) < CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -10871,7 +10871,7 @@ Project [(cast(1 as decimal(10,0)) < cast(cast(cast(1 as tinyint) as decimal(3,0
 -- !query
 SELECT cast(1 as decimal(20, 0)) < cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) < cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) < CAST(1 AS TINYINT))#x]
+Project [(cast(1 as decimal(20,0)) < cast(cast(1 as tinyint) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) < CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -10904,7 +10904,7 @@ Project [(cast(1 as decimal(5,0)) < cast(cast(1 as smallint) as decimal(5,0))) A
 -- !query
 SELECT cast(1 as decimal(10, 0)) < cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) < cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) < CAST(1 AS SMALLINT))#x]
+Project [(cast(1 as decimal(10,0)) < cast(cast(1 as smallint) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) < CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -10915,7 +10915,7 @@ Project [(cast(1 as decimal(10,0)) < cast(cast(cast(1 as smallint) as decimal(5,
 -- !query
 SELECT cast(1 as decimal(20, 0)) < cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) < cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) < CAST(1 AS SMALLINT))#x]
+Project [(cast(1 as decimal(20,0)) < cast(cast(1 as smallint) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) < CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -10959,7 +10959,7 @@ Project [(cast(1 as decimal(10,0)) < cast(cast(1 as int) as decimal(10,0))) AS (
 -- !query
 SELECT cast(1 as decimal(20, 0)) < cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) < cast(cast(cast(1 as int) as decimal(10,0)) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) < CAST(1 AS INT))#x]
+Project [(cast(1 as decimal(20,0)) < cast(cast(1 as int) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) < CAST(1 AS INT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -11553,7 +11553,7 @@ Project [(cast(cast(1 as tinyint) as decimal(3,0)) <= cast(1 as decimal(3,0))) A
 -- !query
 SELECT cast(1 as tinyint) <= cast(1 as decimal(5, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0)) <= cast(1 as decimal(5,0))) AS (CAST(1 AS TINYINT) <= CAST(1 AS DECIMAL(5,0)))#x]
+Project [(cast(cast(1 as tinyint) as decimal(5,0)) <= cast(1 as decimal(5,0))) AS (CAST(1 AS TINYINT) <= CAST(1 AS DECIMAL(5,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -11564,7 +11564,7 @@ Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0)) <= cast
 -- !query
 SELECT cast(1 as tinyint) <= cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0)) <= cast(1 as decimal(10,0))) AS (CAST(1 AS TINYINT) <= CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(cast(1 as tinyint) as decimal(10,0)) <= cast(1 as decimal(10,0))) AS (CAST(1 AS TINYINT) <= CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -11575,7 +11575,7 @@ Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0)) <= cas
 -- !query
 SELECT cast(1 as tinyint) <= cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(20,0)) <= cast(1 as decimal(20,0))) AS (CAST(1 AS TINYINT) <= CAST(1 AS DECIMAL(20,0)))#x]
+Project [(cast(cast(1 as tinyint) as decimal(20,0)) <= cast(1 as decimal(20,0))) AS (CAST(1 AS TINYINT) <= CAST(1 AS DECIMAL(20,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -11608,7 +11608,7 @@ Project [(cast(cast(1 as smallint) as decimal(5,0)) <= cast(1 as decimal(5,0))) 
 -- !query
 SELECT cast(1 as smallint) <= cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0)) <= cast(1 as decimal(10,0))) AS (CAST(1 AS SMALLINT) <= CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(cast(1 as smallint) as decimal(10,0)) <= cast(1 as decimal(10,0))) AS (CAST(1 AS SMALLINT) <= CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -11619,7 +11619,7 @@ Project [(cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0)) <= ca
 -- !query
 SELECT cast(1 as smallint) <= cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(20,0)) <= cast(1 as decimal(20,0))) AS (CAST(1 AS SMALLINT) <= CAST(1 AS DECIMAL(20,0)))#x]
+Project [(cast(cast(1 as smallint) as decimal(20,0)) <= cast(1 as decimal(20,0))) AS (CAST(1 AS SMALLINT) <= CAST(1 AS DECIMAL(20,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -11663,7 +11663,7 @@ Project [(cast(cast(1 as int) as decimal(10,0)) <= cast(1 as decimal(10,0))) AS 
 -- !query
 SELECT cast(1 as int) <= cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as int) as decimal(10,0)) as decimal(20,0)) <= cast(1 as decimal(20,0))) AS (CAST(1 AS INT) <= CAST(1 AS DECIMAL(20,0)))#x]
+Project [(cast(cast(1 as int) as decimal(20,0)) <= cast(1 as decimal(20,0))) AS (CAST(1 AS INT) <= CAST(1 AS DECIMAL(20,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -12125,7 +12125,7 @@ Project [(cast(1 as decimal(3,0)) <= cast(cast(1 as tinyint) as decimal(3,0))) A
 -- !query
 SELECT cast(1 as decimal(5, 0))  <= cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(5,0)) <= cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) <= CAST(1 AS TINYINT))#x]
+Project [(cast(1 as decimal(5,0)) <= cast(cast(1 as tinyint) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) <= CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -12136,7 +12136,7 @@ Project [(cast(1 as decimal(5,0)) <= cast(cast(cast(1 as tinyint) as decimal(3,0
 -- !query
 SELECT cast(1 as decimal(10, 0)) <= cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) <= cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) <= CAST(1 AS TINYINT))#x]
+Project [(cast(1 as decimal(10,0)) <= cast(cast(1 as tinyint) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) <= CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -12147,7 +12147,7 @@ Project [(cast(1 as decimal(10,0)) <= cast(cast(cast(1 as tinyint) as decimal(3,
 -- !query
 SELECT cast(1 as decimal(20, 0)) <= cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) <= cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) <= CAST(1 AS TINYINT))#x]
+Project [(cast(1 as decimal(20,0)) <= cast(cast(1 as tinyint) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) <= CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -12180,7 +12180,7 @@ Project [(cast(1 as decimal(5,0)) <= cast(cast(1 as smallint) as decimal(5,0))) 
 -- !query
 SELECT cast(1 as decimal(10, 0)) <= cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) <= cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) <= CAST(1 AS SMALLINT))#x]
+Project [(cast(1 as decimal(10,0)) <= cast(cast(1 as smallint) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) <= CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -12191,7 +12191,7 @@ Project [(cast(1 as decimal(10,0)) <= cast(cast(cast(1 as smallint) as decimal(5
 -- !query
 SELECT cast(1 as decimal(20, 0)) <= cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) <= cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) <= CAST(1 AS SMALLINT))#x]
+Project [(cast(1 as decimal(20,0)) <= cast(cast(1 as smallint) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) <= CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -12235,7 +12235,7 @@ Project [(cast(1 as decimal(10,0)) <= cast(cast(1 as int) as decimal(10,0))) AS 
 -- !query
 SELECT cast(1 as decimal(20, 0)) <= cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) <= cast(cast(cast(1 as int) as decimal(10,0)) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) <= CAST(1 AS INT))#x]
+Project [(cast(1 as decimal(20,0)) <= cast(cast(1 as int) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) <= CAST(1 AS INT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -12829,7 +12829,7 @@ Project [(cast(cast(1 as tinyint) as decimal(3,0)) > cast(1 as decimal(3,0))) AS
 -- !query
 SELECT cast(1 as tinyint) > cast(1 as decimal(5, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0)) > cast(1 as decimal(5,0))) AS (CAST(1 AS TINYINT) > CAST(1 AS DECIMAL(5,0)))#x]
+Project [(cast(cast(1 as tinyint) as decimal(5,0)) > cast(1 as decimal(5,0))) AS (CAST(1 AS TINYINT) > CAST(1 AS DECIMAL(5,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -12840,7 +12840,7 @@ Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0)) > cast(
 -- !query
 SELECT cast(1 as tinyint) > cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0)) > cast(1 as decimal(10,0))) AS (CAST(1 AS TINYINT) > CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(cast(1 as tinyint) as decimal(10,0)) > cast(1 as decimal(10,0))) AS (CAST(1 AS TINYINT) > CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -12851,7 +12851,7 @@ Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0)) > cast
 -- !query
 SELECT cast(1 as tinyint) > cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(20,0)) > cast(1 as decimal(20,0))) AS (CAST(1 AS TINYINT) > CAST(1 AS DECIMAL(20,0)))#x]
+Project [(cast(cast(1 as tinyint) as decimal(20,0)) > cast(1 as decimal(20,0))) AS (CAST(1 AS TINYINT) > CAST(1 AS DECIMAL(20,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -12884,7 +12884,7 @@ Project [(cast(cast(1 as smallint) as decimal(5,0)) > cast(1 as decimal(5,0))) A
 -- !query
 SELECT cast(1 as smallint) > cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0)) > cast(1 as decimal(10,0))) AS (CAST(1 AS SMALLINT) > CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(cast(1 as smallint) as decimal(10,0)) > cast(1 as decimal(10,0))) AS (CAST(1 AS SMALLINT) > CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -12895,7 +12895,7 @@ Project [(cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0)) > cas
 -- !query
 SELECT cast(1 as smallint) > cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(20,0)) > cast(1 as decimal(20,0))) AS (CAST(1 AS SMALLINT) > CAST(1 AS DECIMAL(20,0)))#x]
+Project [(cast(cast(1 as smallint) as decimal(20,0)) > cast(1 as decimal(20,0))) AS (CAST(1 AS SMALLINT) > CAST(1 AS DECIMAL(20,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -12939,7 +12939,7 @@ Project [(cast(cast(1 as int) as decimal(10,0)) > cast(1 as decimal(10,0))) AS (
 -- !query
 SELECT cast(1 as int) > cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as int) as decimal(10,0)) as decimal(20,0)) > cast(1 as decimal(20,0))) AS (CAST(1 AS INT) > CAST(1 AS DECIMAL(20,0)))#x]
+Project [(cast(cast(1 as int) as decimal(20,0)) > cast(1 as decimal(20,0))) AS (CAST(1 AS INT) > CAST(1 AS DECIMAL(20,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -13401,7 +13401,7 @@ Project [(cast(1 as decimal(3,0)) > cast(cast(1 as tinyint) as decimal(3,0))) AS
 -- !query
 SELECT cast(1 as decimal(5, 0))  > cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(5,0)) > cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) > CAST(1 AS TINYINT))#x]
+Project [(cast(1 as decimal(5,0)) > cast(cast(1 as tinyint) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) > CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -13412,7 +13412,7 @@ Project [(cast(1 as decimal(5,0)) > cast(cast(cast(1 as tinyint) as decimal(3,0)
 -- !query
 SELECT cast(1 as decimal(10, 0)) > cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) > cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) > CAST(1 AS TINYINT))#x]
+Project [(cast(1 as decimal(10,0)) > cast(cast(1 as tinyint) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) > CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -13423,7 +13423,7 @@ Project [(cast(1 as decimal(10,0)) > cast(cast(cast(1 as tinyint) as decimal(3,0
 -- !query
 SELECT cast(1 as decimal(20, 0)) > cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) > cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) > CAST(1 AS TINYINT))#x]
+Project [(cast(1 as decimal(20,0)) > cast(cast(1 as tinyint) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) > CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -13456,7 +13456,7 @@ Project [(cast(1 as decimal(5,0)) > cast(cast(1 as smallint) as decimal(5,0))) A
 -- !query
 SELECT cast(1 as decimal(10, 0)) > cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) > cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) > CAST(1 AS SMALLINT))#x]
+Project [(cast(1 as decimal(10,0)) > cast(cast(1 as smallint) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) > CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -13467,7 +13467,7 @@ Project [(cast(1 as decimal(10,0)) > cast(cast(cast(1 as smallint) as decimal(5,
 -- !query
 SELECT cast(1 as decimal(20, 0)) > cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) > cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) > CAST(1 AS SMALLINT))#x]
+Project [(cast(1 as decimal(20,0)) > cast(cast(1 as smallint) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) > CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -13511,7 +13511,7 @@ Project [(cast(1 as decimal(10,0)) > cast(cast(1 as int) as decimal(10,0))) AS (
 -- !query
 SELECT cast(1 as decimal(20, 0)) > cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) > cast(cast(cast(1 as int) as decimal(10,0)) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) > CAST(1 AS INT))#x]
+Project [(cast(1 as decimal(20,0)) > cast(cast(1 as int) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) > CAST(1 AS INT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -14105,7 +14105,7 @@ Project [(cast(cast(1 as tinyint) as decimal(3,0)) >= cast(1 as decimal(3,0))) A
 -- !query
 SELECT cast(1 as tinyint) >= cast(1 as decimal(5, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0)) >= cast(1 as decimal(5,0))) AS (CAST(1 AS TINYINT) >= CAST(1 AS DECIMAL(5,0)))#x]
+Project [(cast(cast(1 as tinyint) as decimal(5,0)) >= cast(1 as decimal(5,0))) AS (CAST(1 AS TINYINT) >= CAST(1 AS DECIMAL(5,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -14116,7 +14116,7 @@ Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0)) >= cast
 -- !query
 SELECT cast(1 as tinyint) >= cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0)) >= cast(1 as decimal(10,0))) AS (CAST(1 AS TINYINT) >= CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(cast(1 as tinyint) as decimal(10,0)) >= cast(1 as decimal(10,0))) AS (CAST(1 AS TINYINT) >= CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -14127,7 +14127,7 @@ Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0)) >= cas
 -- !query
 SELECT cast(1 as tinyint) >= cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(20,0)) >= cast(1 as decimal(20,0))) AS (CAST(1 AS TINYINT) >= CAST(1 AS DECIMAL(20,0)))#x]
+Project [(cast(cast(1 as tinyint) as decimal(20,0)) >= cast(1 as decimal(20,0))) AS (CAST(1 AS TINYINT) >= CAST(1 AS DECIMAL(20,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -14160,7 +14160,7 @@ Project [(cast(cast(1 as smallint) as decimal(5,0)) >= cast(1 as decimal(5,0))) 
 -- !query
 SELECT cast(1 as smallint) >= cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0)) >= cast(1 as decimal(10,0))) AS (CAST(1 AS SMALLINT) >= CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(cast(1 as smallint) as decimal(10,0)) >= cast(1 as decimal(10,0))) AS (CAST(1 AS SMALLINT) >= CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -14171,7 +14171,7 @@ Project [(cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0)) >= ca
 -- !query
 SELECT cast(1 as smallint) >= cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(20,0)) >= cast(1 as decimal(20,0))) AS (CAST(1 AS SMALLINT) >= CAST(1 AS DECIMAL(20,0)))#x]
+Project [(cast(cast(1 as smallint) as decimal(20,0)) >= cast(1 as decimal(20,0))) AS (CAST(1 AS SMALLINT) >= CAST(1 AS DECIMAL(20,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -14215,7 +14215,7 @@ Project [(cast(cast(1 as int) as decimal(10,0)) >= cast(1 as decimal(10,0))) AS 
 -- !query
 SELECT cast(1 as int) >= cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(cast(1 as int) as decimal(10,0)) as decimal(20,0)) >= cast(1 as decimal(20,0))) AS (CAST(1 AS INT) >= CAST(1 AS DECIMAL(20,0)))#x]
+Project [(cast(cast(1 as int) as decimal(20,0)) >= cast(1 as decimal(20,0))) AS (CAST(1 AS INT) >= CAST(1 AS DECIMAL(20,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -14677,7 +14677,7 @@ Project [(cast(1 as decimal(3,0)) >= cast(cast(1 as tinyint) as decimal(3,0))) A
 -- !query
 SELECT cast(1 as decimal(5, 0))  >= cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(5,0)) >= cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) >= CAST(1 AS TINYINT))#x]
+Project [(cast(1 as decimal(5,0)) >= cast(cast(1 as tinyint) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) >= CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -14688,7 +14688,7 @@ Project [(cast(1 as decimal(5,0)) >= cast(cast(cast(1 as tinyint) as decimal(3,0
 -- !query
 SELECT cast(1 as decimal(10, 0)) >= cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) >= cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) >= CAST(1 AS TINYINT))#x]
+Project [(cast(1 as decimal(10,0)) >= cast(cast(1 as tinyint) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) >= CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -14699,7 +14699,7 @@ Project [(cast(1 as decimal(10,0)) >= cast(cast(cast(1 as tinyint) as decimal(3,
 -- !query
 SELECT cast(1 as decimal(20, 0)) >= cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) >= cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) >= CAST(1 AS TINYINT))#x]
+Project [(cast(1 as decimal(20,0)) >= cast(cast(1 as tinyint) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) >= CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -14732,7 +14732,7 @@ Project [(cast(1 as decimal(5,0)) >= cast(cast(1 as smallint) as decimal(5,0))) 
 -- !query
 SELECT cast(1 as decimal(10, 0)) >= cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) >= cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) >= CAST(1 AS SMALLINT))#x]
+Project [(cast(1 as decimal(10,0)) >= cast(cast(1 as smallint) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) >= CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -14743,7 +14743,7 @@ Project [(cast(1 as decimal(10,0)) >= cast(cast(cast(1 as smallint) as decimal(5
 -- !query
 SELECT cast(1 as decimal(20, 0)) >= cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) >= cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) >= CAST(1 AS SMALLINT))#x]
+Project [(cast(1 as decimal(20,0)) >= cast(cast(1 as smallint) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) >= CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -14787,7 +14787,7 @@ Project [(cast(1 as decimal(10,0)) >= cast(cast(1 as int) as decimal(10,0))) AS 
 -- !query
 SELECT cast(1 as decimal(20, 0)) >= cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) >= cast(cast(cast(1 as int) as decimal(10,0)) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) >= CAST(1 AS INT))#x]
+Project [(cast(1 as decimal(20,0)) >= cast(cast(1 as int) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) >= CAST(1 AS INT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -15381,7 +15381,7 @@ Project [NOT (cast(cast(1 as tinyint) as decimal(3,0)) = cast(1 as decimal(3,0))
 -- !query
 SELECT cast(1 as tinyint) <> cast(1 as decimal(5, 0)) FROM t
 -- !query analysis
-Project [NOT (cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0)) = cast(1 as decimal(5,0))) AS (NOT (CAST(1 AS TINYINT) = CAST(1 AS DECIMAL(5,0))))#x]
+Project [NOT (cast(cast(1 as tinyint) as decimal(5,0)) = cast(1 as decimal(5,0))) AS (NOT (CAST(1 AS TINYINT) = CAST(1 AS DECIMAL(5,0))))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -15392,7 +15392,7 @@ Project [NOT (cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0)) = c
 -- !query
 SELECT cast(1 as tinyint) <> cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [NOT (cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0)) = cast(1 as decimal(10,0))) AS (NOT (CAST(1 AS TINYINT) = CAST(1 AS DECIMAL(10,0))))#x]
+Project [NOT (cast(cast(1 as tinyint) as decimal(10,0)) = cast(1 as decimal(10,0))) AS (NOT (CAST(1 AS TINYINT) = CAST(1 AS DECIMAL(10,0))))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -15403,7 +15403,7 @@ Project [NOT (cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0)) = 
 -- !query
 SELECT cast(1 as tinyint) <> cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [NOT (cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(20,0)) = cast(1 as decimal(20,0))) AS (NOT (CAST(1 AS TINYINT) = CAST(1 AS DECIMAL(20,0))))#x]
+Project [NOT (cast(cast(1 as tinyint) as decimal(20,0)) = cast(1 as decimal(20,0))) AS (NOT (CAST(1 AS TINYINT) = CAST(1 AS DECIMAL(20,0))))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -15436,7 +15436,7 @@ Project [NOT (cast(cast(1 as smallint) as decimal(5,0)) = cast(1 as decimal(5,0)
 -- !query
 SELECT cast(1 as smallint) <> cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [NOT (cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0)) = cast(1 as decimal(10,0))) AS (NOT (CAST(1 AS SMALLINT) = CAST(1 AS DECIMAL(10,0))))#x]
+Project [NOT (cast(cast(1 as smallint) as decimal(10,0)) = cast(1 as decimal(10,0))) AS (NOT (CAST(1 AS SMALLINT) = CAST(1 AS DECIMAL(10,0))))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -15447,7 +15447,7 @@ Project [NOT (cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0)) =
 -- !query
 SELECT cast(1 as smallint) <> cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [NOT (cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(20,0)) = cast(1 as decimal(20,0))) AS (NOT (CAST(1 AS SMALLINT) = CAST(1 AS DECIMAL(20,0))))#x]
+Project [NOT (cast(cast(1 as smallint) as decimal(20,0)) = cast(1 as decimal(20,0))) AS (NOT (CAST(1 AS SMALLINT) = CAST(1 AS DECIMAL(20,0))))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -15491,7 +15491,7 @@ Project [NOT (cast(cast(1 as int) as decimal(10,0)) = cast(1 as decimal(10,0))) 
 -- !query
 SELECT cast(1 as int) <> cast(1 as decimal(20, 0)) FROM t
 -- !query analysis
-Project [NOT (cast(cast(cast(1 as int) as decimal(10,0)) as decimal(20,0)) = cast(1 as decimal(20,0))) AS (NOT (CAST(1 AS INT) = CAST(1 AS DECIMAL(20,0))))#x]
+Project [NOT (cast(cast(1 as int) as decimal(20,0)) = cast(1 as decimal(20,0))) AS (NOT (CAST(1 AS INT) = CAST(1 AS DECIMAL(20,0))))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -15953,7 +15953,7 @@ Project [NOT (cast(1 as decimal(3,0)) = cast(cast(1 as tinyint) as decimal(3,0))
 -- !query
 SELECT cast(1 as decimal(5, 0))  <> cast(1 as tinyint) FROM t
 -- !query analysis
-Project [NOT (cast(1 as decimal(5,0)) = cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(5,0))) AS (NOT (CAST(1 AS DECIMAL(5,0)) = CAST(1 AS TINYINT)))#x]
+Project [NOT (cast(1 as decimal(5,0)) = cast(cast(1 as tinyint) as decimal(5,0))) AS (NOT (CAST(1 AS DECIMAL(5,0)) = CAST(1 AS TINYINT)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -15964,7 +15964,7 @@ Project [NOT (cast(1 as decimal(5,0)) = cast(cast(cast(1 as tinyint) as decimal(
 -- !query
 SELECT cast(1 as decimal(10, 0)) <> cast(1 as tinyint) FROM t
 -- !query analysis
-Project [NOT (cast(1 as decimal(10,0)) = cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(10,0))) AS (NOT (CAST(1 AS DECIMAL(10,0)) = CAST(1 AS TINYINT)))#x]
+Project [NOT (cast(1 as decimal(10,0)) = cast(cast(1 as tinyint) as decimal(10,0))) AS (NOT (CAST(1 AS DECIMAL(10,0)) = CAST(1 AS TINYINT)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -15975,7 +15975,7 @@ Project [NOT (cast(1 as decimal(10,0)) = cast(cast(cast(1 as tinyint) as decimal
 -- !query
 SELECT cast(1 as decimal(20, 0)) <> cast(1 as tinyint) FROM t
 -- !query analysis
-Project [NOT (cast(1 as decimal(20,0)) = cast(cast(cast(1 as tinyint) as decimal(3,0)) as decimal(20,0))) AS (NOT (CAST(1 AS DECIMAL(20,0)) = CAST(1 AS TINYINT)))#x]
+Project [NOT (cast(1 as decimal(20,0)) = cast(cast(1 as tinyint) as decimal(20,0))) AS (NOT (CAST(1 AS DECIMAL(20,0)) = CAST(1 AS TINYINT)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -16008,7 +16008,7 @@ Project [NOT (cast(1 as decimal(5,0)) = cast(cast(1 as smallint) as decimal(5,0)
 -- !query
 SELECT cast(1 as decimal(10, 0)) <> cast(1 as smallint) FROM t
 -- !query analysis
-Project [NOT (cast(1 as decimal(10,0)) = cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(10,0))) AS (NOT (CAST(1 AS DECIMAL(10,0)) = CAST(1 AS SMALLINT)))#x]
+Project [NOT (cast(1 as decimal(10,0)) = cast(cast(1 as smallint) as decimal(10,0))) AS (NOT (CAST(1 AS DECIMAL(10,0)) = CAST(1 AS SMALLINT)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -16019,7 +16019,7 @@ Project [NOT (cast(1 as decimal(10,0)) = cast(cast(cast(1 as smallint) as decima
 -- !query
 SELECT cast(1 as decimal(20, 0)) <> cast(1 as smallint) FROM t
 -- !query analysis
-Project [NOT (cast(1 as decimal(20,0)) = cast(cast(cast(1 as smallint) as decimal(5,0)) as decimal(20,0))) AS (NOT (CAST(1 AS DECIMAL(20,0)) = CAST(1 AS SMALLINT)))#x]
+Project [NOT (cast(1 as decimal(20,0)) = cast(cast(1 as smallint) as decimal(20,0))) AS (NOT (CAST(1 AS DECIMAL(20,0)) = CAST(1 AS SMALLINT)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -16063,7 +16063,7 @@ Project [NOT (cast(1 as decimal(10,0)) = cast(cast(1 as int) as decimal(10,0))) 
 -- !query
 SELECT cast(1 as decimal(20, 0)) <> cast(1 as int) FROM t
 -- !query analysis
-Project [NOT (cast(1 as decimal(20,0)) = cast(cast(cast(1 as int) as decimal(10,0)) as decimal(20,0))) AS (NOT (CAST(1 AS DECIMAL(20,0)) = CAST(1 AS INT)))#x]
+Project [NOT (cast(1 as decimal(20,0)) = cast(cast(1 as int) as decimal(20,0))) AS (NOT (CAST(1 AS DECIMAL(20,0)) = CAST(1 AS INT)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -16641,3 +16641,27 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "cast(1 as decimal(20, 0)) <> cast('2017-12-11 09:30:00' as date)"
   } ]
 }
+
+
+-- !query
+SELECT SUM(col1) AS col1 FROM values(DECIMAL(1)) GROUP BY ALL HAVING col1 = 1
+-- !query analysis
+Filter (col1#x = cast(1 as decimal(20,0)))
++- Aggregate [sum(col1#x) AS col1#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT SUM(col1) AS col1 FROM values(DECIMAL(2)) GROUP BY ALL HAVING col1 + 1 = 1
+-- !query analysis
+Filter ((col1#x + cast(1 as decimal(1,0))) = cast(1 as decimal(21,0)))
++- Aggregate [sum(col1#x) AS col1#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT SUM(col1) AS col1 FROM values(DECIMAL(3)) HAVING 1 = 1 + col1
+-- !query analysis
+Filter (cast(1 as decimal(21,0)) = (cast(1 as decimal(1,0)) + col1#x))
++- Aggregate [sum(col1#x) AS col1#x]
+   +- LocalRelation [col1#x]

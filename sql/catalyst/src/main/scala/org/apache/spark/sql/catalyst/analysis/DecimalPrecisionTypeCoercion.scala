@@ -138,9 +138,26 @@ object DecimalPrecisionTypeCoercion extends SQLConfHelper {
     case b @ BinaryComparison(e1 @ DecimalExpression(p1, s1), e2 @ DecimalExpression(p2, s2))
         if p1 != p2 || s1 != s2 =>
       val resultType = widerDecimalType(p1, s1, p2, s2)
-      val newE1 = if (e1.dataType == resultType) e1 else Cast(e1, resultType)
-      val newE2 = if (e2.dataType == resultType) e2 else Cast(e2, resultType)
+      val newE1 = if (e1.dataType == resultType) e1 else tryCollapseInnerCast(e1, resultType)
+      val newE2 = if (e2.dataType == resultType) e2 else tryCollapseInnerCast(e2, resultType)
       b.withNewChildren(Seq(newE1, newE2))
+  }
+
+  /**
+   * In case `SQLConf.COLLAPSE_INNER_CAST_TO_DECIMAL` is true and inner cast is redundant (if the
+   * inner one is not a `USER_SPECIFIED_CAST` has lower precision and scale than the outer one),
+   * remove it.
+   */
+  private def tryCollapseInnerCast(expression: Expression, decimalType: DecimalType): Cast = {
+    expression match {
+      case innerCast @ Cast(_, innerDecimalType: DecimalType, _, _)
+          if conf.getConf(SQLConf.COLLAPSE_INNER_CAST_TO_DECIMAL) &&
+          decimalType.precision >= innerDecimalType.precision &&
+          decimalType.scale >= innerDecimalType.scale &&
+          innerCast.getTagValue(Cast.USER_SPECIFIED_CAST).isEmpty =>
+        Cast(innerCast.child, decimalType)
+      case other => Cast(other, decimalType)
+    }
   }
 
   /**
