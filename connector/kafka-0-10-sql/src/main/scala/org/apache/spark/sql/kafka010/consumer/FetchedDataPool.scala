@@ -139,7 +139,7 @@ private[consumer] class FetchedDataPool(
   }
 
   def reset(): Unit = synchronized {
-    scheduled.foreach(_.cancel(true))
+    scheduled.foreach(_.cancel(false))
 
     cache.clear()
     numTotalElements.reset()
