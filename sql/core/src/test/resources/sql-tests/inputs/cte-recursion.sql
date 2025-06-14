@@ -683,6 +683,20 @@ WITH RECURSIVE randoms(val) AS (
 )
 SELECT val FROM randoms LIMIT 5;
 
+-- Type coercion where the anchor is wider
+WITH RECURSIVE t1(n, m) AS (
+    SELECT 1, CAST(1 AS BIGINT)
+    UNION ALL
+    SELECT n+1, n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
+-- Type coercion where the recursion is wider
+WITH RECURSIVE t1(n, m) AS (
+    SELECT 1, 1
+    UNION ALL
+    SELECT n+1, CAST(n+1 AS BIGINT) FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
 -- Recursive CTE with nullable recursion and non-recursive anchor
 WITH RECURSIVE t1(n) AS (
     SELECT 1
