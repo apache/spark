@@ -2846,4 +2846,22 @@ package object config {
       .checkValues(Set("connect", "classic"))
       .createWithDefault(
         if (sys.env.get("SPARK_CONNECT_MODE").contains("1")) "connect" else "classic")
+
+  private[spark] val DRIVER_REDIRECT_CONSOLE_TO_LOG_ENABLED =
+    ConfigBuilder("spark.driver.log.redirectConsole.enabled")
+      .doc("Whether to redirect the driver's stdout/stderr to logging system. " +
+        s"It only takes affect when `${PLUGINS.key}` is configured with " +
+        "`org.apache.spark.deploy.RedirectConsolePlugin`.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val EXEC_REDIRECT_CONSOLE_TO_LOG_ENABLED =
+    ConfigBuilder("spark.executor.log.redirectConsole.enabled")
+      .doc("Whether to redirect the executor's stdout/stderr to logging system. " +
+        s"It only takes affect when `${PLUGINS.key}` is configured with " +
+        "`org.apache.spark.deploy.RedirectConsolePlugin`.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
 }
