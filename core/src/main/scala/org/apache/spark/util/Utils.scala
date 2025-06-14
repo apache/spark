@@ -51,7 +51,7 @@ import com.google.common.net.InetAddresses
 import jakarta.ws.rs.core.UriBuilder
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.io.IOUtils
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
+import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
@@ -1869,9 +1869,14 @@ private[spark] object Utils
   val isMac = SystemUtils.IS_OS_MAC_OSX
 
   /**
+   * Whether the underlying Java version is at most 17.
+   */
+  val isJavaVersionAtMost17 = Runtime.version().feature() <= 17
+
+  /**
    * Whether the underlying Java version is at least 21.
    */
-  val isJavaVersionAtLeast21 = SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_21)
+  val isJavaVersionAtLeast21 = Runtime.version().feature() >= 21
 
   /**
    * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
