@@ -705,11 +705,8 @@ class KMeansModel(
         """
         return self._call_java("numFeatures")
 
-    def _setup_remote_summary(self, predictions):
-        s = KMeansSummary(f"{str(self._java_obj)}.summary")
-        s._predictions = predictions
-        s._model_ref_id = str(self._java_obj)
-        self._summary = s
+    def _summaryCls(self):
+        return KMeansSummary
 
     @since("3.0.0")
     def predict(self, value: Vector) -> int:

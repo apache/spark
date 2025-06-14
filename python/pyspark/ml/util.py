@@ -126,7 +126,12 @@ def invoke_remote_attribute_relation(
         object_id = instance._java_obj  # type: ignore
     methods, obj_ref = _extract_id_methods(object_id)
     methods.append(pb2.Fetch.Method(method=method, args=serialize(session.client, *args)))
-    plan = AttributeRelation(obj_ref, methods)
+
+    if methods[0].method == "summary":
+        child = instance._predictions._plan
+    else:
+        child = None
+    plan = AttributeRelation(obj_ref, methods, child=child)
 
     # To delay the GC of the model, keep a reference to the source instance,
     # might be a model or a summary.
@@ -207,8 +212,13 @@ def try_remote_fit(f: FuncT) -> FuncT:
             model = self._create_model(remote_model_ref)
             if isinstance(model, HasTrainingSummary):
                 predictions = model.transform(dataset)
-                model._setup_remote_summary(predictions)
-                model._summary.__source_transformer__ = model  # type: ignore[attr-defined]
+
+                summary = model._summaryCls(f"{str(self._java_obj)}.summary")
+                summary._predictions = predictions
+                summary._model_ref_id = str(self._java_obj)
+                summary.__source_transformer__ = model  # type: ignore[attr-defined]
+
+                self._summary = summary
             if model.__class__.__name__ not in ["Bucketizer"]:
                 model._resetUid(self.uid)
             return self._copyValues(model)
@@ -216,28 +226,6 @@ def try_remote_fit(f: FuncT) -> FuncT:
             return f(self, dataset)
 
     return cast(FuncT, wrapped)
-
-
-def _do_remote_call_with_model_summary_restoration(self, remote_call, session):
-    import pyspark.sql.connect.proto as pb2
-    from pyspark.ml.connect.serialize import serialize_param
-
-    try:
-        return remote_call()
-    except SparkException as e:
-        if e.getErrorClass() == "CONNECT_ML.MODEL_SUMMARY_LOST":
-            # the model summary is lost because the remote model was offloaded,
-            # send request to restore model.summary
-            create_summary_command = pb2.Command()
-            create_summary_command.ml_command.create_summary.CopyFrom(
-                pb2.MlCommand.CreateSummary(
-                    model_ref=pb2.ObjectRef(id=self._model_ref_id),
-                    predictions=self._predictions._plan.plan(session.client),
-                )
-            )
-            session.client.execute_command(create_summary_command)
-
-            return remote_call()
 
 
 def try_remote_transform_relation(f: FuncT) -> FuncT:
@@ -306,6 +294,7 @@ def try_remote_call(f: FuncT) -> FuncT:
     @functools.wraps(f)
     def wrapped(self: "JavaWrapper", name: str, *args: Any) -> Any:
         import pyspark.sql.connect.proto as pb2
+        from pyspark.ml.connect.serialize import serialize_param
         from pyspark.sql.connect.session import SparkSession
 
         session = SparkSession.getActiveSession()
@@ -345,7 +334,22 @@ def try_remote_call(f: FuncT) -> FuncT:
                 return deserialize(properties)
 
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            return _do_remote_call_with_model_summary_restoration(self, remote_call, session)
+            try:
+                return remote_call()
+            except SparkException as e:
+                if e.getErrorClass() == "CONNECT_ML.MODEL_SUMMARY_LOST":
+                    # the model summary is lost because the remote model was offloaded,
+                    # send request to restore model.summary
+                    create_summary_command = pb2.Command()
+                    create_summary_command.ml_command.create_summary.CopyFrom(
+                        pb2.MlCommand.CreateSummary(
+                            model_ref=pb2.ObjectRef(id=self._model_ref_id),
+                            predictions=self._predictions._plan.plan(session.client),
+                        )
+                    )
+                    session.client.execute_command(create_summary_command)
+
+                    return remote_call()
         else:
             return f(self, name, *args)
 
@@ -1127,7 +1131,7 @@ class HasTrainingSummary(Generic[T]):
                 )
         return cast("JavaWrapper", self)._call_java("summary")
 
-    def _setup_remote_summary(self, predictions):
+    def _summaryCls(self):
         raise NotImplementedError()
 
 

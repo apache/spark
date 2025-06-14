@@ -369,26 +369,15 @@ class MlCommand(google.protobuf.message.Message):
 
         MODEL_REF_FIELD_NUMBER: builtins.int
         PREDICTIONS_FIELD_NUMBER: builtins.int
-        PARAMS_FIELD_NUMBER: builtins.int
         @property
         def model_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef: ...
         @property
         def predictions(self) -> pyspark.sql.connect.proto.relations_pb2.Relation: ...
-        @property
-        def params(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-            pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-        ]: ...
         def __init__(
             self,
             *,
             model_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
             predictions: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
-            params: collections.abc.Iterable[
-                pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-            ]
-            | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -399,7 +388,7 @@ class MlCommand(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "model_ref", b"model_ref", "params", b"params", "predictions", b"predictions"
+                "model_ref", b"model_ref", "predictions", b"predictions"
             ],
         ) -> None: ...
 
