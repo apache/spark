@@ -18,6 +18,8 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.CheckInvariant
+import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
 
 abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
@@ -78,7 +80,14 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
           |{ "pk": 2, "id": 4, "dep": "eng" }
           |{ "pk": 3, "id": 6, "dep": "eng" }
           |""".stripMargin)
-      sql(s"DELETE FROM $tableNameAsString WHERE pk < 2")
+      val df = sql(s"DELETE FROM $tableNameAsString WHERE pk < 2")
+      val checkInvariant = df.queryExecution.analyzed.collectFirst {
+        case f: Filter =>
+          f.condition.collectFirst {
+            case c: CheckInvariant => c
+          }
+      }.flatten
+      assert(checkInvariant.isEmpty, "Check invariant should not be present in the delete plan")
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(Row(2, 4, "eng"), Row(3, 6, "eng")))
