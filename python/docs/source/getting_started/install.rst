@@ -299,3 +299,20 @@ Package Supported version Note
 ======= ================= ==================
 `numpy` >=1.21            Required for MLlib
 ======= ================= ==================
+
+Declarative Pipelines
+^^^^^^^^^^^^^^^^^^^^^
+
+Installable with ``pip install "pyspark[pipelines]"``. Includes all dependencies for both Spark SQL and Spark Connect, because Declarative Pipelines is built on top of both.
+
+========================== ================= ===================================================
+Package                    Supported version Note
+========================== ================= ===================================================
+`pandas`                   >=2.0.0           Required for Spark Connect and Spark SQL
+`pyarrow`                  >=11.0.0          Required for Spark Connect and Spark SQL
+`grpcio`                   >=1.67.0          Required for Spark Connect
+`grpcio-status`            >=1.67.0          Required for Spark Connect
+`googleapis-common-protos` >=1.65.0          Required for Spark Connect
+`pyyaml`                   >=3.11            Required for spark-pipelines command line interface
+`graphviz`                 >=0.20            Optional for Spark Connect
+========================== ================= ===================================================

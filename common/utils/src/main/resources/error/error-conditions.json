@@ -921,6 +921,12 @@
     },
     "sqlState" : "21S01"
   },
+  "DATAFLOW_GRAPH_NOT_FOUND" : {
+    "message" : [
+      "Dataflow graph with id <graphId> could not be found"
+    ],
+    "sqlState" : "KD011"
+  },
   "DATATYPE_MISMATCH" : {
     "message" : [
       "Cannot resolve <sqlExpr> due to data type mismatch:"
@@ -2221,6 +2227,12 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_ATTRIBUTE_NOT_FOUND" : {
+    "message" : [
+      "Could not find <missingAttr> in <inputAttrs>."
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERNAL_ERROR_BROADCAST" : {
     "message" : [
       "<message>"
@@ -3404,14 +3416,9 @@
       "Invalid recursive reference found inside WITH RECURSIVE clause."
     ],
     "subClass" : {
-      "NUMBER" : {
-        "message" : [
-          "Multiple self-references to one recursive CTE are not allowed."
-        ]
-      },
       "PLACE" : {
         "message" : [
-          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins, in aggregates, and in subquery expressions."
+          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins and in aggregates"
         ]
       }
     },

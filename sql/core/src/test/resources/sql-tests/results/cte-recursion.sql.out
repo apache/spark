@@ -504,13 +504,13 @@ WITH RECURSIVE t(col) (
 )
 SELECT * FROM t LIMIT 5
 -- !query schema
-struct<col:int>
+struct<>
 -- !query output
-1
-1
-1
-1
-1
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836"
+}
 
 
 -- !query
@@ -533,6 +533,23 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
   "sqlState" : "42836"
 }
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT (SELECT n+1 FROM t1 WHERE n<5)
+)
+SELECT * FROM t1 LIMIT 5
+-- !query schema
+struct<n:int>
+-- !query output
+1
+2
+3
+4
+5
 
 
 -- !query
@@ -1656,3 +1673,134 @@ struct<val:array<int>>
 [2,1,5,3,4]
 [4,3,2,5,1]
 [4,5,1,2,3]
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT CASE WHEN n < 5 THEN n + 1 ELSE NULL END FROM t1
+)
+SELECT * FROM t1 LIMIT 25
+-- !query schema
+struct<n:int>
+-- !query output
+1
+2
+3
+4
+5
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t1 WHERE n < 5
+)
+SELECT (SELECT SUM(n) FROM (SELECT * FROM t1)), (SELECT SUM(n) FROM (SELECT * FROM t1 LIMIT 3))
+-- !query schema
+struct<scalarsubquery():bigint,scalarsubquery():bigint>
+-- !query output
+15	6
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t1
+)
+SELECT (SELECT SUM(n) FROM (SELECT * FROM t1 LIMIT 5)), (SELECT SUM(n) FROM (SELECT * FROM t1 LIMIT 3))
+-- !query schema
+struct<scalarsubquery():bigint,scalarsubquery():bigint>
+-- !query output
+15	6
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t1
+), t2(m) AS (
+    SELECT (SELECT SUM(n) FROM (SELECT n FROM t1 LIMIT 10) AS sums)
+    UNION ALL
+    SELECT m + (SELECT SUM(n) FROM (SELECT n FROM t1 LIMIT 3) AS sums) FROM t2
+)
+SELECT * FROM t2 LIMIT 20
+-- !query schema
+struct<m:bigint>
+-- !query output
+103
+109
+115
+121
+127
+133
+139
+145
+151
+157
+163
+169
+55
+61
+67
+73
+79
+85
+91
+97
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t1
+)
+    ((SELECT n FROM t1) UNION ALL (SELECT n FROM t1)) LIMIT 20
+-- !query schema
+struct<n:int>
+-- !query output
+1
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+2
+20
+3
+4
+5
+6
+7
+8
+9

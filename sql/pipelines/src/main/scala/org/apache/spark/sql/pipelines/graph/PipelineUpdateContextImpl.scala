@@ -20,7 +20,11 @@ package org.apache.spark.sql.pipelines.graph
 import scala.annotation.unused
 
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.pipelines.logging.{FlowProgressEventLogger, PipelineEvent, PipelineRunEventBuffer}
+import org.apache.spark.sql.pipelines.logging.{
+  FlowProgressEventLogger,
+  PipelineEvent,
+  PipelineRunEventBuffer
+}
 
 /**
  * An implementation of the PipelineUpdateContext trait used in production.
@@ -29,7 +33,7 @@ import org.apache.spark.sql.pipelines.logging.{FlowProgressEventLogger, Pipeline
  */
 @unused(
   "TODO(SPARK-51727) construct this spark connect server when we expose APIs for users " +
-    "to interact with a pipeline"
+  "to interact with a pipeline"
 )
 class PipelineUpdateContextImpl(
     override val unresolvedGraph: DataflowGraph,
@@ -39,8 +43,6 @@ class PipelineUpdateContextImpl(
   override val spark: SparkSession = SparkSession.getActiveSession.getOrElse(
     throw new IllegalStateException("SparkSession is not available")
   )
-
-  override val pipelineConf: PipelineConf = new PipelineConf(spark)
 
   override val eventBuffer = new PipelineRunEventBuffer(eventCallback)
 
