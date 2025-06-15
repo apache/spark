@@ -37,6 +37,7 @@ from pyspark.pipelines.graph_element_registry import (
     GraphElementRegistry,
 )
 from pyspark.pipelines.init_cli import init
+from pyspark.pipelines.logging_utils import log_with_curr_timestamp
 from pyspark.pipelines.spark_connect_graph_element_registry import (
     SparkConnectGraphElementRegistry,
 )
@@ -163,14 +164,16 @@ def register_definitions(
     path = spec_path.parent
     with change_dir(path):
         with graph_element_registration_context(registry):
-            print(f"Loading definitions. Root directory: '{path}'.")
+            log_with_curr_timestamp(f"Loading definitions. Root directory: '{path}'.")
             for definition_glob in spec.definitions:
                 glob_expression = definition_glob.include
                 matching_files = [p for p in path.glob(glob_expression) if p.is_file()]
-                print(f"Found {len(matching_files)} files matching glob '{glob_expression}'")
+                log_with_curr_timestamp(
+                    f"Found {len(matching_files)} files matching glob '{glob_expression}'"
+                )
                 for file in matching_files:
                     if file.suffix == ".py":
-                        print(f"Importing {file}...")
+                        log_with_curr_timestamp(f"Importing {file}...")
                         module_spec = importlib.util.spec_from_file_location(file.stem, str(file))
                         assert module_spec is not None, f"Could not find module spec for {file}"
                         module = importlib.util.module_from_spec(module_spec)
@@ -179,7 +182,7 @@ def register_definitions(
                         ), f"Module spec has no loader for {file}"
                         module_spec.loader.exec_module(module)
                     elif file.suffix == ".sql":
-                        print(f"Registering SQL file {file}...")
+                        log_with_curr_timestamp(f"Registering SQL file {file}...")
                         with file.open("r") as f:
                             sql = f.read()
                         file_path_relative_to_spec = file.relative_to(spec_path.parent)
@@ -202,19 +205,19 @@ def change_dir(path: Path) -> Generator[None, None, None]:
         os.chdir(prev)
 
 
-def run(spec_path: Path, remote: str) -> None:
+def run(spec_path: Path) -> None:
     """Run the pipeline defined with the given spec."""
-    print(f"Loading pipeline spec from {spec_path}...")
+    log_with_curr_timestamp(f"Loading pipeline spec from {spec_path}...")
     spec = load_pipeline_spec(spec_path)
 
-    print("Creating Spark session...")
-    spark_builder = SparkSession.builder.remote(remote)
+    log_with_curr_timestamp("Creating Spark session...")
+    spark_builder = SparkSession.builder
     for key, value in spec.configuration.items():
         spark_builder = spark_builder.config(key, value)
 
-    spark = spark_builder.create()
+    spark = spark_builder.getOrCreate()
 
-    print("Creating dataflow graph...")
+    log_with_curr_timestamp("Creating dataflow graph...")
     dataflow_graph_id = create_dataflow_graph(
         spark,
         default_catalog=spec.catalog,
@@ -222,11 +225,11 @@ def run(spec_path: Path, remote: str) -> None:
         sql_conf=spec.configuration,
     )
 
-    print("Registering graph elements...")
+    log_with_curr_timestamp("Registering graph elements...")
     registry = SparkConnectGraphElementRegistry(spark, dataflow_graph_id)
     register_definitions(spec_path, registry, spec)
 
-    print("Starting run...")
+    log_with_curr_timestamp("Starting run...")
     result_iter = start_run(spark, dataflow_graph_id)
     try:
         handle_pipeline_events(result_iter)
@@ -241,9 +244,6 @@ if __name__ == "__main__":
     # "run" subcommand
     run_parser = subparsers.add_parser("run", help="Run a pipeline.")
     run_parser.add_argument("--spec", help="Path to the pipeline spec.")
-    run_parser.add_argument(
-        "--remote", help="The Spark Connect remote to connect to.", required=True
-    )
 
     # "init" subcommand
     init_parser = subparsers.add_parser(
@@ -271,6 +271,6 @@ if __name__ == "__main__":
         else:
             spec_path = find_pipeline_spec(Path.cwd())
 
-        run(spec_path=spec_path, remote=args.remote)
+        run(spec_path=spec_path)
     elif args.command == "init":
         init(args.name)

@@ -209,7 +209,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addInteger(row.getInt(ordinal))
 
-      case LongType | _: DayTimeIntervalType | _: TimeType =>
+      case LongType | _: DayTimeIntervalType =>
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addLong(row.getLong(ordinal))
 
@@ -252,6 +252,10 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
         // For TimestampNTZType column, Spark always output as INT64 with Timestamp annotation in
         // MICROS time unit.
         (row: SpecializedGetters, ordinal: Int) => recordConsumer.addLong(row.getLong(ordinal))
+
+      case _: TimeType =>
+        (row: SpecializedGetters, ordinal: Int) =>
+          recordConsumer.addLong(DateTimeUtils.nanosToMicros(row.getLong(ordinal)))
 
       case BinaryType =>
         (row: SpecializedGetters, ordinal: Int) =>
