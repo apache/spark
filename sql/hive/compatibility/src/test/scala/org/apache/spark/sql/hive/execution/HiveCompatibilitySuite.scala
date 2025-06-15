@@ -218,7 +218,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alter1",
     "input16",
 
-    // Hive 4 does not support DynamicSerDe
+    // HIVE-23483: Hive 4 does not support DynamicSerDe
+    "implicit_cast1",
     "input19",
 
     // No support for unpublished test udfs.
@@ -737,7 +738,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "groupby_ppr",
     "groupby_sort_6",
     "having",
-    "implicit_cast1",
     "index_serde",
     "infer_bucket_sort_dyn_part",
     "innerjoin",
