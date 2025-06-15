@@ -165,7 +165,8 @@ public class VectorizedColumnReader {
       case INT64: {
         boolean isDecimal = sparkType instanceof DecimalType;
         boolean needsUpcast = (isDecimal && !DecimalType.is64BitDecimalType(sparkType)) ||
-          updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS);
+          updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS) ||
+          updaterFactory.isTimeTypeMatched(TimeUnit.MICROS);
         boolean needsRebase = updaterFactory.isTimestampTypeMatched(TimeUnit.MICROS) &&
           !"CORRECTED".equals(datetimeRebaseMode);
         isSupported = !needsUpcast && !needsRebase && !needsDecimalScaleRebase(sparkType);

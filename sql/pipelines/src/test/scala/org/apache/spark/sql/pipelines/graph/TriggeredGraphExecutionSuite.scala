@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import org.scalatest.concurrent.Eventually.eventually
-import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.sql.{functions, Row}
@@ -34,10 +32,11 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 class TriggeredGraphExecutionSuite extends ExecutionTest {
 
-  import originalSpark.implicits._
-
   /** Returns a Dataset of Longs from the table with the given identifier. */
   private def getTable(identifier: TableIdentifier): Dataset[Long] = {
+    val session = spark
+    import session.implicits._
+
     spark.read.table(identifier.toString).as[Long]
   }
 
@@ -52,6 +51,9 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
   }
 
   test("basic graph resolution and execution") {
+    val session = spark
+    import session.implicits._
+
     val pipelineDef = new TestGraphRegistrationContext(spark) {
       registerTable("a", query = Option(dfFlowFunc(Seq(1, 2).toDF("x"))))
       registerTable("b", query = Option(readFlowFunc("a")))
@@ -95,6 +97,9 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
   }
 
   test("graph materialization with streams") {
+    val session = spark
+    import session.implicits._
+
     val pipelineDef = new TestGraphRegistrationContext(spark) {
       registerTable("a", query = Option(dfFlowFunc(Seq(1, 2).toDF("x"))))
       registerTable("b", query = Option(readFlowFunc("a")))
@@ -172,6 +177,9 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
   }
 
   test("three hop pipeline") {
+    val session = spark
+    import session.implicits._
+
     // Construct pipeline
     val pipelineDef = new TestGraphRegistrationContext(spark) {
       private val ints = MemoryStream[Int]
@@ -245,6 +253,9 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
   }
 
   test("all events are emitted even if there is no data") {
+    val session = spark
+    import session.implicits._
+
     // Construct pipeline
     val pipelineDef = new TestGraphRegistrationContext(spark) {
       private val ints = MemoryStream[Int]
@@ -285,6 +296,9 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
   }
 
   test("stream failure causes its downstream to be skipped") {
+    val session = spark
+    import session.implicits._
+
     spark.sql("CREATE TABLE src USING PARQUET AS SELECT * FROM RANGE(10)")
 
     // A UDF which fails immediately
@@ -356,11 +370,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
       identifier = fullyQualifiedIdentifier("branch_2"),
       expectedFlowStatus = FlowStatus.FAILED,
       expectedEventLevel = EventLevel.ERROR,
-      errorChecker = { ex =>
-        ex.exceptions.exists { ex =>
-          ex.message.contains("Test error")
-        }
-      }
+      errorChecker = _.getMessage.contains("Test error")
     )
     // all the downstream flows of `branch_2` should be skipped.
     assertFlowProgressEvent(
@@ -463,6 +473,9 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
   }
 
   test("user-specified schema is applied to table") {
+    val session = spark
+    import session.implicits._
+
     val specifiedSchema = new StructType().add("x", "int", nullable = true)
     val pipelineDef = new TestGraphRegistrationContext(spark) {
       registerTable(
@@ -521,6 +534,9 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
   }
 
   test("stopping a pipeline mid-execution") {
+    val session = spark
+    import session.implicits._
+
     // A UDF which adds a delay
     val delayUDF = functions.udf((_: String) => {
       Thread.sleep(5 * 1000)
@@ -546,7 +562,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
 
     val graph = pipelineDef.toDataflowGraph
     val updateContext = TestPipelineUpdateContext(spark, graph)
-    updateContext.pipelineExecution.runPipeline()
+    updateContext.pipelineExecution.startPipeline()
 
     val graphExecution = updateContext.pipelineExecution.graphExecution.get
 
@@ -589,6 +605,9 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
   }
 
   test("two hop pipeline with partitioned graph") {
+    val session = spark
+    import session.implicits._
+
     val pipelineDef = new TestGraphRegistrationContext(spark) {
       registerTable("integer_input", query = Option(dfFlowFunc(Seq(1, 2, 3, 4).toDF("value"))))
       registerTable(
@@ -643,6 +662,9 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
   }
 
   test("multiple hop pipeline with merge from multiple sources") {
+    val session = spark
+    import session.implicits._
+
     val pipelineDef = new TestGraphRegistrationContext(spark) {
       registerTable("integer_input", query = Option(dfFlowFunc(Seq(1, 2, 3, 4).toDF("nums"))))
       registerTable(
@@ -719,6 +741,9 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
   }
 
   test("multiple hop pipeline with split and merge from single source") {
+    val session = spark
+    import session.implicits._
+
     val pipelineDef = new TestGraphRegistrationContext(spark) {
       registerTable(
         "input_table",
@@ -797,6 +822,9 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
   }
 
   test("test default flow retry is 2 and event WARN/ERROR levels accordingly") {
+    val session = spark
+    import session.implicits._
+
     val fail = functions.udf((x: Int) => {
       throw new RuntimeException("Intentionally failing UDF.")
       x
@@ -843,6 +871,9 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
   }
 
   test("partial graph updates") {
+    val session = spark
+    import session.implicits._
+
     val ints: MemoryStream[Int] = MemoryStream[Int]
     val pipelineDef = new TestGraphRegistrationContext(spark) {
       ints.addData(1, 2, 3)
@@ -964,9 +995,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
     }.toDataflowGraph
 
     val updateContext = TestPipelineUpdateContext(spark = spark, unresolvedGraph = graph)
-    intercept[UnresolvedPipelineException] {
-      updateContext.pipelineExecution.runPipeline()
-    }
+    updateContext.pipelineExecution.runPipeline()
 
     assertFlowProgressEvent(
       updateContext.eventBuffer,
@@ -974,13 +1003,9 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
       expectedFlowStatus = FlowStatus.FAILED,
       expectedEventLevel = EventLevel.WARN,
       msgChecker = _.contains("Failed to resolve flow: 'spark_catalog.test_db.table1'"),
-      errorChecker = { ex =>
-        ex.exceptions.exists { ex =>
-          ex.message.contains(
-            "The table or view `spark_catalog`.`test_db`.`nonexistent_src1` cannot be found"
-          )
-        }
-      }
+      errorChecker = _.getMessage.contains(
+        "The table or view `spark_catalog`.`test_db`.`nonexistent_src1` cannot be found"
+      )
     )
 
     assertFlowProgressEvent(
@@ -989,13 +1014,9 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
       expectedFlowStatus = FlowStatus.FAILED,
       expectedEventLevel = EventLevel.WARN,
       msgChecker = _.contains("Failed to resolve flow: 'spark_catalog.test_db.table2'"),
-      errorChecker = { ex =>
-        ex.exceptions.exists { ex =>
-          ex.message.contains(
-            "The table or view `spark_catalog`.`test_db`.`nonexistent_src2` cannot be found"
-          )
-        }
-      }
+      errorChecker = _.getMessage.contains(
+        "The table or view `spark_catalog`.`test_db`.`nonexistent_src2` cannot be found"
+      )
     )
 
     assertFlowProgressEvent(
@@ -1007,12 +1028,10 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
         "Failed to resolve flow due to upstream failure: 'spark_catalog.test_db.table3'"
       ),
       errorChecker = { ex =>
-        ex.exceptions.exists { ex =>
-          ex.message.contains(
-            "Failed to read dataset 'spark_catalog.test_db.table1'. Dataset is defined in the " +
-            "pipeline but could not be resolved."
-          )
-        }
+        ex.getMessage.contains(
+          "Failed to read dataset 'spark_catalog.test_db.table1'. Dataset is defined in the " +
+          "pipeline but could not be resolved."
+        )
       }
     )
   }
