@@ -1,0 +1,85 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.io
+
+import java.io.InputStream
+
+import scala.collection.Seq
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.compress._
+
+import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.internal.config
+import org.apache.spark.io.{CompressionCodec => SparkCompressionCodec}
+
+object HadoopCodecStreams {
+  val ZSTD_EXTENSIONS = Seq(".zstd", ".zst")
+
+  // get codec based on file name extension
+  private[sql] def getDecompressionCodec(
+    config: Configuration,
+    file: Path): Option[CompressionCodec] = {
+    val factory = new CompressionCodecFactory(config)
+    Option(factory.getCodec(file)).orElse {
+      // Try some non-standards extensions for Zstandard and Gzip
+      file.getName.toLowerCase() match {
+        case name if name.endsWith(".zstd") =>
+          Option(factory.getCodecByName(classOf[ZStandardCodec].getName))
+        case name if name.endsWith(".gzip") =>
+          Option(factory.getCodecByName(classOf[GzipCodec].getName))
+        case _ => None
+      }
+    }
+  }
+
+  private def createZstdInputStream(
+    file: Path,
+    inputStream: InputStream): Option[InputStream] = {
+    val fileName = file.getName.toLowerCase()
+
+    if (ZSTD_EXTENSIONS.exists(fileName.endsWith) && isSparkZstdCodecEnabled) {
+      Some(
+        SparkCompressionCodec
+          .createCodec(sparkConf, SparkCompressionCodec.ZSTD)
+          .compressedInputStream(inputStream)
+      )
+    } else {
+      None
+    }
+  }
+
+  def createInputStream(config: Configuration, file: Path): InputStream = {
+    val fs = file.getFileSystem(config)
+    val inputStream: InputStream = fs.open(file)
+
+    getDecompressionCodec(config, file)
+      .map { codec =>
+        try {
+          codec.createInputStream(inputStream)
+        } catch {
+          case e: RuntimeException =>
+            createZstdInputStream(file, inputStream).getOrElse(throw e)
+        }
+      }.getOrElse(inputStream)
+  }
+
+  private val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
+  private val isSparkZstdCodecEnabled = sparkConf.get(config.FILE_DATA_SOURCE_ZSTANDARD_ENABLED)
+}
