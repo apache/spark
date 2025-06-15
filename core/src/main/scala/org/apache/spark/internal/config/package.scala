@@ -224,6 +224,14 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val EVENT_LOG_EXCLUDED_PATTERNS =
+    ConfigBuilder("spark.eventLog.excludedPatterns")
+      .doc("Specifies comma-separated event names to be excluded from the event logs.")
+      .version("4.1.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   private[spark] val EVENT_LOG_ALLOW_EC =
     ConfigBuilder("spark.eventLog.erasureCoding.enabled")
       .version("3.0.0")
@@ -317,8 +325,8 @@ package object config {
         " to be rolled over.")
       .version("3.0.0")
       .bytesConf(ByteUnit.BYTE)
-      .checkValue(_ >= ByteUnit.MiB.toBytes(10), "Max file size of event log should be " +
-        "configured to be at least 10 MiB.")
+      .checkValue(_ >= ByteUnit.MiB.toBytes(2), "Max file size of event log should be " +
+        "configured to be at least 2 MiB.")
       .createWithDefaultString("128m")
 
   private[spark] val EXECUTOR_ID =

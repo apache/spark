@@ -30,7 +30,6 @@ import org.apache.spark.sql.pipelines.graph.{
   TableFilter
 }
 import org.apache.spark.sql.pipelines.logging.{
-  ErrorDetail,
   EventLevel,
   FlowProgress,
   FlowProgressEventLogger,
@@ -74,12 +73,12 @@ trait TestPipelineUpdateContextMixin {
 trait EventVerificationTestHelpers {
 
   /**
-   * Asserts that there is a [[FlowProgress]] event in the event log with the specified flow name
+   * Asserts that there is a FlowProgress event in the event log with the specified flow name
    * and status and matching the specified error condition.
    *
    * @param identifier Flow identifier to look for events for
-   * @param expectedFlowStatus Expected [[FlowStatus]]
-   * @param expectedEventLevel Expected [[EventLevel]] of the event.
+   * @param expectedFlowStatus Expected FlowStatus
+   * @param expectedEventLevel Expected EventLevel of the event.
    * @param errorChecker Condition that the event's exception, if any, must pass in order for this
    *                     function to return true.
    * @param msgChecker Condition that the event's msg must pass in order for the function to return
@@ -92,7 +91,7 @@ trait EventVerificationTestHelpers {
       identifier: TableIdentifier,
       expectedFlowStatus: FlowStatus,
       expectedEventLevel: EventLevel,
-      errorChecker: ErrorDetail => Boolean = _ => true,
+      errorChecker: Throwable => Boolean = _ => true,
       msgChecker: String => Boolean = _ => true,
       cond: PipelineEvent => Boolean = _ => true,
       expectedNumOfEvents: Option[Int] = None
@@ -186,7 +185,7 @@ trait EventVerificationTestHelpers {
     )
   }
 
-  /** Returns a map of flow names to their latest [[FlowStatus]]es. */
+  /** Returns a map of flow names to their latest FlowStatus. */
   protected def latestFlowStatuses(eventBuffer: PipelineRunEventBuffer): Map[String, FlowStatus] = {
     eventBuffer.getEvents
       .filter(_.details.isInstanceOf[FlowProgress])
@@ -227,11 +226,11 @@ trait EventVerificationTestHelpers {
   }
 
   /**
-   * Asserts that there is an [[RunProgress]] event in the event log with the specified id
+   * Asserts that there is a RunProgress event in the event log with the specified id
    * and state and matching the specified error condition.
    *
-   * @param state        Expected [[RunState]]
-   * @param expectedEventLevel Expected [[EventLevel]] of the event.
+   * @param state        Expected RunState
+   * @param expectedEventLevel Expected EventLevel of the event.
    * @param errorChecker Condition that the event's exception, if any, must pass in order for this
    *                     function to return true.
    * @param msgChecker   Condition that the event's msg must pass in order for the function to
@@ -241,13 +240,13 @@ trait EventVerificationTestHelpers {
       eventBuffer: PipelineRunEventBuffer,
       state: RunState,
       expectedEventLevel: EventLevel,
-      errorChecker: Option[ErrorDetail] => Boolean = null,
+      errorChecker: Option[Throwable] => Boolean = null,
       msgChecker: String => Boolean = _ => true): Unit = {
     val errorCheckerWithDefault = Option(errorChecker).getOrElse {
-      if (state == RunState.FAILED) { (errorDetailsOpt: Option[ErrorDetail]) =>
-        errorDetailsOpt.nonEmpty
-      } else { (errorDetailsOpt: Option[ErrorDetail]) =>
-        errorDetailsOpt.isEmpty
+      if (state == RunState.FAILED) { (errorOpt: Option[Throwable]) =>
+        errorOpt.nonEmpty
+      } else { (errorOpt: Option[Throwable]) =>
+        errorOpt.isEmpty
       }
     }
 
