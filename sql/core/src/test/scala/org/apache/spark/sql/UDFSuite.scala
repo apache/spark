@@ -379,15 +379,17 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     def explainStr(df: DataFrame): String = {
       val explain = ExplainCommand(df.queryExecution.logical, SimpleMode)
       val sparkPlan = spark.sessionState.executePlan(explain).executedPlan
-      sparkPlan.executeCollect().map(_.getString(0).trim).headOption.getOrElse("")
+      val res = sparkPlan.executeCollect().map(_.getString(0).trim).headOption.getOrElse("")
+      res
     }
     val udf1Name = "myUdf1"
     val udf2Name = "myUdf2"
     val udf1 = spark.udf.register(udf1Name, (n: Int) => n + 1)
     val udf2 = spark.udf.register(udf2Name, (n: Int) => n * 1)
-    assert(explainStr(sql("SELECT myUdf1(myUdf2(1))")).contains(s"$udf1Name($udf2Name(1))"))
+    val expectedSubString = s"$udf1Name:UDF($udf2Name:UDF(1))"
+    assert(explainStr(sql("SELECT myUdf1(myUdf2(1))")).contains(expectedSubString))
     assert(explainStr(spark.range(1).select(udf1(udf2(functions.lit(1)))))
-      .contains(s"$udf1Name($udf2Name(1))"))
+      .contains(expectedSubString))
   }
 
   test("SPARK-23666 Do not display exprId in argument names") {
@@ -398,7 +400,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       Console.withOut(outputStream) {
         spark.sql("SELECT f(a._1) FROM x").show()
       }
-      assert(outputStream.toString.contains("f(a._1)"))
+      assert(outputStream.toString.contains("f:UDF(a._1)"))
     }
   }
 
