@@ -1129,7 +1129,7 @@ class HasTrainingSummary(Generic[T]):
                 raise RuntimeError(
                     "No training summary available for this %s" % self.__class__.__name__
                 )
-        return cast("JavaWrapper", self)._call_java("summary")
+        return self._summaryCls()(cast("JavaWrapper", self)._call_java("summary"))
 
     def _summaryCls(self):
         raise NotImplementedError()

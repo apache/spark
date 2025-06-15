@@ -107,13 +107,14 @@ class ClusteringTestsMixin:
         # check summary before model offloading occurs
         check_summary()
 
-        self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-        # check summary "try_remote_call" path after model offloading occurs
-        check_summary()
+        if is_remote():
+            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+            # check summary "try_remote_call" path after model offloading occurs
+            check_summary()
 
-        self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-        # check summary "invoke_remote_attribute_relation" path after model offloading occurs
-        self.assertEqual(model.summary.cluster.count(), 6)
+            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+            # check summary "invoke_remote_attribute_relation" path after model offloading occurs
+            self.assertEqual(model.summary.cluster.count(), 6)
 
         # save & load
         with tempfile.TemporaryDirectory(prefix="kmeans_model") as d:
@@ -125,6 +126,8 @@ class ClusteringTestsMixin:
             model2 = KMeansModel.load(d)
             self.assertEqual(str(model), str(model2))
             self.assertFalse(model2.hasSummary)
+            with self.assertRaisesRegex(Exception, "No training summary available"):
+                model2.summary
 
     def test_bisecting_kmeans(self):
         df = (
