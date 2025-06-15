@@ -288,7 +288,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val loaded = catalog.loadTable(testIdent)
 
     assert(table.name == loaded.name)
-    assert(table.columns == loaded.columns())
+    assert(table.columns sameElements loaded.columns())
     assert(table.properties == loaded.properties)
   }
 
@@ -549,7 +549,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     val expectedColumns = Array(
       Column.create("id", IntegerType, true, "comment text", null),
-      Column.create("string", StringType))
+      Column.create("data", StringType))
     assert(updated.columns sameElements expectedColumns)
   }
 
@@ -564,7 +564,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     catalog.alterTable(testIdent, TableChange.updateColumnComment(Array("id"), "comment text"))
 
     val expectedColumns = Array(
-      Column.create("id", IntegerType, true, "comment text", null),
+      Column.create("id", IntegerType, true, "replacement comment", null),
       Column.create("data", StringType))
 
     catalog.alterTable(testIdent,
