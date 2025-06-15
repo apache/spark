@@ -273,6 +273,10 @@ public final class Variant {
     return Instant.EPOCH.plus(timestamp, ChronoUnit.MICROS);
   }
 
+  private static Instant nanosToInstant(long timestamp) {
+    return Instant.EPOCH.plus(timestamp, ChronoUnit.NANOS);
+  }
+
   static void toJsonImpl(byte[] value, byte[] metadata, int pos, StringBuilder sb, ZoneId zoneId) {
     switch (VariantUtil.getType(value, pos)) {
       case OBJECT:
@@ -330,6 +334,14 @@ public final class Variant {
         break;
       case DATE:
         appendQuoted(sb, LocalDate.ofEpochDay((int) VariantUtil.getLong(value, pos)).toString());
+        break;
+      case TIMESTAMP_NANOS:
+        appendQuoted(sb, TIMESTAMP_FORMATTER.format(
+            nanosToInstant(VariantUtil.getLong(value, pos)).atZone(zoneId)));
+        break;
+      case TIMESTAMP_NANOS_NTZ:
+        appendQuoted(sb, TIMESTAMP_NTZ_FORMATTER.format(
+            nanosToInstant(VariantUtil.getLong(value, pos)).atZone(ZoneOffset.UTC)));
         break;
       case TIMESTAMP:
         appendQuoted(sb, TIMESTAMP_FORMATTER.format(
