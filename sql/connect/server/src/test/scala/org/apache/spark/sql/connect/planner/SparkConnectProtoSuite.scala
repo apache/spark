@@ -40,7 +40,7 @@ import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.commands._
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
-import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, InMemoryTableCatalog, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.functions._
@@ -824,8 +824,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       assert(table.name === "testcat.table_name")
       assert(table.columns sameElements
         Array(
-          Column.create("id", LongType),
-          Column.create("data", StringType)))
+          ColumnV2.create("id", LongType),
+          ColumnV2.create("data", StringType)))
       assert(table.partitioning.isEmpty)
       assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
     }
