@@ -242,7 +242,7 @@ class GaussianMixtureModel private[ml] (
     )
   }
 
-  override private[spark] def loadSummary(path: String, predictions: DataFrame): Unit = {
+  override private[spark] def loadSummary(path: String, dataset: DataFrame): Unit = {
     val (logLikelihood: Double, numIter: Int) = ReadWriteUtils.loadObjectFromLocal[(Double, Int)](
       path,
       dis => {
@@ -251,7 +251,7 @@ class GaussianMixtureModel private[ml] (
         (logLikelihood, numIter)
       }
     )
-    createSummary(predictions, logLikelihood, numIter)
+    createSummary(dataset, logLikelihood, numIter)
   }
 }
 

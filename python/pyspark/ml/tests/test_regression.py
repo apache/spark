@@ -43,6 +43,7 @@ from pyspark.ml.regression import (
     GBTRegressor,
     GBTRegressionModel,
 )
+from pyspark.sql import is_remote
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -318,36 +319,43 @@ class RegressionTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
 
-        # Model summary
-        self.assertTrue(model.hasSummary)
+        def check_summary():
+            # Model summary
+            self.assertTrue(model.hasSummary)
+
+            summary = model.summary
+            self.assertIsInstance(summary, GeneralizedLinearRegressionSummary)
+            self.assertIsInstance(summary, GeneralizedLinearRegressionTrainingSummary)
+            self.assertEqual(summary.numIterations, 1)
+            self.assertEqual(summary.numInstances, 4)
+            self.assertEqual(summary.rank, 3)
+            self.assertTrue(
+                np.allclose(
+                    summary.tValues,
+                    [0.3725037662281711, -0.49418209022924164, 2.6589353685797654],
+                    atol=1e-4,
+                ),
+                summary.tValues,
+            )
+            self.assertTrue(
+                np.allclose(
+                    summary.pValues,
+                    [0.7729938686180984, 0.707802691825973, 0.22900885781807023],
+                    atol=1e-4,
+                ),
+                summary.pValues,
+            )
+            self.assertEqual(summary.predictions.columns, expected_cols)
+            self.assertEqual(summary.predictions.count(), 4)
+            self.assertEqual(summary.residuals().columns, ["devianceResiduals"])
+            self.assertEqual(summary.residuals().count(), 4)
+
+        check_summary()
+        if is_remote():
+            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+            check_summary()
 
         summary = model.summary
-        self.assertIsInstance(summary, GeneralizedLinearRegressionSummary)
-        self.assertIsInstance(summary, GeneralizedLinearRegressionTrainingSummary)
-        self.assertEqual(summary.numIterations, 1)
-        self.assertEqual(summary.numInstances, 4)
-        self.assertEqual(summary.rank, 3)
-        self.assertTrue(
-            np.allclose(
-                summary.tValues,
-                [0.3725037662281711, -0.49418209022924164, 2.6589353685797654],
-                atol=1e-4,
-            ),
-            summary.tValues,
-        )
-        self.assertTrue(
-            np.allclose(
-                summary.pValues,
-                [0.7729938686180984, 0.707802691825973, 0.22900885781807023],
-                atol=1e-4,
-            ),
-            summary.pValues,
-        )
-        self.assertEqual(summary.predictions.columns, expected_cols)
-        self.assertEqual(summary.predictions.count(), 4)
-        self.assertEqual(summary.residuals().columns, ["devianceResiduals"])
-        self.assertEqual(summary.residuals().count(), 4)
-
         summary2 = model.evaluate(df)
         self.assertIsInstance(summary2, GeneralizedLinearRegressionSummary)
         self.assertNotIsInstance(summary2, GeneralizedLinearRegressionTrainingSummary)

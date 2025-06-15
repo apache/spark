@@ -51,7 +51,7 @@ private[spark] trait HasTrainingSummary[T] {
     this
   }
 
-  private[spark] def loadSummary(path: String, predictions: DataFrame): Unit = {
+  private[spark] def loadSummary(path: String, dataset: DataFrame): Unit = {
     throw new SparkException(
       s"No createSummary implementation for this ${this.getClass.getSimpleName}")
   }

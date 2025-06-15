@@ -128,7 +128,7 @@ def invoke_remote_attribute_relation(
     methods.append(pb2.Fetch.Method(method=method, args=serialize(session.client, *args)))
 
     if methods[0].method == "summary":
-        child = instance._predictions._plan
+        child = instance._summary_dataset._plan
     else:
         child = None
     plan = AttributeRelation(obj_ref, methods, child=child)
@@ -211,10 +211,10 @@ def try_remote_fit(f: FuncT) -> FuncT:
             remote_model_ref = RemoteModelRef(model_info.obj_ref.id)
             model = self._create_model(remote_model_ref)
             if isinstance(model, HasTrainingSummary):
-                predictions = model.transform(dataset)
+                summary_dataset = model._summary_dataset(dataset)
 
                 summary = model._summaryCls(f"{str(model._java_obj)}.summary")
-                summary._predictions = predictions
+                summary._summary_dataset = summary_dataset
                 summary._model_ref_id = str(model._java_obj)
                 summary.__source_transformer__ = model  # type: ignore[attr-defined]
 
@@ -344,7 +344,7 @@ def try_remote_call(f: FuncT) -> FuncT:
                     create_summary_command.ml_command.create_summary.CopyFrom(
                         pb2.MlCommand.CreateSummary(
                             model_ref=pb2.ObjectRef(id=self._model_ref_id),
-                            predictions=self._predictions._plan.plan(session.client),
+                            predictions=self._summary_dataset._plan.plan(session.client),
                         )
                     )
                     session.client.execute_command(create_summary_command)
@@ -1134,6 +1134,9 @@ class HasTrainingSummary(Generic[T]):
     @property
     def _summaryCls(self):
         raise NotImplementedError()
+
+    def _summary_dataset(self, train_dataset: "DataFrame") -> "DataFrame":
+        return self.transform(train_dataset)
 
 
 class MetaAlgorithmReadWrite:

@@ -240,7 +240,7 @@ class KMeansModel private[ml] (
     )
   }
 
-  override private[spark] def loadSummary(path: String, predictions: DataFrame): Unit = {
+  override private[spark] def loadSummary(path: String, dataset: DataFrame): Unit = {
     val (numIter: Int, trainingCost: Double) = ReadWriteUtils.loadObjectFromLocal[(Int, Double)](
       path,
       dis => {
@@ -249,7 +249,7 @@ class KMeansModel private[ml] (
         (numIter, trainingCost)
       }
     )
-    createSummary(predictions, numIter, trainingCost)
+    createSummary(dataset, numIter, trainingCost)
   }
 }
 

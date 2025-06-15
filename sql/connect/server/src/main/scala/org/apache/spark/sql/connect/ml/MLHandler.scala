@@ -462,13 +462,13 @@ private[connect] object MLHandler extends Logging {
           && methods(0).getMethod == "summary"
           && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
 
-          if (relation.hasModelSummaryPredictions) {
-            val predictions = MLUtils.parseRelationProto(
-              relation.getModelSummaryPredictions, sessionHolder
+          if (relation.hasModelSummaryDataset) {
+            val dataset = MLUtils.parseRelationProto(
+              relation.getModelSummaryDataset, sessionHolder
             )
             val modelPath = sessionHolder.mlCache.getModelOffloadingPath(objRefId)
             val summaryPath = modelPath.resolve("summary").toString
-            obj.asInstanceOf[HasTrainingSummary[_]].loadSummary(summaryPath, predictions)
+            obj.asInstanceOf[HasTrainingSummary[_]].loadSummary(summaryPath, dataset)
           } else {
             // For old Spark client backward compatibility.
             throw MLModelSummaryLostException(objRefId)
