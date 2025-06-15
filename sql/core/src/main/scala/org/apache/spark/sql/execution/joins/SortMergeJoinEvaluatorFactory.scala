@@ -34,6 +34,7 @@ class SortMergeJoinEvaluatorFactory(
     output: Seq[Attribute],
     inMemoryThreshold: Int,
     spillThreshold: Int,
+    spillSizeThreshold: Long,
     numOutputRows: SQLMetric,
     spillSize: SQLMetric,
     onlyBufferFirstMatchedRow: Boolean)
@@ -85,6 +86,7 @@ class SortMergeJoinEvaluatorFactory(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
+              spillSizeThreshold,
               spillSize,
               cleanupResources)
             private[this] val joinRow = new JoinedRow
@@ -130,6 +132,7 @@ class SortMergeJoinEvaluatorFactory(
             bufferedIter = RowIterator.fromScala(rightIter),
             inMemoryThreshold,
             spillThreshold,
+            spillSizeThreshold,
             spillSize,
             cleanupResources)
           val rightNullRow = new GenericInternalRow(right.output.length)
@@ -149,6 +152,7 @@ class SortMergeJoinEvaluatorFactory(
             bufferedIter = RowIterator.fromScala(leftIter),
             inMemoryThreshold,
             spillThreshold,
+            spillSizeThreshold,
             spillSize,
             cleanupResources)
           val leftNullRow = new GenericInternalRow(left.output.length)
@@ -185,6 +189,7 @@ class SortMergeJoinEvaluatorFactory(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
+              spillSizeThreshold,
               spillSize,
               cleanupResources,
               onlyBufferFirstMatchedRow)
@@ -222,6 +227,7 @@ class SortMergeJoinEvaluatorFactory(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
+              spillSizeThreshold,
               spillSize,
               cleanupResources,
               onlyBufferFirstMatchedRow)
@@ -266,6 +272,7 @@ class SortMergeJoinEvaluatorFactory(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
+              spillSizeThreshold,
               spillSize,
               cleanupResources,
               onlyBufferFirstMatchedRow)
