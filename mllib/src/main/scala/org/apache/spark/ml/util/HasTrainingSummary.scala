@@ -53,11 +53,11 @@ private[spark] trait HasTrainingSummary[T] {
 
   private[spark] def loadSummary(path: String, dataset: DataFrame): Unit = {
     throw new SparkException(
-      s"No createSummary implementation for this ${this.getClass.getSimpleName}")
+      s"No loadSummary implementation for this ${this.getClass.getSimpleName}")
   }
 
   private[spark] def saveSummary(path: String): Unit = {
     throw new SparkException(
-      s"No createSummaryArgTypes implementation for this ${this.getClass.getSimpleName}")
+      s"No saveSummary implementation for this ${this.getClass.getSimpleName}")
   }
 }
