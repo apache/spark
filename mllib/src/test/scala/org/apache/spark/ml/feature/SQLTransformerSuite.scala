@@ -77,4 +77,87 @@ class SQLTransformerSuite extends MLTest with DefaultReadWriteTest {
     testTransformerByGlobalCheckFunc[Long](df, sqlTrans, "id1") { _ => }
     assert(df.storageLevel != StorageLevel.NONE)
   }
+
+  test("basic project") {
+    val df = Seq((0, 1.0, 3.0), (2, 2.0, 5.0)).toDF("id", "v1", "v2")
+    val sqlTrans = new SQLTransformer()
+      .setStatement("SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__")
+    val output = sqlTrans.transform(df)
+    assert(output.columns === Array("id", "v1", "v2", "v3", "v4"))
+    assert(output.count() === 2)
+  }
+
+  test("basic filter") {
+    val df = Seq((0, 1.0, 3.0), (2, 2.0, 5.0)).toDF("id", "v1", "v2")
+    val sqlTrans = new SQLTransformer()
+      .setStatement("SELECT * FROM __THIS__ WHERE id = 0")
+    val output = sqlTrans.transform(df)
+    assert(output.columns === Array("id", "v1", "v2"))
+    assert(output.count() === 1)
+  }
+
+  test("basic aggregate: without groupby") {
+    val df = Seq((0, 1.0, 3.0), (2, 2.0, 5.0)).toDF("id", "v1", "v2")
+    val sqlTrans = new SQLTransformer()
+      .setStatement("SELECT MAX(v1) AS m1, MIN(v2) AS m2 FROM __THIS__")
+    val output = sqlTrans.transform(df)
+    assert(output.columns === Array("m1", "m2"))
+    assert(output.count() === 1)
+  }
+
+  test("basic aggregate: with groupby") {
+    val df = Seq((0, 1.0, 3.0), (2, 2.0, 5.0)).toDF("id", "v1", "v2")
+    val sqlTrans = new SQLTransformer()
+      .setStatement("SELECT MAX(v1) AS m1, MIN(v2) AS m2 FROM __THIS__ GROUP BY id")
+    val output = sqlTrans.transform(df)
+    assert(output.columns === Array("m1", "m2"))
+    assert(output.count() === 2)
+  }
+
+  test("basic sort: without aggregate") {
+    val df = Seq((0, 1.0, 3.0), (2, 2.0, 5.0)).toDF("id", "v1", "v2")
+    val sqlTrans = new SQLTransformer()
+      .setStatement("SELECT * FROM __THIS__ ORDER BY id")
+    val output = sqlTrans.transform(df)
+    assert(output.columns === Array("id", "v1", "v2"))
+    assert(output.count() === 2)
+  }
+
+  test("basic sort: with aggregate") {
+    val df = Seq((0, 1.0, 3.0), (2, 2.0, 5.0)).toDF("id", "v1", "v2")
+    val sqlTrans = new SQLTransformer()
+      .setStatement("SELECT MAX(v1) AS m1, MIN(v2) AS m2  FROM __THIS__ GROUP BY id ORDER BY id")
+    val output = sqlTrans.transform(df)
+    assert(output.columns === Array("m1", "m2"))
+    assert(output.count() === 2)
+  }
+
+  test("basic scalar subquery") {
+    val df = Seq((0, 1.0, 3.0), (2, 2.0, 5.0)).toDF("id", "v1", "v2")
+    val sqlTrans = new SQLTransformer()
+      .setStatement("SELECT *, (SELECT MIN(v1) FROM __THIS__) AS m1 FROM __THIS__")
+    val output = sqlTrans.transform(df)
+    assert(output.columns === Array("id", "v1", "v2", "m1"))
+    assert(output.count() === 2)
+  }
+
+  test("fail drop table") {
+    val df = Seq((0, 1.0, 3.0), (2, 2.0, 5.0)).toDF("id", "v1", "v2")
+    val sqlTrans = new SQLTransformer()
+      .setStatement("DROP TABLE some_table")
+    val e = intercept[IllegalArgumentException] {
+      sqlTrans.transform(df)
+    }
+    assert(e.getMessage.contains("SQL expression must be a SELECT statement"))
+  }
+
+  test("fail insert into") {
+    val df = Seq((0, 1.0, 3.0), (2, 2.0, 5.0)).toDF("id", "v1", "v2")
+    val sqlTrans = new SQLTransformer()
+      .setStatement("INSERT INTO TABLE some_table SELECT id, val FROM __THIS__")
+    val e = intercept[IllegalArgumentException] {
+      sqlTrans.transform(df)
+    }
+    assert(e.getMessage.contains("SQL expression must be a SELECT statement"))
+  }
 }
