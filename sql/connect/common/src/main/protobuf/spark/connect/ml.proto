@@ -107,7 +107,7 @@ message MlCommand {
   // (model summary is lost when the model is offloaded and then loaded back)
   message CreateSummary {
     ObjectRef model_ref = 1;
-    Relation predictions = 2;
+    Relation dataset = 2;
   }
 }
 

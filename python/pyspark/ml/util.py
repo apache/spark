@@ -344,7 +344,7 @@ def try_remote_call(f: FuncT) -> FuncT:
                     create_summary_command.ml_command.create_summary.CopyFrom(
                         pb2.MlCommand.CreateSummary(
                             model_ref=pb2.ObjectRef(id=self._model_ref_id),
-                            predictions=self._summary_dataset._plan.plan(session.client),
+                            dataset=self._summary_dataset._plan.plan(session.client),
                         )
                     )
                     session.client.execute_command(create_summary_command)

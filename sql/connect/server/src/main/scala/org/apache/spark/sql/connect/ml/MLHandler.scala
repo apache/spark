@@ -416,10 +416,10 @@ private[connect] object MLHandler extends Logging {
   ): proto.MlCommandResult = {
     val refId = createSummaryCmd.getModelRef.getId
     val model = sessionHolder.mlCache.get(refId).asInstanceOf[HasTrainingSummary[_]]
-    val predictions = MLUtils.parseRelationProto(createSummaryCmd.getPredictions, sessionHolder)
+    val dataset = MLUtils.parseRelationProto(createSummaryCmd.getDataset, sessionHolder)
     val modelPath = sessionHolder.mlCache.getModelOffloadingPath(refId)
     val summaryPath = modelPath.resolve("summary").toString
-    model.loadSummary(summaryPath, predictions)
+    model.loadSummary(summaryPath, dataset)
     proto.MlCommandResult
       .newBuilder()
       .setParam(LiteralValueProtoConverter.toLiteralProto(true))

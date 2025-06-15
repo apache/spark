@@ -368,28 +368,24 @@ class MlCommand(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         MODEL_REF_FIELD_NUMBER: builtins.int
-        PREDICTIONS_FIELD_NUMBER: builtins.int
+        DATASET_FIELD_NUMBER: builtins.int
         @property
         def model_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef: ...
         @property
-        def predictions(self) -> pyspark.sql.connect.proto.relations_pb2.Relation: ...
+        def dataset(self) -> pyspark.sql.connect.proto.relations_pb2.Relation: ...
         def __init__(
             self,
             *,
             model_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
-            predictions: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+            dataset: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         ) -> None: ...
         def HasField(
             self,
-            field_name: typing_extensions.Literal[
-                "model_ref", b"model_ref", "predictions", b"predictions"
-            ],
+            field_name: typing_extensions.Literal["dataset", b"dataset", "model_ref", b"model_ref"],
         ) -> builtins.bool: ...
         def ClearField(
             self,
-            field_name: typing_extensions.Literal[
-                "model_ref", b"model_ref", "predictions", b"predictions"
-            ],
+            field_name: typing_extensions.Literal["dataset", b"dataset", "model_ref", b"model_ref"],
         ) -> None: ...
 
     FIT_FIELD_NUMBER: builtins.int
