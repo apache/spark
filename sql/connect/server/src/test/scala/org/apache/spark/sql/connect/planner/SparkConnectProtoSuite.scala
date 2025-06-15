@@ -822,10 +822,9 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         .asTableCatalog
         .loadTable(Identifier.of(Array(), "table_name"))
       assert(table.name === "testcat.table_name")
-      assert(table.columns sameElements
-        Array(
-          ColumnV2.create("id", LongType),
-          ColumnV2.create("data", StringType)))
+      assert(
+        table.columns sameElements
+          Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
       assert(table.partitioning.isEmpty)
       assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
     }
