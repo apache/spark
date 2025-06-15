@@ -28,8 +28,9 @@ object HiveDateTimeUtils {
   private val zoneId = ZoneId.systemDefault()
 
   private def toSqlTimestamp(t: HiveTimestamp): SqlTimestamp = {
-    val ts = new SqlTimestamp(t.toEpochMilli(zoneId))
-    ts.setNanos (t.getNanos)
+    val millis = t.toEpochMilli(zoneId)
+    val ts = new SqlTimestamp(millis)
+    ts.setNanos(t.getNanos)
     ts
   }
 
@@ -43,7 +44,7 @@ object HiveDateTimeUtils {
 
   def toHiveTimestamp(t: Long): HiveTimestamp = {
     val javaTimestamp = DateTimeUtils.toJavaTimestamp(t)
-    val hiveTimestamp = HiveTimestamp.ofEpochMilli(javaTimestamp.getTime, zoneId)
+    val hiveTimestamp = new HiveTimestamp(javaTimestamp.toLocalDateTime)
     hiveTimestamp.setNanos(javaTimestamp.getNanos)
     hiveTimestamp
   }

@@ -216,7 +216,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
       }
 
-      val hiveMetastoreVersion = """^\d+\.\d+""".r.findFirstIn(hiveVersion).get
+      val hiveMetastoreVersion = "2.3"
       val args = Seq(
         "--name", "prepare testing tables",
         "--master", "local[2]",

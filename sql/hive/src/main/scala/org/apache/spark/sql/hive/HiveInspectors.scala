@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
+import org.apache.spark.sql.execution.datasources.DaysWritableV2
 import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -634,7 +635,7 @@ private[hive] trait HiveInspectors {
         case x: DateObjectInspector if x.preferWritable() =>
           data: Any => {
             if (data != null) {
-              HiveDateTimeUtils.fromHiveDate(x.getPrimitiveWritableObject(data).get())
+              new DaysWritableV2(x.getPrimitiveWritableObject(data)).getGregorianDays
             } else {
               null
             }
@@ -1099,7 +1100,7 @@ private[hive] trait HiveInspectors {
     if (value == null) {
       null
     } else {
-      new hiveIo.DateWritableV2(HiveDateTimeUtils.toHiveDate(value.asInstanceOf[Int]))
+      new DaysWritableV2(value.asInstanceOf[Int])
     }
 
   private def getTimestampWritableV2(value: Any): hiveIo.TimestampWritableV2 =

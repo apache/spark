@@ -291,6 +291,7 @@ private[orc] class OrcOutputWriter(
   }
 
   override def write(row: InternalRow): Unit = {
+    // getOrCreateInternalWriter()
     recordWriter.write(NullWritable.get(), serializer.serialize(row))
   }
 
