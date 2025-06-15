@@ -58,8 +58,11 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   checkDataType("deC", DecimalType.USER_DEFAULT)
   checkDataType("DATE", DateType)
   checkDataType("TimE", TimeType())
+  checkDataType("TimE WiTHOUT TiME ZoNE", TimeType())
   checkDataType("time(0)", TimeType(0))
+  checkDataType("time(0) without time zone", TimeType(0))
   checkDataType("TIME(6)", TimeType(6))
+  checkDataType("TIME(6) WITHOUT TIME ZONE", TimeType(6))
   checkDataType("timestamp", TimestampType)
   checkDataType("timestamp_ntz", TimestampNTZType)
   checkDataType("timestamp_ltz", TimestampType)
@@ -184,10 +187,37 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
       condition = "UNSUPPORTED_TIME_PRECISION",
       parameters = Map("precision" -> "9"))
     checkError(
+      exception = intercept[SparkException] {
+        CatalystSqlParser.parseDataType("time(8) without time zone")
+      },
+      condition = "UNSUPPORTED_TIME_PRECISION",
+      parameters = Map("precision" -> "8"))
+    checkError(
       exception = intercept[ParseException] {
         CatalystSqlParser.parseDataType("time(-1)")
       },
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'('", "hint" -> ""))
+    checkError(
+      exception = intercept[ParseException] {
+        CatalystSqlParser.parseDataType("time(-100) WITHOUT TIME ZONE")
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'('", "hint" -> ""))
+  }
+
+  test("invalid TIME suffix") {
+    checkError(
+      exception = intercept[ParseException] {
+        CatalystSqlParser.parseDataType("time(0) WITHOUT TIMEZONE")
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'WITHOUT'", "hint" -> ""))
+    checkError(
+      exception = intercept[ParseException] {
+        CatalystSqlParser.parseDataType("time(0) WITH TIME ZONE")
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'WITH'", "hint" -> ""))
   }
 }

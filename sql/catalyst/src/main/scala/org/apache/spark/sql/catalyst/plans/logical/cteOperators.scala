@@ -68,8 +68,8 @@ case class UnionLoop(
  * @param loopId The id of the loop, inherited from [[CTERelationRef]] which got resolved into this
  *               UnionLoopRef.
  * @param output The output attributes of this recursive reference.
- * @param accumulated If false the the reference stands for the result of the previous iteration.
- *                    If it is true then then it stands for the union of all previous iteration
+ * @param accumulated If false the reference stands for the result of the previous iteration.
+ *                    If it is true then it stands for the union of all previous iteration
  *                    results.
  */
 case class UnionLoopRef(

@@ -128,7 +128,6 @@ object PipelinesErrors extends Logging {
       val actionFromError = GraphExecution.determineFlowExecutionActionFromError(
         ex = ex,
         flowDisplayName = flow.displayName,
-        pipelineConf = env.pipelineConf,
         currentNumTries = prevFailureCount + 1,
         maxAllowedRetries = maxRetries
       )

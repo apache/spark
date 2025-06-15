@@ -135,7 +135,8 @@ case class UnionLoopExec(
         // reference any external tables, we are able to calculate everything in the optimizer,
         // using the ConvertToLocalRelation rule, which significantly improves runtime.
         if (count <= localRelationLimit) {
-          val local = LocalRelation.fromExternalRows(anchor.output, df.collect().toIndexedSeq)
+          val local = LocalRelation.fromExternalRows(df.logicalPlan.output,
+            df.collect().toIndexedSeq)
          (Dataset.ofRows(session, local), count)
         } else {
           (materializedDF, count)
@@ -210,7 +211,7 @@ case class UnionLoopExec(
             // SQLConf.CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION is set to be
             // anything larger than 0. However, we still handle this case in a special way to
             // optimize the case when the flag is set to 0.
-            case p @ Project(projectList, _: OneRowRelation) =>
+            case p @ Project(projectList, _: OneRowRelation) if p.subqueries.isEmpty =>
               prevPlan = p
               val prevPlanToRefMapping = projectList.zip(r.output).map {
                 case (fa: Alias, ta) => fa.withExprId(ta.exprId).withName(ta.name)

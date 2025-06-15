@@ -1343,6 +1343,8 @@ dataType
     | INTERVAL from=(YEAR | MONTH) (TO to=MONTH)?               #yearMonthIntervalDataType
     | INTERVAL from=(DAY | HOUR | MINUTE | SECOND)
       (TO to=(HOUR | MINUTE | SECOND))?                         #dayTimeIntervalDataType
+    | TIME (LEFT_PAREN precision=INTEGER_VALUE RIGHT_PAREN)?
+      (WITHOUT TIME ZONE)?                                      #timeDataType
     | type (LEFT_PAREN INTEGER_VALUE
       (COMMA INTEGER_VALUE)* RIGHT_PAREN)?                      #primitiveDataType
     ;
@@ -2013,6 +2015,7 @@ ansiNonReserved
     | WEEKS
     | WHILE
     | WINDOW
+    | WITHOUT
     | YEAR
     | YEARS
     | ZONE
@@ -2423,6 +2426,7 @@ nonReserved
     | WINDOW
     | WITH
     | WITHIN
+    | WITHOUT
     | YEAR
     | YEARS
     | ZONE
