@@ -921,6 +921,12 @@
     },
     "sqlState" : "21S01"
   },
+  "DATATYPE_CANNOT_ORDER" : {
+    "message" : [
+      "Type <dataType> does not support ordered operations."
+    ],
+    "sqlState" : "0A000"
+  },
   "DATAFLOW_GRAPH_NOT_FOUND" : {
     "message" : [
       "Dataflow graph with id <graphId> could not be found"
@@ -7862,11 +7868,6 @@
   "_LEGACY_ERROR_TEMP_2003" : {
     "message" : [
       "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2005" : {
-    "message" : [
-      "Type <dataType> does not support ordered operations."
     ]
   },
   "_LEGACY_ERROR_TEMP_2017" : {
