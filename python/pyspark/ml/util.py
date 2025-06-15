@@ -213,7 +213,7 @@ def try_remote_fit(f: FuncT) -> FuncT:
             if isinstance(model, HasTrainingSummary):
                 predictions = model.transform(dataset)
 
-                summary = model._summaryCls()(f"{str(model._java_obj)}.summary")
+                summary = model._summaryCls(f"{str(model._java_obj)}.summary")
                 summary._predictions = predictions
                 summary._model_ref_id = str(model._java_obj)
                 summary.__source_transformer__ = model  # type: ignore[attr-defined]
@@ -1129,8 +1129,9 @@ class HasTrainingSummary(Generic[T]):
                 raise RuntimeError(
                     "No training summary available for this %s" % self.__class__.__name__
                 )
-        return self._summaryCls()(cast("JavaWrapper", self)._call_java("summary"))
+        return self._summaryCls(cast("JavaWrapper", self)._call_java("summary"))
 
+    @property
     def _summaryCls(self):
         raise NotImplementedError()
 

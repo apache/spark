@@ -83,5 +83,6 @@ class AttributeRelation(LogicalPlan):
         plan = self._create_proto_relation()
         plan.ml_relation.fetch.obj_ref.CopyFrom(pb2.ObjectRef(id=self._ref_id))
         plan.ml_relation.fetch.methods.extend(self._methods)
-        plan.ml_relation.model_summary_predictions.CopyFrom(self._child.plan(session))
+        if self._child is not None:
+            plan.ml_relation.model_summary_predictions.CopyFrom(self._child.plan(session))
         return plan
