@@ -65,6 +65,13 @@ object ApplyCharTypePaddingHelper {
     }
   }
 
+  private[sql] def isReadSidePadding(p: Project): Boolean = {
+    p.projectList.exists {
+      case Alias(e, _) => CharVarcharUtils.containsPaddingForScan(e)
+      case _ => false
+    }
+  }
+
   private[sql] def paddingForStringComparison(
       plan: LogicalPlan,
       padCharCol: Boolean): LogicalPlan = {
