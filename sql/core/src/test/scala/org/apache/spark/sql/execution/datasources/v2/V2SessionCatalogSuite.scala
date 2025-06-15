@@ -288,7 +288,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val loaded = catalog.loadTable(testIdent)
 
     assert(table.name == loaded.name)
-    assert(table.schema == loaded.schema)
+    assert(table.columns sameElements loaded.columns())
     assert(table.properties == loaded.properties)
   }
 
@@ -490,8 +490,10 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     catalog.alterTable(testIdent, TableChange.updateColumnType(Array("id"), LongType))
     val updated = catalog.loadTable(testIdent)
 
-    val expectedSchema = new StructType().add("id", LongType).add("data", StringType)
-    assert(updated.schema == expectedSchema)
+    val expectedColumns = Array(
+      Column.create("id", LongType),
+      Column.create("data", StringType))
+    assert(updated.columns sameElements expectedColumns)
   }
 
   test("alterTable: update column nullability") {
@@ -509,7 +511,6 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       TableChange.updateColumnNullability(Array("id"), true))
     val updated = catalog.loadTable(testIdent)
 
-    val expectedSchema = new StructType().add("id", IntegerType).add("data", StringType)
     val expectedColumns: Array[Column] = Array(
       Column.create("id", IntegerType),
       Column.create("data", StringType)
@@ -546,10 +547,10 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       TableChange.updateColumnComment(Array("id"), "comment text"))
     val updated = catalog.loadTable(testIdent)
 
-    val expectedSchema = new StructType()
-        .add("id", IntegerType, nullable = true, "comment text")
-        .add("data", StringType)
-    assert(updated.schema == expectedSchema)
+    val expectedColumns = Array(
+      Column.create("id", IntegerType, true, "comment text", null),
+      Column.create("data", StringType))
+    assert(updated.columns sameElements expectedColumns)
   }
 
   test("alterTable: replace comment") {
@@ -562,15 +563,15 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     catalog.alterTable(testIdent, TableChange.updateColumnComment(Array("id"), "comment text"))
 
-    val expectedSchema = new StructType()
-        .add("id", IntegerType, nullable = true, "replacement comment")
-        .add("data", StringType)
+    val expectedColumns = Array(
+      Column.create("id", IntegerType, true, "replacement comment", null),
+      Column.create("data", StringType))
 
     catalog.alterTable(testIdent,
       TableChange.updateColumnComment(Array("id"), "replacement comment"))
     val updated = catalog.loadTable(testIdent)
 
-    assert(updated.schema == expectedSchema)
+    assert(updated.columns sameElements expectedColumns)
   }
 
   test("alterTable: add comment to missing column fails") {
