@@ -22,6 +22,7 @@ from argparse import ArgumentParser
 import os
 import re
 import sys
+import time
 import subprocess
 
 from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
@@ -146,7 +147,7 @@ def exec_maven(mvn_args=()):
     run_cmd(flags + mvn_args)
 
 
-def exec_sbt(sbt_args=()):
+def exec_sbt(sbt_args=(), retry=1):
     """Will call SBT in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
@@ -156,17 +157,39 @@ def exec_sbt(sbt_args=()):
         b"^.*[info].*Resolving" + b"|" + b"^.*[warn].*Merging" + b"|" + b"^.*[info].*Including"
     )
 
-    # NOTE: echo "q" is needed because sbt on encountering a build file
-    # with failure (either resolution or compilation) prompts the user for
-    # input either q, r, etc to quit or retry. This echo is there to make it
-    # not block.
-    echo_proc = subprocess.Popen(["echo", '"q\n"'], stdout=subprocess.PIPE)
-    sbt_proc = subprocess.Popen(sbt_cmd, stdin=echo_proc.stdout, stdout=subprocess.PIPE)
-    echo_proc.wait()
-    for line in iter(sbt_proc.stdout.readline, b""):
-        if not sbt_output_filter.match(line):
-            print(line.decode("utf-8"), end="")
-    retcode = sbt_proc.wait()
+    attempts = 0
+    while attempts < retry:
+        attempts += 1
+
+        # NOTE: echo "q" is needed because sbt on encountering a build file
+        # with failure (either resolution or compilation) prompts the user for
+        # input either q, r, etc to quit or retry. This echo is there to make it
+        # not block.
+        echo_proc = subprocess.Popen(["echo", '"q\n"'], stdout=subprocess.PIPE)
+        sbt_proc = subprocess.Popen(sbt_cmd, stdin=echo_proc.stdout, stdout=subprocess.PIPE)
+        echo_proc.wait()
+        for line in iter(sbt_proc.stdout.readline, b""):
+            if not sbt_output_filter.match(line):
+                print(line.decode("utf-8"), end="")
+        retcode = sbt_proc.wait()
+
+        if retcode == 0:
+            # successfully executed the command
+            return
+        elif attempts < retry:
+            # Will retry the command.
+            if retcode < 0:
+                print(
+                    "[error] running",
+                    " ".join(sbt_cmd),
+                    "; process was terminated by signal",
+                    -retcode,
+                )
+            else:
+                print("[error] running", " ".join(sbt_cmd), "; received return code", retcode)
+
+            time.sleep(10)
+            print("[info] Retrying command", sbt_cmd, "; attempt ", attempts + 1, " of ", retry)
 
     if retcode != 0:
         exit_from_command_with_retcode(sbt_cmd, retcode)
@@ -255,7 +278,7 @@ def build_spark_sbt(extra_profiles):
 
     print("[info] Building Spark using SBT with these arguments: ", " ".join(profiles_and_goals))
 
-    exec_sbt(profiles_and_goals)
+    exec_sbt(profiles_and_goals, retry=3)
 
 
 def build_spark_unidoc_sbt(extra_profiles):
