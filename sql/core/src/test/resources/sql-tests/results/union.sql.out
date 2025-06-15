@@ -16,6 +16,30 @@ struct<>
 
 
 -- !query
+CREATE TABLE parquetTable (col1 INT, col2 INT, col3 INT, col4 INT) USING parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE csvTable (col1 INT, col2 INT, col3 INT, col4 INT) USING csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE jsonTable (col1 INT, col2 INT, col3 INT, col4 INT) USING json
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT *
 FROM   (SELECT * FROM t1
         UNION ALL
@@ -201,6 +225,42 @@ struct<sum(v):decimal(21,0)>
 
 
 -- !query
+SELECT col1, col2, col3, NULLIF('','') AS col4
+FROM parquetTable
+UNION ALL
+SELECT col2, col2, null AS col3, col4
+FROM parquetTable
+-- !query schema
+struct<col1:int,col2:int,col3:int,col4:bigint>
+-- !query output
+
+
+
+-- !query
+SELECT col1, col2, col3, NULLIF('','') AS col4
+FROM csvTable
+UNION ALL
+SELECT col2, col2, null AS col3, col4
+FROM csvTable
+-- !query schema
+struct<col1:int,col2:int,col3:int,col4:bigint>
+-- !query output
+
+
+
+-- !query
+SELECT col1, col2, col3, NULLIF('','') AS col4
+FROM jsonTable
+UNION ALL
+SELECT col2, col2, null AS col3, col4
+FROM jsonTable
+-- !query schema
+struct<col1:int,col2:int,col3:int,col4:bigint>
+-- !query output
+
+
+
+-- !query
 DROP VIEW IF EXISTS t1
 -- !query schema
 struct<>
@@ -242,6 +302,30 @@ struct<>
 
 -- !query
 DROP VIEW IF EXISTS p3
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS parquetTable
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS csvTable
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS jsonTable
 -- !query schema
 struct<>
 -- !query output
