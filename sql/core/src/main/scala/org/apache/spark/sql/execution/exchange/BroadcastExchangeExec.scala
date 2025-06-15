@@ -108,7 +108,7 @@ trait BroadcastExchangeLike extends Exchange {
         case Some(r) => sparkContext.cancelJobsWithTag(this.jobTag, r)
         case None => sparkContext.cancelJobsWithTag(this.jobTag)
       }
-      this.relationFuture.cancel(true)
+      this.relationFuture.cancel(false)
     }
   }
 
@@ -257,7 +257,7 @@ case class BroadcastExchangeExec(
         logError(log"Could not execute broadcast in ${MDC(TIMEOUT, timeout)} secs.", ex)
         if (!relationFuture.isDone) {
           sparkContext.cancelJobsWithTag(jobTag, "The corresponding broadcast query has failed.")
-          relationFuture.cancel(true)
+          relationFuture.cancel(false)
         }
         throw QueryExecutionErrors.executeBroadcastTimeoutError(timeout, Some(ex))
     }
