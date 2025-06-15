@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.FormattedMode
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
+import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, bit_and, bit_or, bit_xor, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
@@ -1315,6 +1315,17 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedInfo(df17,
       "PushedFilters: [DEPT IS NOT NULL, BONUS IS NOT NULL, SALARY IS NOT NULL]")
     checkAnswer(df17, Seq(Row(6, "jen", 12000, 1200, true)))
+
+    val df18 = sql(
+      """
+        |SELECT * FROM h2.test.employee
+        |WHERE bit_count(dept) > 0
+        |AND bit_get(dept, 2) = 1
+        |""".stripMargin)
+    checkFiltersRemoved(df18)
+    checkPushedInfo(df18,
+      "PushedFilters: [DEPT IS NOT NULL, BIT_COUNT(DEPT) > 0, (BIT_GET(DEPT, 2)) = 1]")
+    checkAnswer(df18, Seq(Row(6, "jen", 12000, 1200, true)))
   }
 
   test("SPARK-48943: arguments for asin and acos are invalid (< -1 || > 1) in H2") {
@@ -2844,6 +2855,18 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       Row("cathy", 9000.00, 9000.000000, 1),
       Row("david", 10000.00, 10000.000000, 1),
       Row("jen", 12000.00, 12000.000000, 1)))
+  }
+
+  test("scan with aggregate push-down: BIT_AND, BIT_OR and BIT_XOR") {
+    val df = spark.read
+      .table("h2.test.employee")
+      .agg(
+        bit_and($"DEPT").as("bit_and"),
+        bit_or($"DEPT").as("bit_or"),
+        bit_xor($"DEPT").as("bit_xor"))
+    checkAggregateRemoved(df)
+    checkPushedInfo(df, "PushedAggregates: [BIT_AND(DEPT), BIT_OR(DEPT), BIT_XOR(DEPT)]")
+    checkAnswer(df, Seq(Row(0, 7, 6)))
   }
 
   test("SPARK-37895: JDBC push down with delimited special identifiers") {
