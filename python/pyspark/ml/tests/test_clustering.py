@@ -85,33 +85,35 @@ class ClusteringTestsMixin:
 
         self.assertTrue(np.allclose(model.predict(Vectors.dense(0.0, 5.0)), 1, atol=1e-4))
 
-        # Model summary
-        self.assertTrue(model.hasSummary)
-        summary = model.summary
-        self.assertTrue(isinstance(summary, KMeansSummary))
-        self.assertEqual(summary.k, 2)
-        self.assertEqual(summary.numIter, 2)
-        self.assertEqual(summary.clusterSizes, [4, 2])
-        self.assertTrue(np.allclose(summary.trainingCost, 1.35710375, atol=1e-4))
+        def check_summary():
+            # Model summary
+            self.assertTrue(model.hasSummary)
+            summary = model.summary
+            self.assertTrue(isinstance(summary, KMeansSummary))
+            self.assertEqual(summary.k, 2)
+            self.assertEqual(summary.numIter, 2)
+            self.assertEqual(summary.clusterSizes, [4, 2])
+            self.assertTrue(np.allclose(summary.trainingCost, 1.35710375, atol=1e-4))
 
-        self.assertEqual(summary.featuresCol, "features")
-        self.assertEqual(summary.predictionCol, "prediction")
+            self.assertEqual(summary.featuresCol, "features")
+            self.assertEqual(summary.predictionCol, "prediction")
 
-        self.assertEqual(summary.cluster.columns, ["prediction"])
-        self.assertEqual(summary.cluster.count(), 6)
+            self.assertEqual(summary.cluster.columns, ["prediction"])
+            self.assertEqual(summary.cluster.count(), 6)
 
-        self.assertEqual(summary.predictions.columns, expected_cols)
-        self.assertEqual(summary.predictions.count(), 6)
+            self.assertEqual(summary.predictions.columns, expected_cols)
+            self.assertEqual(summary.predictions.count(), 6)
+
+        # check summary before model offloading occurs
+        check_summary()
 
         self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-        breakpoint()
-        self.assertEqual(model.summary.cluster.count(), 2)
-        breakpoint()
-        self.assertEqual(model.summary.numIter, 2)
-        try:
-            self.assertEqual(model.summary.numIter, 2)
-        except Exception as e:
-            raise RuntimeError(e.getErrorClass())
+        # check summary "try_remote_call" path after model offloading occurs
+        check_summary()
+
+        self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+        # check summary "invoke_remote_attribute_relation" path after model offloading occurs
+        self.assertEqual(model.summary.cluster.count(), 6)
 
         # save & load
         with tempfile.TemporaryDirectory(prefix="kmeans_model") as d:
@@ -122,6 +124,7 @@ class ClusteringTestsMixin:
             model.write().overwrite().save(d)
             model2 = KMeansModel.load(d)
             self.assertEqual(str(model), str(model2))
+            self.assertFalse(model2.hasSummary)
 
     def test_bisecting_kmeans(self):
         df = (
