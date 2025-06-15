@@ -54,11 +54,13 @@ class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
         CommandResult(
           Seq.empty,
           call,
+          call,
           LocalTableScanExec(Seq.empty, Seq.empty, None),
           Seq.empty)
       case Seq(relation: LocalRelation) =>
         CommandResult(
           relation.output,
+          call,
           call,
           LocalTableScanExec(relation.output, relation.data, None),
           relation.data)
