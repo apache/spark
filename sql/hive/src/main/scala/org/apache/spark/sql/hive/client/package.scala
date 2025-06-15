@@ -102,10 +102,10 @@ package object client {
         "org.apache.hive:hive-vector-code-gen"))
 
     case object v4_1 extends HiveVersion("4.1.0",
-      extraDeps = Seq("org.apache.hadoop:hadoop-hdfs:3.3.6",
-        "org.datanucleus:datanucleus-api-jdo:5.2.10",
-        "org.datanucleus:datanucleus-rdbms:5.2.10",
-        "org.datanucleus:datanucleus-core:5.2.10",
+      extraDeps = Seq("org.apache.hadoop:hadoop-hdfs:3.4.1",
+        "org.datanucleus:datanucleus-api-jdo:6.0.5",
+        "org.datanucleus:datanucleus-rdbms:6.0.10",
+        "org.datanucleus:datanucleus-core:6.0.11",
         "org.datanucleus:javax.jdo:3.2.0-release",
         "org.springframework:spring-core:5.3.21",
         "org.springframework:spring-jdbc:5.3.21",

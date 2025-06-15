@@ -196,7 +196,7 @@
     <commons-lang3.version>3.18.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.12.1</commons-pool2.version>
-    <datanucleus-core.version>5.2.10</datanucleus-core.version>
+    <datanucleus-core.version>6.0.11</datanucleus-core.version>
     <guava.version>33.4.0-jre</guava.version>
     <gson.version>2.11.0</gson.version>
     <janino.version>3.1.9</janino.version>
@@ -2544,7 +2544,7 @@
       <dependency>
         <groupId>org.datanucleus</groupId>
         <artifactId>datanucleus-api-jdo</artifactId>
-        <version>${datanucleus-core.version}</version>
+        <version>6.0.5</version>
       </dependency>
       <dependency>
         <groupId>org.apache.thrift</groupId>
