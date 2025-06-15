@@ -919,8 +919,14 @@ private[spark] class JsonProtocol(sparkConf: SparkConf) extends JsonUtils {
       case `stageExecutorMetrics` => stageExecutorMetricsFromJson(json)
       case `blockUpdate` => blockUpdateFromJson(json)
       case `resourceProfileAdded` => resourceProfileAddedFromJson(json)
-      case other => mapper.readValue(json.toString, Utils.classForName(other))
-        .asInstanceOf[SparkListenerEvent]
+      case other =>
+        val otherClass = Utils.classForName(other)
+        if (classOf[SparkListenerEvent].isAssignableFrom(otherClass)) {
+          mapper.readValue(json.toString, otherClass)
+            .asInstanceOf[SparkListenerEvent]
+        } else {
+          throw new SparkException(s"Unknown event type: $other")
+        }
     }
   }
 
