@@ -19,6 +19,9 @@
 package org.apache.spark.sql.execution.datasources;
 
 import java.io.IOException;
+import java.io.InputStream;
+
+import scala.Option;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -44,6 +47,7 @@ import org.apache.hadoop.mapreduce.lib.input.UncompressedSplitLineReader;
 import org.apache.hadoop.util.functional.FutureIO;
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.io.HadoopCodecStreams;
 
 import static org.apache.hadoop.fs.Options.OpenFileOptions.FS_OPTION_OPENFILE_SPLIT_END;
 import static org.apache.hadoop.fs.Options.OpenFileOptions.FS_OPTION_OPENFILE_SPLIT_START;
@@ -103,30 +107,50 @@ public class HadoopLineRecordReader extends RecordReader<LongWritable, Text> {
         fileIn = FutureIO.awaitFuture(builder.build());
 
         try {
-            CompressionCodec codec = new CompressionCodecFactory(job).getCodec(file);
-            if (null!=codec) {
+            Option<CompressionCodec> codecOpt = HadoopCodecStreams.getDecompressionCodec(job, file);
+            if (codecOpt.isDefined()) {
+                CompressionCodec codec = codecOpt.get();
                 isCompressedInput = true;
-                decompressor = CodecPool.getDecompressor(codec);
-                if (codec instanceof SplittableCompressionCodec) {
-                    final SplitCompressionInputStream cIn =
-                            ((SplittableCompressionCodec)codec).createInputStream(
-                                    fileIn, decompressor, start, end,
-                                    SplittableCompressionCodec.READ_MODE.BYBLOCK);
-                    in = new CompressedSplitLineReader(cIn, job,
-                            this.recordDelimiterBytes);
-                    start = cIn.getAdjustedStart();
-                    end = cIn.getAdjustedEnd();
-                    filePosition = cIn;
-                } else {
+                try {
+                    decompressor = CodecPool.getDecompressor(codec);
+                    if (codec instanceof SplittableCompressionCodec) {
+                        final SplitCompressionInputStream cIn =
+                                ((SplittableCompressionCodec) codec).createInputStream(
+                                        fileIn, decompressor, start, end,
+                                        SplittableCompressionCodec.READ_MODE.BYBLOCK);
+                        in = new CompressedSplitLineReader(cIn, job,
+                                this.recordDelimiterBytes);
+                        start = cIn.getAdjustedStart();
+                        end = cIn.getAdjustedEnd();
+                        filePosition = cIn;
+                    } else {
+                        if (start != 0) {
+                            // So we have a split that is only part of a file stored using
+                            // a Compression codec that cannot be split.
+                            throw new IOException("Cannot seek in " +
+                                    codec.getClass().getSimpleName() + " compressed stream");
+                        }
+
+                        in = new SplitLineReader(codec.createInputStream(fileIn,
+                                decompressor), job, this.recordDelimiterBytes);
+                        filePosition = fileIn;
+                    }
+                } catch (RuntimeException e) {
+                    // Try Spark's ZSTD decompression support
+                    Option<InputStream> decompressedStreamOpt =
+                            HadoopCodecStreams.createZstdInputStream(file, fileIn);
+                    if (decompressedStreamOpt.isEmpty()) {
+                        // File is either not ZSTD compressed or ZSTD codec is not available.
+                        throw e;
+                    }
+                    InputStream decompressedStream = decompressedStreamOpt.get();
                     if (start != 0) {
-                        // So we have a split that is only part of a file stored using
-                        // a Compression codec that cannot be split.
-                        throw new IOException("Cannot seek in " +
-                                codec.getClass().getSimpleName() + " compressed stream");
+                        decompressedStream.close();
+                        throw new IOException("Cannot seek in "+ file.getName() +" compressed stream");
                     }
 
-                    in = new SplitLineReader(codec.createInputStream(fileIn,
-                            decompressor), job, this.recordDelimiterBytes);
+                    isCompressedInput = true;
+                    in = new SplitLineReader(decompressedStream, job, this.recordDelimiterBytes);
                     filePosition = fileIn;
                 }
             } else {

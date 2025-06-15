@@ -33,7 +33,7 @@ object HadoopCodecStreams {
   val ZSTD_EXTENSIONS = Seq(".zstd", ".zst")
 
   // get codec based on file name extension
-  private[sql] def getDecompressionCodec(
+  def getDecompressionCodec(
     config: Configuration,
     file: Path): Option[CompressionCodec] = {
     val factory = new CompressionCodecFactory(config)
@@ -49,7 +49,7 @@ object HadoopCodecStreams {
     }
   }
 
-  private def createZstdInputStream(
+  def createZstdInputStream(
     file: Path,
     inputStream: InputStream): Option[InputStream] = {
     val fileName = file.getName.toLowerCase()
