@@ -27,6 +27,10 @@ private[spark] trait SparkEnvUtils {
     System.getenv("SPARK_TESTING") != null || System.getProperty("spark.testing") != null
   }
 
+  /**
+   * Whether allow using native BLAS/LAPACK/ARPACK libraries if available.
+   */
+  val allowNativeBlas = "true".equals(System.getProperty("netlib.allowNativeBlas", "true"))
 }
 
 object SparkEnvUtils extends SparkEnvUtils
