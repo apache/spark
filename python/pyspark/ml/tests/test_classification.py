@@ -443,15 +443,21 @@ class ClassificationTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
 
-        # model summary
-        self.assertTrue(model.hasSummary)
-        summary = model.summary()
-        self.assertIsInstance(summary, LinearSVCSummary)
-        self.assertIsInstance(summary, LinearSVCTrainingSummary)
-        self.assertEqual(summary.labels, [0.0, 1.0])
-        self.assertEqual(summary.accuracy, 0.5)
-        self.assertEqual(summary.areaUnderROC, 0.75)
-        self.assertEqual(summary.predictions.columns, expected_cols)
+        def check_summary():
+            # model summary
+            self.assertTrue(model.hasSummary)
+            summary = model.summary()
+            self.assertIsInstance(summary, LinearSVCSummary)
+            self.assertIsInstance(summary, LinearSVCTrainingSummary)
+            self.assertEqual(summary.labels, [0.0, 1.0])
+            self.assertEqual(summary.accuracy, 0.5)
+            self.assertEqual(summary.areaUnderROC, 0.75)
+            self.assertEqual(summary.predictions.columns, expected_cols)
+
+        check_summary()
+        if is_remote():
+            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+            check_summary()
 
         summary2 = model.evaluate(df)
         self.assertIsInstance(summary2, LinearSVCSummary)

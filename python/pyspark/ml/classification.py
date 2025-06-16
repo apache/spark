@@ -883,21 +883,12 @@ class LinearSVCModel(
         """
         return self._call_java("intercept")
 
-    @since("3.1.0")
-    def summary(self) -> "LinearSVCTrainingSummary":  # type: ignore[override]
-        """
-        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
-        trained on the training set. An exception is thrown if `trainingSummary is None`.
-        """
-        if self.hasSummary:
-            s = LinearSVCTrainingSummary(super(LinearSVCModel, self).summary)
-            if is_remote():
-                s.__source_transformer__ = self  # type: ignore[attr-defined]
-            return s
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
+    @property
+    def _summaryCls(self) -> type:
+        return LinearSVCTrainingSummary
+
+    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
+        return train_dataset
 
     def evaluate(self, dataset: DataFrame) -> "LinearSVCSummary":
         """
