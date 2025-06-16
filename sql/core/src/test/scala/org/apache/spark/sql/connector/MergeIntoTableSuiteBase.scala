@@ -1814,6 +1814,49 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("Emit numTargetRowsCopied metrics 2") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |{ "pk": 4, "salary": 400, "dep": "marketing" }
+          |{ "pk": 5, "salary": 500, "dep": "executive" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 2, 6, 10).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      val mergeExec = findMergeExec {
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED AND salary < 200 THEN
+           | UPDATE SET salary = 1000
+           |WHEN NOT MATCHED AND s.pk < 10 THEN
+           | INSERT (pk, salary, dep) VALUES (s.pk, -1, "dummy")
+           |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
+           | UPDATE SET salary = -1
+           |""".stripMargin
+      }
+
+      mergeExec.metrics.get("numTargetRowsCopied") match {
+        case Some(metric) => assert(metric.value == 3, "3 rows copied without updates")
+        case None => fail("numCopiedRows metric not found")
+      }
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 1000, "hr"), // updated
+          Row(2, 200, "software"),
+          Row(3, 300, "hr"),
+          Row(4, 400, "marketing"),
+          Row(5, -1, "executive"), // updated
+          Row(6, -1, "dummy"))) // inserted
+    }
+  }
+
   private def findMergeExec(query: String): MergeRowsExec = {
     val plan = executeAndKeepPlan {
       sql(query)

@@ -213,11 +213,11 @@ case class MergeRowsExec(
 
       if (isTargetRowPresent && isSourceRowPresent) {
         cardinalityValidator.validate(row)
-        applyInstructions(row, matchedInstructions)
+        applyInstructions(row, matchedInstructions, targetPresent = true)
       } else if (isSourceRowPresent) {
         applyInstructions(row, notMatchedInstructions)
       } else if (isTargetRowPresent) {
-        applyInstructions(row, notMatchedBySourceInstructions)
+        applyInstructions(row, notMatchedBySourceInstructions, targetPresent = true)
       } else {
         null
       }
@@ -225,12 +225,15 @@ case class MergeRowsExec(
 
     private def applyInstructions(
         row: InternalRow,
-        instructions: Seq[InstructionExec]): InternalRow = {
+        instructions: Seq[InstructionExec],
+        targetPresent: Boolean = false): InternalRow = {
 
       for (instruction <- instructions) {
         if (instruction.condition.eval(row)) {
           instruction match {
             case keep: KeepExec =>
+              // For GroupBased Merge, Spark inserts a keep predicate for join matches
+              // to retain the row if no other case matches
               if (keep.systemPredicate) {
                 longMetric("numTargetRowsCopied") += 1
               }
@@ -246,7 +249,9 @@ case class MergeRowsExec(
         }
       }
 
-      longMetric("numTargetRowsCopied") += 1
+      if (targetPresent) {
+        longMetric("numTargetRowsCopied") += 1
+      }
       null
     }
   }
