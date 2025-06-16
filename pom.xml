@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.12</artifactId>
-  <version>3.5.8-SNAPSHOT</version>
+  <version>3.5.8</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>https://spark.apache.org/</url>
@@ -2730,6 +2730,12 @@
         <artifactId>parquet-column</artifactId>
         <version>${parquet.version}</version>
         <scope>${parquet.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.parquet</groupId>
@@ -2751,6 +2757,12 @@
         <version>${parquet.version}</version>
         <scope>${parquet.test.deps.scope}</scope>
         <classifier>tests</classifier>
+        <exclusions>
+          <exclusion>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.parquet</groupId>
