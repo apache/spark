@@ -19,7 +19,7 @@ from typing import List
 
 from pyspark.sql import DataFrame as SparkDataFrame, functions as F, SparkSession
 from pyspark.sql.window import Window
-from pyspark.pandas.utils import verify_temp_column_name, is_ansi_mode_enabled
+from pyspark.pandas.utils import verify_temp_column_name, is_ansi_mode_enabled, default_session
 
 
 CORRELATION_VALUE_1_COLUMN = "__correlation_value_1_input__"
@@ -60,6 +60,7 @@ def compute(sdf: SparkDataFrame, groupKeys: List[str], method: str) -> SparkData
             .alias(CORRELATION_VALUE_2_COLUMN),
         ],
     )
+    spark_session = default_session()
 
     if method in ["pearson", "spearman"]:
         # convert values to avg ranks for spearman correlation
@@ -125,7 +126,6 @@ def compute(sdf: SparkDataFrame, groupKeys: List[str], method: str) -> SparkData
                 )
             )
 
-        spark_session = SparkSession.getActiveSession()
         if is_ansi_mode_enabled(spark_session):
             corr_expr = F.try_divide(
                 F.covar_samp(CORRELATION_VALUE_1_COLUMN, CORRELATION_VALUE_2_COLUMN),
@@ -224,7 +224,6 @@ def compute(sdf: SparkDataFrame, groupKeys: List[str], method: str) -> SparkData
             F.col(CORRELATION_VALUE_2_COLUMN) == F.col(CORRELATION_VALUE_Y_COLUMN)
         )
 
-        spark_session = SparkSession.getActiveSession()
         if is_ansi_mode_enabled(spark_session):
             corr_expr = F.try_divide(
                 F.col(CORRELATION_KENDALL_P_COLUMN) - F.col(CORRELATION_KENDALL_Q_COLUMN),
