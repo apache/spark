@@ -1269,7 +1269,7 @@ final class ShuffleBlockFetcherIterator(
     if (fastFailOnFetchFailureEnabled) {
       results.putFirst(result)
     } else {
-      results.put(result)
+      results.putLast(result)
     }
   }
 
