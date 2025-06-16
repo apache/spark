@@ -31,8 +31,9 @@ import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 
-@Disabled
-public class TestSparkBloomFilter {
+@Tag("BloomFilter")
+@Tag("org.apache.spark.tags.SlowTest")
+public class SparkBloomFilterSuite {
 
     // the implemented fpp limit is only approximating the hard boundary,
     // so we'll need an error threshold for the assertion
@@ -66,8 +67,13 @@ public class TestSparkBloomFilter {
 
         String testName = testInfo.getDisplayName();
 
-        Path testLogPath = Path.of(testName + ".log");
+        String testClassName = getClass().getName();
+        String logDir = System.getProperty(testClassName+ ".logDir", "./target/tmp");
+        Path logDirPath = Path.of(logDir);
+        Files.createDirectories(logDirPath);
+        Path testLogPath = Path.of(logDir,testName + ".log");
         Files.deleteIfExists(testLogPath);
+
         PrintStream testOut = new PrintStream(Files.newOutputStream(testLogPath));
         testOutMap.put(testName, testOut);
 
