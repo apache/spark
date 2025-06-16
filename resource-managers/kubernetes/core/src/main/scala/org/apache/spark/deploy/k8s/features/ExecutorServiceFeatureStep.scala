@@ -22,18 +22,29 @@ import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, ServiceBu
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, SparkPod}
-import org.apache.spark.internal.config.SHUFFLE_SERVICE_PORT
+import org.apache.spark.internal.config.{BLOCK_MANAGER_PORT, SHUFFLE_SERVICE_PORT}
 
 class ExecutorServiceFeatureStep(conf: KubernetesExecutorConf) extends KubernetesFeatureConfigStep {
   private val spark_app_selector_label = "spark-app-selector"
   private val spark_exec_id_label = "spark-exec-id"
   private val service_selector_labels = Set(spark_app_selector_label, spark_exec_id_label)
+  private lazy val selector = conf.labels
+    .filter { case (key, _) => service_selector_labels.contains(key) }
 
   private lazy val sparkAppSelector = getLabel(spark_app_selector_label)
   private lazy val sparkExecId = getLabel(spark_exec_id_label)
   // name length is 8 + 38 + 6 + 10 = 62
   // which fits in KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH = 63
   private lazy val serviceName = s"svc-$sparkAppSelector-exec-$sparkExecId"
+
+  // The executor kubernetes services requires BLOCK_MANAGER_PORT to be set
+  private val blockManagerPortName = "spark-block-manager"
+  private val blockManagerPort = conf.sparkConf.get(BLOCK_MANAGER_PORT)
+  SparkException.require(blockManagerPort > 0,
+    "EXECUTOR_KUBERNETES_SERVICE_REQUIRES_BLOCK_MANAGER_PORT",
+    Map(
+      "blockManagerPortConfigKey" -> BLOCK_MANAGER_PORT.key,
+      "defaultShuffleServicePort" -> SHUFFLE_SERVICE_PORT.defaultValue.get.toString));
 
   private def getLabel(label: String): String = {
     val value = conf.labels.get(label)
@@ -55,13 +66,6 @@ class ExecutorServiceFeatureStep(conf: KubernetesExecutorConf) extends Kubernete
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-    val selector = conf.labels
-      .filter { case (key, _) => service_selector_labels.contains(key) }
-
-    // kubernetes executor service provides access to the executor's shuffle service
-    val portName = "spark-shuffle-service"
-    val port = conf.sparkConf.get(SHUFFLE_SERVICE_PORT)
-
     val service = new ServiceBuilder()
       .withNewMetadata()
       .withName(serviceName)
@@ -69,9 +73,9 @@ class ExecutorServiceFeatureStep(conf: KubernetesExecutorConf) extends Kubernete
       .withNewSpec()
       .withSelector(selector.asJava)
       .addNewPort()
-      .withName(portName)
-      .withPort(port)
-      .withNewTargetPort(port)
+      .withName(blockManagerPortName)
+      .withPort(blockManagerPort)
+      .withNewTargetPort(blockManagerPort)
       .endPort()
       .endSpec()
       .build()
