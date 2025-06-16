@@ -473,7 +473,8 @@ private[spark] object Config extends Logging {
         "executor fails after a 'connection timeout', which is set via NETWORK_TIMEOUT and " +
         "defaults to 2 minutes. Connecting to the executor via a Kubernetes service instantly " +
         "fails with 'connection refused' error. " +
-        "The kubernetes service provides access to the executors shuffle service.")
+        "The executor kubernetes service provides access to the executor's block manager, so " +
+        "BLOCK_MANAGER_PORT has to be given a value greater than zero.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
