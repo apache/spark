@@ -4,6 +4,7 @@
 - [SPARK-49259][SS] Size based partition creation during kafka read
 - [WIP][SPARK-24815][CORE] Trigger Interval based DRA for Structured Streaming
 - [SPARK-43980][SQL] introducing select * except syntax
+- [SPARK-44778][SQL] Add the alias TIMEDIFF for TIMESTAMPDIFF
 
 # From 3.5.x
 
