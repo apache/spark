@@ -1804,7 +1804,7 @@ package object config {
     ConfigBuilder("spark.shuffle.fastFailOnFetchFailure")
       .doc("If enabled, FailureFetchResult will be added to the head of the result queue in " +
         "ShuffleBlockFetcherIterator and fail the task as soon as the failure result is " +
-        "consumed. Otherwise, will have to process all the successfully fetched blocks in " +
+        "consumed. Otherwise, the iterator must first process all the successfully fetched blocks that are ahead in the queue before failing the task " +
         "front of the result queue and then fail the task.")
       .version("4.1.0")
       .booleanConf
