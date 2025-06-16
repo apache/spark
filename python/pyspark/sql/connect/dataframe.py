@@ -1853,6 +1853,7 @@ class DataFrame(ParentDataFrame):
                 return CPickleSerializer().loads(self._cached_schema_serialized)
             except Exception as e:
                 logger.warn(f"DataFrame schema pickle loads failed with exception: {e}.")
+        # In case of pickle ser/de failure, fallback to deepcopy approach.
         return copy.deepcopy(self._schema)
 
     @functools.cache
