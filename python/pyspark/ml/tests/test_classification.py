@@ -998,7 +998,7 @@ class ClassificationTestsMixin:
         def check_summary():
             # model summary
             self.assertTrue(model.hasSummary)
-            summary = model.summary()
+            summary = model.summary
             self.assertIsInstance(summary, MultilayerPerceptronClassificationSummary)
             self.assertIsInstance(summary, MultilayerPerceptronClassificationTrainingSummary)
             self.assertEqual(summary.labels, [0.0, 1.0])
