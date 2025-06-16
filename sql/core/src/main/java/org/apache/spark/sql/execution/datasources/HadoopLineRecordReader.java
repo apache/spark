@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -34,7 +33,6 @@ import org.apache.hadoop.io.compress.CodecPool;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.SplitCompressionInputStream;
 import org.apache.hadoop.io.compress.SplittableCompressionCodec;
-import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.io.compress.Decompressor;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.MRJobConfig;
@@ -63,7 +61,8 @@ import static org.apache.hadoop.fs.Options.OpenFileOptions.FS_OPTION_OPENFILE_SP
 public class HadoopLineRecordReader extends RecordReader<LongWritable, Text> {
     public static final String MAX_LINE_LENGTH =
             "mapreduce.input.linerecordreader.line.maxlength";
-    private static final SparkLogger LOG = SparkLoggerFactory.getLogger(HadoopLineRecordReader.class);
+    private static final SparkLogger LOG =
+            SparkLoggerFactory.getLogger(HadoopLineRecordReader.class);
 
     private long start;
     private long pos;
@@ -146,7 +145,8 @@ public class HadoopLineRecordReader extends RecordReader<LongWritable, Text> {
                     InputStream decompressedStream = decompressedStreamOpt.get();
                     if (start != 0) {
                         decompressedStream.close();
-                        throw new IOException("Cannot seek in "+ file.getName() +" compressed stream");
+                        throw new IOException("Cannot seek in "+ file.getName() +
+                                " compressed stream");
                     }
 
                     isCompressedInput = true;

@@ -74,7 +74,7 @@ object HadoopCodecStreams {
         try {
           codec.createInputStream(inputStream)
         } catch {
-          case e: RuntimeException =>
+          case e: Exception =>
             createZstdInputStream(file, inputStream).getOrElse(throw e)
         }
       }.getOrElse(inputStream)
