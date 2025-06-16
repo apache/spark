@@ -61,7 +61,7 @@ trait CachedBatchSerializer extends Serializable {
   def supportsColumnarInput(schema: Seq[Attribute]): Boolean
 
   /**
-   * Attempt to convert a query plan to its columnar equivalence for more efficient caching.
+   * Attempt to convert a query plan to its columnar equivalence for columnar caching.
    * Called on the query plan that is about to be cached once [[supportsColumnarInput]] returns
    * true on its output schema.
    *
