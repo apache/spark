@@ -5,6 +5,7 @@
 - [WIP][SPARK-24815][CORE] Trigger Interval based DRA for Structured Streaming
 - [SPARK-43980][SQL] introducing select * except syntax
 - [SPARK-44778][SQL] Add the alias TIMEDIFF for TIMESTAMPDIFF
+- [WIP][SPARK-31561][SQL] Add QUALIFY clause
 
 # From 3.5.x
 
