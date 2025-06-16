@@ -72,7 +72,7 @@ trait CachedBatchSerializer extends Serializable {
    * @return The output plan. Could either be a columnar plan if the input plan is convertible, or
    *         the input plan unchanged if no viable conversion can be done.
    */
-  @Since("4.0.1")
+  @Since("4.1.0")
   def convertToColumnarPlanIfPossible(plan: SparkPlan): SparkPlan = plan match {
     case gen: WholeStageCodegenExec =>
       gen.child match {
