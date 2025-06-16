@@ -66,7 +66,7 @@ trait CachedBatchSerializer extends Serializable {
    * true on its output schema.
    *
    * The default implementation works by stripping the topmost columnar-to-row transition to
-   * expose the row-based plan to the serializer.
+   * expose the columnar-based plan to the serializer.
    *
    * @param plan The plan to convert.
    * @return The output plan. Could either be a columnar plan if the input plan is convertible, or
