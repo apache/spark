@@ -60,7 +60,7 @@ def compute(sdf: SparkDataFrame, groupKeys: List[str], method: str) -> SparkData
             .alias(CORRELATION_VALUE_2_COLUMN),
         ],
     )
-    spark_session = default_session()
+    spark_session = sdf.sql_ctx.sparkSession
 
     if method in ["pearson", "spearman"]:
         # convert values to avg ranks for spearman correlation
