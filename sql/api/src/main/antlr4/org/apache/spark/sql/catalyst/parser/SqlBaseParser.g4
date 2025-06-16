@@ -1208,6 +1208,7 @@ primaryExpression
     | constant                                                                                 #constantDefault
     | ASTERISK exceptClause?                                                                   #star
     | qualifiedName DOT ASTERISK exceptClause?                                                 #star
+    | col=primaryExpression COLON path=semiStructuredExtractionPath                            #semiStructuredExtract
     | LEFT_PAREN namedExpression (COMMA namedExpression)+ RIGHT_PAREN                          #rowConstructor
     | LEFT_PAREN query RIGHT_PAREN                                                             #subqueryExpression
     | functionName LEFT_PAREN (setQuantifier? argument+=functionArgument
@@ -1228,6 +1229,32 @@ primaryExpression
        FROM srcStr=valueExpression RIGHT_PAREN                                                 #trim
     | OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
       FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN                  #overlay
+    ;
+
+semiStructuredExtractionPath
+    : jsonPathFirstPart (jsonPathParts)*
+    ;
+
+jsonPathIdentifier
+    : identifier
+    | BACKQUOTED_IDENTIFIER
+    ;
+
+jsonPathBracketedIdentifier
+    : LEFT_BRACKET stringLit RIGHT_BRACKET
+    ;
+
+jsonPathFirstPart
+    : jsonPathIdentifier
+    | jsonPathBracketedIdentifier
+    | LEFT_BRACKET INTEGER_VALUE RIGHT_BRACKET
+    ;
+
+jsonPathParts
+    : DOT jsonPathIdentifier
+    | jsonPathBracketedIdentifier
+    | LEFT_BRACKET INTEGER_VALUE RIGHT_BRACKET
+    | LEFT_BRACKET identifier RIGHT_BRACKET
     ;
 
 literalType
