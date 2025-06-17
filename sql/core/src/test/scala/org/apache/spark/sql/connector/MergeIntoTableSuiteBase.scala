@@ -35,6 +35,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
   import testImplicits._
 
+  protected def deltaMerge: Boolean = false
+
   test("merge into table with expression-based default values") {
     val columns = Array(
       Column.create("pk", IntegerType),
@@ -1774,7 +1776,48 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
-  test("Emit numTargetRowsCopied metrics") {
+  test("Merge metrics with matched clause") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 2).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      val mergeExec = findMergeExec {
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED AND salary < 200 THEN
+           | UPDATE SET salary = 1000
+           |""".stripMargin
+      }
+
+      mergeExec.metrics.get("numTargetRowsCopied") match {
+        case Some(metric) =>
+          val expectedMetrics = if (deltaMerge) 0 else 2
+          assert(metric.value == expectedMetrics)
+        case None => fail("numCopiedRows metric not found")
+      }
+
+      mergeExec.metrics.get("numTargetRowsUnmatched") match {
+        case Some(metric) => assert(metric.value == 2, "2 rows unmatched")
+        case None => fail("numTargetRowsUnmatched metric not found")
+      }
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 1000, "hr"), // updated
+          Row(2, 200, "software"),
+          Row(3, 300, "hr")))
+    }
+  }
+
+  test("Merge metrics with matched and not matched by source clauses") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
@@ -1799,8 +1842,15 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       }
 
       mergeExec.metrics.get("numTargetRowsCopied") match {
-        case Some(metric) => assert(metric.value == 3, "3 rows copied without updates")
+        case Some(metric) =>
+          val expectedMetrics = if (deltaMerge) 0 else 3
+          assert(metric.value == expectedMetrics)
         case None => fail("numCopiedRows metric not found")
+      }
+
+      mergeExec.metrics.get("numTargetRowsUnmatched") match {
+        case Some(metric) => assert(metric.value == 3, "3 rows unmatched")
+        case None => fail("numTargetRowsUnmatched metric not found")
       }
 
       checkAnswer(
@@ -1814,7 +1864,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
-  test("Emit numTargetRowsCopied metrics 2") {
+  test("Merge metrics with matched, not matched, and not matched by source clauses") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
@@ -1841,8 +1891,15 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       }
 
       mergeExec.metrics.get("numTargetRowsCopied") match {
-        case Some(metric) => assert(metric.value == 3, "3 rows copied without updates")
+        case Some(metric) =>
+          val expectedMetrics = if (deltaMerge) 0 else 3
+          assert(metric.value == expectedMetrics)
         case None => fail("numCopiedRows metric not found")
+      }
+
+      mergeExec.metrics.get("numTargetRowsUnmatched") match {
+        case Some(metric) => assert(metric.value == 3, "3 rows unmatched")
+        case None => fail("numTargetRowsUnmatched metric not found")
       }
 
       checkAnswer(

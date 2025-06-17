@@ -26,10 +26,11 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.catalyst.expressions.BasePredicate
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.expressions.Projection
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
-import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Discard, Instruction, Keep, ROW_ID, Split}
+import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{CarryOver, Discard, Instruction, Keep, ROW_ID, Split}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
@@ -72,7 +73,10 @@ case class MergeRowsExec(
 
   override lazy val metrics: Map[String, SQLMetric] = Map(
     "numTargetRowsCopied" -> SQLMetrics.createMetric(sparkContext,
-      "number of target rows rewritten unmodified"))
+      "Number of target rows copied over because they did not match any condition."),
+    "numTargetRowsUnmatched" -> SQLMetrics.createMetric(sparkContext,
+      "Number of target rows processed that do not match any condition. " +
+        "These will be dropped for delta-based merge and retained for group-based merge."))
 
   protected override def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions(processPartition)
@@ -112,8 +116,11 @@ case class MergeRowsExec(
 
   private def planInstructions(instructions: Seq[Instruction]): Seq[InstructionExec] = {
     instructions.map {
-      case Keep(cond, output, isSystem) =>
-        KeepExec(createPredicate(cond), createProjection(output), isSystem)
+      case CarryOver(output) =>
+        CarryOverExec(createProjection(output))
+
+      case Keep(cond, output) =>
+        KeepExec(createPredicate(cond), createProjection(output))
 
       case Discard(cond) =>
         DiscardExec(createPredicate(cond))
@@ -132,12 +139,14 @@ case class MergeRowsExec(
     def condition: BasePredicate
   }
 
+  case class CarryOverExec(projection: Projection) extends InstructionExec {
+    override def condition: BasePredicate = createPredicate(TrueLiteral)
+    def apply(row: InternalRow): InternalRow = projection.apply(row)
+  }
+
   case class KeepExec(
       condition: BasePredicate,
-      projection: Projection,
-      // flag marking that row should be considered not matching
-      // any user predicate for metric calculations
-      systemPredicate: Boolean = false) extends InstructionExec {
+      projection: Projection) extends InstructionExec {
     def apply(row: InternalRow): InternalRow = projection.apply(row)
   }
 
@@ -231,12 +240,13 @@ case class MergeRowsExec(
       for (instruction <- instructions) {
         if (instruction.condition.eval(row)) {
           instruction match {
-            case keep: KeepExec =>
-              // For GroupBased Merge, Spark inserts a keep predicate for join matches
+            case carryOver: CarryOverExec =>
+              // For GroupBased Merge, Spark inserts a CarryOver predicate
               // to retain the row if no other case matches
-              if (keep.systemPredicate) {
-                longMetric("numTargetRowsCopied") += 1
-              }
+              longMetric("numTargetRowsCopied") += 1
+              longMetric("numTargetRowsUnmatched") += 1
+              return carryOver.apply(row)
+            case keep: KeepExec =>
               return keep.apply(row)
 
             case _: DiscardExec =>
@@ -250,7 +260,7 @@ case class MergeRowsExec(
       }
 
       if (targetPresent) {
-        longMetric("numTargetRowsCopied") += 1
+        longMetric("numTargetRowsUnmatched") += 1
       }
       null
     }
