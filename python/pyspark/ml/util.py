@@ -73,20 +73,6 @@ ML_CONNECT_HELPER_ID = "______ML_CONNECT_HELPER______"
 _logger = logging.getLogger("pyspark.ml.util")
 
 
-def try_remote_intermediate_result(f: FuncT) -> FuncT:
-    """Mark the function/property that returns the intermediate result of the remote call.
-    Eg, model.summary"""
-
-    @functools.wraps(f)
-    def wrapped(self: "JavaWrapper") -> Any:
-        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            return f"{str(self._java_obj)}.{f.__name__}"
-        else:
-            return f(self)
-
-    return cast(FuncT, wrapped)
-
-
 def invoke_helper_attr(method: str, *args: Any) -> Any:
     from pyspark.ml.wrapper import JavaWrapper
 

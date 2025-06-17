@@ -856,7 +856,7 @@
       "MODEL_SUMMARY_LOST": {
         "message" : [
           "The model <objectName> summary is lost because the cached model is offloaded."
-         ]
+        ]
       },
       "UNSUPPORTED_EXCEPTION" : {
         "message" : [

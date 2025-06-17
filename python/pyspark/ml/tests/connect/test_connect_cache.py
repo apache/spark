@@ -57,12 +57,13 @@ class MLConnectCacheTests(ReusedConnectTestCase):
         assert model2._java_obj._ref_count == 2
 
         # explicitly delete the model
-        del model
+        model.__del__()
 
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 1)
         assert model2._java_obj._ref_count == 1
 
+        del model2._summary
         del model2
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 0)
@@ -99,7 +100,7 @@ class MLConnectCacheTests(ReusedConnectTestCase):
             cache_info,
         )
 
-        # explicitly delete the model1
+        del model1._summary
         del model1
 
         cache_info = spark.client._get_ml_cache_info()
