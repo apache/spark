@@ -411,9 +411,8 @@ private[connect] object MLHandler extends Logging {
   }
 
   private def createModelSummary(
-    sessionHolder: SessionHolder,
-    createSummaryCmd: proto.MlCommand.CreateSummary
-  ): proto.MlCommandResult = {
+      sessionHolder: SessionHolder,
+      createSummaryCmd: proto.MlCommand.CreateSummary): proto.MlCommandResult = {
     val refId = createSummaryCmd.getModelRef.getId
     val model = sessionHolder.mlCache.get(refId).asInstanceOf[HasTrainingSummary[_]]
     val dataset = MLUtils.parseRelationProto(createSummaryCmd.getDataset, sessionHolder)
@@ -463,9 +462,8 @@ private[connect] object MLHandler extends Logging {
           && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
 
           if (relation.hasModelSummaryDataset) {
-            val dataset = MLUtils.parseRelationProto(
-              relation.getModelSummaryDataset, sessionHolder
-            )
+            val dataset =
+              MLUtils.parseRelationProto(relation.getModelSummaryDataset, sessionHolder)
             val modelPath = sessionHolder.mlCache.getModelOffloadingPath(objRefId)
             val summaryPath = modelPath.resolve("summary").toString
             obj.asInstanceOf[HasTrainingSummary[_]].loadSummary(summaryPath, dataset)

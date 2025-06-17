@@ -53,7 +53,7 @@ private[spark] case class MLCacheSizeOverflowException(mlCacheMaxSize: Long)
       cause = null)
 
 private[spark] case class MLModelSummaryLostException(objectName: String)
-  extends SparkException(
-        errorClass = "CONNECT_ML.MODEL_SUMMARY_LOST",
-        messageParameters = Map("objectName" -> objectName),
-        cause = null)
+    extends SparkException(
+      errorClass = "CONNECT_ML.MODEL_SUMMARY_LOST",
+      messageParameters = Map("objectName" -> objectName),
+      cause = null)

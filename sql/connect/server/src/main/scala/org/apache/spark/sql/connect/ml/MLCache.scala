@@ -146,9 +146,10 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
         val savePath = getModelOffloadingPath(objectId)
         obj.asInstanceOf[MLWritable].write.saveToLocal(savePath.toString)
         if (obj.isInstanceOf[HasTrainingSummary[_]]
-          && obj.asInstanceOf[HasTrainingSummary[_]].hasSummary
-        ) {
-          obj.asInstanceOf[HasTrainingSummary[_]].saveSummary(savePath.resolve("summary").toString)
+          && obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
+          obj
+            .asInstanceOf[HasTrainingSummary[_]]
+            .saveSummary(savePath.resolve("summary").toString)
         }
         Files.writeString(savePath.resolve(modelClassNameFile), obj.getClass.getName)
         totalMLCacheInMemorySizeBytes.addAndGet(sizeBytes)
