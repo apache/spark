@@ -201,8 +201,8 @@ def try_remote_fit(f: FuncT) -> FuncT:
 
                 summary = model._summaryCls(f"{str(model._java_obj)}.summary")
                 summary._summary_dataset = summary_dataset
-                summary._model_ref_id = str(model._java_obj)
-                summary.__source_transformer__ = model  # type: ignore[attr-defined]
+                summary._remote_model_obj = model._java_obj
+                summary._remote_model_obj.add_ref()
 
                 model._summary = summary
             if model.__class__.__name__ not in ["Bucketizer"]:
@@ -329,7 +329,7 @@ def try_remote_call(f: FuncT) -> FuncT:
                     create_summary_command = pb2.Command()
                     create_summary_command.ml_command.create_summary.CopyFrom(
                         pb2.MlCommand.CreateSummary(
-                            model_ref=pb2.ObjectRef(id=self._model_ref_id),
+                            model_ref=pb2.ObjectRef(id=self._remote_model_obj.ref_id),
                             dataset=self._summary_dataset._plan.plan(session.client),
                         )
                     )
@@ -367,8 +367,11 @@ def try_remote_del(f: FuncT) -> FuncT:
         except Exception:
             return
 
-        if in_remote and isinstance(self._java_obj, RemoteModelRef):
-            self._java_obj.release_ref()
+        if in_remote:
+            if isinstance(self._java_obj, RemoteModelRef):
+                self._java_obj.release_ref()
+            if hasattr(self, "_remote_model_obj"):
+                self._remote_model_obj.release_ref()
             return
         else:
             return f(self)
