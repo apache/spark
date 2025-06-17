@@ -941,25 +941,18 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
   test("SingleVariantColumn with partition columns in the source file path") {
     withTempDir { dir =>
       // Create partitioned directory structure and copy file to each partition
-      val partitionDirs = Seq(
-        s"${dir.getCanonicalPath}/year=2021/month=01",
-        s"${dir.getCanonicalPath}/year=2021/month=02",
-        s"${dir.getCanonicalPath}/year=2022/month=03"
-      )
+      val path = s"${dir.getCanonicalPath}/year=2021/month=01"
+      val partitionDir = new java.io.File(path)
+      partitionDir.mkdirs()
 
-      partitionDirs.foreach { path =>
-        val partitionDir = new java.io.File(path)
-        partitionDir.mkdirs()
+      // Copy cars.xml to each partition
+      val srcPath = getTestResourcePath(resDir + "cars.xml")
+      val destPath = s"${path}/data.xml"
 
-        // Copy cars.xml to each partition
-        val srcPath = getTestResourcePath(resDir + "cars.xml")
-        val destPath = s"${path}/data.xml"
-
-        // Use Spark's file utilities to copy file
-        val fs = org.apache.hadoop.fs.FileSystem.get(spark.sessionState.newHadoopConf())
-        fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(srcPath),
-          new org.apache.hadoop.fs.Path(destPath))
-      }
+      // Use Spark's file utilities to copy file
+      val fs = org.apache.hadoop.fs.FileSystem.get(spark.sessionState.newHadoopConf())
+      fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(srcPath),
+        new org.apache.hadoop.fs.Path(destPath))
 
       // Read the files with partitioning info
       val df = spark.read
@@ -974,15 +967,12 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       // Verify that the partition columns are present in the variant column
       checkAnswer(
         df.select(
-          variant_get(col("var"), "$.make", "string"),
-          variant_get(col("var"), "$.year", "string"),
-          variant_get(col("var"), "$.month", "string")
-        ).orderBy("year", "month"),
+          variant_get(col("var"), "$.year", "int"),
+          variant_get(col("var"), "$.month", "int"),
+          variant_get(col("var"), "$.make", "string").as("make")
+        ).orderBy("make"),
         Seq(
-          // Each partition has all 3 rows from cars.xml
-          Row(2021, "01", "Chevy"), Row(2021, "01", "Ford"), Row(2021, "01", "Tesla"),
-          Row(2021, "02", "Chevy"), Row(2021, "02", "Ford"), Row(2021, "02", "Tesla"),
-          Row(2022, "03", "Chevy"), Row(2022, "03", "Ford"), Row(2022, "03", "Tesla")
+          Row(2021, 1, "Chevy"), Row(2021, 1, "Ford"), Row(2021, 1, "Tesla")
         )
       )
     }

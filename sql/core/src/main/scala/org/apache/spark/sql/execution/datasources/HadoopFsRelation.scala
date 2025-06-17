@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister}
@@ -54,8 +55,15 @@ case class HadoopFsRelation(
   // schema respects the order of the data schema for the overlapping columns, and it
   // respects the data types of the partition schema.
   val (schema: StructType, overlappedPartCols: Map[String, StructField]) =
-    PartitioningUtils.mergeDataAndPartitionSchema(dataSchema,
-      partitionSchema, sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    if (options.contains(DataSourceOptions.SINGLE_VARIANT_COLUMN)) {
+      (dataSchema, Map.empty)
+    } else {
+      PartitioningUtils.mergeDataAndPartitionSchema(
+        dataSchema,
+        partitionSchema,
+        sparkSession.sessionState.conf.caseSensitiveAnalysis
+      )
+    }
 
   override def toString: String = {
     fileFormat match {
