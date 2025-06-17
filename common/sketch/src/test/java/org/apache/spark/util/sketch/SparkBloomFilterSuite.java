@@ -105,10 +105,17 @@ public class SparkBloomFilterSuite {
      */
     @CartesianTest(name = "testAccuracyEvenOdd_{index}.n{0}_fpp{1}_seed{2}")
     public void testAccuracyEvenOdd(
-      @Values(longs = {1_000_000L, 1_000_000_000L, 5_000_000_000L}) long numItems,
-      @Values(doubles = {0.05, 0.03, 0.01, 0.001}) double expectedFpp,
-      @Values(ints = {BloomFilterImpl.DEFAULT_SEED, 1, 127}) int deterministicSeed,
-      TestInfo testInfo
+        // temporary workaround:
+        //   to reduce running time to acceptable levels, we test only one case,
+        //   with the default FPP and the default seed only.
+        @Values(longs = {1_000_000_000L}) long numItems,
+        @Values(doubles = {0.03}) double expectedFpp,
+        @Values(ints = {BloomFilterImpl.DEFAULT_SEED}) int deterministicSeed,
+        // preferable minimum parameter space for tests:
+        //   @Values(longs = {1_000_000L, 1_000_000_000L}) long numItems,
+        //   @Values(doubles = {0.05, 0.03, 0.01, 0.001}) double expectedFpp,
+        //   @Values(ints = {BloomFilterImpl.DEFAULT_SEED, 1, 127}) int deterministicSeed,
+        TestInfo testInfo
     ) {
         String testName = testInfo.getDisplayName();
         PrintStream testOut = testOutMap.get(testName);
@@ -215,13 +222,19 @@ public class SparkBloomFilterSuite {
      *                          the primary BloomFilter instance. (The secondary will be
      *                          initialized with the constant seed of 0xCAFEBABE)
      */
-    @Disabled
     @CartesianTest(name = "testAccuracyRandom_{index}.n{0}_fpp{1}_seed{2}")
     public void testAccuracyRandom(
-            @Values(longs = {1_000_000L, 1_000_000_000L}) long numItems,
-            @Values(doubles = {0.05, 0.03, 0.01, 0.001}) double expectedFpp,
-            @Values(ints = {BloomFilterImpl.DEFAULT_SEED, 1, 127}) int deterministicSeed,
-            TestInfo testInfo
+        // temporary workaround:
+        //   to reduce running time to acceptable levels, we test only one case,
+        //   with the default FPP and the default seed only.
+        @Values(longs = {1_000_000_000L}) long numItems,
+        @Values(doubles = {0.03}) double expectedFpp,
+        @Values(ints = {BloomFilterImpl.DEFAULT_SEED}) int deterministicSeed,
+        // preferable minimum parameter space for tests:
+        //   @Values(longs = {1_000_000L, 1_000_000_000L}) long numItems,
+        //   @Values(doubles = {0.05, 0.03, 0.01, 0.001}) double expectedFpp,
+        //   @Values(ints = {BloomFilterImpl.DEFAULT_SEED, 1, 127}) int deterministicSeed,
+        TestInfo testInfo
     ) {
         String testName = testInfo.getDisplayName();
         PrintStream testOut = testOutMap.get(testName);
