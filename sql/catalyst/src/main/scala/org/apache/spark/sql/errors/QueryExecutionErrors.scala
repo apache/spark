@@ -363,15 +363,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def orderedOperationUnsupportedByDataTypeError(
       dataType: DataType): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2005",
-      messageParameters = Map("dataType" -> dataType.toString()))
+    return orderedOperationUnsupportedByDataTypeError(dataType.toString())
   }
 
   def orderedOperationUnsupportedByDataTypeError(
       dataType: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2005",
+      errorClass = "DATATYPE_CANNOT_ORDER",
       messageParameters = Map("dataType" -> dataType))
   }
 
@@ -1970,11 +1968,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "message" -> e.getMessage))
   }
 
-  def multiFailuresInStageMaterializationError(error: Throwable): Throwable = {
+  def multiFailuresInStageMaterializationError(errors: Seq[Throwable]): Throwable = {
+    val failureDetails = errors.zipWithIndex.map { case (error, index) =>
+      s"\n  ${index + 1}. ${error.getClass.getSimpleName}: ${error.getMessage}"
+    }.mkString("")
+
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2235",
-      messageParameters = Map.empty,
-      cause = error)
+      errorClass = "STAGE_MATERIALIZATION_MULTIPLE_FAILURES",
+      messageParameters = Map(
+        "failureCount" -> errors.size.toString,
+        "failureDetails" -> failureDetails
+      ),
+      cause = errors.head)
   }
 
   def unrecognizedCompressionSchemaTypeIDError(typeId: Int): SparkUnsupportedOperationException = {
@@ -3025,5 +3030,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       columns: java.util.List[String],
       values: java.util.List[Any]): SparkRuntimeException = {
     checkViolation(constraintName, sqlStr, columns.asScala.zip(values.asScala).toMap)
+  }
+
+  def newCheckViolation(sqlStr: String, tableName: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "NEW_CHECK_CONSTRAINT_VIOLATION",
+      messageParameters = Map(
+        "expression" -> sqlStr,
+        "tableName" -> tableName
+      )
+    )
   }
 }

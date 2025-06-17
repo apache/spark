@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -183,13 +185,26 @@ class PCAModel private[ml] (
 object PCAModel extends MLReadable[PCAModel] {
   private[ml] case class Data(pc: Matrix, explainedVariance: Vector)
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeMatrix(data.pc, dos)
+    serializeVector(data.explainedVariance, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val pc = deserializeMatrix(dis)
+    val explainedVariance = deserializeVector(dis)
+    Data(pc, explainedVariance)
+  }
+
   private[PCAModel] class PCAModelWriter(instance: PCAModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.pc, instance.explainedVariance)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -211,7 +226,7 @@ object PCAModel extends MLReadable[PCAModel] {
 
       val dataPath = new Path(path, "data").toString
       val model = if (majorVersion(metadata.sparkVersion) >= 2) {
-        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
         new PCAModel(metadata.uid, data.pc.toDense, data.explainedVariance.toDense)
       } else {
         // pc field is the old matrix format in Spark <= 1.6

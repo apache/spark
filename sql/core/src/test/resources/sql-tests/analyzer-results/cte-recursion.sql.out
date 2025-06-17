@@ -170,6 +170,78 @@ DropTempViewCommand ZeroAndOne
 
 
 -- !query
+WITH RECURSIVE r(level) MAX RECURSION LEVEL 35 AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 30
+  )
+SELECT * FROM r
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false, 35
+:  +- SubqueryAlias r
+:     +- Project [col1#x AS level#x]
+:        +- UnionLoop xxxx, 35
+:           :- LocalRelation [col1#x]
+:           +- Project [(level#x + 1) AS (level + 1)#x]
+:              +- Filter (level#x < 30)
+:                 +- SubqueryAlias r
+:                    +- Project [col1#x AS level#x]
+:                       +- UnionLoopRef xxxx, [col1#x], false
++- Project [level#x]
+   +- SubqueryAlias r
+      +- CTERelationRef xxxx, true, [level#x], false, false
+
+
+-- !query
+WITH r(level) MAX RECURSION LEVEL 35 AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 30
+)
+SELECT * FROM r
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "Cannot specify MAX RECURSION LEVEL when the CTE is not marked as RECURSIVE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 125,
+    "fragment" : "WITH r(level) MAX RECURSION LEVEL 35 AS (\n  VALUES 0\n  UNION ALL\n  SELECT level + 1 FROM r WHERE level < 30\n)\nSELECT * FROM r"
+  } ]
+}
+
+
+-- !query
+WITH RECURSIVE r(level) AS (
+  VALUES 0
+  UNION ALL
+  SELECT level + 1 FROM r WHERE level < 150
+)
+SELECT * FROM r
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias r
+:     +- Project [col1#x AS level#x]
+:        +- UnionLoop xxxx
+:           :- LocalRelation [col1#x]
+:           +- Project [(level#x + 1) AS (level + 1)#x]
+:              +- Filter (level#x < 150)
+:                 +- SubqueryAlias r
+:                    +- Project [col1#x AS level#x]
+:                       +- UnionLoopRef xxxx, [col1#x], false
++- Project [level#x]
+   +- SubqueryAlias r
+      +- CTERelationRef xxxx, true, [level#x], false, false
+
+
+-- !query
 CREATE TEMPORARY VIEW ZeroAndOne(current, next) AS VALUES
     (0,0),
     (0,1),
@@ -185,18 +257,12 @@ CreateViewCommand `ZeroAndOne`, [(current,None), (next,None)], VALUES
 
 
 -- !query
-SET spark.sql.cteRecursionRowLimit=25
--- !query analysis
-SetCommand (spark.sql.cteRecursionRowLimit,Some(25))
-
-
--- !query
 WITH RECURSIVE t(n) AS (
     SELECT 1
     UNION ALL
     SELECT next FROM t LEFT JOIN ZeroAndOne ON n = current
     )
-SELECT * FROM t LIMIT 30
+SELECT * FROM t LIMIT 60
 -- !query analysis
 WithCTE
 :- CTERelationDef xxxx, false
@@ -214,17 +280,11 @@ WithCTE
 :                    +- View (`ZeroAndOne`, [current#x, next#x])
 :                       +- Project [cast(col1#x as int) AS current#x, cast(col2#x as int) AS next#x]
 :                          +- LocalRelation [col1#x, col2#x]
-+- GlobalLimit 30
-   +- LocalLimit 30
++- GlobalLimit 60
+   +- LocalLimit 60
       +- Project [n#x]
          +- SubqueryAlias t
             +- CTERelationRef xxxx, true, [n#x], false, false
-
-
--- !query
-RESET spark.sql.cteRecursionRowLimit
--- !query analysis
-ResetCommand spark.sql.cteRecursionRowLimit
 
 
 -- !query
@@ -411,24 +471,11 @@ WITH RECURSIVE t(col) (
 )
 SELECT * FROM t LIMIT 5
 -- !query analysis
-WithCTE
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias t
-:     +- Project [1#x AS col#x]
-:        +- UnionLoop xxxx
-:           :- Project [1 AS 1#x]
-:           :  +- OneRowRelation
-:           +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
-:              :  +- Aggregate [max(col#x) AS max(col)#x]
-:              :     +- SubqueryAlias t
-:              :        +- Project [1#x AS col#x]
-:              :           +- UnionLoopRef xxxx, [1#x], false
-:              +- OneRowRelation
-+- GlobalLimit 5
-   +- LocalLimit 5
-      +- Project [col#x]
-         +- SubqueryAlias t
-            +- CTERelationRef xxxx, true, [col#x], false, false
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836"
+}
 
 
 -- !query
@@ -449,6 +496,35 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
   "sqlState" : "42836"
 }
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT (SELECT n+1 FROM t1 WHERE n<5)
+)
+SELECT * FROM t1 LIMIT 5
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#x AS n#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
+:              :  +- Project [(n#x + 1) AS (n + 1)#x]
+:              :     +- Filter (n#x < 5)
+:              :        +- SubqueryAlias t1
+:              :           +- Project [1#x AS n#x]
+:              :              +- UnionLoopRef xxxx, [1#x], false
+:              +- OneRowRelation
++- GlobalLimit 5
+   +- LocalLimit 5
+      +- Project [n#x]
+         +- SubqueryAlias t1
+            +- CTERelationRef xxxx, true, [n#x], false, false
 
 
 -- !query
@@ -955,18 +1031,34 @@ FROM r
 INSERT INTO rt2 SELECT *
 INSERT INTO rt2 SELECT *
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "RECURSIVE_CTE_WHEN_INLINING_IS_FORCED",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 160,
-    "fragment" : "WITH RECURSIVE r(level) AS (\n    VALUES (0)\n    UNION ALL\n    SELECT level + 1 FROM r WHERE level < 9\n)\nFROM r\nINSERT INTO rt2 SELECT *\nINSERT INTO rt2 SELECT *"
-  } ]
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias r
+:     +- Project [col1#x AS level#x]
+:        +- UnionLoop xxxx
+:           :- LocalRelation [col1#x]
+:           +- Project [(level#x + 1) AS (level + 1)#x]
+:              +- Filter (level#x < 9)
+:                 +- SubqueryAlias r
+:                    +- Project [col1#x AS level#x]
+:                       +- UnionLoopRef xxxx, [col1#x], false
++- Union false, false
+   :- InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/rt2, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/rt2], Append, `spark_catalog`.`default`.`rt2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/rt2), [level]
+   :  +- Project [level#x]
+   :     +- SubqueryAlias r
+   :        +- CTERelationRef xxxx, true, [level#x], false, false
+   +- InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/rt2, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/rt2], Append, `spark_catalog`.`default`.`rt2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/rt2), [level]
+      +- Project [level#x]
+         +- SubqueryAlias r
+            +- CTERelationRef xxxx, true, [level#x], false, false
+
+
+-- !query
+SELECT * FROM rt2
+-- !query analysis
+Project [level#x]
++- SubqueryAlias spark_catalog.default.rt2
+   +- Relation spark_catalog.default.rt2[level#x] csv
 
 
 -- !query
@@ -1275,7 +1367,7 @@ WithCTE
 
 
 -- !query
-CREATE TABLE tb (next INT)
+CREATE TABLE tb (next INT) USING json
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`tb`, false
 
@@ -1283,7 +1375,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`tb`, false
 -- !query
 INSERT INTO tb VALUES (0), (1)
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/tb, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/tb], Append, `spark_catalog`.`default`.`tb`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/tb), [next]
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/tb, false, JSON, [path=file:[not included in comparison]/{warehouse_dir}/tb], Append, `spark_catalog`.`default`.`tb`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/tb), [next]
 +- Project [cast(col1#x as int) AS next#x]
    +- LocalRelation [col1#x]
 
@@ -1309,7 +1401,7 @@ WithCTE
 :                 :  +- Project [1#x AS n#x]
 :                 :     +- UnionLoopRef xxxx, [1#x], false
 :                 +- SubqueryAlias spark_catalog.default.tb
-:                    +- Relation spark_catalog.default.tb[next#x] parquet
+:                    +- Relation spark_catalog.default.tb[next#x] json
 +- GlobalLimit 63
    +- LocalLimit 63
       +- Project [n#x]
@@ -1553,3 +1645,369 @@ WithCTE
 +- Project [n#x]
    +- SubqueryAlias t1
       +- CTERelationRef xxxx, true, [n#x], false, false
+
+
+-- !query
+WITH RECURSIVE tmp(x) AS (
+    values (1), (2), (3), (4), (5)
+), rcte(x, y) AS (
+    SELECT x, x FROM tmp WHERE x = 1
+    UNION ALL
+    SELECT x + 1, x FROM rcte WHERE x < 5
+)
+SELECT * FROM rcte
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias tmp
+:     +- Project [col1#x AS x#x]
+:        +- LocalRelation [col1#x]
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias rcte
+:     +- Project [x#x AS x#x, x#x AS y#x]
+:        +- UnionLoop xxxx
+:           :- Project [x#x, x#x]
+:           :  +- Filter (x#x = 1)
+:           :     +- SubqueryAlias tmp
+:           :        +- CTERelationRef xxxx, true, [x#x], false, false, 5
+:           +- Project [(x#x + 1) AS (x + 1)#x, x#x]
+:              +- Filter (x#x < 5)
+:                 +- SubqueryAlias rcte
+:                    +- Project [x#x AS x#x, x#x AS y#x]
+:                       +- UnionLoopRef xxxx, [x#x, x#x], false
++- Project [x#x, y#x]
+   +- SubqueryAlias rcte
+      +- CTERelationRef xxxx, true, [x#x, y#x], false, false
+
+
+-- !query
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=0
+-- !query analysis
+SetCommand (spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation,Some(0))
+
+
+-- !query
+WITH RECURSIVE tmp(x) AS (
+    values (1), (2), (3), (4), (5)
+), rcte(x, y) AS (
+    SELECT x, x FROM tmp WHERE x = 1
+    UNION ALL
+    SELECT x + 1, x FROM rcte WHERE x < 5
+)
+SELECT * FROM rcte
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias tmp
+:     +- Project [col1#x AS x#x]
+:        +- LocalRelation [col1#x]
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias rcte
+:     +- Project [x#x AS x#x, x#x AS y#x]
+:        +- UnionLoop xxxx
+:           :- Project [x#x, x#x]
+:           :  +- Filter (x#x = 1)
+:           :     +- SubqueryAlias tmp
+:           :        +- CTERelationRef xxxx, true, [x#x], false, false, 5
+:           +- Project [(x#x + 1) AS (x + 1)#x, x#x]
+:              +- Filter (x#x < 5)
+:                 +- SubqueryAlias rcte
+:                    +- Project [x#x AS x#x, x#x AS y#x]
+:                       +- UnionLoopRef xxxx, [x#x, x#x], false
++- Project [x#x, y#x]
+   +- SubqueryAlias rcte
+      +- CTERelationRef xxxx, true, [x#x, y#x], false, false
+
+
+-- !query
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100
+-- !query analysis
+SetCommand (spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation,Some(100))
+
+
+-- !query
+WITH RECURSIVE tmp(x) AS (
+    values (1), (2), (3), (4), (5)
+), rcte(x, y, z, t) AS (
+    SELECT x, x, x, x FROM tmp WHERE x = 1
+    UNION ALL
+    SELECT x + 1, x, y + 1, y FROM rcte WHERE x < 5
+)
+SELECT * FROM rcte
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias tmp
+:     +- Project [col1#x AS x#x]
+:        +- LocalRelation [col1#x]
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias rcte
+:     +- Project [x#x AS x#x, x#x AS y#x, x#x AS z#x, x#x AS t#x]
+:        +- UnionLoop xxxx
+:           :- Project [x#x, x#x, x#x, x#x]
+:           :  +- Filter (x#x = 1)
+:           :     +- SubqueryAlias tmp
+:           :        +- CTERelationRef xxxx, true, [x#x], false, false, 5
+:           +- Project [(x#x + 1) AS (x + 1)#x, x#x, (y#x + 1) AS (y + 1)#x, y#x]
+:              +- Filter (x#x < 5)
+:                 +- SubqueryAlias rcte
+:                    +- Project [x#x AS x#x, x#x AS y#x, x#x AS z#x, x#x AS t#x]
+:                       +- UnionLoopRef xxxx, [x#x, x#x, x#x, x#x], false
++- Project [x#x, y#x, z#x, t#x]
+   +- SubqueryAlias rcte
+      +- CTERelationRef xxxx, true, [x#x, y#x, z#x, t#x], false, false
+
+
+-- !query
+WITH RECURSIVE randoms(val) AS (
+    SELECT CAST(floor(rand(82374) * 5 + 1) AS INT)
+    UNION ALL
+    SELECT CAST(floor(rand(237685) * 5 + 1) AS INT)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+WITH RECURSIVE randoms(val) AS (
+    SELECT CAST(UNIFORM(1, 6, 82374) AS INT)
+    UNION ALL
+    SELECT CAST(UNIFORM(1, 6, 237685) AS INT)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+WITH RECURSIVE randoms(val) AS (
+    SELECT CAST(floor(randn(82374) * 5 + 1) AS INT)
+    UNION ALL
+    SELECT CAST(floor(randn(237685) * 5 + 1) AS INT)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+WITH RECURSIVE randoms(val) AS (
+    SELECT randstr(10, 82374)
+    UNION ALL
+    SELECT randstr(10, 237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+WITH RECURSIVE randoms(val) AS (
+    SELECT UUID(82374)
+    UNION ALL
+    SELECT UUID(237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+WITH RECURSIVE randoms(val) AS (
+    SELECT ARRAY(1,2,3,4,5)
+    UNION ALL
+    SELECT SHUFFLE(ARRAY(1,2,3,4,5), 237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT CASE WHEN n < 5 THEN n + 1 ELSE NULL END FROM t1
+)
+SELECT * FROM t1 LIMIT 25
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#x AS n#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [CASE WHEN (n#x < 5) THEN (n#x + 1) ELSE cast(null as int) END AS CASE WHEN (n < 5) THEN (n + 1) ELSE NULL END#x]
+:              +- SubqueryAlias t1
+:                 +- Project [1#x AS n#x]
+:                    +- UnionLoopRef xxxx, [1#x], false
++- GlobalLimit 25
+   +- LocalLimit 25
+      +- Project [n#x]
+         +- SubqueryAlias t1
+            +- CTERelationRef xxxx, true, [n#x], false, false
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t1 WHERE n < 5
+)
+SELECT (SELECT SUM(n) FROM (SELECT * FROM t1)), (SELECT SUM(n) FROM (SELECT * FROM t1 LIMIT 3))
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#x AS n#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [(n#x + 1) AS (n + 1)#x]
+:              +- Filter (n#x < 5)
+:                 +- SubqueryAlias t1
+:                    +- Project [1#x AS n#x]
+:                       +- UnionLoopRef xxxx, [1#x], false
++- Project [scalar-subquery#x [] AS scalarsubquery()#xL, scalar-subquery#x [] AS scalarsubquery()#xL]
+   :  :- Aggregate [sum(n#x) AS sum(n)#xL]
+   :  :  +- SubqueryAlias __auto_generated_subquery_name
+   :  :     +- Project [n#x]
+   :  :        +- SubqueryAlias t1
+   :  :           +- CTERelationRef xxxx, true, [n#x], false, false
+   :  +- Aggregate [sum(n#x) AS sum(n)#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- GlobalLimit 3
+   :           +- LocalLimit 3
+   :              +- Project [n#x]
+   :                 +- SubqueryAlias t1
+   :                    +- CTERelationRef xxxx, true, [n#x], false, false
+   +- OneRowRelation
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t1
+)
+SELECT (SELECT SUM(n) FROM (SELECT * FROM t1 LIMIT 5)), (SELECT SUM(n) FROM (SELECT * FROM t1 LIMIT 3))
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#x AS n#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [(n#x + 1) AS (n + 1)#x]
+:              +- SubqueryAlias t1
+:                 +- Project [1#x AS n#x]
+:                    +- UnionLoopRef xxxx, [1#x], false
++- Project [scalar-subquery#x [] AS scalarsubquery()#xL, scalar-subquery#x [] AS scalarsubquery()#xL]
+   :  :- Aggregate [sum(n#x) AS sum(n)#xL]
+   :  :  +- SubqueryAlias __auto_generated_subquery_name
+   :  :     +- GlobalLimit 5
+   :  :        +- LocalLimit 5
+   :  :           +- Project [n#x]
+   :  :              +- SubqueryAlias t1
+   :  :                 +- CTERelationRef xxxx, true, [n#x], false, false
+   :  +- Aggregate [sum(n#x) AS sum(n)#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- GlobalLimit 3
+   :           +- LocalLimit 3
+   :              +- Project [n#x]
+   :                 +- SubqueryAlias t1
+   :                    +- CTERelationRef xxxx, true, [n#x], false, false
+   +- OneRowRelation
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t1
+), t2(m) AS (
+    SELECT (SELECT SUM(n) FROM (SELECT n FROM t1 LIMIT 10) AS sums)
+    UNION ALL
+    SELECT m + (SELECT SUM(n) FROM (SELECT n FROM t1 LIMIT 3) AS sums) FROM t2
+)
+SELECT * FROM t2 LIMIT 20
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#x AS n#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [(n#x + 1) AS (n + 1)#x]
+:              +- SubqueryAlias t1
+:                 +- Project [1#x AS n#x]
+:                    +- UnionLoopRef xxxx, [1#x], false
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t2
+:     +- Project [scalarsubquery()#xL AS m#xL]
+:        +- UnionLoop xxxx
+:           :- Project [scalar-subquery#x [] AS scalarsubquery()#xL]
+:           :  :  +- Aggregate [sum(n#x) AS sum(n)#xL]
+:           :  :     +- SubqueryAlias sums
+:           :  :        +- GlobalLimit 10
+:           :  :           +- LocalLimit 10
+:           :  :              +- Project [n#x]
+:           :  :                 +- SubqueryAlias t1
+:           :  :                    +- CTERelationRef xxxx, true, [n#x], false, false
+:           :  +- OneRowRelation
+:           +- Project [(m#xL + scalar-subquery#x []) AS (m + scalarsubquery())#xL]
+:              :  +- Aggregate [sum(n#x) AS sum(n)#xL]
+:              :     +- SubqueryAlias sums
+:              :        +- GlobalLimit 3
+:              :           +- LocalLimit 3
+:              :              +- Project [n#x]
+:              :                 +- SubqueryAlias t1
+:              :                    +- CTERelationRef xxxx, true, [n#x], false, false
+:              +- SubqueryAlias t2
+:                 +- Project [scalarsubquery()#xL AS m#xL]
+:                    +- UnionLoopRef xxxx, [scalarsubquery()#xL], false
++- GlobalLimit 20
+   +- LocalLimit 20
+      +- Project [m#xL]
+         +- SubqueryAlias t2
+            +- CTERelationRef xxxx, true, [m#xL], false, false
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t1
+)
+    ((SELECT n FROM t1) UNION ALL (SELECT n FROM t1)) LIMIT 20
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#x AS n#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [(n#x + 1) AS (n + 1)#x]
+:              +- SubqueryAlias t1
+:                 +- Project [1#x AS n#x]
+:                    +- UnionLoopRef xxxx, [1#x], false
++- GlobalLimit 20
+   +- LocalLimit 20
+      +- Union false, false
+         :- Project [n#x]
+         :  +- SubqueryAlias t1
+         :     +- CTERelationRef xxxx, true, [n#x], false, false
+         +- Project [n#x]
+            +- SubqueryAlias t1
+               +- CTERelationRef xxxx, true, [n#x], false, false

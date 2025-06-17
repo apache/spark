@@ -380,6 +380,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def schemaLevelCollationsNotEnabledError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.SCHEMA_LEVEL_COLLATIONS",
+      messageParameters = Map.empty
+    )
+  }
+
   def trimCollationNotEnabledError(): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.TRIM_COLLATION",
@@ -1269,7 +1276,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidBucketNumberError(bucketingMaxBuckets: Int, numBuckets: Int): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1083",
+      errorClass = "INVALID_BUCKET_COUNT",
       messageParameters = Map(
         "bucketingMaxBuckets" -> bucketingMaxBuckets.toString,
         "numBuckets" -> numBuckets.toString))
@@ -3989,6 +3996,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def unsupportedCreatePipelineFlowQueryExecutionError(): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.CREATE_FLOW_QUERY_EXECUTION"
+    )
+  }
+
+  def unsupportedCreatePipelineDatasetQueryExecutionError(
+      pipelineDatasetType: String): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.CREATE_PIPELINE_DATASET_QUERY_EXECUTION",
+      messageParameters = Map("pipelineDatasetType" -> pipelineDatasetType)
+    )
+  }
+
   def avroIncompatibleReadError(
       avroPath: String,
       sqlPath: String,
@@ -4368,5 +4389,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       ),
       origin = origin
     )
+  }
+
+  def unsupportedStreamingTVF(funcName: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION",
+      messageParameters = Map("funcName" -> toSQLId(funcName)))
   }
 }

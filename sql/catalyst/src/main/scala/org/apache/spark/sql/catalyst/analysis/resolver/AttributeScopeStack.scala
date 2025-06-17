@@ -80,21 +80,23 @@ class AttributeScopeStack {
   }
 
   /**
-   * Execute `body` in the context of a fresh attribute scope. Used by [[Project]] and [[Aggregate]]
-   * validation code since those operators introduce a new scope with fresh expression IDs.
+   * Push a fresh attribute scope. Used by [[Project]] and [[Aggregate]] validation code since
+   * those operators introduce a new scope with fresh expression IDs.
    */
-  def withNewScope[R](isSubqueryRoot: Boolean = false)(body: => R): Unit = {
+  def pushScope(isSubqueryRoot: Boolean = false): Unit = {
     stack.push(
       AttributeScope(
         attributes = AttributeSet(Seq.empty),
         isSubqueryRoot = isSubqueryRoot
       )
     )
-    try {
-      body
-    } finally {
+  }
+
+  /**
+   * Pop current attribute scope.
+   */
+  def popScope(): Unit = {
       stack.pop()
-    }
   }
 
   override def toString: String = stack.toString

@@ -50,6 +50,8 @@ abstract class BasePythonUDFRunner(
   override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
 
   override val bufferSize: Int = SQLConf.get.getConf(SQLConf.PYTHON_UDF_BUFFER_SIZE)
+  override val batchSizeForPythonUDF: Int =
+    SQLConf.get.getConf(SQLConf.PYTHON_UDF_MAX_RECORDS_PER_BATCH)
 
   protected def writeUDF(dataOut: DataOutputStream): Unit
 

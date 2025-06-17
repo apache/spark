@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
@@ -471,6 +473,22 @@ class StringIndexerModel (
 object StringIndexerModel extends MLReadable[StringIndexerModel] {
   private[ml] case class Data(labelsArray: Seq[Seq[String]])
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeGenericArray[Seq[String]](
+      data.labelsArray.toArray, dos,
+      (strSeq, dos) => serializeStringArray(strSeq.toArray, dos)
+    )
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val labelsArray = deserializeGenericArray[Seq[String]](
+      dis, dis => deserializeStringArray(dis).toSeq
+    ).toSeq
+    Data(labelsArray)
+  }
+
   private[StringIndexerModel]
   class StringIndexModelWriter(instance: StringIndexerModel) extends MLWriter {
 
@@ -478,7 +496,7 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.labelsArray.map(_.toImmutableArraySeq).toImmutableArraySeq)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -501,7 +519,7 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
         val labels = data.getAs[Seq[String]](0).toArray
         Array(labels)
       } else {
-        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
         data.labelsArray.map(_.toArray).toArray
       }
       val model = new StringIndexerModel(metadata.uid, labelsArray)

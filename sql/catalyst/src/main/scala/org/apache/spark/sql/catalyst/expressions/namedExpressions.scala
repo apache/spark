@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
-import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.{TreeNodeTag, TreePattern}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, METADATA_COL_ATTR_KEY}
@@ -443,7 +443,13 @@ case class OuterReference(e: NamedExpression)
   override def nullable: Boolean = e.nullable
   override def prettyName: String = "outer"
 
-  override def sql: String = s"$prettyName(${e.sql})"
+  override def sql: String =
+    getTagValue(OuterReference.SINGLE_PASS_SQL_STRING_OVERRIDE) match {
+      case Some(name) =>
+        name
+      case None =>
+        s"$prettyName(${e.sql})"
+    }
   override def name: String = e.name
   override def qualifier: Seq[String] = e.qualifier
   override def exprId: ExprId = e.exprId
@@ -508,6 +514,22 @@ case class LateralColumnAliasReference(ne: NamedExpression, nameParts: Seq[Strin
   override def toString: String = sql
 
   final override val nodePatterns: Seq[TreePattern] = Seq(LATERAL_COLUMN_ALIAS_REFERENCE)
+}
+
+object OuterReference {
+
+  /**
+   * In fixed-point [[OuterReference]] is extracted in [[UpdateOuterReferences]] which is invoked
+   * after the alias assignment ([[ResolveAliases]]) which is opposite of how it is done in the
+   * single-pass implementation (first we extract the [[OuterReference]] and then assign the name -
+   * in bottom-up manner).
+   *
+   * In order to make single-pass and fixed-point implementations compatible use earlier computed
+   * name (if defined) for [[OuterReference]] (defined in
+   * `AggregateExpressionResolver.handleOuterAggregateExpression`).
+   */
+  val SINGLE_PASS_SQL_STRING_OVERRIDE =
+    TreeNodeTag[String]("single_pass_sql_string_override")
 }
 
 object VirtualColumn {

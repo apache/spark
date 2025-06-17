@@ -50,7 +50,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 abstract class InMemoryBaseTable(
     val name: String,
-    val schema: StructType,
+    override val columns: Array[Column],
     override val partitioning: Array[Transform],
     override val properties: util.Map[String, String],
     override val constraints: Array[Constraint] = Array.empty,
@@ -113,6 +113,8 @@ abstract class InMemoryBaseTable(
       metadata.json
     }
   }
+
+  override val schema: StructType = CatalogV2Util.v2ColumnsToStructType(columns)
 
   // purposely exposes a metadata column that conflicts with a data column in some tests
   override val metadataColumns: Array[MetadataColumn] = Array(IndexColumn, PartitionKeyColumn)

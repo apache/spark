@@ -1041,8 +1041,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
         p
       }
 
-    // TODO: Pruning `UnionLoop`s needs to take into account both the outer `Project` and the inner
-    //  `UnionLoopRef` nodes.
+    // Avoid pruning UnionLoop because of its recursive nature.
     case p @ Project(_, _: UnionLoop) => p
 
     // Prune unnecessary window expressions

@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, TableSummary}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryExecutionErrors}
@@ -84,19 +84,25 @@ class JDBCTableCatalog extends TableCatalog
     }
   }
 
+  override def listTableSummaries(namespace: Array[String]): Array[TableSummary] = {
+    // Each table from remote database system is treated as foreign table.
+    this.listTables(namespace)
+        .map(identifier => TableSummary.of(identifier, TableSummary.FOREIGN_TABLE_TYPE))
+  }
+
   override def tableExists(ident: Identifier): Boolean = {
     checkNamespace(ident.namespace())
     val writeOptions = new JdbcOptionsInWrite(
       options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
-    JdbcUtils.classifyException(
-      condition = "FAILED_JDBC.TABLE_EXISTS",
-      messageParameters = Map(
-        "url" -> options.getRedactUrl(),
-        "tableName" -> toSQLId(ident)),
-      dialect,
-      description = s"Failed table existence check: $ident",
-      isRuntime = false) {
-      JdbcUtils.withConnection(options)(JdbcUtils.tableExists(_, writeOptions))
+    JdbcUtils.withConnection(options) {
+      JdbcUtils.classifyException(
+        condition = "FAILED_JDBC.TABLE_EXISTS",
+        messageParameters = Map(
+          "url" -> options.getRedactUrl(),
+          "tableName" -> toSQLId(ident)),
+        dialect,
+        description = s"Failed table existence check: $ident",
+        isRuntime = false)(JdbcUtils.tableExists(_, writeOptions))
     }
   }
 

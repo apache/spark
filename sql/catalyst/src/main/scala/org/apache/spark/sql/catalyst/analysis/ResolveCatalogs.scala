@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.SqlScriptingLocalVariableManager
+import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -57,7 +57,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
             Map("varName" -> toSQLId(nameParts)))
         }
 
-        SqlScriptingLocalVariableManager.get()
+        SqlScriptingContextManager.get().map(_.getVariableManager)
           .getOrElse(throw SparkException.internalError(
               "Scripting local variable manager should be present in SQL script."))
           .qualify(nameParts.last)
@@ -137,7 +137,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   }
 
   private def withinSqlScript: Boolean =
-    SqlScriptingLocalVariableManager.get().isDefined && !AnalysisContext.get.isExecuteImmediate
+    SqlScriptingContextManager.get().map(_.getVariableManager).isDefined &&
+      !AnalysisContext.get.isExecuteImmediate
 
   private def assertValidSessionVariableNameParts(
       nameParts: Seq[String],

@@ -654,6 +654,10 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def createTempTableUsingProviderError(ctx: CreateTableContext): Throwable = {
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_TABLE_USING_PROVIDER", ctx)
+  }
+
   def createFuncWithGeneratedColumnsError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_GENERATED_COLUMNS_AS_PARAMETERS",

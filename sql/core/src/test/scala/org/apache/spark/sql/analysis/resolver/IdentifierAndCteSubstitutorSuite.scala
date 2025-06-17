@@ -81,6 +81,92 @@ class IdentifierAndCteSubstitutorSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("Plan with CTEs not on top level") {
+    val substitutor = new IdentifierAndCteSubstitutor
+
+    withTable("t2") {
+      spark.sql("CREATE TABLE t2 (col1 INT) USING PARQUET")
+
+      val unresolvedPlan = spark.sessionState.sqlParser.parsePlan("""
+      SELECT * FROM (
+        WITH t1 AS (
+          WITH t2 AS (
+            SELECT 1
+          )
+          SELECT * FROM t2
+        )
+        SELECT * FROM t2
+      )
+      """)
+
+      val planAfterSubstitution = substitutor.substitutePlan(unresolvedPlan)
+      assert(
+        planAfterSubstitution
+          .children(0)
+          .children(0)
+          .children(0)
+          .children(0)
+          .isInstanceOf[UnresolvedRelation]
+      )
+      assert(
+        planAfterSubstitution
+          .children(0)
+          .children(0)
+          .asInstanceOf[UnresolvedWith]
+          .cteRelations(0)
+          ._2
+          .children(0)
+          .children(0)
+          .children(0)
+          .isInstanceOf[UnresolvedCteRelationRef]
+      )
+    }
+  }
+
+  test("Plan with CTEs only in CTE definitions") {
+    val substitutor = new IdentifierAndCteSubstitutor
+
+    withTable("t2") {
+      spark.sql("CREATE TABLE t2 (col1 INT) USING PARQUET")
+
+      val unresolvedPlan = spark.sessionState.sqlParser.parsePlan("""
+      SELECT * FROM (
+        WITH t1 AS (
+          SELECT * FROM t2
+        ),
+        t2 AS (
+          SELECT * FROM t1
+        )
+        SELECT 1
+      )
+      """)
+
+      val planAfterSubstitution = substitutor.substitutePlan(unresolvedPlan)
+      assert(
+        planAfterSubstitution
+          .children(0)
+          .children(0)
+          .asInstanceOf[UnresolvedWith]
+          .cteRelations(0)
+          ._2
+          .children(0)
+          .children(0)
+          .isInstanceOf[UnresolvedRelation]
+      )
+      assert(
+        planAfterSubstitution
+          .children(0)
+          .children(0)
+          .asInstanceOf[UnresolvedWith]
+          .cteRelations(1)
+          ._2
+          .children(0)
+          .children(0)
+          .isInstanceOf[UnresolvedCteRelationRef]
+      )
+    }
+  }
+
   test("Plan with CTEs in scalar subquery") {
     val substitutor = new IdentifierAndCteSubstitutor
 

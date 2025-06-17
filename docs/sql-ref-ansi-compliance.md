@@ -532,6 +532,7 @@ Below is a list of all the keywords in Spark SQL.
 |FILEFORMAT|non-reserved|non-reserved|non-reserved|
 |FIRST|non-reserved|non-reserved|non-reserved|
 |FLOAT|non-reserved|non-reserved|reserved|
+|FLOW|non-reserved|non-reserved|non-reserved|
 |FOLLOWING|non-reserved|non-reserved|non-reserved|
 |FOR|reserved|non-reserved|reserved|
 |FOREIGN|reserved|non-reserved|reserved|
@@ -587,6 +588,7 @@ Below is a list of all the keywords in Spark SQL.
 |LEADING|reserved|non-reserved|reserved|
 |LEAVE|non-reserved|non-reserved|non-reserved|
 |LEFT|reserved|strict-non-reserved|reserved|
+|LEVEL|non-reserved|non-reserved|non-reserved|
 |LIKE|non-reserved|non-reserved|reserved|
 |ILIKE|non-reserved|non-reserved|non-reserved|
 |LIMIT|non-reserved|non-reserved|non-reserved|
@@ -603,6 +605,8 @@ Below is a list of all the keywords in Spark SQL.
 |MACRO|non-reserved|non-reserved|non-reserved|
 |MAP|non-reserved|non-reserved|non-reserved|
 |MATCHED|non-reserved|non-reserved|non-reserved|
+|MATERIALIZED|non-reserved|non-reserved|non-reserved|
+|MAX|non-reserved|non-reserved|non-reserved|
 |MERGE|non-reserved|non-reserved|non-reserved|
 |MICROSECOND|non-reserved|non-reserved|non-reserved|
 |MICROSECONDS|non-reserved|non-reserved|non-reserved|
@@ -665,6 +669,7 @@ Below is a list of all the keywords in Spark SQL.
 |RECORDREADER|non-reserved|non-reserved|non-reserved|
 |RECORDWRITER|non-reserved|non-reserved|non-reserved|
 |RECOVER|non-reserved|non-reserved|non-reserved|
+|RECURSION|non-reserved|non-reserved|non-reserved|
 |RECURSIVE|reserved|non-reserved|reserved|
 |REDUCE|non-reserved|non-reserved|non-reserved|
 |REFERENCES|reserved|non-reserved|reserved|
@@ -720,6 +725,8 @@ Below is a list of all the keywords in Spark SQL.
 |STATISTICS|non-reserved|non-reserved|non-reserved|
 |STORED|non-reserved|non-reserved|non-reserved|
 |STRATIFY|non-reserved|non-reserved|non-reserved|
+|STREAM|non-reserved|non-reserved|non-reserved|
+|STREAMING|non-reserved|non-reserved|non-reserved|
 |STRING|non-reserved|non-reserved|non-reserved|
 |STRUCT|non-reserved|non-reserved|non-reserved|
 |SUBSTR|non-reserved|non-reserved|non-reserved|
@@ -787,6 +794,7 @@ Below is a list of all the keywords in Spark SQL.
 |WINDOW|non-reserved|non-reserved|reserved|
 |WITH|reserved|non-reserved|reserved|
 |WITHIN|reserved|non-reserved|reserved|
+|WITHOUT|non-reserved|non-reserved|non-reserved|
 |X|non-reserved|non-reserved|non-reserved|
 |YEAR|non-reserved|non-reserved|non-reserved|
 |YEARS|non-reserved|non-reserved|non-reserved|

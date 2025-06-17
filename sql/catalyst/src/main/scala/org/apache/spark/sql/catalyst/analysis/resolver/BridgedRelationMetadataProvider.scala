@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.analysis.RelationResolution
 import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
@@ -57,32 +57,48 @@ class BridgedRelationMetadataProvider(
           == bridgeRelationId.catalogAndNamespace) {
           relationsWithResolvedMetadata.put(
             relationIdFromUnresolvedRelation(bridgeRelationId.unresolvedRelation),
-            tryConvertUnresolvedCatalogRelation(relationWithResolvedMetadata)
+            visitUnderSubqueryAlias(relationWithResolvedMetadata)({ relation =>
+              tryConvertHiveTableRelation(tryConvertUnresolvedCatalogRelation(relation))
+            })
           )
         }
       }
     )
   }
 
-  private def tryConvertUnresolvedCatalogRelation(source: LogicalPlan): LogicalPlan = {
-    source match {
-      case unresolvedCatalogRelation: UnresolvedCatalogRelation
-          if analyzerBridgeState.catalogRelationsWithResolvedMetadata
-            .containsKey(unresolvedCatalogRelation) =>
-        analyzerBridgeState.catalogRelationsWithResolvedMetadata.get(unresolvedCatalogRelation)
-
-      case SubqueryAlias(id, unresolvedCatalogRelation: UnresolvedCatalogRelation)
-          if analyzerBridgeState.catalogRelationsWithResolvedMetadata
-            .containsKey(unresolvedCatalogRelation) =>
-        SubqueryAlias(
-          id,
-          analyzerBridgeState.catalogRelationsWithResolvedMetadata.get(
-            unresolvedCatalogRelation
-          )
-        )
+  private def tryConvertUnresolvedCatalogRelation(relation: LogicalPlan): LogicalPlan = {
+    relation match {
+      case unresolvedCatalogRelation: UnresolvedCatalogRelation =>
+        analyzerBridgeState.catalogRelationsWithResolvedMetadata
+          .getOrDefault(unresolvedCatalogRelation, unresolvedCatalogRelation)
 
       case _ =>
-        source
+        relation
+    }
+  }
+
+  private def tryConvertHiveTableRelation(relation: LogicalPlan): LogicalPlan = {
+    relation match {
+      case leafNode: LeafNode =>
+        analyzerBridgeState.getLogicalRelationForHiveRelation(leafNode).getOrElse(leafNode)
+      case _ =>
+        relation
+    }
+  }
+
+  private def visitUnderSubqueryAlias(operator: LogicalPlan)(
+      visitor: LogicalPlan => LogicalPlan): LogicalPlan = {
+    operator match {
+      case SubqueryAlias(id, child: LogicalPlan) =>
+        SubqueryAlias(id, visitor(child))
+      case _ =>
+        visitor(operator)
+    }
+  }
+
+  private[sql] object TestOnly {
+    def getRelationsWithResolvedMetadata: RelationsWithResolvedMetadata = {
+      relationsWithResolvedMetadata
     }
   }
 }

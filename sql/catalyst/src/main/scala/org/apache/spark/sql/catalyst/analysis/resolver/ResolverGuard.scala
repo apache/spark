@@ -19,11 +19,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.{
-  FunctionIdentifier,
-  SQLConfHelper,
-  SqlScriptingLocalVariableManager
-}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, SqlScriptingContextManager}
 import org.apache.spark.sql.catalyst.analysis.{
   FunctionRegistry,
   GetViewColumnByNameAndOrdinal,
@@ -31,12 +27,20 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedAlias,
   UnresolvedAttribute,
   UnresolvedFunction,
+  UnresolvedHaving,
   UnresolvedInlineTable,
+  UnresolvedOrdinal,
   UnresolvedRelation,
   UnresolvedStar,
   UnresolvedSubqueryColumnAliases
 }
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{
+  AggregateExpression,
+  AnyValue,
+  First,
+  Last
+}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -133,6 +137,12 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
         checkSetOperation(setOperation)
       case sort: Sort =>
         checkSort(sort)
+      case supervisingCommand: SupervisingCommand =>
+        true
+      case repartition: Repartition =>
+        checkRepartition(repartition)
+      case having: UnresolvedHaving =>
+        checkHaving(having)
       case _ =>
         false
     }
@@ -166,6 +176,8 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
         checkUnresolvedAttribute(unresolvedAttribute)
       case literal: Literal =>
         checkLiteral(literal)
+      case unresolvedOrdinal: UnresolvedOrdinal =>
+        checkUnresolvedOrdinal(unresolvedOrdinal)
       case unresolvedPredicate: Predicate =>
         checkUnresolvedPredicate(unresolvedPredicate)
       case scalarSubquery: ScalarSubquery =>
@@ -197,7 +209,7 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
 
   private def checkUnresolvedWith(unresolvedWith: UnresolvedWith) = {
     !unresolvedWith.allowRecursion && unresolvedWith.cteRelations.forall {
-      case (cteName, ctePlan) =>
+      case (cteName, ctePlan, _) =>
         checkOperator(ctePlan)
     } && checkOperator(unresolvedWith.child)
   }
@@ -273,11 +285,8 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
   private def checkSetOperation(setOperation: SetOperation) =
     setOperation.children.forall(checkOperator)
 
-  private def checkSort(sort: Sort) = {
-    checkOperator(sort.child) && sort.order.forall(
-      sortOrder => checkExpression(sortOrder.child)
-    )
-  }
+  private def checkSort(sort: Sort) =
+    checkOperator(sort.child) && sort.order.forall(sortOrder => checkExpression(sortOrder))
 
   private def checkOneRowRelation(oneRowRelation: OneRowRelation) = true
 
@@ -331,6 +340,8 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
 
   private def checkLiteral(literal: Literal) = true
 
+  private def checkUnresolvedOrdinal(unresolvedOrdinal: UnresolvedOrdinal) = true
+
   private def checkScalarSubquery(scalarSubquery: ScalarSubquery) =
     checkOperator(scalarSubquery.plan)
 
@@ -347,6 +358,13 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
   private def checkGetViewColumnBynameAndOrdinal(
       getViewColumnByNameAndOrdinal: GetViewColumnByNameAndOrdinal) = true
 
+  private def checkRepartition(repartition: Repartition) = {
+    checkOperator(repartition.child)
+  }
+
+  private def checkHaving(having: UnresolvedHaving) =
+    checkExpression(having.havingCondition) && checkOperator(having.child)
+
   /**
    * Most of the expressions come from resolving the [[UnresolvedFunction]], but here we have some
    * popular expressions allowlist for two reasons:
@@ -358,7 +376,8 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
       // Math
       case _: UnaryMinus | _: BinaryArithmetic | _: LeafMathExpression | _: UnaryMathExpression |
           _: UnaryLogExpression | _: BinaryMathExpression | _: BitShiftOperation | _: RoundCeil |
-          _: Conv | _: RoundBase | _: Factorial | _: Bin | _: Hex | _: Unhex | _: WidthBucket =>
+          _: Conv | _: RoundBase | _: Factorial | _: Bin | _: Hex | _: Unhex | _: WidthBucket |
+          _: UnaryPositive | _: BitwiseNot =>
         true
       // Strings
       case _: Collate | _: Collation | _: ResolvedCollation | _: UnresolvedCollation | _: Concat |
@@ -374,12 +393,11 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
           _: Luhncheck =>
         true
       // Datetime
-      case _: TimeZoneAwareExpression =>
+      case _: CurrentTime | _: CurrentTimestampLike | _: TimeZoneAwareExpression =>
         true
       // Decimal
       case _: UnscaledValue | _: MakeDecimal | _: CheckOverflow | _: CheckOverflowInSum |
-          _: DecimalAddNoOverflowCheck |
-          _: DecimalDivideWithOverflowCheck =>
+          _: DecimalAddNoOverflowCheck | _: DecimalDivideWithOverflowCheck =>
         true
       // Interval
       case _: ExtractIntervalPart[_] | _: IntervalNumOperation | _: MultiplyInterval |
@@ -399,8 +417,8 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
           _: RegExpCount | _: RegExpSubStr | _: RegExpInStr =>
         true
       // JSON
-      case _: JsonToStructs | _: StructsToJson |
-          _: SchemaOfJson | _: JsonObjectKeys | _: LengthOfJsonArray =>
+      case _: JsonToStructs | _: StructsToJson | _: SchemaOfJson | _: JsonObjectKeys |
+          _: LengthOfJsonArray =>
         true
       // CSV
       case _: SchemaOfCsv | _: StructsToCsv | _: CsvToStructs =>
@@ -412,7 +430,10 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
       case _: XmlToStructs | _: SchemaOfXml | _: StructsToXml =>
         true
       // Misc
-      case _: TaggingExpression =>
+      case _: SortOrder | _: TaggingExpression =>
+        true
+      // Aggregate
+      case _: AggregateExpression | _: AnyValue | _: First | _: Last =>
         true
       case _ =>
         false
@@ -429,6 +450,8 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
     } else if (conf.getConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY) !=
       LegacyBehaviorPolicy.CORRECTED) {
       Some("legacyCTEPrecedencePolicy")
+    } else if (conf.getConfString("pipelines.id", null) != null) {
+      Some("dlt")
     } else {
       None
     }
@@ -438,7 +461,7 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
     catalogManager.tempVariableManager.isEmpty
 
   private def checkScriptingVariables() =
-    SqlScriptingLocalVariableManager.get().forall(_.isEmpty)
+    SqlScriptingContextManager.get().map(_.getVariableManager).forall(_.isEmpty)
 
   private def tryThrowUnsupportedSinglePassAnalyzerFeature(operator: LogicalPlan): Unit = {
     tryThrowUnsupportedSinglePassAnalyzerFeature(s"${operator.getClass} operator resolution")
@@ -486,19 +509,24 @@ object ResolverGuard {
     map += ("array_sort", ())
     map += ("transform", ())
     // Functions that require generator support.
+    map += ("collations", ())
     map += ("explode", ())
     map += ("explode_outer", ())
     map += ("inline", ())
     map += ("inline_outer", ())
+    map += ("json_tuple", ())
     map += ("posexplode", ())
     map += ("posexplode_outer", ())
+    map += ("stack", ())
+    map += ("sql_keywords", ())
+    map += ("variant_explode", ())
+    map += ("variant_explode_outer", ())
     // Functions that require session/time window resolution.
     map += ("session_window", ())
     map += ("window", ())
     map += ("window_time", ())
     // Functions that are not resolved properly.
     map += ("collate", ())
-    map += ("json_tuple", ())
     // Functions that produce wrong schemas/plans because of alias assignment.
     map += ("from_json", ())
     map += ("schema_of_json", ())

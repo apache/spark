@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -281,6 +283,19 @@ class RobustScalerModel private[ml] (
 object RobustScalerModel extends MLReadable[RobustScalerModel] {
   private[ml] case class Data(range: Vector, median: Vector)
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeVector(data.range, dos)
+    serializeVector(data.median, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val range = deserializeVector(dis)
+    val median = deserializeVector(dis)
+    Data(range, median)
+  }
+
   private[RobustScalerModel]
   class RobustScalerModelWriter(instance: RobustScalerModel) extends MLWriter {
 
@@ -288,7 +303,7 @@ object RobustScalerModel extends MLReadable[RobustScalerModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.range, instance.median)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -299,7 +314,7 @@ object RobustScalerModel extends MLReadable[RobustScalerModel] {
     override def load(path: String): RobustScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
       val model = new RobustScalerModel(metadata.uid, data.range, data.median)
       metadata.getAndSetParams(model)
       model
