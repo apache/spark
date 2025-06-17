@@ -37,9 +37,9 @@ import org.apache.spark.io.{CompressionCodec => SparkCompressionCodec}
  * non-standard file extensions like `.zstd` and `.gzip` for Zstandard and Gzip codecs.
  */
 object HadoopCodecStreams {
-  private val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
-  private val isSparkZstdCodecEnabled =
-    sparkConf.getBoolean(config.FILE_DATA_SOURCE_ZSTANDARD_ENABLED.key, true)
+  private lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
+  private lazy val isSparkZstdCodecEnabled =
+    sparkConf.get(config.FILE_DATA_SOURCE_ZSTANDARD_ENABLED)
   private val ZSTD_EXTENSIONS = Seq(".zstd", ".zst")
 
   // get codec based on file name extension
@@ -85,7 +85,9 @@ object HadoopCodecStreams {
     isOpt
   }
 
-  def createInputStream(config: Configuration, file: Path): InputStream = {
+  def createInputStream(
+    config: Configuration,
+    file: Path): InputStream = {
     val fs = file.getFileSystem(config)
     val inputStream: InputStream = fs.open(file)
 
