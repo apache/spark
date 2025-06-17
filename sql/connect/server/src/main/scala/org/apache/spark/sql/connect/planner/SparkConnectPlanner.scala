@@ -2425,7 +2425,6 @@ class SparkConnectPlanner(
         e.setTagValue(LogicalPlan.ALLOW_NON_EXISTENT_COL, ())
         Column(e)
       }
-      // rel.getColumnsList.asScala.toSeq.map(expr => Column(transformExpression(expr)))
       output = output.drop(cols.head, cols.tail: _*)
     }
     if (rel.getColumnNamesCount > 0) {
