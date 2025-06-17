@@ -538,6 +538,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       e: Expression,
       q: Seq[LogicalPlan]): Expression = e match {
     case u: UnresolvedAttribute =>
+
       resolveDataFrameColumn(u, q).getOrElse(u)
     case u: UnresolvedDataFrameStar =>
       resolveDataFrameStar(u, q)
@@ -565,7 +566,14 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       //  df1.select(df2.a)   <-   illegal reference df2.a
       throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
     }
-    resolved.map(_._1)
+
+    if (resolved.nonEmpty) {
+      resolved.map(_._1)
+    } else if (u.getTagValue(LogicalPlan.ALLOW_NON_EXISTENT_COL).nonEmpty) {
+      Some(NonExistentAttribute(u.name))
+    } else {
+      None
+    }
   }
 
   private def resolveDataFrameColumnByPlanId(

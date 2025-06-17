@@ -790,3 +790,29 @@ object FileSourceGeneratedMetadataAttribute {
       .map(attr -> _)
   }
 }
+
+
+case class NonExistentAttribute(name: String) extends Attribute with Unevaluable {
+  override def dataType: DataType = NullType
+  override def canEqual(that: Any): Boolean = that.isInstanceOf[NonExistentAttribute]
+
+  override def withNullability(newNullability: Boolean): Attribute =
+    throw SparkUnsupportedOperationException()
+  override def newInstance(): Attribute =
+    throw SparkUnsupportedOperationException()
+  override def withQualifier(newQualifier: Seq[String]): Attribute =
+    throw SparkUnsupportedOperationException()
+  override def withName(newName: String): Attribute =
+    throw SparkUnsupportedOperationException()
+  override def withMetadata(newMetadata: Metadata): Attribute =
+    throw SparkUnsupportedOperationException()
+  override def qualifier: Seq[String] =
+    throw SparkUnsupportedOperationException()
+  override def exprId: ExprId =
+    throw SparkUnsupportedOperationException()
+  override def withExprId(newExprId: ExprId): Attribute =
+    throw SparkUnsupportedOperationException()
+  override def withDataType(newType: DataType): Attribute =
+    throw SparkUnsupportedOperationException()
+  override def nullable: Boolean = true
+}

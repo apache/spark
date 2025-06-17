@@ -217,6 +217,8 @@ object LogicalPlan {
   //    to the old code path.
   private[spark] val PLAN_ID_TAG = TreeNodeTag[Long]("plan_id")
   private[spark] val IS_METADATA_COL = TreeNodeTag[Unit]("is_metadata_col")
+  // Whether an expression can be resolved to a non-existent column.
+  private[spark] val ALLOW_NON_EXISTENT_COL = TreeNodeTag[Unit]("allow_non_existent_col")
 }
 
 /**
