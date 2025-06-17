@@ -69,6 +69,14 @@ public class VariantBuilder {
     return builder.result();
   }
 
+  public static VariantBuilder parseJsonAndReturnBuilder(
+      JsonParser parser,
+      boolean allowDuplicateKeys) throws IOException {
+    VariantBuilder builder = new VariantBuilder(allowDuplicateKeys);
+    builder.buildJson(parser);
+    return builder;
+  }
+
   // Build the variant metadata from `dictionaryKeys` and return the variant result.
   public Variant result() {
     int numKeys = dictionaryKeys.size();

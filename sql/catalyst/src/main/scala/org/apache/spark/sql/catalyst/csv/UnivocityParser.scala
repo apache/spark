@@ -53,7 +53,9 @@ class UnivocityParser(
     dataSchema: StructType,
     requiredSchema: StructType,
     val options: CSVOptions,
-    filters: Seq[Filter]) extends Logging {
+    filters: Seq[Filter],
+    partitionSchema: StructType = StructType(Seq.empty),
+    partitionValues: InternalRow = InternalRow.empty) extends Logging {
   require(requiredSchema.toSet.subsetOf(dataSchema.toSet),
     s"requiredSchema (${requiredSchema.catalogString}) should be the subset of " +
       s"dataSchema (${dataSchema.catalogString}).")
@@ -369,6 +371,31 @@ class UnivocityParser(
         fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
         singleVariantFieldConverters(i).convertInput(builder, tokens(i))
       }
+
+      // Add the partition columns to the variant object
+      if (partitionSchema.nonEmpty) {
+        partitionSchema.zipWithIndex.foreach { case (field, index) =>
+          val value = partitionValues.get(index, field.dataType)
+          if (value != null) {
+            val id = builder.addKey(field.name)
+            fields.add(new VariantBuilder.FieldEntry(field.name, id, builder.getWritePos - start))
+            field.dataType match {
+              case LongType => builder.appendLong(value.toString.toLong)
+              case _: DecimalType => builder.appendDecimal(
+                decimalParser(value.toString)
+              )
+              case DateType => builder.appendDate(dateFormatter.parse(value.toString))
+              case TimestampNTZType =>
+                builder.appendTimestampNtz(timestampNTZFormatter.parse(value.toString))
+              case TimestampType =>
+                builder.appendTimestamp(timestampFormatter.parse(value.toString))
+              case BooleanType => builder.appendBoolean(value.toString.toBoolean)
+              case StringType => builder.appendString(value.toString)
+            }
+          }
+        }
+      }
+
       builder.finishWritingObject(start, fields)
       val v = builder.result()
       row(0) = new VariantVal(v.getValue, v.getMetadata)

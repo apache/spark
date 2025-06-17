@@ -24,7 +24,7 @@ import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{DataSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -136,6 +136,12 @@ trait FileFormat {
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
     val dataReader = buildReader(
       sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
+
+    if (options.contains(DataSourceOptions.SINGLE_VARIANT_COLUMN)) {
+      // In singleVariantColumn mode, the partition values should be pushed down to the parser and
+      // included in variant column of the output rows
+      return (file: PartitionedFile) => dataReader(file)
+    }
 
     new (PartitionedFile => Iterator[InternalRow]) with Serializable {
       private val fullSchema = toAttributes(requiredSchema) ++ toAttributes(partitionSchema)

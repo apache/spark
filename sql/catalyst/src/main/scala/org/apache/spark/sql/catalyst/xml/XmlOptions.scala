@@ -213,7 +213,7 @@ object XmlOptions extends DataSourceOptions {
   val INDENT = newOption("indent")
   val PREFERS_DECIMAL = newOption("prefersDecimal")
   val VALIDATE_NAME = newOption("validateName")
-  val SINGLE_VARIANT_COLUMN = newOption("singleVariantColumn")
+  val SINGLE_VARIANT_COLUMN = newOption(DataSourceOptions.SINGLE_VARIANT_COLUMN)
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"

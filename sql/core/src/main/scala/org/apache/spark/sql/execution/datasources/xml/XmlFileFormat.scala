@@ -121,7 +121,9 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
     (file: PartitionedFile) => {
       val parser = new StaxXmlParser(
         actualRequiredSchema,
-        xmlOptions)
+        xmlOptions,
+        partitionSchema,
+        file.partitionValues)
       XmlDataSource(xmlOptions).readFile(
         broadcastedHadoopConf.value.value,
         file,

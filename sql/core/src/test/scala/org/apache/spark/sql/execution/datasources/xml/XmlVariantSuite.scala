@@ -933,4 +933,58 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       .map(_.getString(0).replaceAll("\\s+", ""))
     assert(xmlResult.head === xmlStr)
   }
+
+  // ==========================================================
+  // ====== SingleVariantColumn with partition schema =========
+  // ==========================================================
+
+  test("SingleVariantColumn with partition columns in the source file path") {
+    withTempDir { dir =>
+      // Create partitioned directory structure and copy file to each partition
+      val partitionDirs = Seq(
+        s"${dir.getCanonicalPath}/year=2021/month=01",
+        s"${dir.getCanonicalPath}/year=2021/month=02",
+        s"${dir.getCanonicalPath}/year=2022/month=03"
+      )
+
+      partitionDirs.foreach { path =>
+        val partitionDir = new java.io.File(path)
+        partitionDir.mkdirs()
+
+        // Copy cars.xml to each partition
+        val srcPath = getTestResourcePath(resDir + "cars.xml")
+        val destPath = s"${path}/data.xml"
+
+        // Use Spark's file utilities to copy file
+        val fs = org.apache.hadoop.fs.FileSystem.get(spark.sessionState.newHadoopConf())
+        fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(srcPath),
+          new org.apache.hadoop.fs.Path(destPath))
+      }
+
+      // Read the files with partitioning info
+      val df = spark.read
+        .format("xml")
+        .option("singleVariantColumn", "var")
+        .options(baseOptions)
+        .load(dir.getCanonicalPath)
+
+      // Check that the DataFrame only contains the variant column
+      assert(df.columns.length == 1)
+
+      // Verify that the partition columns are present in the variant column
+      checkAnswer(
+        df.select(
+          variant_get(col("var"), "$.make", "string"),
+          variant_get(col("var"), "$.year", "string"),
+          variant_get(col("var"), "$.month", "string")
+        ).orderBy("year", "month"),
+        Seq(
+          // Each partition has all 3 rows from cars.xml
+          Row(2021, "01", "Chevy"), Row(2021, "01", "Ford"), Row(2021, "01", "Tesla"),
+          Row(2021, "02", "Chevy"), Row(2021, "02", "Ford"), Row(2021, "02", "Tesla"),
+          Row(2022, "03", "Chevy"), Row(2022, "03", "Ford"), Row(2022, "03", "Tesla")
+        )
+      )
+    }
+  }
 }

@@ -139,7 +139,9 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
         actualDataSchema,
         actualRequiredSchema,
         parsedOptions,
-        actualFilters)
+        actualFilters,
+        partitionSchema,
+        file.partitionValues)
       // Use column pruning when specified by Catalyst, except when one or more columns have
       // existence default value(s), since in that case we instruct the CSV parser to disable column
       // pruning and instead read each entire row in order to correctly assign the default value(s).
