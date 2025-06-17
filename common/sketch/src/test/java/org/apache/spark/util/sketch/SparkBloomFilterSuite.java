@@ -31,8 +31,6 @@ import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 
-@Tag("BloomFilter")
-@Tag("org.apache.spark.tags.SlowTest")
 public class SparkBloomFilterSuite {
 
     // the implemented fpp limit is only approximating the hard boundary,
