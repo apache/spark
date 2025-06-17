@@ -921,17 +921,17 @@
     },
     "sqlState" : "21S01"
   },
-  "DATATYPE_CANNOT_ORDER" : {
-    "message" : [
-      "Type <dataType> does not support ordered operations."
-    ],
-    "sqlState" : "0A000"
-  },
   "DATAFLOW_GRAPH_NOT_FOUND" : {
     "message" : [
       "Dataflow graph with id <graphId> could not be found"
     ],
     "sqlState" : "KD011"
+  },
+  "DATATYPE_CANNOT_ORDER" : {
+    "message" : [
+      "Type <dataType> does not support ordered operations."
+    ],
+    "sqlState" : "0A000"
   },
   "DATATYPE_MISMATCH" : {
     "message" : [
