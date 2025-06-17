@@ -1805,11 +1805,10 @@ package object config {
       .doc("If enabled, FailureFetchResult will be added to the head of the result queue in " +
         "ShuffleBlockFetcherIterator and fail the task as soon as the failure result is " +
         "consumed. Otherwise, the iterator must first process all the successfully fetched " +
-        "blocks that are ahead in the queue before failing the task front of the result " +
-        "queue and then fail the task.")
+        "blocks that are ahead in the queue before failing the task.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE =
     ConfigBuilder("spark.storage.localDiskByExecutors.cacheSize")
