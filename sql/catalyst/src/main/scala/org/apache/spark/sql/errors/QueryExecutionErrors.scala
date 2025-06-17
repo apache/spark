@@ -152,13 +152,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       s: UTF8String,
       fmt: UTF8String,
       hint: String): SparkIllegalArgumentException = {
-      new SparkIllegalArgumentException(
-        errorClass = "CONVERSION_INVALID_INPUT",
-        messageParameters = Map(
-          "str" -> toSQLValue(s, StringType),
-          "fmt" -> toSQLValue(fmt, StringType),
-          "targetType" -> toSQLType(to),
-          "suggestion" -> toSQLId(hint)))
+    new SparkIllegalArgumentException(
+      errorClass = "CONVERSION_INVALID_INPUT",
+      messageParameters = Map(
+        "str" -> toSQLValue(s, StringType),
+        "fmt" -> toSQLValue(fmt, StringType),
+        "targetType" -> toSQLType(to),
+        "suggestion" -> toSQLId(hint)))
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
@@ -249,7 +249,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def invalidBitmapPositionError(bitPosition: Long,
-                                 bitmapNumBytes: Long): ArrayIndexOutOfBoundsException = {
+      bitmapNumBytes: Long): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_BITMAP_POSITION",
       messageParameters = Map(
@@ -346,7 +346,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "UNSUPPORTED_FEATURE.LITERAL_TYPE",
       messageParameters = Map(
         "value" -> v.toString,
-        "type" ->  v.getClass.toString))
+        "type" -> v.getClass.toString))
   }
 
   def pivotColumnUnsupportedError(v: Any, expr: Expression): RuntimeException = {
@@ -668,7 +668,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def withoutSuggestionIntervalArithmeticOverflowError(
-    context: QueryContext): SparkArithmeticException = {
+      context: QueryContext): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
       messageParameters = Map(),
@@ -728,7 +728,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "windowFunc" -> windowFuncList.map(toSQLStmt(_)).mkString(","),
         "columnName" -> columnNameList.map(toSQLId(_)).mkString(","),
         "windowSpec" -> windowSpecList.map(toSQLStmt(_)).mkString(",")),
-        origin = origin)
+      origin = origin)
   }
 
   def multiplePathsSpecifiedError(allPaths: Seq[String]): SparkIllegalArgumentException = {
@@ -1421,7 +1421,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def arrayFunctionWithElementsExceedLimitError(
-    prettyName: String, numberOfElements: Long): SparkRuntimeException = {
+      prettyName: String, numberOfElements: Long): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
       messageParameters = Map(
@@ -1432,7 +1432,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def createArrayWithElementsExceedLimitError(
-    prettyName: String, count: Any): SparkRuntimeException = {
+      prettyName: String, count: Any): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
       messageParameters = Map(
@@ -1547,7 +1547,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "_LEGACY_ERROR_TEMP_2176",
       messageParameters = Map(
         "numElements" -> numElements.toString(),
-        "maxRoundedArrayLength"-> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
         "additionalErrorMessage" -> additionalErrorMessage))
   }
 
@@ -1742,7 +1742,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def stateNotDefinedOrAlreadyRemovedError(): Throwable = {
-      new NoSuchElementException("State is either not defined or has already been removed")
+    new NoSuchElementException("State is either not defined or has already been removed")
   }
 
   def statefulOperatorNotMatchInStateMetadataError(
@@ -1750,6 +1750,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       opsInCurBatchSeq: Map[Long, String]): SparkRuntimeException = {
     def formatPairString(pair: (Long, String)): String
     = s"(OperatorId: ${pair._1} -> OperatorName: ${pair._2})"
+
     new SparkRuntimeException(
       errorClass = s"STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA",
       messageParameters = Map(
@@ -2630,7 +2631,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       acquiredThreadInfo: String,
       timeWaitedMs: Long,
       stackTraceOutput: String): Throwable = {
-    new SparkException (
+    new SparkException(
       errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
       messageParameters = Map(
         "loggingId" -> loggingId,
@@ -2643,7 +2644,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def cannotReadCheckpoint(expectedVersion: String, actualVersion: String): Throwable = {
-    new SparkException (
+    new SparkException(
       errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_CHECKPOINT",
       messageParameters = Map(
         "expectedVersion" -> expectedVersion,
@@ -2652,7 +2653,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def cannotFindBaseSnapshotCheckpoint(lineage: String): Throwable = {
-    new SparkException (
+    new SparkException(
       errorClass =
         "CANNOT_LOAD_STATE_STORE.CANNOT_FIND_BASE_SNAPSHOT_CHECKPOINT",
       messageParameters = Map("lineage" -> lineage),
@@ -2769,6 +2770,28 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "function" -> toSQLId(function)))
   }
 
+  def approxTopKNonPositiveValue(argName: String, argValue: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "APPROX_TOP_K_NON_POSITIVE_ARG",
+      messageParameters = Map(
+        "argName" -> toSQLId(argName),
+        "argValue" -> toSQLValue(argValue, IntegerType)))
+  }
+
+  def approxTopKNullArg(argName: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "APPROX_TOP_K_NULL_ARG",
+      messageParameters = Map("argName" -> toSQLId(argName)))
+  }
+
+  def approxTopKMaxItemsTrackedLessThanK(maxItemsTracked: Int, k: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K",
+      messageParameters = Map(
+        "maxItemsTracked" -> toSQLValue(maxItemsTracked, IntegerType),
+        "k" -> toSQLValue(k, IntegerType)))
+  }
+
   def mergeCardinalityViolationError(): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "MERGE_CARDINALITY_VIOLATION",
@@ -2795,7 +2818,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       val errorParmsMutable = collection.mutable.Map[String, String]()
       errorParms.foreach(StringType, StringType, { case (key, value) =>
         errorParmsMutable += (key.toString ->
-          (if (value == null) { "null" } else { value.toString } ))
+          (if (value == null) {
+            "null"
+          } else {
+            value.toString
+          }))
       })
       errorParmsMutable.toMap
     } else {
