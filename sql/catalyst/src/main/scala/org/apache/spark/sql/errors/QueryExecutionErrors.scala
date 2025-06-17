@@ -2152,20 +2152,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = failureReason)
   }
 
-  def foreachWriterAbortedDueToTaskFailureError(errors: Seq[Throwable] = Seq.empty): Throwable = {
-    val numErrors = if (errors.nonEmpty) errors.size else 1
-    val errorDetails = if (errors.nonEmpty) {
-      errors.map(e => Option(e.getMessage).getOrElse(e.getClass.getSimpleName)).mkString("; ")
-    } else {
-      "Task failure"
-    }
+  def foreachWriterAbortedDueToTaskFailureError(): Throwable = {
     new SparkException(
       errorClass = "FOREACH_WRITER_ABORTED",
-      messageParameters = Map(
-        "numErrors" -> numErrors.toString,
-        "errorDetails" -> errorDetails
-      ),
-      cause = errors.headOption.orNull)
+      messageParameters = Map.empty,
+      cause = null)
   }
 
   def incorrectRampUpRate(rowsPerSecond: Long,

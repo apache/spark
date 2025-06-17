@@ -308,55 +308,12 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       assert(allEvents(0)(0) === ForeachWriterSuite.Open(partition = 0, version = 0))
       // `close` should be called with the error
       val errorEvent = allEvents(0)(1).asInstanceOf[ForeachWriterSuite.Close]
-      // "Task failure" happens when the error is not caused by ForeachWriter
+      // when the error is not caused by ForeachWriter
       checkError(
         exception = errorEvent.error.get.asInstanceOf[SparkException],
         condition = "FOREACH_WRITER_ABORTED",
-        parameters = Map(
-          "numErrors" -> "1",
-          "errorDetails" -> "Task failure"
-        )
+        parameters = Map.empty
       )
-    }
-  }
-
-  test("foreach with error in write stage should show error details") {
-    withTempDir { checkpointDir =>
-      val input = MemoryStream[Int]
-      val customError = new IllegalArgumentException("Custom error in write stage")
-      val query = input.toDS().repartition(1).writeStream
-        .option("checkpointLocation", checkpointDir.getCanonicalPath)
-        .foreach(new TestForeachWriter() {
-          override def process(value: Int): Unit = {
-            super.process(value)
-            if (value == 2) {
-              throw customError
-            }
-          }
-        })
-        .start()
-      input.addData(1, 2, 3, 4)
-
-      val e = intercept[StreamingQueryException] {
-        query.processAllAvailable()
-      }
-
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.getMessage === "Custom error in write stage")
-      assert(query.isActive === false)
-
-      val allEvents = ForeachWriterSuite.allEvents()
-      assert(allEvents.size === 1)
-      assert(allEvents(0)(0) === ForeachWriterSuite.Open(partition = 0, version = 0))
-      assert(allEvents(0)(1) === ForeachWriterSuite.Process(value = 1))
-
-      // The error should be the IllegalArgumentException that was thrown in process()
-      val errorEvent = allEvents(0)(2).asInstanceOf[ForeachWriterSuite.Close]
-      val error = errorEvent.error.get
-      assert(error.isInstanceOf[IllegalArgumentException],
-        s"Expected IllegalArgumentException, got ${error.getClass}")
-      assert(error.getMessage === "Custom error in write stage",
-        s"Expected 'Custom error in write stage', got '${error.getMessage}'")
     }
   }
 }
