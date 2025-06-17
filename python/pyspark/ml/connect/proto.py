@@ -71,7 +71,8 @@ class AttributeRelation(LogicalPlan):
     """
 
     def __init__(
-        self, ref_id: str,
+        self,
+        ref_id: str,
         methods: List[pb2.Fetch.Method],
         child: Optional["LogicalPlan"] = None,
     ) -> None:

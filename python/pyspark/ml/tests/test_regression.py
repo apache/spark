@@ -236,7 +236,9 @@ class RegressionTestsMixin:
             self.assertTrue(np.allclose(summary.explainedVariance, 0.07997500000000031, atol=1e-4))
             self.assertTrue(np.allclose(summary.meanAbsoluteError, 0.4200000000000002, atol=1e-4))
             self.assertTrue(np.allclose(summary.meanSquaredError, 0.20212500000000005, atol=1e-4))
-            self.assertTrue(np.allclose(summary.rootMeanSquaredError, 0.44958314025327956, atol=1e-4))
+            self.assertTrue(
+                np.allclose(summary.rootMeanSquaredError, 0.44958314025327956, atol=1e-4)
+            )
             self.assertTrue(np.allclose(summary.r2, 0.4427212572373862, atol=1e-4))
             self.assertTrue(np.allclose(summary.r2adj, -0.6718362282878414, atol=1e-4))
 
