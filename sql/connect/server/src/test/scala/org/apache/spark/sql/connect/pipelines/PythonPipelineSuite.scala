@@ -90,10 +90,11 @@ class PythonPipelineSuite
   }
 
   test("basic") {
-    val graph = buildGraph("""
+    val graph = buildGraph(
+      """
         |@sdp.table
         |def table1():
-        |    return spark.range(10)
+        |    return spark.readStream.format("rate").load()
         |""".stripMargin)
       .resolve()
       .validate()
@@ -112,11 +113,11 @@ class PythonPipelineSuite
         |def c():
         |  return spark.readStream.table("a")
         |
-        |@sdp.table()
+        |@sdp.materialized_view()
         |def d():
         |  return spark.read.table("a")
         |
-        |@sdp.table()
+        |@sdp.materialized_view()
         |def a():
         |  return spark.range(5)
         |""".stripMargin)
@@ -177,11 +178,11 @@ class PythonPipelineSuite
   test("referencing external datasets") {
     sql("CREATE TABLE spark_catalog.default.src AS SELECT * FROM RANGE(5)")
     val graph = buildGraph("""
-        |@sdp.table
+        |@sdp.materialized_view
         |def a():
         |  return spark.read.table("spark_catalog.default.src")
         |
-        |@sdp.table
+        |@sdp.materialized_view
         |def b():
         |  return spark.table("spark_catalog.default.src")
         |
@@ -230,11 +231,11 @@ class PythonPipelineSuite
         |def a():
         |  return spark.read.table("spark_catalog.default.src")
         |
-        |@sdp.table
+        |@sdp.materialized_view
         |def b():
         |  return spark.table("spark_catalog.default.src")
         |
-        |@sdp.table
+        |@sdp.materialized_view
         |def c():
         |  return spark.readStream.table("spark_catalog.default.src")
         |""".stripMargin).resolve()

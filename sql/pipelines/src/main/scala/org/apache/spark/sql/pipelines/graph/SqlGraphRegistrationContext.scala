@@ -199,7 +199,7 @@ class SqlGraphRegistrationContext(
           ),
           format = cst.tableSpec.provider,
           normalizedPath = None,
-          isStreamingTableOpt = None
+          isStreamingTable = true
         )
       )
     }
@@ -230,7 +230,7 @@ class SqlGraphRegistrationContext(
           ),
           format = cst.tableSpec.provider,
           normalizedPath = None,
-          isStreamingTableOpt = None
+          isStreamingTable = true
         )
       )
 
@@ -281,7 +281,7 @@ class SqlGraphRegistrationContext(
           ),
           format = cmv.tableSpec.provider,
           normalizedPath = None,
-          isStreamingTableOpt = None
+          isStreamingTable = false
         )
       )
 
