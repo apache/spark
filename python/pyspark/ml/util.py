@@ -280,7 +280,6 @@ def try_remote_call(f: FuncT) -> FuncT:
     @functools.wraps(f)
     def wrapped(self: "JavaWrapper", name: str, *args: Any) -> Any:
         import pyspark.sql.connect.proto as pb2
-        from pyspark.ml.connect.serialize import serialize_param
         from pyspark.sql.connect.session import SparkSession
 
         session = SparkSession.getActiveSession()
