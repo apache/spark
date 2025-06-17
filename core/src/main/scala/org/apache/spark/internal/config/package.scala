@@ -2846,16 +2846,4 @@ package object config {
       .checkValues(Set("connect", "classic"))
       .createWithDefault(
         if (sys.env.get("SPARK_CONNECT_MODE").contains("1")) "connect" else "classic")
-
-  private[spark] val FILE_DATA_SOURCE_ZSTANDARD_ENABLED =
-    ConfigBuilder("spark.io.zStandard.enabled")
-      .internal()
-      .doc("Hadoop library used in Spark has not been compiled with ZSTD support. " +
-        "This conf enables the use of ZStandard codec available within SparkCompressionCodec " +
-        "for file data sources. This conf is not a SQLConf because SQLConf is not accessible " +
-        "from WholeTextFileRecordReader. This is a temporary workaround until Spark's Hadoop " +
-        "library has support for ZSTD.")
-      .version("4.1.0")
-      .booleanConf
-      .createWithDefault(true)
 }

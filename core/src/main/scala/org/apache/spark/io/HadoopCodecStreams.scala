@@ -27,7 +27,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.compress._
 
 import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.internal.config
 import org.apache.spark.io.{CompressionCodec => SparkCompressionCodec}
 
 /**
@@ -37,9 +36,6 @@ import org.apache.spark.io.{CompressionCodec => SparkCompressionCodec}
  * non-standard file extensions like `.zstd` and `.gzip` for Zstandard and Gzip codecs.
  */
 object HadoopCodecStreams {
-  private lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
-  private lazy val isSparkZstdCodecEnabled =
-    sparkConf.get(config.FILE_DATA_SOURCE_ZSTANDARD_ENABLED)
   private val ZSTD_EXTENSIONS = Seq(".zstd", ".zst")
 
   // get codec based on file name extension
@@ -62,16 +58,10 @@ object HadoopCodecStreams {
   def createZstdInputStream(
     file: Path,
     inputStream: InputStream): Option[InputStream] = {
+    val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     val fileName = file.getName.toLowerCase(Locale.ROOT)
 
-    // FOR DEBUGGING GITHUB ACTION FAILURE ONLY -- START
-    assert(ZSTD_EXTENSIONS.exists(fileName.endsWith),
-      s"File $fileName does not have a recognized Zstandard extension:" +
-        s"${ZSTD_EXTENSIONS.mkString(", ")}")
-    assert(isSparkZstdCodecEnabled, "Spark Zstandard codec is not enabled.")
-    // FOR DEBUGGING GITHUB ACTION FAILURE ONLY -- END
-
-    val isOpt = if (ZSTD_EXTENSIONS.exists(fileName.endsWith) && isSparkZstdCodecEnabled) {
+    val isOpt = if (ZSTD_EXTENSIONS.exists(fileName.endsWith)) {
       Some(
         SparkCompressionCodec
           .createCodec(sparkConf, SparkCompressionCodec.ZSTD)
@@ -80,8 +70,6 @@ object HadoopCodecStreams {
     } else {
       None
     }
-    assert(isOpt.isDefined,
-      s"Failed to create Zstandard input stream for file: $fileName")
     isOpt
   }
 
@@ -98,7 +86,7 @@ object HadoopCodecStreams {
         } catch {
           case e: RuntimeException =>
             // createInputStream may fail for ZSTD if hadoop is not already compiled with ZSTD
-            // support. In that case, we try to use Spark's Zstandard codec if enabled.
+            // support. In that case, we try to use Spark's Zstandard codec.
             createZstdInputStream(file, inputStream).getOrElse(throw e)
         }
       }.getOrElse(inputStream)

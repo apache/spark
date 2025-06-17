@@ -25,8 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 
-import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
-import org.apache.spark.internal.config
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.io.ZStdCompressionCodec
 
 /**
@@ -112,40 +111,23 @@ class WholeTextFileRecordReaderSuite extends SparkFunSuite {
           createNativeFile(dir, filename, contents, compressionType)
         }
 
-        if (!sc.conf.get(config.FILE_DATA_SOURCE_ZSTANDARD_ENABLED) &&
-          (compressionType == CompressionType.ZSTD || compressionType == CompressionType.ZST)) {
-          val e = intercept[SparkException] {
-            sc.wholeTextFiles(dir.toString, 3).collect()
-          }
-          assert(e.getCause.isInstanceOf[RuntimeException])
-          assert(e.getCause.getMessage === "native zStandard library not available: " +
-            "this version of libhadoop was built without zstd support.")
-        } else {
-          val res = sc.wholeTextFiles(dir.toString, 3).collect()
+        val res = sc.wholeTextFiles(dir.toString, 3).collect()
 
-          assert(res.length === WholeTextFileRecordReaderSuite.fileNames.length,
-            "Number of files read out does not fit with the actual value.")
+        assert(res.length === WholeTextFileRecordReaderSuite.fileNames.length,
+          "Number of files read out does not fit with the actual value.")
 
-          for ((filename, contents) <- res) {
-            val shortName = compressionType match {
-              case CompressionType.NONE => filename.split('/').last
-              case _ => filename.split('/').last.split('.').head
-            }
-            assert(WholeTextFileRecordReaderSuite.fileNames.contains(shortName),
-              s"Missing file name $filename.")
-            assert(contents === new Text(WholeTextFileRecordReaderSuite.files(shortName)).toString,
-              s"file $filename contents can not match.")
+        for ((filename, contents) <- res) {
+          val shortName = compressionType match {
+            case CompressionType.NONE => filename.split('/').last
+            case _ => filename.split('/').last.split('.').head
           }
+          assert(WholeTextFileRecordReaderSuite.fileNames.contains(shortName),
+            s"Missing file name $filename.")
+          assert(contents === new Text(WholeTextFileRecordReaderSuite.files(shortName)).toString,
+            s"file $filename contents can not match.")
         }
       }
     }
-  }
-}
-
-class WholeTextFileRecordReaderZStandardDisabledSuite extends WholeTextFileRecordReaderSuite {
-
-  override def getSparkConf(): SparkConf = {
-    super.getSparkConf().set(config.FILE_DATA_SOURCE_ZSTANDARD_ENABLED, false)
   }
 }
 
