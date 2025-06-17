@@ -853,6 +853,11 @@
           "Please fit or load a model smaller than <modelMaxSize> bytes."
         ]
       },
+      "MODEL_SUMMARY_LOST" : {
+        "message" : [
+          "The model <objectName> summary is lost because the cached model is offloaded."
+        ]
+      },
       "UNSUPPORTED_EXCEPTION" : {
         "message" : [
           "<message>"
@@ -926,6 +931,12 @@
       "Dataflow graph with id <graphId> could not be found"
     ],
     "sqlState" : "KD011"
+  },
+  "DATATYPE_CANNOT_ORDER" : {
+    "message" : [
+      "Type <dataType> does not support ordered operations."
+    ],
+    "sqlState" : "0A000"
   },
   "DATATYPE_MISMATCH" : {
     "message" : [
@@ -4984,6 +4995,12 @@
     ],
     "sqlState" : "07501"
   },
+  "STAGE_MATERIALIZATION_MULTIPLE_FAILURES" : {
+    "message" : [
+      "Multiple failures (<failureCount>) in stage materialization: <failureDetails>"
+    ],
+    "sqlState" : "XX000"
+  },
   "STAR_GROUP_BY_POS" : {
     "message" : [
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
@@ -7865,11 +7882,6 @@
       "Sinks cannot request distribution and ordering in continuous execution mode."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2005" : {
-    "message" : [
-      "Type <dataType> does not support ordered operations."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2017" : {
     "message" : [
       "not resolved."
@@ -8564,11 +8576,6 @@
   "_LEGACY_ERROR_TEMP_2234" : {
     "message" : [
       "Failed to set original ACL <aclEntries> back to the created path: <path>. Exception: <message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2235" : {
-    "message" : [
-      "Multiple failures in stage materialization."
     ]
   },
   "_LEGACY_ERROR_TEMP_2236" : {
