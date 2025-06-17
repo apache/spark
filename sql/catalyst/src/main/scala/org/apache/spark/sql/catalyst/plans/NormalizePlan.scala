@@ -153,18 +153,40 @@ object NormalizePlan extends PredicateHelper {
             .getTagValue(DeduplicateRelations.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION)
             .isDefined =>
         project.child
+
       case aggregate @ Aggregate(_, _, innerProject: Project, _) =>
-        val newInnerProject = Project(
-          innerProject.projectList.sortBy(_.name),
-          innerProject.child
-        )
-        aggregate.copy(child = newInnerProject)
+        aggregate.copy(child = normalizeProjectListOrder(innerProject))
+
       case project @ Project(_, innerProject: Project) =>
-        val newInnerProject = Project(
-          innerProject.projectList.sortBy(_.name),
-          innerProject.child
+        project.copy(child = normalizeProjectListOrder(innerProject))
+
+      case project @ Project(_, innerAggregate: Aggregate) =>
+        project.copy(child = normalizeAggregateListOrder(innerAggregate))
+
+      /**
+       * ORDER BY covered by an output-retaining project on top of GROUP BY
+       */
+      case project @ Project(_, sort @ Sort(_, _, innerAggregate: Aggregate, _)) =>
+        project.copy(child = sort.copy(child = normalizeAggregateListOrder(innerAggregate)))
+
+      /**
+       * HAVING covered by an output-retaining project on top of GROUP BY
+       */
+      case project @ Project(_, filter @ Filter(_, innerAggregate: Aggregate)) =>
+        project.copy(child = filter.copy(child = normalizeAggregateListOrder(innerAggregate)))
+
+      /**
+       * HAVING ... ORDER BY covered by an output-retaining project on top of GROUP BY
+       */
+      case project @ Project(
+            _,
+            sort @ Sort(_, _, filter @ Filter(_, innerAggregate: Aggregate), _)
+          ) =>
+        project.copy(
+          child =
+            sort.copy(child = filter.copy(child = normalizeAggregateListOrder(innerAggregate)))
         )
-        project.copy(child = newInnerProject)
+
       case c: KeepAnalyzedQuery => c.storeAnalyzedQuery()
       case localRelation: LocalRelation if !localRelation.data.isEmpty =>
         /**
@@ -199,6 +221,14 @@ object NormalizePlan extends PredicateHelper {
     case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
     case LessThanOrEqual(l, r) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
     case _ => condition // Don't reorder.
+  }
+
+  private def normalizeProjectListOrder(project: Project): Project = {
+    project.copy(projectList = project.projectList.sortBy(_.name))
+  }
+
+  private def normalizeAggregateListOrder(aggregate: Aggregate): Aggregate = {
+    aggregate.copy(aggregateExpressions = aggregate.aggregateExpressions.sortBy(_.name))
   }
 }
 

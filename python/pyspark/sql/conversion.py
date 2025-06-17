@@ -255,7 +255,7 @@ class LocalDataToArrowConversion:
                     return None
                 else:
                     if isinstance(value, bool):
-                        # To match the PySpark which convert bool to string in
+                        # To match the PySpark Classic which convert bool to string in
                         # the JVM side (python.EvaluatePython.makeFromJava)
                         return str(value).lower()
                     else:

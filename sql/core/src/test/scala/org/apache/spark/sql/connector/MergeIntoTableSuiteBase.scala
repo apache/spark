@@ -21,8 +21,8 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, In, Not}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue}
-import org.apache.spark.sql.connector.expressions.LiteralValue
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, TableInfo}
+import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -31,6 +31,51 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
 abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
 
   import testImplicits._
+
+  test("merge into table with expression-based default values") {
+    val columns = Array(
+      Column.create("pk", IntegerType),
+      Column.create("salary", IntegerType),
+      Column.create("dep", StringType),
+      Column.create(
+        "value",
+        IntegerType,
+        false, /* not nullable */
+        null, /* no comment */
+        new ColumnDefaultValue(
+          new GeneralScalarExpression(
+            "+",
+            Array(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
+          LiteralValue(123, IntegerType)),
+        "{}"))
+    val tableInfo = new TableInfo.Builder().withColumns(columns).build()
+    catalog.createTable(ident, tableInfo)
+
+    withTempView("source") {
+      val sourceRows = Seq(
+        (1, 500, "eng"),
+        (2, 600, "hr"))
+      sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+      sql(s"INSERT INTO $tableNameAsString (pk, salary, dep, value) VALUES (1, 200, 'eng', 999)")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN
+           | UPDATE SET value = DEFAULT
+           |WHEN NOT MATCHED THEN
+           | INSERT (pk, salary, dep) VALUES (s.pk, s.salary, s.dep)
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 200, "eng", 123), // update
+          Row(2, 600, "hr", 123))) // insert
+    }
+  }
 
   test("merge into table containing added column with default value") {
     withTempView("source") {

@@ -1107,25 +1107,27 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
           "invalidValue" -> "'SECS'"))
   }
 
-  test("localTimeToMicros and microsToLocalTime") {
-    assert(microsToLocalTime(0) === LocalTime.of(0, 0))
-    assert(localTimeToMicros(LocalTime.of(0, 0)) === 0)
+  test("localTimeToNanos and nanosToLocalTime") {
+    assert(nanosToLocalTime(0) === LocalTime.of(0, 0))
+    assert(localTimeToNanos(LocalTime.of(0, 0)) === 0)
 
-    assert(localTimeToMicros(microsToLocalTime(123456789)) === 123456789)
+    assert(localTimeToNanos(nanosToLocalTime(123456789123L)) === 123456789123L)
 
-    assert(localTimeToMicros(LocalTime.parse("23:59:59.999999")) === (24L * 60 * 60 * 1000000 - 1))
-    assert(microsToLocalTime(24L * 60 * 60 * 1000000 - 1) === LocalTime.of(23, 59, 59, 999999000))
+    assert(localTimeToNanos(LocalTime.parse("23:59:59.999999999")) ===
+      (24L * 60 * 60 * 1000 * 1000 * 1000 - 1))
+    assert(nanosToLocalTime(24L * 60 * 60 * 1000 * 1000 * 1000 - 1) ===
+      LocalTime.of(23, 59, 59, 999999999))
 
-    Seq(-1, 24L * 60 * 60 * 1000000).foreach { invalidMicros =>
+    Seq(-1, 24L * 60 * 60 * 1000 * 1000 * 1000L).foreach { invalidMicros =>
       val msg = intercept[DateTimeException] {
-        microsToLocalTime(invalidMicros)
+        nanosToLocalTime(invalidMicros)
       }.getMessage
       assert(msg.contains("Invalid value"))
     }
-    val msg = intercept[ArithmeticException] {
-      microsToLocalTime(Long.MaxValue)
+    val msg = intercept[DateTimeException] {
+      nanosToLocalTime(Long.MaxValue)
     }.getMessage
-    assert(msg == "long overflow")
+    assert(msg.contains("Invalid value"))
   }
 
   test("stringToTime") {
