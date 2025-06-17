@@ -37,7 +37,9 @@ import org.apache.spark.io.{CompressionCodec => SparkCompressionCodec}
  * non-standard file extensions like `.zstd` and `.gzip` for Zstandard and Gzip codecs.
  */
 object HadoopCodecStreams {
-  val ZSTD_EXTENSIONS = Seq(".zstd", ".zst")
+  private val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
+  private val isSparkZstdCodecEnabled = sparkConf.get(config.FILE_DATA_SOURCE_ZSTANDARD_ENABLED)
+  private val ZSTD_EXTENSIONS = Seq(".zstd", ".zst")
 
   // get codec based on file name extension
   def getDecompressionCodec(
@@ -61,7 +63,14 @@ object HadoopCodecStreams {
     inputStream: InputStream): Option[InputStream] = {
     val fileName = file.getName.toLowerCase(Locale.ROOT)
 
-    if (ZSTD_EXTENSIONS.exists(fileName.endsWith) && isSparkZstdCodecEnabled) {
+    // FOR DEBUGGING GITHUB ACTION FAILURE ONLY -- START
+    assert(ZSTD_EXTENSIONS.exists(fileName.endsWith),
+      s"File $fileName does not have a recognized Zstandard extension:" +
+        s"${ZSTD_EXTENSIONS.mkString(", ")}")
+    assert(isSparkZstdCodecEnabled, "Spark Zstandard codec is not enabled.")
+    // FOR DEBUGGING GITHUB ACTION FAILURE ONLY -- END
+
+    val isOpt = if (ZSTD_EXTENSIONS.exists(fileName.endsWith) && isSparkZstdCodecEnabled) {
       Some(
         SparkCompressionCodec
           .createCodec(sparkConf, SparkCompressionCodec.ZSTD)
@@ -70,6 +79,9 @@ object HadoopCodecStreams {
     } else {
       None
     }
+    assert(isOpt.isDefined,
+      s"Failed to create Zstandard input stream for file: $fileName")
+    isOpt
   }
 
   def createInputStream(config: Configuration, file: Path): InputStream = {
@@ -88,7 +100,4 @@ object HadoopCodecStreams {
         }
       }.getOrElse(inputStream)
   }
-
-  private val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
-  private val isSparkZstdCodecEnabled = sparkConf.get(config.FILE_DATA_SOURCE_ZSTANDARD_ENABLED)
 }
