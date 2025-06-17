@@ -17,9 +17,9 @@
 
 from typing import List
 
-from pyspark.sql import DataFrame as SparkDataFrame, functions as F, SparkSession
+from pyspark.sql import DataFrame as SparkDataFrame, functions as F
 from pyspark.sql.window import Window
-from pyspark.pandas.utils import verify_temp_column_name, is_ansi_mode_enabled, default_session
+from pyspark.pandas.utils import verify_temp_column_name, is_ansi_mode_enabled
 
 
 CORRELATION_VALUE_1_COLUMN = "__correlation_value_1_input__"
@@ -60,7 +60,7 @@ def compute(sdf: SparkDataFrame, groupKeys: List[str], method: str) -> SparkData
             .alias(CORRELATION_VALUE_2_COLUMN),
         ],
     )
-    spark_session = sdf.sql_ctx.sparkSession
+    spark_session = sdf.sparkSession
 
     if method in ["pearson", "spearman"]:
         # convert values to avg ranks for spearman correlation
