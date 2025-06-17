@@ -63,10 +63,10 @@ message DataType {
     Struct struct = 21;
     Map map = 22;
     Variant variant = 25;
-    
+
     // UserDefinedType
     UDT udt = 23;
-   
+
     // Reserved for geometry and geography types
     reserved 26, 27;
 
