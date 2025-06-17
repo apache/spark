@@ -681,7 +681,7 @@ class NonStreamV2Table(override val name: String)
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat.empty,
       owner = null,
-      schema = schema(),
+      schema = StructType(Nil),
       provider = Some("parquet"))
   }
 }
