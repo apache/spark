@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.expressions.NonExistentAttribute
 import org.apache.spark.sql.catalyst.plans.logical.{DataFrameDropColumns, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.DF_DROP_COLUMNS
@@ -34,10 +35,10 @@ class ResolveDataFrameDropColumns(val catalogManager: CatalogManager)
     case d: DataFrameDropColumns if d.childrenResolved =>
       // expressions in dropList can be unresolved, e.g.
       //   df.drop(col("non-existing-column"))
-      val dropped = d.dropList.map {
-        case u: UnresolvedAttribute =>
-          resolveExpressionByPlanChildren(u, d)
-        case e => e
+      val dropped = d.dropList.flatMap {
+        case u: UnresolvedAttribute => Some(resolveExpressionByPlanChildren(u, d))
+        case n: NonExistentAttribute => None
+        case e => Some(e)
       }
       val remaining = d.child.output.filterNot(attr => dropped.exists(_.semanticEquals(attr)))
       if (remaining.size == d.child.output.size) {

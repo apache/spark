@@ -2420,7 +2420,12 @@ class SparkConnectPlanner(
   private def transformDrop(rel: proto.Drop): LogicalPlan = {
     var output = Dataset.ofRows(session, transformRelation(rel.getInput))
     if (rel.getColumnsCount > 0) {
-      val cols = rel.getColumnsList.asScala.toSeq.map(expr => Column(transformExpression(expr)))
+      val cols = rel.getColumnsList.asScala.toSeq.map { expr =>
+        val e = transformExpression(expr)
+        e.setTagValue(LogicalPlan.ALLOW_NON_EXISTENT_COL, ())
+        Column(e)
+      }
+      // rel.getColumnsList.asScala.toSeq.map(expr => Column(transformExpression(expr)))
       output = output.drop(cols.head, cols.tail: _*)
     }
     if (rel.getColumnNamesCount > 0) {
