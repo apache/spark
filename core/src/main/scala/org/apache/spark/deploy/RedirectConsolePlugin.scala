@@ -36,9 +36,12 @@ class RedirectConsolePlugin extends SparkPlugin {
 
 object RedirectConsolePlugin {
 
-  def redirectConsoleToLog(): Unit = {
+  def redirectStdoutToLog(): Unit = {
     val stdoutLogger = SparkLoggerFactory.getLogger("stdout")
     System.setOut(new LoggingPrintStream(stdoutLogger.info))
+  }
+
+  def redirectStderrToLog(): Unit = {
     val stderrLogger = SparkLoggerFactory.getLogger("stderr")
     System.setErr(new LoggingPrintStream(stderrLogger.error))
   }
@@ -47,9 +50,14 @@ object RedirectConsolePlugin {
 class DriverRedirectConsolePlugin extends DriverPlugin with Logging {
 
   override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
-    if (sc.conf.get(DRIVER_REDIRECT_CONSOLE_TO_LOG_ENABLED)) {
-      logInfo("Redirect driver's stdout/stderr to logging system")
-      RedirectConsolePlugin.redirectConsoleToLog()
+    val outputs = sc.conf.get(DRIVER_REDIRECT_CONSOLE_OUTPUTS)
+    if (outputs.contains("stdout")) {
+      logInfo("Redirect driver's stdout to logging system.")
+      RedirectConsolePlugin.redirectStdoutToLog()
+    }
+    if (outputs.contains("stderr")) {
+      logInfo("Redirect driver's stderr to logging system.")
+      RedirectConsolePlugin.redirectStderrToLog()
     }
     Collections.emptyMap
   }
@@ -58,9 +66,14 @@ class DriverRedirectConsolePlugin extends DriverPlugin with Logging {
 class ExecRedirectConsolePlugin extends ExecutorPlugin with Logging {
 
   override def init(ctx: PluginContext, extraConf: JMap[String, String]): Unit = {
-    if (ctx.conf.get(EXEC_REDIRECT_CONSOLE_TO_LOG_ENABLED)) {
-      logInfo("Redirect executor's stdout/stdout to logging system")
-      RedirectConsolePlugin.redirectConsoleToLog()
+    val outputs = ctx.conf.get(EXEC_REDIRECT_CONSOLE_OUTPUTS)
+    if (outputs.contains("stdout")) {
+      logInfo("Redirect executor's stdout to logging system.")
+      RedirectConsolePlugin.redirectStdoutToLog()
+    }
+    if (outputs.contains("stderr")) {
+      logInfo("Redirect executor's stderr to logging system.")
+      RedirectConsolePlugin.redirectStderrToLog()
     }
   }
 }
