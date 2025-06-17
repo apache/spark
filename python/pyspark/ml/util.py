@@ -114,7 +114,7 @@ def invoke_remote_attribute_relation(
     methods.append(pb2.Fetch.Method(method=method, args=serialize(session.client, *args)))
 
     if methods[0].method == "summary":
-        child = instance._summary_dataset._plan
+        child = instance._summary_dataset._plan  # type: ignore
     else:
         child = None
     plan = AttributeRelation(obj_ref, methods, child=child)
@@ -199,12 +199,12 @@ def try_remote_fit(f: FuncT) -> FuncT:
             if isinstance(model, HasTrainingSummary):
                 summary_dataset = model._summary_dataset(dataset)
 
-                summary = model._summaryCls(f"{str(model._java_obj)}.summary")
+                summary = model._summaryCls(f"{str(model._java_obj)}.summary")  # type: ignore
                 summary._summary_dataset = summary_dataset
-                summary._remote_model_obj = model._java_obj
+                summary._remote_model_obj = model._java_obj  # type: ignore
                 summary._remote_model_obj.add_ref()
 
-                model._summary = summary
+                model._summary = summary  # type: ignore
             if model.__class__.__name__ not in ["Bucketizer"]:
                 model._resetUid(self.uid)
             return self._copyValues(model)
@@ -284,7 +284,7 @@ def try_remote_call(f: FuncT) -> FuncT:
 
         session = SparkSession.getActiveSession()
 
-        def remote_call():
+        def remote_call() -> Any:
             from pyspark.ml.connect.util import _extract_id_methods
             from pyspark.ml.connect.serialize import serialize, deserialize
             from pyspark.ml.wrapper import JavaModel
@@ -328,11 +328,15 @@ def try_remote_call(f: FuncT) -> FuncT:
                     create_summary_command = pb2.Command()
                     create_summary_command.ml_command.create_summary.CopyFrom(
                         pb2.MlCommand.CreateSummary(
-                            model_ref=pb2.ObjectRef(id=self._remote_model_obj.ref_id),
-                            dataset=self._summary_dataset._plan.plan(session.client),
+                            model_ref=pb2.ObjectRef(
+                                id=self._remote_model_obj.ref_id  # type: ignore
+                            ),
+                            dataset=self._summary_dataset._plan.plan(  # type: ignore
+                                session.client  # type: ignore
+                            ),
                         )
                     )
-                    session.client.execute_command(create_summary_command)
+                    session.client.execute_command(create_summary_command)  # type: ignore
 
                     return remote_call()
         else:
@@ -1120,11 +1124,11 @@ class HasTrainingSummary(Generic[T]):
         return self._summaryCls(cast("JavaWrapper", self)._call_java("summary"))
 
     @property
-    def _summaryCls(self):
+    def _summaryCls(self) -> type:
         raise NotImplementedError()
 
     def _summary_dataset(self, train_dataset: "DataFrame") -> "DataFrame":
-        return self.transform(train_dataset)
+        return self.transform(train_dataset)  # type: ignore
 
 
 class MetaAlgorithmReadWrite:
