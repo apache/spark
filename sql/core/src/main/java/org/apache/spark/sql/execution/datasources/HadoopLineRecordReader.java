@@ -53,6 +53,9 @@ import static org.apache.hadoop.fs.Options.OpenFileOptions.FS_OPTION_OPENFILE_SP
 /**
  * Inlined from Hadoop's LineRecordReader to add support for passing compression option
  * and also add support for other codecs like ZSTD.
+ * Specifically, it calls in HadoopCodecStreams.getDecompressionCodec to get the codec
+ * and calls HadoopCodecStreams.createZstdInputStream when the codec fails to create the
+ * InputStream.
  */
 
 /**
@@ -135,7 +138,8 @@ public class HadoopLineRecordReader extends RecordReader<LongWritable, Text> {
                         filePosition = fileIn;
                     }
                 } catch (RuntimeException e) {
-                    // Try Spark's ZSTD decompression support
+                    // Try Spark's ZSTD decompression support. This is not available in Hadoop's
+                    // version of LineRecordReader.
                     Option<InputStream> decompressedStreamOpt =
                             HadoopCodecStreams.createZstdInputStream(file, fileIn);
                     if (decompressedStreamOpt.isEmpty()) {

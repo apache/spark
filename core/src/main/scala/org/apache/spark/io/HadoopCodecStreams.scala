@@ -18,6 +18,7 @@
 package org.apache.spark.io
 
 import java.io.InputStream
+import java.util.Locale
 
 import scala.collection.Seq
 
@@ -29,6 +30,12 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.config
 import org.apache.spark.io.{CompressionCodec => SparkCompressionCodec}
 
+/**
+ * An utility object to look up Hadoop compression codecs and create input streams.
+ * In addition to standard Hadoop codecs, it also supports Spark's Zstandard codec
+ * if Hadopp is not compiled with Zstandard support. Additionally, it supports
+ * non-standard file extensions like `.zstd` and `.gzip` for Zstandard and Gzip codecs.
+ */
 object HadoopCodecStreams {
   val ZSTD_EXTENSIONS = Seq(".zstd", ".zst")
 
@@ -52,7 +59,7 @@ object HadoopCodecStreams {
   def createZstdInputStream(
     file: Path,
     inputStream: InputStream): Option[InputStream] = {
-    val fileName = file.getName.toLowerCase()
+    val fileName = file.getName.toLowerCase(Locale.ROOT)
 
     if (ZSTD_EXTENSIONS.exists(fileName.endsWith) && isSparkZstdCodecEnabled) {
       Some(
@@ -74,7 +81,9 @@ object HadoopCodecStreams {
         try {
           codec.createInputStream(inputStream)
         } catch {
-          case e: Exception =>
+          case e: RuntimeException =>
+            // createInputStream may fail for ZSTD if hadoop is not already compiled with ZSTD
+            // support. In that case, we try to use Spark's Zstandard codec if enabled.
             createZstdInputStream(file, inputStream).getOrElse(throw e)
         }
       }.getOrElse(inputStream)
