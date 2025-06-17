@@ -42,6 +42,7 @@ public class SparkBloomFilterSuite {
     final long REQUIRED_HEAP_UPPER_BOUND_IN_BYTES = 4 * ONE_GB;
 
     private static Instant START;
+    private static boolean verbose;
 
     private Instant start;
     private final Map<String,PrintStream> testOutMap = new ConcurrentHashMap<>();
@@ -49,12 +50,17 @@ public class SparkBloomFilterSuite {
     @BeforeAll
     public static void beforeAll() {
         START = Instant.now();
+        String testClassName = SparkBloomFilterSuite.class.getName();
+        String verboseString = System.getProperty(testClassName+ ".verbose", "false");
+        verbose = Boolean.parseBoolean(verboseString);
     }
 
     @AfterAll
     public static void afterAll() {
         Duration duration = Duration.between(START, Instant.now());
-        System.err.println(duration + " TOTAL");
+        if (verbose) {
+            System.err.println(duration + " TOTAL");
+        }
     }
 
     @BeforeEach
@@ -65,7 +71,7 @@ public class SparkBloomFilterSuite {
 
         String testName = testInfo.getDisplayName();
 
-        String testClassName = getClass().getName();
+        String testClassName = SparkBloomFilterSuite.class.getName();
         String logDir = System.getProperty(testClassName+ ".logDir", "./target/tmp");
         Path logDirPath = Path.of(logDir);
         Files.createDirectories(logDirPath);
@@ -139,7 +145,7 @@ public class SparkBloomFilterSuite {
         );
 
         for (long i = 0; i < numItems; i++) {
-            if (i % 10_000_000 == 0) {
+            if (verbose && i % 10_000_000 == 0) {
                 System.err.printf("i: %d\n", i);
             }
 
@@ -155,7 +161,7 @@ public class SparkBloomFilterSuite {
         long mightContainOdd = 0;
 
         for (long i = 0; i < numItems; i++) {
-            if (i % (numItems / 100) == 0) {
+            if (verbose && i % (numItems / 100) == 0) {
                 System.err.printf("%s: %2d %%\n", testName, 100 * i / numItems);
             }
 
@@ -267,7 +273,7 @@ public class SparkBloomFilterSuite {
 
         pseudoRandom.setSeed(deterministicSeed);
         for (long i = 0; i < iterationCount; i++) {
-            if (i % 10_000_000 == 0) {
+            if (verbose && i % 10_000_000 == 0) {
                 System.err.printf("i: %d\n", i);
             }
 
@@ -288,7 +294,7 @@ public class SparkBloomFilterSuite {
 
         pseudoRandom.setSeed(deterministicSeed);
         for (long i = 0; i < iterationCount; i++) {
-            if (i % (iterationCount / 100) == 0) {
+            if (verbose && i % (iterationCount / 100) == 0) {
                 System.err.printf("%s: %2d %%\n", testName, 100 * i / iterationCount);
             }
 
