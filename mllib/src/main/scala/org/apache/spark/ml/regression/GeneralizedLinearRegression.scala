@@ -419,9 +419,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, wlsModel.coefficients, wlsModel.intercept)
           .setParent(this))
-      val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
-        wlsModel.diagInvAtWA.toArray, 1, getSolver)
-      model.setSummary(Some(trainingSummary))
+      model.createSummary(dataset, wlsModel.diagInvAtWA.toArray, 1)
+      model
     } else {
       val instances = validated.rdd.map {
         case Row(label: Double, weight: Double, offset: Double, features: Vector) =>
@@ -436,9 +435,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
           .setParent(this))
-      val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
-        irlsModel.diagInvAtWA.toArray, irlsModel.numIterations, getSolver)
-      model.setSummary(Some(trainingSummary))
+      model.createSummary(dataset, irlsModel.diagInvAtWA.toArray, irlsModel.numIterations)
+      model
     }
 
     model
@@ -1140,6 +1138,39 @@ class GeneralizedLinearRegressionModel private[ml] (
     s"GeneralizedLinearRegressionModel: uid=$uid, family=${$(family)}, link=${$(link)}, " +
       s"numFeatures=$numFeatures"
   }
+
+  private[spark] def createSummary(
+    dataset: Dataset[_], diagInvAtWA: Array[Double], numIter: Int
+  ): Unit = {
+    val summary = new GeneralizedLinearRegressionTrainingSummary(
+      dataset, this, diagInvAtWA, numIter, $(solver)
+    )
+
+    setSummary(Some(summary))
+  }
+
+  override private[spark] def saveSummary(path: String): Unit = {
+    ReadWriteUtils.saveObjectToLocal[(Array[Double], Int)](
+      path, (summary.diagInvAtWA, summary.numIterations),
+      (data, dos) => {
+        ReadWriteUtils.serializeDoubleArray(data._1, dos)
+        dos.writeInt(data._2)
+      }
+    )
+  }
+
+  override private[spark] def loadSummary(path: String, dataset: DataFrame): Unit = {
+    val (diagInvAtWA: Array[Double], numIterations: Int) =
+      ReadWriteUtils.loadObjectFromLocal[(Array[Double], Int)](
+      path,
+      dis => {
+        val diagInvAtWA = ReadWriteUtils.deserializeDoubleArray(dis)
+        val numIterations = dis.readInt()
+        (diagInvAtWA, numIterations)
+      }
+    )
+    createSummary(dataset, diagInvAtWA, numIterations)
+  }
 }
 
 @Since("2.0.0")
@@ -1467,7 +1498,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
 class GeneralizedLinearRegressionTrainingSummary private[regression] (
     dataset: Dataset[_],
     origModel: GeneralizedLinearRegressionModel,
-    private val diagInvAtWA: Array[Double],
+    private[spark] val diagInvAtWA: Array[Double],
     @Since("2.0.0") val numIterations: Int,
     @Since("2.0.0") val solver: String)
   extends GeneralizedLinearRegressionSummary(dataset, origModel) with Serializable {
