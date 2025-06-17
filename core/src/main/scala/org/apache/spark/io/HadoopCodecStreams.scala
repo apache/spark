@@ -38,7 +38,8 @@ import org.apache.spark.io.{CompressionCodec => SparkCompressionCodec}
  */
 object HadoopCodecStreams {
   private val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
-  private val isSparkZstdCodecEnabled = sparkConf.get(config.FILE_DATA_SOURCE_ZSTANDARD_ENABLED)
+  private val isSparkZstdCodecEnabled =
+    sparkConf.getBoolean(config.FILE_DATA_SOURCE_ZSTANDARD_ENABLED.key, true)
   private val ZSTD_EXTENSIONS = Seq(".zstd", ".zst")
 
   // get codec based on file name extension
