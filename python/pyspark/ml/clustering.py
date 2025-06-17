@@ -1036,6 +1036,10 @@ class BisectingKMeansModel(
         """
         return self._call_java("predict", value)
 
+    @property
+    def _summaryCls(self) -> type:
+        return BisectingKMeansSummary
+
 
 @inherit_doc
 class BisectingKMeans(

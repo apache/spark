@@ -446,7 +446,7 @@ class ClassificationTestsMixin:
         def check_summary():
             # model summary
             self.assertTrue(model.hasSummary)
-            summary = model.summary
+            summary = model.summary()
             self.assertIsInstance(summary, LinearSVCSummary)
             self.assertIsInstance(summary, LinearSVCTrainingSummary)
             self.assertEqual(summary.labels, [0.0, 1.0])
@@ -551,7 +551,7 @@ class ClassificationTestsMixin:
         self.assertTrue(model.hasSummary)
 
         def check_summary():
-            summary = model.summary
+            summary = model.summary()
             self.assertIsInstance(summary, FMClassificationSummary)
             self.assertIsInstance(summary, FMClassificationTrainingSummary)
             self.assertEqual(summary.labels, [0.0, 1.0])
@@ -998,7 +998,7 @@ class ClassificationTestsMixin:
         def check_summary():
             # model summary
             self.assertTrue(model.hasSummary)
-            summary = model.summary
+            summary = model.summary()
             self.assertIsInstance(summary, MultilayerPerceptronClassificationSummary)
             self.assertIsInstance(summary, MultilayerPerceptronClassificationTrainingSummary)
             self.assertEqual(summary.labels, [0.0, 1.0])

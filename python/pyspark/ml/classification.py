@@ -883,6 +883,14 @@ class LinearSVCModel(
         """
         return self._call_java("intercept")
 
+    @since("3.1.0")
+    def summary(self) -> "LinearSVCTrainingSummary":  # type: ignore[override]
+        """
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
+        trained on the training set. An exception is thrown if `trainingSummary is None`.
+        """
+        return super().summary
+
     @property
     def _summaryCls(self) -> type:
         return LinearSVCTrainingSummary
@@ -3325,6 +3333,16 @@ class MultilayerPerceptronClassificationModel(
         """
         return self._call_java("weights")
 
+    @since("3.1.0")
+    def summary(  # type: ignore[override]
+        self,
+    ) -> "MultilayerPerceptronClassificationTrainingSummary":
+        """
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
+        trained on the training set. An exception is thrown if `trainingSummary is None`.
+        """
+        return super().summary
+
     @property
     def _summaryCls(self) -> type:
         return MultilayerPerceptronClassificationTrainingSummary
@@ -4287,6 +4305,14 @@ class FMClassificationModel(
         if is_remote():
             s.__source_transformer__ = self  # type: ignore[attr-defined]
         return s
+
+    @since("3.1.0")
+    def summary(self) -> "FMClassificationTrainingSummary":
+        """
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
+        trained on the training set. An exception is thrown if `trainingSummary is None`.
+        """
+        return super().summary
 
     @property
     def _summaryCls(self) -> type:
