@@ -1250,23 +1250,9 @@ NULL
 -- !query
 SELECT make_timestamp(DATE'1970-01-01', NULL)
 -- !query schema
-struct<>
+struct<make_timestamp(year(DATE '1970-01-01'), month(DATE '1970-01-01'), dayofmonth(DATE '1970-01-01'), hour(NULL), minute(NULL), secondsoftimewithfraction(NULL)):timestamp>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "FAILED_FUNCTION_CALL",
-  "sqlState" : "38000",
-  "messageParameters" : {
-    "funcName" : "`make_timestamp`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 45,
-    "fragment" : "make_timestamp(DATE'1970-01-01', NULL)"
-  } ]
-}
+NULL
 
 
 -- !query

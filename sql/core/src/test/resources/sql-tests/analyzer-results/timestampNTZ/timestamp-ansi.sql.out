@@ -994,21 +994,7 @@ Project [make_timestamp(year(cast(null as date)), month(cast(null as date)), day
 -- !query
 SELECT make_timestamp(DATE'1970-01-01', NULL)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "FAILED_FUNCTION_CALL",
-  "sqlState" : "38000",
-  "messageParameters" : {
-    "funcName" : "`make_timestamp`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 45,
-    "fragment" : "make_timestamp(DATE'1970-01-01', NULL)"
-  } ]
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
