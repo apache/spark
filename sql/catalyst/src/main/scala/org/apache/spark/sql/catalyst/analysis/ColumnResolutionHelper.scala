@@ -511,7 +511,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
   // Tries to resolve `UnresolvedAttribute` by the children with Plan Ids.
   // Returns `None` if fail to resolve.
-  private[spark] def tryResolveUnresolvedAttributeByPlanChildren(
+  private[sql] def tryResolveUnresolvedAttributeByPlanChildren(
       u: UnresolvedAttribute,
       q: LogicalPlan,
       includeLastResort: Boolean = false): Option[Expression] = {
