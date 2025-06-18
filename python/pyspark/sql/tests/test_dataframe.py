@@ -212,7 +212,7 @@ class DataFrameTestsMixin:
         df3 = df1.join(df2, df1["colC"] == df2["colC"]).withColumn(
             "colB",
             when(
-                df1["colB"] == "b", concat(df1["colB"].cast("string"), lit("_newValue"))
+                df1["colB"] == "b", concat(df1["colB"].cast("string"), lit("x"))
             ).otherwise(df1["colB"]),
         )
         df4 = df3.drop(df1["colB"])
