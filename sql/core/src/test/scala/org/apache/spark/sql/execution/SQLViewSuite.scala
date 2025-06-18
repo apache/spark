@@ -1317,7 +1317,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("view with ANSI expressions") {
+  test("SPARK-52521: view with ANSI expressions") {
     withView("v1") {
       withSQLConf(ANSI_ENABLED.key -> "true") {
         sql(
