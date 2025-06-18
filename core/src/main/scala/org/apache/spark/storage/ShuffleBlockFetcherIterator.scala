@@ -1272,8 +1272,8 @@ final class ShuffleBlockFetcherIterator(
   }
 
   private[this] def addFailureFetchResult(result: FailureFetchResult): Unit = {
-    (failFastOnFetchFailureEnabled, results) match {
-      case (true, deque: LinkedBlockingDeque[FetchResult]) =>
+    results match {
+      case deque: LinkedBlockingDeque[FetchResult] =>
         deque.putFirst(result)
       case _ =>
         results.put(result)
