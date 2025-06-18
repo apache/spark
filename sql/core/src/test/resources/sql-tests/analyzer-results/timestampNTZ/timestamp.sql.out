@@ -1042,3 +1042,36 @@ SELECT make_timestamp(DATE'2025-06-14', TIME'17:25:30.5', 'CET')
 SELECT make_timestamp(DATE'9999-12-31', TIME'23:59:59.123456')
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(NULL, TIME'0:0:0.000001')
+-- !query analysis
+Project [make_timestamp(year(cast(null as date)), month(cast(null as date)), dayofmonth(cast(null as date)), hour(00:00:00.000001), minute(00:00:00.000001), cast(secondsoftimewithfraction(00:00:00.000001) as decimal(16,6)), None, Some(America/Los_Angeles), false, TimestampNTZType) AS make_timestamp(year(NULL), month(NULL), dayofmonth(NULL), hour(TIME '00:00:00.000001'), minute(TIME '00:00:00.000001'), secondsoftimewithfraction(TIME '00:00:00.000001'))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', NULL)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "FAILED_FUNCTION_CALL",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "funcName" : "`make_timestamp`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "make_timestamp(DATE'1970-01-01', NULL)"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', TIME'12:00:00', NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]

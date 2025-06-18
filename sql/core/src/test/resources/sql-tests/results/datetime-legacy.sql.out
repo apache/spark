@@ -2519,3 +2519,41 @@ SELECT make_timestamp(DATE'9999-12-31', TIME'23:59:59.123456')
 struct<make_timestamp(year(DATE '9999-12-31'), month(DATE '9999-12-31'), dayofmonth(DATE '9999-12-31'), hour(TIME '23:59:59.123456'), minute(TIME '23:59:59.123456'), secondsoftimewithfraction(TIME '23:59:59.123456')):timestamp>
 -- !query output
 9999-12-31 23:59:59.123456
+
+
+-- !query
+SELECT make_timestamp(NULL, TIME'0:0:0.000001')
+-- !query schema
+struct<make_timestamp(year(NULL), month(NULL), dayofmonth(NULL), hour(TIME '00:00:00.000001'), minute(TIME '00:00:00.000001'), secondsoftimewithfraction(TIME '00:00:00.000001')):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', NULL)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "FAILED_FUNCTION_CALL",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "funcName" : "`make_timestamp`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "make_timestamp(DATE'1970-01-01', NULL)"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', TIME'12:00:00', NULL)
+-- !query schema
+struct<make_timestamp(year(DATE '1970-01-01'), month(DATE '1970-01-01'), dayofmonth(DATE '1970-01-01'), hour(TIME '12:00:00'), minute(TIME '12:00:00'), secondsoftimewithfraction(TIME '12:00:00'), NULL):timestamp>
+-- !query output
+NULL

@@ -174,3 +174,6 @@ select timediff('YEAR', date'2020-02-15', date'2023-02-15');
 SELECT make_timestamp(DATE'0001-01-01', TIME'0:0:0');
 SELECT make_timestamp(DATE'2025-06-14', TIME'17:25:30.5', 'CET');
 SELECT make_timestamp(DATE'9999-12-31', TIME'23:59:59.123456');
+SELECT make_timestamp(NULL, TIME'0:0:0.000001');
+SELECT make_timestamp(DATE'1970-01-01', NULL);
+SELECT make_timestamp(DATE'1970-01-01', TIME'12:00:00', NULL);
