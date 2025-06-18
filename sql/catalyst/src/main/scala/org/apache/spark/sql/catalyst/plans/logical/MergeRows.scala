@@ -89,7 +89,7 @@ object MergeRows {
   }
 
   // A special case of Keep where the row is kept as is.
-  case class CarryOver(output: Seq[Expression]) extends Instruction  {
+  case class Copy(output: Seq[Expression]) extends Instruction  {
     override def condition: Expression = TrueLiteral
     override def outputs: Seq[Seq[Expression]] = Seq(output)
     override def children: Seq[Expression] = output

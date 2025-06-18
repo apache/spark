@@ -1784,7 +1784,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           |{ "pk": 3, "salary": 300, "dep": "hr" }
           |""".stripMargin)
 
-      val sourceDF = Seq(1, 2).toDF("pk")
+      val sourceDF = Seq(1, 2, 10).toDF("pk")
       sourceDF.createOrReplaceTempView("source")
 
       val mergeExec = findMergeExec {
@@ -1796,17 +1796,10 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
            |""".stripMargin
       }
 
-      mergeExec.metrics.get("numTargetRowsCopied") match {
-        case Some(metric) =>
-          val expectedMetrics = if (deltaMerge) 0 else 2
-          assert(metric.value == expectedMetrics)
-        case None => fail("numCopiedRows metric not found")
-      }
-
-      mergeExec.metrics.get("numTargetRowsUnmatched") match {
-        case Some(metric) => assert(metric.value == 2, "2 rows unmatched")
-        case None => fail("numTargetRowsUnmatched metric not found")
-      }
+      assertMetric(mergeExec, "numTargetRowsCopied", 2, Some(0))
+      // group based merge does a outer join on target to retain the original rows
+      assertMetric(mergeExec, "numTargetRowsUnused", 2, Some(1))
+      assertMetric(mergeExec, "numSourceRowsUnused", 1)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -1827,7 +1820,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           |{ "pk": 5, "salary": 500, "dep": "executive" }
           |""".stripMargin)
 
-      val sourceDF = Seq(1, 2).toDF("pk")
+      val sourceDF = Seq(1, 2, 10).toDF("pk")
       sourceDF.createOrReplaceTempView("source")
 
       val mergeExec = findMergeExec {
@@ -1841,17 +1834,10 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
            |""".stripMargin
       }
 
-      mergeExec.metrics.get("numTargetRowsCopied") match {
-        case Some(metric) =>
-          val expectedMetrics = if (deltaMerge) 0 else 3
-          assert(metric.value == expectedMetrics)
-        case None => fail("numCopiedRows metric not found")
-      }
 
-      mergeExec.metrics.get("numTargetRowsUnmatched") match {
-        case Some(metric) => assert(metric.value == 3, "3 rows unmatched")
-        case None => fail("numTargetRowsUnmatched metric not found")
-      }
+      assertMetric(mergeExec, "numTargetRowsCopied", 3, Some(0))
+      assertMetric(mergeExec, "numTargetRowsUnused", 3)
+      assertMetric(mergeExec, "numSourceRowsUnused", 1)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -1890,17 +1876,9 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
            |""".stripMargin
       }
 
-      mergeExec.metrics.get("numTargetRowsCopied") match {
-        case Some(metric) =>
-          val expectedMetrics = if (deltaMerge) 0 else 3
-          assert(metric.value == expectedMetrics)
-        case None => fail("numCopiedRows metric not found")
-      }
-
-      mergeExec.metrics.get("numTargetRowsUnmatched") match {
-        case Some(metric) => assert(metric.value == 3, "3 rows unmatched")
-        case None => fail("numTargetRowsUnmatched metric not found")
-      }
+      assertMetric(mergeExec, "numTargetRowsCopied", 3, Some(0))
+      assertMetric(mergeExec, "numTargetRowsUnused", 3)
+      assertMetric(mergeExec, "numSourceRowsUnused", 2)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -1948,5 +1926,23 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       sql(query)
     }
     assert(e.getMessage.contains("ON search condition of the MERGE statement"))
+  }
+
+  private def assertMetric(
+      mergeExec: MergeRowsExec,
+      metricName: String,
+      expected: Long,
+      deltaExpected: Option[Long] = None): Unit = {
+    mergeExec.metrics.get(metricName) match {
+      case Some(metric) =>
+        val actualExpected =
+          deltaExpected match {
+            case Some(deltaExpectedValue) if deltaMerge => deltaExpectedValue
+            case _ => expected
+          }
+        assert(metric.value == actualExpected,
+          s"Expected $metricName to be $actualExpected, but got ${metric.value}")
+      case None => fail(s"$metricName metric not found")
+    }
   }
 }
