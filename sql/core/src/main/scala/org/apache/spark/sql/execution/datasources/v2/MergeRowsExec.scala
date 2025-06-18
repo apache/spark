@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.expressions.Projection
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
-import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{CarryOver, Discard, Instruction, Keep, ROW_ID, Split}
+import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Discard, Instruction, Keep, ROW_ID, Split}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
@@ -73,10 +73,13 @@ case class MergeRowsExec(
 
   override lazy val metrics: Map[String, SQLMetric] = Map(
     "numTargetRowsCopied" -> SQLMetrics.createMetric(sparkContext,
-      "Number of target rows copied over because they did not match any condition."),
-    "numTargetRowsUnmatched" -> SQLMetrics.createMetric(sparkContext,
-      "Number of target rows processed that do not match any condition. " +
-        "These will be dropped for delta-based merge and retained for group-based merge."))
+      "Number of target rows rewritten unmodified because they did not meet any condition."),
+    "numTargetRowsUnused" -> SQLMetrics.createMetric(sparkContext,
+      """Number of target rows processed that did not meet any condition.
+         |These will be dropped for delta-based merge and
+         |rewritten unmodified for group-based merge.""".stripMargin),
+    "numSourceRowsUnused" -> SQLMetrics.createMetric(sparkContext,
+      "Number of source rows processed that did not meet any condition."))
 
   protected override def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions(processPartition)
@@ -116,8 +119,8 @@ case class MergeRowsExec(
 
   private def planInstructions(instructions: Seq[Instruction]): Seq[InstructionExec] = {
     instructions.map {
-      case CarryOver(output) =>
-        CarryOverExec(createProjection(output))
+      case Copy(output) =>
+        CopyExec(createProjection(output))
 
       case Keep(cond, output) =>
         KeepExec(createPredicate(cond), createProjection(output))
@@ -139,7 +142,7 @@ case class MergeRowsExec(
     def condition: BasePredicate
   }
 
-  case class CarryOverExec(projection: Projection) extends InstructionExec {
+  case class CopyExec(projection: Projection) extends InstructionExec {
     override def condition: BasePredicate = createPredicate(TrueLiteral)
     def apply(row: InternalRow): InternalRow = projection.apply(row)
   }
@@ -222,9 +225,9 @@ case class MergeRowsExec(
 
       if (isTargetRowPresent && isSourceRowPresent) {
         cardinalityValidator.validate(row)
-        applyInstructions(row, matchedInstructions, targetPresent = true)
+        applyInstructions(row, matchedInstructions, sourcePresent = true, targetPresent = true)
       } else if (isSourceRowPresent) {
-        applyInstructions(row, notMatchedInstructions)
+        applyInstructions(row, notMatchedInstructions, sourcePresent = true)
       } else if (isTargetRowPresent) {
         applyInstructions(row, notMatchedBySourceInstructions, targetPresent = true)
       } else {
@@ -235,17 +238,22 @@ case class MergeRowsExec(
     private def applyInstructions(
         row: InternalRow,
         instructions: Seq[InstructionExec],
+        sourcePresent: Boolean = false,
         targetPresent: Boolean = false): InternalRow = {
 
       for (instruction <- instructions) {
         if (instruction.condition.eval(row)) {
           instruction match {
-            case carryOver: CarryOverExec =>
-              // For GroupBased Merge, Spark inserts a CarryOver predicate
+            case copy: CopyExec =>
+              // For GroupBased Merge, Spark inserts a Copy predicate
               // to retain the row if no other case matches
               longMetric("numTargetRowsCopied") += 1
-              longMetric("numTargetRowsUnmatched") += 1
-              return carryOver.apply(row)
+              longMetric("numTargetRowsUnused") += 1
+              if (sourcePresent) {
+                longMetric("numSourceRowsUnused") += 1
+              }
+              return copy.apply(row)
+
             case keep: KeepExec =>
               return keep.apply(row)
 
@@ -260,7 +268,10 @@ case class MergeRowsExec(
       }
 
       if (targetPresent) {
-        longMetric("numTargetRowsUnmatched") += 1
+        longMetric("numTargetRowsUnused") += 1
+      }
+      if (sourcePresent) {
+        longMetric("numSourceRowsUnused") += 1
       }
       null
     }
