@@ -5949,7 +5949,7 @@ object SQLConf {
       .createWithDefault(2)
   }
 
-    val HADOOP_LINE_RECORD_READER_ENABLED =
+  val HADOOP_LINE_RECORD_READER_ENABLED =
     buildConf("spark.sql.execution.datasources.hadoopLineRecordReader.enabled")
       .internal()
       .doc("Enable the imported Hadoop's LineRecordReader. This was imported and renamed to " +
