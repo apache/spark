@@ -509,6 +509,27 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       includeLastResort = includeLastResort)
   }
 
+  // Tries to resolve `UnresolvedAttribute` by the children with Plan Ids.
+  // Returns `None` if fail to resolve.
+  private[spark] def tryResolveUnresolvedAttributeByPlanChildren(
+      u: UnresolvedAttribute,
+      q: LogicalPlan,
+      includeLastResort: Boolean = false): Option[Expression] = {
+    resolveDataFrameColumn(u, q.children).map { r =>
+      resolveExpression(
+        r,
+        resolveColumnByName = nameParts => {
+          q.resolveChildren(nameParts, conf.resolver)
+        },
+        getAttrCandidates = () => {
+          assert(q.children.length == 1)
+          q.children.head.output
+        },
+        throws = true,
+        includeLastResort = includeLastResort)
+    }
+  }
+
   /**
    * The last resort to resolve columns. Currently it does two things:
    *  - Try to resolve column names as outer references
@@ -538,7 +559,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       e: Expression,
       q: Seq[LogicalPlan]): Expression = e match {
     case u: UnresolvedAttribute =>
-
       resolveDataFrameColumn(u, q).getOrElse(u)
     case u: UnresolvedDataFrameStar =>
       resolveDataFrameStar(u, q)
@@ -566,14 +586,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       //  df1.select(df2.a)   <-   illegal reference df2.a
       throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
     }
-
-    if (resolved.nonEmpty) {
-      resolved.map(_._1)
-    } else if (u.getTagValue(LogicalPlan.ALLOW_NON_EXISTENT_COL).nonEmpty) {
-      Some(NonExistentAttribute(u.name))
-    } else {
-      None
-    }
+    resolved.map(_._1)
   }
 
   private def resolveDataFrameColumnByPlanId(
