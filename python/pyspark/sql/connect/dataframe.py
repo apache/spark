@@ -1848,15 +1848,13 @@ class DataFrame(ParentDataFrame):
 
     @property
     def schema(self) -> StructType:
-        # self._schema call will cache the schema and serialize it if it is not cached yet.
-        _schema = self._schema
         if self._cached_schema_serialized is not None:
             try:
                 return CPickleSerializer().loads(self._cached_schema_serialized)
             except Exception as e:
                 logger.warn(f"DataFrame schema pickle loads failed with exception: {e}.")
         # In case of pickle ser/de failure, fallback to deepcopy approach.
-        return copy.deepcopy(_schema)
+        return copy.deepcopy(self._schema)
 
     @functools.cache
     def isLocal(self) -> bool:
