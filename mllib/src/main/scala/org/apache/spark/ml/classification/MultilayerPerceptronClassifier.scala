@@ -251,14 +251,8 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
       objectiveHistory: Array[Double]): MultilayerPerceptronClassificationModel = {
     val model = copyValues(new MultilayerPerceptronClassificationModel(uid, weights))
 
-    val (summaryModel, _, predictionColName) = model.findSummaryModel()
-    val summary = new MultilayerPerceptronClassificationTrainingSummaryImpl(
-      summaryModel.transform(dataset),
-      predictionColName,
-      $(labelCol),
-      "",
-      objectiveHistory)
-    model.setSummary(Some(summary))
+    model.createSummary(dataset, objectiveHistory)
+    model
   }
 }
 
@@ -364,6 +358,39 @@ class MultilayerPerceptronClassificationModel private[ml] (
   override def toString: String = {
     s"MultilayerPerceptronClassificationModel: uid=$uid, numLayers=${$(layers).length}, " +
       s"numClasses=$numClasses, numFeatures=$numFeatures"
+  }
+
+  private[spark] def createSummary(
+    dataset: Dataset[_], objectiveHistory: Array[Double]
+  ): Unit = {
+    val (summaryModel, _, predictionColName) = findSummaryModel()
+    val summary = new MultilayerPerceptronClassificationTrainingSummaryImpl(
+      summaryModel.transform(dataset),
+      predictionColName,
+      $(labelCol),
+      "",
+      objectiveHistory)
+    setSummary(Some(summary))
+  }
+
+  override private[spark] def saveSummary(path: String): Unit = {
+    ReadWriteUtils.saveObjectToLocal[Tuple1[Array[Double]]](
+      path, Tuple1(summary.objectiveHistory),
+      (data, dos) => {
+        ReadWriteUtils.serializeDoubleArray(data._1, dos)
+      }
+    )
+  }
+
+  override private[spark] def loadSummary(path: String, dataset: DataFrame): Unit = {
+    val Tuple1(objectiveHistory: Array[Double])
+    = ReadWriteUtils.loadObjectFromLocal[Tuple1[Array[Double]]](
+      path,
+      dis => {
+        Tuple1(ReadWriteUtils.deserializeDoubleArray(dis))
+      }
+    )
+    createSummary(dataset, objectiveHistory)
   }
 }
 

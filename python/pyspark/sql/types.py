@@ -2510,6 +2510,9 @@ def _need_converter(dataType: DataType) -> bool:
         return _need_converter(dataType.keyType) or _need_converter(dataType.valueType)
     elif isinstance(dataType, NullType):
         return True
+    elif isinstance(dataType, StringType):
+        # Coercion to StringType is allowed, e.g. dict -> str
+        return True
     else:
         return False
 
@@ -2521,15 +2524,34 @@ def _create_converter(dataType: DataType) -> Callable:
 
     if isinstance(dataType, ArrayType):
         conv = _create_converter(dataType.elementType)
-        return lambda row: [conv(v) for v in row]
+        return lambda row: [conv(v) for v in row] if row is not None else None
 
     elif isinstance(dataType, MapType):
         kconv = _create_converter(dataType.keyType)
         vconv = _create_converter(dataType.valueType)
-        return lambda row: dict((kconv(k), vconv(v)) for k, v in row.items())
+        return (
+            lambda row: dict((kconv(k), vconv(v)) for k, v in row.items())
+            if row is not None
+            else None
+        )
 
     elif isinstance(dataType, NullType):
         return lambda x: None
+
+    elif isinstance(dataType, StringType):
+
+        def convert_string(value: Any) -> Any:
+            if value is None:
+                return None
+            else:
+                if isinstance(value, bool):
+                    # To match the Classic behavior
+                    return str(value).lower()
+                else:
+                    # Coercion to StringType is allowed, e.g. dict -> str
+                    return str(value)
+
+        return convert_string
 
     elif not isinstance(dataType, StructType):
         return lambda x: x
