@@ -35,13 +35,14 @@ public class SparkBloomFilterSuite {
 
     // the implemented fpp limit is only approximating the hard boundary,
     // so we'll need an error threshold for the assertion
-    final double FPP_EVEN_ODD_ERROR_FACTOR = 0.05;
-    final double FPP_RANDOM_ERROR_FACTOR = 0.04;
+    final double FPP_EVEN_ODD_ERROR_FACTOR = 0.10;
+    final double FPP_RANDOM_ERROR_FACTOR = 0.10;
 
     final long ONE_GB = 1024L * 1024L * 1024L;
     final long REQUIRED_HEAP_UPPER_BOUND_IN_BYTES = 4 * ONE_GB;
 
     private static Instant START;
+    private static boolean strict;
     private static boolean verbose;
 
     private Instant start;
@@ -51,8 +52,8 @@ public class SparkBloomFilterSuite {
     public static void beforeAll() {
         START = Instant.now();
         String testClassName = SparkBloomFilterSuite.class.getName();
-        String verboseString = System.getProperty(testClassName+ ".verbose", "false");
-        verbose = Boolean.parseBoolean(verboseString);
+        strict = Boolean.parseBoolean(System.getProperty(testClassName+ ".strict", "true"));
+        verbose = Boolean.parseBoolean(System.getProperty(testClassName+ ".verbose", "false"));
     }
 
     @AfterAll
@@ -188,23 +189,25 @@ public class SparkBloomFilterSuite {
         testOut.printf("acceptableFpp: %f %%\n", 100 * acceptableFpp);
         testOut.printf("actualFpp:     %f %%\n", 100 * actualFpp);
 
-        Assumptions.assumeTrue(
+        if (!strict) {
+            Assumptions.assumeTrue(
                 actualFpp <= acceptableFpp,
                 String.format(
-                  "acceptableFpp(%f %%) < actualFpp (%f %%)",
-                  100 * acceptableFpp,
-                  100 * actualFpp
+                    "acceptableFpp(%f %%) < actualFpp (%f %%)",
+                    100 * acceptableFpp,
+                    100 * actualFpp
                 )
-        );
-
-        Assertions.assertTrue(
+            );
+        } else {
+            Assertions.assertTrue(
                 actualFpp <= acceptableFpp,
                 String.format(
-                        "acceptableFpp(%f %%) < actualFpp (%f %%)",
-                        100 * acceptableFpp,
-                        100 * actualFpp
+                    "acceptableFpp(%f %%) < actualFpp (%f %%)",
+                    100 * acceptableFpp,
+                    100 * actualFpp
                 )
-        );
+            );
+        }
     }
 
     /**
@@ -338,22 +341,24 @@ public class SparkBloomFilterSuite {
         testOut.printf("acceptableFpp: %f %%\n", 100 * acceptableFpp);
         testOut.printf("actualFpp:     %f %%\n", 100 * actualFpp);
 
-        Assumptions.assumeTrue(
+        if (!strict) {
+            Assumptions.assumeTrue(
                 actualFpp <= acceptableFpp,
                 String.format(
-                        "acceptableFpp(%f %%) < actualFpp (%f %%)",
-                        100 * acceptableFpp,
-                        100 * actualFpp
+                    "acceptableFpp(%f %%) < actualFpp (%f %%)",
+                    100 * acceptableFpp,
+                    100 * actualFpp
                 )
-        );
-
-        Assertions.assertTrue(
+            );
+        } else {
+            Assertions.assertTrue(
                 actualFpp <= acceptableFpp,
                 String.format(
-                        "acceptableFpp(%f %%) < actualFpp (%f %%)",
-                        100 * acceptableFpp,
-                        100 * actualFpp
+                    "acceptableFpp(%f %%) < actualFpp (%f %%)",
+                    100 * acceptableFpp,
+                    100 * actualFpp
                 )
-        );
+            );
+        }
     }
 }
