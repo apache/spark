@@ -20,7 +20,6 @@ import unittest
 from pyspark.sql.tests.streaming.test_streaming_foreach_batch import StreamingTestsForeachBatchMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.errors import PySparkPicklingError
-from pyspark.sql.dataframe import DataFrame
 
 if should_test_connect:
     from pyspark.errors.exceptions.connect import StreamingPythonRunnerInitializationException
