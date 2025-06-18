@@ -195,6 +195,9 @@ message Expression {
       Struct struct = 24;
 
       SpecializedArray specialized_array = 25;
+      Variant variant = 26;
+      Char char = 27;
+      Varchar varchar = 28;
     }
 
     message Decimal {
@@ -239,6 +242,21 @@ message Expression {
         Doubles doubles = 5;
         Strings strings = 6;
       }
+    }
+
+    message Variant {
+      bytes value = 1;
+      bytes metadata = 2;
+    }
+
+    message Char {
+      string value = 1;
+      optional int32 length = 2;
+    }
+
+    message Varchar {
+      string value = 1;
+      optional int32 length = 2;
     }
   }
 
