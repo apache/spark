@@ -301,7 +301,7 @@ object ShuffleExchangeExec {
           ascending = true,
           samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
       case SinglePartition => new ConstantPartitioner
-      case k @ KeyGroupedPartitioning(expressions, n, _) =>
+      case k @ KeyGroupedPartitioning(expressions, n, _, _) =>
         val valueMap = k.uniquePartitionValues.zipWithIndex.map {
           case (partition, index) => (partition.toSeq(expressions.map(_.dataType)), index)
         }.toMap
@@ -332,7 +332,7 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
       case SinglePartition => identity
-      case KeyGroupedPartitioning(expressions, _, _) =>
+      case KeyGroupedPartitioning(expressions, _, _, _) =>
         row => bindReferences(expressions, outputAttributes).map(_.eval(row))
       case _ => throw new IllegalStateException(s"Exchange not implemented for $newPartitioning")
     }

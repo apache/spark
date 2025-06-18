@@ -1127,7 +1127,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       EnsureRequirements.apply(smjExec) match {
         case ShuffledHashJoinExec(_, _, _, _, _,
         DummySparkPlan(_, _, left: KeyGroupedPartitioning, _, _),
-        ShuffleExchangeExec(KeyGroupedPartitioning(attrs, 4, pv),
+        ShuffleExchangeExec(KeyGroupedPartitioning(attrs, 4, pv, _),
         DummySparkPlan(_, _, SinglePartition, _, _), _, _), _) =>
           assert(left.expressions == a1 :: Nil)
           assert(attrs == a1 :: Nil)

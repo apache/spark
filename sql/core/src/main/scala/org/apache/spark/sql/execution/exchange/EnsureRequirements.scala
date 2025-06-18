@@ -288,12 +288,12 @@ case class EnsureRequirements(
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, rightExpressions, rightKeys)
           .orElse(reorderJoinKeysRecursively(
             leftKeys, rightKeys, leftPartitioning, None))
-      case (Some(KeyGroupedPartitioning(clustering, _, _)), _) =>
+      case (Some(KeyGroupedPartitioning(clustering, _, _, _)), _) =>
         val leafExprs = clustering.flatMap(_.collectLeaves())
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, leftKeys)
             .orElse(reorderJoinKeysRecursively(
               leftKeys, rightKeys, None, rightPartitioning))
-      case (_, Some(KeyGroupedPartitioning(clustering, _, _))) =>
+      case (_, Some(KeyGroupedPartitioning(clustering, _, _, _))) =>
         val leafExprs = clustering.flatMap(_.collectLeaves())
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, rightKeys)
             .orElse(reorderJoinKeysRecursively(
@@ -483,7 +483,10 @@ case class EnsureRequirements(
                   s"'$joinType'. Skipping partially clustered distribution.")
               replicateRightSide = false
             } else {
-              val partValues = if (replicateLeftSide) rightPartValues else leftPartValues
+              // In partially clustered distribution, we should use un-grouped partition values
+              val spec = if (replicateLeftSide) rightSpec else leftSpec
+              val partValues = spec.partitioning.originalPartitionValues
+
               val numExpectedPartitions = partValues
                 .map(InternalRowComparableWrapper(_, partitionExprs))
                 .groupBy(identity)
