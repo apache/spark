@@ -15,20 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.pipelines.hive
+package org.apache.spark.sql.hive.pipelines
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{
-  CatalogV2Util,
-  Identifier,
-  TableCatalog,
-  TableChange,
-  TableInfo
-}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, TableChange, TableInfo}
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.pipelines.graph.MaterializeTablesSuite
+import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
 class HiveMaterializeTablesSuite extends MaterializeTablesSuite {
@@ -54,7 +48,7 @@ class HiveMaterializeTablesSuite extends MaterializeTablesSuite {
 
   protected val hiveContext: TestHiveContext = TestHive
 
-  override def createAndInitializeSpark(): SparkSession = TestHive.sparkSession
+  override def createSparkSession: TestSparkSession = TestHive.sparkSession
 
   override def afterAll(): Unit = {
     try {
