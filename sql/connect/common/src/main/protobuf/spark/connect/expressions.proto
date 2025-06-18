@@ -196,6 +196,9 @@ message Expression {
 
       SpecializedArray specialized_array = 25;
       Time time = 26;
+      Variant variant = 27;
+      Char char = 28;
+      Varchar varchar = 29;
     }
 
     message Decimal {
@@ -246,6 +249,21 @@ message Expression {
       int64 nano = 1;
       // The precision of this time, if omitted, uses the default value of MICROS_PRECISION.
       optional int32 precision = 2;
+    }
+
+    message Variant {
+      bytes value = 1;
+      bytes metadata = 2;
+    }
+
+    message Char {
+      string value = 1;
+      optional int32 length = 2;
+    }
+
+    message Varchar {
+      string value = 1;
+      optional int32 length = 2;
     }
   }
 
