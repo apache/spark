@@ -1810,6 +1810,46 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("Merge metrics with matched and not matched clause") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(
+        (4, 100, "marketing"),
+        (5, 400, "executive"),
+        (6, 100, "hr")
+      ).toDF("pk", "salary", "dep")
+      sourceDF.createOrReplaceTempView("source")
+
+      val mergeExec = findMergeExec {
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN
+           | UPDATE SET salary = 9999
+           |WHEN NOT MATCHED AND salary > 200 THEN
+           | INSERT *
+           |""".stripMargin
+      }
+
+      assertMetric(mergeExec, "numTargetRowsCopied", 0)
+      assertMetric(mergeExec, "numTargetRowsUnused", 0)
+      assertMetric(mergeExec, "numSourceRowsUnused", 2)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 100, "hr"),
+          Row(2, 200, "software"),
+          Row(3, 300, "hr"),
+          Row(5, 400, "executive"))) // inserted
+    }
+  }
+
   test("Merge metrics with matched and not matched by source clauses") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
