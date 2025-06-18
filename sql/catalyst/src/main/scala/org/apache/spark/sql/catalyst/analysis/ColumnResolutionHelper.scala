@@ -210,7 +210,11 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         case u @ UnresolvedHaving(_, agg: Aggregate) =>
           agg.resolveChildren(nameParts, conf.resolver)
             .orElse(u.resolveChildren(nameParts, conf.resolver))
-            .map(wrapOuterReference)
+            .map {
+              case alias: Alias =>
+                wrapOuterReference(alias.child)
+              case other => wrapOuterReference(other)
+            }
         case other =>
           other.resolveChildren(nameParts, conf.resolver).map(wrapOuterReference)
       }
