@@ -273,7 +273,7 @@ class IntegralOps(NumericOps):
             raise TypeError("Floor division can not be applied to given types.")
         spark_session = left._internal.spark_frame.sparkSession
         use_try_divide = is_ansi_mode_enabled(spark_session)
-        safe_div = F.try_divide if use_try_divide else lambda x, y: x.__div__(y)
+        safe_div = F.try_divide if use_try_divide else lambda x, y: x.__div__(y)  # type: ignore
 
         def floordiv(left: PySparkColumn, right: Any) -> PySparkColumn:
             return F.when(F.lit(right is np.nan), np.nan).otherwise(
@@ -374,7 +374,7 @@ class FractionalOps(NumericOps):
             raise TypeError("Floor division can not be applied to given types.")
         spark_session = left._internal.spark_frame.sparkSession
         use_try_divide = is_ansi_mode_enabled(spark_session)
-        safe_div = F.try_divide if use_try_divide else lambda x, y: x.__div__(y)
+        safe_div = F.try_divide if use_try_divide else lambda x, y: x.__div__(y)  # type: ignore
 
         def floordiv(left: PySparkColumn, right: Any) -> PySparkColumn:
             return F.when(F.lit(right is np.nan), np.nan).otherwise(
