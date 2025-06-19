@@ -231,7 +231,7 @@ private[connect] object MLHandler extends Logging {
           && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
           throw MLModelSummaryLostException(objRefId)
         }
-        
+
         val helper = AttributeHelper(sessionHolder, objRefId, methods)
         val attrResult = helper.getAttribute
         attrResult match {
