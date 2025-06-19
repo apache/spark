@@ -21,7 +21,6 @@ import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, LongType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -36,11 +35,12 @@ import org.apache.spark.unsafe.types.UTF8String
   since = "1.5.0",
   group = "misc_funcs")
 // scalastyle:on whitespace.end.of.line
-case class InputFileName() extends LeafExpression with Nondeterministic {
+case class InputFileName()
+  extends LeafExpression
+  with Nondeterministic
+  with DefaultStringProducingExpression {
 
   override def nullable: Boolean = false
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def prettyName: String = "input_file_name"
 

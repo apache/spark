@@ -16,17 +16,20 @@
  */
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.expressions.{BooleanLiteral, Expression, IntegerLiteral}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 private[expressions] object PandasAggregate {
-  def expressionToIgnoreNA(e: Expression, source: String): Boolean = e match {
-    case BooleanLiteral(ignoreNA) => ignoreNA
+  def expressionToIgnoreNA(e: Expression, source: String): Boolean = e.eval() match {
+    case b: Boolean => b
     case _ => throw QueryCompilationErrors.invalidIgnoreNAParameter(source, e)
   }
 
-  def expressionToDDOF(e: Expression, source: String): Int = e match {
-    case IntegerLiteral(ddof) => ddof
+  def expressionToDDOF(e: Expression, source: String): Int = e.eval() match {
+    case l: Long => l.toInt
+    case i: Int => i
+    case s: Short => s.toInt
+    case b: Byte => b.toInt
     case _ => throw QueryCompilationErrors.invalidDdofParameter(source, e)
   }
 }

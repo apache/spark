@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project, Sort, Union}
@@ -527,43 +528,30 @@ class SubquerySuite extends QueryTest
   test("SPARK-18504 extra GROUP BY column in correlated scalar subquery is not permitted") {
     withTempView("v") {
       Seq((1, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("v")
-
-      val exception = intercept[AnalysisException] {
-        sql("select (select sum(-1) from v t2 where t1.c2 = t2.c1 group by t2.c2) sum from v t1")
+      val exception = intercept[SparkRuntimeException] {
+        sql("select (select sum(-1) from v t2 where t1.c2 = t2.c1 group by t2.c2) sum from v t1").
+          collect()
       }
       checkError(
         exception,
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-          "NON_CORRELATED_COLUMNS_IN_GROUP_BY",
-        parameters = Map("value" -> "c2"),
-        sqlState = None,
-        context = ExpectedContext(
-          fragment = "(select sum(-1) from v t2 where t1.c2 = t2.c1 group by t2.c2)",
-          start = 7, stop = 67)) }
+        condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS"
+      )
+    }
   }
 
   test("non-aggregated correlated scalar subquery") {
-    val exception1 = intercept[AnalysisException] {
-      sql("select a, (select b from l l2 where l2.a = l1.a) sum_b from l l1")
+    val exception1 = intercept[SparkRuntimeException] {
+      sql("select a, (select b from l l2 where l2.a = l1.a) sum_b from l l1").collect()
     }
     checkError(
       exception1,
-      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-        "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
-      parameters = Map.empty,
-      context = ExpectedContext(
-        fragment = "(select b from l l2 where l2.a = l1.a)", start = 10, stop = 47))
-    val exception2 = intercept[AnalysisException] {
-      sql("select a, (select b from l l2 where l2.a = l1.a group by 1) sum_b from l l1")
-    }
-    checkErrorMatchPVals(
-      exception2,
-      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-        "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
-      parameters = Map.empty[String, String],
-      sqlState = None,
-      context = ExpectedContext(
-        fragment = "(select b from l l2 where l2.a = l1.a group by 1)", start = 10, stop = 58))
+      condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS"
+    )
+    checkAnswer(
+      sql("select a, (select b from l l2 where l2.a = l1.a group by 1) sum_b from l l1"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) ::
+        Row(null, null) :: Row(null, null) :: Row(6, null) :: Nil
+    )
   }
 
   test("non-equal correlated scalar subquery") {
@@ -850,7 +838,7 @@ class SubquerySuite extends QueryTest
       }
       checkErrorMatchPVals(
         exception1,
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
           "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
         parameters = Map("treeNode" -> "(?s).*"),
         sqlState = None,
@@ -872,7 +860,7 @@ class SubquerySuite extends QueryTest
       }
       checkErrorMatchPVals(
         exception2,
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
           "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
         parameters = Map("treeNode" -> "(?s).*"),
         sqlState = None,
@@ -893,7 +881,7 @@ class SubquerySuite extends QueryTest
       }
       checkErrorMatchPVals(
         exception3,
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
           "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
         parameters = Map("treeNode" -> "(?s).*"),
         sqlState = None,
@@ -937,12 +925,12 @@ class SubquerySuite extends QueryTest
 
       withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
         val error = intercept[AnalysisException] { sql(query) }
-        assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        assert(error.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
           "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
       }
       withSQLConf(SQLConf.DECORRELATE_SET_OPS_ENABLED.key -> "false") {
         val error = intercept[AnalysisException] { sql(query) }
-        assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        assert(error.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
           "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
       }
 
@@ -1016,12 +1004,12 @@ class SubquerySuite extends QueryTest
 
           withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
             val error = intercept[AnalysisException] { sql(query) }
-            assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+            assert(error.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
               "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
           }
           withSQLConf(SQLConf.DECORRELATE_SET_OPS_ENABLED.key -> "false") {
             val error = intercept[AnalysisException] { sql(query) }
-            assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+            assert(error.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
               "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
           }
         }
@@ -1057,7 +1045,7 @@ class SubquerySuite extends QueryTest
       }
       checkError(
         exception1,
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+        condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
         parameters = Map("sqlExprs" -> "\"explode(arr_c2)\""),
         context = ExpectedContext(
           fragment = "LATERAL VIEW explode(t2.arr_c2) q AS c2",
@@ -1098,7 +1086,7 @@ class SubquerySuite extends QueryTest
       checkError(
         exception =
           intercept[AnalysisException](sql(query)),
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = None,
         parameters = Map(
           "objectName" -> "`a`",
@@ -1536,7 +1524,7 @@ class SubquerySuite extends QueryTest
       // need to execute the query before we can examine fs.inputRDDs()
       assert(stripAQEPlan(df.queryExecution.executedPlan) match {
         case WholeStageCodegenExec(ColumnarToRowExec(InputAdapter(
-            fs @ FileSourceScanExec(_, _, _, partitionFilters, _, _, _, _, _)))) =>
+            fs @ FileSourceScanExec(_, _, _, _, partitionFilters, _, _, _, _, _)))) =>
           partitionFilters.exists(ExecSubqueryExpression.hasSubquery) &&
             fs.inputRDDs().forall(
               _.asInstanceOf[FileScanRDD].filePartitions.forall(
@@ -2154,6 +2142,24 @@ class SubquerySuite extends QueryTest
     }
   }
 
+  test("SPARK-49819: Do not collapse projects with exist subqueries") {
+    withTempView("v") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("v")
+      checkAnswer(
+        sql("""
+              |SELECT m, CASE WHEN EXISTS (SELECT SUM(c2) FROM v WHERE c1 = m) THEN 1 ELSE 0 END
+              |FROM (SELECT MIN(c2) AS m FROM v)
+              |""".stripMargin),
+        Row(1, 1) :: Nil)
+      checkAnswer(
+        sql("""
+              |SELECT c, CASE WHEN EXISTS (SELECT SUM(c2) FROM v WHERE c1 = c) THEN 1 ELSE 0 END
+              |FROM (SELECT c1 AS c FROM v GROUP BY c1)
+              |""".stripMargin),
+        Row(0, 1) :: Row(1, 1) :: Nil)
+    }
+  }
+
   test("SPARK-37199: deterministic in QueryPlan considers subquery") {
     val deterministicQueryPlan = sql("select (select 1 as b) as b")
       .queryExecution.executedPlan
@@ -2552,7 +2558,7 @@ class SubquerySuite extends QueryTest
                 |""".stripMargin
             ).collect()
           },
-          errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
             "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE",
           parameters = Map("expr" -> "v1.x", "dataType" -> "map"),
           context = ExpectedContext(
@@ -2716,7 +2722,7 @@ class SubquerySuite extends QueryTest
           |SELECT * FROM v1 WHERE kind = (SELECT kind FROM v1 WHERE kind = 'foo')
           |""".stripMargin)
       val df = sql("SELECT * FROM v1 JOIN v2 ON v1.id = v2.id")
-      val filter = df.queryExecution.optimizedPlan.collect {
+      val filter = df.queryExecution.optimizedPlan.collectFirst {
         case f: Filter => f
       }
       assert(filter.isEmpty,
@@ -2793,5 +2799,51 @@ class SubquerySuite extends QueryTest
       val df3 = sql(query3)
       checkAnswer(df3, Row(7))
     }
+  }
+
+  test("SPARK-50091: Handle aggregates in left-hand operand of IN-subquery") {
+    withView("v1", "v2") {
+      Seq((1, 2, 2), (1, 5, 3), (2, 0, 4), (3, 7, 7), (3, 8, 8))
+        .toDF("c1", "c2", "c3")
+        .createOrReplaceTempView("v1")
+      Seq((1, 2, 2), (1, 3, 3), (2, 2, 4), (3, 7, 7), (3, 1, 1))
+        .toDF("col1", "col2", "col3")
+        .createOrReplaceTempView("v2")
+
+      val df1 = sql("SELECT col1, SUM(col2) IN (SELECT c3 FROM v1) FROM v2 GROUP BY col1")
+      checkAnswer(df1,
+        Row(1, false) :: Row(2, true) :: Row(3, true) :: Nil)
+
+      val df2 = sql("""SELECT
+                      |  col1,
+                      |  SUM(col2) IN (SELECT c3 FROM v1) and SUM(col3) IN (SELECT c2 FROM v1) AS x
+                      |FROM v2 GROUP BY col1
+                      |ORDER BY col1""".stripMargin)
+      checkAnswer(df2,
+        Row(1, false) :: Row(2, false) :: Row(3, true) :: Nil)
+
+      val df3 = sql("""SELECT col1, (SUM(col2), SUM(col3)) IN (SELECT c3, c2 FROM v1) AS x
+                      |FROM v2
+                      |GROUP BY col1
+                      |ORDER BY col1""".stripMargin)
+      checkAnswer(df3,
+        Row(1, false) :: Row(2, false) :: Row(3, true) :: Nil)
+    }
+  }
+
+  test("SPARK-51738: IN subquery with struct type") {
+    checkAnswer(
+      sql("SELECT foo IN (SELECT struct(1 a)) FROM (SELECT struct(1 b) foo)"),
+      Row(true)
+    )
+
+    checkAnswer(
+      sql("""
+            |SELECT foo IN (SELECT struct(c, d) FROM r)
+            |FROM (SELECT struct(a, b) foo FROM l)
+            |""".stripMargin),
+      Row(false) :: Row(false) :: Row(false) :: Row(false) :: Row(false)
+        :: Row(true) :: Row(true) :: Row(true) :: Nil
+    )
   }
 }

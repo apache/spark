@@ -26,12 +26,14 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
+import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, FileInputFormat, FileSplit, InvalidInputException}
 import org.apache.hadoop.mapreduce.task.{JobContextImpl, TaskAttemptContextImpl}
+import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
@@ -102,8 +104,7 @@ class NewHadoopRDD[K, V](
 
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
-  private val confBroadcast = sc.broadcast(new SerializableConfiguration(_conf))
-  // private val serializableConf = new SerializableWritable(_conf)
+  private val confBroadcast = SerializableConfiguration.broadcast(sc, _conf)
 
   private val jobTrackerId: String = {
     val dateTimeFormatter =
@@ -242,10 +243,14 @@ class NewHadoopRDD[K, V](
       private var finished = false
       private var reader =
         try {
-          val _reader = format.createRecordReader(
-            split.serializableHadoopSplit.value, hadoopAttemptContext)
-          _reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
-          _reader
+          Utils.createResourceUninterruptiblyIfInTaskThread {
+            Utils.tryInitializeResource(
+              format.createRecordReader(split.serializableHadoopSplit.value, hadoopAttemptContext)
+            ) { reader =>
+              reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
+              reader
+            }
+          }
         } catch {
           case e: FileNotFoundException if ignoreMissingFiles =>
             logWarning(log"Skipped missing file: ${MDC(PATH, split.serializableHadoopSplit)}", e)
@@ -253,6 +258,7 @@ class NewHadoopRDD[K, V](
             null
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
           case e: FileNotFoundException if !ignoreMissingFiles => throw e
+          case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
           case e: IOException if ignoreCorruptFiles =>
             logWarning(
               log"Skipped the rest content in the corrupted file: " +
@@ -282,6 +288,7 @@ class NewHadoopRDD[K, V](
               finished = true
             // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
             case e: FileNotFoundException if !ignoreMissingFiles => throw e
+            case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
             case e: IOException if ignoreCorruptFiles =>
               logWarning(
                 log"Skipped the rest content in the corrupted file: " +

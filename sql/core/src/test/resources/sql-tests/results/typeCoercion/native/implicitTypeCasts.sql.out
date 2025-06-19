@@ -10,25 +10,25 @@ struct<>
 -- !query
 SELECT 1 + '2' FROM t
 -- !query schema
-struct<(1 + 2):double>
+struct<(1 + 2):bigint>
 -- !query output
-3.0
+3
 
 
 -- !query
 SELECT 1 - '2' FROM t
 -- !query schema
-struct<(1 - 2):double>
+struct<(1 - 2):bigint>
 -- !query output
--1.0
+-1
 
 
 -- !query
 SELECT 1 * '2' FROM t
 -- !query schema
-struct<(1 * 2):double>
+struct<(1 * 2):bigint>
 -- !query output
-2.0
+2
 
 
 -- !query

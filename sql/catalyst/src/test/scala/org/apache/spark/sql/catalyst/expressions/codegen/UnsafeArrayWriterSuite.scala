@@ -30,7 +30,7 @@ class UnsafeArrayWriterSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         arrayWriter.initialize(numElements)
       },
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.INITIALIZE",
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.INITIALIZE",
       parameters = Map(
         "numberOfElements" -> (numElements * elementSize).toString,
         "maxRoundedArrayLength" -> Int.MaxValue.toString

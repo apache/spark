@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
+import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.datasources._
@@ -46,7 +47,7 @@ import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
-trait DataSourceScanExec extends LeafExecNode {
+trait DataSourceScanExec extends LeafExecNode with StreamSourceAwareSparkPlan {
   def relation: BaseRelation
   def tableIdentifier: Option[TableIdentifier]
 
@@ -114,6 +115,7 @@ case class RowDataSourceScanExec(
     pushedDownOperators: PushedDownOperators,
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
+    @transient stream: Option[SparkDataStream],
     tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with InputRDDCodegen {
 
@@ -201,12 +203,15 @@ case class RowDataSourceScanExec(
       )
   }
 
-  // Don't care about `rdd` and `tableIdentifier` when canonicalizing.
+  // Don't care about `rdd` and `tableIdentifier`, and `stream` when canonicalizing.
   override def doCanonicalize(): SparkPlan =
     copy(
       output.map(QueryPlan.normalizeExpressions(_, output)),
       rdd = null,
-      tableIdentifier = None)
+      tableIdentifier = None,
+      stream = None)
+
+  override def getStream: Option[SparkDataStream] = stream
 }
 
 /**
@@ -556,7 +561,9 @@ trait FileSourceScanLike extends DataSourceScanExec {
 
     override def toPartitionArray: Array[PartitionedFile] = {
       partitionDirectories.flatMap { p =>
-        p.files.map { f => PartitionedFileUtil.getPartitionedFile(f, p.values, 0, f.getLen) }
+        p.files.map { f =>
+          PartitionedFileUtil.getPartitionedFile(f, f.getPath, p.values, 0, f.getLen)
+        }
       }
     }
 
@@ -599,6 +606,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
  */
 case class FileSourceScanExec(
     @transient override val relation: HadoopFsRelation,
+    @transient stream: Option[SparkDataStream],
     override val output: Seq[Attribute],
     override val requiredSchema: StructType,
     override val partitionFilters: Seq[Expression],
@@ -783,11 +791,14 @@ case class FileSourceScanExec(
     val splitFiles = selectedPartitions.filePartitionIterator.flatMap { partition =>
       val ListingPartition(partitionVals, _, fileStatusIterator) = partition
       fileStatusIterator.flatMap { file =>
-        if (shouldProcess(file.getPath)) {
+        // getPath() is very expensive so we only want to call it once in this block:
+        val filePath = file.getPath
+        if (shouldProcess(filePath)) {
           val isSplitable = relation.fileFormat.isSplitable(
-              relation.sparkSession, relation.options, file.getPath)
+              relation.sparkSession, relation.options, filePath)
           PartitionedFileUtil.splitFiles(
             file = file,
+            filePath = filePath,
             isSplitable = isSplitable,
             maxSplitBytes = maxSplitBytes,
             partitionValues = partitionVals
@@ -817,6 +828,9 @@ case class FileSourceScanExec(
   override def doCanonicalize(): FileSourceScanExec = {
     FileSourceScanExec(
       relation,
+      // remove stream on canonicalization; this is needed for reused shuffle to be effective in
+      // self-join
+      None,
       output.map(QueryPlan.normalizeExpressions(_, output)),
       requiredSchema,
       QueryPlan.normalizePredicates(
@@ -827,4 +841,6 @@ case class FileSourceScanExec(
       None,
       disableBucketedScan)
   }
+
+  override def getStream: Option[SparkDataStream] = stream
 }

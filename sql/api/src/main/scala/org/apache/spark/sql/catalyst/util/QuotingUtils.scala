@@ -45,12 +45,12 @@ object QuotingUtils {
 
   private val validIdentPattern = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]*")
 
+  def needQuote(part: String): Boolean = {
+    !validIdentPattern.matcher(part).matches()
+  }
+
   def quoteIfNeeded(part: String): String = {
-    if (validIdentPattern.matcher(part).matches()) {
-      part
-    } else {
-      quoteIdentifier(part)
-    }
+    if (needQuote(part)) quoteIdentifier(part) else part
   }
 
   def quoted(namespace: Array[String]): String = {

@@ -39,7 +39,7 @@ trait AlterTableRenameColumnSuiteBase extends command.AlterTableRenameColumnSuit
         exception = intercept[AnalysisException](
           sql(s"ALTER TABLE $t RENAME COLUMN col1 TO col3")
         ),
-        errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
         parameters = Map(
           "tableName" -> toSQLId(t),
           "operation" -> "RENAME COLUMN"

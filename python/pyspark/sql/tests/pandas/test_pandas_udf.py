@@ -20,7 +20,14 @@ import datetime
 from typing import cast
 
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType, assert_true, lit
-from pyspark.sql.types import DoubleType, StructType, StructField, LongType, DayTimeIntervalType
+from pyspark.sql.types import (
+    DoubleType,
+    StructType,
+    StructField,
+    LongType,
+    DayTimeIntervalType,
+    VariantType,
+)
 from pyspark.errors import ParseException, PythonException, PySparkTypeError
 from pyspark.util import PythonEvalType
 from pyspark.testing.sqlutils import (
@@ -42,8 +49,16 @@ class PandasUDFTestsMixin:
         self.assertEqual(udf.returnType, DoubleType())
         self.assertEqual(udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
 
+        udf = pandas_udf(lambda x: x, VariantType())
+        self.assertEqual(udf.returnType, VariantType())
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
+
         udf = pandas_udf(lambda x: x, DoubleType(), PandasUDFType.SCALAR)
         self.assertEqual(udf.returnType, DoubleType())
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
+
+        udf = pandas_udf(lambda x: x, VariantType(), PandasUDFType.SCALAR)
+        self.assertEqual(udf.returnType, VariantType())
         self.assertEqual(udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
 
         udf = pandas_udf(
@@ -52,21 +67,45 @@ class PandasUDFTestsMixin:
         self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType())]))
         self.assertEqual(udf.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
+        udf = pandas_udf(
+            lambda x: x, StructType([StructField("v", VariantType())]), PandasUDFType.GROUPED_MAP
+        )
+        self.assertEqual(udf.returnType, StructType([StructField("v", VariantType())]))
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
+
     def test_pandas_udf_basic_with_return_type_string(self):
         udf = pandas_udf(lambda x: x, "double", PandasUDFType.SCALAR)
         self.assertEqual(udf.returnType, DoubleType())
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
+
+        udf = pandas_udf(lambda x: x, "variant", PandasUDFType.SCALAR)
+        self.assertEqual(udf.returnType, VariantType())
         self.assertEqual(udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
 
         udf = pandas_udf(lambda x: x, "v double", PandasUDFType.GROUPED_MAP)
         self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType())]))
         self.assertEqual(udf.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
+        udf = pandas_udf(lambda x: x, "v variant", PandasUDFType.GROUPED_MAP)
+        self.assertEqual(udf.returnType, StructType([StructField("v", VariantType())]))
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
+
         udf = pandas_udf(lambda x: x, "v double", functionType=PandasUDFType.GROUPED_MAP)
         self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType())]))
         self.assertEqual(udf.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
+        udf = pandas_udf(lambda x: x, "v variant", functionType=PandasUDFType.GROUPED_MAP)
+        self.assertEqual(udf.returnType, StructType([StructField("v", VariantType())]))
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
+
         udf = pandas_udf(lambda x: x, returnType="v double", functionType=PandasUDFType.GROUPED_MAP)
         self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType())]))
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
+
+        udf = pandas_udf(
+            lambda x: x, returnType="v variant", functionType=PandasUDFType.GROUPED_MAP
+        )
+        self.assertEqual(udf.returnType, StructType([StructField("v", VariantType())]))
         self.assertEqual(udf.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
     def test_pandas_udf_decorator(self):
@@ -338,6 +377,31 @@ class PandasUDFTestsMixin:
         ).collect()
         self.assertEqual(df.schema[0].dataType.simpleString(), "interval day to second")
         self.assertEqual(df.first()[0], datetime.timedelta(microseconds=123))
+
+    def test_pandas_udf_return_type_error(self):
+        import pandas as pd
+
+        @pandas_udf("s string")
+        def upper(s: pd.Series) -> pd.Series:
+            return s.str.upper()
+
+        df = self.spark.createDataFrame([("a",)], schema="s string")
+
+        self.assertRaisesRegex(
+            PythonException, "Invalid return type", df.select(upper("s")).collect
+        )
+
+    def test_pandas_udf_empty_frame(self):
+        import pandas as pd
+
+        empty_df = self.spark.createDataFrame([], "id long")
+
+        @pandas_udf("long")
+        def add1(x: pd.Series) -> pd.Series:
+            return x + 1
+
+        result = empty_df.select(add1("id"))
+        self.assertEqual(result.collect(), [])
 
 
 class PandasUDFTests(PandasUDFTestsMixin, ReusedSQLTestCase):

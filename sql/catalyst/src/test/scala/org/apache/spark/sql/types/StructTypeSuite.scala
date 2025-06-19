@@ -22,10 +22,12 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, DefaultValueExpression}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, ResolveDefaultColumnsUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType => DT}
 import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
@@ -33,6 +35,7 @@ import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.StructType.fromDDL
 import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.UTF8String.LongWrapper
 
 class StructTypeSuite extends SparkFunSuite with SQLHelper {
 
@@ -45,21 +48,21 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   test("lookup a single missing field should output existing fields") {
     checkError(
       exception = intercept[SparkIllegalArgumentException](s("c")),
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`c`", "fields" -> "`a`, `b`"))
   }
 
   test("lookup a set of missing fields should output existing fields") {
     checkError(
       exception = intercept[SparkIllegalArgumentException](s(Set("a", "c"))),
-      errorClass = "NONEXISTENT_FIELD_NAME_IN_LIST",
+      condition = "NONEXISTENT_FIELD_NAME_IN_LIST",
       parameters = Map("nonExistFields" -> "`c`", "fieldNames" -> "`a`, `b`"))
   }
 
   test("lookup fieldIndex for missing field should output existing fields") {
     checkError(
       exception = intercept[SparkIllegalArgumentException](s.fieldIndex("c")),
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`c`", "fields" -> "`a`, `b`"))
   }
 
@@ -341,7 +344,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`S1`.`S12`.`S123`",
         "path" -> "`s1`.`s12`"))
@@ -352,7 +355,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
+      condition = "AMBIGUOUS_COLUMN_OR_FIELD",
       parameters = Map("name" -> "`S2`.`x`", "n" -> "2"))
     caseSensitiveCheck(Seq("s2", "x"), Some(Seq("s2") -> StructField("x", IntegerType)))
 
@@ -362,7 +365,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`m1`.`key`",
         "path" -> "`m1`"))
@@ -373,7 +376,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`M1`.`key`.`name`",
         "path" -> "`m1`.`key`"))
@@ -382,7 +385,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`M1`.`value`.`name`",
         "path" -> "`m1`.`value`"))
@@ -399,7 +402,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`m2`.`key`.`A`.`name`",
         "path" -> "`m2`.`key`.`a`"))
@@ -408,7 +411,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`M2`.`value`.`b`.`name`",
         "path" -> "`m2`.`value`.`b`"))
@@ -418,7 +421,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`A1`.`element`",
         "path" -> "`a1`"))
@@ -428,7 +431,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`A1`.`element`.`name`",
         "path" -> "`a1`.`element`"))
@@ -442,7 +445,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`a2`.`element`.`C`.`name`",
         "path" -> "`a2`.`element`.`c`"))
@@ -456,7 +459,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`M3`.`value`.`value`.`MA`.`name`",
         "path" -> "`m3`.`value`.`value`.`ma`"))
@@ -470,7 +473,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`A3`.`element`.`element`.`D`.`name`",
         "path" -> "`a3`.`element`.`element`.`d`")
@@ -522,7 +525,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkException] {
         StructType.fromDDL("c1 DECIMAL(10, 5)").merge(StructType.fromDDL("c1 DECIMAL(12, 2)"))
       },
-      errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+      condition = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
       parameters = Map("left" -> "\"DECIMAL(10,5)\"", "right" -> "\"DECIMAL(12,2)\"")
     )
 
@@ -530,7 +533,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkException] {
         StructType.fromDDL("c1 DECIMAL(12, 5)").merge(StructType.fromDDL("c1 DECIMAL(12, 2)"))
       },
-      errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+      condition = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
       parameters = Map("left" -> "\"DECIMAL(12,5)\"", "right" -> "\"DECIMAL(12,2)\"")
     )
   }
@@ -564,7 +567,6 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "1 + 1")
           .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "1 + 1")
           .build())))
-    val error = "fails to parse as a valid literal value"
     assert(ResolveDefaultColumns.existenceDefaultValues(source2).length == 1)
     assert(ResolveDefaultColumns.existenceDefaultValues(source2)(0) == 2)
 
@@ -576,9 +578,13 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
           .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "invalid")
           .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "invalid")
           .build())))
-    assert(intercept[AnalysisException] {
-      ResolveDefaultColumns.existenceDefaultValues(source3)
-    }.getMessage.contains(error))
+
+    checkError(
+      exception = intercept[AnalysisException]{
+        ResolveDefaultColumns.existenceDefaultValues(source3)
+      },
+      condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+      parameters = Map("statement" -> "", "colName" -> "`c1`", "defaultValue" -> "invalid"))
 
     // Negative test: StructType.defaultValues fails because the existence default value fails to
     // resolve.
@@ -592,9 +598,15 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
             ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
             "(SELECT 'abc' FROM missingtable)")
           .build())))
-    assert(intercept[AnalysisException] {
-      ResolveDefaultColumns.existenceDefaultValues(source4)
-    }.getMessage.contains(error))
+
+    checkError(
+      exception = intercept[AnalysisException]{
+        ResolveDefaultColumns.existenceDefaultValues(source4)
+      },
+      condition = "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+      parameters = Map("statement" -> "",
+        "colName" -> "`c1`",
+        "defaultValue" -> "(SELECT 'abc' FROM missingtable)"))
   }
 
   test("SPARK-46629: Test STRUCT DDL with NOT NULL round trip") {
@@ -788,5 +800,69 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
 
     assert(
       mapper.readTree(mapWithNestedArray.json) == mapper.readTree(expectedJson))
+  }
+
+  test("SPARK-51208: ColumnDefinition.toV1Column should preserve EXISTS_DEFAULT resolution") {
+
+    def validateConvertedDefaults(
+        colName: String,
+        dataType: DataType,
+        defaultSQL: String,
+        expectedExists: String): Unit = {
+      val existsDefault = ResolveDefaultColumns.analyze(colName, dataType, defaultSQL, "")
+      val col =
+        ColumnDefinition(colName, dataType, true, None,
+          Some(DefaultValueExpression(existsDefault, defaultSQL)))
+
+      val structField = col.toV1Column
+      assert(
+        structField.metadata.getString(
+          ResolveDefaultColumnsUtils.CURRENT_DEFAULT_COLUMN_METADATA_KEY) ==
+          defaultSQL)
+      val existsSQL = structField.metadata.getString(
+          ResolveDefaultColumnsUtils.EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+      assert(existsSQL == expectedExists)
+      assert(Literal.fromSQL(existsSQL).resolved)
+    }
+
+    validateConvertedDefaults("c1", StringType, "current_catalog()", "'spark_catalog'")
+    validateConvertedDefaults("c2", VariantType, "parse_json('1')", "PARSE_JSON('1')")
+    validateConvertedDefaults("c3", VariantType, "parse_json('{\"k\": \"v\"}')",
+      "PARSE_JSON('{\"k\":\"v\"}')")
+    validateConvertedDefaults("c4", VariantType, "parse_json(null)", "CAST(NULL AS VARIANT)")
+    validateConvertedDefaults("c5", IntegerType, "1 + 1", "2")
+  }
+
+  test("SPARK-51119: Add fallback to process unresolved EXISTS_DEFAULT") {
+    val source = StructType(
+      Array(
+        StructField("c0", VariantType, true,
+          new MetadataBuilder()
+            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY,
+              "parse_json(null)")
+            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+              "parse_json(null)")
+            .build()),
+        StructField("c1", StringType, true,
+          new MetadataBuilder()
+            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY,
+              "current_catalog()")
+            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+              "current_catalog()")
+            .build()),
+        StructField("c2", StringType, true,
+          new MetadataBuilder()
+            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY,
+              "CAST(CURRENT_TIMESTAMP AS BIGINT)")
+            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+              "CAST(CURRENT_TIMESTAMP AS BIGINT)")
+            .build())))
+    val res = ResolveDefaultColumns.existenceDefaultValues(source)
+    assert(res(0) == null)
+    assert(res(1) == UTF8String.fromString("spark_catalog"))
+
+    val res2Wrapper = new LongWrapper
+    assert(res(2).asInstanceOf[UTF8String].toLong(res2Wrapper))
+    assert(res2Wrapper.value > 0)
   }
 }

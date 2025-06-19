@@ -309,7 +309,7 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
           .pivot(min($"training"), Seq("Experts"))
           .agg(sum($"sales.earnings"))
       },
-      errorClass = "GROUP_BY_AGGREGATE",
+      condition = "GROUP_BY_AGGREGATE",
       parameters = Map("sqlExpr" -> "min(training)"),
       context = ExpectedContext(fragment = "min", callSitePattern = getCurrentClassCallSitePattern)
     )

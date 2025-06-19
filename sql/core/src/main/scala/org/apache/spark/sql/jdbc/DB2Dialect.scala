@@ -22,8 +22,7 @@ import java.util.Locale
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -48,7 +47,12 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getErrorCode == -204
+  }
+
   class DB2SQLBuilder extends JDBCSQLBuilder {
+
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
@@ -83,6 +87,12 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
     }
   }
 
+  override def compileValue(value: Any): Any = value match {
+    case binaryValue: Array[Byte] =>
+      binaryValue.map("%02X".format(_)).mkString("BLOB(X'", "", "')")
+    case other => super.compileValue(other)
+  }
+
   override def getCatalystType(
       sqlType: Int,
       typeName: String,
@@ -111,6 +121,11 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  // See https://www.ibm.com/docs/en/db2-for-zos/12.0.0?topic=codes-sqlstate-values-common-error
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    Option(exception.getSQLState).exists(_.startsWith("42"))
+  }
 
   // scalastyle:off line.size.limit
   // See https://www.ibm.com/support/knowledgecenter/en/SSEPGG_11.5.0/com.ibm.db2.luw.sql.ref.doc/doc/r0053474.html
@@ -153,12 +168,12 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
   override def removeSchemaCommentQuery(schema: String): String = {
     s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS ''"
   }
-
   override def classifyException(
       e: Throwable,
-      errorClass: String,
+      condition: String,
       messageParameters: Map[String, String],
-      description: String): AnalysisException = {
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
     e match {
       case sqlException: SQLException =>
         sqlException.getSQLState match {
@@ -168,12 +183,13 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-          case "42710" if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
+          case "42710" if condition == "FAILED_JDBC.RENAME_TABLE" =>
             val newTable = messageParameters("newName")
             throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
-          case _ => super.classifyException(e, errorClass, messageParameters, description)
+          case _ =>
+            super.classifyException(e, condition, messageParameters, description, isRuntime)
         }
-      case _ => super.classifyException(e, errorClass, messageParameters, description)
+      case _ => super.classifyException(e, condition, messageParameters, description, isRuntime)
     }
   }
 
@@ -201,7 +217,7 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
       val offsetClause = dialect.getOffsetClause(offset)
 
       options.prepareQuery +
-        s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+        s"SELECT $columnList FROM ${options.tableOrQuery}" +
         s" $whereClause $groupByClause $orderByClause $offsetClause $limitClause"
     }
   }

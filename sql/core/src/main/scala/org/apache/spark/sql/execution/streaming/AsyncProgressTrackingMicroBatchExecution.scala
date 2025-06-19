@@ -22,8 +22,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.internal.LogKeys.{BATCH_ID, PRETTY_ID_STRING}
 import org.apache.spark.internal.MDC
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, ThreadUtils}
@@ -83,16 +83,21 @@ class AsyncProgressTrackingMicroBatchExecution(
       }
     })
 
-  override val offsetLog = new AsyncOffsetSeqLog(
-    sparkSession,
-    checkpointFile("offsets"),
-    asyncWritesExecutorService,
-    asyncProgressTrackingCheckpointingIntervalMs,
-    clock = triggerClock
-  )
+  /**
+   * Manages the metadata from this checkpoint location with async write operations.
+   */
+  private val asyncCheckpointMetadata =
+    new AsyncStreamingQueryCheckpointMetadata(
+      sparkSessionForStream,
+      resolvedCheckpointRoot,
+      asyncWritesExecutorService,
+      asyncProgressTrackingCheckpointingIntervalMs,
+      triggerClock
+    )
 
-  override val commitLog =
-    new AsyncCommitLog(sparkSession, checkpointFile("commits"), asyncWritesExecutorService)
+  override lazy val offsetLog: AsyncOffsetSeqLog = asyncCheckpointMetadata.offsetLog
+
+  override lazy val commitLog: AsyncCommitLog = asyncCheckpointMetadata.commitLog
 
   // perform quick validation to fail faster
   validateAndGetTrigger()

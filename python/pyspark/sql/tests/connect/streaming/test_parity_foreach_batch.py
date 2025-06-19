@@ -18,9 +18,11 @@
 import unittest
 
 from pyspark.sql.tests.streaming.test_streaming_foreach_batch import StreamingTestsForeachBatchMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.errors import PySparkPicklingError
-from pyspark.errors.exceptions.connect import SparkConnectGrpcException
+
+if should_test_connect:
+    from pyspark.errors.exceptions.connect import StreamingPythonRunnerInitializationException
 
 
 class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedConnectTestCase):
@@ -93,7 +95,7 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
             print(obj)
 
         # Assert that an exception occurs during the initialization
-        with self.assertRaises(SparkConnectGrpcException) as error:
+        with self.assertRaises(StreamingPythonRunnerInitializationException) as error:
             df.select("value").writeStream.foreachBatch(fcn).start()
 
         # Assert that the error message contains the expected string

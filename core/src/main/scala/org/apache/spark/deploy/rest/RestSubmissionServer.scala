@@ -18,13 +18,14 @@
 package org.apache.spark.deploy.rest
 
 import java.util.EnumSet
+import java.util.concurrent.{Executors, ExecutorService}
 
 import scala.io.Source
 
 import com.fasterxml.jackson.core.JsonProcessingException
 import jakarta.servlet.DispatcherType
 import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
-import org.eclipse.jetty.server.{HttpConnectionFactory, Server, ServerConnector}
+import org.eclipse.jetty.server.{HttpConfiguration, HttpConnectionFactory, Server, ServerConnector}
 import org.eclipse.jetty.servlet.{FilterHolder, ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.{QueuedThreadPool, ScheduledExecutorScheduler}
 import org.json4s._
@@ -33,7 +34,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.config.MASTER_REST_SERVER_FILTERS
+import org.apache.spark.internal.config.{MASTER_REST_SERVER_FILTERS, MASTER_REST_SERVER_MAX_THREADS, MASTER_REST_SERVER_VIRTUAL_THREADS}
 import org.apache.spark.util.Utils
 
 /**
@@ -63,7 +64,8 @@ private[spark] abstract class RestSubmissionServer(
   protected val clearRequestServlet: ClearRequestServlet
   protected val readyzRequestServlet: ReadyzRequestServlet
 
-  private var _server: Option[Server] = None
+  // Visible for testing
+  private[rest] var _server: Option[Server] = None
 
   // A mapping from URL prefixes to servlets that serve them. Exposed for testing.
   protected val baseContext = s"/${RestSubmissionServer.PROTOCOL_VERSION}/submissions"
@@ -91,9 +93,23 @@ private[spark] abstract class RestSubmissionServer(
    * Return a 2-tuple of the started server and the bound port.
    */
   private def doStart(startPort: Int): (Server, Int) = {
-    val threadPool = new QueuedThreadPool
+    val threadPool = new QueuedThreadPool(masterConf.get(MASTER_REST_SERVER_MAX_THREADS))
+    threadPool.setName(getClass().getSimpleName())
+    if (Utils.isJavaVersionAtLeast21 && masterConf.get(MASTER_REST_SERVER_VIRTUAL_THREADS)) {
+      val newVirtualThreadPerTaskExecutor =
+        classOf[Executors].getMethod("newVirtualThreadPerTaskExecutor")
+      val service = newVirtualThreadPerTaskExecutor.invoke(null).asInstanceOf[ExecutorService]
+      threadPool.setVirtualThreadsExecutor(service)
+    }
     threadPool.setDaemon(true)
     val server = new Server(threadPool)
+
+    // Hide information.
+    val httpConfig = new HttpConfiguration()
+    logDebug("Using setSendServerVersion: false")
+    httpConfig.setSendServerVersion(false)
+    logDebug("Using setSendXPoweredBy: false")
+    httpConfig.setSendXPoweredBy(false)
 
     val connector = new ServerConnector(
       server,
@@ -103,7 +119,7 @@ private[spark] abstract class RestSubmissionServer(
       null,
       -1,
       -1,
-      new HttpConnectionFactory())
+      new HttpConnectionFactory(httpConfig))
     connector.setHost(host)
     connector.setPort(startPort)
     connector.setReuseAddress(!Utils.isWindows)

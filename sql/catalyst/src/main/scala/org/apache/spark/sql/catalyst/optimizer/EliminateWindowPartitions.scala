@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{WINDOW, WINDOW_EXPRESSIO
 object EliminateWindowPartitions extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(WINDOW), ruleId) {
-    case w @ Window(windowExprs, partitionSpec, _, _) if partitionSpec.exists(_.foldable) =>
+    case w @ Window(windowExprs, partitionSpec, _, _, _) if partitionSpec.exists(_.foldable) =>
       val newWindowExprs = windowExprs.map(_.transformWithPruning(
         _.containsPattern(WINDOW_EXPRESSION)) {
         case windowExpr @ WindowExpression(_, wsd @ WindowSpecDefinition(ps, _, _))

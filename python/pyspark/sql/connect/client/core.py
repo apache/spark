@@ -20,6 +20,8 @@ __all__ = [
     "SparkConnectClient",
 ]
 
+import atexit
+
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -43,6 +45,7 @@ from typing import (
     Dict,
     Set,
     NoReturn,
+    Mapping,
     cast,
     TYPE_CHECKING,
     Type,
@@ -65,7 +68,7 @@ from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.metrics import MetricValue, PlanMetrics, ExecutionInfo, ObservedMetrics
 from pyspark.sql.connect.client.artifact import ArtifactManager
-from pyspark.sql.connect.client.logging import logger
+from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.profiler import ConnectProfilerCollector
 from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
 from pyspark.sql.connect.client.retries import RetryPolicy, Retrying, DefaultPolicy
@@ -217,7 +220,9 @@ class ChannelBuilder:
 
     @property
     def token(self) -> Optional[str]:
-        return self._params.get(ChannelBuilder.PARAM_TOKEN, None)
+        return self._params.get(
+            ChannelBuilder.PARAM_TOKEN, os.environ.get("SPARK_CONNECT_AUTHENTICATE_TOKEN")
+        )
 
     def metadata(self) -> Iterable[Tuple[str, str]]:
         """
@@ -323,13 +328,12 @@ class DefaultChannelBuilder(ChannelBuilder):
             # This is only used in the test/development mode.
             session = PySparkSession._instantiatedSession
 
-            # 'spark.local.connect' is set when we use the local mode in Spark Connect.
-            if session is not None and session.conf.get("spark.local.connect", "0") == "1":
+            if session is not None:
                 jvm = PySparkSession._instantiatedSession._jvm  # type: ignore[union-attr]
                 return getattr(
                     getattr(
-                        jvm.org.apache.spark.sql.connect.service,  # type: ignore[union-attr]
-                        "SparkConnectService$",
+                        jvm,
+                        "org.apache.spark.sql.connect.service.SparkConnectService$",
                     ),
                     "MODULE$",
                 ).localPort()
@@ -408,10 +412,11 @@ class DefaultChannelBuilder(ChannelBuilder):
 
     @property
     def secure(self) -> bool:
-        return (
-            self.getDefault(ChannelBuilder.PARAM_USE_SSL, "").lower() == "true"
-            or self.token is not None
-        )
+        return self.use_ssl or self.token is not None
+
+    @property
+    def use_ssl(self) -> bool:
+        return self.getDefault(ChannelBuilder.PARAM_USE_SSL, "").lower() == "true"
 
     @property
     def host(self) -> str:
@@ -437,14 +442,20 @@ class DefaultChannelBuilder(ChannelBuilder):
 
         if not self.secure:
             return self._insecure_channel(self.endpoint)
-        else:
-            ssl_creds = grpc.ssl_channel_credentials()
+        elif not self.use_ssl and self._host == "localhost":
+            creds = grpc.local_channel_credentials()
 
-            if self.token is None:
-                creds = ssl_creds
-            else:
+            if self.token is not None:
                 creds = grpc.composite_channel_credentials(
-                    ssl_creds, grpc.access_token_call_credentials(self.token)
+                    creds, grpc.access_token_call_credentials(self.token)
+                )
+            return self._secure_channel(self.endpoint, creds)
+        else:
+            creds = grpc.ssl_channel_credentials()
+
+            if self.token is not None:
+                creds = grpc.composite_channel_credentials(
+                    creds, grpc.access_token_call_credentials(self.token)
                 )
 
             return self._secure_channel(self.endpoint, creds)
@@ -493,6 +504,7 @@ class AnalyzeResult:
         is_same_semantics: Optional[bool],
         semantic_hash: Optional[int],
         storage_level: Optional[StorageLevel],
+        ddl_string: Optional[str],
     ):
         self.schema = schema
         self.explain_string = explain_string
@@ -505,6 +517,7 @@ class AnalyzeResult:
         self.is_same_semantics = is_same_semantics
         self.semantic_hash = semantic_hash
         self.storage_level = storage_level
+        self.ddl_string = ddl_string
 
     @classmethod
     def fromProto(cls, pb: Any) -> "AnalyzeResult":
@@ -519,6 +532,7 @@ class AnalyzeResult:
         is_same_semantics: Optional[bool] = None
         semantic_hash: Optional[int] = None
         storage_level: Optional[StorageLevel] = None
+        ddl_string: Optional[str] = None
 
         if pb.HasField("schema"):
             schema = types.proto_schema_to_pyspark_data_type(pb.schema.schema)
@@ -546,6 +560,8 @@ class AnalyzeResult:
             pass
         elif pb.HasField("get_storage_level"):
             storage_level = proto_to_storage_level(pb.get_storage_level.storage_level)
+        elif pb.HasField("json_to_ddl"):
+            ddl_string = pb.json_to_ddl.ddl_string
         else:
             raise SparkConnectException("No analyze result found!")
 
@@ -561,6 +577,7 @@ class AnalyzeResult:
             is_same_semantics,
             semantic_hash,
             storage_level,
+            ddl_string,
         )
 
 
@@ -649,11 +666,11 @@ class SparkConnectClient(object):
         elif user_id is not None:
             self._user_id = user_id
         else:
-            self._user_id = os.getenv("USER", None)
+            self._user_id = os.getenv("SPARK_USER", os.getenv("USER", None))
 
         self._channel = self._builder.toChannel()
         self._closed = False
-        self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
+        self._internal_stub = grpc_lib.SparkConnectServiceStub(self._channel)
         self._artifact_manager = ArtifactManager(
             self._user_id, self._session_id, self._channel, self._builder.metadata()
         )
@@ -667,6 +684,22 @@ class SparkConnectClient(object):
         self._profiler_collector = ConnectProfilerCollector()
 
         self._progress_handlers: List[ProgressHandler] = []
+
+        # cleanup ml cache if possible
+        atexit.register(self._cleanup_ml_cache)
+
+    @property
+    def _stub(self) -> grpc_lib.SparkConnectServiceStub:
+        if self.is_closed:
+            raise SparkConnectException(
+                errorClass="NO_ACTIVE_SESSION", messageParameters=dict()
+            ) from None
+        return self._internal_stub
+
+    # For testing only.
+    @_stub.setter
+    def _stub(self, value: grpc_lib.SparkConnectServiceStub) -> None:
+        self._internal_stub = value
 
     def register_progress_handler(self, handler: ProgressHandler) -> None:
         """
@@ -921,33 +954,39 @@ class SparkConnectClient(object):
         schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
         assert schema is not None and isinstance(schema, StructType)
 
-        # Rename columns to avoid duplicated column names.
-        renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
+        # SPARK-51112: If the table is empty, we avoid using pyarrow to_pandas to create the
+        # DataFrame, as it may fail with a segmentation fault. Instead, we create an empty pandas
+        # DataFrame manually with the correct schema.
+        if table.num_rows == 0:
+            pdf = pd.DataFrame(columns=schema.names, index=range(0))
+        else:
+            # Rename columns to avoid duplicated column names.
+            renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
 
-        pandas_options = {}
-        if self_destruct:
-            # Configure PyArrow to use as little memory as possible:
-            # self_destruct - free columns as they are converted
-            # split_blocks - create a separate Pandas block for each column
-            # use_threads - convert one column at a time
-            pandas_options.update(
-                {
-                    "self_destruct": True,
-                    "split_blocks": True,
-                    "use_threads": False,
-                }
-            )
-        if LooseVersion(pa.__version__) >= LooseVersion("13.0.0"):
-            # A legacy option to coerce date32, date64, duration, and timestamp
-            # time units to nanoseconds when converting to pandas.
-            # This option can only be added since 13.0.0.
-            pandas_options.update(
-                {
-                    "coerce_temporal_nanoseconds": True,
-                }
-            )
-        pdf = renamed_table.to_pandas(**pandas_options)
-        pdf.columns = schema.names
+            pandas_options = {}
+            if self_destruct:
+                # Configure PyArrow to use as little memory as possible:
+                # self_destruct - free columns as they are converted
+                # split_blocks - create a separate Pandas block for each column
+                # use_threads - convert one column at a time
+                pandas_options.update(
+                    {
+                        "self_destruct": True,
+                        "split_blocks": True,
+                        "use_threads": False,
+                    }
+                )
+            if LooseVersion(pa.__version__) >= LooseVersion("13.0.0"):
+                # A legacy option to coerce date32, date64, duration, and timestamp
+                # time units to nanoseconds when converting to pandas.
+                # This option can only be added since 13.0.0.
+                pandas_options.update(
+                    {
+                        "coerce_temporal_nanoseconds": True,
+                    }
+                )
+            pdf = renamed_table.to_pandas(**pandas_options)
+            pdf.columns = schema.names
 
         if len(pdf.columns) > 0:
             timezone: Optional[str] = None
@@ -993,20 +1032,25 @@ class SparkConnectClient(object):
         ----------
         p : google.protobuf.message.Message
             Generic Message type
+        truncate: bool
+            Indicates whether to truncate the message
 
         Returns
         -------
         Single line string of the serialized proto message.
         """
         try:
-            p2 = self._truncate(p) if truncate else p
+            max_level = 8 if truncate else sys.maxsize
+            p2 = self._truncate(p, max_level) if truncate else p
             return text_format.MessageToString(p2, as_one_line=True)
         except RecursionError:
             return "<Truncated message due to recursion error>"
         except Exception:
             return "<Truncated message due to truncation error>"
 
-    def _truncate(self, p: google.protobuf.message.Message) -> google.protobuf.message.Message:
+    def _truncate(
+        self, p: google.protobuf.message.Message, allowed_recursion_depth: int
+    ) -> google.protobuf.message.Message:
         """
         Helper method to truncate the protobuf message.
         Refer to 'org.apache.spark.sql.connect.common.Abbreviator' in the server side.
@@ -1029,11 +1073,17 @@ class SparkConnectClient(object):
                 field_name = descriptor.name
 
                 if descriptor.type == descriptor.TYPE_MESSAGE:
-                    if descriptor.label == descriptor.LABEL_REPEATED:
+                    if allowed_recursion_depth == 0:
                         p2.ClearField(field_name)
-                        getattr(p2, field_name).extend([self._truncate(v) for v in value])
+                    elif descriptor.label == descriptor.LABEL_REPEATED:
+                        p2.ClearField(field_name)
+                        getattr(p2, field_name).extend(
+                            [self._truncate(v, allowed_recursion_depth - 1) for v in value]
+                        )
                     else:
-                        getattr(p2, field_name).CopyFrom(self._truncate(value))
+                        getattr(p2, field_name).CopyFrom(
+                            self._truncate(value, allowed_recursion_depth - 1)
+                        )
 
                 elif descriptor.type == descriptor.TYPE_STRING:
                     if descriptor.label == descriptor.LABEL_REPEATED:
@@ -1178,7 +1228,9 @@ class SparkConnectClient(object):
         """
         return self._builder.token
 
-    def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
+    def _execute_plan_request_with_metadata(
+        self, operation_id: Optional[str] = None
+    ) -> pb2.ExecutePlanRequest:
         req = pb2.ExecutePlanRequest(
             session_id=self._session_id,
             client_type=self._builder.userAgent,
@@ -1188,6 +1240,15 @@ class SparkConnectClient(object):
             req.client_observed_server_side_session_id = self._server_session_id
         if self._user_id:
             req.user_context.user_id = self._user_id
+        if operation_id is not None:
+            try:
+                uuid.UUID(operation_id, version=4)
+            except ValueError as ve:
+                raise PySparkValueError(
+                    errorClass="INVALID_OPERATION_UUID_ID",
+                    messageParameters={"arg_name": "operation_id", "origin": str(ve)},
+                )
+            req.operation_id = operation_id
         return req
 
     def _analyze_plan_request_with_metadata(self) -> pb2.AnalyzePlanRequest:
@@ -1272,6 +1333,8 @@ class SparkConnectClient(object):
                 req.unpersist.blocking = cast(bool, kwargs.get("blocking"))
         elif method == "get_storage_level":
             req.get_storage_level.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
+        elif method == "json_to_ddl":
+            req.json_to_ddl.json_string = cast(str, kwargs.get("json_string"))
         else:
             raise PySparkValueError(
                 errorClass="UNSUPPORTED_OPERATION",
@@ -1311,8 +1374,11 @@ class SparkConnectClient(object):
                 generator = ExecutePlanResponseReattachableIterator(
                     req, self._stub, self._retrying, self._builder.metadata()
                 )
-                for b in generator:
-                    handle_response(b)
+                try:
+                    for b in generator:
+                        handle_response(b)
+                finally:
+                    generator.close()
             else:
                 for attempt in self._retrying():
                     with attempt:
@@ -1408,6 +1474,10 @@ class SparkConnectClient(object):
             if b.HasField("streaming_query_listener_events_result"):
                 event_result = b.streaming_query_listener_events_result
                 yield {"streaming_query_listener_events_result": event_result}
+            if b.HasField("pipeline_command_result"):
+                yield {"pipeline_command_result": b.pipeline_command_result}
+            if b.HasField("pipeline_event_result"):
+                yield {"pipeline_event_result": b.pipeline_event_result}
             if b.HasField("get_resources_command_result"):
                 resources = {}
                 for key, resource in b.get_resources_command_result.resources.items():
@@ -1459,6 +1529,8 @@ class SparkConnectClient(object):
                         b.checkpoint_command_result.relation
                     )
                 }
+            if b.HasField("ml_command_result"):
+                yield {"ml_command_result": b.ml_command_result}
 
         try:
             if self._use_reattachable_execute:
@@ -1466,8 +1538,11 @@ class SparkConnectClient(object):
                 generator = ExecutePlanResponseReattachableIterator(
                     req, self._stub, self._retrying, self._builder.metadata()
                 )
-                for b in generator:
-                    yield from handle_response(b)
+                try:
+                    for b in generator:
+                        yield from handle_response(b)
+                finally:
+                    generator.close()
             else:
                 for attempt in self._retrying():
                     with attempt:
@@ -1564,6 +1639,10 @@ class SparkConnectClient(object):
         op = pb2.ConfigRequest.Operation(get=pb2.ConfigRequest.Get(keys=keys))
         configs = dict(self.config(op).pairs)
         return tuple(configs.get(key) for key in keys)
+
+    def get_config_dict(self, *keys: str) -> Mapping[str, Optional[str]]:
+        op = pb2.ConfigRequest.Operation(get=pb2.ConfigRequest.Get(keys=keys))
+        return dict(self.config(op).pairs)
 
     def get_config_with_defaults(
         self, *pairs: Tuple[str, Optional[str]]
@@ -1751,11 +1830,6 @@ class SparkConnectClient(object):
             self.thread_local.inside_error_handling = True
             if isinstance(error, grpc.RpcError):
                 self._handle_rpc_error(error)
-            elif isinstance(error, ValueError):
-                if "Cannot invoke RPC" in str(error) and "closed" in str(error):
-                    raise SparkConnectException(
-                        errorClass="NO_ACTIVE_SESSION", messageParameters=dict()
-                    ) from None
             raise error
         finally:
             self.thread_local.inside_error_handling = False
@@ -1775,7 +1849,7 @@ class SparkConnectClient(object):
             req.user_context.user_id = self._user_id
 
         try:
-            return self._stub.FetchErrorDetails(req)
+            return self._stub.FetchErrorDetails(req, metadata=self._builder.metadata())
         except grpc.RpcError:
             return None
 
@@ -1831,9 +1905,12 @@ class SparkConnectClient(object):
                         status.message,
                         self._fetch_enriched_error(info),
                         self._display_server_stack_trace(),
+                        status.code,
                     ) from None
 
-            raise SparkConnectGrpcException(status.message) from None
+            raise SparkConnectGrpcException(
+                message=status.message, grpc_status_code=status.code
+            ) from None
         else:
             raise SparkConnectGrpcException(str(rpc_error)) from None
 
@@ -1907,3 +1984,45 @@ class SparkConnectClient(object):
         (_, properties, _) = self.execute_command(cmd)
         profile_id = properties["create_resource_profile_command_result"]
         return profile_id
+
+    def _delete_ml_cache(self, cache_ids: List[str], evict_only: bool = False) -> List[str]:
+        # try best to delete the cache
+        try:
+            if len(cache_ids) > 0:
+                command = pb2.Command()
+                command.ml_command.delete.obj_refs.extend(
+                    [pb2.ObjectRef(id=cache_id) for cache_id in cache_ids]
+                )
+                command.ml_command.delete.evict_only = evict_only
+                (_, properties, _) = self.execute_command(command)
+
+                assert properties is not None
+
+                if properties is not None and "ml_command_result" in properties:
+                    ml_command_result = properties["ml_command_result"]
+                    deleted = ml_command_result.operator_info.obj_ref.id.split(",")
+                    return cast(List[str], deleted)
+            return []
+        except Exception:
+            return []
+
+    def _cleanup_ml_cache(self) -> None:
+        try:
+            command = pb2.Command()
+            command.ml_command.clean_cache.SetInParent()
+            self.execute_command(command)
+        except Exception:
+            pass
+
+    def _get_ml_cache_info(self) -> List[str]:
+        command = pb2.Command()
+        command.ml_command.get_cache_info.SetInParent()
+        (_, properties, _) = self.execute_command(command)
+
+        assert properties is not None
+
+        if properties is not None and "ml_command_result" in properties:
+            ml_command_result = properties["ml_command_result"]
+            return [item.string for item in ml_command_result.param.array.elements]
+
+        return []

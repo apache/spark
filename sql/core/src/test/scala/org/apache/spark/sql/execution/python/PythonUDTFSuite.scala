@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.{IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Expression, FunctionTableSubqueryArgumentExpression, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, OneRowRelation, Project, Repartition, RepartitionByExpression, Sort, SubqueryAlias}
@@ -124,84 +124,6 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Seq(Row(1, 2, -1), Row(1, 2, 1), Row(1, 2, 3)))
   }
 
-  test("Simple variant input UDTF") {
-    assume(shouldTestPythonUDFs)
-    withTempView("t") {
-      spark.udtf.registerPython("variantInputUDTF", variantInputUDTF)
-      spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v").createOrReplaceTempView("t")
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.sql("select udtf.* from t, lateral variantInputUDTF(v) udtf").collect()
-        },
-        errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
-        parameters = Map(
-          "sqlExpr" -> """"InputVariantUDTF\(outer\(v#\d+\)\)"""",
-          "dataType" -> "VARIANT"),
-        matchPVals = true,
-        queryContext = Array(ExpectedContext(
-          fragment = "variantInputUDTF(v) udtf",
-          start = 30,
-          stop = 53)))
-    }
-  }
-
-  test("Complex variant input UDTF") {
-    assume(shouldTestPythonUDFs)
-    withTempView("t") {
-      spark.udtf.registerPython("variantInputUDTF", variantInputUDTF)
-      spark.range(0, 10)
-        .selectExpr("map(id, parse_json(cast(id as string))) map_v")
-        .createOrReplaceTempView("t")
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.sql("select udtf.* from t, lateral variantInputUDTF(map_v) udtf").collect()
-        },
-        errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
-        parameters = Map(
-          "sqlExpr" -> """"InputVariantUDTF\(outer\(map_v#\d+\)\)"""",
-          "dataType" -> "MAP<BIGINT, VARIANT>"),
-        matchPVals = true,
-        queryContext = Array(ExpectedContext(
-          fragment = "variantInputUDTF(map_v) udtf",
-          start = 30,
-          stop = 57)))
-    }
-  }
-
-  test("Simple variant output UDTF") {
-    assume(shouldTestPythonUDFs)
-      spark.udtf.registerPython("variantOutUDTF", variantOutputUDTF)
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.sql("select * from variantOutUDTF()").collect()
-        },
-        errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
-        parameters = Map(
-          "sqlExpr" -> "\"SimpleOutputVariantUDTF()\"",
-          "dataType" -> "VARIANT"),
-        context = ExpectedContext(
-          fragment = "variantOutUDTF()",
-          start = 14,
-          stop = 29))
-  }
-
-  test("Complex variant output UDTF") {
-    assume(shouldTestPythonUDFs)
-      spark.udtf.registerPython("arrayOfVariantOutUDTF", arrayOfVariantOutputUDTF)
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.sql("select * from arrayOfVariantOutUDTF()").collect()
-        },
-        errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
-        parameters = Map(
-          "sqlExpr" -> "\"OutputArrayOfVariantUDTF()\"",
-          "dataType" -> "ARRAY<VARIANT>"),
-        context = ExpectedContext(
-          fragment = "arrayOfVariantOutUDTF()",
-          start = 14,
-          stop = 36))
-  }
-
   test("PythonUDTF with lateral join") {
     assume(shouldTestPythonUDFs)
     withTempView("t") {
@@ -299,7 +221,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         _, false, RepartitionByExpression(
           _, Project(
             _, SubqueryAlias(
-              _, _: LocalRelation)), _, _)) =>
+              _, _: LocalRelation)), _, _), _) =>
       case other =>
         failure(other)
     }
@@ -313,7 +235,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       case Sort(
         _, false, Repartition(
           1, true, SubqueryAlias(
-            _, _: LocalRelation))) =>
+            _, _: LocalRelation)), _) =>
       case other =>
         failure(other)
     }
@@ -488,7 +410,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
           |  WITH SINGLE PARTITION
           |  ORDER BY device_id, data_ds)
           |""".stripMargin)),
-      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" ->
         ("The table function call includes a table argument with an invalid " +
           "partitioning/ordering specification: the ORDER BY clause included multiple " +

@@ -21,11 +21,11 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.EvaluateUnresolvedInlineTable
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, CurrentTimestamp, Literal, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, CurrentTime, CurrentTimestamp, Literal, Rand}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, EvalInlineTables}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.types.{LongType, NullType, TimestampType}
+import org.apache.spark.sql.types.{LongType, NullType, TimestampType, TimeType}
 
 /**
  * Unit tests for [[ResolveInlineTables]]. Note that there are also test cases defined in
@@ -105,7 +105,7 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     assert(resolved.isInstanceOf[ResolvedInlineTable])
 
     EvalInlineTables(ComputeCurrentTime(resolved)) match {
-      case LocalRelation(output, data, _) =>
+      case LocalRelation(output, data, _, _) =>
         assert(output.map(_.dataType) == Seq(TimestampType))
         assert(data.size == 2)
         // Make sure that both CURRENT_TIMESTAMP expressions are evaluated to the same value.
@@ -113,11 +113,38 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     }
   }
 
+  test("cast and execute CURRENT_TIME expressions") {
+    val table = UnresolvedInlineTable(
+      Seq("c1"),
+      Seq(
+        Seq(CurrentTime()),
+        Seq(CurrentTime())
+      )
+    )
+    val resolved = ResolveInlineTables(ResolveTimeZone(table))
+    assert(resolved.isInstanceOf[ResolvedInlineTable],
+      "Expected an inline table to be resolved into a ResolvedInlineTable")
+
+    val transformed = ComputeCurrentTime(resolved)
+    EvalInlineTables(transformed) match {
+      case LocalRelation(output, data, _, _) =>
+        // expect default precision = 6
+        assert(output.map(_.dataType) == Seq(TimeType(6)))
+        // Should have 2 rows
+        assert(data.size == 2)
+        // Both rows should have the *same* microsecond value for current_time
+        assert(data(0).getLong(0) == data(1).getLong(0),
+          "Both CURRENT_TIME calls must yield the same value in the same query")
+    }
+  }
+
+
   test("convert TimeZoneAwareExpression") {
     val table = UnresolvedInlineTable(Seq("c1"),
       Seq(Seq(Cast(lit("1991-12-06 00:00:00.0"), TimestampType))))
     val withTimeZone = ResolveTimeZone.apply(table)
-    val LocalRelation(output, data, _) = EvalInlineTables(ResolveInlineTables.apply(withTimeZone))
+    val LocalRelation(output, data, _, _) =
+      EvalInlineTables(ResolveInlineTables.apply(withTimeZone))
     val correct = Cast(lit("1991-12-06 00:00:00.0"), TimestampType)
       .withTimeZone(conf.sessionLocalTimeZone).eval().asInstanceOf[Long]
     assert(output.map(_.dataType) == Seq(TimestampType))

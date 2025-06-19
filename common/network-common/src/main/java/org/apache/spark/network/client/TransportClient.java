@@ -290,9 +290,11 @@ public class TransportClient implements Closeable {
     try {
       return result.get(timeoutMs, TimeUnit.MILLISECONDS);
     } catch (ExecutionException e) {
-      throw Throwables.propagate(e.getCause());
+      Throwables.throwIfUnchecked(e.getCause());
+      throw new RuntimeException(e.getCause());
     } catch (Exception e) {
-      throw Throwables.propagate(e);
+      Throwables.throwIfUnchecked(e);
+      throw new RuntimeException(e);
     }
   }
 

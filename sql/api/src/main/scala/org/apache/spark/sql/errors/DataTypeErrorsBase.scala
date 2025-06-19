@@ -85,7 +85,7 @@ private[sql] trait DataTypeErrorsBase {
     else value.toString
   }
 
-  protected def quoteByDefault(elem: String): String = {
+  protected[sql] def quoteByDefault(elem: String): String = {
     "\"" + elem + "\""
   }
 
@@ -95,5 +95,9 @@ private[sql] trait DataTypeErrorsBase {
 
   def getQueryContext(context: QueryContext): Array[QueryContext] = {
     if (context == null) Array.empty else Array(context)
+  }
+
+  def toDSOption(option: String): String = {
+    quoteByDefault(option)
   }
 }

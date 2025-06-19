@@ -57,7 +57,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
     ppc: PerPartitionConfig
   ) extends InputDStream[ConsumerRecord[K, V]](_ssc) with Logging with CanCommitOffsets {
 
-  private val initialRate = context.sparkContext.getConf.getLong(
+  private val initialRate = context.sparkContext.getReadOnlyConf.getLong(
     "spark.streaming.backpressure.initialRate", 0)
 
   val executorKafkaParams = {

@@ -21,6 +21,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.types.StructType
 
 /**
  * Interface for a parser.
@@ -64,8 +65,8 @@ trait ParserInterface extends DataTypeParserInterface {
   def parseQuery(sqlText: String): LogicalPlan
 
   /**
-   * Parse a SQL script string to a [[CompoundBody]].
+   * Parse a string to a [[StructType]] as routine parameters, handling default values and comments.
    */
-  @throws[ParseException]("Text cannot be parsed to a CompoundBody")
-  def parseScript(sqlScriptText: String): CompoundBody
+  @throws[ParseException]("Text cannot be parsed to routine parameters")
+  def parseRoutineParam(sqlText: String): StructType
 }

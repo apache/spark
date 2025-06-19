@@ -17,21 +17,27 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import java.lang.{Boolean => JBoolean}
 import java.util.IdentityHashMap
 
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode, TreeNodeTag}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{OUTER_REFERENCE, PLAN_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
+import org.apache.spark.sql.catalyst.trees.TreePatternBits.toPatternBits
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.{BestEffortLazyVal, TransientBestEffortLazyVal}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -50,11 +56,38 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
   def output: Seq[Attribute]
 
+  override def nodeWithOutputColumnsString(maxColumns: Int): String = {
+    try {
+      nodeName + {
+        if (this.output.length > maxColumns) {
+          val outputWithNullability = this.output.take(maxColumns).map { attr =>
+            attr.toString + s"[nullable=${attr.nullable}]"
+          }
+
+          outputWithNullability.mkString(" <output=", ", ",
+            s" ... ${this.output.length - maxColumns} more columns>")
+        } else {
+          val outputWithNullability = this.output.map { attr =>
+            attr.toString + s"[nullable=${attr.nullable}]"
+          }
+
+          outputWithNullability.mkString(" <output=", ", ", ">")
+        }
+      }
+    } catch {
+      case _: UnresolvedException =>
+        // If we encounter an UnresolvedException, it's high likely that the call of `this.output`
+        // throws it. In this case, we may have to give up and only show the nodeName.
+        nodeName + " <output='Unresolved'>"
+    }
+  }
+
   /**
    * Returns the set of attributes that are output by this node.
    */
-  @transient
-  lazy val outputSet: AttributeSet = AttributeSet(output)
+  def outputSet: AttributeSet = _outputSet()
+
+  private val _outputSet = new TransientBestEffortLazyVal(() => AttributeSet(output))
 
   /**
    * Returns the output ordering that this plan generates, although the semantics differ in logical
@@ -94,17 +127,19 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * All Attributes that appear in expressions from this operator.  Note that this set does not
    * include attributes that are implicitly referenced by being passed through to the output tuple.
    */
-  @transient
-  lazy val references: AttributeSet = {
-    AttributeSet.fromAttributeSets(expressions.map(_.references)) -- producedAttributes
-  }
+  def references: AttributeSet = _references()
+
+  private val _references = new TransientBestEffortLazyVal(() =>
+    AttributeSet(expressions) -- producedAttributes)
 
   /**
    * Returns true when the all the expressions in the current node as well as all of its children
    * are deterministic
    */
-  lazy val deterministic: Boolean = expressions.forall(_.deterministic) &&
-    children.forall(_.deterministic)
+  def deterministic: Boolean = _deterministic()
+
+  private val _deterministic = new BestEffortLazyVal[JBoolean](() =>
+    expressions.forall(_.deterministic) && children.forall(_.deterministic))
 
   /**
    * Attributes that are referenced by expressions but not provided by this node's children.
@@ -278,7 +313,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /** Returns all of the expressions present in this query plan operator. */
-  final def expressions: Seq[Expression] = {
+  final def expressions: Seq[Expression] = _expressions()
+
+  private val _expressions = new BestEffortLazyVal[Seq[Expression]](() => {
     // Recursively find all expressions from a traversable.
     def seqToExpressions(seq: Iterable[Any]): Iterable[Expression] = seq.flatMap {
       case e: Expression => e :: Nil
@@ -292,7 +329,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       case seq: Iterable[_] => seqToExpressions(seq)
       case other => Nil
     }.toSeq
-  }
+  })
 
   /**
    * A variant of `transformUp`, which takes care of the case that the rule replaces a plan node
@@ -425,7 +462,10 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     }
   }
 
-  lazy val schema: StructType = DataTypeUtils.fromAttributes(output)
+  def schema: StructType = _schema()
+
+  private val _schema = new BestEffortLazyVal[StructType](() =>
+    DataTypeUtils.fromAttributes(output))
 
   /** Returns the output schema in the tree format. */
   def schemaString: String = schema.treeString
@@ -478,11 +518,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * All the top-level subqueries of the current plan node. Nested subqueries are not included.
    */
-  @transient lazy val subqueries: Seq[PlanType] = {
+  def subqueries: Seq[PlanType] = _subqueries()
+
+  private val _subqueries = new TransientBestEffortLazyVal(() =>
     expressions.filter(_.containsPattern(PLAN_EXPRESSION)).flatMap(_.collect {
       case e: PlanExpression[_] => e.plan.asInstanceOf[PlanType]
     })
-  }
+  )
 
   /**
    * All the subqueries of the current plan node and all its children. Nested subqueries are also
@@ -591,10 +633,20 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
   /**
    * A variant of `collect`. This method not only apply the given function to all elements in this
-   * plan, also considering all the plans in its (nested) subqueries
+   * plan, also considering all the plans in its (nested) subqueries.
    */
   def collectWithSubqueries[B](f: PartialFunction[PlanType, B]): Seq[B] =
     (this +: subqueriesAll).flatMap(_.collect(f))
+
+  /**
+   * A variant of collectFirst. This method not only apply the given function to all elements in
+   * this plan, also considering all the plans in its (nested) subqueries.
+   */
+  def collectFirstWithSubqueries[B](f: PartialFunction[PlanType, B]): Option[B] = {
+    this.collectFirst(f).orElse {
+      subqueriesAll.foldLeft(None: Option[B]) { (l, r) => l.orElse(r.collectFirst(f)) }
+    }
+  }
 
   override def innerChildren: Seq[QueryPlan[_]] = subqueries
 
@@ -618,7 +670,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Plan nodes that require special canonicalization should override [[doCanonicalize()]].
    * They should remove expressions cosmetic variations themselves.
    */
-  @transient final lazy val canonicalized: PlanType = {
+  def canonicalized: PlanType = _canonicalized()
+
+  private val _canonicalized = new TransientBestEffortLazyVal(() => {
     var plan = doCanonicalize()
     // If the plan has not been changed due to canonicalization, make a copy of it so we don't
     // mutate the original plan's _isCanonicalizedPlan flag.
@@ -627,7 +681,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     }
     plan._isCanonicalizedPlan = true
     plan
-  }
+  })
 
   /**
    * Defines how the canonicalization should work for the current plan.
@@ -635,22 +689,23 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   protected def doCanonicalize(): PlanType = {
     val canonicalizedChildren = children.map(_.canonicalized)
     var id = -1
+    val allAttributesSeq = this.allAttributes
     mapExpressions {
       case a: Alias =>
         id += 1
         // As the root of the expression, Alias will always take an arbitrary exprId, we need to
         // normalize that for equality testing, by assigning expr id from 0 incrementally. The
         // alias name doesn't matter and should be erased.
-        val normalizedChild = QueryPlan.normalizeExpressions(a.child, allAttributes)
+        val normalizedChild = QueryPlan.normalizeExpressions(a.child, allAttributesSeq)
         Alias(normalizedChild, "")(ExprId(id), a.qualifier)
 
-      case ar: AttributeReference if allAttributes.indexOf(ar.exprId) == -1 =>
+      case ar: AttributeReference if allAttributesSeq.indexOf(ar.exprId) == -1 =>
         // Top level `AttributeReference` may also be used for output like `Alias`, we should
         // normalize the exprId too.
         id += 1
         ar.withExprId(ExprId(id)).canonicalized
 
-      case other => QueryPlan.normalizeExpressions(other, allAttributes)
+      case other => QueryPlan.normalizeExpressions(other, allAttributesSeq)
     }.withNewChildren(canonicalizedChildren)
   }
 
@@ -676,8 +731,31 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
   /**
    * All the attributes that are used for this plan.
+   *
+   * `def` instead of a `lazy val` to avoid holding references to a large number of
+   * attributes, thereby reducing memory pressure on the driver. The number of attributes
+   * referenced here can be very large, especially for logical plans with wide schemas where the
+   * column pruning hasn't happened yet. Holding references to all of them can lead to
+   * significant memory overhead on the driver.
    */
-  lazy val allAttributes: AttributeSeq = children.flatMap(_.output)
+  def allAttributes: AttributeSeq = children.flatMap(_.output)
+
+  final override def validateNodePatterns(): Unit = {
+    if (Utils.isTesting) {
+      assert(
+        !toPatternBits(nodePatterns: _*).intersects(QueryPlanPatternBitMask.mask),
+        s"${this.getClass.getName} returns Expression patterns")
+    }
+  }
+}
+
+object QueryPlanPatternBitMask {
+  val mask: BitSet = {
+    val bits = new BitSet(TreePattern.maxId)
+    bits.clear()
+    bits.setUntil(OPERATOR_START.id)
+    bits
+  }
 }
 
 object QueryPlan extends PredicateHelper {
@@ -715,6 +793,12 @@ object QueryPlan extends PredicateHelper {
         } else {
           ar.withExprId(ExprId(ordinal))
         }
+
+      // Top-level Alias is already handled by `QueryPlan#doCanonicalize`. For inner Alias, the id
+      // doesn't matter and we normalize it to 0 here.
+      case a: Alias =>
+        Alias(a.child, a.name)(
+          ExprId(0), a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
     }.canonicalized.asInstanceOf[T]
   }
 
@@ -740,11 +824,31 @@ object QueryPlan extends PredicateHelper {
       verbose: Boolean,
       addSuffix: Boolean,
       maxFields: Int = SQLConf.get.maxToStringFields,
-      printOperatorId: Boolean = false): Unit = {
+      printOperatorId: Boolean = false,
+      printOutputColumns: Boolean = false): Unit = {
     try {
-      plan.treeString(append, verbose, addSuffix, maxFields, printOperatorId)
+      plan.treeString(append, verbose, addSuffix, maxFields, printOperatorId, printOutputColumns)
     } catch {
       case e: AnalysisException => append(e.toString)
     }
+  }
+
+  /**
+   * Generate detailed field string with different format based on type of input value. Supported
+   * input values are sequences and strings. An empty sequences converts to []. A non-empty
+   * sequences converts to square brackets-enclosed, comma-separated values, prefixed with a
+   * sequence length. An empty string converts to None, while a non-empty string is verbatim
+   * outputted. In all four cases, user-provided fieldName prefixes the output. Examples:
+   * List("Hello", "World") -> <fieldName>: [2]: [Hello, World]
+   * List()                 -> <fieldName>: []
+   * "hello_world"          -> <fieldName>: hello_world
+   * ""                     -> <fieldName>: None
+   */
+  def generateFieldString(fieldName: String, values: Any): String = values match {
+    case iter: Iterable[_] if iter.isEmpty => s"${fieldName}: []"
+    case iter: Iterable[_] => s"${fieldName} [${iter.size}]: ${iter.mkString("[", ", ", "]")}"
+    case str: String if (str == null || str.isEmpty) => s"${fieldName}: None"
+    case str: String => s"${fieldName}: ${str}"
+    case _ => throw new IllegalArgumentException(s"Unsupported type for argument values: $values")
   }
 }

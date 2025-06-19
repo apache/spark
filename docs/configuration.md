@@ -321,7 +321,7 @@ of the most common options to set are:
   <td>2.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.driver.minMemoryOverhead</code></td>
+  <td><code>spark.executor.minMemoryOverhead</code></td>
   <td>384m</td>
   <td>
     The minimum amount of non-heap memory to be allocated per executor process, in MiB unless otherwise specified, if <code>spark.executor.memoryOverhead</code> is not defined.
@@ -565,8 +565,7 @@ of the most common options to set are:
   <td>numExecutors * 2, with minimum of 3</td>
   <td>
     The maximum number of executor failures before failing the application.
-    This configuration only takes effect on YARN, or Kubernetes when 
-    <code>spark.kubernetes.allocation.pods.allocator</code> is set to 'direct'.
+    This configuration only takes effect on YARN and Kubernetes.
   </td>
   <td>3.5.0</td>
 </tr>
@@ -576,8 +575,7 @@ of the most common options to set are:
   <td>
     Interval after which executor failures will be considered independent and
     not accumulate towards the attempt count.
-    This configuration only takes effect on YARN, or Kubernetes when 
-    <code>spark.kubernetes.allocation.pods.allocator</code> is set to 'direct'.
+    This configuration only takes effect on YARN and Kubernetes.
   </td>
   <td>3.5.0</td>
 </tr>
@@ -1233,6 +1231,19 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.2.1</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.accurateBlockSkewedFactor</code></td>
+  <td>-1.0</td>
+  <td>
+    A shuffle block is considered as skewed and will be accurately recorded in
+    <code>HighlyCompressedMapStatus</code> if its size is larger than this factor multiplying
+    the median shuffle block size or <code>spark.shuffle.accurateBlockThreshold</code>. It is
+    recommended to set this parameter to be the same as
+    <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code>. Set to -1.0 to disable this
+    feature by default.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.registration.timeout</code></td>
   <td>5000</td>
   <td>
@@ -1332,7 +1343,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.checksum.algorithm</code></td>
   <td>ADLER32</td>
   <td>
-    The algorithm is used to calculate the shuffle checksum. Currently, it only supports built-in algorithms of JDK, e.g., ADLER32, CRC32.
+    The algorithm is used to calculate the shuffle checksum. Currently, it only supports built-in algorithms of JDK, e.g., ADLER32, CRC32 and CRC32C.
   </td>
   <td>3.2.0</td>
 </tr>
@@ -1743,10 +1754,6 @@ Apart from these, the following properties are also available, and may be useful
     <br /><code>spark.ui.filters=com.test.filter1</code>
     <br /><code>spark.com.test.filter1.param.name1=foo</code>
     <br /><code>spark.com.test.filter1.param.name2=bar</code>
-    <br />
-    <br />Note that some filter requires additional dependencies. For example,
-    the built-in <code>org.apache.spark.ui.JWSFilter</code> requires
-    <code>jjwt-impl</code> and <code>jjwt-jackson</code> jar files.
   </td>
   <td>1.0.0</td>
 </tr>
@@ -1833,7 +1840,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.checkpoint.compress</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Whether to compress RDD checkpoints. Generally a good idea.
     Compression will use <code>spark.io.compression.codec</code>.
@@ -2103,7 +2110,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.storage.replication.proactive</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Enables proactive block replication for RDD blocks. Cached RDD block replicas lost due to
     executor failures are replenished if there are any existing available replicas. This tries
@@ -2839,8 +2846,35 @@ Apart from these, the following properties are also available, and may be useful
     If set to "true", prevent Spark from scheduling tasks on executors that have been excluded
     due to too many task failures. The algorithm used to exclude executors and nodes can be further
     controlled by the other "spark.excludeOnFailure" configuration options.
+    This config will be overridden by "spark.excludeOnFailure.application.enabled" and
+    "spark.excludeOnFailure.taskAndStage.enabled" to specify exclusion enablement on individual
+    levels.
   </td>
   <td>2.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.excludeOnFailure.application.enabled</code></td>
+  <td>
+    false
+  </td>
+  <td>
+    If set to "true", enables excluding executors for the entire application due to too many task
+    failures and prevent Spark from scheduling tasks on them.
+    This config overrides "spark.excludeOnFailure.enabled". 
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.excludeOnFailure.taskAndStage.enabled</code></td>
+  <td>
+    false
+  </td>
+  <td>
+    If set to "true", enables excluding executors on a task set level due to too many task
+    failures and prevent Spark from scheduling tasks on them.
+    This config overrides "spark.excludeOnFailure.enabled". 
+  </td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.excludeOnFailure.timeout</code></td>
@@ -3357,12 +3391,36 @@ They are typically set via the config file and command-line options with `--conf
 <table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
+  <td><code>spark.api.mode</code></td>
+  <td>
+    classic
+  </td>
+  <td>For Spark Classic applications, specify whether to automatically use Spark Connect by running a local Spark Connect server. The value can be <code>classic</code> or <code>connect</code>.</td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.grpc.binding.address</code></td>
+  <td>
+    (none)
+  </td>
+  <td>Address for Spark Connect server to bind.</td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.connect.grpc.binding.port</code></td>
   <td>
     15002
   </td>
   <td>Port for Spark Connect server to bind.</td>
   <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.grpc.port.maxRetries</code></td>
+  <td>
+    0
+  </td>
+  <td>The max port retry attempts for the gRPC server binding. By default, it's set to 0, and the server will fail fast in case of port conflicts.</td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.connect.grpc.interceptor.classes</code></td>
@@ -3416,6 +3474,70 @@ Expression types in proto.</td>
 <code>org.apache.spark.sql.connect.plugin.CommandPlugin</code> to support custom
 Command types in proto.</td>
   <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.ml.backend.classes</code></td>
+  <td>
+    (none)
+  </td>
+  <td>Comma separated list of classes that implement the trait <code>org.apache.spark.sql.connect.plugin.MLBackendPlugin</code> to replace the specified Spark ML operators with a backend-specific implementation.</td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.jvmStacktrace.maxSize</code></td>
+  <td>
+    1024
+  </td>
+  <td>Sets the maximum stack trace size to display when `spark.sql.pyspark.jvmStacktrace.enabled` is true.</td>
+  <td>3.5.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.connect.ui.retainedSessions</code></td>
+  <td>
+    200
+  </td>
+  <td>The number of client sessions kept in the Spark Connect UI history.</td>
+  <td>3.5.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.connect.ui.retainedStatements</code></td>
+  <td>
+    200
+  </td>
+  <td>The number of statements kept in the Spark Connect UI history.</td>
+  <td>3.5.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.connect.enrichError.enabled</code></td>
+  <td>
+    true
+  </td>
+  <td>When true, it enriches errors with full exception messages and optionally server-side stacktrace on the client side via an additional RPC.</td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.connect.serverStacktrace.enabled</code></td>
+  <td>
+    true
+  </td>
+  <td>When true, it sets the server-side stacktrace in the user-facing Spark exception.</td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.grpc.maxMetadataSize</code></td>
+  <td>
+    1024
+  </td>
+  <td>Sets the maximum size of metadata fields. For instance, it restricts metadata fields in `ErrorInfo`.</td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.progress.reportInterval</code></td>
+  <td>
+    2s
+  </td>
+  <td>The interval at which the progress of a query is reported to the client. If the value is set to a negative value the progress reports will be disabled.</td>
+  <td>4.0.0</td>
 </tr>
 </table>
 
@@ -3713,37 +3835,35 @@ Note: When running Spark on YARN in `cluster` mode, environment variables need t
 
 # Configuring Logging
 
-Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can configure it by adding a
-`log4j2.properties` file in the `conf` directory. One way to start is to copy the existing templates `log4j2.properties.template` or `log4j2.properties.pattern-layout-template` located there.
-
-## Structured Logging
-Starting from version 4.0.0, `spark-submit` has adopted the [JSON Template Layout](https://logging.apache.org/log4j/2.x/manual/json-template-layout.html) for logging, which outputs logs in JSON format. This format facilitates querying logs using Spark SQL with the JSON data source. Additionally, the logs include all Mapped Diagnostic Context (MDC) information for search and debugging purposes.
-
-To configure the layout of structured logging, start with the `log4j2.properties.template` file.
-
-To query Spark logs using Spark SQL, you can use the following Python code snippet:
-
-```python
-from pyspark.util import LogUtils
-
-logDf = spark.read.schema(LogUtils.LOG_SCHEMA).json("path/to/logs")
-```
-
-Or using the following Scala code snippet:
-```scala
-import org.apache.spark.util.LogUtils.LOG_SCHEMA
-
-val logDf = spark.read.schema(LOG_SCHEMA).json("path/to/logs")
-```
+Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can configure it by adding a `log4j2.properties` file in the `conf` directory. To get started, copy one of the provided templates: `log4j2.properties.template` (for plain text logging) or `log4j2-json-layout.properties.template` (for structured logging).
 
 ## Plain Text Logging
-If you prefer plain text logging, you have two options:
-- Disable structured JSON logging by setting the Spark configuration `spark.log.structuredLogging.enabled` to `false`.
-- Use a custom log4j configuration file. Rename `conf/log4j2.properties.pattern-layout-template` to `conf/log4j2.properties`. This reverts to the default configuration prior to Spark 4.0, which utilizes [PatternLayout](https://logging.apache.org/log4j/2.x/manual/layouts.html#PatternLayout) for logging all messages in plain text.
+The default logging format is plain text, using Log4j's [Pattern Layout](https://logging.apache.org/log4j/2.x/manual/pattern-layout.html).
 
-MDC information is not included by default when with plain text logging. In order to print it in the logs, you can update the patternLayout in the file. For example, you can add `%X{task_name}` to print the task name in the logs.
-Moreover, you can use `spark.sparkContext.setLocalProperty(s"mdc.$name", "value")` to add user specific data into MDC.
-The key in MDC will be the string of `mdc.$name`.
+MDC (Mapped Diagnostic Context) information is not included by default in plain text logs. To include it, update the `PatternLayout` configuration in the `log4j2.properties` file. For example, add `%X{task_name}` to include the task name in logs. Additionally, use `spark.sparkContext.setLocalProperty("key", "value")` to add custom data to the MDC.
+
+## Structured Logging
+Starting with version 4.0.0, `spark-submit` supports optional structured logging using the [JSON Template Layout](https://logging.apache.org/log4j/2.x/manual/json-template-layout.html). This format enables efficient querying of logs with Spark SQL using the JSON data source and includes all MDC information for improved searchability and debugging.
+
+To enable structured logging and include MDC information, set the configuration `spark.log.structuredLogging.enabled` to `true` (default is `false`). For additional customization, copy `log4j2-json-layout.properties.template` to `conf/log4j2.properties` and adjust as needed.
+
+### Querying Structured Logs with Spark SQL
+To query structured logs in JSON format, use the following code snippet:
+
+**Python:**
+```python
+from pyspark.logger import SPARK_LOG_SCHEMA
+
+logDf = spark.read.schema(SPARK_LOG_SCHEMA).json("path/to/logs")
+```
+
+**Scala:**
+```scala
+import org.apache.spark.util.LogUtils.SPARK_LOG_SCHEMA
+
+val logDf = spark.read.schema(SPARK_LOG_SCHEMA).json("path/to/logs")
+```
+**Note**: If you're using the interactive shell (pyspark shell or spark-shell), you can omit the import statement in the code because SPARK_LOG_SCHEMA is already available in the shell's context.
 
 # Overriding configuration directory
 

@@ -57,6 +57,7 @@ case class ShowCreateTableExec(
     showTableOptions(builder, tableOptions)
     showTablePartitioning(table, builder)
     showTableComment(table, builder)
+    showTableCollation(table, builder)
     showTableLocation(table, builder)
     showTableProperties(table, builder, tableOptions)
   }
@@ -152,6 +153,12 @@ case class ShowCreateTableExec(
   private def showTableComment(table: Table, builder: StringBuilder): Unit = {
     Option(table.properties.get(TableCatalog.PROP_COMMENT))
       .map("COMMENT '" + escapeSingleQuotedString(_) + "'\n")
+      .foreach(builder.append)
+  }
+
+  private def showTableCollation(table: Table, builder: StringBuilder): Unit = {
+    Option(table.properties.get(TableCatalog.PROP_COLLATION))
+      .map("COLLATION '" + escapeSingleQuotedString(_) + "'\n")
       .foreach(builder.append)
   }
 

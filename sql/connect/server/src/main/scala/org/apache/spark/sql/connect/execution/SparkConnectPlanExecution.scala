@@ -27,8 +27,8 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
-import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
@@ -77,8 +77,10 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(dataframe, responseObserver, executeHolder)
     responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, dataframe))
-    createObservedMetricsResponse(request.getSessionId, dataframe).foreach(
-      responseObserver.onNext)
+    createObservedMetricsResponse(
+      request.getSessionId,
+      executeHolder.allObservationAndPlanIds,
+      dataframe).foreach(responseObserver.onNext)
   }
 
   type Batch = (Array[Byte], Long)
@@ -88,14 +90,16 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       maxRecordsPerBatch: Int,
       maxBatchSize: Long,
       timeZoneId: String,
-      errorOnDuplicatedFieldNames: Boolean): Iterator[InternalRow] => Iterator[Batch] = { rows =>
+      errorOnDuplicatedFieldNames: Boolean,
+      largeVarTypes: Boolean): Iterator[InternalRow] => Iterator[Batch] = { rows =>
     val batches = ArrowConverters.toBatchWithSchemaIterator(
       rows,
       schema,
       maxRecordsPerBatch,
       maxBatchSize,
       timeZoneId,
-      errorOnDuplicatedFieldNames)
+      errorOnDuplicatedFieldNames,
+      largeVarTypes)
     batches.map(b => b -> batches.rowCountInLastBatch)
   }
 
@@ -108,6 +112,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     val schema = dataframe.schema
     val maxRecordsPerBatch = spark.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = spark.sessionState.conf.sessionLocalTimeZone
+    val largeVarTypes = spark.sessionState.conf.arrowUseLargeVarTypes
     // Conservatively sets it 70% because the size is not accurate but estimated.
     val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
 
@@ -116,7 +121,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       maxRecordsPerBatch,
       maxBatchSize,
       timeZoneId,
-      errorOnDuplicatedFieldNames = false)
+      errorOnDuplicatedFieldNames = false,
+      largeVarTypes = largeVarTypes)
 
     var numSent = 0
     def sendBatch(bytes: Array[Byte], count: Long, startOffset: Long): Unit = {
@@ -137,7 +143,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     }
 
     dataframe.queryExecution.executedPlan match {
-      case LocalTableScanExec(_, rows) =>
+      case LocalTableScanExec(_, rows, _) =>
         executePlan.eventsManager.postFinished(Some(rows.length))
         var offset = 0L
         converter(rows.iterator).foreach { case (bytes, count) =>
@@ -237,7 +243,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         ArrowConverters.createEmptyArrowBatch(
           schema,
           timeZoneId,
-          errorOnDuplicatedFieldNames = false),
+          errorOnDuplicatedFieldNames = false,
+          largeVarTypes = largeVarTypes),
         0L,
         0L)
     }
@@ -255,22 +262,24 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
   private def createObservedMetricsResponse(
       sessionId: String,
+      observationAndPlanIds: Map[String, Long],
       dataframe: DataFrame): Option[ExecutePlanResponse] = {
     val observedMetrics = dataframe.queryExecution.observedMetrics.collect {
       case (name, row) if !executeHolder.observations.contains(name) =>
-        val values = (0 until row.length).map { i =>
-          (if (row.schema != null) Some(row.schema.fieldNames(i)) else None, row(i))
+        val values = if (row.schema == null) {
+          (0 until row.length).map { i => (None, row(i)) }
+        } else {
+          (0 until row.length).map { i => (Some(row.schema.fieldNames(i)), row(i)) }
         }
         name -> values
     }
     if (observedMetrics.nonEmpty) {
-      val planId = executeHolder.request.getPlan.getRoot.getCommon.getPlanId
       Some(
         SparkConnectPlanExecution
           .createObservedMetricsResponse(
             sessionId,
             sessionHolder.serverSessionId,
-            planId,
+            observationAndPlanIds,
             observedMetrics))
     } else None
   }
@@ -280,17 +289,17 @@ object SparkConnectPlanExecution {
   def createObservedMetricsResponse(
       sessionId: String,
       serverSessionId: String,
-      planId: Long,
+      observationAndPlanIds: Map[String, Long],
       metrics: Map[String, Seq[(Option[String], Any)]]): ExecutePlanResponse = {
     val observedMetrics = metrics.map { case (name, values) =>
       val metrics = ExecutePlanResponse.ObservedMetrics
         .newBuilder()
         .setName(name)
-        .setPlanId(planId)
       values.foreach { case (key, value) =>
         metrics.addValues(toLiteralProto(value))
         key.foreach(metrics.addKeys)
       }
+      observationAndPlanIds.get(name).foreach(metrics.setPlanId)
       metrics.build()
     }
     // Prepare a response with the observed metrics.

@@ -521,7 +521,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
       // verify that the key schema not compatible error is thrown
       checkError(
         ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
-        errorClass = "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE",
+        condition = "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE",
         parameters = Map("storedKeySchema" -> ".*",
           "newKeySchema" -> ".*"),
         matchPVals = true
@@ -567,12 +567,27 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
     checkError(
       ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
-      errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
+      condition = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
       parameters = Map(
         "schema" -> ".+\"str\":\"spark.UTF8_LCASE\".+"
       ),
       matchPVals = true
     )
+  }
+
+  test("test that avro encoding is not supported") {
+    val inputData = MemoryStream[String]
+    val result = inputData.toDS().dropDuplicates()
+
+    val ex = intercept[Exception] {
+      withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "avro") {
+        testStream(result, Append)(
+          AddData(inputData, "a"),
+          ProcessAllAvailable()
+        )
+      }
+    }
+    assert(ex.getMessage.contains("State store encoding format as avro is not supported"))
   }
 }
 

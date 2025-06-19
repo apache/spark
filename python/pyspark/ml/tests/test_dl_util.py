@@ -137,7 +137,7 @@ class TestFunctionPickler(unittest.TestCase):
                 "",
             ),
             (
-                "Check if it creates the correct file with only suffix + boddy",
+                "Check if it creates the correct file with only suffix + body",
                 "",
                 "print('goodbye')",
             ),

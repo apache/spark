@@ -101,7 +101,7 @@ class SaveIntoDataSourceCommandSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           dataSource.planForWriting(SaveMode.ErrorIfExists, df.logicalPlan)
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map("columnName" -> "`col`", "columnType" -> s"\"${testCase._2}\"",
           "format" -> ".*JdbcRelationProvider.*"),
         matchPVals = true

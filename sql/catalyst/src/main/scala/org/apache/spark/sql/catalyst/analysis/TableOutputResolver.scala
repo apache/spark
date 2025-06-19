@@ -34,7 +34,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
-import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralType, MapType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralType, MapType, StructType, UserDefinedType}
 
 object TableOutputResolver extends SQLConfHelper with Logging {
 
@@ -80,7 +80,6 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       query: LogicalPlan,
       byName: Boolean,
       conf: SQLConf,
-      // TODO: Only DS v1 writing will set it to true. We should enable in for DS v2 as well.
       supportColDefaultValue: Boolean = false): LogicalPlan = {
 
     if (expected.size < query.output.size) {
@@ -460,11 +459,28 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
 
     if (resKey.length == 1 && resValue.length == 1) {
-      val keyFunc = LambdaFunction(resKey.head, Seq(keyParam))
-      val valueFunc = LambdaFunction(resValue.head, Seq(valueParam))
-      val newKeys = ArrayTransform(MapKeys(nullCheckedInput), keyFunc)
-      val newValues = ArrayTransform(MapValues(nullCheckedInput), valueFunc)
-      Some(Alias(MapFromArrays(newKeys, newValues), expected.name)())
+      // If the key and value expressions have not changed, we just check original map field.
+      // Otherwise, we construct a new map by adding transformations to the keys and values.
+      if (resKey.head == keyParam && resValue.head == valueParam) {
+        Some(
+          Alias(nullCheckedInput, expected.name)(
+            nonInheritableMetadataKeys =
+              Seq(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)))
+      } else {
+        val newKeys = if (resKey.head != keyParam) {
+          val keyFunc = LambdaFunction(resKey.head, Seq(keyParam))
+          ArrayTransform(MapKeys(nullCheckedInput), keyFunc)
+        } else {
+          MapKeys(nullCheckedInput)
+        }
+        val newValues = if (resValue.head != valueParam) {
+          val valueFunc = LambdaFunction(resValue.head, Seq(valueParam))
+          ArrayTransform(MapValues(nullCheckedInput), valueFunc)
+        } else {
+          MapValues(nullCheckedInput)
+        }
+        Some(Alias(MapFromArrays(newKeys, newValues), expected.name)())
+      }
     } else {
       None
     }
@@ -539,7 +555,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       }
     } else {
       val nullCheckedQueryExpr = checkNullability(queryExpr, tableAttr, conf, colPath)
-      val casted = cast(nullCheckedQueryExpr, attrTypeWithoutCharVarchar, conf, colPath.quoted)
+      val udtUnwrapped = unwrapUDT(nullCheckedQueryExpr)
+      val casted = cast(udtUnwrapped, attrTypeWithoutCharVarchar, conf, colPath.quoted)
       val exprWithStrLenCheck = if (conf.charVarcharAsString || !attrTypeHasCharVarchar) {
         casted
       } else {
@@ -556,6 +573,39 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       byName, conf, addError, colPath)
 
     if (canWriteExpr) outputField else None
+  }
+
+  private def unwrapUDT(expr: Expression): Expression = expr.dataType match {
+    case ArrayType(et, containsNull) =>
+      val param = NamedLambdaVariable("element", et, containsNull)
+      val func = LambdaFunction(unwrapUDT(param), Seq(param))
+      ArrayTransform(expr, func)
+
+    case MapType(kt, vt, valueContainsNull) =>
+      val keyParam = NamedLambdaVariable("key", kt, nullable = false)
+      val valueParam = NamedLambdaVariable("value", vt, valueContainsNull)
+      val keyFunc = LambdaFunction(unwrapUDT(keyParam), Seq(keyParam))
+      val valueFunc = LambdaFunction(unwrapUDT(valueParam), Seq(valueParam))
+      val newKeys = ArrayTransform(MapKeys(expr), keyFunc)
+      val newValues = ArrayTransform(MapValues(expr), valueFunc)
+      MapFromArrays(newKeys, newValues)
+
+    case st: StructType =>
+      val newFieldExprs = st.indices.map { i =>
+        unwrapUDT(GetStructField(expr, i))
+      }
+      val struct = CreateNamedStruct(st.zip(newFieldExprs).flatMap {
+        case (field, newExpr) => Seq(Literal(field.name), newExpr)
+      })
+      if (expr.nullable) {
+        If(IsNull(expr), Literal(null, struct.dataType), struct)
+      } else {
+        struct
+      }
+
+    case _: UserDefinedType[_] => UnwrapUDT(expr)
+
+    case _ => expr
   }
 
   private def cast(

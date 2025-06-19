@@ -43,7 +43,7 @@ class AlterNamespaceSetPropertiesParserSuite extends AnalysisTest {
     val sql = "ALTER NAMESPACE my_db SET PROPERTIES('key_without_value', 'key_with_value'='x')"
     checkError(
       exception = parseException(parsePlan)(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "Values must be specified for key(s): [key_without_value]"),
       context = ExpectedContext(
         fragment = sql,

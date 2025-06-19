@@ -94,9 +94,26 @@ NULL
 -- !query
 select left("abcd", -2), left("abcd", 0), left("abcd", 'a')
 -- !query schema
-struct<left(abcd, -2):string,left(abcd, 0):string,left(abcd, a):string>
+struct<>
 -- !query output
-		NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 43,
+    "stopIndex" : 59,
+    "fragment" : "left(\"abcd\", 'a')"
+  } ]
+}
 
 
 -- !query
@@ -118,9 +135,26 @@ NULL
 -- !query
 select right("abcd", -2), right("abcd", 0), right("abcd", 'a')
 -- !query schema
-struct<right(abcd, -2):string,right(abcd, 0):string,right(abcd, a):string>
+struct<>
 -- !query output
-		NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 45,
+    "stopIndex" : 62,
+    "fragment" : "right(\"abcd\", 'a')"
+  } ]
+}
 
 
 -- !query
@@ -466,17 +500,51 @@ bar
 -- !query
 SELECT lpad('hi', 'invalid_length')
 -- !query schema
-struct<lpad(hi, invalid_length,  ):string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'invalid_length'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "lpad('hi', 'invalid_length')"
+  } ]
+}
 
 
 -- !query
 SELECT rpad('hi', 'invalid_length')
 -- !query schema
-struct<rpad(hi, invalid_length,  ):string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'invalid_length'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "rpad('hi', 'invalid_length')"
+  } ]
+}
 
 
 -- !query
@@ -778,7 +846,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "WINDOWS-1252",
-    "charsets" : "utf-8, utf-16be, iso-8859-1, utf-16le, utf-16, utf-32, us-ascii",
+    "charsets" : "iso-8859-1, us-ascii, utf-16, utf-16be, utf-16le, utf-32, utf-8",
     "functionName" : "`encode`",
     "parameter" : "`charset`"
   }
@@ -796,7 +864,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "WINDOWS-1252",
-    "charsets" : "utf-8, utf-16be, iso-8859-1, utf-16le, utf-16, utf-32, us-ascii",
+    "charsets" : "iso-8859-1, us-ascii, utf-16, utf-16be, utf-16le, utf-32, utf-8",
     "functionName" : "`encode`",
     "parameter" : "`charset`"
   }
@@ -814,7 +882,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "Windows-xxx",
-    "charsets" : "utf-8, utf-16be, iso-8859-1, utf-16le, utf-16, utf-32, us-ascii",
+    "charsets" : "iso-8859-1, us-ascii, utf-16, utf-16be, utf-16le, utf-32, utf-8",
     "functionName" : "`encode`",
     "parameter" : "`charset`"
   }
@@ -832,7 +900,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "Windows-xxx",
-    "charsets" : "utf-8, utf-16be, iso-8859-1, utf-16le, utf-16, utf-32, us-ascii",
+    "charsets" : "iso-8859-1, us-ascii, utf-16, utf-16be, utf-16le, utf-32, utf-8",
     "functionName" : "`encode`",
     "parameter" : "`charset`"
   }
@@ -1076,7 +1144,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "Windows-xxx",
-    "charsets" : "utf-8, utf-16be, iso-8859-1, utf-16le, utf-16, utf-32, us-ascii",
+    "charsets" : "iso-8859-1, us-ascii, utf-16, utf-16be, utf-16le, utf-32, utf-8",
     "functionName" : "`decode`",
     "parameter" : "`charset`"
   }
@@ -1094,7 +1162,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "Windows-xxx",
-    "charsets" : "utf-8, utf-16be, iso-8859-1, utf-16le, utf-16, utf-32, us-ascii",
+    "charsets" : "iso-8859-1, us-ascii, utf-16, utf-16be, utf-16le, utf-32, utf-8",
     "functionName" : "`decode`",
     "parameter" : "`charset`"
   }
@@ -1144,7 +1212,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "WINDOWS-1252",
-    "charsets" : "utf-8, utf-16be, iso-8859-1, utf-16le, utf-16, utf-32, us-ascii",
+    "charsets" : "iso-8859-1, us-ascii, utf-16, utf-16be, utf-16le, utf-32, utf-8",
     "functionName" : "`decode`",
     "parameter" : "`charset`"
   }
@@ -1162,7 +1230,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "WINDOWS-1252",
-    "charsets" : "utf-8, utf-16be, iso-8859-1, utf-16le, utf-16, utf-32, us-ascii",
+    "charsets" : "iso-8859-1, us-ascii, utf-16, utf-16be, utf-16le, utf-32, utf-8",
     "functionName" : "`decode`",
     "parameter" : "`charset`"
   }
@@ -2275,5 +2343,29 @@ abc
 select try_validate_utf8(x'80')
 -- !query schema
 struct<try_validate_utf8(X'80'):string>
+-- !query output
+NULL
+
+
+-- !query
+select quote('Spark')
+-- !query schema
+struct<quote(Spark):string>
+-- !query output
+'Spark'
+
+
+-- !query
+select quote("Don't")
+-- !query schema
+struct<quote(Don't):string>
+-- !query output
+'Don\'t'
+
+
+-- !query
+select quote(NULL)
+-- !query schema
+struct<quote(NULL):string>
 -- !query output
 NULL

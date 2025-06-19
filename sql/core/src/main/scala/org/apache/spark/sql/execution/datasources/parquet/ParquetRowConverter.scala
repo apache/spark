@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, VariantMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
@@ -481,6 +481,17 @@ private[parquet] class ParquetRowConverter(
           }
         }
 
+      case _: TimeType
+        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimeLogicalTypeAnnotation] &&
+          parquetType.getLogicalTypeAnnotation
+            .asInstanceOf[TimeLogicalTypeAnnotation].getUnit == TimeUnit.MICROS =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addLong(value: Long): Unit = {
+            val nanos = DateTimeUtils.microsToNanos(value)
+            this.updater.setLong(nanos)
+          }
+        }
+
       // A repeated field that is neither contained by a `LIST`- or `MAP`-annotated group nor
       // annotated by `LIST` or `MAP` should be interpreted as a required list of required
       // elements where the element type is the type of the field.
@@ -497,6 +508,9 @@ private[parquet] class ParquetRowConverter(
 
       case t: MapType =>
         new ParquetMapConverter(parquetType.asGroupType(), t, updater)
+
+      case t: StructType if VariantMetadata.isVariantStruct(t) =>
+        new ParquetVariantConverter(t, parquetType.asGroupType(), updater)
 
       case t: StructType =>
         val wrappedUpdater = {
@@ -535,7 +549,11 @@ private[parquet] class ParquetRowConverter(
           wrappedUpdater)
 
       case t: VariantType =>
-        new ParquetVariantConverter(parquetType.asGroupType(), updater)
+        if (SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED)) {
+          new ParquetVariantConverter(t, parquetType.asGroupType(), updater)
+        } else {
+          new ParquetUnshreddedVariantConverter(parquetType.asGroupType(), updater)
+        }
 
       case t =>
         throw QueryExecutionErrors.cannotCreateParquetConverterForDataTypeError(
@@ -845,8 +863,8 @@ private[parquet] class ParquetRowConverter(
     }
   }
 
-  /** Parquet converter for Variant */
-  private final class ParquetVariantConverter(
+  /** Parquet converter for unshredded Variant */
+  private final class ParquetUnshreddedVariantConverter(
      parquetType: GroupType,
      updater: ParentContainerUpdater)
     extends ParquetGroupConverter(updater) {
@@ -895,6 +913,47 @@ private[parquet] class ParquetRowConverter(
     override def start(): Unit = {
       currentValue = null
       currentMetadata = null
+    }
+  }
+
+  /** Parquet converter for Variant (shredded or unshredded) */
+  private final class ParquetVariantConverter(
+     targetType: DataType, parquetType: GroupType, updater: ParentContainerUpdater)
+    extends ParquetGroupConverter(updater) {
+
+    private[this] var currentRow: Any = _
+    private[this] val parquetSparkType = SparkShreddingUtils.parquetTypeToSparkType(parquetType)
+    private[this] val variantSchema = SparkShreddingUtils.buildVariantSchema(parquetSparkType)
+    private[this] val fieldsToExtract =
+      SparkShreddingUtils.getFieldsToExtract(targetType, variantSchema)
+    // A struct converter that reads the underlying file data.
+    private[this] val fileConverter = new ParquetRowConverter(
+      schemaConverter,
+      parquetType,
+      parquetSparkType.asInstanceOf[StructType],
+      convertTz,
+      datetimeRebaseSpec,
+      int96RebaseSpec,
+      new ParentContainerUpdater {
+        override def set(value: Any): Unit = currentRow = value
+      })
+
+    override def getConverter(fieldIndex: Int): Converter = fileConverter.getConverter(fieldIndex)
+
+    override def end(): Unit = {
+      fileConverter.end()
+      val row = currentRow.asInstanceOf[InternalRow]
+      val v = if (fieldsToExtract == null) {
+        SparkShreddingUtils.assembleVariant(row, variantSchema)
+      } else {
+        SparkShreddingUtils.assembleVariantStruct(row, variantSchema, fieldsToExtract)
+      }
+      updater.set(v)
+    }
+
+    override def start(): Unit = {
+      fileConverter.start()
+      currentRow = null
     }
   }
 

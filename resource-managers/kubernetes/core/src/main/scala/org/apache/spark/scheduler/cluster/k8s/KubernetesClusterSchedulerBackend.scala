@@ -32,7 +32,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.internal.LogKeys.{COUNT, HOST_PORT, TOTAL}
+import org.apache.spark.internal.LogKeys.{COUNT, TOTAL}
 import org.apache.spark.internal.MDC
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
 import org.apache.spark.resource.ResourceProfile
@@ -356,7 +356,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
               execIDRequester -= rpcAddress
               // Expected, executors re-establish a connection with an ID
             case _ =>
-              logInfo(log"No executor found for ${MDC(HOST_PORT, rpcAddress)}")
+              logDebug(s"No executor found for ${rpcAddress}")
           }
       }
     }

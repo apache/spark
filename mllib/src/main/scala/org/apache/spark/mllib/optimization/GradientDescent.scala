@@ -244,8 +244,9 @@ object GradientDescent extends Logging {
       // Sample a subset (fraction miniBatchFraction) of the total data
       // compute and sum up the subgradients on this subset (this is one map-reduce)
       val (gradientSum, lossSum, miniBatchSize) = data.sample(false, miniBatchFraction, 42 + i)
-        .treeAggregate((null.asInstanceOf[BDV[Double]], 0.0, 0L))(
-          seqOp = (c, v) => {
+        .treeAggregate[(BDV[Double], Double, Long)](
+          zeroValue = (null.asInstanceOf[BDV[Double]], 0.0, 0L),
+          seqOp = (c: (BDV[Double], Double, Long), v: (Double, Vector)) => {
             // c: (grad, loss, count), v: (label, features)
             val vec =
               if (c._1 == null) {
@@ -256,7 +257,7 @@ object GradientDescent extends Logging {
             val l = gradient.compute(v._2, v._1, bcWeights.value, Vectors.fromBreeze(vec))
             (vec, c._2 + l, c._3 + 1)
           },
-          combOp = (c1, c2) => {
+          combOp = (c1: (BDV[Double], Double, Long), c2: (BDV[Double], Double, Long)) => {
             // c: (grad, loss, count)
             val vec =
               if (c1._1 == null) {
@@ -268,7 +269,9 @@ object GradientDescent extends Logging {
                 c1._1
               }
             (vec, c1._2 + c2._2, c1._3 + c2._3)
-          })
+          },
+          depth = 2,
+          finalAggregateOnExecutor = true)
       bcWeights.destroy()
 
       if (miniBatchSize > 0) {

@@ -17,35 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.io.File
-import java.io.FileNotFoundException
-import java.nio.file.NoSuchFileException
-
-import scala.util.control.NonFatal
-
-import org.apache.commons.io.FileUtils
-
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{MapType, NullType, StringType}
+import org.apache.spark.sql.types.{BinaryType, MapType, NullType, StringType, StructType}
+import org.apache.spark.sql.util.ProtobufUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
-
-object ProtobufHelper {
-  def readDescriptorFileContent(filePath: String): Array[Byte] = {
-    try {
-      FileUtils.readFileToByteArray(new File(filePath))
-    } catch {
-      case ex: FileNotFoundException =>
-        throw new RuntimeException(s"Cannot find descriptor file at path: $filePath", ex)
-      case ex: NoSuchFileException =>
-        throw new RuntimeException(s"Cannot find descriptor file at path: $filePath", ex)
-      case NonFatal(ex) =>
-        throw new RuntimeException(s"Failed to read the descriptor file: $filePath", ex)
-    }
-  }
-}
 
 /**
  * Converts a binary column of Protobuf format into its corresponding catalyst value.
@@ -87,6 +67,27 @@ case class FromProtobuf(
     messageName: Expression,
     descFilePath: Expression,
     options: Expression) extends QuaternaryExpression with RuntimeReplaceable {
+
+  def this(data: Expression, messageName: Expression, descFilePathOrOptions: Expression) = {
+    this(
+      data,
+      messageName,
+      descFilePathOrOptions match {
+        case lit: Literal
+          if lit.dataType == StringType || lit.dataType == BinaryType => descFilePathOrOptions
+        case _ => Literal(null)
+      },
+      descFilePathOrOptions.dataType match {
+        case _: MapType => descFilePathOrOptions
+        case _ => Literal(null)
+      }
+    )
+  }
+
+  def this(data: Expression, messageName: Expression) = {
+    this(data, messageName, Literal(null), Literal(null))
+  }
+
   override def first: Expression = data
   override def second: Expression = messageName
   override def third: Expression = descFilePath
@@ -109,11 +110,11 @@ case class FromProtobuf(
             "representing the Protobuf message name"))
     }
     val descFilePathCheck = descFilePath.dataType match {
-      case _: StringType if descFilePath.foldable => None
+      case _: StringType | BinaryType | NullType if descFilePath.foldable => None
       case _ =>
         Some(TypeCheckResult.TypeCheckFailure(
           "The third argument of the FROM_PROTOBUF SQL function must be a constant string " +
-            "representing the Protobuf descriptor file path"))
+            "or binary data representing the Protobuf descriptor file path"))
     }
     val optionsCheck = options.dataType match {
       case MapType(StringType, StringType, _) |
@@ -140,7 +141,10 @@ case class FromProtobuf(
         s.toString
     }
     val descFilePathValue: Option[Array[Byte]] = descFilePath.eval() match {
-      case s: UTF8String => Some(ProtobufHelper.readDescriptorFileContent(s.toString))
+      case s: UTF8String if s.toString.isEmpty => None
+      case s: UTF8String => Some(ProtobufUtils.readDescriptorFileContent(s.toString))
+      case bytes: Array[Byte] if bytes.isEmpty => None
+      case bytes: Array[Byte] => Some(bytes)
       case null => None
     }
     val optionsValue: Map[String, String] = options.eval() match {
@@ -161,6 +165,9 @@ case class FromProtobuf(
     val expr = constructor.newInstance(data, messageNameValue, descFilePathValue, optionsValue)
     expr.asInstanceOf[Expression]
   }
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("from_protobuf")
 }
 
 /**
@@ -197,6 +204,27 @@ case class ToProtobuf(
     messageName: Expression,
     descFilePath: Expression,
     options: Expression) extends QuaternaryExpression with RuntimeReplaceable {
+
+  def this(data: Expression, messageName: Expression, descFilePathOrOptions: Expression) = {
+    this(
+      data,
+      messageName,
+      descFilePathOrOptions match {
+        case lit: Literal
+          if lit.dataType == StringType || lit.dataType == BinaryType => descFilePathOrOptions
+        case _ => Literal(null)
+      },
+      descFilePathOrOptions.dataType match {
+        case _: MapType => descFilePathOrOptions
+        case _ => Literal(null)
+      }
+    )
+  }
+
+  def this(data: Expression, messageName: Expression) = {
+    this(data, messageName, Literal(null), Literal(null))
+  }
+
   override def first: Expression = data
   override def second: Expression = messageName
   override def third: Expression = descFilePath
@@ -211,6 +239,18 @@ case class ToProtobuf(
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
+    val colTypeCheck = first.dataType match {
+      case _: StructType => None
+      case _ =>
+        Some(
+          TypeCheckResult.DataTypeMismatch(
+            errorSubClass = "NON_STRUCT_TYPE",
+            messageParameters = Map(
+              "inputName" -> "data",
+              "inputType" -> toSQLType(first.dataType)))
+        )
+    }
+
     val messageNameCheck = messageName.dataType match {
       case _: StringType if messageName.foldable => None
       case _ =>
@@ -219,11 +259,11 @@ case class ToProtobuf(
             "representing the Protobuf message name"))
     }
     val descFilePathCheck = descFilePath.dataType match {
-      case _: StringType if descFilePath.foldable => None
+      case _: StringType | BinaryType | NullType if descFilePath.foldable => None
       case _ =>
         Some(TypeCheckResult.TypeCheckFailure(
           "The third argument of the TO_PROTOBUF SQL function must be a constant string " +
-            "representing the Protobuf descriptor file path"))
+            "or binary data representing the Protobuf descriptor file path"))
     }
     val optionsCheck = options.dataType match {
       case MapType(StringType, StringType, _) |
@@ -235,10 +275,11 @@ case class ToProtobuf(
             "strings to strings containing the options to use for converting the value to " +
             "Protobuf format"))
     }
-
-    messageNameCheck.getOrElse(
-      descFilePathCheck.getOrElse(
-        optionsCheck.getOrElse(TypeCheckResult.TypeCheckSuccess)
+    colTypeCheck.getOrElse(
+      messageNameCheck.getOrElse(
+        descFilePathCheck.getOrElse(
+         optionsCheck.getOrElse(TypeCheckResult.TypeCheckSuccess)
+        )
       )
     )
   }
@@ -251,7 +292,8 @@ case class ToProtobuf(
         s.toString
     }
     val descFilePathValue: Option[Array[Byte]] = descFilePath.eval() match {
-      case s: UTF8String => Some(ProtobufHelper.readDescriptorFileContent(s.toString))
+      case s: UTF8String => Some(ProtobufUtils.readDescriptorFileContent(s.toString))
+      case bytes: Array[Byte] => Some(bytes)
       case null => None
     }
     val optionsValue: Map[String, String] = options.eval() match {
@@ -272,4 +314,7 @@ case class ToProtobuf(
     val expr = constructor.newInstance(data, messageNameValue, descFilePathValue, optionsValue)
     expr.asInstanceOf[Expression]
   }
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("to_protobuf")
 }

@@ -26,7 +26,7 @@ import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.{BZIP2, DEFLATE, GZIP, NONE}
+import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.{BZIP2, DEFLATE, GZIP, LZ4, NONE, SNAPPY}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -93,7 +93,7 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
 
   test("SPARK-13503 Support to specify the option for compression codec for TEXT") {
     val testDf = spark.read.text(testFile)
-    val extensionNameMap = Seq(BZIP2, DEFLATE, GZIP)
+    val extensionNameMap = Seq(BZIP2, DEFLATE, GZIP, LZ4, SNAPPY)
       .map(codec => codec.lowerCaseName() -> codec.getCompressionCodec.getDefaultExtension)
     extensionNameMap.foreach {
       case (codecName, extension) =>
@@ -111,7 +111,7 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
           testDf.write.option("compression", "illegal").mode(
             SaveMode.Overwrite).text(dir.getAbsolutePath)
         },
-        errorClass = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+        condition = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
         parameters = Map(
           "codecName" -> "illegal",
           "availableCodecs" -> "bzip2, deflate, uncompressed, snappy, none, lz4, gzip")

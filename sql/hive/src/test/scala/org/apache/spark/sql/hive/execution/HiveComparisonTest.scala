@@ -27,10 +27,10 @@ import scala.util.control.NonFatal
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command._
@@ -162,7 +162,7 @@ abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
 
     def isSorted(plan: LogicalPlan): Boolean = plan match {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
-      case PhysicalOperation(_, _, Sort(_, true, _)) => true
+      case PhysicalOperation(_, _, Sort(_, true, _, _)) => true
       case _ => plan.children.iterator.exists(isSorted)
     }
 

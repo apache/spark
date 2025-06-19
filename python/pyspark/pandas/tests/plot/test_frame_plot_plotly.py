@@ -23,12 +23,8 @@ import numpy as np
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
-from pyspark.testing.pandasutils import (
-    have_plotly,
-    plotly_requirement_message,
-    PandasOnSparkTestCase,
-    TestUtils,
-)
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.utils import have_plotly, plotly_requirement_message
 from pyspark.pandas.utils import name_like_string
 
 if have_plotly:
@@ -105,9 +101,10 @@ class DataFramePlotPlotlyTestsMixin:
             self.assertEqual(pdf.plot.barh(x=x, y=y), psdf.plot.barh(x=x, y=y))
 
         # this is testing plot with specified x and y
-        pdf1 = pd.DataFrame({"lab": ["A", "B", "C"], "val": [10, 30, 20]})
+        pdf1 = pd.DataFrame({"lab": ["A", "B", "C"], "val": [10, 30, 20], "val2": [1.1, 2.2, 3.3]})
         psdf1 = ps.from_pandas(pdf1)
-        check_barh_plot_with_x_y(pdf1, psdf1, x="lab", y="val")
+        check_barh_plot_with_x_y(pdf1, psdf1, x="val", y="lab")
+        check_barh_plot_with_x_y(pdf1, psdf1, x=["val", "val2"], y="lab")
 
     def test_barh_plot(self):
         def check_barh_plot(pdf, psdf):

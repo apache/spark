@@ -14,21 +14,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Union, cast, Tuple
+from typing import Union, Tuple, Optional
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
-from pyspark.sql.types import StructType, _parse_datatype_string
+from pyspark.sql.types import StructType
 from pyspark.errors import PySparkRuntimeError
 
 __all__ = ["ValueStateClient"]
 
 
 class ValueStateClient:
-    def __init__(self, stateful_processor_api_client: StatefulProcessorApiClient) -> None:
+    def __init__(
+        self,
+        stateful_processor_api_client: StatefulProcessorApiClient,
+        schema: Union[StructType, str],
+    ) -> None:
         self._stateful_processor_api_client = stateful_processor_api_client
+        if isinstance(schema, str):
+            self.schema = self._stateful_processor_api_client._parse_string_schema(schema)
+        else:
+            self.schema = schema
 
     def exists(self, state_name: str) -> bool:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         exists_call = stateMessage.Exists()
         value_state_call = stateMessage.ValueStateCall(stateName=state_name, exists=exists_call)
@@ -49,8 +57,8 @@ class ValueStateClient:
                 f"Error checking value state exists: " f"{response_message[1]}"
             )
 
-    def get(self, state_name: str) -> Any:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+    def get(self, state_name: str) -> Optional[Tuple]:
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         get_call = stateMessage.Get()
         value_state_call = stateMessage.ValueStateCall(stateName=state_name, get=get_call)
@@ -63,18 +71,16 @@ class ValueStateClient:
         if status == 0:
             if len(response_message[2]) == 0:
                 return None
-            row = self._stateful_processor_api_client._deserialize_from_bytes(response_message[2])
-            return row
+            data = self._stateful_processor_api_client._deserialize_from_bytes(response_message[2])
+            return tuple(data)
         else:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error getting value state: " f"{response_message[1]}")
 
-    def update(self, state_name: str, schema: Union[StructType, str], value: Tuple) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+    def update(self, state_name: str, value: Tuple) -> None:
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
-        if isinstance(schema, str):
-            schema = cast(StructType, _parse_datatype_string(schema))
-        bytes = self._stateful_processor_api_client._serialize_to_bytes(schema, value)
+        bytes = self._stateful_processor_api_client._serialize_to_bytes(self.schema, value)
         update_call = stateMessage.ValueStateUpdate(value=bytes)
         value_state_call = stateMessage.ValueStateCall(
             stateName=state_name, valueStateUpdate=update_call
@@ -90,7 +96,7 @@ class ValueStateClient:
             raise PySparkRuntimeError(f"Error updating value state: " f"{response_message[1]}")
 
     def clear(self, state_name: str) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         clear_call = stateMessage.Clear()
         value_state_call = stateMessage.ValueStateCall(stateName=state_name, clear=clear_call)

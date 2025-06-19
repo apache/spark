@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.v2.state
 
+import java.util.UUID
+
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.Assertions
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
@@ -58,7 +60,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.conf.set(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED, false)
+    spark.conf.set(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key, false)
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key, newStateStoreProvider().getClass.getName)
   }
 
@@ -71,6 +73,8 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
    */
   private def getNewStateStoreProvider(checkpointDir: String): StateStoreProvider = {
     val provider = newStateStoreProvider()
+    val conf = new Configuration
+    conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
     provider.init(
       StateStoreId(checkpointDir, 0, 0),
       keySchema,
@@ -78,7 +82,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
       NoPrefixKeyStateEncoderSpec(keySchema),
       useColumnFamilies = false,
       StateStoreConf(spark.sessionState.conf),
-      new Configuration)
+      conf)
     provider
   }
 
@@ -90,7 +94,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
           .option(StateSourceOptions.CHANGE_END_BATCH_ID, 2)
           .load(tempDir.getAbsolutePath)
       }
-      assert(exc.getErrorClass === "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE")
+      assert(exc.getCondition === "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE")
     }
   }
 
@@ -103,7 +107,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
           .option(StateSourceOptions.CHANGE_END_BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
-      assert(exc.getErrorClass === "STDS_INVALID_OPTION_VALUE.IS_NEGATIVE")
+      assert(exc.getCondition === "STDS_INVALID_OPTION_VALUE.IS_NEGATIVE")
     }
   }
 
@@ -116,7 +120,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
           .option(StateSourceOptions.CHANGE_END_BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
-      assert(exc.getErrorClass === "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE")
+      assert(exc.getCondition === "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE")
     }
   }
 
@@ -130,7 +134,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
           .option(StateSourceOptions.CHANGE_END_BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
-      assert(exc.getErrorClass === "STDS_CONFLICT_OPTIONS")
+      assert(exc.getCondition === "STDS_CONFLICT_OPTIONS")
     }
   }
 

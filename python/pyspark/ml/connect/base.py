@@ -39,7 +39,6 @@ from pyspark.ml.param.shared import (
     HasFeaturesCol,
     HasPredictionCol,
 )
-from pyspark.ml.connect.util import transform_dataframe_column
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap
@@ -53,6 +52,8 @@ class Estimator(Params, Generic[M], metaclass=ABCMeta):
     Abstract class for estimators that fit models to data.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     @abstractmethod
@@ -82,6 +83,8 @@ class Estimator(Params, Generic[M], metaclass=ABCMeta):
         Fits a model to the input dataset with optional parameters.
 
         .. versionadded:: 3.5.0
+
+        .. deprecated:: 4.0.0
 
         Parameters
         ----------
@@ -119,6 +122,8 @@ class Transformer(Params, metaclass=ABCMeta):
     Abstract class for transformers that transform one dataset into another.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     def _input_columns(self) -> List[str]:
@@ -182,6 +187,8 @@ class Transformer(Params, metaclass=ABCMeta):
                 return self._transform(dataset)
 
     def _transform(self, dataset: Union[DataFrame, pd.DataFrame]) -> Union[DataFrame, pd.DataFrame]:
+        from pyspark.ml.connect.util import transform_dataframe_column
+
         input_cols = self._input_columns()
         transform_fn = self._get_transform_fn()
         output_cols = self._output_columns()
@@ -208,6 +215,8 @@ class Evaluator(Params, metaclass=ABCMeta):
     Base class for evaluators that compute metrics from predictions.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     @abstractmethod
@@ -232,6 +241,8 @@ class Evaluator(Params, metaclass=ABCMeta):
         Evaluates the output with optional parameters.
 
         .. versionadded:: 3.5.0
+
+        .. deprecated:: 4.0.0
 
         Parameters
         ----------
@@ -271,6 +282,8 @@ class Model(Transformer, metaclass=ABCMeta):
     Abstract class for models that are fitted by estimators.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     pass
@@ -282,6 +295,8 @@ class _PredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol):
     Params for :py:class:`Predictor` and :py:class:`PredictorModel`.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     pass

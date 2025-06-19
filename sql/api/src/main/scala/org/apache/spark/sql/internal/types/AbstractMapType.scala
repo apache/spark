@@ -19,23 +19,20 @@ package org.apache.spark.sql.internal.types
 
 import org.apache.spark.sql.types.{AbstractDataType, DataType, MapType}
 
-
 /**
- * Use AbstractMapType(AbstractDataType, AbstractDataType)
- * for defining expected types for expression parameters.
+ * Use AbstractMapType(AbstractDataType, AbstractDataType) for defining expected types for
+ * expression parameters.
  */
-case class AbstractMapType(
-    keyType: AbstractDataType,
-    valueType: AbstractDataType
-  ) extends AbstractDataType {
+case class AbstractMapType(keyType: AbstractDataType, valueType: AbstractDataType)
+    extends AbstractDataType {
 
   override private[sql] def defaultConcreteType: DataType =
     MapType(keyType.defaultConcreteType, valueType.defaultConcreteType, valueContainsNull = true)
 
   override private[sql] def acceptsType(other: DataType): Boolean = {
     other.isInstanceOf[MapType] &&
-      keyType.acceptsType(other.asInstanceOf[MapType].keyType) &&
-      valueType.acceptsType(other.asInstanceOf[MapType].valueType)
+    keyType.acceptsType(other.asInstanceOf[MapType].keyType) &&
+    valueType.acceptsType(other.asInstanceOf[MapType].valueType)
   }
 
   override private[spark] def simpleString: String =

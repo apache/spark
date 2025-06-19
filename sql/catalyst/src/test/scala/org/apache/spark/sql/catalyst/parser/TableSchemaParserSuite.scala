@@ -75,26 +75,26 @@ class TableSchemaParserSuite extends SparkFunSuite {
 
     checkError(
       exception = parseException(""),
-      errorClass = "PARSE_EMPTY_STATEMENT")
+      condition = "PARSE_EMPTY_STATEMENT")
     checkError(
       exception = parseException("a"),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "end of input", "hint" -> ""))
     checkError(
       exception = parseException("a INT b long"),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'b'", "hint" -> ""))
     checkError(
       exception = parseException("a INT,, b long"),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "','", "hint" -> ""))
     checkError(
       exception = parseException("a INT, b long,,"),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "','", "hint" -> ""))
     checkError(
       exception = parseException("a INT, b long, c int,"),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "end of input", "hint" -> ""))
   }
 }

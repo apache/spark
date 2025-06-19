@@ -39,8 +39,8 @@ abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
   protected val storeConf = new StateStoreConf(sessionState.conf, extraOptions)
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
-  protected val hadoopConfBroadcast = dataRDD.context.broadcast(
-    new SerializableConfiguration(sessionState.newHadoopConf()))
+  protected val hadoopConfBroadcast =
+    SerializableConfiguration.broadcast(dataRDD.context, sessionState.newHadoopConf())
 
   /**
    * Set the preferred location of each partition using the executor that has the related
@@ -72,6 +72,8 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     queryRunId: UUID,
     operatorId: Long,
     storeVersion: Long,
+    stateStoreCkptIds: Option[Array[Array[String]]],
+    stateSchemaBroadcast: Option[StateSchemaBroadcast],
     keySchema: StructType,
     valueSchema: StructType,
     keyStateEncoderSpec: KeyStateEncoderSpec,
@@ -90,6 +92,8 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStore.getReadOnly(
       storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
+      stateStoreCkptIds.map(_.apply(partition.index).head),
+      stateSchemaBroadcast,
       useColumnFamilies, storeConf, hadoopConfBroadcast.value.value)
     storeReadFunction(store, inputIter)
   }
@@ -107,6 +111,8 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     queryRunId: UUID,
     operatorId: Long,
     storeVersion: Long,
+    uniqueId: Option[Array[Array[String]]],
+    stateSchemaBroadcast: Option[StateSchemaBroadcast],
     keySchema: StructType,
     valueSchema: StructType,
     keyStateEncoderSpec: KeyStateEncoderSpec,
@@ -126,8 +132,17 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStore.get(
       storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
+      uniqueId.map(_.apply(partition.index).head),
+      stateSchemaBroadcast,
       useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
       useMultipleValuesPerKey)
+
+    if (storeConf.unloadOnCommit) {
+      ctxt.addTaskCompletionListener[Unit](_ => {
+        StateStore.doMaintenanceAndUnload(storeProviderId)
+      })
+    }
+
     storeUpdateFunction(store, inputIter)
   }
 }

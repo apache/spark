@@ -855,6 +855,116 @@ for more details on the API.
 
 </div>
 
+## TargetEncoder
+
+[Target Encoding](https://www.researchgate.net/publication/220520258_A_Preprocessing_Scheme_for_High-Cardinality_Categorical_Attributes_in_Classification_and_Prediction_Problems) is a data-preprocessing technique that transforms high-cardinality categorical features into quasi-continuous scalar attributes suited for use in regression-type models. This paradigm maps individual values of an independent feature to a scalar, representing some estimate of the dependent attribute (meaning categorical values that exhibit similar statistics with respect to the target will have a similar representation).
+
+By leveraging the relationship between categorical features and the target variable, Target Encoding usually performs better than One-Hot and does not require a final binary vector encoding, decreasing the overall dimensionality of the dataset.
+
+User can specify input and output column names by setting `inputCol` and `outputCol` for single-column use cases, or `inputCols` and `outputCols` for multi-column use cases (both arrays required to have the same size). These columns are expected to contain categorical indices (positive integers), being missing values (null) treated as a separate category. Data type must be any subclass of 'NumericType'. For string type input data, it is common to encode categorical features using [StringIndexer](ml-features.html#stringindexer) first.
+
+User can specify the target column name by setting `label`. This column is expected to contain the ground-truth labels from which encodings will be derived. Observations with missing label (null) are not considered when calculating estimates. Data type must be any subclass of 'NumericType'.
+
+`TargetEncoder` supports the `handleInvalid` parameter to choose how to handle invalid input, meaning categories not seen at training, when encoding new data. Available options include 'keep' (any invalid inputs are assigned to an extra categorical index) and 'error' (throw an exception).
+
+`TargetEncoder` supports the `targetType` parameter to choose the label type when fitting data, affecting how estimates are calculated. Available options include 'binary'  and 'continuous'.
+
+When set to 'binary', the target attribute $Y$ is expected to be binary, $Y\in\{ 0,1 \}$. The transformation maps individual values $X_{i}$ to the conditional probability of $Y$ given that $X=X_{i}\;$: $\;\; S_{i}=P(Y\mid X=X_{i})$. This approach is also known as bin-counting.
+
+When set to 'continuous', the target attribute $Y$ is expected to be continuous, $Y\in\mathbb{Q}$. The transformation maps individual values $X_{i}$ to the average of $Y$ given that $X=X_{i}\;$: $\;\; S_{i}=E[Y\mid X=X_{i}]$. This approach is also known as mean-encoding.
+
+`TargetEncoder` supports the `smoothing` parameter to tune how in-category stats and overall stats are blended. High-cardinality categorical features are usually unevenly distributed across all possible values of $X$.
+Therefore, calculating encodings $S_{i}$ according only to in-class statistics makes this estimates very unreliable, and rarely seen categories will very likely cause overfitting in learning.
+
+Smoothing prevents this behaviour by weighting in-class estimates with overall estimates according to the relative size of the particular class on the whole dataset.
+
+$\;\;\; S_{i}=\lambda(n_{i})\, P(Y\mid X=X_{i})+(1-\lambda(n_{i}))\, P(Y)$ for the binary case
+
+$\;\;\; S_{i}=\lambda(n_{i})\, E[Y\mid X=X_{i}]+(1-\lambda(n_{i}))\, E[Y]$ for the continuous case
+
+being $\lambda(n_{i})$ a monotonically increasing function on $n_{i}$, bounded between 0 and 1.
+
+Usually $\lambda(n_{i})$ is implemented as the parametric function $\lambda(n_{i})=\frac{n_{i}}{n_{i}+m}$, where $m$ is the smoothing factor, represented by `smoothing` parameter in `TargetEncoder`.
+
+**Examples**
+
+Building on the `TargetEncoder` example, let's assume we have the following
+DataFrame with columns `feature` and `target` (binary & continuous):
+
+~~~~
+ feature | target | target
+         | (bin)  | (cont)
+ --------|--------|--------
+ 1       | 0      | 1.3
+ 1       | 1      | 2.5
+ 1       | 0      | 1.6
+ 2       | 1      | 1.8
+ 2       | 0      | 2.4
+ 3       | 1      | 3.2
+~~~~
+
+Applying `TargetEncoder` with 'binary' target type,
+`feature` as the input column,`target (bin)` as the label column
+and `encoded` as the output column, we are able to fit a model
+on the data to learn encodings and transform the data according
+to these mappings:
+
+~~~~
+ feature | target | encoded
+         | (bin)  |
+ --------|--------|--------
+ 1       | 0      | 0.333
+ 1       | 1      | 0.333
+ 1       | 0      | 0.333
+ 2       | 1      | 0.5
+ 2       | 0      | 0.5
+ 3       | 1      | 1.0
+~~~~
+
+Applying `TargetEncoder` with 'continuous'  target type,
+`feature` as the input column,`target (cont)` as the label column
+and `encoded` as the output column, we are able to fit a model
+on the data to learn encodings and transform the data according
+to these mappings:
+
+~~~~
+ feature | target | encoded
+         | (cont) |
+ --------|--------|--------
+ 1       | 1.3    | 1.8
+ 1       | 2.5    | 1.8
+ 1       | 1.6    | 1.8
+ 2       | 1.8    | 2.1
+ 2       | 2.4    | 2.1
+ 3       | 3.2    | 3.2
+~~~~
+
+<div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [TargetEncoder Python docs](api/python/reference/api/pyspark.ml.feature.TargetEncoder.html) for more details on the API.
+
+{% include_example python/ml/target_encoder_example.py %}
+</div>
+
+<div data-lang="scala" markdown="1">
+
+Refer to the [TargetEncoder Scala docs](api/scala/org/apache/spark/ml/feature/TargetEncoder.html) for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/TargetEncoderExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [TargetEncoder Java docs](api/java/org/apache/spark/ml/feature/TargetEncoder.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaTargetEncoderExample.java %}
+</div>
+
+</div>
+
 ## VectorIndexer
 
 `VectorIndexer` helps index categorical features in datasets of `Vector`s.

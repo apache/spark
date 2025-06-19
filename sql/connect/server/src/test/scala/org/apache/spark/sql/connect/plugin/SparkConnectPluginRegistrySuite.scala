@@ -24,9 +24,9 @@ import com.google.protobuf
 import org.apache.spark.{SparkContext, SparkEnv, SparkException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Relation
-import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.ConnectProtoUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
@@ -217,7 +217,7 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
         exception = intercept[SparkException] {
           SparkConnectPluginRegistry.loadRelationPlugins()
         },
-        errorClass = "CONNECT.PLUGIN_CTOR_MISSING",
+        condition = "CONNECT.PLUGIN_CTOR_MISSING",
         parameters = Map("cls" -> "org.apache.spark.sql.connect.plugin.DummyPluginNoTrivialCtor"))
     }
 
@@ -228,7 +228,7 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
         exception = intercept[SparkException] {
           SparkConnectPluginRegistry.loadRelationPlugins()
         },
-        errorClass = "CONNECT.PLUGIN_RUNTIME_ERROR",
+        condition = "CONNECT.PLUGIN_RUNTIME_ERROR",
         parameters = Map("msg" -> "Bad Plugin Error"))
     }
   }

@@ -14,10 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import datetime
 import os
+import platform
 import shutil
 import tempfile
 import unittest
+import time
 from dataclasses import dataclass
 from typing import Iterator, Optional
 
@@ -27,10 +30,12 @@ from pyspark.errors import (
     PySparkTypeError,
     AnalysisException,
     PySparkPicklingError,
+    IllegalArgumentException,
 )
 from pyspark.util import PythonEvalType
 from pyspark.sql.functions import (
     array,
+    col,
     create_map,
     array,
     lit,
@@ -55,6 +60,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    VariantVal,
 )
 from pyspark.testing import assertDataFrameEqual, assertSchemaEqual
 from pyspark.testing.sqlutils import (
@@ -73,8 +79,7 @@ class BaseUDTFTestsMixin:
                 yield "hello", "world"
 
         func = udtf(TestUDTF, returnType="c1: string, c2: string")
-        rows = func().collect()
-        self.assertEqual(rows, [Row(c1="hello", c2="world")])
+        assertDataFrameEqual(func(), [Row(c1="hello", c2="world")])
 
     def test_udtf_yield_single_row_col(self):
         class TestUDTF:
@@ -82,8 +87,7 @@ class BaseUDTFTestsMixin:
                 yield a,
 
         func = udtf(TestUDTF, returnType="a: int")
-        rows = func(lit(1)).collect()
-        self.assertEqual(rows, [Row(a=1)])
+        assertDataFrameEqual(func(lit(1)), [Row(a=1)])
 
     def test_udtf_yield_multi_cols(self):
         class TestUDTF:
@@ -91,8 +95,7 @@ class BaseUDTFTestsMixin:
                 yield a, a + 1
 
         func = udtf(TestUDTF, returnType="a: int, b: int")
-        rows = func(lit(1)).collect()
-        self.assertEqual(rows, [Row(a=1, b=2)])
+        assertDataFrameEqual(func(lit(1)), [Row(a=1, b=2)])
 
     def test_udtf_yield_multi_rows(self):
         class TestUDTF:
@@ -101,8 +104,7 @@ class BaseUDTFTestsMixin:
                 yield a + 1,
 
         func = udtf(TestUDTF, returnType="a: int")
-        rows = func(lit(1)).collect()
-        self.assertEqual(rows, [Row(a=1), Row(a=2)])
+        assertDataFrameEqual(func(lit(1)), [Row(a=1), Row(a=2)])
 
     def test_udtf_yield_multi_row_col(self):
         class TestUDTF:
@@ -112,8 +114,8 @@ class BaseUDTFTestsMixin:
                 yield a, b, b - a
 
         func = udtf(TestUDTF, returnType="a: int, b: int, c: int")
-        rows = func(lit(1), lit(2)).collect()
-        self.assertEqual(rows, [Row(a=1, b=2, c=3), Row(a=1, b=2, c=-1), Row(a=1, b=2, c=1)])
+        res = func(lit(1), lit(2))
+        assertDataFrameEqual(res, [Row(a=1, b=2, c=3), Row(a=1, b=2, c=-1), Row(a=1, b=2, c=1)])
 
     def test_udtf_decorator(self):
         @udtf(returnType="a: int, b: int")
@@ -121,8 +123,7 @@ class BaseUDTFTestsMixin:
             def eval(self, a: int):
                 yield a, a + 1
 
-        rows = TestUDTF(lit(1)).collect()
-        self.assertEqual(rows, [Row(a=1, b=2)])
+        assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=1, b=2)])
 
     def test_udtf_registration(self):
         class TestUDTF:
@@ -134,9 +135,7 @@ class BaseUDTFTestsMixin:
         func = udtf(TestUDTF, returnType="a: int, b: int, c: int")
         self.spark.udtf.register("testUDTF", func)
         df = self.spark.sql("SELECT * FROM testUDTF(1, 2)")
-        self.assertEqual(
-            df.collect(), [Row(a=1, b=2, c=3), Row(a=1, b=2, c=-1), Row(a=1, b=2, c=1)]
-        )
+        assertDataFrameEqual(df, [Row(a=1, b=2, c=3), Row(a=1, b=2, c=-1), Row(a=1, b=2, c=1)])
 
     def test_udtf_with_lateral_join(self):
         class TestUDTF:
@@ -149,10 +148,33 @@ class BaseUDTFTestsMixin:
         df = self.spark.sql(
             "SELECT f.* FROM values (0, 1), (1, 2) t(a, b), LATERAL testUDTF(a, b) f"
         )
-        expected = self.spark.createDataFrame(
-            [(0, 1, 1), (0, 1, -1), (1, 2, 3), (1, 2, -1)], schema=["a", "b", "c"]
+        schema = StructType(
+            [
+                StructField("a", IntegerType(), True),
+                StructField("b", IntegerType(), True),
+                StructField("c", IntegerType(), True),
+            ]
         )
-        self.assertEqual(df.collect(), expected.collect())
+        expected = self.spark.createDataFrame(
+            [(0, 1, 1), (0, 1, -1), (1, 2, 3), (1, 2, -1)], schema=schema
+        )
+        assertDataFrameEqual(df, expected)
+
+    def test_udtf_with_lateral_join_dataframe(self):
+        @udtf(returnType="a: int, b: int, c: int")
+        class TestUDTF:
+            def eval(self, a: int, b: int) -> Iterator:
+                yield a, b, a + b
+                yield a, b, a - b
+
+        self.spark.udtf.register("testUDTF", TestUDTF)
+
+        assertDataFrameEqual(
+            self.spark.sql("values (0, 1), (1, 2) t(a, b)").lateralJoin(
+                TestUDTF(col("a").outer(), col("b").outer())
+            ),
+            self.spark.sql("SELECT * FROM values (0, 1), (1, 2) t(a, b), LATERAL testUDTF(a, b)"),
+        )
 
     def test_udtf_eval_with_return_stmt(self):
         class TestUDTF:
@@ -160,8 +182,8 @@ class BaseUDTFTestsMixin:
                 return [(a, a + 1), (b, b + 1)]
 
         func = udtf(TestUDTF, returnType="a: int, b: int")
-        rows = func(lit(1), lit(2)).collect()
-        self.assertEqual(rows, [Row(a=1, b=2), Row(a=2, b=3)])
+        res = func(lit(1), lit(2))
+        assertDataFrameEqual(res, [Row(a=1, b=2), Row(a=2, b=3)])
 
     def test_udtf_eval_returning_non_tuple(self):
         @udtf(returnType="a: int")
@@ -216,14 +238,14 @@ class BaseUDTFTestsMixin:
             def eval(self, a: int):
                 ...
 
-        self.assertEqual(TestUDTF(lit(1)).collect(), [])
+        assertDataFrameEqual(TestUDTF(lit(1)), [])
 
         @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self, a: int):
                 return
 
-        self.assertEqual(TestUDTF(lit(1)).collect(), [])
+        assertDataFrameEqual(TestUDTF(lit(1)), [])
 
     def test_udtf_with_conditional_return(self):
         class TestUDTF:
@@ -233,9 +255,23 @@ class BaseUDTFTestsMixin:
 
         func = udtf(TestUDTF, returnType="a: int")
         self.spark.udtf.register("test_udtf", func)
-        self.assertEqual(
-            self.spark.sql("SELECT * FROM range(0, 8) JOIN LATERAL test_udtf(id)").collect(),
+        assertDataFrameEqual(
+            self.spark.sql("SELECT * FROM range(0, 8) JOIN LATERAL test_udtf(id)"),
             [Row(id=6, a=6), Row(id=7, a=7)],
+        )
+
+    def test_udtf_with_conditional_return_dataframe(self):
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                if a > 5:
+                    yield a,
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        assertDataFrameEqual(
+            self.spark.range(8).lateralJoin(TestUDTF(col("id").outer())),
+            self.spark.sql("SELECT * FROM range(0, 8) JOIN LATERAL test_udtf(id)"),
         )
 
     def test_udtf_with_empty_yield(self):
@@ -253,9 +289,9 @@ class BaseUDTFTestsMixin:
                 yield a,
                 yield None,
 
-        self.assertEqual(TestUDTF(lit(1)).collect(), [Row(a=1), Row(a=None)])
+        assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=1), Row(a=None)])
         df = self.spark.createDataFrame([(0, 1), (1, 2)], schema=["a", "b"])
-        self.assertEqual(TestUDTF(lit(1)).join(df, "a", "inner").collect(), [Row(a=1, b=2)])
+        assertDataFrameEqual(TestUDTF(lit(1)).join(df, "a", "inner"), [Row(a=1, b=2)])
         assertDataFrameEqual(
             TestUDTF(lit(1)).join(df, "a", "left"), [Row(a=None, b=None), Row(a=1, b=2)]
         )
@@ -266,10 +302,10 @@ class BaseUDTFTestsMixin:
             def eval(self, a: int):
                 yield a,
 
-        self.assertEqual(TestUDTF(lit(None)).collect(), [Row(a=None)])
+        assertDataFrameEqual(TestUDTF(lit(None)), [Row(a=None)])
         self.spark.udtf.register("testUDTF", TestUDTF)
         df = self.spark.sql("SELECT * FROM testUDTF(null)")
-        self.assertEqual(df.collect(), [Row(a=None)])
+        assertDataFrameEqual(df, [Row(a=None)])
 
     # These are expected error message substrings to be used in test cases below.
     tooManyPositionalArguments = "too many positional arguments"
@@ -315,10 +351,7 @@ class BaseUDTFTestsMixin:
             TestUDTF(lit(1)).show()
 
     def test_udtf_with_wrong_num_output(self):
-        err_msg = (
-            r"\[UDTF_RETURN_SCHEMA_MISMATCH\] The number of columns in the "
-            "result does not match the specified schema."
-        )
+        err_msg = "(UDTF_ARROW_TYPE_CONVERSION_ERROR|UDTF_RETURN_SCHEMA_MISMATCH)"
 
         # Output less columns than specified return schema
         @udtf(returnType="a: int, b: int")
@@ -344,7 +377,9 @@ class BaseUDTFTestsMixin:
             def eval(self):
                 yield 1,
 
-        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
+        with self.assertRaisesRegex(
+            PythonException, "(UDTF_RETURN_SCHEMA_MISMATCH|UDTF_ARROW_TYPE_CONVERSION_ERROR)"
+        ):
             TestUDTF().collect()
 
     def test_udtf_with_non_empty_output_schema_and_empty_output(self):
@@ -353,7 +388,9 @@ class BaseUDTFTestsMixin:
             def eval(self):
                 yield tuple()
 
-        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
+        with self.assertRaisesRegex(
+            PythonException, "(UDTF_RETURN_SCHEMA_MISMATCH|UDTF_ARROW_TYPE_CONVERSION_ERROR)"
+        ):
             TestUDTF().collect()
 
     def test_udtf_init(self):
@@ -365,8 +402,8 @@ class BaseUDTFTestsMixin:
             def eval(self, a: int):
                 yield a, a + 1, self.key
 
-        rows = TestUDTF(lit(1)).collect()
-        self.assertEqual(rows, [Row(a=1, b=2, c="test")])
+        res = TestUDTF(lit(1))
+        assertDataFrameEqual(res, [Row(a=1, b=2, c="test")])
 
     def test_udtf_terminate(self):
         @udtf(returnType="key: string, value: float")
@@ -384,8 +421,8 @@ class BaseUDTFTestsMixin:
                 yield "count", float(self._count)
                 yield "avg", self._sum / self._count
 
-        self.assertEqual(
-            TestUDTF(lit(1)).collect(),
+        assertDataFrameEqual(
+            TestUDTF(lit(1)),
             [Row(key="input", value=1), Row(key="count", value=1.0), Row(key="avg", value=1.0)],
         )
 
@@ -394,8 +431,8 @@ class BaseUDTFTestsMixin:
             "SELECT id, key, value FROM range(0, 10, 1, 2), "
             "LATERAL test_udtf(id) WHERE key != 'input'"
         )
-        self.assertEqual(
-            df.collect(),
+        assertDataFrameEqual(
+            df,
             [
                 Row(id=4, key="count", value=5.0),
                 Row(id=4, key="avg", value=2.0),
@@ -508,10 +545,7 @@ class BaseUDTFTestsMixin:
             TestUDTF(lit(1)).collect()
 
     def test_udtf_terminate_with_wrong_num_output(self):
-        err_msg = (
-            r"\[UDTF_RETURN_SCHEMA_MISMATCH\] The number of columns in the result "
-            "does not match the specified schema."
-        )
+        err_msg = "(UDTF_RETURN_SCHEMA_MISMATCH|UDTF_ARROW_TYPE_CONVERSION_ERROR)"
 
         @udtf(returnType="a: int, b: int")
         class TestUDTF:
@@ -607,10 +641,8 @@ class BaseUDTFTestsMixin:
                 yield f"{person.name}: {person.age}",
 
         self.spark.udtf.register("test_udtf", TestUDTF)
-        self.assertEqual(
-            self.spark.sql(
-                "select * from test_udtf(named_struct('name', 'Alice', 'age', 1))"
-            ).collect(),
+        assertDataFrameEqual(
+            self.spark.sql("select * from test_udtf(named_struct('name', 'Alice', 'age', 1))"),
             [Row(x="Alice: 1")],
         )
 
@@ -633,8 +665,8 @@ class BaseUDTFTestsMixin:
                 yield str(m),
 
         self.spark.udtf.register("test_udtf", TestUDTF)
-        self.assertEqual(
-            self.spark.sql("select * from test_udtf(map('key', 'value'))").collect(),
+        assertDataFrameEqual(
+            self.spark.sql("select * from test_udtf(map('key', 'value'))"),
             [Row(x="{'key': 'value'}")],
         )
 
@@ -644,7 +676,7 @@ class BaseUDTFTestsMixin:
             def eval(self, x: int):
                 yield {"a": x, "b": x + 1},
 
-        self.assertEqual(TestUDTF(lit(1)).collect(), [Row(x=Row(a=1, b=2))])
+        assertDataFrameEqual(TestUDTF(lit(1)), [Row(x=Row(a=1, b=2))])
 
     def test_udtf_with_array_output_types(self):
         @udtf(returnType="x: array<int>")
@@ -652,7 +684,7 @@ class BaseUDTFTestsMixin:
             def eval(self, x: int):
                 yield [x, x + 1, x + 2],
 
-        self.assertEqual(TestUDTF(lit(1)).collect(), [Row(x=[1, 2, 3])])
+        assertDataFrameEqual(TestUDTF(lit(1)), [Row(x=[1, 2, 3])])
 
     def test_udtf_with_map_output_types(self):
         @udtf(returnType="x: map<int,string>")
@@ -660,7 +692,7 @@ class BaseUDTFTestsMixin:
             def eval(self, x: int):
                 yield {x: str(x)},
 
-        self.assertEqual(TestUDTF(lit(1)).collect(), [Row(x={1: "1"})])
+        assertDataFrameEqual(TestUDTF(lit(1)), [Row(x={1: "1"})])
 
     def test_udtf_with_empty_output_types(self):
         @udtf(returnType=StructType())
@@ -1018,17 +1050,132 @@ class BaseUDTFTestsMixin:
         )
 
     def test_udtf_with_table_argument_query(self):
+        func = self.udtf_for_table_argument()
+        self.spark.udtf.register("test_udtf", func)
+        assertDataFrameEqual(
+            self.spark.sql("SELECT * FROM test_udtf(TABLE (SELECT id FROM range(0, 8)))"),
+            [Row(a=6), Row(a=7)],
+        )
+
+    def test_df_asTable(self):
+        func = self.udtf_for_table_argument()
+        self.spark.udtf.register("test_udtf", func)
+        df = self.spark.range(8)
+        assertDataFrameEqual(
+            func(df.asTable()),
+            self.spark.sql("SELECT * FROM test_udtf(TABLE (SELECT id FROM range(0, 8)))"),
+        )
+
+    def udtf_for_table_argument(self):
         class TestUDTF:
             def eval(self, row: Row):
                 if row["id"] > 5:
                     yield row["id"],
 
         func = udtf(TestUDTF, returnType="a: int")
-        self.spark.udtf.register("test_udtf", func)
-        self.assertEqual(
-            self.spark.sql("SELECT * FROM test_udtf(TABLE (SELECT id FROM range(0, 8)))").collect(),
-            [Row(a=6), Row(a=7)],
+        return func
+
+    def test_df_asTable_chaining_methods(self):
+        class TestUDTF:
+            def eval(self, row: Row):
+                yield row["key"], row["value"]
+
+        func = udtf(TestUDTF, returnType="key: int, value: string")
+        df = self.spark.createDataFrame(
+            [(1, "a", 3), (1, "b", 3), (2, "c", 4), (2, "d", 4)], ["key", "value", "number"]
         )
+        assertDataFrameEqual(
+            func(df.asTable().partitionBy("key").orderBy(df.value)),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+            checkRowOrder=True,
+        )
+        assertDataFrameEqual(
+            func(df.asTable().partitionBy(["key", "number"]).orderBy(df.value)),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+            checkRowOrder=True,
+        )
+        assertDataFrameEqual(
+            func(df.asTable().partitionBy("key").orderBy(df.value.desc())),
+            [
+                Row(key=1, value="b"),
+                Row(key=1, value="a"),
+                Row(key=2, value="d"),
+                Row(key=2, value="c"),
+            ],
+            checkRowOrder=True,
+        )
+        assertDataFrameEqual(
+            func(df.asTable().partitionBy("key").orderBy(["number", "value"])),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+            checkRowOrder=True,
+        )
+        assertDataFrameEqual(
+            func(df.asTable().withSinglePartition()),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+        )
+
+        assertDataFrameEqual(
+            func(df.asTable().withSinglePartition().orderBy("value")),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+        )
+
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
+            r"Cannot call withSinglePartition\(\) after partitionBy\(\)"
+            r" or withSinglePartition\(\) has been called",
+        ):
+            df.asTable().partitionBy(df.key).withSinglePartition()
+
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
+            r"Cannot call partitionBy\(\) after partitionBy\(\)"
+            r" or withSinglePartition\(\) has been called",
+        ):
+            df.asTable().withSinglePartition().partitionBy(df.key)
+
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
+            r"Please call partitionBy\(\) or withSinglePartition\(\) before orderBy\(\)",
+        ):
+            df.asTable().orderBy(df.key)
+
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
+            r"Please call partitionBy\(\) or withSinglePartition\(\) before orderBy\(\)",
+        ):
+            df.asTable().partitionBy().orderBy(df.key)
+
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
+            r"Cannot call partitionBy\(\) after partitionBy\(\)"
+            r" or withSinglePartition\(\) has been called",
+        ):
+            df.asTable().partitionBy(df.key).partitionBy()
 
     def test_udtf_with_int_and_table_argument_query(self):
         class TestUDTF:
@@ -1038,26 +1185,19 @@ class BaseUDTFTestsMixin:
 
         func = udtf(TestUDTF, returnType="a: int")
         self.spark.udtf.register("test_udtf", func)
-        self.assertEqual(
-            self.spark.sql(
-                "SELECT * FROM test_udtf(5, TABLE (SELECT id FROM range(0, 8)))"
-            ).collect(),
+        assertDataFrameEqual(
+            self.spark.sql("SELECT * FROM test_udtf(5, TABLE (SELECT id FROM range(0, 8)))"),
             [Row(a=6), Row(a=7)],
         )
 
     def test_udtf_with_table_argument_identifier(self):
-        class TestUDTF:
-            def eval(self, row: Row):
-                if row["id"] > 5:
-                    yield row["id"],
-
-        func = udtf(TestUDTF, returnType="a: int")
+        func = self.udtf_for_table_argument()
         self.spark.udtf.register("test_udtf", func)
 
         with self.tempView("v"):
             self.spark.sql("CREATE OR REPLACE TEMPORARY VIEW v as SELECT id FROM range(0, 8)")
-            self.assertEqual(
-                self.spark.sql("SELECT * FROM test_udtf(TABLE (v))").collect(),
+            assertDataFrameEqual(
+                self.spark.sql("SELECT * FROM test_udtf(TABLE (v))"),
                 [Row(a=6), Row(a=7)],
             )
 
@@ -1072,44 +1212,29 @@ class BaseUDTFTestsMixin:
 
         with self.tempView("v"):
             self.spark.sql("CREATE OR REPLACE TEMPORARY VIEW v as SELECT id FROM range(0, 8)")
-            self.assertEqual(
-                self.spark.sql("SELECT * FROM test_udtf(5, TABLE (v))").collect(),
+            assertDataFrameEqual(
+                self.spark.sql("SELECT * FROM test_udtf(5, TABLE (v))"),
                 [Row(a=6), Row(a=7)],
             )
 
     def test_udtf_with_table_argument_unknown_identifier(self):
-        class TestUDTF:
-            def eval(self, row: Row):
-                if row["id"] > 5:
-                    yield row["id"],
-
-        func = udtf(TestUDTF, returnType="a: int")
+        func = self.udtf_for_table_argument()
         self.spark.udtf.register("test_udtf", func)
 
         with self.assertRaisesRegex(AnalysisException, "TABLE_OR_VIEW_NOT_FOUND"):
             self.spark.sql("SELECT * FROM test_udtf(TABLE (v))").collect()
 
     def test_udtf_with_table_argument_malformed_query(self):
-        class TestUDTF:
-            def eval(self, row: Row):
-                if row["id"] > 5:
-                    yield row["id"],
-
-        func = udtf(TestUDTF, returnType="a: int")
+        func = self.udtf_for_table_argument()
         self.spark.udtf.register("test_udtf", func)
 
         with self.assertRaisesRegex(AnalysisException, "TABLE_OR_VIEW_NOT_FOUND"):
             self.spark.sql("SELECT * FROM test_udtf(TABLE (SELECT * FROM v))").collect()
 
     def test_udtf_with_table_argument_cte_inside(self):
-        class TestUDTF:
-            def eval(self, row: Row):
-                if row["id"] > 5:
-                    yield row["id"],
-
-        func = udtf(TestUDTF, returnType="a: int")
+        func = self.udtf_for_table_argument()
         self.spark.udtf.register("test_udtf", func)
-        self.assertEqual(
+        assertDataFrameEqual(
             self.spark.sql(
                 """
                 SELECT * FROM test_udtf(TABLE (
@@ -1119,19 +1244,14 @@ class BaseUDTFTestsMixin:
                   SELECT * FROM t
                 ))
                 """
-            ).collect(),
+            ),
             [Row(a=6), Row(a=7)],
         )
 
     def test_udtf_with_table_argument_cte_outside(self):
-        class TestUDTF:
-            def eval(self, row: Row):
-                if row["id"] > 5:
-                    yield row["id"],
-
-        func = udtf(TestUDTF, returnType="a: int")
+        func = self.udtf_for_table_argument()
         self.spark.udtf.register("test_udtf", func)
-        self.assertEqual(
+        assertDataFrameEqual(
             self.spark.sql(
                 """
                 WITH t AS (
@@ -1139,11 +1259,11 @@ class BaseUDTFTestsMixin:
                 )
                 SELECT * FROM test_udtf(TABLE (SELECT id FROM t))
                 """
-            ).collect(),
+            ),
             [Row(a=6), Row(a=7)],
         )
 
-        self.assertEqual(
+        assertDataFrameEqual(
             self.spark.sql(
                 """
                 WITH t AS (
@@ -1151,28 +1271,23 @@ class BaseUDTFTestsMixin:
                 )
                 SELECT * FROM test_udtf(TABLE (t))
                 """
-            ).collect(),
+            ),
             [Row(a=6), Row(a=7)],
         )
 
     # TODO(SPARK-44233): Fix the subquery resolution.
     @unittest.skip("Fails to resolve the subquery.")
     def test_udtf_with_table_argument_lateral_join(self):
-        class TestUDTF:
-            def eval(self, row: Row):
-                if row["id"] > 5:
-                    yield row["id"],
-
-        func = udtf(TestUDTF, returnType="a: int")
+        func = self.udtf_for_table_argument()
         self.spark.udtf.register("test_udtf", func)
-        self.assertEqual(
+        assertDataFrameEqual(
             self.spark.sql(
                 """
                 SELECT * FROM
                   range(0, 8) AS t,
                   LATERAL test_udtf(TABLE (t))
                 """
-            ).collect(),
+            ),
             [Row(a=6), Row(a=7)],
         )
 
@@ -1197,8 +1312,8 @@ class BaseUDTFTestsMixin:
                 self.spark.sql(query).collect()
 
         with self.sql_conf({"spark.sql.tvf.allowMultipleTableArguments.enabled": True}):
-            self.assertEqual(
-                self.spark.sql(query).collect(),
+            assertDataFrameEqual(
+                self.spark.sql(query),
                 [
                     Row(a=0, b=0),
                     Row(a=1, b=0),
@@ -1374,7 +1489,7 @@ class BaseUDTFTestsMixin:
                 assertSchemaEqual(df.schema, expected_schema)
                 assertDataFrameEqual(df, expected_results)
 
-    def test_udtf_with_analyze_arbitary_number_arguments(self):
+    def test_udtf_with_analyze_arbitrary_number_arguments(self):
         class TestUDTF:
             @staticmethod
             def analyze(*args: AnalyzeArgument) -> AnalyzeResult:
@@ -2196,6 +2311,17 @@ class BaseUDTFTestsMixin:
                     ],
                 )
 
+    def test_udtf_with_table_argument_and_partition_by_no_terminate(self):
+        func = self.udtf_for_table_argument()  # a udtf with no terminate method defined
+        self.spark.udtf.register("test_udtf", func)
+
+        assertDataFrameEqual(
+            self.spark.sql(
+                "SELECT * FROM test_udtf(TABLE (SELECT id FROM range(0, 8)) PARTITION BY id)"
+            ),
+            [Row(a=6), Row(a=7)],
+        )
+
     def test_udtf_with_table_argument_and_partition_by_and_order_by(self):
         class TestUDTF:
             def __init__(self):
@@ -2530,6 +2656,191 @@ class BaseUDTFTestsMixin:
             [Row(current=4, total=4), Row(current=13, total=4), Row(current=20, total=1)],
         )
 
+    def test_udtf_with_variant_input(self):
+        @udtf(returnType="i int, s: string")
+        class TestUDTF:
+            def eval(self, v):
+                for i in range(10):
+                    yield i, v.toJson()
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+        assertDataFrameEqual(
+            self.spark.sql('select i, s from test_udtf(parse_json(\'{"a":"b"}\'))'),
+            [Row(i=n, s='{"a":"b"}') for n in range(10)],
+        )
+
+    def test_udtf_with_nested_variant_input(self):
+        # struct<variant>
+        @udtf(returnType="i int, s: string")
+        class TestUDTFStruct:
+            def eval(self, v):
+                for i in range(10):
+                    yield i, v["v"].toJson()
+
+        self.spark.udtf.register("test_udtf_struct", TestUDTFStruct)
+        res = self.spark.sql(
+            "select i, s from test_udtf_struct(named_struct('v', parse_json('{\"a\":\"c\"}')))"
+        )
+        assertDataFrameEqual(res, [Row(i=n, s='{"a":"c"}') for n in range(10)])
+
+        # array<variant>
+        @udtf(returnType="i int, s: string")
+        class TestUDTFArray:
+            def eval(self, v):
+                for i in range(10):
+                    yield i, v[0].toJson()
+
+        self.spark.udtf.register("test_udtf_array", TestUDTFArray)
+        res = self.spark.sql('select i, s from test_udtf_array(array(parse_json(\'{"a":"d"}\')))')
+        assertDataFrameEqual(res, [Row(i=n, s='{"a":"d"}') for n in range(10)])
+
+        # map<string, variant>
+        @udtf(returnType="i int, s: string")
+        class TestUDTFMap:
+            def eval(self, v):
+                for i in range(10):
+                    yield i, v["v"].toJson()
+
+        self.spark.udtf.register("test_udtf_map", TestUDTFMap)
+        res = self.spark.sql(
+            "select i, s from test_udtf_map(map('v', parse_json('{\"a\":\"e\"}')))"
+        )
+        assertDataFrameEqual(res, [Row(i=n, s='{"a":"e"}') for n in range(10)])
+
+    def test_udtf_with_variant_output(self):
+        @udtf(returnType="i int, v: variant")
+        class TestUDTF:
+            # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
+            def eval(self, n):
+                for i in range(n):
+                    yield i, VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+        res = self.spark.sql("select i, to_json(v) from test_udtf(8)")
+        assertDataFrameEqual(res, [Row(i=n, s=f'{{"a":"{chr(97 + n)}"}}') for n in range(8)])
+
+    def test_udtf_with_nested_variant_output(self):
+        # struct<variant>
+        @udtf(returnType="i int, v: struct<v1 variant>")
+        class TestUDTFStruct:
+            # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
+            def eval(self, n):
+                for i in range(n):
+                    yield i, {
+                        "v1": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
+                    }
+
+        self.spark.udtf.register("test_udtf_struct", TestUDTFStruct)
+        res = self.spark.sql("select i, to_json(v.v1) from test_udtf_struct(8)")
+        assertDataFrameEqual(res, [Row(i=n, s=f'{{"a":"{chr(97 + n)}"}}') for n in range(8)])
+
+        # array<variant>
+        @udtf(returnType="i int, v: array<variant>")
+        class TestUDTFArray:
+            # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
+            def eval(self, n):
+                for i in range(n):
+                    yield i, [
+                        VariantVal(bytes([2, 1, 0, 0, 2, 5, 98 + i]), bytes([1, 1, 0, 1, 97]))
+                    ]
+
+        self.spark.udtf.register("test_udtf_array", TestUDTFArray)
+        res = self.spark.sql("select i, to_json(v[0]) from test_udtf_array(8)")
+        assertDataFrameEqual(res, [Row(i=n, s=f'{{"a":"{chr(98 + n)}"}}') for n in range(8)])
+
+        # map<string, variant>
+        @udtf(returnType="i int, v: map<string, variant>")
+        class TestUDTFStruct:
+            # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
+            def eval(self, n):
+                for i in range(n):
+                    yield i, {
+                        "v1": VariantVal(bytes([2, 1, 0, 0, 2, 5, 99 + i]), bytes([1, 1, 0, 1, 97]))
+                    }
+
+        self.spark.udtf.register("test_udtf_struct", TestUDTFStruct)
+        res = self.spark.sql("select i, to_json(v['v1']) from test_udtf_struct(8)")
+        assertDataFrameEqual(res, [Row(i=n, s=f'{{"a":"{chr(99 + n)}"}}') for n in range(8)])
+
+    @unittest.skipIf(
+        "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+    )
+    def test_udtf_segfault(self):
+        for enabled, expected in [
+            (True, "Segmentation fault"),
+            (False, "Consider setting .* for the better Python traceback."),
+        ]:
+            with self.subTest(enabled=enabled), self.sql_conf(
+                {"spark.sql.execution.pyspark.udf.faulthandler.enabled": enabled}
+            ):
+                with self.subTest(method="eval"):
+
+                    class TestUDTF:
+                        def eval(self):
+                            import ctypes
+
+                            yield ctypes.string_at(0),
+
+                    self._check_result_or_exception(
+                        TestUDTF, "x: string", expected, err_type=Exception
+                    )
+
+                with self.subTest(method="analyze"):
+
+                    class TestUDTFWithAnalyze:
+                        @staticmethod
+                        def analyze():
+                            import ctypes
+
+                            ctypes.string_at(0)
+                            return AnalyzeResult(StructType().add("x", StringType()))
+
+                        def eval(self):
+                            yield "x",
+
+                    self._check_result_or_exception(
+                        TestUDTFWithAnalyze, None, expected, err_type=Exception
+                    )
+
+    def test_udtf_kill_on_timeout(self):
+        with self.sql_conf(
+            {
+                "spark.sql.execution.pyspark.udf.idleTimeoutSeconds": "1s",
+                "spark.sql.execution.pyspark.udf.killOnIdleTimeout": "true",
+            }
+        ):
+            with self.subTest(method="eval"):
+
+                class TestUDTF:
+                    def eval(self):
+                        time.sleep(2)
+                        yield "x"
+
+                self._check_result_or_exception(
+                    TestUDTF,
+                    "x: string",
+                    "Python worker exited unexpectedly",
+                    err_type=Exception,
+                )
+
+            with self.subTest(method="analyze"):
+
+                class TestUDTFWithAnalyze:
+                    @staticmethod
+                    def analyze():
+                        time.sleep(2)
+                        return AnalyzeResult(StructType().add("x", StringType()))
+
+                    def eval(self):
+                        yield "x",
+
+                self._check_result_or_exception(
+                    TestUDTFWithAnalyze,
+                    None,
+                    "Python worker exited unexpectedly",
+                    err_type=Exception,
+                )
+
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod
@@ -2548,7 +2859,7 @@ class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
 @unittest.skipIf(
     not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
 )
-class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
+class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
     def test_eval_type(self):
         def upper(x: str):
             return upper(x)
@@ -2828,16 +3139,278 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
                     udtf(TestUDTF, returnType=ret_type)().collect()
 
 
-class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
+class LegacyUDTFArrowTests(LegacyUDTFArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(UDTFArrowTests, cls).setUpClass()
+        super(LegacyUDTFArrowTests, cls).setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "true")
+        cls.spark.conf.set(
+            "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "true"
+        )
 
     @classmethod
     def tearDownClass(cls):
         try:
             cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
+            cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled")
+        finally:
+            super(LegacyUDTFArrowTests, cls).tearDownClass()
+
+
+class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
+    def test_udtf_eval_returning_non_tuple(self):
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a
+
+        with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CONVERSION_ERROR"):
+            TestUDTF(lit(1)).collect()
+
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                return [a]
+
+        with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CONVERSION_ERROR"):
+            TestUDTF(lit(1)).collect()
+
+    def test_numeric_output_type_casting(self):
+        class TestUDTF:
+            def eval(self):
+                yield 1,
+
+        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
+
+        for ret_type, expected in [
+            ("x: boolean", err),
+            ("x: tinyint", [Row(x=1)]),
+            ("x: smallint", [Row(x=1)]),
+            ("x: int", [Row(x=1)]),
+            ("x: bigint", [Row(x=1)]),
+            ("x: string", [Row(x="1")]),  # require arrow.cast
+            ("x: date", [Row(x=datetime.date(1970, 1, 2))]),
+            ("x: byte", [Row(x=1)]),
+            ("x: binary", err),
+            ("x: float", [Row(x=1.0)]),
+            ("x: double", [Row(x=1.0)]),
+            ("x: decimal(10, 0)", err),
+            ("x: array<int>", err),
+            ("x: map<string,int>", err),
+            ("x: struct<a:int>", err),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_numeric_string_output_type_casting(self):
+        class TestUDTF:
+            def eval(self):
+                yield "1",
+
+        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
+
+        for ret_type, expected in [
+            ("x: boolean", err),
+            ("x: tinyint", err),
+            ("x: smallint", err),
+            ("x: int", err),
+            ("x: bigint", err),
+            ("x: string", [Row(x="1")]),
+            ("x: date", err),
+            ("x: timestamp", err),
+            ("x: byte", err),
+            ("x: binary", err),
+            ("x: float", err),
+            ("x: double", err),
+            ("x: decimal(10, 0)", err),
+            ("x: array<string>", err),
+            ("x: array<int>", err),
+            ("x: map<string,int>", err),
+            ("x: struct<a:int>", err),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_string_output_type_casting(self):
+        class TestUDTF:
+            def eval(self):
+                yield "hello",
+
+        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
+        for ret_type, expected in [
+            ("x: boolean", err),
+            ("x: tinyint", err),
+            ("x: smallint", err),
+            ("x: int", err),
+            ("x: bigint", err),
+            ("x: string", [Row(x="hello")]),
+            ("x: date", err),
+            ("x: timestamp", err),
+            ("x: byte", err),
+            ("x: binary", err),
+            ("x: float", err),
+            ("x: double", err),
+            ("x: decimal(10, 0)", err),
+            ("x: array<string>", err),
+            ("x: array<int>", err),
+            ("x: map<string,int>", err),
+            ("x: struct<a:int>", err),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_array_output_type_casting(self):
+        class TestUDTF:
+            def eval(self):
+                yield [0, 1.1, 2],
+
+        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
+        for ret_type, expected in [
+            ("x: boolean", err),
+            ("x: tinyint", err),
+            ("x: smallint", err),
+            ("x: int", err),
+            ("x: bigint", err),
+            ("x: string", [Row(x="[0, 1.1, 2]")]),
+            ("x: date", err),
+            ("x: timestamp", err),
+            ("x: byte", err),
+            ("x: binary", err),
+            ("x: float", err),
+            ("x: double", err),
+            ("x: decimal(10, 0)", err),
+            ("x: array<string>", [Row(x=["0", "1.1", "2"])]),
+            ("x: array<boolean>", err),
+            ("x: array<int>", [Row(x=[0, 1, 2])]),
+            ("x: array<float>", [Row(x=[0, 1.1, 2])]),
+            ("x: array<array<int>>", err),
+            ("x: map<string,int>", err),
+            ("x: struct<a:int>", err),
+            ("x: struct<a:int,b:int,c:int>", err),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_map_output_type_casting(self):
+        class TestUDTF:
+            def eval(self):
+                yield {"a": 0, "b": 1.1, "c": 2},
+
+        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
+        for ret_type, expected in [
+            ("x: boolean", err),
+            ("x: tinyint", err),
+            ("x: smallint", err),
+            ("x: int", err),
+            ("x: bigint", err),
+            ("x: string", [Row(x=str({"a": 0, "b": 1.1, "c": 2}))]),
+            ("x: date", err),
+            ("x: timestamp", err),
+            ("x: byte", err),
+            ("x: binary", err),
+            ("x: float", err),
+            ("x: double", err),
+            ("x: decimal(10, 0)", err),
+            ("x: array<string>", err),
+            ("x: map<string,string>", [Row(x={"a": "0", "b": "1.1", "c": "2"})]),
+            ("x: map<string,boolean>", err),
+            ("x: map<string,int>", [Row(x={"a": 0, "b": 1, "c": 2})]),
+            ("x: map<string,float>", [Row(x={"a": 0, "b": 1.1, "c": 2})]),
+            ("x: map<string,map<string,int>>", err),
+            ("x: struct<a:int>", [Row(x=Row(a=0))]),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_struct_output_type_casting_dict(self):
+        class TestUDTF:
+            def eval(self):
+                yield {"a": 0, "b": 1.1, "c": 2},
+
+        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
+        for ret_type, expected in [
+            ("x: boolean", err),
+            ("x: tinyint", err),
+            ("x: smallint", err),
+            ("x: int", err),
+            ("x: bigint", err),
+            ("x: string", [Row(x="{'a': 0, 'b': 1.1, 'c': 2}")]),
+            ("x: date", err),
+            ("x: timestamp", err),
+            ("x: byte", err),
+            ("x: binary", err),
+            ("x: float", err),
+            ("x: double", err),
+            ("x: decimal(10, 0)", err),
+            ("x: array<string>", err),
+            ("x: map<string,string>", [Row(x={"a": "0", "b": "1.1", "c": "2"})]),
+            ("x: struct<a:string,b:string,c:string>", [Row(Row(a="0", b="1.1", c="2"))]),
+            ("x: struct<a:int,b:int,c:int>", [Row(Row(a=0, b=1, c=2))]),
+            ("x: struct<a:float,b:float,c:float>", [Row(Row(a=0, b=1.1, c=2))]),
+            ("x: struct<a:struct<>,b:struct<>,c:struct<>>", err),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_struct_output_type_casting_row(self):
+        class TestUDTF:
+            def eval(self):
+                yield Row(a=0, b=1.1, c=2),
+
+        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
+        for ret_type, expected in [
+            ("x: boolean", err),
+            ("x: tinyint", err),
+            ("x: smallint", err),
+            ("x: int", err),
+            ("x: bigint", err),
+            ("x: string", [Row(x="Row(a=0, b=1.1, c=2)")]),
+            ("x: date", err),
+            ("x: timestamp", err),
+            ("x: byte", err),
+            ("x: binary", err),
+            ("x: float", err),
+            ("x: double", err),
+            ("x: decimal(10, 0)", err),
+            ("x: array<string>", err),
+            ("x: map<string,string>", err),
+            ("x: struct<a:string,b:string,c:string>", [Row(Row(a="0", b="1.1", c="2"))]),
+            ("x: struct<a:int,b:int,c:int>", [Row(Row(a=0, b=1, c=2))]),
+            ("x: struct<a:float,b:float,c:float>", [Row(Row(a=0, b=1.1, c=2))]),
+            ("x: struct<a:struct<>,b:struct<>,c:struct<>>", err),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_inconsistent_output_types(self):
+        class TestUDTF:
+            def eval(self):
+                yield 1,
+                yield [1, 2],
+
+        for ret_type in [
+            "x: int",
+            "x: array<int>",
+        ]:
+            with self.subTest(ret_type=ret_type):
+                with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CONVERSION_ERROR"):
+                    udtf(TestUDTF, returnType=ret_type)().collect()
+
+
+class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super(UDTFArrowTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "true")
+        cls.spark.conf.set(
+            "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "false"
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
+            cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled")
         finally:
             super(UDTFArrowTests, cls).tearDownClass()
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.time.LocalDateTime
+import java.time.{LocalDateTime, LocalTime}
 import java.util.Locale
 
 import scala.collection.mutable
@@ -41,7 +41,8 @@ import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.localTime
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -92,12 +93,13 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         |  required fixed_len_byte_array(32) i(DECIMAL(32,0));
         |  required int64 j(TIMESTAMP_MILLIS);
         |  required int64 k(TIMESTAMP_MICROS);
+        |  required int64 l(TIME(MICROS, false));
         |}
       """.stripMargin)
 
     val expectedSparkTypes = Seq(ByteType, ShortType, DateType, DecimalType(1, 0),
       DecimalType(10, 0), StringType, StringType, DecimalType(32, 0), DecimalType(32, 0),
-      TimestampType, TimestampType)
+      TimestampType, TimestampType, TimeType(TimeType.MICROS_PRECISION))
 
     withTempPath { location =>
       val path = new Path(location.getCanonicalPath)
@@ -846,7 +848,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     def checkCompressionCodec(codec: ParquetCompressionCodec): Unit = {
       withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> codec.name()) {
         withParquetFile(data) { path =>
-          assertResult(spark.conf.get(SQLConf.PARQUET_COMPRESSION).toUpperCase(Locale.ROOT)) {
+          assertResult(spark.conf.get(SQLConf.PARQUET_COMPRESSION.key).toUpperCase(Locale.ROOT)) {
             compressionCodecFor(path, codec.name())
           }
         }
@@ -855,7 +857,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
     // Checks default compression codec
     checkCompressionCodec(
-      ParquetCompressionCodec.fromString(spark.conf.get(SQLConf.PARQUET_COMPRESSION)))
+      ParquetCompressionCodec.fromString(spark.conf.get(SQLConf.PARQUET_COMPRESSION.key)))
 
     ParquetCompressionCodec.availableCodecs.asScala.foreach(checkCompressionCodec(_))
   }
@@ -1068,7 +1070,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         exception = intercept[SparkException] {
           spark.read.schema(readSchema).parquet(path).collect()
         },
-        errorClass = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
+        condition = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
         parameters = Map(
           "path" -> ".*",
           "column" -> "\\[_1\\]",
@@ -1223,7 +1225,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val m1 = intercept[SparkException] {
           spark.range(1).coalesce(1).write.options(extraOptions).parquet(dir.getCanonicalPath)
         }
-        assert(m1.getErrorClass == "TASK_WRITE_FAILED")
+        assert(m1.getCondition == "TASK_WRITE_FAILED")
         assert(m1.getCause.getMessage.contains("Intentional exception for testing purposes"))
       }
 
@@ -1233,8 +1235,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
             .coalesce(1)
           df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
         }
-        if (m2.getErrorClass != null) {
-          assert(m2.getErrorClass == "TASK_WRITE_FAILED")
+        if (m2.getCondition != null) {
+          assert(m2.getCondition == "TASK_WRITE_FAILED")
           assert(m2.getCause.getMessage.contains("Intentional exception for testing purposes"))
         } else {
           assert(m2.getMessage.contains("TASK_WRITE_FAILED"))
@@ -1302,6 +1304,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         // Decimal column in this file is encoded using plain dictionary
         readResourceParquetFile("test-data/dec-in-i32.parquet"),
         spark.range(1 << 4).select($"id" % 10 cast DecimalType(5, 2) as Symbol("i32_dec")))
+    }
+  }
+
+  test("explode nested lists crossing a rowgroup boundary") {
+    withAllParquetReaders {
+      checkAnswer(
+        readResourceParquetFile("test-data/packed-list-vectorized.parquet")
+          .selectExpr("explode(DIStatus.command_status.actions_status)")
+          .selectExpr("col.result"),
+        List.fill(4992)(Row("SUCCESS")))
     }
   }
 
@@ -1582,6 +1594,47 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           assert(Seq(866, 20, 492, 76, 824, 604, 343, 820, 864, 243)
             .zip(last10Df).forall(d =>
             d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
+      }
+    }
+  }
+
+  test("SPARK-49991: Respect 'mapreduce.output.basename' to generate file names") {
+    withTempPath { dir =>
+      withSQLConf("mapreduce.output.basename" -> "apachespark") {
+        spark.range(1).coalesce(1).write.parquet(dir.getCanonicalPath)
+        val df = spark.read.parquet(dir.getCanonicalPath)
+        assert(df.inputFiles.head.contains("apachespark"))
+        checkAnswer(spark.read.parquet(dir.getCanonicalPath), Row(0))
+      }
+    }
+  }
+
+  test("Read TimeType for the logical TIME type") {
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 time_micros(TIME(MICROS,false));
+        |}""".stripMargin)
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/times.parquet")
+        val numRecords = 100
+
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { i =>
+          val record = new SimpleGroup(schema)
+          record.add(0, localTime(23, 59, 59, 123456) / DateTimeConstants.NANOS_PER_MICROS)
+          writer.write(record)
+        }
+        writer.close
+
+        withAllParquetReaders {
+          val df = spark.read.parquet(tablePath.toString)
+          assertResult(df.schema) { new StructType().add("time_micros", TimeType()) }
+          val lt = LocalTime.of(23, 59, 59, 123456000)
+          val expected = (0 until numRecords).map { _ => lt }.toDF()
+          checkAnswer(df, expected)
+        }
       }
     }
   }

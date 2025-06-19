@@ -74,4 +74,8 @@ class MemoryStateStore extends StateStore() {
   override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
     throw new UnsupportedOperationException("Doesn't support multiple values per key")
   }
+
+  override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
+    StateStoreCheckpointInfo(id.partitionId, version + 1, None, None)
+  }
 }

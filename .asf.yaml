@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# https://cwiki.apache.org/confluence/display/INFRA/git+-+.asf.yaml+features
+# https://github.com/apache/infrastructure-asfyaml/blob/main/README.md
 ---
 github:
   description: "Apache Spark - A unified analytics engine for large-scale data processing"
@@ -31,6 +31,8 @@ github:
     merge: false
     squash: true
     rebase: true
+  ghp_branch: master
+  ghp_path: /docs
 
 notifications:
   pullrequests: reviews@spark.apache.org

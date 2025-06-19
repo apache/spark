@@ -21,6 +21,8 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.concurrent.duration.DurationInt
+
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 
@@ -616,6 +618,95 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     assert(df.rdd.collectPartitions().flatMap(_.map(_.getString(0))).toSet
       === (0 to 30).map(_.toString).toSet)
   }
+
+  test("topic-partition for start offset and end offset must match") {
+    val e = intercept[IllegalArgumentException] {
+      spark.read
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("subscribe", "test")
+        .option(
+          "startingOffsets",
+          """
+            |{"test": {"0": 1, "1": 1, "2": 1}}
+            |""".stripMargin
+        )
+        .option(
+          "endingOffsets",
+          """
+            |{"test": {"0": 0, "1": 0}}
+            |""".stripMargin
+        )
+        .load()
+        .collect()
+    }
+
+    assert(e.getMessage.contains(
+      "The specified start offset and end offset should have the same topic-partitions.")
+    )
+  }
+
+  test("unresolved start offset greater than end offset") {
+    val e = intercept[IllegalArgumentException] {
+      spark.read
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("subscribe", "test")
+        .option(
+          "startingOffsets",
+          """
+            |{"test": {"0": 1, "1": 1, "2": 1}}
+            |""".stripMargin
+        )
+        .option(
+          "endingOffsets",
+          """
+            |{"test": {"0": 0, "1": 0, "2": 0}}
+            |""".stripMargin
+        )
+        .load()
+        .collect()
+    }
+
+    assert(e.getMessage.contains(
+      "The specified start offset 1 is greater than the end offset 0 for"))
+  }
+
+  test("resolved start offset greater than end offset (without latest)") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    val timestamp1 =
+      testUtils.sendMessages(topic, Seq("0", "0").toArray, Some(0))(1)._2.timestamp()
+    val timestamp2 =
+      testUtils.sendMessages(topic, Seq("0", "0").toArray, Some(1))(1)._2.timestamp()
+    val timestamp3 =
+      testUtils.sendMessages(topic, Seq("0", "0").toArray, Some(2))(1)._2.timestamp()
+    val df = spark.read
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option(
+        "startingOffsets",
+        s"""
+          |{"$topic": {"0": 3, "1": 3, "2": 3}}
+          |""".stripMargin
+      )
+      .option(
+        "endingOffsetsByTimestamp",
+        s"""
+          |{"$topic": {"0": $timestamp1, "1": $timestamp2, "2": $timestamp3}}
+          |""".stripMargin
+      )
+      .load()
+
+    eventually(timeout(60.seconds)) {
+      val e = intercept[IllegalStateException] {
+        df.collect()
+      }
+      assert(e.getMessage.contains(
+        "The resolved start offset 3 is greater than the resolved end offset 1 for"))
+    }
+  }
 }
 
 class KafkaRelationSuiteWithAdminV1 extends KafkaRelationSuiteV1 {
@@ -637,9 +728,31 @@ class KafkaRelationSuiteV1 extends KafkaRelationSuiteBase {
   test("V1 Source is used when set through SQLConf") {
     val topic = newTopic()
     val df = createDF(topic)
-    assert(df.logicalPlan.collect {
-      case LogicalRelation(_, _, _, _) => true
+    assert(df.logicalPlan.collectFirst {
+      case _: LogicalRelation => true
     }.nonEmpty)
+  }
+
+  test("resolved start offset greater than end offset (with latest)") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    val df = spark.read
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option(
+        "startingOffsets",
+        s"""
+           |{"$topic": {"0": 1, "1": 1, "2": 1}}
+           |""".stripMargin
+      )
+      .load()
+
+    val e = intercept[IllegalStateException] {
+      df.collect()
+    }
+    assert(e.getMessage.contains(
+      "The resolved start offset 1 is greater than the resolved end offset 0 for"))
   }
 }
 
@@ -652,7 +765,7 @@ class KafkaRelationSuiteV2 extends KafkaRelationSuiteBase {
   test("V2 Source is used when set through SQLConf") {
     val topic = newTopic()
     val df = createDF(topic)
-    assert(df.logicalPlan.collect {
+    assert(df.logicalPlan.collectFirst {
       case _: DataSourceV2Relation => true
     }.nonEmpty)
   }

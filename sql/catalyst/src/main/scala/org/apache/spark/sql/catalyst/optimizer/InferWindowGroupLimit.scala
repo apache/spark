@@ -74,7 +74,7 @@ object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
 
     plan.transformWithPruning(_.containsAllPatterns(FILTER, WINDOW), ruleId) {
       case filter @ Filter(condition,
-        window @ Window(windowExpressions, partitionSpec, orderSpec, child))
+        window @ Window(windowExpressions, partitionSpec, orderSpec, child, _))
         if !child.isInstanceOf[WindowGroupLimit] && windowExpressions.forall(isExpandingWindow) &&
           orderSpec.nonEmpty =>
         val limits = windowExpressions.collect {

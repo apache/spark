@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 
@@ -52,7 +52,7 @@ trait AlterTableUnsetTblPropertiesSuiteBase extends QueryTest with DDLCommandTes
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map("relationName" -> toSQLId(t)),
         context = ExpectedContext(
           fragment = t,
@@ -109,14 +109,14 @@ trait AlterTableUnsetTblPropertiesSuiteBase extends QueryTest with DDLCommandTes
       PROP_EXTERNAL -> "please use CREATE EXTERNAL TABLE"
     )
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
-      CatalogV2Util.TABLE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+      tableLegacyProperties.foreach { key =>
         withNamespaceAndTable("ns", "tbl") { t =>
           val sqlText = s"ALTER TABLE $t UNSET TBLPROPERTIES ('$key')"
           checkError(
             exception = intercept[ParseException] {
               sql(sqlText)
             },
-            errorClass = "UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY",
+            condition = "UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY",
             parameters = Map(
               "property" -> key,
               "msg" -> keyParameters.getOrElse(
@@ -129,7 +129,7 @@ trait AlterTableUnsetTblPropertiesSuiteBase extends QueryTest with DDLCommandTes
       }
     }
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
-      CatalogV2Util.TABLE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+      tableLegacyProperties.foreach { key =>
         Seq("OPTIONS", "TBLPROPERTIES").foreach { clause =>
           withNamespaceAndTable("ns", "tbl") { t =>
             sql(s"CREATE TABLE $t (key int) USING parquet $clause ('$key'='bar')")

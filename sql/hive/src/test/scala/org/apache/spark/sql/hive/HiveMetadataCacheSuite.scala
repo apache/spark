@@ -59,7 +59,7 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
           exception = intercept[SparkException] {
             sql("select count(*) from view_refresh").first()
           },
-          errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+          condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
           parameters = Map("path" -> ".*")
         )
 
@@ -102,7 +102,7 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
               exception = intercept[SparkException] {
                 sql("select * from test").count()
               },
-              errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+              condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
               parameters = Map("path" -> ".*")
             )
 
@@ -120,7 +120,7 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
               exception = intercept[SparkException] {
                 sql("select * from test").count()
               },
-              errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+              condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
               parameters = Map("path" -> ".*")
             )
             spark.catalog.refreshByPath(dir.getAbsolutePath)

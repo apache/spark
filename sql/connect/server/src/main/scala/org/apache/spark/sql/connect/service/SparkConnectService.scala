@@ -31,7 +31,7 @@ import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{SparkConf, SparkContext, SparkEnv}
+import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
 import org.apache.spark.connect.proto.SparkConnectServiceGrpc.AsyncService
@@ -39,7 +39,7 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.HOST
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerEvent}
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_GRPC_PORT_MAX_RETRIES}
+import org.apache.spark.sql.connect.config.Connect.{getAuthenticateToken, CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_GRPC_PORT_MAX_RETRIES}
 import org.apache.spark.sql.connect.execution.ConnectProgressExecutionListener
 import org.apache.spark.sql.connect.ui.{SparkConnectServerAppStatusStore, SparkConnectServerListener, SparkConnectServerTab}
 import org.apache.spark.sql.connect.utils.ErrorUtils
@@ -345,7 +345,7 @@ object SparkConnectService extends Logging {
     val kvStore = sc.statusStore.store.asInstanceOf[ElementTrackingStore]
     listener = new SparkConnectServerListener(kvStore, sc.conf)
     sc.listenerBus.addToStatusQueue(listener)
-    uiTab = if (sc.getConf.get(UI_ENABLED)) {
+    uiTab = if (sc.conf.get(UI_ENABLED)) {
       Some(
         new SparkConnectServerTab(
           new SparkConnectServerAppStatusStore(kvStore),
@@ -363,7 +363,7 @@ object SparkConnectService extends Logging {
    * Starts the GRPC Service.
    */
   private def startGRPCService(): Unit = {
-    val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", true)
+    val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", false)
     val bindAddress = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_ADDRESS)
     val startPort = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_PORT)
     val sparkConnectService = new SparkConnectService(debugMode)
@@ -380,6 +380,10 @@ object SparkConnectService extends Logging {
       }
       sb.maxInboundMessageSize(SparkEnv.get.conf.get(CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE).toInt)
         .addService(sparkConnectService)
+
+      getAuthenticateToken.foreach { token =>
+        sb.intercept(new PreSharedKeyAuthenticationInterceptor(token))
+      }
 
       // Add all registered interceptors to the server builder.
       SparkConnectInterceptorRegistry.chainInterceptors(sb, configuredInterceptors)
@@ -405,7 +409,11 @@ object SparkConnectService extends Logging {
     }
 
     val maxRetries: Int = SparkEnv.get.conf.get(CONNECT_GRPC_PORT_MAX_RETRIES)
-    Utils.startServiceOnPort[Server](startPort, startServiceFn, maxRetries, getClass.getName)
+    Utils.startServiceOnPort[Server](
+      startPort,
+      startServiceFn,
+      maxRetries,
+      getClass.getName.stripSuffix("$"))
   }
 
   // Starts the service
@@ -420,7 +428,7 @@ object SparkConnectService extends Logging {
 
     started = true
     stopped = false
-    postSparkConnectServiceStarted(sc)
+    postSparkConnectServiceStarted()
   }
 
   def stop(timeout: Option[Long] = None, unit: Option[TimeUnit] = None): Unit = synchronized {
@@ -456,13 +464,9 @@ object SparkConnectService extends Logging {
    * Post the event that the Spark Connect service has started. This is expected to be called only
    * once after the service is ready.
    */
-  private def postSparkConnectServiceStarted(sc: SparkContext): Unit = {
+  private def postSparkConnectServiceStarted(): Unit = {
     postServiceEvent(isa =>
-      SparkListenerConnectServiceStarted(
-        hostAddress,
-        isa.getPort,
-        sc.conf,
-        System.currentTimeMillis()))
+      SparkListenerConnectServiceStarted(hostAddress, isa.getPort, System.currentTimeMillis()))
   }
 
   /**
@@ -521,15 +525,12 @@ object SparkConnectService extends Logging {
  *   The host address of the started Spark Connect service.
  * @param bindingPort:
  *   The binding port of the started Spark Connect service.
- * @param sparkConf:
- *   The SparkConf of the active SparkContext that associated with the service.
  * @param eventTime:
  *   The time in ms when the event was generated.
  */
 case class SparkListenerConnectServiceStarted(
     hostAddress: String,
     bindingPort: Int,
-    sparkConf: SparkConf,
     eventTime: Long)
     extends SparkListenerEvent
 

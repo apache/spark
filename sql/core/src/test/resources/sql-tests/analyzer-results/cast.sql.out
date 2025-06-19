@@ -205,57 +205,193 @@ Project [hex(cast(abc as binary)) AS hex(CAST(abc AS BINARY))#x]
 -- !query
 SELECT HEX(CAST(CAST(123 AS byte) AS binary))
 -- !query analysis
-Project [hex(cast(cast(123 as tinyint) as binary)) AS hex(CAST(CAST(123 AS TINYINT) AS BINARY))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(CAST(123 AS TINYINT) AS BINARY)\"",
+    "srcType" : "\"TINYINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 44,
+    "fragment" : "CAST(CAST(123 AS byte) AS binary)"
+  } ]
+}
 
 
 -- !query
 SELECT HEX(CAST(CAST(-123 AS byte) AS binary))
 -- !query analysis
-Project [hex(cast(cast(-123 as tinyint) as binary)) AS hex(CAST(CAST(-123 AS TINYINT) AS BINARY))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(CAST(-123 AS TINYINT) AS BINARY)\"",
+    "srcType" : "\"TINYINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 45,
+    "fragment" : "CAST(CAST(-123 AS byte) AS binary)"
+  } ]
+}
 
 
 -- !query
 SELECT HEX(CAST(123S AS binary))
 -- !query analysis
-Project [hex(cast(123 as binary)) AS hex(CAST(123 AS BINARY))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(123 AS BINARY)\"",
+    "srcType" : "\"SMALLINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 31,
+    "fragment" : "CAST(123S AS binary)"
+  } ]
+}
 
 
 -- !query
 SELECT HEX(CAST(-123S AS binary))
 -- !query analysis
-Project [hex(cast(-123 as binary)) AS hex(CAST(-123 AS BINARY))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(-123 AS BINARY)\"",
+    "srcType" : "\"SMALLINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 32,
+    "fragment" : "CAST(-123S AS binary)"
+  } ]
+}
 
 
 -- !query
 SELECT HEX(CAST(123 AS binary))
 -- !query analysis
-Project [hex(cast(123 as binary)) AS hex(CAST(123 AS BINARY))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(123 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 30,
+    "fragment" : "CAST(123 AS binary)"
+  } ]
+}
 
 
 -- !query
 SELECT HEX(CAST(-123 AS binary))
 -- !query analysis
-Project [hex(cast(-123 as binary)) AS hex(CAST(-123 AS BINARY))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(-123 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 31,
+    "fragment" : "CAST(-123 AS binary)"
+  } ]
+}
 
 
 -- !query
 SELECT HEX(CAST(123L AS binary))
 -- !query analysis
-Project [hex(cast(123 as binary)) AS hex(CAST(123 AS BINARY))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(123 AS BINARY)\"",
+    "srcType" : "\"BIGINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 31,
+    "fragment" : "CAST(123L AS binary)"
+  } ]
+}
 
 
 -- !query
 SELECT HEX(CAST(-123L AS binary))
 -- !query analysis
-Project [hex(cast(-123 as binary)) AS hex(CAST(-123 AS BINARY))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(-123 AS BINARY)\"",
+    "srcType" : "\"BIGINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 32,
+    "fragment" : "CAST(-123L AS binary)"
+  } ]
+}
 
 
 -- !query
@@ -804,8 +940,25 @@ Project [hex(cast(abc as binary)) AS hex(CAST(abc AS BINARY))#x]
 -- !query
 SELECT HEX((123 :: byte) :: binary)
 -- !query analysis
-Project [hex(cast(cast(123 as tinyint) as binary)) AS hex(CAST(CAST(123 AS TINYINT) AS BINARY))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(CAST(123 AS TINYINT) AS BINARY)\"",
+    "srcType" : "\"TINYINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 34,
+    "fragment" : "(123 :: byte) :: binary"
+  } ]
+}
 
 
 -- !query

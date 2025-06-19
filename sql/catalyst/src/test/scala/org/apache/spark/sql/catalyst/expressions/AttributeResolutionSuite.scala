@@ -69,7 +69,7 @@ class AttributeResolutionSuite extends SparkFunSuite {
       exception = intercept[AnalysisException] {
         attrs.resolve(Seq("a"), resolver)
       },
-      errorClass = "AMBIGUOUS_REFERENCE",
+      condition = "AMBIGUOUS_REFERENCE",
       parameters = Map(
         "name" -> "`a`",
         "referenceNames" -> "[`ns1`.`ns2`.`t2`.`a`, `ns1`.`t1`.`a`]"
@@ -86,7 +86,7 @@ class AttributeResolutionSuite extends SparkFunSuite {
       exception = intercept[AnalysisException] {
         attrs.resolve(Seq("ns1", "t", "a"), resolver)
       },
-      errorClass = "AMBIGUOUS_REFERENCE",
+      condition = "AMBIGUOUS_REFERENCE",
       parameters = Map(
         "name" -> "`ns1`.`t`.`a`",
         "referenceNames" -> "[`ns1`.`t`.`a`, `ns2`.`ns1`.`t`.`a`]"
@@ -108,7 +108,7 @@ class AttributeResolutionSuite extends SparkFunSuite {
       exception = intercept[AnalysisException] {
         attrs.resolve(Seq("ns1", "t", "a", "cc"), resolver)
       },
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`cc`", "fields" -> "`aa`, `bb`"))
   }
 

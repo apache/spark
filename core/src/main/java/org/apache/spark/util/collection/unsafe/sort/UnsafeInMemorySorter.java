@@ -18,6 +18,7 @@
 package org.apache.spark.util.collection.unsafe.sort;
 
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedList;
 
 import javax.annotation.Nullable;
@@ -215,7 +216,7 @@ public final class UnsafeInMemorySorter {
     if (array != null) {
       if (newArray.size() < array.size()) {
         // checkstyle.off: RegexpSinglelineJava
-        throw new SparkOutOfMemoryError("Not enough memory to grow pointer array");
+        throw new SparkOutOfMemoryError("POINTER_ARRAY_OUT_OF_MEMORY", new HashMap<>());
         // checkstyle.on: RegexpSinglelineJava
       }
       Platform.copyMemory(

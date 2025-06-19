@@ -28,28 +28,42 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.8.0):
+ * To run this test suite for a specific version (e.g., icr.io/db2_community/db2:11.5.9.0):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.8.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=icr.io/db2_community/db2:11.5.9.0
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.DB2IntegrationSuite"
  * }}}
  */
 @DockerTest
 class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
 
+  // Following tests are disabled for both single and multiple partition read
   override def excluded: Seq[String] = Seq(
-    "scan with aggregate push-down: COVAR_POP with DISTINCT",
-    "scan with aggregate push-down: COVAR_SAMP with DISTINCT",
-    "scan with aggregate push-down: CORR with DISTINCT",
-    "scan with aggregate push-down: CORR without DISTINCT",
-    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT",
-    "scan with aggregate push-down: REGR_SLOPE with DISTINCT",
-    "scan with aggregate push-down: REGR_R2 with DISTINCT",
-    "scan with aggregate push-down: REGR_SXY with DISTINCT")
+    "scan with aggregate push-down: COVAR_POP with DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_POP with DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT (true)",
+    "scan with aggregate push-down: CORR with DISTINCT (false)",
+    "scan with aggregate push-down: CORR with DISTINCT (true)",
+    "scan with aggregate push-down: CORR without DISTINCT (false)",
+    "scan with aggregate push-down: CORR without DISTINCT (true)",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT (true)")
 
   override val catalogName: String = "db2"
   override val namespaceOpt: Option[String] = Some("DB2INST1")
   override val db = new DB2DatabaseOnDocker
+
+  object JdbcClientTypes {
+    val INTEGER = "INTEGER"
+    val DOUBLE = "DOUBLE"
+  }
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.db2", classOf[JDBCTableCatalog].getName)
@@ -74,12 +88,12 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, JdbcClientTypes.INTEGER))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE DOUBLE")
     t = spark.table(tbl)
     expectedSchema = new StructType()
-      .add("ID", DoubleType, true, defaultMetadata(DoubleType))
+      .add("ID", DoubleType, true, defaultMetadata(DoubleType, JdbcClientTypes.DOUBLE))
     assert(t.schema === expectedSchema)
     // Update column type from DOUBLE to STRING
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE VARCHAR(10)"
@@ -87,7 +101,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
       exception = intercept[AnalysisException] {
         sql(sql1)
       },
-      errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+      condition = "NOT_SUPPORTED_CHANGE_COLUMN",
       parameters = Map(
         "originType" -> "\"DOUBLE\"",
         "newType" -> "\"VARCHAR(10)\"",
@@ -103,7 +117,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
       s" TBLPROPERTIES('CCSID'='UNICODE')")
     val t = spark.table(tbl)
     val expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, JdbcClientTypes.INTEGER))
     assert(t.schema === expectedSchema)
   }
 

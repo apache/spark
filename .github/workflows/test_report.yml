@@ -30,14 +30,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Download test results to report
-      uses: dawidd6/action-download-artifact@09385b76de790122f4da9c82b17bccf858b9557c # pin@v2
+      uses: dawidd6/action-download-artifact@bf251b5aa9c2f7eeb574a96ee720e24f801b7c11 # pin @v6
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         workflow: ${{ github.event.workflow_run.workflow_id }}
         commit: ${{ github.event.workflow_run.head_commit.id }}
         workflow_conclusion: completed
     - name: Publish test report
-      uses: scacap/action-surefire-report@482f012643ed0560e23ef605a79e8e87ca081648 # pin@v1
+      uses: scacap/action-surefire-report@a2911bd1a4412ec18dde2d93b1758b3e56d2a880 # pin @v1.8.0
       with:
         check_name: Report test results
         github_token: ${{ secrets.GITHUB_TOKEN }}

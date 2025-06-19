@@ -136,4 +136,150 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
     val expectedOutput = Seq("`c1`", "`v2.c2`", "`v1`.`c2`")
     assert(orderSuggestedIdentifiersBySimilarity(baseString, testStrings) === expectedOutput)
   }
+
+  test("SPARK-50579: truncated string") {
+    assert(truncatedString(Seq.empty, ", ", -1) === "")
+    assert(truncatedString(Seq("a"), ", ", -1) === "... 1 more fields")
+    assert(truncatedString(Seq("B"), "(", ", ", ")", -1) === "(... 1 more fields)")
+    assert(truncatedString(Seq.empty, ", ", 0) === "")
+    assert(truncatedString(Seq.empty, "[", ", ", "]", 0) === "[]")
+    assert(truncatedString(Seq("a", "b"), ", ", 0) === "... 2 more fields")
+    assert(truncatedString(Seq.empty, ",", 1) === "")
+    assert(truncatedString(Seq("a"), ",", 1) === "a")
+    assert(truncatedString(Seq("a", "b"), ", ", 1) === "a, ... 1 more fields")
+    assert(truncatedString(Seq("a", "b"), ", ", 2) === "a, b")
+    assert(truncatedString(Seq("a", "b", "c"), ", ", Int.MaxValue) === "a, b, c")
+    assert(truncatedString(Seq("a", "b", "c"), ", ", Int.MinValue) === "... 3 more fields")
+  }
+
+  test("SQL comments are stripped correctly") {
+    // single line comment tests
+    assert(stripComment("-- comment") == "")
+    assert(stripComment("--comment") == "")
+    assert(stripComment("-- SELECT * FROM table") == "")
+    assert(stripComment(
+      """-- comment
+        |SELECT * FROM table""".stripMargin) == "\nSELECT * FROM table")
+    assert(stripComment("SELECT * FROM table -- comment") == "SELECT * FROM table ")
+    assert(stripComment("SELECT '-- not a comment'") == "SELECT '-- not a comment'")
+    assert(stripComment("SELECT \"-- not a comment\"") == "SELECT \"-- not a comment\"")
+    assert(stripComment("SELECT 1 -- -- nested comment") == "SELECT 1 ")
+    assert(stripComment("SELECT ' \\' --not a comment'") == "SELECT ' \\' --not a comment'")
+
+
+    // multiline comment tests
+    assert(stripComment("SELECT /* inline comment */1-- comment") == "SELECT 1")
+    assert(stripComment("SELECT /* inline comment */1") == "SELECT 1")
+    assert(stripComment(
+      """/* my
+        |* multiline
+        | comment */ SELECT * FROM table""".stripMargin) == " SELECT * FROM table")
+    assert(stripComment("SELECT '/* not a comment */'") == "SELECT '/* not a comment */'")
+    assert(StringUtils.stripComment(
+      "SELECT \"/* not a comment */\"") == "SELECT \"/* not a comment */\"")
+    assert(stripComment("SELECT 1/* /* nested comment */") == "SELECT 1")
+    assert(stripComment("SELECT ' \\'/*not a comment*/'") == "SELECT ' \\'/*not a comment*/'")
+  }
+
+  test("SQL script detector") {
+    assert(isSqlScript("  BEGIN END"))
+    assert(isSqlScript("BEGIN END;"))
+    assert(isSqlScript("BEGIN END"))
+    assert(isSqlScript(
+      """
+        |BEGIN
+        |
+        |END
+        |""".stripMargin))
+    assert(isSqlScript(
+      """
+        |BEGIN
+        |
+        |END;
+        |""".stripMargin))
+    assert(isSqlScript("BEGIN BEGIN END END"))
+    assert(isSqlScript("BEGIN end"))
+    assert(isSqlScript("begin END"))
+    assert(isSqlScript(
+      """/* header comment
+        |*/
+        |BEGIN
+        |END;
+        |""".stripMargin))
+    assert(isSqlScript(
+      """-- header comment
+        |BEGIN
+        |END;
+        |""".stripMargin))
+    assert(!isSqlScript("-- BEGIN END"))
+    assert(!isSqlScript("/*BEGIN END*/"))
+    assert(isSqlScript("/*BEGIN END*/ BEGIN END"))
+
+    assert(!isSqlScript("CREATE 'PROCEDURE BEGIN' END"))
+    assert(!isSqlScript("CREATE /*PROCEDURE*/ BEGIN END"))
+    assert(!isSqlScript("CREATE PROCEDURE END"))
+    assert(isSqlScript("create   ProCeDure p() BEgin END"))
+    assert(isSqlScript("CREATE OR REPLACE PROCEDURE p() BEGIN END"))
+    assert(!isSqlScript("CREATE PROCEDURE BEGIN END")) // procedure must be named
+  }
+
+  test("SQL string splitter") {
+    // semicolon shouldn't delimit if in quotes
+    assert(
+      splitSemiColonWithIndex(
+        """
+          |SELECT "string;with;semicolons";
+          |USE DATABASE db""".stripMargin,
+        enableSqlScripting = false) == Seq(
+        "\nSELECT \"string;with;semicolons\"",
+        "\nUSE DATABASE db"
+      )
+    )
+
+    // semicolon shouldn't delimit if in backticks
+    assert(
+      splitSemiColonWithIndex(
+        """
+          |SELECT `escaped;sequence;with;semicolons`;
+          |USE DATABASE db""".stripMargin,
+        enableSqlScripting = false) == Seq(
+        "\nSELECT `escaped;sequence;with;semicolons`",
+        "\nUSE DATABASE db"
+      )
+    )
+
+    // white space around command is included in split string
+    assert(
+      splitSemiColonWithIndex(
+        s"""
+          |-- comment 1
+          |-- comment 2
+          |
+          |SELECT 1;\t
+          |-- comment 3
+          |SELECT 2
+          |""".stripMargin,
+        enableSqlScripting = false
+      ) == Seq(
+        "\n-- comment 1\n-- comment 2\n\nSELECT 1",
+        "\t\n-- comment 3\nSELECT 2\n"
+      )
+    )
+
+    // SQL procedures are respected and not split, if configured
+    assert(
+      splitSemiColonWithIndex(
+        """CREATE PROCEDURE p() BEGIN
+          | SELECT 1;
+          | SELECT 2;
+          |END""".stripMargin,
+        enableSqlScripting = true
+      ) == Seq(
+        """CREATE PROCEDURE p() BEGIN
+          | SELECT 1;
+          | SELECT 2;
+          |END""".stripMargin
+      )
+    )
+  }
 }

@@ -74,6 +74,8 @@ private[spark] class EventLoggingListener(
   private val liveStageExecutorMetrics =
     mutable.HashMap.empty[(Int, Int), mutable.HashMap[String, ExecutorMetrics]]
 
+  private[this] val jsonProtocol = new JsonProtocol(sparkConf)
+
   /**
    * Creates the log file in the configured log directory.
    */
@@ -84,7 +86,7 @@ private[spark] class EventLoggingListener(
 
   private def initEventLog(): Unit = {
     val metadata = SparkListenerLogStart(SPARK_VERSION)
-    val eventJson = JsonProtocol.sparkEventToJsonString(metadata)
+    val eventJson = jsonProtocol.sparkEventToJsonString(metadata)
     logWriter.writeEvent(eventJson, flushLogger = true)
     if (testing && loggedEvents != null) {
       loggedEvents += eventJson
@@ -93,7 +95,7 @@ private[spark] class EventLoggingListener(
 
   /** Log the event as JSON. */
   private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false): Unit = {
-    val eventJson = JsonProtocol.sparkEventToJsonString(event)
+    val eventJson = jsonProtocol.sparkEventToJsonString(event)
     logWriter.writeEvent(eventJson, flushLogger)
     if (testing) {
       loggedEvents += eventJson

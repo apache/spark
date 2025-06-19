@@ -20,9 +20,10 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.expressions.{Literal, NonFoldableLiteral}
 import org.apache.spark.sql.catalyst.optimizer.EliminateWindowPartitions
 import org.apache.spark.sql.catalyst.plans.logical.{Window => WindowNode}
+import org.apache.spark.sql.classic.ExpressionColumnNode
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.{ExpressionColumnNode, SQLConf}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.CalendarIntervalType
 
@@ -154,6 +155,37 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         Row(2, default, default, default, default) :: Nil)
   }
 
+  test("lead/lag with column reference as default when offset exceeds window group size") {
+    val df = spark.range(0, 10, 1, 1).toDF("id")
+    val window = Window.partitionBy(expr("div(id, 2)")).orderBy($"id")
+
+    val result = df.select(
+      $"id",
+      lead($"id", 1, $"id").over(window).as("lead_1"),
+      lead($"id", 3, $"id").over(window).as("lead_3"),
+      lag($"id", 1, $"id").over(window).as("lag_1"),
+      lag($"id", 3, $"id").over(window).as("lag_3")
+    ).orderBy("id")
+
+    // check the output in one table
+    // col0: id, col1: lead_1 result, col2: lead_3 result,
+    // col3: lag_1 result, col4: lag_3 result
+    val expected = Seq(
+      Row(0, 1, 0, 0, 0),
+      Row(1, 1, 1, 0, 1),
+      Row(2, 3, 2, 2, 2),
+      Row(3, 3, 3, 2, 3),
+      Row(4, 5, 4, 4, 4),
+      Row(5, 5, 5, 4, 5),
+      Row(6, 7, 6, 6, 6),
+      Row(7, 7, 7, 6, 7),
+      Row(8, 9, 8, 8, 8),
+      Row(9, 9, 9, 8, 9)
+    )
+
+    checkAnswer(result, expected)
+  }
+
   test("rows/range between with empty data frame") {
     val df = Seq.empty[(String, Int)].toDF("key", "value")
     val window = Window.partitionBy($"key").orderBy($"value")
@@ -186,7 +218,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
           $"key",
           count("key").over(
             Window.partitionBy($"value").orderBy($"key").rowsBetween(2147483648L, 0)))),
-      errorClass = "INVALID_BOUNDARY.START",
+      condition = "INVALID_BOUNDARY.START",
       parameters = Map(
         "invalidValue" -> "2147483648L",
         "boundary" -> "`start`",
@@ -200,7 +232,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
           $"key",
           count("key").over(
             Window.partitionBy($"value").orderBy($"key").rowsBetween(0, 2147483648L)))),
-      errorClass = "INVALID_BOUNDARY.END",
+      condition = "INVALID_BOUNDARY.END",
       parameters = Map(
         "invalidValue" -> "2147483648L",
         "boundary" -> "`end`",
@@ -226,7 +258,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         df.select(
           min("key").over(window.rangeBetween(Window.unboundedPreceding, 1)))
       ),
-      errorClass = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
+      condition = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
       parameters = Map(
         "orderSpec" -> """key#\d+ ASC NULLS FIRST,value#\d+ ASC NULLS FIRST""",
         "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
@@ -242,7 +274,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         df.select(
           min("key").over(window.rangeBetween(-1, Window.unboundedFollowing)))
       ),
-      errorClass = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
+      condition = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
       parameters = Map(
         "orderSpec" -> """key#\d+ ASC NULLS FIRST,value#\d+ ASC NULLS FIRST""",
         "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
@@ -258,7 +290,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         df.select(
           min("key").over(window.rangeBetween(-1, 1)))
       ),
-      errorClass = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
+      condition = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
       parameters = Map(
         "orderSpec" -> """key#\d+ ASC NULLS FIRST,value#\d+ ASC NULLS FIRST""",
         "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
@@ -287,7 +319,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         df.select(
           min("value").over(window.rangeBetween(Window.unboundedPreceding, 1)))
       ),
-      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+      condition = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
       parameters = Map(
         "location" -> "upper",
         "exprType" -> "\"STRING\"",
@@ -303,7 +335,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         df.select(
           min("value").over(window.rangeBetween(-1, Window.unboundedFollowing)))
       ),
-      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+      condition = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
       parameters = Map(
         "location" -> "lower",
         "exprType" -> "\"STRING\"",
@@ -319,7 +351,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         df.select(
           min("value").over(window.rangeBetween(-1, 1)))
       ),
-      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+      condition = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
       parameters = Map(
         "location" -> "lower",
         "exprType" -> "\"STRING\"",
@@ -512,7 +544,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select($"key", count("key").over(windowSpec)).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_DIFF_TYPES",
+      condition = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_DIFF_TYPES",
       parameters = Map(
         "sqlExpr" -> "\"RANGE BETWEEN NULL FOLLOWING AND 2 FOLLOWING\"",
         "lower" -> "\"NULL\"",
@@ -534,7 +566,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select($"key", count("key").over(windowSpec)).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
+      condition = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
       parameters = Map(
         "sqlExpr" -> "\"RANGE BETWEEN nonfoldableliteral() FOLLOWING AND 2 FOLLOWING\"",
         "location" -> "lower",

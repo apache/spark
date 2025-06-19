@@ -29,8 +29,8 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
   val rightAttributeC = AttributeReference("c", IntegerType)()
   val rightAttributeD = AttributeReference("d", IntegerType)()
 
-  val left = new LocalTableScanExec(Seq(leftAttributeA, leftAttributeB), Seq())
-  val right = new LocalTableScanExec(Seq(rightAttributeC, rightAttributeD), Seq())
+  val left = new LocalTableScanExec(Seq(leftAttributeA, leftAttributeB), Seq(), None)
+  val right = new LocalTableScanExec(Seq(rightAttributeC, rightAttributeD), Seq(), None)
 
   test("empty") {
     val split = JoinConditionSplitPredicates(None, left, right)

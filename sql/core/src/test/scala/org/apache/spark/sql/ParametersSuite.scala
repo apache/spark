@@ -21,13 +21,12 @@ import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.Limit
 import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
+class ParametersSuite extends QueryTest with SharedSparkSession {
 
   test("bind named parameters") {
     val sqlText =
@@ -73,7 +72,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       exception = intercept[AnalysisException] {
         spark.sql("select :P", Map("p" -> 1))
       },
-      errorClass = "UNBOUND_SQL_PARAMETER",
+      condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "P"),
       context = ExpectedContext(
         fragment = ":P",
@@ -246,8 +245,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       exception = intercept[ParseException] {
         spark.sql(sqlText, args)
       },
-      errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "CREATE VIEW body"),
+      condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+      parameters = Map("statement" -> "the query of CREATE VIEW"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
@@ -261,8 +260,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       exception = intercept[ParseException] {
         spark.sql(sqlText, args)
       },
-      errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "CREATE VIEW body"),
+      condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+      parameters = Map("statement" -> "the query of CREATE VIEW"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
@@ -276,8 +275,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       exception = intercept[ParseException] {
         spark.sql(sqlText, args)
       },
-      errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "CREATE VIEW body"),
+      condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+      parameters = Map("statement" -> "the query of CREATE VIEW"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
@@ -291,8 +290,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       exception = intercept[ParseException] {
         spark.sql(sqlText, args)
       },
-      errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "CREATE VIEW body"),
+      condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+      parameters = Map("statement" -> "the query of CREATE VIEW"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
@@ -310,8 +309,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       exception = intercept[ParseException] {
         spark.sql(sqlText, args)
       },
-      errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "CREATE VIEW body"),
+      condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+      parameters = Map("statement" -> "the query of CREATE VIEW"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
@@ -329,8 +328,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       exception = intercept[ParseException] {
         spark.sql(sqlText, args)
       },
-      errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "CREATE VIEW body"),
+      condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+      parameters = Map("statement" -> "the query of CREATE VIEW"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
@@ -342,7 +341,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       exception = intercept[AnalysisException] {
         spark.sql("select :abc, :def", Map("abc" -> 1))
       },
-      errorClass = "UNBOUND_SQL_PARAMETER",
+      condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "def"),
       context = ExpectedContext(
         fragment = ":def",
@@ -352,7 +351,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       exception = intercept[AnalysisException] {
         sql("select :abc").collect()
       },
-      errorClass = "UNBOUND_SQL_PARAMETER",
+      condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "abc"),
       context = ExpectedContext(
         fragment = ":abc",
@@ -365,7 +364,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       exception = intercept[AnalysisException] {
         spark.sql("select ?, ?", Array(1))
       },
-      errorClass = "UNBOUND_SQL_PARAMETER",
+      condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "_10"),
       context = ExpectedContext(
         fragment = "?",
@@ -375,7 +374,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       exception = intercept[AnalysisException] {
         sql("select ?").collect()
       },
-      errorClass = "UNBOUND_SQL_PARAMETER",
+      condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "_7"),
       context = ExpectedContext(
         fragment = "?",
@@ -472,7 +471,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       exception = intercept[AnalysisException] {
         spark.sql("select :param1, ?", Map("param1" -> 1))
       },
-      errorClass = "UNBOUND_SQL_PARAMETER",
+      condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "_16"),
       context = ExpectedContext(
         fragment = "?",
@@ -483,7 +482,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       exception = intercept[AnalysisException] {
         spark.sql("select :param1, ?", Array(1))
       },
-      errorClass = "UNBOUND_SQL_PARAMETER",
+      condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "param1"),
       context = ExpectedContext(
         fragment = ":param1",
@@ -498,7 +497,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
           "CREATE TABLE t11(c1 int default :parm) USING parquet",
           args = Map("parm" -> 5))
       },
-      errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+      condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
       parameters = Map("statement" -> "DEFAULT"),
       context = ExpectedContext(
         fragment = "default :parm",
@@ -602,7 +601,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
               lit(Array("a")),
               array(str_to_map(lit("a:1,b:2,c:3"))))))
       },
-      errorClass = "INVALID_SQL_ARG",
+      condition = "INVALID_SQL_ARG",
       parameters = Map("name" -> "m"),
       context = ExpectedContext(
         fragment = "map_from_arrays",
@@ -682,6 +681,22 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
     }
   }
 
+  test("SPARK-49017: bind named parameters with IDENTIFIER clause in create table as") {
+    withTable("testtab", "testtab1") {
+
+      sql("create table testtab (id int, name string)")
+      sql("insert into testtab values(1, 'test1')")
+
+      // create table with parameters in query
+      spark.sql(
+        """create table identifier(:tab) as
+          | select * from testtab where identifier(:col) == 1""".stripMargin,
+        Map("tab" -> "testtab1", "col" -> "id"))
+
+      checkAnswer(sql("select * from testtab1"), Seq(Row(1, "test1")))
+    }
+  }
+
   test("SPARK-46999: bind parameters for nested IDENTIFIER clause") {
     val query = sql(
       """
@@ -698,5 +713,124 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
     val analyzedPlan = Limit(Literal.create(100), df.queryExecution.logical)
     spark.sessionState.analyzer.executeAndCheck(analyzedPlan, df.queryExecution.tracker)
     checkAnswer(df, Row(11))
+  }
+
+  test("SPARK-49398: Cache Table with parameter markers in select query should throw " +
+    "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT") {
+    val sqlText = "CACHE TABLE CacheTable as SELECT 1 + :param1"
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql(sqlText, Map("param1" -> "1")).show()
+      },
+      condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+      parameters = Map("statement" -> "the query of CACHE TABLE"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1)
+    )
+  }
+
+  test("SPARK-49398: Cache Table with parameter in identifier should work") {
+    val cacheName = "MyCacheTable"
+    withCache(cacheName) {
+      spark.sql("CACHE TABLE IDENTIFIER(:param) as SELECT 1 as c1", Map("param" -> cacheName))
+      checkAnswer(
+        spark.sql("SHOW COLUMNS FROM IDENTIFIER(?)", args = Array(cacheName)),
+        Row("c1"))
+    }
+  }
+
+  test("SPARK-50322: parameterized identifier in a sub-query") {
+    withTable("tt1") {
+      sql("CREATE TABLE tt1 (c1 INT)")
+      sql("INSERT INTO tt1 VALUES (1)")
+      def query(p: String): String = {
+        s"""
+          |WITH v1 AS (
+          |  SELECT * FROM tt1
+          |  WHERE 1 = (SELECT * FROM IDENTIFIER($p))
+          |) SELECT * FROM v1""".stripMargin
+      }
+
+      checkAnswer(spark.sql(query(":tab"), args = Map("tab" -> "tt1")), Row(1))
+      checkAnswer(spark.sql(query("?"), args = Array("tt1")), Row(1))
+    }
+  }
+
+  test("SPARK-50441: parameterized identifier referencing a CTE") {
+    def query(p: String): String = {
+      s"""
+         |WITH t1 AS (SELECT 1)
+         |SELECT * FROM IDENTIFIER($p)""".stripMargin
+    }
+
+    checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")), Row(1))
+    checkAnswer(spark.sql(query("?"), args = Array("t1")), Row(1))
+  }
+
+  test("SPARK-50892: parameterized identifier in outer query referencing a recursive CTE") {
+    def query(p: String): String = {
+      s"""
+         |WITH RECURSIVE t1(n) AS (
+         |  SELECT 1
+         |  UNION ALL
+         |  SELECT n+1 FROM t1 WHERE n < 5)
+         |SELECT * FROM IDENTIFIER($p)""".stripMargin
+    }
+
+    checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")),
+      Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
+    checkAnswer(spark.sql(query("?"), args = Array("t1")),
+      Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
+  }
+
+  test("SPARK-50892: parameterized identifier inside a recursive CTE") {
+    def query(p: String): String = {
+      s"""
+         |WITH RECURSIVE t1(n) AS (
+         |  SELECT 1
+         |  UNION ALL
+         |  SELECT n+1 FROM IDENTIFIER($p) WHERE n < 5)
+         |SELECT * FROM t1""".stripMargin
+    }
+
+    checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")),
+      Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
+    checkAnswer(spark.sql(query("?"), args = Array("t1")),
+      Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
+  }
+
+
+  test("SPARK-50403: parameterized execute immediate") {
+    checkAnswer(spark.sql("execute immediate 'select ?' using ?", Array(1)), Row(1))
+    checkAnswer(spark.sql("execute immediate 'select ?, ?' using ?, 2", Array(1)), Row(1, 2))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("execute immediate 'select ?, ?' using 1", Array(2))
+      },
+      condition = "UNBOUND_SQL_PARAMETER",
+      parameters = Map("name" -> "_10"),
+      context = ExpectedContext("?", 10, 10))
+
+    checkAnswer(spark.sql("execute immediate 'select ?' using 1", Map("param1" -> "1")), Row(1))
+    checkAnswer(spark.sql("execute immediate 'select :param1' using :param2 as param1",
+      Map("param2" -> 42)), Row(42))
+    checkAnswer(spark.sql(
+      "execute immediate 'select :param1, :param2' using :param2 as param1, 43 as param2",
+      Map("param2" -> 42)), Row(42, 43))
+    checkAnswer(spark.sql("execute immediate 'select :param' using 0 as param",
+      Map("param" -> 42)), Row(0))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("execute immediate 'select :param1, :param2' using 1 as param1",
+          Map("param2" -> 2))
+      },
+      condition = "UNBOUND_SQL_PARAMETER",
+      parameters = Map("name" -> "param2"),
+      context = ExpectedContext(":param2", 16, 22))
+
+    checkAnswer(spark.sql("execute immediate 'select ?' using :param", Map("param" -> 2)), Row(2))
+    checkAnswer(spark.sql("execute immediate 'select :param' using ? as param", Array(3)), Row(3))
   }
 }

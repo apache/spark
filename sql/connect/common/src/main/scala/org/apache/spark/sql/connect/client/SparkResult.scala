@@ -41,8 +41,7 @@ private[sql] class SparkResult[T](
     responses: CloseableIterator[proto.ExecutePlanResponse],
     allocator: BufferAllocator,
     encoder: AgnosticEncoder[T],
-    timeZoneId: String,
-    setObservationMetricsOpt: Option[(Long, Map[String, Any]) => Unit] = None)
+    timeZoneId: String)
     extends AutoCloseable { self =>
 
   case class StageInfo(
@@ -122,7 +121,8 @@ private[sql] class SparkResult[T](
     while (!stop && responses.hasNext) {
       val response = responses.next()
 
-      // Collect metrics for this response
+      // Collect **all** metrics for this response, whether or not registered to an Observation
+      // object.
       observedMetrics ++= processObservedMetrics(response.getObservedMetricsList)
 
       // Save and validate operationId
@@ -209,23 +209,7 @@ private[sql] class SparkResult[T](
   private def processObservedMetrics(
       metrics: java.util.List[ObservedMetrics]): Iterable[(String, Row)] = {
     metrics.asScala.map { metric =>
-      assert(metric.getKeysCount == metric.getValuesCount)
-      var schema = new StructType()
-      val keys = mutable.ListBuffer.empty[String]
-      val values = mutable.ListBuffer.empty[Any]
-      (0 until metric.getKeysCount).map { i =>
-        val key = metric.getKeys(i)
-        val value = LiteralValueProtoConverter.toCatalystValue(metric.getValues(i))
-        schema = schema.add(key, LiteralValueProtoConverter.toDataType(value.getClass))
-        keys += key
-        values += value
-      }
-      // If the metrics is registered by an Observation object, attach them and unblock any
-      // blocked thread.
-      setObservationMetricsOpt.foreach { setObservationMetrics =>
-        setObservationMetrics(metric.getPlanId, keys.zip(values).toMap)
-      }
-      metric.getName -> new GenericRowWithSchema(values.toArray, schema)
+      metric.getName -> SparkResult.transformObservedMetrics(metric)
     }
   }
 
@@ -387,8 +371,23 @@ private[sql] class SparkResult[T](
   }
 }
 
-private object SparkResult {
+private[sql] object SparkResult {
   private val cleaner: Cleaner = Cleaner.create()
+
+  /** Return value is a Seq of pairs, to preserve the order of values. */
+  private[sql] def transformObservedMetrics(metric: ObservedMetrics): Row = {
+    assert(metric.getKeysCount == metric.getValuesCount)
+    var schema = new StructType()
+    val values = mutable.ArrayBuilder.make[Any]
+    values.sizeHint(metric.getKeysCount)
+    (0 until metric.getKeysCount).foreach { i =>
+      val key = metric.getKeys(i)
+      val value = LiteralValueProtoConverter.toCatalystValue(metric.getValues(i))
+      schema = schema.add(key, LiteralValueProtoConverter.toDataType(value.getClass))
+      values += value
+    }
+    new GenericRowWithSchema(values.result(), schema)
+  }
 }
 
 private[client] class SparkResultCloseable(

@@ -132,7 +132,7 @@ import org.apache.spark.util.Utils
 // scalastyle:on line.size.limit
 @ExtendedSQLTest
 class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
-    with SQLQueryTestHelper {
+    with SQLQueryTestHelper with TPCDSSchema {
 
   import IntegratedUDFTestUtils._
 
@@ -165,13 +165,17 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected def ignoreList: Set[String] = Set(
     "ignored.sql" // Do NOT remove this one. It is here to test the ignore functionality.
   ) ++ otherIgnoreList
+  /** List of test cases that require TPCDS table schemas to be loaded. */
+  private def requireTPCDSCases: Seq[String] = Seq("pipe-operators.sql")
+  /** List of TPCDS table names and schemas to load from the [[TPCDSSchema]] base class. */
+  private val tpcDSTableNamesToSchemas: Map[String, String] = tableColumns
 
   // Create all the test cases.
   listTestCases.foreach(createScalaTestCase)
 
   protected def createScalaTestCase(testCase: TestCase): Unit = {
     if (ignoreList.exists(t =>
-        testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
+      testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
     } else testCase match {
@@ -306,13 +310,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         localSparkSession.udf.register("vol", (s: String) => s)
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.LEGACY_INTERVAL_ENABLED.key, true)
-      case _: SQLQueryTestSuite#AnsiTest =>
-        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
+      case _: SQLQueryTestSuite#NonAnsiTest =>
+        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, false)
       case _: SQLQueryTestSuite#TimestampNTZTest =>
         localSparkSession.conf.set(SQLConf.TIMESTAMP_TYPE.key,
           TimestampTypes.TIMESTAMP_NTZ.toString)
       case _ =>
-        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, false)
+        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
     }
 
     if (sparkConfigSet.nonEmpty) {
@@ -320,6 +324,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       val setOperations = sparkConfigSet.map { case (key, value) => s"set $key=$value" }
       logInfo(s"Setting configs: ${setOperations.mkString(", ")}")
       setOperations.foreach(localSparkSession.sql)
+    }
+
+    // Load TPCDS table schemas for the test case if required.
+    val lowercaseTestCase = testCase.name.toLowerCase(Locale.ROOT)
+    if (requireTPCDSCases.contains(lowercaseTestCase)) {
+      tpcDSTableNamesToSchemas.foreach { case (name: String, schema: String) =>
+        localSparkSession.sql(s"DROP TABLE IF EXISTS $name")
+        localSparkSession.sql(s"CREATE TABLE `$name` ($schema) USING parquet")
+      }
     }
 
     // Run the SQL queries preparing them for comparison.
@@ -345,6 +358,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
             expandCTEQueryAndCompareResult(localSparkSession, sql, executionOutput)
           }
           executionOutput
+      }
+    }
+
+    // Drop TPCDS tables after the test case if required.
+    if (requireTPCDSCases.contains(lowercaseTestCase)) {
+      tpcDSTableNamesToSchemas.foreach { case (name: String, schema: String) =>
+        localSparkSession.sql(s"DROP TABLE IF EXISTS $name")
       }
     }
 
@@ -445,8 +465,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
-      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}ansi")) {
-        AnsiTestCase(testCaseName, absPath, resultFile) :: Nil
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}nonansi")) {
+        NonAnsiTestCase(testCaseName, absPath, resultFile) :: Nil
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}timestampNTZ")) {
         TimestampNTZTestCase(testCaseName, absPath, resultFile) :: Nil
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}cte.sql")) {

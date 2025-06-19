@@ -48,7 +48,7 @@ class HiveResolutionSuite extends HiveComparisonTest {
       exception = intercept[AnalysisException] {
         sql("SELECT a[0].b from nested").queryExecution.analyzed
       },
-      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      condition = "AMBIGUOUS_REFERENCE_TO_FIELDS",
       sqlState = "42000",
       parameters = Map("field" -> "`b`", "count" -> "2")
     )
@@ -117,7 +117,6 @@ class HiveResolutionSuite extends HiveComparisonTest {
 
   /**
    * Negative examples.  Currently only left here for documentation purposes.
-   * TODO(marmbrus): Test that catalyst fails on these queries.
    */
 
   /* SemanticException [Error 10009]: Line 1:7 Invalid table alias 'src'

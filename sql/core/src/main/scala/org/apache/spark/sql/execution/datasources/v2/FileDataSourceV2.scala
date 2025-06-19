@@ -131,7 +131,7 @@ object FileDataSourceV2 {
       // The error is already FAILED_READ_FILE, throw it directly. To be consistent, schema
       // inference code path throws `FAILED_READ_FILE`, but the file reading code path can reach
       // that code path as well and we should not double-wrap the error.
-      case e: SparkException if e.getErrorClass == "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER" =>
+      case e: SparkException if e.getCondition == "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER" =>
         throw e
       case e: SchemaColumnConvertNotSupportedException =>
         throw QueryExecutionErrors.parquetColumnDataTypeMismatchError(

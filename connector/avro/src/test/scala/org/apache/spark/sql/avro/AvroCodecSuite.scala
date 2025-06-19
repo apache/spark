@@ -54,7 +54,7 @@ class AvroCodecSuite extends FileSourceCodecSuite {
           s"""CREATE TABLE avro_t
              |USING $format OPTIONS('compression'='unsupported')
              |AS SELECT 1 as id""".stripMargin)),
-      errorClass = "CODEC_SHORT_NAME_NOT_FOUND",
+      condition = "CODEC_SHORT_NAME_NOT_FOUND",
       sqlState = Some("42704"),
       parameters = Map("codecName" -> "unsupported")
     )

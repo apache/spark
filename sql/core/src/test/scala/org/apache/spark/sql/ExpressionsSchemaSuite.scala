@@ -118,7 +118,8 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
         // SET spark.sql.parser.escapedStringLiterals=true
         example.split("  > ").tail.filterNot(_.trim.startsWith("SET")).take(1).foreach {
           case _ if funcName == "from_avro" || funcName == "to_avro" ||
-            funcName == "from_protobuf" || funcName == "to_protobuf" =>
+            funcName == "schema_of_avro" || funcName == "from_protobuf" ||
+            funcName == "to_protobuf" =>
               // Skip running the example queries for the from_avro, to_avro, from_protobuf and
               // to_protobuf functions because these functions dynamically load the
               // AvroDataToCatalyst or CatalystDataToAvro classes which are not available in this
@@ -186,8 +187,12 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
       "The number of queries not equals the number of expected queries.")
 
     outputs.zip(expectedOutputs).foreach { case (output, expected) =>
-      assert(expected.sql == output.sql, "SQL query did not match")
-      assert(expected.schema == output.schema, s"Schema did not match for query ${expected.sql}")
+      assert(expected.className == output.className, "The expected class name " +
+        s"${expected.className} does not match the output class name ${output.className}")
+      assert(expected.sql == output.sql, "The expected SQL query " +
+        s"${expected.sql} does not match the output SQL query ${output.sql}")
+      assert(expected.schema == output.schema, "The expected schema " +
+        s"${expected.schema} does not match the output schema ${output.schema}")
     }
   }
 }

@@ -33,7 +33,7 @@ class CreateNamespaceSuite extends v1.CreateNamespaceSuiteBase with CommandSuite
       exception = intercept[AnalysisException] {
         sql(s"CREATE NAMESPACE $catalog.$namespace")
       },
-      errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
+      condition = "REQUIRES_SINGLE_PART_NAMESPACE",
       parameters = Map(
         "sessionCatalog" -> catalog,
         "namespace" -> "`ns1`.`ns2`"

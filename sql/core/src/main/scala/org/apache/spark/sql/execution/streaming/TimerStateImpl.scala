@@ -30,10 +30,28 @@ import org.apache.spark.util.NextIterator
  * Singleton utils class used primarily while interacting with TimerState
  */
 object TimerStateUtils {
-  val PROC_TIMERS_STATE_NAME = "_procTimers"
-  val EVENT_TIMERS_STATE_NAME = "_eventTimers"
+  val PROC_TIMERS_STATE_NAME = "$procTimers"
+  val EVENT_TIMERS_STATE_NAME = "$eventTimers"
   val KEY_TO_TIMESTAMP_CF = "_keyToTimestamp"
   val TIMESTAMP_TO_KEY_CF = "_timestampToKey"
+
+  def getTimerStateVarNames(timeMode: String): (String, String) = {
+    assert(timeMode == TimeMode.EventTime.toString || timeMode == TimeMode.ProcessingTime.toString)
+
+    def buildTimerStateNames(baseStateName: String): (String, String) = {
+      val primaryIndex = baseStateName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
+      val secondaryIndex = baseStateName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
+      (primaryIndex, secondaryIndex)
+    }
+
+    val baseStateName = if (timeMode == TimeMode.EventTime.toString) {
+      TimerStateUtils.EVENT_TIMERS_STATE_NAME
+    } else {
+      TimerStateUtils.PROC_TIMERS_STATE_NAME
+    }
+
+    buildTimerStateNames(baseStateName)
+  }
 }
 
 /**
@@ -169,7 +187,7 @@ class TimerStateImpl(
           val rowPair = iter.next()
           val keyRow = rowPair.key
           val result = getTimerRowFromSecIndex(keyRow)
-          if (result._2 < expiryTimestampMs) {
+          if (result._2 <= expiryTimestampMs) {
             result
           } else {
             finished = true

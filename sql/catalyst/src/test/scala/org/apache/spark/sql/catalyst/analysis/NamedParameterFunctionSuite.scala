@@ -20,7 +20,7 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, NamedArgumentExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, FunctionSignature, InputParameter, NamedParametersSupport}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, NamedParametersSupport}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.types.DataType
 
@@ -89,27 +89,19 @@ class NamedParameterFunctionSuite extends AnalysisTest {
       NamedParametersSupport.defaultRearrange(functionSignature, expressions, functionName))
   }
 
-  private def parseExternalException[T <: FunctionBuilderBase[_]](
-      functionName: String,
-      builder: T,
-      expressions: Seq[Expression]) : SparkThrowable = {
-    intercept[SparkThrowable](
-      FunctionRegistry.rearrangeExpressions[T](functionName, builder, expressions))
-  }
-
   test("DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT") {
-    val errorClass =
+    val condition =
       "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED"
     checkError(
       exception = parseRearrangeException(
         signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, namedK1Arg), "foo"),
-      errorClass = errorClass,
+      condition = condition,
       parameters = Map("routineName" -> toSQLId("foo"), "parameterName" -> toSQLId("k1"))
     )
     checkError(
       exception = parseRearrangeException(
         signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, k4Arg), "foo"),
-      errorClass = "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+      condition = "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
       parameters = Map("routineName" -> toSQLId("foo"), "parameterName" -> toSQLId("k4"))
     )
   }
@@ -117,7 +109,7 @@ class NamedParameterFunctionSuite extends AnalysisTest {
   test("REQUIRED_PARAMETER_NOT_FOUND") {
     checkError(
       exception = parseRearrangeException(signature, Seq(k1Arg, k2Arg, k3Arg), "foo"),
-      errorClass = "REQUIRED_PARAMETER_NOT_FOUND",
+      condition = "REQUIRED_PARAMETER_NOT_FOUND",
       parameters = Map(
         "routineName" -> toSQLId("foo"), "parameterName" -> toSQLId("k4"), "index" -> "2"))
   }
@@ -126,7 +118,7 @@ class NamedParameterFunctionSuite extends AnalysisTest {
     checkError(
       exception = parseRearrangeException(signature,
         Seq(k1Arg, k2Arg, k3Arg, k4Arg, NamedArgumentExpression("k5", Literal("k5"))), "foo"),
-      errorClass = "UNRECOGNIZED_PARAMETER_NAME",
+      condition = "UNRECOGNIZED_PARAMETER_NAME",
       parameters = Map("routineName" -> toSQLId("foo"), "argumentName" -> toSQLId("k5"),
         "proposal" -> (toSQLId("k1") + " " + toSQLId("k2") + " " + toSQLId("k3")))
     )
@@ -136,7 +128,7 @@ class NamedParameterFunctionSuite extends AnalysisTest {
     checkError(
       exception = parseRearrangeException(signature,
         Seq(k2Arg, k3Arg, k1Arg, k4Arg), "foo"),
-      errorClass = "UNEXPECTED_POSITIONAL_ARGUMENT",
+      condition = "UNEXPECTED_POSITIONAL_ARGUMENT",
       parameters = Map("routineName" -> toSQLId("foo"), "parameterName" -> toSQLId("k3"))
     )
   }
@@ -147,7 +139,7 @@ class NamedParameterFunctionSuite extends AnalysisTest {
       s" All required arguments should come before optional arguments."
     checkError(
       exception = parseRearrangeException(illegalSignature, args, "foo"),
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> errorMessage)
     )
   }

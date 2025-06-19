@@ -19,7 +19,6 @@ package org.apache.spark.network;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Random;
 
@@ -85,7 +84,7 @@ class StreamTestHelper {
     if (tempDir != null) {
       try {
         JavaUtils.deleteRecursively(tempDir);
-      } catch (IOException io) {
+      } catch (Exception io) {
         throw new RuntimeException(io);
       }
     }

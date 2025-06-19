@@ -674,4 +674,14 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInAndInSet(In(Literal(Double.NaN),
       Seq(Literal(Double.NaN), Literal(2d), Literal.create(null, DoubleType))), true)
   }
+
+  test("In and InSet logging limits") {
+    assert(In(Literal(1), Seq(Literal(1), Literal(2))).simpleString(1)
+      === "1 IN (1,... 1 more fields)")
+    assert(In(Literal(1), Seq(Literal(1), Literal(2))).simpleString(2) === "1 IN (1,2)")
+    assert(In(Literal(1), Seq(Literal(1))).simpleString(1) === "1 IN (1)")
+    assert(InSet(Literal(1), Set(1, 2)).simpleString(1) === "1 INSET 1, ... 1 more fields")
+    assert(InSet(Literal(1), Set(1, 2)).simpleString(2) === "1 INSET 1, 2")
+    assert(InSet(Literal(1), Set(1)).simpleString(1) === "1 INSET 1")
+  }
 }

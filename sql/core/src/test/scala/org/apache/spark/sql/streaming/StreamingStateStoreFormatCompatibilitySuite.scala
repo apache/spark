@@ -256,6 +256,7 @@ class StreamingStateStoreFormatCompatibilitySuite extends StreamTest {
       case _: SparkUnsupportedOperationException => true
       case _: StateStoreKeyRowFormatValidationFailure => true
       case _: StateStoreValueRowFormatValidationFailure => true
+      case e: SparkException if e.getCondition.contains("ROW_FORMAT_VALIDATION_FAILURE") => true
       case e1 if e1.getCause != null => findStateSchemaException(e1.getCause)
       case _ => false
     }

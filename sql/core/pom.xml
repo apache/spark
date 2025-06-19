@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.13</artifactId>
-    <version>4.0.0-SNAPSHOT</version>
+    <version>4.1.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -72,6 +72,19 @@
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql-api_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-connect-shims_${scala.binary.version}</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -196,7 +209,7 @@
     </dependency>
     <dependency>
       <groupId>com.oracle.database.jdbc</groupId>
-      <artifactId>ojdbc11</artifactId>
+      <artifactId>ojdbc17</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -210,6 +223,21 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>com.databricks</groupId>
+      <artifactId>databricks-jdbc</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>net.snowflake</groupId>
+      <artifactId>snowflake-jdbc</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.teradata.jdbc</groupId>
+      <artifactId>terajdbc</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>org.apache.parquet</groupId>
       <artifactId>parquet-avro</artifactId>
       <scope>test</scope>
@@ -217,6 +245,16 @@
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>net.bytebuddy</groupId>
+      <artifactId>byte-buddy</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>net.bytebuddy</groupId>
+      <artifactId>byte-buddy-agent</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -249,27 +287,24 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
-        <configuration>
+        <configuration combine.self = "override">
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
           <artifactSet>
             <includes>
-              <include>com.google.protobuf:*</include>
+              <include>org.spark-project.spark:unused</include>
             </includes>
           </artifactSet>
           <relocations>
             <relocation>
-              <pattern>com.google</pattern>
-              <shadedPattern>${spark.shade.packageName}.com.google</shadedPattern>
-              <excludes>
-                <!-- Guava is relocated to ${spark.shade.packageName}.connect.guava -->
-                <exclude>com.google.common.**</exclude>
-              </excludes>
+              <pattern>com.google.common</pattern>
+              <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.protobuf</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_core.protobuf</shadedPattern>
             </relocation>
           </relocations>
-          <transformers>
-            <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
-          </transformers>
         </configuration>
       </plugin>
        <!--
@@ -321,4 +356,69 @@
       </plugin>
     </plugins>
   </build>
+  <profiles>
+    <profile>
+      <id>default-protoc</id>
+      <activation>
+        <property>
+          <name>!skipDefaultProtoc</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>com.github.os72</groupId>
+            <artifactId>protoc-jar-maven-plugin</artifactId>
+            <version>${protoc-jar-maven-plugin.version}</version>
+            <executions>
+              <execution>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <protocArtifact>com.google.protobuf:protoc:${protobuf.version}</protocArtifact>
+                  <protocVersion>${protobuf.version}</protocVersion>
+                  <inputDirectories>
+                    <include>src/main/protobuf</include>
+                  </inputDirectories>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>user-defined-protoc</id>
+      <properties>
+        <spark.protoc.executable.path>${env.SPARK_PROTOC_EXEC_PATH}</spark.protoc.executable.path>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>com.github.os72</groupId>
+            <artifactId>protoc-jar-maven-plugin</artifactId>
+            <version>${protoc-jar-maven-plugin.version}</version>
+            <executions>
+              <execution>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <protocArtifact>com.google.protobuf:protoc:${protobuf.version}</protocArtifact>
+                  <protocVersion>${protobuf.version}</protocVersion>
+                  <protocCommand>${spark.protoc.executable.path}</protocCommand>
+                  <inputDirectories>
+                    <include>src/main/protobuf</include>
+                  </inputDirectories>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

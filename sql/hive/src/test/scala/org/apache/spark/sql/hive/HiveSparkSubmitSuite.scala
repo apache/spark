@@ -168,6 +168,7 @@ class HiveSparkSubmitSuite
     }
     val jarDir = getTestResourcePath("regression-test-SPARK-8489")
     val testJar = s"$jarDir/test-$version.jar"
+    assume(new File(testJar).exists)
     val args = Seq(
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
@@ -828,7 +829,7 @@ object SPARK_18360 {
       .enableHiveSupport().getOrCreate()
 
     val defaultDbLocation = spark.catalog.getDatabase("default").locationUri
-    assert(new Path(defaultDbLocation) == new Path(spark.conf.get(WAREHOUSE_PATH)))
+    assert(new Path(defaultDbLocation) == new Path(spark.conf.get(WAREHOUSE_PATH.key)))
 
     val hiveClient =
       spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client

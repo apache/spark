@@ -86,11 +86,29 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
 
   // Returns true if we can trust all values of the given DataType can be serialized.
   private def trustedSerializable(dt: DataType): Boolean = {
-    // Right now we conservatively block all ObjectType (Java objects) regardless of
-    // serializability, because the type-level info with java.io.Serializable and
-    // java.io.Externalizable marker interfaces are not strong guarantees.
+    // Right now we conservatively block all ObjectType (Java objects) except for
+    // it's `cls` equal to `Array[JavaBoxedPrimitive]` & `JavaBoxedPrimitive`
+    // regardless of serializability, because the type-level info with java.io.Serializable
+    // and java.io.Externalizable marker interfaces are not strong guarantees.
     // This restriction can be relaxed in the future to expose more optimizations.
-    !dt.existsRecursively(_.isInstanceOf[ObjectType])
+    !dt.existsRecursively {
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Boolean]] => false
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Byte]] => false
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Short]] => false
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Integer]] => false
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Long]] => false
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Float]] => false
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Double]] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Boolean] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Byte] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Short] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Integer] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Long] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Float] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Double] => false
+      case ObjectType(_) => true
+      case _ => false
+    }
   }
 
   /**
@@ -191,6 +209,25 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
       throw QueryExecutionErrors.methodNotFoundError(cls, functionName, argClasses)
     } else {
       method
+    }
+  }
+
+  final def getFuncResult(
+      needTryCatch: Boolean,
+      resultVal: String,
+      funcCall: String,
+      returnType: Option[String] = None): String = {
+    val castFuncCall = if (returnType.isEmpty) funcCall else s"(${returnType.get}) $funcCall"
+    if (needTryCatch) {
+      s"""
+        try {
+          $resultVal = $castFuncCall;
+        } catch (Exception e) {
+          org.apache.spark.unsafe.Platform.throwException(e);
+        }
+      """
+    } else {
+      s"$resultVal = $castFuncCall;"
     }
   }
 }
@@ -295,6 +332,7 @@ case class StaticInvoke(
   }
 
   override def nullable: Boolean = needNullCheck || returnNullable
+  override def nullIntolerant: Boolean = propagateNull
   override def children: Seq[Expression] = arguments
   override lazy val deterministic: Boolean = isDeterministic && arguments.forall(_.deterministic)
 
@@ -310,6 +348,8 @@ case class StaticInvoke(
 
     val (argCode, argString, resultIsNull) = prepareArguments(ctx)
 
+    val needTryCatch = method.getExceptionTypes.nonEmpty
+
     val callFunc = s"$objectName.$functionName($argString)"
 
     val prepareIsNull = if (nullable) {
@@ -322,13 +362,15 @@ case class StaticInvoke(
     val evaluate = if (returnNullable && !method.getReturnType.isPrimitive) {
       if (CodeGenerator.defaultValue(dataType) == "null") {
         s"""
-          ${ev.value} = $callFunc;
+          ${getFuncResult(needTryCatch, ev.value, callFunc, Some(javaType))}
           ${ev.isNull} = ${ev.value} == null;
         """
       } else {
         val boxedResult = ctx.freshName("boxedResult")
+        val boxedJavaType = CodeGenerator.boxedType(dataType)
         s"""
-          ${CodeGenerator.boxedType(dataType)} $boxedResult = $callFunc;
+          $boxedJavaType $boxedResult = null;
+          ${getFuncResult(needTryCatch, boxedResult, callFunc, Some(boxedJavaType))}
           ${ev.isNull} = $boxedResult == null;
           if (!${ev.isNull}) {
             ${ev.value} = $boxedResult;
@@ -336,7 +378,7 @@ case class StaticInvoke(
         """
       }
     } else {
-      s"${ev.value} = $callFunc;"
+      getFuncResult(needTryCatch, ev.value, callFunc, Some(javaType))
     }
 
     val code = code"""
@@ -407,7 +449,7 @@ case class Invoke(
     propagateNull: Boolean = true,
     returnNullable : Boolean = true,
     isDeterministic: Boolean = true) extends InvokeLike {
-
+  override def nullIntolerant: Boolean = propagateNull
   lazy val argClasses = EncoderUtils.expressionJavaClasses(arguments)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(INVOKE)
@@ -455,38 +497,27 @@ case class Invoke(
     val returnPrimitive = method.isDefined && method.get.getReturnType.isPrimitive
     val needTryCatch = method.isDefined && method.get.getExceptionTypes.nonEmpty
 
-    def getFuncResult(resultVal: String, funcCall: String): String = if (needTryCatch) {
-      s"""
-        try {
-          $resultVal = $funcCall;
-        } catch (Exception e) {
-          org.apache.spark.unsafe.Platform.throwException(e);
-        }
-      """
-    } else {
-      s"$resultVal = $funcCall;"
-    }
-
     val evaluate = if (returnPrimitive) {
-      getFuncResult(ev.value, s"${obj.value}.$encodedFunctionName($argString)")
+      getFuncResult(needTryCatch, ev.value, s"${obj.value}.$encodedFunctionName($argString)")
     } else {
       val funcResult = ctx.freshName("funcResult")
       // If the function can return null, we do an extra check to make sure our null bit is still
       // set correctly.
       val assignResult = if (!returnNullable) {
-        s"${ev.value} = (${CodeGenerator.boxedType(javaType)}) $funcResult;"
+        s"${ev.value} = $funcResult;"
       } else {
         s"""
           if ($funcResult != null) {
-            ${ev.value} = (${CodeGenerator.boxedType(javaType)}) $funcResult;
+            ${ev.value} = $funcResult;
           } else {
             ${ev.isNull} = true;
           }
         """
       }
       s"""
-        Object $funcResult = null;
-        ${getFuncResult(funcResult, s"${obj.value}.$encodedFunctionName($argString)")}
+        ${CodeGenerator.boxedType(javaType)} $funcResult = null;
+        ${getFuncResult(needTryCatch, funcResult, s"${obj.value}.$encodedFunctionName($argString)",
+          Some(CodeGenerator.boxedType(javaType)))}
         $assignResult
       """
     }
@@ -961,7 +992,7 @@ case class MapObjects private(
       }
     case Some(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
       // Scala sequence
-      executeFuncOnCollection(_).toSeq
+      executeFuncOnCollection(_).toIndexedSeq
     case Some(cls) if classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
       // Scala set
       executeFuncOnCollection(_).toSet
@@ -1664,7 +1695,7 @@ case class ExternalMapToCatalyst private(
           final Object[] $convertedValues = new Object[$length];
           int $index = 0;
           $defineEntries
-          while($entries.hasNext()) {
+          while ($entries.hasNext()) {
             $defineKeyValue
             $keyNullCheck
             $valueNullCheck
@@ -2023,8 +2054,6 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
 
   override val dataType: DataType = externalDataType
 
-  private lazy val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
-
   private lazy val checkType: (Any) => Boolean = expected match {
     case _: DecimalType =>
       (value: Any) => {
@@ -2035,7 +2064,7 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
       (value: Any) => {
         value.getClass.isArray ||
           value.isInstanceOf[scala.collection.Seq[_]] ||
-          value.isInstanceOf[Set[_]] ||
+          value.isInstanceOf[scala.collection.Set[_]] ||
           value.isInstanceOf[java.util.List[_]]
       }
     case _: DateType =>
@@ -2057,14 +2086,12 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
     if (checkType(input)) {
       input
     } else {
-      throw new RuntimeException(s"${input.getClass.getName}$errMsg")
+      throw QueryExecutionErrors.invalidExternalTypeError(
+        input.getClass.getName, expected, child)
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
-    // because errMsgField is used only when the type doesn't match.
-    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
     val input = child.genCode(ctx)
     val obj = input.value
     def genCheckTypes(classes: Seq[Class[_]]): String = {
@@ -2079,7 +2106,7 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
       case _: ArrayType =>
         val check = genCheckTypes(Seq(
           classOf[scala.collection.Seq[_]],
-          classOf[Set[_]],
+          classOf[scala.collection.Set[_]],
           classOf[java.util.List[_]]))
         s"$obj.getClass().isArray() || $check"
       case _: DateType =>
@@ -2090,6 +2117,13 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
         s"$obj instanceof ${CodeGenerator.boxedType(dataType)}"
     }
 
+    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
+    // because errMsgField is used only when the type doesn't match.
+    val expectedTypeField = ctx.addReferenceObj(
+      "expectedTypeField", expected)
+    val childExpressionMsgField = ctx.addReferenceObj(
+      "childExpressionMsgField", child)
+
     val code = code"""
       ${input.code}
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -2097,7 +2131,8 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
         if ($typeCheck) {
           ${ev.value} = (${CodeGenerator.boxedType(dataType)}) $obj;
         } else {
-          throw new RuntimeException($obj.getClass().getName() + $errMsgField);
+          throw QueryExecutionErrors.invalidExternalTypeError(
+            $obj.getClass().getName(), $expectedTypeField, $childExpressionMsgField);
         }
       }
 

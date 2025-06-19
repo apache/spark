@@ -59,6 +59,36 @@ Aggregate [a#x, b#x, c#x, spark_grouping_id#xL], [a#x, b#x, c#x, count(d#x) AS c
 
 
 -- !query
+SELECT a, b, c, d FROM grouping GROUP BY GROUPING SETS (a, b, c, d)
+-- !query analysis
+Aggregate [a#x, b#x, c#x, d#x, spark_grouping_id#xL], [a#x, b#x, c#x, d#x]
++- Expand [[a#x, b#x, c#x, d#x, a#x, null, null, null, 7], [a#x, b#x, c#x, d#x, null, b#x, null, null, 11], [a#x, b#x, c#x, d#x, null, null, c#x, null, 13], [a#x, b#x, c#x, d#x, null, null, null, d#x, 14]], [a#x, b#x, c#x, d#x, a#x, b#x, c#x, d#x, spark_grouping_id#xL]
+   +- Project [a#x, b#x, c#x, d#x, a#x AS a#x, b#x AS b#x, c#x AS c#x, d#x AS d#x]
+      +- SubqueryAlias grouping
+         +- View (`grouping`, [a#x, b#x, c#x, d#x])
+            +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x, cast(c#x as string) AS c#x, cast(d#x as int) AS d#x]
+               +- Project [a#x, b#x, c#x, d#x]
+                  +- SubqueryAlias grouping
+                     +- LocalRelation [a#x, b#x, c#x, d#x]
+
+
+-- !query
+SELECT a, b FROM grouping GROUP BY GROUPING SETS (a, b, d + 1) ORDER BY `(d + 1)`
+-- !query analysis
+Project [a#x, b#x]
++- Sort [(d + 1)#x ASC NULLS FIRST], true
+   +- Aggregate [a#x, b#x, (d + 1)#x, spark_grouping_id#xL], [a#x, b#x, (d + 1)#x]
+      +- Expand [[a#x, b#x, c#x, d#x, a#x, null, null, 3], [a#x, b#x, c#x, d#x, null, b#x, null, 5], [a#x, b#x, c#x, d#x, null, null, (d + 1)#x, 6]], [a#x, b#x, c#x, d#x, a#x, b#x, (d + 1)#x, spark_grouping_id#xL]
+         +- Project [a#x, b#x, c#x, d#x, a#x AS a#x, b#x AS b#x, (d#x + 1) AS (d + 1)#x]
+            +- SubqueryAlias grouping
+               +- View (`grouping`, [a#x, b#x, c#x, d#x])
+                  +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x, cast(c#x as string) AS c#x, cast(d#x as int) AS d#x]
+                     +- Project [a#x, b#x, c#x, d#x]
+                        +- SubqueryAlias grouping
+                           +- LocalRelation [a#x, b#x, c#x, d#x]
+
+
+-- !query
 SELECT c1, sum(c2) FROM (VALUES ('x', 10, 0), ('y', 20, 0)) AS t (c1, c2, c3) GROUP BY GROUPING SETS (c1)
 -- !query analysis
 Aggregate [c1#x, spark_grouping_id#xL], [c1#x, sum(c2#x) AS sum(c2)#xL]
@@ -120,9 +150,9 @@ Aggregate [c1#x, c2#x, spark_grouping_id#xL], [-c1#x AS c1#x]
 -- !query
 SELECT a + b, b, sum(c) FROM (VALUES (1,1,1),(2,2,2)) AS t(a,b,c) GROUP BY GROUPING SETS ( (a + b), (b))
 -- !query analysis
-Aggregate [(a#x + b#x)#x, b#x, spark_grouping_id#xL], [(a#x + b#x)#x AS (a + b)#x, b#x, sum(c#x) AS sum(c)#xL]
-+- Expand [[a#x, b#x, c#x, (a#x + b#x)#x, null, 1], [a#x, b#x, c#x, null, b#x, 2]], [a#x, b#x, c#x, (a#x + b#x)#x, b#x, spark_grouping_id#xL]
-   +- Project [a#x, b#x, c#x, (a#x + b#x) AS (a#x + b#x)#x, b#x AS b#x]
+Aggregate [(a + b)#x, b#x, spark_grouping_id#xL], [(a + b)#x AS (a + b)#x, b#x, sum(c#x) AS sum(c)#xL]
++- Expand [[a#x, b#x, c#x, (a + b)#x, null, 1], [a#x, b#x, c#x, null, b#x, 2]], [a#x, b#x, c#x, (a + b)#x, b#x, spark_grouping_id#xL]
+   +- Project [a#x, b#x, c#x, (a#x + b#x) AS (a + b)#x, b#x AS b#x]
       +- SubqueryAlias t
          +- Project [col1#x AS a#x, col2#x AS b#x, col3#x AS c#x]
             +- LocalRelation [col1#x, col2#x, col3#x]
@@ -131,9 +161,9 @@ Aggregate [(a#x + b#x)#x, b#x, spark_grouping_id#xL], [(a#x + b#x)#x AS (a + b)#
 -- !query
 SELECT a + b, b, sum(c) FROM (VALUES (1,1,1),(2,2,2)) AS t(a,b,c) GROUP BY GROUPING SETS ( (a + b), (b + a), (b))
 -- !query analysis
-Aggregate [(a#x + b#x)#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x], [(a#x + b#x)#x AS (a + b)#x, b#x, sum(c#x) AS sum(c)#xL]
-+- Expand [[a#x, b#x, c#x, (a#x + b#x)#x, null, 1, 0], [a#x, b#x, c#x, (a#x + b#x)#x, null, 1, 1], [a#x, b#x, c#x, null, b#x, 2, 2]], [a#x, b#x, c#x, (a#x + b#x)#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x]
-   +- Project [a#x, b#x, c#x, (a#x + b#x) AS (a#x + b#x)#x, b#x AS b#x]
+Aggregate [(a + b)#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x], [(a + b)#x AS (a + b)#x, b#x, sum(c#x) AS sum(c)#xL]
++- Expand [[a#x, b#x, c#x, (a + b)#x, null, 1, 0], [a#x, b#x, c#x, (a + b)#x, null, 1, 1], [a#x, b#x, c#x, null, b#x, 2, 2]], [a#x, b#x, c#x, (a + b)#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x]
+   +- Project [a#x, b#x, c#x, (a#x + b#x) AS (a + b)#x, b#x AS b#x]
       +- SubqueryAlias t
          +- Project [col1#x AS a#x, col2#x AS b#x, col3#x AS c#x]
             +- LocalRelation [col1#x, col2#x, col3#x]

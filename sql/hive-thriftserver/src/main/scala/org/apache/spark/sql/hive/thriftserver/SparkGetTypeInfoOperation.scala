@@ -43,14 +43,11 @@ private[hive] class SparkGetTypeInfoOperation(
   with SparkOperation
   with Logging {
 
-  override def runInternal(): Unit = {
+  override def runInternal(): Unit = withClassLoader { _ =>
     statementId = UUID.randomUUID().toString
     val logMsg = "Listing type info"
     logInfo(log"Listing type info with ${MDC(STATEMENT_ID, statementId)}")
     setState(OperationState.RUNNING)
-    // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = session.sharedState.jarClassLoader
-    Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
     if (isAuthV2Enabled) {
       authorizeMetaGets(HiveOperationType.GET_TYPEINFO, null)

@@ -22,9 +22,10 @@ import org.apache.spark.sql.types.{DataType, StructType}
  * Interface for [[DataType]] parsing functionality.
  */
 trait DataTypeParserInterface {
+
   /**
-   * Parse a string to a [[StructType]]. The passed SQL string should be a comma separated list
-   * of field definitions which will preserve the correct Hive metadata.
+   * Parse a string to a [[StructType]]. The passed SQL string should be a comma separated list of
+   * field definitions which will preserve the correct Hive metadata.
    */
   @throws[ParseException]("Text cannot be parsed to a schema")
   def parseTableSchema(sqlText: String): StructType

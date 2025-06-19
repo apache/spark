@@ -130,7 +130,7 @@ The following options can be used to configure the version of Hive that is used 
     <td><code>2.3.10</code></td>
     <td>
       Version of the Hive metastore. Available
-      options are <code>2.0.0</code> through <code>2.3.10</code> and <code>3.0.0</code> through <code>3.1.3</code>.
+      options are <code>2.0.0</code> through <code>2.3.10</code>, <code>3.0.0</code> through <code>3.1.3</code>, and <code>4.0.0</code> through <code>4.0.1</code>.
     </td>
     <td>1.4.0</td>
   </tr>

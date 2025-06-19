@@ -28,7 +28,7 @@ class AlterTableRecoverPartitionsParserSuite extends AnalysisTest with SharedSpa
     val sql = "ALTER TABLE RECOVER PARTITIONS"
     checkError(
       exception = parseException(parsePlan)(sql),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'PARTITIONS'", "hint" -> ""))
   }
 

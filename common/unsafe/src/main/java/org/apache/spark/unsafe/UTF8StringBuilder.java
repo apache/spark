@@ -96,4 +96,33 @@ public class UTF8StringBuilder {
   public UTF8String build() {
     return UTF8String.fromBytes(buffer, 0, totalSize());
   }
+
+  public void appendCodePoint(int codePoint) {
+    if (codePoint <= 0x7F) {
+      grow(1);
+      buffer[cursor - Platform.BYTE_ARRAY_OFFSET] = (byte) codePoint;
+      ++cursor;
+    } else if (codePoint <= 0x7FF) {
+      grow(2);
+      buffer[cursor - Platform.BYTE_ARRAY_OFFSET] = (byte) (0xC0 | (codePoint >> 6));
+      buffer[cursor + 1 - Platform.BYTE_ARRAY_OFFSET] = (byte) (0x80 | (codePoint & 0x3F));
+      cursor += 2;
+    } else if (codePoint <= 0xFFFF) {
+      grow(3);
+      buffer[cursor - Platform.BYTE_ARRAY_OFFSET] = (byte) (0xE0 | (codePoint >> 12));
+      buffer[cursor + 1 - Platform.BYTE_ARRAY_OFFSET] = (byte) (0x80 | ((codePoint >> 6) & 0x3F));
+      buffer[cursor + 2 - Platform.BYTE_ARRAY_OFFSET] = (byte) (0x80 | (codePoint & 0x3F));
+      cursor += 3;
+    } else if (codePoint <= 0x10FFFF) {
+      grow(4);
+      buffer[cursor - Platform.BYTE_ARRAY_OFFSET] = (byte) (0xF0 | (codePoint >> 18));
+      buffer[cursor + 1 - Platform.BYTE_ARRAY_OFFSET] = (byte) (0x80 | ((codePoint >> 12) & 0x3F));
+      buffer[cursor + 2 - Platform.BYTE_ARRAY_OFFSET] = (byte) (0x80 | ((codePoint >> 6) & 0x3F));
+      buffer[cursor + 3 - Platform.BYTE_ARRAY_OFFSET] = (byte) (0x80 | (codePoint & 0x3F));
+      cursor += 4;
+    } else {
+      throw new IllegalArgumentException("Invalid Unicode codePoint: " + codePoint);
+    }
+  }
+
 }

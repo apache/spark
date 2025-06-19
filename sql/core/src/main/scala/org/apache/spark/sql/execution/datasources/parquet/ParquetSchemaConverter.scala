@@ -28,6 +28,7 @@ import org.apache.parquet.schema.Type.Repetition._
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.VariantMetadata
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -56,21 +57,25 @@ class ParquetToSparkSchemaConverter(
     assumeInt96IsTimestamp: Boolean = SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get,
     caseSensitive: Boolean = SQLConf.CASE_SENSITIVE.defaultValue.get,
     inferTimestampNTZ: Boolean = SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.defaultValue.get,
-    nanosAsLong: Boolean = SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.defaultValue.get) {
+    nanosAsLong: Boolean = SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.defaultValue.get,
+    useFieldId: Boolean = SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get) {
 
   def this(conf: SQLConf) = this(
     assumeBinaryIsString = conf.isParquetBinaryAsString,
     assumeInt96IsTimestamp = conf.isParquetINT96AsTimestamp,
     caseSensitive = conf.caseSensitiveAnalysis,
     inferTimestampNTZ = conf.parquetInferTimestampNTZEnabled,
-    nanosAsLong = conf.legacyParquetNanosAsLong)
+    nanosAsLong = conf.legacyParquetNanosAsLong,
+    useFieldId = conf.parquetFieldIdReadEnabled)
 
   def this(conf: Configuration) = this(
     assumeBinaryIsString = conf.get(SQLConf.PARQUET_BINARY_AS_STRING.key).toBoolean,
     assumeInt96IsTimestamp = conf.get(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key).toBoolean,
     caseSensitive = conf.get(SQLConf.CASE_SENSITIVE.key).toBoolean,
     inferTimestampNTZ = conf.get(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key).toBoolean,
-    nanosAsLong = conf.get(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key).toBoolean)
+    nanosAsLong = conf.get(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key).toBoolean,
+    useFieldId = conf.getBoolean(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key,
+      SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get))
 
   /**
    * Converts Parquet [[MessageType]] `parquetSchema` to a Spark SQL [[StructType]].
@@ -106,11 +111,29 @@ class ParquetToSparkSchemaConverter(
     val schemaMapOpt = sparkReadSchema.map { schema =>
       schema.map(f => normalizeFieldName(f.name) -> f).toMap
     }
+    // Use ID mapping only when the name mapping doesn't find a match.
+    lazy val schemaIdMapOpt = sparkReadSchema match {
+      case Some(schema) if useFieldId =>
+        Some(schema.fields.flatMap { f =>
+          if (ParquetUtils.hasFieldId(f)) {
+            Some((ParquetUtils.getFieldId(f), f))
+          } else {
+            None
+          }
+        }.toMap)
+      case _ => None
+    }
 
     val converted = (0 until groupColumn.getChildrenCount).map { i =>
       val field = groupColumn.getChild(i)
       val fieldFromReadSchema = schemaMapOpt.flatMap { schemaMap =>
         schemaMap.get(normalizeFieldName(field.getName))
+      }.orElse {
+        val parquetFieldId = Option(field.getType.getId).map(_.intValue())
+        (parquetFieldId, schemaIdMapOpt) match {
+          case (Some(id), Some(map)) => map.get(id)
+          case _ => None
+        }
       }
       var fieldReadType = fieldFromReadSchema.map(_.dataType)
 
@@ -179,7 +202,15 @@ class ParquetToSparkSchemaConverter(
     field match {
       case primitiveColumn: PrimitiveColumnIO => convertPrimitiveField(primitiveColumn, targetType)
       case groupColumn: GroupColumnIO if targetType.contains(VariantType) =>
-        convertVariantField(groupColumn)
+        if (SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED)) {
+          val col = convertGroupField(groupColumn)
+          col.copy(sparkType = VariantType, variantFileType = Some(col))
+        } else {
+          convertVariantField(groupColumn)
+        }
+      case groupColumn: GroupColumnIO if targetType.exists(VariantMetadata.isVariantStruct) =>
+        val col = convertGroupField(groupColumn)
+        col.copy(sparkType = targetType.get, variantFileType = Some(col))
       case groupColumn: GroupColumnIO => convertGroupField(groupColumn, targetType)
     }
   }
@@ -275,7 +306,11 @@ class ParquetToSparkSchemaConverter(
           case timestamp: TimestampLogicalTypeAnnotation
             if timestamp.getUnit == TimeUnit.NANOS && nanosAsLong =>
             LongType
-          case _ => illegalType()
+          case time: TimeLogicalTypeAnnotation
+            if time.getUnit == TimeUnit.MICROS && !time.isAdjustedToUTC =>
+            TimeType(TimeType.MICROS_PRECISION)
+          case _ =>
+            illegalType()
         }
 
       case INT96 =>
@@ -569,6 +604,10 @@ class SparkToParquetSchemaConverter(
         Types.primitive(INT32, repetition)
           .as(LogicalTypeAnnotation.dateType()).named(field.name)
 
+      case _: TimeType =>
+        Types.primitive(INT64, repetition)
+          .as(LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS)).named(field.name)
+
       // NOTE: Spark SQL can write timestamp values to Parquet using INT96, TIMESTAMP_MICROS or
       // TIMESTAMP_MILLIS. TIMESTAMP_MICROS is recommended but INT96 is the default to keep the
       // behavior same as before.
@@ -746,6 +785,14 @@ class SparkToParquetSchemaConverter(
           .addField(convertField(StructField("value", BinaryType, nullable = false)))
           .addField(convertField(StructField("metadata", BinaryType, nullable = false)))
           .named(field.name)
+
+      case s: StructType if SparkShreddingUtils.isVariantShreddingStruct(s) =>
+        // Variant struct takes a Variant and writes to Parquet as a shredded schema.
+        val group = Types.buildGroup(repetition)
+        s.fields.foreach { f =>
+          group.addField(convertField(f))
+        }
+        group.named(field.name)
 
       case StructType(fields) =>
         fields.foldLeft(Types.buildGroup(repetition)) { (builder, field) =>

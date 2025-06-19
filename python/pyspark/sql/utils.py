@@ -41,6 +41,7 @@ from pyspark.errors import (  # noqa: F401
     PythonException,
     UnknownException,
     SparkUpgradeException,
+    PySparkImportError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
 )
@@ -60,14 +61,6 @@ if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
-
-has_numpy: bool = False
-try:
-    import numpy as np  # noqa: F401
-
-    has_numpy = True
-except ImportError:
-    pass
 
 
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
@@ -112,6 +105,38 @@ def require_test_compiled() -> None:
         raise PySparkRuntimeError(
             errorClass="TEST_CLASS_NOT_COMPILED",
             messageParameters={"test_class_path": test_class_path},
+        )
+
+
+def require_minimum_plotly_version() -> None:
+    """Raise ImportError if plotly is not installed"""
+    from pyspark.loose_version import LooseVersion
+
+    minimum_plotly_version = "4.8"
+
+    try:
+        import plotly
+
+        have_plotly = True
+    except ImportError as error:
+        have_plotly = False
+        raised_error = error
+    if not have_plotly:
+        raise PySparkImportError(
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
+                "package_name": "Plotly",
+                "minimum_version": str(minimum_plotly_version),
+            },
+        ) from raised_error
+    if LooseVersion(plotly.__version__) < LooseVersion(minimum_plotly_version):
+        raise PySparkImportError(
+            errorClass="UNSUPPORTED_PACKAGE_VERSION",
+            messageParameters={
+                "package_name": "Plotly",
+                "minimum_version": str(minimum_plotly_version),
+                "current_version": str(plotly.__version__),
+            },
         )
 
 
@@ -336,7 +361,7 @@ def try_remote_session_classmethod(f: FuncT) -> FuncT:
 
 def dispatch_df_method(f: FuncT) -> FuncT:
     """
-    For the usecases of direct DataFrame.union(df, ...), it checks if self
+    For the use cases of direct DataFrame.method(df, ...), it checks if self
     is a Connect DataFrame or Classic DataFrame, and dispatches.
     """
 
@@ -363,8 +388,8 @@ def dispatch_df_method(f: FuncT) -> FuncT:
 
 def dispatch_col_method(f: FuncT) -> FuncT:
     """
-    For the usecases of direct Column.method(col, ...), it checks if self
-    is a Connect DataFrame or Classic DataFrame, and dispatches.
+    For the use cases of direct Column.method(col, ...), it checks if self
+    is a Connect Column or Classic Column, and dispatches.
     """
 
     @functools.wraps(f)
@@ -390,8 +415,9 @@ def dispatch_col_method(f: FuncT) -> FuncT:
 
 def dispatch_window_method(f: FuncT) -> FuncT:
     """
-    For the usecases of direct Window.method(col, ...), it checks if self
-    is a Connect Window or Classic Window, and dispatches.
+    For use cases of direct Window.method(col, ...), this function dispatches
+    the call to either ConnectWindow or ClassicWindow based on the execution
+    environment.
     """
 
     @functools.wraps(f)
@@ -405,10 +431,25 @@ def dispatch_window_method(f: FuncT) -> FuncT:
 
             return getattr(ClassicWindow, f.__name__)(*args, **kwargs)
 
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": f"Window.{f.__name__}"},
-        )
+    return cast(FuncT, wrapped)
+
+
+def dispatch_table_arg_method(f: FuncT) -> FuncT:
+    """
+    Dispatches TableArg method calls to either ConnectTableArg or ClassicTableArg
+    based on the execution environment.
+    """
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.table_arg import TableArg as ConnectTableArg
+
+            return getattr(ConnectTableArg, f.__name__)(*args, **kwargs)
+        else:
+            from pyspark.sql.classic.table_arg import TableArg as ClassicTableArg
+
+            return getattr(ClassicTableArg, f.__name__)(*args, **kwargs)
 
     return cast(FuncT, wrapped)
 
@@ -436,3 +477,28 @@ def get_lit_sql_str(val: str) -> str:
     # See `sql` definition in `sql/catalyst/src/main/scala/org/apache/spark/
     # sql/catalyst/expressions/literals.scala`
     return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+class NumpyHelper:
+    @staticmethod
+    def linspace(start: float, stop: float, num: int) -> Sequence[float]:
+        if num == 1:
+            return [float(start)]
+        step = (float(stop) - float(start)) / (num - 1)
+        return [start + step * i for i in range(num)]
+
+
+def remote_only(func: Union[Callable, property]) -> Union[Callable, property]:
+    """
+    Decorator to mark a function or method as only available in Spark Connect.
+
+    This decorator allows for easy identification of Spark Connect-specific APIs.
+    """
+    if isinstance(func, property):
+        # If it's a property, we need to set the attribute on the getter function
+        getter_func = func.fget
+        getter_func._remote_only = True  # type: ignore[union-attr]
+        return property(getter_func)
+    else:
+        func._remote_only = True  # type: ignore[attr-defined]
+        return func

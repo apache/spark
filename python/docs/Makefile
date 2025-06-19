@@ -16,12 +16,13 @@
 # Minimal makefile for Sphinx documentation
 
 # You can set these variables from the command line.
-SPHINXOPTS    ?= "-W" "-j" "auto"
+SPHINXOPTS    ?= "-W" "-j" "4"
 SPHINXBUILD   ?= sphinx-build
 SOURCEDIR     ?= source
 BUILDDIR      ?= build
 
-export PYTHONPATH=$(realpath ..):$(realpath ../lib/py4j-0.10.9.7-src.zip)
+export PYTHONPATH=$(realpath ..):$(realpath ../lib/py4j-0.10.9.9-src.zip)
+export SPARK_ANSI_SQL_MODE=false
 
 # Put it first so that "make" without argument is like "make help".
 help:

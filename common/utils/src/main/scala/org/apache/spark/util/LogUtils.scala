@@ -29,9 +29,9 @@ object LogUtils {
   /**
    * Schema for structured Spark logs.
    * Example usage:
-   *   val logDf = spark.read.schema(LOG_SCHEMA).json("path/to/logs")
+   *   val logDf = spark.read.schema(SPARK_LOG_SCHEMA).json("path/to/logs")
    */
-  val LOG_SCHEMA: String = """
+  val SPARK_LOG_SCHEMA: String = """
     |ts TIMESTAMP,
     |level STRING,
     |msg STRING,

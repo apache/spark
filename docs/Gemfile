@@ -24,9 +24,7 @@ source "https://rubygems.org"
 
 gem "jekyll", "~> 4.3"
 gem "jekyll-redirect-from", "~> 0.16"
-# Rouge 4.0 drops support for Ruby < 2.7, which is EOL.
-# See: https://github.com/rouge-ruby/rouge/blob/61bdda18f204a661413daa93d9624bc65ad219a5/CHANGELOG.md#version-400-2022-09-04
-gem "rouge", "~> 3.26"
 # This resolves a build issue on Apple Silicon.
 # See: https://issues.apache.org/jira/browse/SPARK-38488
 gem "ffi", "~> 1.15"
+gem "rexml", "~> 3.3.9"

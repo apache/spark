@@ -101,6 +101,7 @@ object DataSourceManager extends Logging {
 
   private def initialStaticDataSourceBuilders: Map[String, UserDefinedPythonDataSource] = {
     if (shouldLoadPythonDataSources) this.synchronized {
+      logInfo("Loading static Python Data Sources.")
       if (dataSourceBuilders.isEmpty) {
         val maybeResult = try {
           Some(UserDefinedPythonDataSource.lookupAllDataSourcesInPython())

@@ -36,6 +36,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
  * Base SQL parsing infrastructure.
  */
 abstract class AbstractParser extends DataTypeParserInterface with Logging {
+
   /** Creates/Resolves DataType for a given SQL string. */
   override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
     astBuilder.visitSingleDataType(parser.singleDataType())
@@ -78,8 +79,7 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
         parser.setErrorHandler(new SparkParserBailErrorStrategy())
         parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
         toResult(parser)
-      }
-      catch {
+      } catch {
         case e: ParseCancellationException =>
           // if we fail, parse with LL mode w/ SparkParserErrorStrategy
           tokenStream.seek(0) // rewind input stream
@@ -90,8 +90,7 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
           parser.getInterpreter.setPredictionMode(PredictionMode.LL)
           toResult(parser)
       }
-    }
-    catch {
+    } catch {
       case e: ParseException if e.command.isDefined =>
         throw e
       case e: ParseException =>
@@ -100,8 +99,7 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
         throw new ParseException(
           command = Option(command),
           start = e.origin,
-          stop = e.origin,
-          errorClass = e.getErrorClass,
+          errorClass = e.getCondition,
           messageParameters = e.getMessageParameters.asScala.toMap,
           queryContext = e.getQueryContext)
     }
@@ -159,24 +157,19 @@ case object ParseErrorListener extends BaseErrorListener {
       charPositionInLine: Int,
       msg: String,
       e: RecognitionException): Unit = {
-    val (start, stop) = offendingSymbol match {
+    val start = offendingSymbol match {
       case token: CommonToken =>
-        val start = Origin(Some(line), Some(token.getCharPositionInLine))
-        val length = token.getStopIndex - token.getStartIndex + 1
-        val stop = Origin(Some(line), Some(token.getCharPositionInLine + length))
-        (start, stop)
+        Origin(Some(line), Some(token.getCharPositionInLine))
       case _ =>
-        val start = Origin(Some(line), Some(charPositionInLine))
-        (start, start)
+        Origin(Some(line), Some(charPositionInLine))
     }
     e match {
       case sre: SparkRecognitionException if sre.errorClass.isDefined =>
-        throw new ParseException(None, start, stop, sre.errorClass.get, sre.messageParameters)
+        throw new ParseException(None, start, sre.errorClass.get, sre.messageParameters)
       case _ =>
         throw new ParseException(
           command = None,
           start = start,
-          stop = stop,
           errorClass = "PARSE_SYNTAX_ERROR",
           messageParameters = Map("error" -> msg, "hint" -> ""))
     }
@@ -187,45 +180,43 @@ case object ParseErrorListener extends BaseErrorListener {
  * A [[ParseException]] is an [[SparkException]] that is thrown during the parse process. It
  * contains fields and an extended error message that make reporting and diagnosing errors easier.
  */
-class ParseException private(
+class ParseException private (
     val command: Option[String],
     message: String,
     val start: Origin,
-    val stop: Origin,
     errorClass: Option[String] = None,
     messageParameters: Map[String, String] = Map.empty,
     queryContext: Array[QueryContext] = ParseException.getQueryContext())
-  extends AnalysisException(
-    message,
-    start.line,
-    start.startPosition,
-    None,
-    errorClass,
-    messageParameters,
-    queryContext) {
+    extends AnalysisException(
+      message,
+      start.line,
+      start.startPosition,
+      None,
+      errorClass,
+      messageParameters,
+      queryContext) {
 
   def this(errorClass: String, messageParameters: Map[String, String], ctx: ParserRuleContext) =
-    this(Option(SparkParserUtils.command(ctx)),
+    this(
+      Option(SparkParserUtils.command(ctx)),
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
       SparkParserUtils.position(ctx.getStart),
-      SparkParserUtils.position(ctx.getStop),
       Some(errorClass),
       messageParameters)
 
-  def this(errorClass: String, ctx: ParserRuleContext) = this(errorClass, Map.empty, ctx)
+  def this(errorClass: String, ctx: ParserRuleContext) =
+    this(errorClass = errorClass, messageParameters = Map.empty, ctx = ctx)
 
   /** Compose the message through SparkThrowableHelper given errorClass and messageParameters. */
   def this(
       command: Option[String],
       start: Origin,
-      stop: Origin,
       errorClass: String,
       messageParameters: Map[String, String]) =
     this(
       command,
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
       start,
-      stop,
       Some(errorClass),
       messageParameters,
       queryContext = ParseException.getQueryContext())
@@ -233,7 +224,6 @@ class ParseException private(
   def this(
       command: Option[String],
       start: Origin,
-      stop: Origin,
       errorClass: String,
       messageParameters: Map[String, String],
       queryContext: Array[QueryContext]) =
@@ -241,7 +231,6 @@ class ParseException private(
       command,
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
       start,
-      stop,
       Some(errorClass),
       messageParameters,
       queryContext)
@@ -275,19 +264,19 @@ class ParseException private(
   }
 
   def withCommand(cmd: String): ParseException = {
-    val cl = getErrorClass
+    val cl = getCondition
     val (newCl, params) = if (cl == "PARSE_SYNTAX_ERROR" && cmd.trim().isEmpty) {
       // PARSE_EMPTY_STATEMENT error class overrides the PARSE_SYNTAX_ERROR when cmd is empty
       ("PARSE_EMPTY_STATEMENT", Map.empty[String, String])
     } else {
       (cl, messageParameters)
     }
-    new ParseException(Option(cmd), start, stop, newCl, params, queryContext)
+    new ParseException(Option(cmd), start, newCl, params, queryContext)
   }
 
   override def getQueryContext: Array[QueryContext] = queryContext
 
-  override def getErrorClass: String = errorClass.getOrElse {
+  override def getCondition: String = errorClass.getOrElse {
     throw SparkException.internalError("ParseException shall have an error class.")
   }
 }
@@ -310,14 +299,16 @@ case object PostProcessor extends SqlBaseParserBaseListener {
     throw QueryParsingErrors.invalidIdentifierError(ident, ctx)
   }
 
-  /** Throws error message when unquoted identifier contains characters outside a-z, A-Z, 0-9, _ */
+  /**
+   * Throws error message when unquoted identifier contains characters outside a-z, A-Z, 0-9, _
+   */
   override def exitUnquotedIdentifier(ctx: SqlBaseParser.UnquotedIdentifierContext): Unit = {
     val ident = ctx.getText
     if (ident.exists(c =>
-      !(c >= 'a' && c <= 'z') &&
-      !(c >= 'A' && c <= 'Z') &&
-      !(c >= '0' && c <= '9') &&
-      c != '_')) {
+        !(c >= 'a' && c <= 'z') &&
+          !(c >= 'A' && c <= 'Z') &&
+          !(c >= '0' && c <= '9') &&
+          c != '_')) {
       throw QueryParsingErrors.invalidIdentifierError(ident, ctx)
     }
   }
@@ -353,9 +344,7 @@ case object PostProcessor extends SqlBaseParserBaseListener {
     replaceTokenByIdentifier(ctx, 0)(identity)
   }
 
-  private def replaceTokenByIdentifier(
-      ctx: ParserRuleContext,
-      stripMargins: Int)(
+  private def replaceTokenByIdentifier(ctx: ParserRuleContext, stripMargins: Int)(
       f: CommonToken => CommonToken = identity): Unit = {
     val parent = ctx.getParent
     parent.removeLastChild()
@@ -373,8 +362,8 @@ case object PostProcessor extends SqlBaseParserBaseListener {
 /**
  * The post-processor checks the unclosed bracketed comment.
  */
-case class UnclosedCommentProcessor(
-    command: String, tokenStream: CommonTokenStream) extends SqlBaseParserBaseListener {
+case class UnclosedCommentProcessor(command: String, tokenStream: CommonTokenStream)
+    extends SqlBaseParserBaseListener {
 
   override def exitSingleDataType(ctx: SqlBaseParser.SingleDataTypeContext): Unit = {
     checkUnclosedComment(tokenStream, command)
@@ -384,7 +373,8 @@ case class UnclosedCommentProcessor(
     checkUnclosedComment(tokenStream, command)
   }
 
-  override def exitSingleTableIdentifier(ctx: SqlBaseParser.SingleTableIdentifierContext): Unit = {
+  override def exitSingleTableIdentifier(
+      ctx: SqlBaseParser.SingleTableIdentifierContext): Unit = {
     checkUnclosedComment(tokenStream, command)
   }
 
@@ -414,6 +404,20 @@ case class UnclosedCommentProcessor(
     }
   }
 
+  override def exitCompoundOrSingleStatement(
+      ctx: SqlBaseParser.CompoundOrSingleStatementContext): Unit = {
+    // Same as in exitSingleStatement, we shouldn't parse the comments in SET command.
+    if (Option(ctx.singleStatement()).forall(
+        !_.setResetStatement().isInstanceOf[SqlBaseParser.SetConfigurationContext])) {
+      checkUnclosedComment(tokenStream, command)
+    }
+  }
+
+  override def exitSingleCompoundStatement(
+      ctx: SqlBaseParser.SingleCompoundStatementContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
   /** check `has_unclosed_bracketed_comment` to find out the unclosed bracketed comment. */
   private def checkUnclosedComment(tokenStream: CommonTokenStream, command: String) = {
     assert(tokenStream.getTokenSource.isInstanceOf[SqlBaseLexer])
@@ -422,7 +426,8 @@ case class UnclosedCommentProcessor(
       // The last token is 'EOF' and the penultimate is unclosed bracketed comment
       val failedToken = tokenStream.get(tokenStream.size() - 2)
       assert(failedToken.getType() == SqlBaseParser.BRACKETED_COMMENT)
-      val position = Origin(Option(failedToken.getLine), Option(failedToken.getCharPositionInLine))
+      val position =
+        Origin(Option(failedToken.getLine), Option(failedToken.getCharPositionInLine))
       throw QueryParsingErrors.unclosedBracketedCommentError(
         command = command,
         start = Origin(Option(failedToken.getStartIndex)),

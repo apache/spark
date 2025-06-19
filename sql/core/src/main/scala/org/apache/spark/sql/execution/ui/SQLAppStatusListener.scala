@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.metric._
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.status.{ElementTrackingStore, KVUtils, LiveEntity}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{MetricUtils, Utils}
 import org.apache.spark.util.collection.OpenHashMap
 
 class SQLAppStatusListener(
@@ -235,7 +235,7 @@ class SQLAppStatusListener(
         }
       }.getOrElse(
         // Built-in SQLMetric
-        SQLMetrics.stringValue(m.metricType, _, _)
+        MetricUtils.stringValue(m.metricType, _, _)
       )
       (m.accumulatorId, metricAggMethod)
     }.toMap
@@ -554,7 +554,7 @@ private class LiveStageMetrics(
   /**
    * Task metrics values for the stage. Maps the metric ID to the metric values for each
    * index. For each metric ID, there will be the same number of values as the number
-   * of indices. This relies on `SQLMetrics.stringValue` treating 0 as a neutral value,
+   * of indices. This relies on `MetricUtils.stringValue` treating 0 as a neutral value,
    * independent of the actual metric type.
    */
   private val taskMetrics = new ConcurrentHashMap[Long, Array[Long]]()
@@ -601,7 +601,7 @@ private class LiveStageMetrics(
         val metricValues = taskMetrics.computeIfAbsent(acc.id, _ => new Array(numTasks))
         metricValues(taskIdx) = value
 
-        if (SQLMetrics.metricNeedsMax(accumIdsToMetricType(acc.id))) {
+        if (MetricUtils.metricNeedsMax(accumIdsToMetricType(acc.id))) {
           val maxMetricsTaskId = metricsIdToMaxTaskValue.computeIfAbsent(acc.id, _ => Array(value,
             taskId))
 

@@ -25,7 +25,7 @@ import java.time.LocalDateTime
 import scala.collection.mutable
 import scala.util.Random
 
-import org.apache.spark.sql.catalyst.{FullQualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, CatalogTable, HiveTableRelation}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.AttributeMap
@@ -270,7 +270,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
 
   def getTableFromCatalogCache(tableName: String): LogicalPlan = {
     val catalog = spark.sessionState.catalog
-    val qualifiedTableName = FullQualifiedTableName(
+    val qualifiedTableName = QualifiedTableName(
       CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, tableName)
     catalog.getCachedTable(qualifiedTableName)
   }
@@ -366,7 +366,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       val stats = spark.table("ds_tbl").queryExecution.optimizedPlan.stats
       assert(stats.sizeInBytes > 0, "non-empty partitioned table should not report zero size.")
 
-      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive") {
+      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION.key) == "hive") {
         sql("CREATE TABLE hive_tbl(i int) PARTITIONED BY (j int)")
         sql("INSERT INTO hive_tbl PARTITION(j=1) SELECT 1")
         val stats2 = spark.table("hive_tbl").queryExecution.optimizedPlan.stats
@@ -381,7 +381,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       // Test data source table
       checkStatsConversion(tableName = "ds_tbl", isDatasourceTable = true)
       // Test hive serde table
-      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive") {
+      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION.key) == "hive") {
         checkStatsConversion(tableName = "hive_tbl", isDatasourceTable = false)
       }
     }

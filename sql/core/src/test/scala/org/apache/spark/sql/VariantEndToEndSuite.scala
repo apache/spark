@@ -16,15 +16,21 @@
  */
 package org.apache.spark.sql
 
+import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.sql.QueryTest.sameRows
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.variant.{ToVariantObject, VariantExpressionEvalUtils}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarArray
 import org.apache.spark.types.variant.VariantBuilder
-import org.apache.spark.unsafe.types.VariantVal
+import org.apache.spark.types.variant.VariantUtil._
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -33,8 +39,10 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     def check(input: String, output: String = null): Unit = {
       val df = Seq(input).toDF("v")
       val variantDF = df.select(to_json(parse_json(col("v"))))
+      val variantDF2 = df.select(to_json(from_json(col("v"), VariantType)))
       val expected = if (output != null) output else input
       checkAnswer(variantDF, Seq(Row(expected)))
+      checkAnswer(variantDF2, Seq(Row(expected)))
     }
 
     check("null")
@@ -57,6 +65,12 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     )
     // scalastyle:on nonascii
     check("[0.0, 1.00, 1.10, 1.23]", "[0,1,1.1,1.23]")
+    withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "true") {
+      check(
+        """{"c": [], "b": 0, "a": null, "a": {"x": 0, "x": 1}, "b": 1, "b": 2, "c": [3]}""",
+        """{"a":{"x":1},"b":2,"c":[3]}"""
+      )
+    }
   }
 
   test("from_json/to_json round-trip") {
@@ -87,6 +101,26 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     )
     // scalastyle:on nonascii
     check("[0.0, 1.00, 1.10, 1.23]", "[0,1,1.1,1.23]")
+
+    // Validate options work.
+    checkAnswer(Seq("""{"a": NaN}""").toDF("v")
+      .selectExpr("from_json(v, 'variant', map('allowNonNumericNumbers', 'false'))"), Row(null))
+    checkAnswer(Seq("""{"a": NaN}""").toDF("v")
+      .selectExpr("from_json(v, 'variant', map('allowNonNumericNumbers', 'true'))"),
+      Row(
+        VariantExpressionEvalUtils.castToVariant(InternalRow(Double.NaN),
+          StructType.fromDDL("a double"))))
+    // String input "NaN" will remain a string instead of double.
+    checkAnswer(Seq("""{"a": "NaN"}""").toDF("v")
+      .selectExpr("from_json(v, 'variant', map('allowNonNumericNumbers', 'true'))"),
+      Row(
+        VariantExpressionEvalUtils.castToVariant(InternalRow(UTF8String.fromString("NaN")),
+          StructType.fromDDL("a string"))))
+    // to_json should put special floating point values in quotes.
+    checkAnswer(Seq("""{"a": NaN}""").toDF("v")
+      .selectExpr("to_json(from_json(v, 'variant', map('allowNonNumericNumbers', 'true')))"),
+      Row("""{"a":"NaN"}"""))
+
   }
 
   test("try_parse_json/to_json round-trip") {
@@ -146,9 +180,37 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     val variantDF = df.select(parse_json(col("v")))
     val plan = variantDF.queryExecution.executedPlan
     assert(plan.isInstanceOf[WholeStageCodegenExec])
-    val v = VariantBuilder.parseJson("""{"a":1}""")
+    val v = VariantBuilder.parseJson("""{"a":1}""", false)
     val expected = new VariantVal(v.getValue, v.getMetadata)
     checkAnswer(variantDF, Seq(Row(expected)))
+  }
+
+  test("to_variant_object - Codegen Support") {
+    Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+        val schema = StructType(Array(
+          StructField("v", StructType(Array(StructField("a", IntegerType))))
+        ))
+        val data = Seq(Row(Row(1)), Row(Row(2)), Row(Row(3)), Row(null))
+        val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+        val variantDF = df.select(to_variant_object(col("v")))
+        val plan = variantDF.queryExecution.executedPlan
+        assert(plan.isInstanceOf[WholeStageCodegenExec] == (codegenMode == "CODEGEN_ONLY"))
+        val v1 = VariantExpressionEvalUtils.castToVariant(InternalRow(1),
+          StructType(Array(StructField("a", IntegerType))))
+        val v2 = VariantExpressionEvalUtils.castToVariant(InternalRow(2),
+          StructType(Array(StructField("a", IntegerType))))
+        val v3 = VariantExpressionEvalUtils.castToVariant(InternalRow(3),
+          StructType(Array(StructField("a", IntegerType))))
+        val v4 = VariantExpressionEvalUtils.castToVariant(null,
+          StructType(Array(StructField("a", IntegerType))))
+        val expected = Seq(Row(new VariantVal(v1.getValue, v1.getMetadata)),
+          Row(new VariantVal(v2.getValue, v2.getMetadata)),
+          Row(new VariantVal(v3.getValue, v3.getMetadata)),
+          Row(new VariantVal(v4.getValue, v4.getMetadata)))
+        sameRows(variantDF.collect().toSeq, expected)
+      }
+    }
   }
 
   test("schema_of_variant") {
@@ -174,8 +236,8 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("1E0", "DOUBLE")
     check("true", "BOOLEAN")
     check("\"2000-01-01\"", "STRING")
-    check("""{"a":0}""", "STRUCT<a: BIGINT>")
-    check("""{"b": {"c": "c"}, "a":["a"]}""", "STRUCT<a: ARRAY<STRING>, b: STRUCT<c: STRING>>")
+    check("""{"a":0}""", "OBJECT<a: BIGINT>")
+    check("""{"b": {"c": "c"}, "a":["a"]}""", "OBJECT<a: ARRAY<STRING>, b: OBJECT<c: STRING>>")
     check("[]", "ARRAY<VOID>")
     check("[false]", "ARRAY<BOOLEAN>")
     check("[null, 1, 1.0]", "ARRAY<DECIMAL(20,0)>")
@@ -185,11 +247,11 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("[1.1, 11111111111111111111111111111111111111]", "ARRAY<DOUBLE>")
     check("[1, \"1\"]", "ARRAY<VARIANT>")
     check("[{}, true]", "ARRAY<VARIANT>")
-    check("""[{"c": ""}, {"a": null}, {"b": 1}]""", "ARRAY<STRUCT<a: VOID, b: BIGINT, c: STRING>>")
-    check("""[{"a": ""}, {"a": null}, {"b": 1}]""", "ARRAY<STRUCT<a: STRING, b: BIGINT>>")
+    check("""[{"c": ""}, {"a": null}, {"b": 1}]""", "ARRAY<OBJECT<a: VOID, b: BIGINT, c: STRING>>")
+    check("""[{"a": ""}, {"a": null}, {"b": 1}]""", "ARRAY<OBJECT<a: STRING, b: BIGINT>>")
     check(
       """[{"a": 1, "b": null}, {"b": true, "a": 1E0}]""",
-      "ARRAY<STRUCT<a: DOUBLE, b: BOOLEAN>>"
+      "ARRAY<OBJECT<a: DOUBLE, b: BOOLEAN>>"
     )
   }
 
@@ -226,7 +288,7 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     // Literal input.
     checkAnswer(
       sql("""SELECT schema_of_variant_agg(parse_json('{"a": [1, 2, 3]}'))"""),
-      Seq(Row("STRUCT<a: ARRAY<BIGINT>>")))
+      Seq(Row("OBJECT<a: ARRAY<BIGINT>>")))
 
     // Non-grouping aggregation.
     def checkNonGrouping(input: Seq[String], expected: String): Unit = {
@@ -234,20 +296,20 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
         Seq(Row(expected)))
     }
 
-    checkNonGrouping(Seq("""{"a": [1, 2, 3]}"""), "STRUCT<a: ARRAY<BIGINT>>")
-    checkNonGrouping((0 to 100).map(i => s"""{"a": [$i]}"""), "STRUCT<a: ARRAY<BIGINT>>")
-    checkNonGrouping(Seq("""[{"a": 1}, {"b": 2}]"""), "ARRAY<STRUCT<a: BIGINT, b: BIGINT>>")
-    checkNonGrouping(Seq("""{"a": [1, 2, 3]}""", """{"a": "banana"}"""), "STRUCT<a: VARIANT>")
+    checkNonGrouping(Seq("""{"a": [1, 2, 3]}"""), "OBJECT<a: ARRAY<BIGINT>>")
+    checkNonGrouping((0 to 100).map(i => s"""{"a": [$i]}"""), "OBJECT<a: ARRAY<BIGINT>>")
+    checkNonGrouping(Seq("""[{"a": 1}, {"b": 2}]"""), "ARRAY<OBJECT<a: BIGINT, b: BIGINT>>")
+    checkNonGrouping(Seq("""{"a": [1, 2, 3]}""", """{"a": "banana"}"""), "OBJECT<a: VARIANT>")
     checkNonGrouping(Seq("""{"a": "banana"}""", """{"b": "apple"}"""),
-      "STRUCT<a: STRING, b: STRING>")
-    checkNonGrouping(Seq("""{"a": "data"}""", null), "STRUCT<a: STRING>")
+      "OBJECT<a: STRING, b: STRING>")
+    checkNonGrouping(Seq("""{"a": "data"}""", null), "OBJECT<a: STRING>")
     checkNonGrouping(Seq(null, null), "VOID")
-    checkNonGrouping(Seq("""{"a": null}""", """{"a": null}"""), "STRUCT<a: VOID>")
+    checkNonGrouping(Seq("""{"a": null}""", """{"a": null}"""), "OBJECT<a: VOID>")
     checkNonGrouping(Seq(
       """{"hi":[]}""",
       """{"hi":[{},{}]}""",
       """{"hi":[{"it's":[{"me":[{"a": 1}]}]}]}"""),
-      "STRUCT<hi: ARRAY<STRUCT<`it's`: ARRAY<STRUCT<me: ARRAY<STRUCT<a: BIGINT>>>>>>>")
+      "OBJECT<hi: ARRAY<OBJECT<`it's`: ARRAY<OBJECT<me: ARRAY<OBJECT<a: BIGINT>>>>>>>")
 
     // Grouping aggregation.
     withView("v") {
@@ -256,11 +318,11 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
         (id, json)
       }.toDF("id", "json").createTempView("v")
       checkAnswer(sql("select schema_of_variant_agg(parse_json(json)) from v group by id % 2"),
-        Seq(Row("STRUCT<a: ARRAY<STRING>>"), Row("STRUCT<a: ARRAY<VARIANT>>")))
+        Seq(Row("OBJECT<a: ARRAY<STRING>>"), Row("OBJECT<a: ARRAY<VARIANT>>")))
       checkAnswer(sql("select schema_of_variant_agg(parse_json(json)) from v group by id % 3"),
-        Seq.fill(3)(Row("STRUCT<a: ARRAY<VARIANT>>")))
+        Seq.fill(3)(Row("OBJECT<a: ARRAY<VARIANT>>")))
       checkAnswer(sql("select schema_of_variant_agg(parse_json(json)) from v group by id % 4"),
-        Seq.fill(3)(Row("STRUCT<a: ARRAY<STRING>>")) ++ Seq(Row("STRUCT<a: ARRAY<BIGINT>>")))
+        Seq.fill(3)(Row("OBJECT<a: ARRAY<STRING>>")) ++ Seq(Row("OBJECT<a: ARRAY<BIGINT>>")))
     }
   }
 
@@ -272,22 +334,135 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     dataVector.appendLong(456)
     val array = new ColumnarArray(dataVector, 0, 4)
     val variant = Cast(Literal(array, ArrayType(LongType)), VariantType).eval()
+    val variant2 = ToVariantObject(Literal(array, ArrayType(LongType))).eval()
     assert(variant.toString == "[null,123,null,456]")
+    assert(variant2.toString == "[null,123,null,456]")
     dataVector.close()
   }
 
-  test("cast to variant with scan input") {
-    withTempPath { dir =>
-      val path = dir.getAbsolutePath
-      val input = Seq(Row(Array(1, null), Map("k1" -> null, "k2" -> false), Row(null, "str")))
-      val schema = StructType.fromDDL(
-        "a array<int>, m map<string, boolean>, s struct<f1 string, f2 string>")
-      spark.createDataFrame(spark.sparkContext.parallelize(input), schema).write.parquet(path)
-      val df = spark.read.parquet(path).selectExpr(
-        s"cast(cast(a as variant) as ${schema(0).dataType.sql})",
-        s"cast(cast(m as variant) as ${schema(1).dataType.sql})",
-        s"cast(cast(s as variant) as ${schema(2).dataType.sql})")
-      checkAnswer(df, input)
+  test("cast to variant/to_variant_object with scan input") {
+    Seq("NO_CODEGEN", "CODEGEN_ONLY").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+        withTempPath { dir =>
+          val path = dir.getAbsolutePath
+          val input = Seq(
+              Row(Array(1, null), Map("k1" -> null, "k2" -> false), Row(null, "str")),
+              Row(null, null, null)
+            )
+          val schema = StructType.fromDDL(
+            "a array<int>, m map<string, boolean>, s struct<f1 string, f2 string>")
+          spark.createDataFrame(spark.sparkContext.parallelize(input), schema).write.parquet(path)
+          val df = spark.read.parquet(path).selectExpr(
+            s"cast(cast(a as variant) as ${schema(0).dataType.sql})",
+            s"cast(to_variant_object(m) as ${schema(1).dataType.sql})",
+            s"cast(to_variant_object(s) as ${schema(2).dataType.sql})")
+          checkAnswer(df, input)
+          val plan = df.queryExecution.executedPlan
+          assert(plan.isInstanceOf[WholeStageCodegenExec] == (codegenMode == "CODEGEN_ONLY"))
+        }
+      }
+    }
+  }
+
+  test("from_json(_, 'variant') with duplicate keys") {
+    val json: String = """{"a": 1, "b": 2, "c": "3", "a": 4}"""
+
+    withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "true") {
+      val df = Seq(json).toDF("j")
+        .selectExpr("from_json(j,'variant')")
+      val actual = df.collect().head(0).asInstanceOf[VariantVal]
+      val expectedValue: Array[Byte] = Array(objectHeader(false, 1, 1),
+        /* size */ 3,
+        /* id list */ 0, 1, 2,
+        /* offset list */ 4, 0, 2, 6,
+        /* field data */ primitiveHeader(INT1), 2, shortStrHeader(1), '3',
+        primitiveHeader(INT1), 4)
+      val expectedMetadata: Array[Byte] = Array(VERSION, 3, 0, 1, 2, 3, 'a', 'b', 'c')
+      assert(actual === new VariantVal(expectedValue, expectedMetadata))
+    }
+
+    withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "false") {
+      // In default mode (PERMISSIVE), JSON with duplicate keys is still invalid, but no error will
+      // be thrown.
+      checkAnswer(Seq(json).toDF("j").selectExpr("from_json(j, 'variant')"), Row(null))
+
+      val exception = intercept[SparkException] {
+        Seq(json).toDF("j").selectExpr("from_json(j, 'variant', map('mode', 'FAILFAST'))").collect()
+      }
+      checkError(
+        exception = exception,
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
+      )
+      checkError(
+        exception = exception.getCause.asInstanceOf[SparkRuntimeException],
+        condition = "VARIANT_DUPLICATE_KEY",
+        parameters = Map("key" -> "a")
+      )
+    }
+  }
+
+  test("SPARK-49985: Disable support for interval types in the variant spec") {
+    // Top level intervals
+    assert(intercept[AnalysisException] {
+      sql("select interval '1' month::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    assert(intercept[AnalysisException] {
+      sql("select interval '1' day::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    // struct<interval>
+    assert(intercept[AnalysisException] {
+      sql("select named_struct('i', interval '1' month)::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    assert(intercept[AnalysisException] {
+      sql("select named_struct('i', interval '1' day)::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    // struct<struct<interval>>
+    assert(intercept[AnalysisException] {
+      sql("select struct(named_struct('i', interval '1' month))::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    assert(intercept[AnalysisException] {
+      sql("select struct(named_struct('i', interval '1' day))::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    // array<interval>
+    assert(intercept[AnalysisException] {
+      sql("select array(interval '1' month)::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    assert(intercept[AnalysisException] {
+      sql("select array(interval '1' day)::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    // map<string, interval>
+    assert(intercept[AnalysisException] {
+      sql("select map('i', interval '1' month)::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    assert(intercept[AnalysisException] {
+      sql("select map('i', interval '1' day)::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    // map<string, struct<interval>>
+    assert(intercept[AnalysisException] {
+      sql("select map('i', struct(interval '1' month))::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    assert(intercept[AnalysisException] {
+      sql("select map('i', struct(interval '1' day))::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    val tableName = "_v"
+    withTable(tableName) {
+      sql(s"create table $tableName (" +
+        s"i1 interval month," +
+        s"i2 interval day," +
+        s"i3 struct<i interval month>," +
+        s"i4 struct<i interval day>," +
+        s"i5 array<interval month>," +
+        s"i6 array<interval day>," +
+        s"i7 map<string, interval month>," +
+        s"i8 map<string, interval day>," +
+        s"i9 struct<i struct<i map<string, array<interval month>>>>," +
+        s"i10 struct<i struct<i map<string, array<interval day>>>>)")
+      (1 to 10).foreach { i =>
+        assert(intercept[AnalysisException] {
+          sql(s"select i$i::variant from $tableName")
+        }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+      }
     }
   }
 }

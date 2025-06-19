@@ -154,16 +154,16 @@ abstract class V2ANSIWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
     }
   }
 
-  override def assertAnalysisErrorClass(
+  override def assertAnalysisErrorCondition(
       inputPlan: LogicalPlan,
-      expectedErrorClass: String,
+      expectedErrorCondition: String,
       expectedMessageParameters: Map[String, String],
       queryContext: Array[ExpectedContext] = Array.empty,
       caseSensitive: Boolean = true): Unit = {
     withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.ANSI.toString) {
-      super.assertAnalysisErrorClass(
+      super.assertAnalysisErrorCondition(
         inputPlan,
-        expectedErrorClass,
+        expectedErrorCondition,
         expectedMessageParameters,
         queryContext,
         caseSensitive
@@ -191,16 +191,16 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
     }
   }
 
-  override def assertAnalysisErrorClass(
+  override def assertAnalysisErrorCondition(
       inputPlan: LogicalPlan,
-      expectedErrorClass: String,
+      expectedErrorCondition: String,
       expectedMessageParameters: Map[String, String],
       queryContext: Array[ExpectedContext] = Array.empty,
       caseSensitive: Boolean = true): Unit = {
     withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.STRICT.toString) {
-      super.assertAnalysisErrorClass(
+      super.assertAnalysisErrorCondition(
         inputPlan,
-        expectedErrorClass,
+        expectedErrorCondition,
         expectedMessageParameters,
         queryContext,
         caseSensitive
@@ -212,9 +212,9 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
     val parsedPlan = byName(table, widerTable)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       parsedPlan,
-      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
         "colName" -> "`x`",
@@ -235,9 +235,9 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
     val parsedPlan = byName(xRequiredTable, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       parsedPlan,
-      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
         "colName" -> "`x`",
@@ -254,9 +254,9 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
     val parsedPlan = byPosition(table, widerTable)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       parsedPlan,
-      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
         "colName" -> "`x`",
@@ -277,9 +277,9 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
     val parsedPlan = byPosition(xRequiredTable, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       parsedPlan,
-      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
         "colName" -> "`x`",
@@ -331,6 +331,37 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       ArrayType(new StructType().add("x", "int").add("y", "int")),
       ArrayType(new StructType().add("y", "int").add("x", "byte")),
       hasTransform = true)
+  }
+
+  test("SPARK-48922: Avoid redundant array transform of identical expression for map type") {
+    def assertMapField(fromType: MapType, toType: MapType, transformNum: Int): Unit = {
+      val table = TestRelation(Seq($"a".int, Symbol("map").map(toType)))
+      val query = TestRelation(Seq(Symbol("map").map(fromType), $"a".int))
+
+      val writePlan = byName(table, query).analyze
+
+      assertResolved(writePlan)
+      checkAnalysis(writePlan, writePlan)
+
+      val transforms = writePlan.children.head.expressions.flatMap { e =>
+        e.flatMap {
+          case t: ArrayTransform => Some(t)
+          case _ => None
+        }
+      }
+      assert(transforms.size == transformNum)
+    }
+
+    assertMapField(MapType(LongType, StringType), MapType(LongType, StringType), 0)
+    assertMapField(
+      MapType(LongType, new StructType().add("x", "int").add("y", "int")),
+      MapType(LongType, new StructType().add("y", "int").add("x", "byte")),
+      1)
+    assertMapField(MapType(LongType, LongType), MapType(IntegerType, LongType), 1)
+    assertMapField(
+      MapType(LongType, new StructType().add("x", "int").add("y", "int")),
+      MapType(IntegerType, new StructType().add("y", "int").add("x", "byte")),
+      2)
   }
 
   test("SPARK-33136: output resolved on complex types for V2 write commands") {
@@ -420,12 +451,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
     val parsedPlan = byName(table, query)
 
-    assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(
-      parsedPlan,
-      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
-    )
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      assertNotResolved(parsedPlan)
+      assertAnalysisErrorCondition(
+        parsedPlan,
+        expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
+      )
+    }
   }
 
   test("byName: case sensitive column resolution") {
@@ -435,12 +468,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
     val parsedPlan = byName(table, query)
 
-    assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(
-      parsedPlan,
-      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
-    )
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      assertNotResolved(parsedPlan)
+      assertAnalysisErrorCondition(
+        parsedPlan,
+        expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
+      )
+    }
   }
 
   test("byName: case insensitive column resolution") {
@@ -499,9 +534,9 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byName(requiredTable, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       parsedPlan,
-      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
       expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
     )
   }
@@ -513,12 +548,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
     val parsedPlan = byName(table, query)
 
-    assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(
-      parsedPlan,
-      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
-    )
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      assertNotResolved(parsedPlan)
+      assertAnalysisErrorCondition(
+        parsedPlan,
+        expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
+      )
+    }
   }
 
   test("byName: insert safe cast") {
@@ -546,9 +583,9 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byName(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       inputPlan = parsedPlan,
-      expectedErrorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+      expectedErrorCondition = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
         "tableColumns" -> "`x`, `y`",
@@ -561,9 +598,9 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val query = TestRelation(Seq($"b".struct($"y".int, $"x".int, $"z".int), $"a".int))
 
     val writePlan = byName(table, query)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       writePlan,
-      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
+      expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
         "colName" -> "`b`",
@@ -636,9 +673,9 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byPosition(requiredTable, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       inputPlan = parsedPlan,
-      expectedErrorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+      expectedErrorCondition = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
         "tableColumns" -> "`x`, `y`",
@@ -654,9 +691,9 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byPosition(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       inputPlan = parsedPlan,
-      expectedErrorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+      expectedErrorCondition = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
         "tableColumns" -> "`x`, `y`",
@@ -693,9 +730,9 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byName(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       inputPlan = parsedPlan,
-      expectedErrorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+      expectedErrorCondition = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
         "tableColumns" -> "`x`, `y`",
@@ -740,9 +777,9 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     withClue("byName") {
       val parsedPlan = byName(tableWithStructCol, query)
       assertNotResolved(parsedPlan)
-      assertAnalysisErrorClass(
+      assertAnalysisErrorCondition(
         parsedPlan,
-        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
         expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`col`.`a`")
       )
     }
@@ -792,9 +829,9 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       parsedPlan,
-      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
+      expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
         "colName" -> "`b`.`n2`",
@@ -821,9 +858,9 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       parsedPlan,
-      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
+      expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
         "colName" -> "`arr`.`element`",
@@ -854,9 +891,9 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       parsedPlan,
-      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
+      expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
         "colName" -> "`m`.`key`",
@@ -887,9 +924,9 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       parsedPlan,
-      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
+      expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
         "colName" -> "`m`.`value`",
@@ -921,17 +958,17 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
     assertNotResolved(parsedPlan)
     if (byNameResolution) {
-      assertAnalysisErrorClass(
+      assertAnalysisErrorCondition(
         parsedPlan,
-        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
           "colName" -> "`b`.`n2`.`dn3`")
       )
     } else {
-      assertAnalysisErrorClass(
+      assertAnalysisErrorCondition(
         parsedPlan,
-        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
+        expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
           "colName" -> "`b`.`n2`",
@@ -964,17 +1001,17 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
     assertNotResolved(parsedPlan)
     if (byNameResolution) {
-      assertAnalysisErrorClass(
+      assertAnalysisErrorCondition(
         parsedPlan,
-        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
           "colName" -> "`arr`.`element`.`y`")
       )
     } else {
-      assertAnalysisErrorClass(
+      assertAnalysisErrorCondition(
         parsedPlan,
-        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
+        expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
           "colName" -> "`arr`.`element`",
@@ -1011,17 +1048,17 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
     assertNotResolved(parsedPlan)
     if (byNameResolution) {
-      assertAnalysisErrorClass(
+      assertAnalysisErrorCondition(
         parsedPlan,
-        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
           "colName" -> "`m`.`key`.`y`")
       )
     } else {
-      assertAnalysisErrorClass(
+      assertAnalysisErrorCondition(
         parsedPlan,
-        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
+        expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
           "colName" -> "`m`.`key`",
@@ -1058,17 +1095,17 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
     assertNotResolved(parsedPlan)
     if (byNameResolution) {
-      assertAnalysisErrorClass(
+      assertAnalysisErrorCondition(
         parsedPlan,
-        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
           "colName" -> "`m`.`value`.`y`")
       )
     } else {
-      assertAnalysisErrorClass(
+      assertAnalysisErrorCondition(
         parsedPlan,
-        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
+        expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
           "colName" -> "`m`.`value`",
@@ -1363,7 +1400,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       LessThanOrEqual(UnresolvedAttribute(Seq("a")), Literal(15.0d)))
 
     assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       parsedPlan,
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       Map("objectName" -> "`a`", "proposal" -> "`x`, `y`")
@@ -1376,7 +1413,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan2 = OverwriteByExpression.byPosition(tableAcceptAnySchema, query,
       LessThanOrEqual(UnresolvedAttribute(Seq("a")), Literal(15.0d)))
     assertNotResolved(parsedPlan2)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       parsedPlan2,
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       Map("objectName" -> "`a`", "proposal" -> "`x`, `y`")

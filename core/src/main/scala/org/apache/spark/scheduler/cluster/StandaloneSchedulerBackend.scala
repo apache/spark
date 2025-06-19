@@ -186,6 +186,9 @@ private[spark] class StandaloneSchedulerBackend(
     val reason: ExecutorLossReason = exitStatus match {
       case Some(ExecutorExitCode.HEARTBEAT_FAILURE) =>
         ExecutorExited(ExecutorExitCode.HEARTBEAT_FAILURE, exitCausedByApp = false, message)
+      case Some(ExecutorExitCode.BLOCK_MANAGER_REREGISTRATION_FAILED) =>
+        ExecutorExited(ExecutorExitCode.BLOCK_MANAGER_REREGISTRATION_FAILED,
+          exitCausedByApp = false, message)
       case Some(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR) =>
         ExecutorExited(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR,
           exitCausedByApp = false, message)

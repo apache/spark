@@ -8594,7 +8594,7 @@ Project [(cast(1 as decimal(20,0)) = cast(cast(1 as decimal(10,0)) as decimal(20
 -- !query
 SELECT cast(1 as decimal(3, 0))  = cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(3,0)) = cast(cast(1 as string) as decimal(3,0))) AS (CAST(1 AS DECIMAL(3,0)) = CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(3,0)) as double) = cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(3,0)) = CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -8605,7 +8605,7 @@ Project [(cast(1 as decimal(3,0)) = cast(cast(1 as string) as decimal(3,0))) AS 
 -- !query
 SELECT cast(1 as decimal(5, 0))  = cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(5,0)) = cast(cast(1 as string) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) = CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(5,0)) as double) = cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(5,0)) = CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -8616,7 +8616,7 @@ Project [(cast(1 as decimal(5,0)) = cast(cast(1 as string) as decimal(5,0))) AS 
 -- !query
 SELECT cast(1 as decimal(10, 0)) = cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) = cast(cast(1 as string) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) = CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(10,0)) as double) = cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(10,0)) = CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -8627,7 +8627,7 @@ Project [(cast(1 as decimal(10,0)) = cast(cast(1 as string) as decimal(10,0))) A
 -- !query
 SELECT cast(1 as decimal(20, 0)) = cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) = cast(cast(1 as string) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) = CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(20,0)) as double) = cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(20,0)) = CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -8726,45 +8726,89 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT cast(1 as decimal(3, 0))  = cast(1 as boolean) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(3,0)) = cast(cast(1 as boolean) as decimal(3,0))) AS (CAST(1 AS DECIMAL(3,0)) = CAST(1 AS BOOLEAN))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DECIMAL(3,0)\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) = CAST(1 AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "cast(1 as decimal(3, 0))  = cast(1 as boolean)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as decimal(5, 0))  = cast(1 as boolean) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(5,0)) = cast(cast(1 as boolean) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) = CAST(1 AS BOOLEAN))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DECIMAL(5,0)\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) = CAST(1 AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "cast(1 as decimal(5, 0))  = cast(1 as boolean)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as decimal(10, 0)) = cast(1 as boolean) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) = cast(cast(1 as boolean) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) = CAST(1 AS BOOLEAN))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DECIMAL(10,0)\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) = CAST(1 AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "cast(1 as decimal(10, 0)) = cast(1 as boolean)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as decimal(20, 0)) = cast(1 as boolean) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) = cast(cast(1 as boolean) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) = CAST(1 AS BOOLEAN))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DECIMAL(20,0)\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) = CAST(1 AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "cast(1 as decimal(20, 0)) = cast(1 as boolean)"
+  } ]
+}
 
 
 -- !query
@@ -9826,7 +9870,7 @@ Project [(cast(1 as decimal(20,0)) <=> cast(cast(1 as decimal(10,0)) as decimal(
 -- !query
 SELECT cast(1 as decimal(3, 0))  <=> cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(3,0)) <=> cast(cast(1 as string) as decimal(3,0))) AS (CAST(1 AS DECIMAL(3,0)) <=> CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(3,0)) as double) <=> cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(3,0)) <=> CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -9837,7 +9881,7 @@ Project [(cast(1 as decimal(3,0)) <=> cast(cast(1 as string) as decimal(3,0))) A
 -- !query
 SELECT cast(1 as decimal(5, 0))  <=> cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(5,0)) <=> cast(cast(1 as string) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) <=> CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(5,0)) as double) <=> cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(5,0)) <=> CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -9848,7 +9892,7 @@ Project [(cast(1 as decimal(5,0)) <=> cast(cast(1 as string) as decimal(5,0))) A
 -- !query
 SELECT cast(1 as decimal(10, 0)) <=> cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) <=> cast(cast(1 as string) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) <=> CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(10,0)) as double) <=> cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(10,0)) <=> CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -9859,7 +9903,7 @@ Project [(cast(1 as decimal(10,0)) <=> cast(cast(1 as string) as decimal(10,0)))
 -- !query
 SELECT cast(1 as decimal(20, 0)) <=> cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) <=> cast(cast(1 as string) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) <=> CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(20,0)) as double) <=> cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(20,0)) <=> CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -9958,45 +10002,89 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT cast(1 as decimal(3, 0))  <=> cast(1 as boolean) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(3,0)) <=> cast(cast(1 as boolean) as decimal(3,0))) AS (CAST(1 AS DECIMAL(3,0)) <=> CAST(1 AS BOOLEAN))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DECIMAL(3,0)\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) <=> CAST(1 AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast(1 as decimal(3, 0))  <=> cast(1 as boolean)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as decimal(5, 0))  <=> cast(1 as boolean) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(5,0)) <=> cast(cast(1 as boolean) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) <=> CAST(1 AS BOOLEAN))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DECIMAL(5,0)\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) <=> CAST(1 AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast(1 as decimal(5, 0))  <=> cast(1 as boolean)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as decimal(10, 0)) <=> cast(1 as boolean) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) <=> cast(cast(1 as boolean) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) <=> CAST(1 AS BOOLEAN))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DECIMAL(10,0)\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) <=> CAST(1 AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast(1 as decimal(10, 0)) <=> cast(1 as boolean)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as decimal(20, 0)) <=> cast(1 as boolean) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) <=> cast(cast(1 as boolean) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) <=> CAST(1 AS BOOLEAN))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DECIMAL(20,0)\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) <=> CAST(1 AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast(1 as decimal(20, 0)) <=> cast(1 as boolean)"
+  } ]
+}
 
 
 -- !query
@@ -11058,7 +11146,7 @@ Project [(cast(1 as decimal(20,0)) < cast(cast(1 as decimal(10,0)) as decimal(20
 -- !query
 SELECT cast(1 as decimal(3, 0))  < cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(3,0)) < cast(cast(1 as string) as decimal(3,0))) AS (CAST(1 AS DECIMAL(3,0)) < CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(3,0)) as double) < cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(3,0)) < CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -11069,7 +11157,7 @@ Project [(cast(1 as decimal(3,0)) < cast(cast(1 as string) as decimal(3,0))) AS 
 -- !query
 SELECT cast(1 as decimal(5, 0))  < cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(5,0)) < cast(cast(1 as string) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) < CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(5,0)) as double) < cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(5,0)) < CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -11080,7 +11168,7 @@ Project [(cast(1 as decimal(5,0)) < cast(cast(1 as string) as decimal(5,0))) AS 
 -- !query
 SELECT cast(1 as decimal(10, 0)) < cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) < cast(cast(1 as string) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) < CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(10,0)) as double) < cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(10,0)) < CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -11091,7 +11179,7 @@ Project [(cast(1 as decimal(10,0)) < cast(cast(1 as string) as decimal(10,0))) A
 -- !query
 SELECT cast(1 as decimal(20, 0)) < cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) < cast(cast(1 as string) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) < CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(20,0)) as double) < cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(20,0)) < CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -12334,7 +12422,7 @@ Project [(cast(1 as decimal(20,0)) <= cast(cast(1 as decimal(10,0)) as decimal(2
 -- !query
 SELECT cast(1 as decimal(3, 0))  <= cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(3,0)) <= cast(cast(1 as string) as decimal(3,0))) AS (CAST(1 AS DECIMAL(3,0)) <= CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(3,0)) as double) <= cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(3,0)) <= CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -12345,7 +12433,7 @@ Project [(cast(1 as decimal(3,0)) <= cast(cast(1 as string) as decimal(3,0))) AS
 -- !query
 SELECT cast(1 as decimal(5, 0))  <= cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(5,0)) <= cast(cast(1 as string) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) <= CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(5,0)) as double) <= cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(5,0)) <= CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -12356,7 +12444,7 @@ Project [(cast(1 as decimal(5,0)) <= cast(cast(1 as string) as decimal(5,0))) AS
 -- !query
 SELECT cast(1 as decimal(10, 0)) <= cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) <= cast(cast(1 as string) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) <= CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(10,0)) as double) <= cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(10,0)) <= CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -12367,7 +12455,7 @@ Project [(cast(1 as decimal(10,0)) <= cast(cast(1 as string) as decimal(10,0))) 
 -- !query
 SELECT cast(1 as decimal(20, 0)) <= cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) <= cast(cast(1 as string) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) <= CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(20,0)) as double) <= cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(20,0)) <= CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -13610,7 +13698,7 @@ Project [(cast(1 as decimal(20,0)) > cast(cast(1 as decimal(10,0)) as decimal(20
 -- !query
 SELECT cast(1 as decimal(3, 0))  > cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(3,0)) > cast(cast(1 as string) as decimal(3,0))) AS (CAST(1 AS DECIMAL(3,0)) > CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(3,0)) as double) > cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(3,0)) > CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -13621,7 +13709,7 @@ Project [(cast(1 as decimal(3,0)) > cast(cast(1 as string) as decimal(3,0))) AS 
 -- !query
 SELECT cast(1 as decimal(5, 0))  > cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(5,0)) > cast(cast(1 as string) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) > CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(5,0)) as double) > cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(5,0)) > CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -13632,7 +13720,7 @@ Project [(cast(1 as decimal(5,0)) > cast(cast(1 as string) as decimal(5,0))) AS 
 -- !query
 SELECT cast(1 as decimal(10, 0)) > cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) > cast(cast(1 as string) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) > CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(10,0)) as double) > cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(10,0)) > CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -13643,7 +13731,7 @@ Project [(cast(1 as decimal(10,0)) > cast(cast(1 as string) as decimal(10,0))) A
 -- !query
 SELECT cast(1 as decimal(20, 0)) > cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) > cast(cast(1 as string) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) > CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(20,0)) as double) > cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(20,0)) > CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -14886,7 +14974,7 @@ Project [(cast(1 as decimal(20,0)) >= cast(cast(1 as decimal(10,0)) as decimal(2
 -- !query
 SELECT cast(1 as decimal(3, 0))  >= cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(3,0)) >= cast(cast(1 as string) as decimal(3,0))) AS (CAST(1 AS DECIMAL(3,0)) >= CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(3,0)) as double) >= cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(3,0)) >= CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -14897,7 +14985,7 @@ Project [(cast(1 as decimal(3,0)) >= cast(cast(1 as string) as decimal(3,0))) AS
 -- !query
 SELECT cast(1 as decimal(5, 0))  >= cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(5,0)) >= cast(cast(1 as string) as decimal(5,0))) AS (CAST(1 AS DECIMAL(5,0)) >= CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(5,0)) as double) >= cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(5,0)) >= CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -14908,7 +14996,7 @@ Project [(cast(1 as decimal(5,0)) >= cast(cast(1 as string) as decimal(5,0))) AS
 -- !query
 SELECT cast(1 as decimal(10, 0)) >= cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) >= cast(cast(1 as string) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) >= CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(10,0)) as double) >= cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(10,0)) >= CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -14919,7 +15007,7 @@ Project [(cast(1 as decimal(10,0)) >= cast(cast(1 as string) as decimal(10,0))) 
 -- !query
 SELECT cast(1 as decimal(20, 0)) >= cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(20,0)) >= cast(cast(1 as string) as decimal(20,0))) AS (CAST(1 AS DECIMAL(20,0)) >= CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as decimal(20,0)) as double) >= cast(cast(1 as string) as double)) AS (CAST(1 AS DECIMAL(20,0)) >= CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -16162,7 +16250,7 @@ Project [NOT (cast(1 as decimal(20,0)) = cast(cast(1 as decimal(10,0)) as decima
 -- !query
 SELECT cast(1 as decimal(3, 0))  <> cast(1 as string) FROM t
 -- !query analysis
-Project [NOT (cast(1 as decimal(3,0)) = cast(cast(1 as string) as decimal(3,0))) AS (NOT (CAST(1 AS DECIMAL(3,0)) = CAST(1 AS STRING)))#x]
+Project [NOT (cast(cast(1 as decimal(3,0)) as double) = cast(cast(1 as string) as double)) AS (NOT (CAST(1 AS DECIMAL(3,0)) = CAST(1 AS STRING)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -16173,7 +16261,7 @@ Project [NOT (cast(1 as decimal(3,0)) = cast(cast(1 as string) as decimal(3,0)))
 -- !query
 SELECT cast(1 as decimal(5, 0))  <> cast(1 as string) FROM t
 -- !query analysis
-Project [NOT (cast(1 as decimal(5,0)) = cast(cast(1 as string) as decimal(5,0))) AS (NOT (CAST(1 AS DECIMAL(5,0)) = CAST(1 AS STRING)))#x]
+Project [NOT (cast(cast(1 as decimal(5,0)) as double) = cast(cast(1 as string) as double)) AS (NOT (CAST(1 AS DECIMAL(5,0)) = CAST(1 AS STRING)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -16184,7 +16272,7 @@ Project [NOT (cast(1 as decimal(5,0)) = cast(cast(1 as string) as decimal(5,0)))
 -- !query
 SELECT cast(1 as decimal(10, 0)) <> cast(1 as string) FROM t
 -- !query analysis
-Project [NOT (cast(1 as decimal(10,0)) = cast(cast(1 as string) as decimal(10,0))) AS (NOT (CAST(1 AS DECIMAL(10,0)) = CAST(1 AS STRING)))#x]
+Project [NOT (cast(cast(1 as decimal(10,0)) as double) = cast(cast(1 as string) as double)) AS (NOT (CAST(1 AS DECIMAL(10,0)) = CAST(1 AS STRING)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -16195,7 +16283,7 @@ Project [NOT (cast(1 as decimal(10,0)) = cast(cast(1 as string) as decimal(10,0)
 -- !query
 SELECT cast(1 as decimal(20, 0)) <> cast(1 as string) FROM t
 -- !query analysis
-Project [NOT (cast(1 as decimal(20,0)) = cast(cast(1 as string) as decimal(20,0))) AS (NOT (CAST(1 AS DECIMAL(20,0)) = CAST(1 AS STRING)))#x]
+Project [NOT (cast(cast(1 as decimal(20,0)) as double) = cast(cast(1 as string) as double)) AS (NOT (CAST(1 AS DECIMAL(20,0)) = CAST(1 AS STRING)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -16294,45 +16382,89 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT cast(1 as decimal(3, 0))  <> cast(1 as boolean) FROM t
 -- !query analysis
-Project [NOT (cast(1 as decimal(3,0)) = cast(cast(1 as boolean) as decimal(3,0))) AS (NOT (CAST(1 AS DECIMAL(3,0)) = CAST(1 AS BOOLEAN)))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DECIMAL(3,0)\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) = CAST(1 AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "cast(1 as decimal(3, 0))  <> cast(1 as boolean)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as decimal(5, 0))  <> cast(1 as boolean) FROM t
 -- !query analysis
-Project [NOT (cast(1 as decimal(5,0)) = cast(cast(1 as boolean) as decimal(5,0))) AS (NOT (CAST(1 AS DECIMAL(5,0)) = CAST(1 AS BOOLEAN)))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DECIMAL(5,0)\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) = CAST(1 AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "cast(1 as decimal(5, 0))  <> cast(1 as boolean)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as decimal(10, 0)) <> cast(1 as boolean) FROM t
 -- !query analysis
-Project [NOT (cast(1 as decimal(10,0)) = cast(cast(1 as boolean) as decimal(10,0))) AS (NOT (CAST(1 AS DECIMAL(10,0)) = CAST(1 AS BOOLEAN)))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DECIMAL(10,0)\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) = CAST(1 AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "cast(1 as decimal(10, 0)) <> cast(1 as boolean)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as decimal(20, 0)) <> cast(1 as boolean) FROM t
 -- !query analysis
-Project [NOT (cast(1 as decimal(20,0)) = cast(cast(1 as boolean) as decimal(20,0))) AS (NOT (CAST(1 AS DECIMAL(20,0)) = CAST(1 AS BOOLEAN)))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DECIMAL(20,0)\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) = CAST(1 AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "cast(1 as decimal(20, 0)) <> cast(1 as boolean)"
+  } ]
+}
 
 
 -- !query

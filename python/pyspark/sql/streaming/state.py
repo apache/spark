@@ -19,7 +19,6 @@ import json
 from typing import Tuple, Optional
 
 from pyspark.sql.types import Row, StructType, TimestampType
-from pyspark.sql.utils import has_numpy
 from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkRuntimeError
 
 __all__ = ["GroupState", "GroupStateTimeout"]
@@ -132,6 +131,8 @@ class GroupState:
         """
         Update the value of the state. The value of the state cannot be null.
         """
+        from pyspark.testing.utils import have_numpy
+
         if newValue is None:
             raise PySparkTypeError(
                 errorClass="CANNOT_BE_NONE",
@@ -139,7 +140,7 @@ class GroupState:
             )
 
         converted = []
-        if has_numpy:
+        if have_numpy:
             import numpy as np
 
             # In order to convert NumPy types to Python primitive types.

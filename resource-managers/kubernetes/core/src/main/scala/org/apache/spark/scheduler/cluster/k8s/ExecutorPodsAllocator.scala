@@ -28,7 +28,6 @@ import io.fabric8.kubernetes.api.model.{HasMetadata, PersistentVolumeClaim, Pod,
 import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.deploy.ExecutorFailureTracker
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
@@ -38,7 +37,6 @@ import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils.DEFAULT_NUMBER_EXECUTORS
 import org.apache.spark.util.{Clock, Utils}
-import org.apache.spark.util.SparkExitCode.EXCEED_MAX_EXECUTOR_FAILURES
 
 class ExecutorPodsAllocator(
     conf: SparkConf,
@@ -72,8 +70,6 @@ class ExecutorPodsAllocator(
   protected val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
 
   protected val maxPendingPods = conf.get(KUBERNETES_MAX_PENDING_PODS)
-
-  protected val maxNumExecutorFailures = ExecutorFailureTracker.maxNumExecutorFailures(conf)
 
   protected val podCreationTimeout = math.max(
     podAllocationDelay * 5,
@@ -121,12 +117,6 @@ class ExecutorPodsAllocator(
   // if they happen to come up before the deletion takes effect.
   @volatile protected var deletedExecutorIds = Set.empty[Long]
 
-  @volatile private var failedExecutorIds = Set.empty[Long]
-
-  protected val failureTracker = new ExecutorFailureTracker(conf, clock)
-
-  protected[spark] def getNumExecutorsFailed: Int = failureTracker.numFailedExecutors
-
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     appId = applicationId
     driverPod.foreach { pod =>
@@ -142,11 +132,6 @@ class ExecutorPodsAllocator(
     }
     snapshotsStore.addSubscriber(podAllocationDelay) { executorPodsSnapshot =>
       onNewSnapshots(applicationId, schedulerBackend, executorPodsSnapshot)
-      if (failureTracker.numFailedExecutors > maxNumExecutorFailures) {
-        logError(log"Max number of executor failures " +
-          log"(${MDC(LogKeys.MAX_EXECUTOR_FAILURES, maxNumExecutorFailures)}) reached")
-        stopApplication(EXCEED_MAX_EXECUTOR_FAILURES)
-      }
     }
   }
 
@@ -162,10 +147,6 @@ class ExecutorPodsAllocator(
   }
 
   def isDeleted(executorId: String): Boolean = deletedExecutorIds.contains(executorId.toLong)
-
-  private[k8s] def stopApplication(exitCode: Int): Unit = {
-    sys.exit(exitCode)
-  }
 
   protected def onNewSnapshots(
       applicationId: String,
@@ -275,18 +256,6 @@ class ExecutorPodsAllocator(
         case PodRunning(_) => true
         case _ => false
       }
-
-      val currentFailedExecutorIds = podsForRpId.filter {
-        case (_, PodFailed(_)) => true
-        case _ => false
-      }.keySet
-
-      val newFailedExecutorIds = currentFailedExecutorIds.diff(failedExecutorIds)
-      if (newFailedExecutorIds.nonEmpty) {
-        logWarning(log"${MDC(LogKeys.COUNT, newFailedExecutorIds.size)} new failed executors.")
-        newFailedExecutorIds.foreach { _ => failureTracker.registerExecutorFailure() }
-      }
-      failedExecutorIds = failedExecutorIds ++ currentFailedExecutorIds
 
       val (schedulerKnownPendingExecsForRpId, currentPendingExecutorsForRpId) = podsForRpId.filter {
         case (_, PodPending(_)) => true

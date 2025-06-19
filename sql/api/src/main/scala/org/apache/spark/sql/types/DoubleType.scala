@@ -27,7 +27,8 @@ import org.apache.spark.annotation.Stable
  * @since 1.3.0
  */
 @Stable
-class DoubleType private() extends FractionalType {
+class DoubleType private () extends FractionalType {
+
   /**
    * The default size of a value of the DoubleType is 8 bytes.
    */

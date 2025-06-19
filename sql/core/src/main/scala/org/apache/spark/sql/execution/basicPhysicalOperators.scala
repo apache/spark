@@ -261,13 +261,13 @@ case class FilterExec(condition: Expression, child: SparkPlan)
       ev
     }
 
-    // Note: wrap in "do { } while(false);", so the generated checks can jump out with "continue;"
+    // Note: wrap in "do { } while (false);", so the generated checks can jump out with "continue;"
     s"""
        |do {
        |  $predicateCode
        |  $numOutput.add(1);
        |  ${consume(ctx, resultVars)}
-       |} while(false);
+       |} while (false);
      """.stripMargin
   }
 
@@ -790,6 +790,7 @@ abstract class BaseSubqueryExec extends SparkPlan {
       addSuffix: Boolean = false,
       maxFields: Int,
       printNodeId: Boolean,
+      printOutputColumns: Boolean,
       indent: Int = 0): Unit = {
     /**
      * In the new explain mode `EXPLAIN FORMATTED`, the subqueries are not shown in the
@@ -807,6 +808,7 @@ abstract class BaseSubqueryExec extends SparkPlan {
         false,
         maxFields,
         printNodeId,
+        printOutputColumns,
         indent)
     }
   }

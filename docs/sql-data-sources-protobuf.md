@@ -435,3 +435,68 @@ message Person {
 ```
 </div>
 </div>
+
+## Data Source Option
+
+Data source options of Protobuf can be set via:
+* the built-in functions below
+  * `from_protobuf`
+  * `to_protobuf`
+
+<table>
+  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr></thead>
+  <tr>
+    <td><code>mode</code></td>
+    <td><code>FAILFAST</code></td>
+    <td>Allows a mode for dealing with corrupt records during parsing.<br>
+    <ul>
+      <li><code>PERMISSIVE</code>: when it meets a corrupted record, sets all fields to <code>null</code>.</li>
+      <li><code>DROPMALFORMED</code>: ignores the whole corrupted records. This mode is unsupported in the Protobuf built-in functions.</li>
+      <li><code>FAILFAST</code>: throws an exception when it meets corrupted records.</li>
+    </ul>
+    </td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>recursive.fields.max.depth</code></td>
+    <td><code>-1</code></td>
+    <td>Specifies the maximum number of recursion levels to allow when parsing the schema. For more details refers to the section <a href="https://spark.apache.org/docs/latest/sql-data-sources-protobuf.html#handling-circular-references-protobuf-fields">Handling circular references protobuf fields</a>.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>convert.any.fields.to.json</code></td>
+    <td><code>false</code></td>
+    <td>Enables converting Protobuf <code>Any</code> fields to JSON. This option should be enabled carefully. JSON conversion and processing are inefficient. In addition, schema safety is also reduced making downstream processing error-prone.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>emit.default.values</code></td>
+    <td><code>false</code></td>
+    <td>Whether to render fields with zero values when deserializing Protobuf to a Spark struct. When a field is empty in the serialized Protobuf, this library will deserialize them as <code>null</code> by default, this option can control whether to render the type-specific zero values.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>enums.as.ints</code></td>
+    <td><code>false</code></td>
+    <td>Whether to render enum fields as their integer values. When this option set to <code>false</code>, an enum field will be mapped to <code>StringType</code>, and the value is the name of enum; when set to <code>true</code>, an enum field will be mapped to <code>IntegerType</code>, the value is its integer value.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>upcast.unsigned.ints</code></td>
+    <td><code>false</code></td>
+    <td>Whether to upcast unsigned integers into a larger type. Setting this option to <code>true</code>, <code>LongType</code> is used for <code>uint32</code> and <code>Decimal(20, 0)</code> is used for <code>uint64</code>, so their representation can contain large unsigned values without overflow.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>unwrap.primitive.wrapper.types</code></td>
+    <td><code>false</code></td>
+    <td>Whether to unwrap the struct representation for well-known primitive wrapper types when deserializing. By default, the wrapper types for primitives (i.e. google.protobuf.Int32Value, google.protobuf.Int64Value, etc.) will get deserialized as structs.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>retain.empty.message.types</code></td>
+    <td><code>false</code></td>
+    <td>Whether to retain fields of the empty proto message type in Schema. Since Spark doesn't allow writing empty <code>StructType</code>, the empty proto message type will be dropped by default. Setting this option to <code>true</code> will insert a dummy column(<code>__dummy_field_in_empty_struct</code>) to the empty proto message so that the empty message fields will be retained.</td>
+    <td>read</td>
+  </tr>
+</table>

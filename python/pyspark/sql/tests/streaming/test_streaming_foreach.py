@@ -220,9 +220,10 @@ class StreamingTestsForeachMixin:
         try:
             tester.run_streaming_query_on_writer(ForeachWriter(), 1)
             self.fail("bad writer did not fail the query")  # this is not expected
-        except StreamingQueryException:
-            # TODO: Verify whether original error message is inside the exception
-            pass
+        except StreamingQueryException as e:
+            err_msg = str(e)
+            self.assertTrue("test error" in err_msg)
+            self.assertTrue("FOREACH_USER_FUNCTION_ERROR" in err_msg)
 
         self.assertEqual(len(tester.process_events()), 0)  # no row was processed
         close_events = tester.close_events()

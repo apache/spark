@@ -23,7 +23,7 @@ import java.util.Locale
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TemporaryViewRelation}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TemporaryViewRelation, VariableDefinition}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{StringType, StructType}
 
@@ -87,9 +88,15 @@ trait AnalysisTest extends PlanTest {
       overrideIfExists = true)
     new Analyzer(catalog) {
       catalogManager.tempVariableManager.create(
-        "testVarA", "1", Literal(1), overrideIfExists = true)
+        Seq("testA", "testVarA"),
+        VariableDefinition(Identifier.of(Array("testA"), "testVarA"), "1", Literal(1)),
+        overrideIfExists = true)
+
       catalogManager.tempVariableManager.create(
-        "testVarNull", null, Literal(null, StringType), overrideIfExists = true)
+        Seq("testVarNull", "testVarNull"),
+        VariableDefinition(
+          Identifier.of(Array("testVarNull"), "testVarNull"), null, Literal(null, StringType)),
+        overrideIfExists = true)
       override val extendedResolutionRules = extendedAnalysisRules
     }
   }
@@ -178,9 +185,9 @@ trait AnalysisTest extends PlanTest {
     }
   }
 
-  protected def assertAnalysisErrorClass(
+  protected def assertAnalysisErrorCondition(
       inputPlan: LogicalPlan,
-      expectedErrorClass: String,
+      expectedErrorCondition: String,
       expectedMessageParameters: Map[String, String],
       queryContext: Array[ExpectedContext] = Array.empty,
       caseSensitive: Boolean = true): Unit = {
@@ -191,22 +198,36 @@ trait AnalysisTest extends PlanTest {
       }
       checkError(
         exception = e,
-        errorClass = expectedErrorClass,
+        condition = expectedErrorCondition,
         parameters = expectedMessageParameters,
         queryContext = queryContext
       )
     }
   }
 
+  protected def assertParseErrorClass(
+      parser: String => Any,
+      sqlCommand: String,
+      errorClass: String,
+      parameters: Map[String, String],
+      queryContext: Array[ExpectedContext] = Array.empty): Unit = {
+    val e = parseException(parser)(sqlCommand)
+    checkError(
+      exception = e,
+      condition = errorClass,
+      parameters = parameters,
+      queryContext = queryContext
+    )
+  }
+
   protected def interceptParseException(parser: String => Any)(
-    sqlCommand: String, messages: String*)(
-    errorClass: Option[String] = None): Unit = {
+    sqlCommand: String, messages: String*)(condition: Option[String] = None): Unit = {
     val e = parseException(parser)(sqlCommand)
     messages.foreach { message =>
       assert(e.message.contains(message))
     }
-    if (errorClass.isDefined) {
-      assert(e.getErrorClass == errorClass.get)
+    if (condition.isDefined) {
+      assert(e.getCondition == condition.get)
     }
   }
 

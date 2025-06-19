@@ -23,10 +23,10 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.{Locale, Set}
 
-import com.google.common.io.Files
+import com.google.common.io.{Files, FileWriteMode}
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{SparkException, TestUtils}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, TestUtils}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -34,11 +34,12 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLConf
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.{SparkPlanInfo, TestUncaughtExceptionHandler}
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.command.{InsertIntoDataSourceDirCommand, LoadDataCommand}
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -79,13 +80,13 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   test("query global temp view") {
     val df = Seq(1).toDF("i1")
     df.createGlobalTempView("tbl1")
-    val global_temp_db = spark.conf.get(GLOBAL_TEMP_DATABASE)
+    val global_temp_db = spark.conf.get(GLOBAL_TEMP_DATABASE.key)
     checkAnswer(spark.sql(s"select * from ${global_temp_db}.tbl1"), Row(1))
     spark.sql(s"drop view ${global_temp_db}.tbl1")
   }
 
   test("non-existent global temp view") {
-    val global_temp_db = spark.conf.get(GLOBAL_TEMP_DATABASE)
+    val global_temp_db = spark.conf.get(GLOBAL_TEMP_DATABASE.key)
     val e = intercept[AnalysisException] {
       spark.sql(s"select * from ${global_temp_db}.nonexistentview")
     }
@@ -99,7 +100,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       assume(TestUtils.testCommandAvailable("/bin/bash"))
       assume(TestUtils.testCommandAvailable("echo"))
       assume(TestUtils.testCommandAvailable("sed"))
-      val scriptFilePath = getTestResourcePath("test_script.sh")
+      val scriptFilePath = getTestResourcePath("test-script.sh")
       val df = Seq(("x1", "y1", "z1"), ("x2", "y2", "z2")).toDF("c1", "c2", "c3")
       df.createOrReplaceTempView("script_table")
       val query1 = sql(
@@ -221,7 +222,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     val sqlText = "describe functioN abcadf"
     checkError(
       exception = intercept[AnalysisException](sql(sqlText)),
-      errorClass = "UNRESOLVED_ROUTINE",
+      condition = "UNRESOLVED_ROUTINE",
       parameters = Map(
         "routineName" -> "`abcadf`",
         "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
@@ -246,7 +247,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
     checkKeywordsExist(sql("describe function  `between`"),
       "Function: between",
-      "Usage: input [NOT] BETWEEN lower AND upper - " +
+      "input [NOT] between lower AND upper - " +
         "evaluate if `input` is [not] in between `lower` and `upper`")
 
     checkKeywordsExist(sql("describe function  `case`"),
@@ -258,6 +259,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("describe functions - user defined functions") {
+    assume(Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar") != null)
     withUserDefinedFunction("udtf_count" -> false) {
       sql(
         s"""
@@ -283,6 +285,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("describe functions - temporary user defined functions") {
+    assume(Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar") != null)
     withUserDefinedFunction("udtf_count_temp" -> true) {
       sql(
         s"""
@@ -401,7 +404,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     val catalogTable =
       sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
     relation match {
-      case LogicalRelation(r: HadoopFsRelation, _, _, _) =>
+      case LogicalRelationWithTable(r: HadoopFsRelation, _) =>
         if (!isDataSourceTable) {
           fail(
             s"${classOf[HiveTableRelation].getCanonicalName} is expected, but found " +
@@ -1356,7 +1359,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       exception = intercept[AnalysisException] {
         sql(s"select id from parquet.`invalid_path`")
       },
-      errorClass = "PATH_NOT_FOUND",
+      condition = "PATH_NOT_FOUND",
       parameters = Map("path" -> "file.*invalid_path"),
       matchPVals = true
     )
@@ -1413,7 +1416,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         exception = intercept[AnalysisException] {
           sql(s"select id from hive.`${f.getCanonicalPath}`")
         },
-        errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
+        condition = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
         parameters = Map("dataSourceType" -> "hive"),
         context = ExpectedContext(s"hive.`${f.getCanonicalPath}`",
           15, 21 + f.getCanonicalPath.length)
@@ -1424,7 +1427,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         exception = intercept[AnalysisException] {
           sql(s"select id from HIVE.`${f.getCanonicalPath}`")
         },
-        errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
+        condition = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
         parameters = Map("dataSourceType" -> "HIVE"),
         context = ExpectedContext(s"HIVE.`${f.getCanonicalPath}`",
           15, 21 + f.getCanonicalPath.length)
@@ -1782,7 +1785,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
               |AS SELECT 1 AS a, 2 AS b
             """.stripMargin)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_0035",
+        condition = "_LEGACY_ERROR_TEMP_0035",
         parameters = Map("message" -> "Column ordering must be ASC, was 'DESC'"),
         context = ExpectedContext(
           fragment = "CLUSTERED BY (a) SORTED BY (b DESC) INTO 2 BUCKETS",
@@ -1947,10 +1950,10 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
       for (i <- 1 to 3) {
-        Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
+        Files.asCharSink(new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8).write(s"$i")
       }
       for (i <- 5 to 7) {
-        Files.write(s"$i", new File(dirPath, s"part-s-0000$i"), StandardCharsets.UTF_8)
+        Files.asCharSink(new File(dirPath, s"part-s-0000$i"), StandardCharsets.UTF_8).write(s"$i")
       }
 
       withTable("load_t") {
@@ -1971,7 +1974,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
       for (i <- 1 to 3) {
-        Files.write(s"$i", new File(dirPath, s"part-r-0000 $i"), StandardCharsets.UTF_8)
+        Files.asCharSink(new File(dirPath, s"part-r-0000 $i"), StandardCharsets.UTF_8).write(s"$i")
       }
       withTable("load_t") {
         sql("CREATE TABLE load_t (a STRING) USING hive")
@@ -1986,7 +1989,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
       for (i <- 1 to 3) {
-        Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
+        Files.asCharSink(new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8).write(s"$i")
       }
       withTable("load_t") {
         sql("CREATE TABLE load_t (a STRING) USING hive")
@@ -2010,7 +2013,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
       for (i <- 1 to 3) {
-        Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
+        Files.asCharSink(new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8).write(s"$i")
       }
       withTable("load_t1") {
         sql("CREATE TABLE load_t1 (a STRING) USING hive")
@@ -2025,7 +2028,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
       for (i <- 1 to 3) {
-        Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
+        Files.asCharSink(new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8).write(s"$i")
       }
       withTable("load_t2") {
         sql("CREATE TABLE load_t2 (a STRING) USING hive")
@@ -2039,7 +2042,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     withTempDir { dir =>
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
-      Files.append("1", new File(dirPath, "part-r-000011"), StandardCharsets.UTF_8)
+      Files.asCharSink(
+        new File(dirPath, "part-r-000011"), StandardCharsets.UTF_8, FileWriteMode.APPEND).write("1")
       withTable("part_table") {
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
           sql(
@@ -2460,8 +2464,12 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       "spark.sql.hive.metastore.jars",
       "spark.sql.hive.metastore.sharedPrefixes",
       "spark.sql.hive.metastore.barrierPrefixes").foreach { key =>
-      val e = intercept[AnalysisException](sql(s"set $key=abc"))
-      assert(e.getMessage.contains("Cannot modify the value of a static config"))
+      checkError(
+        exception = intercept[AnalysisException](sql(s"set $key=abc")),
+        condition = "CANNOT_MODIFY_CONFIG",
+        parameters = Map(
+          "key" -> toSQLConf(key), "docroot" -> SPARK_DOC_ROOT)
+      )
     }
   }
 
@@ -2479,6 +2487,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("SPARK-32668: HiveGenericUDTF initialize UDTF should use StructObjectInspector method") {
+    assume(Thread.currentThread().getContextClassLoader.getResource("SPARK-21101-1.0.jar") != null)
     withUserDefinedFunction("udtf_stack1" -> true, "udtf_stack2" -> true) {
       sql(
         s"""
@@ -2638,7 +2647,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       sql("CREATE TABLE t (a STRING)")
       checkError(
         exception = intercept[AnalysisException](sql("INSERT INTO t SELECT a*2 FROM t where b=1")),
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = None,
         parameters = Map("objectName" -> "`b`", "proposal" -> "`a`"),
         context = ExpectedContext(
@@ -2648,7 +2657,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       checkError(
         exception = intercept[AnalysisException](
           sql("INSERT INTO t SELECT cast(a as short) FROM t where b=1")),
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = None,
         parameters = Map("objectName" -> "`b`", "proposal" -> "`a`"),
         context = ExpectedContext(

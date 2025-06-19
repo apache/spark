@@ -21,13 +21,7 @@ import javax.annotation.concurrent.GuardedBy;
 import java.io.InterruptedIOException;
 import java.io.IOException;
 import java.nio.channels.ClosedByInterruptException;
-import java.util.Arrays;
-import java.util.ArrayList;
-import java.util.BitSet;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -284,15 +278,19 @@ public class TaskMemoryManager {
       }
     } catch (ClosedByInterruptException | InterruptedIOException e) {
       // This called by user to kill a task (e.g: speculative task).
-      logger.error("error while calling spill() on {}", e,
+      logger.error("Error while calling spill() on {}", e,
         MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, consumerToSpill));
       throw new RuntimeException(e.getMessage());
     } catch (IOException e) {
-      logger.error("error while calling spill() on {}", e,
+      logger.error("Error while calling spill() on {}", e,
         MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, consumerToSpill));
       // checkstyle.off: RegexpSinglelineJava
-      throw new SparkOutOfMemoryError("error while calling spill() on " + consumerToSpill + " : "
-        + e.getMessage());
+      throw new SparkOutOfMemoryError(
+        "SPILL_OUT_OF_MEMORY",
+        new HashMap<String, String>() {{
+          put("consumerToSpill", consumerToSpill.toString());
+          put("message", e.getMessage());
+        }});
       // checkstyle.on: RegexpSinglelineJava
     }
   }

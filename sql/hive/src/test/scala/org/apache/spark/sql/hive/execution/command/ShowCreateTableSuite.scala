@@ -365,7 +365,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
         exception = intercept[AnalysisException] {
           checkCreateSparkTableAsHive("t1")
         },
-        errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNSUPPORTED_SERDE_CONFIGURATION",
+        condition = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNSUPPORTED_SERDE_CONFIGURATION",
         sqlState = "0A000",
         parameters = Map(
           "tableName" -> "`spark_catalog`.`default`.`t1`",
@@ -438,7 +438,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
         exception = intercept[AnalysisException] {
           sql("SHOW CREATE TABLE t1")
         },
-        errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_TRANSACTIONAL_HIVE_TABLE",
+        condition = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_TRANSACTIONAL_HIVE_TABLE",
         sqlState = "0A000",
         parameters = Map("tableName" -> "`spark_catalog`.`default`.`t1`")
       )

@@ -27,7 +27,7 @@ class BufferHolderSuite extends SparkFunSuite {
       exception = intercept[SparkUnsupportedOperationException] {
         new BufferHolder(new UnsafeRow(Int.MaxValue / 8))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3130",
+      condition = "_LEGACY_ERROR_TEMP_3130",
       parameters = Map("numFields" -> "268435455"))
 
     val holder = new BufferHolder(new UnsafeRow(1000))
@@ -38,7 +38,7 @@ class BufferHolderSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         holder.grow(Integer.MAX_VALUE)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3199",
+      condition = "_LEGACY_ERROR_TEMP_3199",
       parameters = Map("neededSize" -> "2147483647", "arrayMax" -> "2147483632")
     )
   }

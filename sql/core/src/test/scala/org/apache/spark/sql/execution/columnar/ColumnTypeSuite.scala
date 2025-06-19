@@ -186,7 +186,7 @@ class ColumnTypeSuite extends SparkFunSuite {
       exception = intercept[SparkUnsupportedOperationException] {
         ColumnType(invalidType)
       },
-      errorClass = "UNSUPPORTED_DATATYPE",
+      condition = "UNSUPPORTED_DATATYPE",
       parameters = Map("typeName" -> "\"INVALID TYPE NAME\"")
     )
   }

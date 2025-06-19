@@ -26,15 +26,17 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan, WithCTE}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReportsSinkMetrics, ReportsSourceMetrics, SparkDataStream}
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{QueryExecution, StreamSourceAwareSparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress}
+import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent}
 import org.apache.spark.util.{Clock, Utils}
@@ -59,6 +61,12 @@ class ProgressReporter(
 
   val noDataProgressEventInterval: Long =
     sparkSession.sessionState.conf.streamingNoDataProgressEventInterval
+
+  val coordinatorReportSnapshotUploadLag: Boolean =
+    sparkSession.sessionState.conf.stateStoreCoordinatorReportSnapshotUploadLag
+
+  val stateStoreCoordinator: StateStoreCoordinatorRef =
+    sparkSession.sessionState.streamingQueryManager.stateStoreCoordinator
 
   private val timestampFormat =
     DateTimeFormatter
@@ -282,6 +290,17 @@ abstract class ProgressContext(
     progressReporter.lastNoExecutionProgressEventTime = triggerClock.getTimeMillis()
     progressReporter.updateProgress(newProgress)
 
+    // Ask the state store coordinator to log all lagging state stores
+    if (progressReporter.coordinatorReportSnapshotUploadLag) {
+      val latestVersion = lastEpochId + 1
+      progressReporter.stateStoreCoordinator
+        .logLaggingStateStores(
+          lastExecution.runId,
+          latestVersion,
+          lastExecution.isTerminatingTrigger
+        )
+    }
+
     // Update the value since this trigger executes a batch successfully.
     this.execStatsOnLatestExecutedBatch = Some(execStats)
 
@@ -401,8 +420,42 @@ abstract class ProgressContext(
     }
   }
 
-  /** Extract number of input sources for each streaming source in plan */
   private def extractSourceToNumInputRows(
+      lastExecution: IncrementalExecution): Map[SparkDataStream, Long] = {
+
+    def sumRows(tuples: Seq[(SparkDataStream, Long)]): Map[SparkDataStream, Long] = {
+      tuples.groupBy(_._1).transform((_, v) => v.map(_._2).sum) // sum up rows for each source
+    }
+
+    val sources = newData.keys.toSet
+
+    val sourceToInputRowsTuples = lastExecution.executedPlan
+      .collect {
+        case node: StreamSourceAwareSparkPlan if node.getStream.isDefined =>
+          val numRows = node.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
+          node.getStream.get -> numRows
+      }
+
+    val capturedSources = sourceToInputRowsTuples.map(_._1).toSet
+
+    if (sources == capturedSources) {
+      logDebug("Source -> # input rows\n\t" + sourceToInputRowsTuples.mkString("\n\t"))
+      sumRows(sourceToInputRowsTuples)
+    } else {
+      // Falling back to the legacy approach to avoid any regression.
+      val inputRows = legacyExtractSourceToNumInputRows(lastExecution)
+      // If the legacy approach fails to extract the input rows, we just pick the new approach
+      // as it is more likely that the source nodes have been pruned in valid reason.
+      if (inputRows.isEmpty) {
+        sumRows(sourceToInputRowsTuples)
+      } else {
+        inputRows
+      }
+    }
+  }
+
+  /** Extract number of input sources for each streaming source in plan */
+  private def legacyExtractSourceToNumInputRows(
       lastExecution: IncrementalExecution): Map[SparkDataStream, Long] = {
 
     def sumRows(tuples: Seq[(SparkDataStream, Long)]): Map[SparkDataStream, Long] = {
@@ -524,7 +577,7 @@ abstract class ProgressContext(
       hasNewData: Boolean,
       sourceToNumInputRows: Map[SparkDataStream, Long],
       lastExecution: IncrementalExecution): ExecutionStats = {
-    val hasEventTime = progressReporter.logicalPlan().collect {
+    val hasEventTime = progressReporter.logicalPlan().collectFirst {
       case e: EventTimeWatermark => e
     }.nonEmpty
 

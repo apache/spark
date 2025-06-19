@@ -19,19 +19,19 @@ package org.apache.spark.sql.execution
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.internal.{LogEntry, Logging, MDC}
+import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
-import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
@@ -94,7 +94,13 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       query: Dataset[_],
       tableName: Option[String],
       storageLevel: StorageLevel): Unit = {
-    cacheQueryInternal(query.sparkSession, query.queryExecution.normalized, tableName, storageLevel)
+    cacheQueryInternal(
+      query.sparkSession,
+      query.queryExecution.analyzed,
+      query.queryExecution.normalized,
+      tableName,
+      storageLevel
+    )
   }
 
   /**
@@ -107,23 +113,30 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       tableName: Option[String],
       storageLevel: StorageLevel): Unit = {
     val normalized = QueryExecution.normalize(spark, planToCache)
-    cacheQueryInternal(spark, normalized, tableName, storageLevel)
+    cacheQueryInternal(spark, planToCache, normalized, tableName, storageLevel)
   }
 
-  // The `planToCache` should have been normalized.
+  // The `normalizedPlan` should have been normalized. It is the cache key.
   private def cacheQueryInternal(
       spark: SparkSession,
-      planToCache: LogicalPlan,
+      unnormalizedPlan: LogicalPlan,
+      normalizedPlan: LogicalPlan,
       tableName: Option[String],
       storageLevel: StorageLevel): Unit = {
     if (storageLevel == StorageLevel.NONE) {
       // Do nothing for StorageLevel.NONE since it will not actually cache any data.
-    } else if (lookupCachedDataInternal(planToCache).nonEmpty) {
+    } else if (unnormalizedPlan.isInstanceOf[IgnoreCachedData]) {
+      logWarning(
+        log"Asked to cache a plan that is inapplicable for caching: " +
+        log"${MDC(LOGICAL_PLAN, unnormalizedPlan)}"
+      )
+    } else if (lookupCachedDataInternal(normalizedPlan).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
       val inMemoryRelation = sessionWithConfigsOff.withActive {
-        val qe = sessionWithConfigsOff.sessionState.executePlan(planToCache)
+        // it creates query execution from unnormalizedPlan plan to avoid multiple normalization.
+        val qe = sessionWithConfigsOff.sessionState.executePlan(unnormalizedPlan)
         InMemoryRelation(
           storageLevel,
           qe,
@@ -131,10 +144,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       }
 
       this.synchronized {
-        if (lookupCachedDataInternal(planToCache).nonEmpty) {
+        if (lookupCachedDataInternal(normalizedPlan).nonEmpty) {
           logWarning("Data has already been cached.")
         } else {
-          val cd = CachedData(planToCache, inMemoryRelation)
+          // the cache key is the normalized plan
+          val cd = CachedData(normalizedPlan, inMemoryRelation)
           cachedData = cd +: cachedData
           CacheManager.logCacheOperation(log"Added Dataframe cache entry:" +
             log"${MDC(DATAFRAME_CACHE_ENTRY, cd)}")
@@ -211,15 +225,15 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
 
     plan match {
-      case LogicalRelation(_, _, Some(catalogTable), _) =>
+      case LogicalRelationWithTable(_, Some(catalogTable)) =>
         isSameName(catalogTable.identifier.nameParts)
 
       case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _) =>
         import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
         isSameName(v2Ident.toQualifiedNameParts(catalog))
 
-      case View(catalogTable, _, _) =>
-        isSameName(catalogTable.identifier.nameParts)
+      case v: View =>
+        isSameName(v.desc.identifier.nameParts)
 
       case HiveTableRelation(catalogTable, _, _, _, _) =>
         isSameName(catalogTable.identifier.nameParts)
@@ -465,7 +479,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     // Bucketed scan only has one time overhead but can have multi-times benefits in cache,
     // so we always do bucketed scan in a cached plan.
     var disableConfigs = Seq(SQLConf.AUTO_BUCKETED_SCAN_ENABLED)
-    if (!session.conf.get(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
+    if (!session.sessionState.conf.getConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
       // Allowing changing cached plan output partitioning might lead to regression as it introduces
       // extra shuffle
       disableConfigs =
@@ -476,14 +490,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 }
 
 object CacheManager extends Logging {
-  def logCacheOperation(f: => LogEntry): Unit = {
-    SQLConf.get.dataframeCacheLogLevel match {
-      case "TRACE" => logTrace(f)
-      case "DEBUG" => logDebug(f)
-      case "INFO" => logInfo(f)
-      case "WARN" => logWarning(f)
-      case "ERROR" => logError(f)
-      case _ => logTrace(f)
-    }
+  def logCacheOperation(f: => MessageWithContext): Unit = {
+    logBasedOnLevel(SQLConf.get.dataframeCacheLogLevel)(f)
   }
 }

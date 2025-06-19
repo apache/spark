@@ -27,7 +27,7 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{REASON, RETRY_INTERVAL, SHARD_ID, WORKER_URL}
+import org.apache.spark.internal.LogKeys.{KINESIS_REASON, RETRY_INTERVAL, SHARD_ID, WORKER_URL}
 
 /**
  * Kinesis-specific implementation of the Kinesis Client Library (KCL) IRecordProcessor.
@@ -119,7 +119,7 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
       checkpointer: IRecordProcessorCheckpointer,
       reason: ShutdownReason): Unit = {
     logInfo(log"Shutdown: Shutting down workerId ${MDC(WORKER_URL, workerId)} " +
-      log"with reason ${MDC(REASON, reason)}")
+      log"with reason ${MDC(KINESIS_REASON, reason)}")
     // null if not initialized before shutdown:
     if (shardId == null) {
       logWarning(log"No shardId for workerId ${MDC(WORKER_URL, workerId)}?")

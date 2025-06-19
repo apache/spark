@@ -48,29 +48,60 @@ compoundOrSingleStatement
     ;
 
 singleCompoundStatement
-    : beginEndCompoundBlock SEMICOLON? EOF
+    : BEGIN (NOT ATOMIC)? compoundBody? END SEMICOLON? EOF
     ;
 
 beginEndCompoundBlock
-    : beginLabel? BEGIN compoundBody END endLabel?
+    : beginLabel? BEGIN (NOT ATOMIC)? compoundBody? END endLabel?
     ;
 
 compoundBody
-    : (compoundStatements+=compoundStatement SEMICOLON)*
+    : (compoundStatements+=compoundStatement SEMICOLON)+
     ;
 
 compoundStatement
-    : statement
-    | setStatementWithOptionalVarKeyword
+    : declareConditionStatement
+    | statement
+    | setStatementInsideSqlScript
     | beginEndCompoundBlock
+    | declareHandlerStatement
     | ifElseStatement
+    | caseStatement
     | whileStatement
+    | repeatStatement
+    | leaveStatement
+    | iterateStatement
+    | loopStatement
+    | forStatement
     ;
 
-setStatementWithOptionalVarKeyword
-    : SET variable? assignmentList                              #setVariableWithOptionalKeyword
-    | SET variable? LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
-        LEFT_PAREN query RIGHT_PAREN                            #setVariableWithOptionalKeyword
+setStatementInsideSqlScript
+    : SET assignmentList                              #setVariableInsideSqlScript
+    | SET LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
+        LEFT_PAREN query RIGHT_PAREN                  #setVariableInsideSqlScript
+    ;
+
+sqlStateValue
+    : stringLit
+    ;
+
+declareConditionStatement
+    : DECLARE multipartIdentifier CONDITION (FOR SQLSTATE VALUE? sqlStateValue)?
+    ;
+
+conditionValue
+    : SQLSTATE VALUE? sqlStateValue
+    | SQLEXCEPTION
+    | NOT FOUND
+    | multipartIdentifier
+    ;
+
+conditionValues
+    : cvList+=conditionValue (COMMA cvList+=conditionValue)*
+    ;
+
+declareHandlerStatement
+    : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValues (beginEndCompoundBlock | statement | setStatementInsideSqlScript)
     ;
 
 whileStatement
@@ -79,8 +110,35 @@ whileStatement
 
 ifElseStatement
     : IF booleanExpression THEN conditionalBodies+=compoundBody
-        (ELSE IF booleanExpression THEN conditionalBodies+=compoundBody)*
+        (ELSEIF booleanExpression THEN conditionalBodies+=compoundBody)*
         (ELSE elseBody=compoundBody)? END IF
+    ;
+
+repeatStatement
+    : beginLabel? REPEAT compoundBody UNTIL booleanExpression END REPEAT endLabel?
+    ;
+
+leaveStatement
+    : LEAVE multipartIdentifier
+    ;
+
+iterateStatement
+    : ITERATE multipartIdentifier
+    ;
+
+caseStatement
+    : CASE (WHEN conditions+=booleanExpression THEN conditionalBodies+=compoundBody)+
+        (ELSE elseBody=compoundBody)? END CASE                #searchedCaseStatement
+    | CASE caseVariable=expression (WHEN conditionExpressions+=expression THEN conditionalBodies+=compoundBody)+
+        (ELSE elseBody=compoundBody)? END CASE                #simpleCaseStatement
+    ;
+
+loopStatement
+    : beginLabel? LOOP compoundBody END LOOP endLabel?
+    ;
+
+forStatement
+    : beginLabel? FOR (multipartIdentifier AS)? query DO compoundBody END FOR endLabel?
     ;
 
 singleStatement
@@ -119,28 +177,35 @@ singleTableSchema
     : colTypeList EOF
     ;
 
+singleRoutineParamList
+    : colDefinitionList EOF
+    ;
+
 statement
     : query                                                            #statementDefault
     | executeImmediate                                                 #visitExecuteImmediate
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE identifierReference                                          #use
     | USE namespace identifierReference                                #useNamespace
-    | SET CATALOG (errorCapturingIdentifier | stringLit)                  #setCatalog
+    | SET CATALOG catalogIdentifierReference                           #setCatalog
     | CREATE namespace (IF errorCapturingNot EXISTS)? identifierReference
         (commentSpec |
          locationSpec |
+         collationSpec |
          (WITH (DBPROPERTIES | PROPERTIES) propertyList))*             #createNamespace
     | ALTER namespace identifierReference
         SET (DBPROPERTIES | PROPERTIES) propertyList                   #setNamespaceProperties
     | ALTER namespace identifierReference
         UNSET (DBPROPERTIES | PROPERTIES) propertyList                 #unsetNamespaceProperties
     | ALTER namespace identifierReference
+        collationSpec                                                  #setNamespaceCollation
+    | ALTER namespace identifierReference
         SET locationSpec                                               #setNamespaceLocation
     | DROP namespace (IF EXISTS)? identifierReference
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW namespaces ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=stringLit)?                                        #showNamespaces
-    | createTableHeader (LEFT_PAREN colDefinitionList RIGHT_PAREN)? tableProvider?
+    | createTableHeader (LEFT_PAREN tableElementList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
     | CREATE TABLE (IF errorCapturingNot EXISTS)? target=tableIdentifier
@@ -150,7 +215,7 @@ statement
         createFileFormat |
         locationSpec |
         (TBLPROPERTIES tableProps=propertyList))*                      #createTableLike
-    | replaceTableHeader (LEFT_PAREN colDefinitionList RIGHT_PAREN)? tableProvider?
+    | replaceTableHeader (LEFT_PAREN tableElementList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE identifierReference partitionSpec? COMPUTE STATISTICS
@@ -179,8 +244,7 @@ statement
     | ALTER (TABLE | VIEW) identifierReference
         UNSET TBLPROPERTIES (IF EXISTS)? propertyList                  #unsetTableProperties
     | ALTER TABLE table=identifierReference
-        (ALTER | CHANGE) COLUMN? column=multipartIdentifier
-        alterColumnAction?                                             #alterTableAlterColumn
+        (ALTER | CHANGE) COLUMN? columns=alterColumnSpecList           #alterTableAlterColumn
     | ALTER TABLE table=identifierReference partitionSpec?
         CHANGE COLUMN?
         colName=multipartIdentifier colType colPosition?               #hiveChangeColumn
@@ -203,6 +267,11 @@ statement
     | ALTER TABLE identifierReference RECOVER PARTITIONS                 #recoverPartitions
     | ALTER TABLE identifierReference
         (clusterBySpec | CLUSTER BY NONE)                              #alterClusterBy
+    | ALTER TABLE identifierReference collationSpec                    #alterTableCollation
+    | ALTER TABLE identifierReference ADD tableConstraintDefinition    #addTableConstraint
+    | ALTER TABLE identifierReference
+        DROP CONSTRAINT (IF EXISTS)? name=identifier
+        (RESTRICT | CASCADE)?                                     #dropTableConstraint
     | DROP TABLE (IF EXISTS)? identifierReference PURGE?               #dropTable
     | DROP VIEW (IF EXISTS)? identifierReference                       #dropView
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?
@@ -210,6 +279,7 @@ statement
         identifierCommentList?
         (commentSpec |
          schemaBinding |
+         collationSpec |
          (PARTITIONED ON identifierList) |
          (TBLPROPERTIES propertyList))*
         AS query                                                       #createView
@@ -245,14 +315,16 @@ statement
     | SHOW PARTITIONS identifierReference partitionSpec?               #showPartitions
     | SHOW identifier? FUNCTIONS ((FROM | IN) ns=identifierReference)?
         (LIKE? (legacy=multipartIdentifier | pattern=stringLit))?      #showFunctions
+    | SHOW PROCEDURES ((FROM | IN) identifierReference)?               #showProcedures
     | SHOW CREATE TABLE identifierReference (AS SERDE)?                #showCreateTable
     | SHOW CURRENT namespace                                           #showCurrentNamespace
     | SHOW CATALOGS (LIKE? pattern=stringLit)?                            #showCatalogs
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
+    | (DESC | DESCRIBE) PROCEDURE identifierReference                  #describeProcedure
     | (DESC | DESCRIBE) namespace EXTENDED?
         identifierReference                                            #describeNamespace
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
-        identifierReference partitionSpec? describeColName?            #describeRelation
+        identifierReference partitionSpec? describeColName? (AS JSON)? #describeRelation
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
     | COMMENT ON namespace identifierReference IS
         comment                                                        #commentNamespace
@@ -275,12 +347,39 @@ statement
         LEFT_PAREN columns=multipartIdentifierPropertyList RIGHT_PAREN
         (OPTIONS options=propertyList)?                                #createIndex
     | DROP INDEX (IF EXISTS)? identifier ON TABLE? identifierReference #dropIndex
+    | CALL identifierReference
+        LEFT_PAREN
+        (functionArgument (COMMA functionArgument)*)?
+        RIGHT_PAREN                                                    #call
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
+    | createPipelineDatasetHeader (LEFT_PAREN tableElementList? RIGHT_PAREN)? tableProvider?
+        createTableClauses
+        (AS query)?                                                    #createPipelineDataset
+    | createPipelineFlowHeader insertInto query                        #createPipelineInsertIntoFlow
+    ;
+
+materializedView
+    : MATERIALIZED VIEW
+    ;
+
+streamingTable
+    : STREAMING TABLE
+    ;
+
+createPipelineDatasetHeader
+    : CREATE
+      (materializedView | streamingTable)
+      (IF errorCapturingNot EXISTS)?
+      identifierReference
+    ;
+
+streamRelationPrimary
+    : STREAM multipartIdentifier tableAlias optionsClause?                           #streamTableName
+    | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN tableAlias optionsClause?    #streamTableName
     ;
 
 setResetStatement
-    : SET COLLATION collationName=identifier                           #setCollation
-    | SET ROLE .*?                                                     #failSetRole
+    : SET ROLE .*?                                                     #failSetRole
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone                                           #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
@@ -413,6 +512,10 @@ commentSpec
     : COMMENT stringLit
     ;
 
+singleQuery
+    : query EOF
+    ;
+
 query
     : ctes? queryTerm queryOrganization
     ;
@@ -436,6 +539,10 @@ partitionSpec
 partitionVal
     : identifier (EQ constant)?
     | identifier EQ DEFAULT
+    ;
+
+createPipelineFlowHeader
+    : CREATE FLOW flowName=identifierReference (commentSpec)? AS
     ;
 
 namespace
@@ -470,11 +577,11 @@ describeColName
     ;
 
 ctes
-    : WITH namedQuery (COMMA namedQuery)*
+    : WITH RECURSIVE? namedQuery (COMMA namedQuery)*
     ;
 
 namedQuery
-    : name=errorCapturingIdentifier (columnAliases=identifierList)? AS? LEFT_PAREN query RIGHT_PAREN
+    : name=errorCapturingIdentifier (columnAliases=identifierList)? (MAX RECURSION LEVEL INTEGER_VALUE)? AS? LEFT_PAREN query RIGHT_PAREN
     ;
 
 tableProvider
@@ -491,6 +598,7 @@ createTableClauses
      createFileFormat |
      locationSpec |
      commentSpec |
+     collationSpec |
      (TBLPROPERTIES tableProps=propertyList))*
     ;
 
@@ -567,6 +675,12 @@ identifierReference
     | multipartIdentifier
     ;
 
+catalogIdentifierReference
+    : IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN
+    | errorCapturingIdentifier
+    | stringLit
+    ;
+
 queryOrganization
     : (ORDER BY order+=sortItem (COMMA order+=sortItem)*)?
       (CLUSTER BY clusterBy+=expression (COMMA clusterBy+=expression)*)?
@@ -589,6 +703,7 @@ queryTerm
         operator=INTERSECT setQuantifier? right=queryTerm                                #setOperation
     | left=queryTerm {!legacy_setops_precedence_enabled}?
         operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
+    | left=queryTerm OPERATOR_PIPE operatorPipeRightSide                                 #operatorPipeStatement
     ;
 
 queryPrimary
@@ -604,7 +719,7 @@ sortItem
     ;
 
 fromStatement
-    : fromClause fromStatementBody+
+    : fromClause fromStatementBody*
     ;
 
 fromStatementBody
@@ -726,7 +841,7 @@ temporalClause
 aggregationClause
     : GROUP BY groupingExpressionsWithGroupingAnalytics+=groupByClause
         (COMMA groupingExpressionsWithGroupingAnalytics+=groupByClause)*
-    | GROUP BY groupingExpressions+=expression (COMMA groupingExpressions+=expression)* (
+    | GROUP BY groupingExpressions+=namedExpression (COMMA groupingExpressions+=namedExpression)* (
       WITH kind=ROLLUP
     | WITH kind=CUBE
     | kind=GROUPING SETS LEFT_PAREN groupingSet (COMMA groupingSet)* RIGHT_PAREN)?
@@ -889,7 +1004,8 @@ identifierComment
     ;
 
 relationPrimary
-    : identifierReference temporalClause?
+    : streamRelationPrimary                                 #streamRelation
+    | identifierReference temporalClause?
       optionsClause? sample? tableAlias                     #tableName
     | LEFT_PAREN query RIGHT_PAREN sample? tableAlias       #aliasedQuery
     | LEFT_PAREN relation RIGHT_PAREN sample? tableAlias    #aliasedRelation
@@ -1076,7 +1192,7 @@ datetimeUnit
     ;
 
 primaryExpression
-    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER | USER | SESSION_USER)             #currentLike
+    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER | USER | SESSION_USER | CURRENT_TIME)             #currentLike
     | name=(TIMESTAMPADD | DATEADD | DATE_ADD) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA unitsAmount=valueExpression COMMA timestamp=valueExpression RIGHT_PAREN             #timestampadd
     | name=(TIMESTAMPDIFF | DATEDIFF | DATE_DIFF | TIMEDIFF) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN    #timestampdiff
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
@@ -1116,6 +1232,7 @@ primaryExpression
 
 literalType
     : DATE
+    | TIME
     | TIMESTAMP | TIMESTAMP_LTZ | TIMESTAMP_NTZ
     | INTERVAL
     | BINARY_HEX
@@ -1188,8 +1305,12 @@ colPosition
     : position=FIRST | position=AFTER afterCol=errorCapturingIdentifier
     ;
 
+collationSpec
+    : DEFAULT COLLATION collationName=identifier
+    ;
+
 collateClause
-    : COLLATE collationName=identifier
+    : COLLATE collationName=multipartIdentifier
     ;
 
 type
@@ -1201,6 +1322,7 @@ type
     | FLOAT | REAL
     | DOUBLE
     | DATE
+    | TIME
     | TIMESTAMP | TIMESTAMP_NTZ | TIMESTAMP_LTZ
     | STRING collateClause?
     | CHARACTER | CHAR
@@ -1221,6 +1343,9 @@ dataType
     | INTERVAL from=(YEAR | MONTH) (TO to=MONTH)?               #yearMonthIntervalDataType
     | INTERVAL from=(DAY | HOUR | MINUTE | SECOND)
       (TO to=(HOUR | MINUTE | SECOND))?                         #dayTimeIntervalDataType
+    | TIME (LEFT_PAREN precision=INTEGER_VALUE RIGHT_PAREN)?
+      (WITHOUT TIME ZONE)?                                      #timeDataType
+    | (TIMESTAMP_NTZ | TIMESTAMP WITHOUT TIME ZONE)             #timestampNtzDataType
     | type (LEFT_PAREN INTEGER_VALUE
       (COMMA INTEGER_VALUE)* RIGHT_PAREN)?                      #primitiveDataType
     ;
@@ -1256,6 +1381,15 @@ colType
     : colName=errorCapturingIdentifier dataType (errorCapturingNot NULL)? commentSpec?
     ;
 
+tableElementList
+    : tableElement (COMMA tableElement)*
+    ;
+
+tableElement
+    : tableConstraintDefinition
+    | colDefinition
+    ;
+
 colDefinitionList
     : colDefinition (COMMA colDefinition)*
     ;
@@ -1269,10 +1403,26 @@ colDefinitionOption
     | defaultExpression
     | generationExpression
     | commentSpec
+    | columnConstraintDefinition
     ;
 
 generationExpression
-    : GENERATED ALWAYS AS LEFT_PAREN expression RIGHT_PAREN
+    : GENERATED ALWAYS AS LEFT_PAREN expression RIGHT_PAREN     #generatedColumn
+    | GENERATED (ALWAYS | BY DEFAULT) AS IDENTITY identityColSpec? #identityColumn
+    ;
+
+identityColSpec
+    : LEFT_PAREN sequenceGeneratorOption* RIGHT_PAREN
+    ;
+
+sequenceGeneratorOption
+    : START WITH start=sequenceGeneratorStartOrStep
+    | INCREMENT BY step=sequenceGeneratorStartOrStep
+    ;
+
+sequenceGeneratorStartOrStep
+    : MINUS? INTEGER_VALUE
+    | MINUS? BIGINT_LITERAL
     ;
 
 complexColTypeList
@@ -1423,6 +1573,70 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
+columnConstraintDefinition
+    : (CONSTRAINT name=errorCapturingIdentifier)? columnConstraint constraintCharacteristic*
+    ;
+
+columnConstraint
+    : checkConstraint
+    | uniqueSpec
+    | referenceSpec
+    ;
+
+tableConstraintDefinition
+    : (CONSTRAINT name=errorCapturingIdentifier)? tableConstraint constraintCharacteristic*
+    ;
+
+tableConstraint
+    : checkConstraint
+    | uniqueConstraint
+    | foreignKeyConstraint
+    ;
+
+checkConstraint
+    : CHECK LEFT_PAREN (expr=booleanExpression) RIGHT_PAREN
+    ;
+
+uniqueSpec
+    : UNIQUE
+    | PRIMARY KEY
+    ;
+
+uniqueConstraint
+    : uniqueSpec identifierList
+    ;
+
+referenceSpec
+    : REFERENCES multipartIdentifier (parentColumns=identifierList)?
+    ;
+
+foreignKeyConstraint
+    : FOREIGN KEY identifierList referenceSpec
+    ;
+
+constraintCharacteristic
+    : enforcedCharacteristic
+    | relyCharacteristic
+    ;
+
+enforcedCharacteristic
+    : ENFORCED
+    | NOT ENFORCED
+    ;
+
+relyCharacteristic
+    : RELY
+    | NORELY
+    ;
+
+alterColumnSpecList
+    : alterColumnSpec (COMMA alterColumnSpec)*
+    ;
+
+alterColumnSpec
+    : column=multipartIdentifier alterColumnAction?
+    ;
+
 alterColumnAction
     : TYPE dataType
     | commentSpec
@@ -1447,6 +1661,37 @@ version
     | stringLit
     ;
 
+operatorPipeRightSide
+    : selectClause windowClause?
+    | EXTEND extendList=namedExpressionSeq
+    | SET operatorPipeSetAssignmentSeq
+    | DROP identifierSeq
+    | AS errorCapturingIdentifier
+    // Note that the WINDOW clause is not allowed in the WHERE pipe operator, but we add it here in
+    // the grammar simply for purposes of catching this invalid syntax and throwing a specific
+    // dedicated error message.
+    | whereClause windowClause?
+    // The following two cases match the PIVOT or UNPIVOT clause, respectively.
+    // For each one, we add the other clause as an option in order to return high-quality error
+    // messages in the event that both are present (this is not allowed).
+    | pivotClause unpivotClause?
+    | unpivotClause pivotClause?
+    | sample
+    | joinRelation
+    | operator=(UNION | EXCEPT | SETMINUS | INTERSECT) setQuantifier? right=queryPrimary
+    | queryOrganization
+    | AGGREGATE namedExpressionSeq? aggregationClause?
+    ;
+
+operatorPipeSetAssignmentSeq
+    : ident+=errorCapturingIdentifier
+        (DOT errorCapturingIdentifier)*  // This is invalid syntax; we just capture it here.
+        EQ expression
+        (COMMA ident+=errorCapturingIdentifier
+          (DOT errorCapturingIdentifier)*  // This is invalid syntax; we just capture it here.
+          EQ expression)*
+    ;
+
 // When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.
 // - Reserved keywords:
 //     Keywords that are reserved and can't be used as identifiers for table, view, column,
@@ -1461,6 +1706,7 @@ ansiNonReserved
 //--ANSI-NON-RESERVED-START
     : ADD
     | AFTER
+    | AGGREGATE
     | ALTER
     | ALWAYS
     | ANALYZE
@@ -1470,6 +1716,7 @@ ansiNonReserved
     | ARRAY
     | ASC
     | AT
+    | ATOMIC
     | BEGIN
     | BETWEEN
     | BIGINT
@@ -1502,7 +1749,9 @@ ansiNonReserved
     | COMPENSATION
     | COMPUTE
     | CONCATENATE
+    | CONDITION
     | CONTAINS
+    | CONTINUE
     | COST
     | CUBE
     | CURRENT
@@ -1537,13 +1786,17 @@ ansiNonReserved
     | DO
     | DOUBLE
     | DROP
+    | ELSEIF
+    | ENFORCED
     | ESCAPED
     | EVOLUTION
     | EXCHANGE
     | EXCLUDE
     | EXISTS
+    | EXIT
     | EXPLAIN
     | EXPORT
+    | EXTEND
     | EXTENDED
     | EXTERNAL
     | EXTRACT
@@ -1551,22 +1804,27 @@ ansiNonReserved
     | FILEFORMAT
     | FIRST
     | FLOAT
+    | FLOW
     | FOLLOWING
     | FORMAT
     | FORMATTED
+    | FOUND
     | FUNCTION
     | FUNCTIONS
     | GENERATED
     | GLOBAL
     | GROUPING
+    | HANDLER
     | HOUR
     | HOURS
     | IDENTIFIER_KW
+    | IDENTITY
     | IF
     | IGNORE
     | IMMEDIATE
     | IMPORT
     | INCLUDE
+    | INCREMENT
     | INDEX
     | INDEXES
     | INPATH
@@ -1578,10 +1836,15 @@ ansiNonReserved
     | INTERVAL
     | INVOKER
     | ITEMS
+    | ITERATE
+    | JSON
+    | KEY
     | KEYS
     | LANGUAGE
     | LAST
     | LAZY
+    | LEAVE
+    | LEVEL
     | LIKE
     | ILIKE
     | LIMIT
@@ -1594,9 +1857,12 @@ ansiNonReserved
     | LOCKS
     | LOGICAL
     | LONG
+    | LOOP
     | MACRO
     | MAP
     | MATCHED
+    | MATERIALIZED
+    | MAX
     | MERGE
     | MICROSECOND
     | MICROSECONDS
@@ -1615,6 +1881,7 @@ ansiNonReserved
     | NANOSECONDS
     | NO
     | NONE
+    | NORELY
     | NULLS
     | NUMERIC
     | OF
@@ -1634,6 +1901,8 @@ ansiNonReserved
     | POSITION
     | PRECEDING
     | PRINCIPALS
+    | PROCEDURE
+    | PROCEDURES
     | PROPERTIES
     | PURGE
     | QUARTER
@@ -1644,10 +1913,13 @@ ansiNonReserved
     | RECORDREADER
     | RECORDWRITER
     | RECOVER
+    | RECURSION
     | REDUCE
     | REFRESH
+    | RELY
     | RENAME
     | REPAIR
+    | REPEAT
     | REPEATABLE
     | REPLACE
     | RESET
@@ -1684,12 +1956,16 @@ ansiNonReserved
     | SORTED
     | SOURCE
     | SPECIFIC
+    | SQLEXCEPTION
+    | SQLSTATE
     | START
     | STATISTICS
     | STORED
     | STRATIFY
     | STRING
     | STRUCT
+    | STREAM
+    | STREAMING
     | SUBSTR
     | SUBSTRING
     | SYNC
@@ -1723,8 +1999,10 @@ ansiNonReserved
     | UNLOCK
     | UNPIVOT
     | UNSET
+    | UNTIL
     | UPDATE
     | USE
+    | VALUE
     | VALUES
     | VARCHAR
     | VAR
@@ -1738,6 +2016,7 @@ ansiNonReserved
     | WEEKS
     | WHILE
     | WINDOW
+    | WITHOUT
     | YEAR
     | YEARS
     | ZONE
@@ -1776,6 +2055,7 @@ nonReserved
 //--DEFAULT-NON-RESERVED-START
     : ADD
     | AFTER
+    | AGGREGATE
     | ALL
     | ALTER
     | ALWAYS
@@ -1788,6 +2068,7 @@ nonReserved
     | AS
     | ASC
     | AT
+    | ATOMIC
     | AUTHORIZATION
     | BEGIN
     | BETWEEN
@@ -1802,6 +2083,7 @@ nonReserved
     | BY
     | BYTE
     | CACHE
+    | CALL
     | CALLED
     | CASCADE
     | CASE
@@ -1828,8 +2110,10 @@ nonReserved
     | COMPENSATION
     | COMPUTE
     | CONCATENATE
+    | CONDITION
     | CONSTRAINT
     | CONTAINS
+    | CONTINUE
     | COST
     | CREATE
     | CUBE
@@ -1871,7 +2155,9 @@ nonReserved
     | DOUBLE
     | DROP
     | ELSE
+    | ELSEIF
     | END
+    | ENFORCED
     | ESCAPE
     | ESCAPED
     | EVOLUTION
@@ -1879,8 +2165,10 @@ nonReserved
     | EXCLUDE
     | EXECUTE
     | EXISTS
+    | EXIT
     | EXPLAIN
     | EXPORT
+    | EXTEND
     | EXTENDED
     | EXTERNAL
     | EXTRACT
@@ -1891,12 +2179,14 @@ nonReserved
     | FILEFORMAT
     | FIRST
     | FLOAT
+    | FLOW
     | FOLLOWING
     | FOR
     | FOREIGN
     | FORMAT
     | FORMATTED
     | FROM
+    | FOUND
     | FUNCTION
     | FUNCTIONS
     | GENERATED
@@ -1904,16 +2194,19 @@ nonReserved
     | GRANT
     | GROUP
     | GROUPING
+    | HANDLER
     | HAVING
     | HOUR
     | HOURS
     | IDENTIFIER_KW
+    | IDENTITY
     | IF
     | IGNORE
     | IMMEDIATE
     | IMPORT
     | IN
     | INCLUDE
+    | INCREMENT
     | INDEX
     | INDEXES
     | INPATH
@@ -1927,11 +2220,16 @@ nonReserved
     | INVOKER
     | IS
     | ITEMS
+    | ITERATE
+    | JSON
+    | KEY
     | KEYS
     | LANGUAGE
     | LAST
     | LAZY
     | LEADING
+    | LEAVE
+    | LEVEL
     | LIKE
     | LONG
     | ILIKE
@@ -1945,9 +2243,12 @@ nonReserved
     | LOCKS
     | LOGICAL
     | LONG
+    | LOOP
     | MACRO
     | MAP
     | MATCHED
+    | MATERIALIZED
+    | MAX
     | MERGE
     | MICROSECOND
     | MICROSECONDS
@@ -1966,6 +2267,7 @@ nonReserved
     | NANOSECONDS
     | NO
     | NONE
+    | NORELY
     | NOT
     | NULL
     | NULLS
@@ -1994,6 +2296,8 @@ nonReserved
     | PRECEDING
     | PRIMARY
     | PRINCIPALS
+    | PROCEDURE
+    | PROCEDURES
     | PROPERTIES
     | PURGE
     | QUARTER
@@ -2004,11 +2308,15 @@ nonReserved
     | RECORDREADER
     | RECORDWRITER
     | RECOVER
+    | RECURSION
+    | RECURSIVE
     | REDUCE
     | REFERENCES
     | REFRESH
+    | RELY
     | RENAME
     | REPAIR
+    | REPEAT
     | REPEATABLE
     | REPLACE
     | RESET
@@ -2047,10 +2355,14 @@ nonReserved
     | SOURCE
     | SPECIFIC
     | SQL
+    | SQLEXCEPTION
+    | SQLSTATE
     | START
     | STATISTICS
     | STORED
     | STRATIFY
+    | STREAM
+    | STREAMING
     | STRING
     | STRUCT
     | SUBSTR
@@ -2093,9 +2405,11 @@ nonReserved
     | UNLOCK
     | UNPIVOT
     | UNSET
+    | UNTIL
     | UPDATE
     | USE
     | USER
+    | VALUE
     | VALUES
     | VARCHAR
     | VAR
@@ -2113,6 +2427,7 @@ nonReserved
     | WINDOW
     | WITH
     | WITHIN
+    | WITHOUT
     | YEAR
     | YEARS
     | ZONE

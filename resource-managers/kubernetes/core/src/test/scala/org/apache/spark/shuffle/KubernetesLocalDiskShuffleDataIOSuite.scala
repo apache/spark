@@ -230,7 +230,7 @@ class KubernetesLocalDiskShuffleDataIOSuite extends SparkFunSuite with LocalRoot
       conf.get("spark.local.dir") + "/spark-x/executor-y")
     val dir = sparkConf.get("spark.local.dir") + "/blockmgr-z/00"
     Files.createDirectories(new File(dir).toPath())
-    Seq("ADLER32", "CRC32").foreach { algorithm =>
+    Seq("ADLER32", "CRC32", "CRC32C").foreach { algorithm =>
       new File(dir, s"1.checksum.$algorithm").createNewFile()
     }
 

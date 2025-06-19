@@ -35,7 +35,10 @@ case class ParquetColumn(
     definitionLevel: Int,
     required: Boolean,
     path: Seq[String],
-    children: Seq[ParquetColumn]) {
+    children: Seq[ParquetColumn],
+    // When `variantFileType` has value, the parquet column should produce a Spark variant type, and
+    // `variantFileType` describes the file schema of the Parquet variant column.
+    variantFileType: Option[ParquetColumn] = None) {
 
   def isPrimitive: Boolean = descriptor.nonEmpty
 }

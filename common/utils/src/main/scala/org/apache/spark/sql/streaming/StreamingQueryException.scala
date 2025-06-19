@@ -84,7 +84,7 @@ class StreamingQueryException private[sql](
     s"""${classOf[StreamingQueryException].getName}: ${cause.getMessage}
        |$queryDebugString""".stripMargin
 
-  override def getErrorClass: String = errorClass
+  override def getCondition: String = errorClass
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 }

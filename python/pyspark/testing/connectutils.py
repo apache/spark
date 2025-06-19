@@ -23,35 +23,18 @@ import unittest
 import uuid
 import contextlib
 
-grpc_requirement_message = None
-try:
-    import grpc
-except ImportError as e:
-    grpc_requirement_message = str(e)
-have_grpc = grpc_requirement_message is None
-
-
-grpc_status_requirement_message = None
-try:
-    import grpc_status
-except ImportError as e:
-    grpc_status_requirement_message = str(e)
-have_grpc_status = grpc_status_requirement_message is None
-
-googleapis_common_protos_requirement_message = None
-try:
-    from google.rpc import error_details_pb2
-except ImportError as e:
-    googleapis_common_protos_requirement_message = str(e)
-have_googleapis_common_protos = googleapis_common_protos_requirement_message is None
-
-graphviz_requirement_message = None
-try:
-    import graphviz
-except ImportError as e:
-    graphviz_requirement_message = str(e)
-have_graphviz: bool = graphviz_requirement_message is None
-
+from pyspark.testing import (
+    grpc_requirement_message,
+    have_grpc,
+    grpc_status_requirement_message,
+    have_grpc_status,
+    googleapis_common_protos_requirement_message,
+    have_googleapis_common_protos,
+    graphviz_requirement_message,
+    have_graphviz,
+    connect_requirement_message,
+    should_test_connect,
+)
 from pyspark import Row, SparkConf
 from pyspark.util import is_remote_only
 from pyspark.testing.utils import PySparkErrorTestUtils
@@ -63,15 +46,6 @@ from pyspark.testing.sqlutils import (
 )
 from pyspark.sql.session import SparkSession as PySparkSession
 
-
-connect_requirement_message = (
-    pandas_requirement_message
-    or pyarrow_requirement_message
-    or grpc_requirement_message
-    or googleapis_common_protos_requirement_message
-    or grpc_status_requirement_message
-)
-should_test_connect: str = typing.cast(str, connect_requirement_message is None)
 
 if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame
@@ -181,6 +155,9 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
             conf._jconf.remove("spark.master")
         conf.set("spark.connect.execute.reattachable.senderMaxStreamDuration", "1s")
         conf.set("spark.connect.execute.reattachable.senderMaxStreamSize", "123")
+        # Set a static token for all tests so the parallelism doesn't overwrite each
+        # tests' environment variables
+        conf.set("spark.connect.authenticate.token", "deadbeef")
         return conf
 
     @classmethod
@@ -208,6 +185,10 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
         cls.spark.stop()
 
+    def setUp(self) -> None:
+        # force to clean up the ML cache before each test
+        self.spark.client._cleanup_ml_cache()
+
     def test_assert_remote_mode(self):
         from pyspark.sql import is_remote
 
@@ -220,3 +201,55 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
             return QuietTest(self._legacy_sc)
         else:
             return contextlib.nullcontext()
+
+
+@unittest.skipIf(
+    not should_test_connect or is_remote_only(),
+    connect_requirement_message or "Requires JVM access",
+)
+class ReusedMixedTestCase(ReusedConnectTestCase, SQLTestUtils):
+    @classmethod
+    def setUpClass(cls):
+        super(ReusedMixedTestCase, cls).setUpClass()
+        # Disable the shared namespace so pyspark.sql.functions, etc point the regular
+        # PySpark libraries.
+        os.environ["PYSPARK_NO_NAMESPACE_SHARE"] = "1"
+
+        cls.connect = cls.spark  # Switch Spark Connect session and regular PySpark session.
+        cls.spark = PySparkSession._instantiatedSession
+        assert cls.spark is not None
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            # Stopping Spark Connect closes the session in JVM at the server.
+            cls.spark = cls.connect
+            del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
+        finally:
+            super(ReusedMixedTestCase, cls).tearDownClass()
+
+    def setUp(self) -> None:
+        # force to clean up the ML cache before each test
+        self.connect.client._cleanup_ml_cache()
+
+    def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
+        from pyspark.sql.classic.dataframe import DataFrame as SDF
+        from pyspark.sql.connect.dataframe import DataFrame as CDF
+
+        assert isinstance(df1, (SDF, CDF))
+        if isinstance(df1, SDF):
+            str1 = df1._jdf.showString(n, truncate, False)
+        else:
+            str1 = df1._show_string(n, truncate, False)
+
+        assert isinstance(df2, (SDF, CDF))
+        if isinstance(df2, SDF):
+            str2 = df2._jdf.showString(n, truncate, False)
+        else:
+            str2 = df2._show_string(n, truncate, False)
+
+        self.assertEqual(str1, str2)
+
+    def test_assert_remote_mode(self):
+        # no need to test this in mixed mode
+        pass

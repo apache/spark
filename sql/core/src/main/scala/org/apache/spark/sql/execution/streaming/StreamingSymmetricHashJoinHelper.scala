@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, 
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.WatermarkSupport.watermarkExpression
-import org.apache.spark.sql.execution.streaming.state.{StateStoreCoordinatorRef, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.{StateStoreCheckpointInfo, StateStoreCoordinatorRef, StateStoreProviderId}
 
 
 /**
@@ -320,4 +320,21 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         dataRDD.sparkContext, f, dataRDD, dataRDD2, stateInfo, storeNames, Some(storeCoordinator))
     }
   }
+
+  case class JoinerStateStoreCkptInfo(
+      keyToNumValues: StateStoreCheckpointInfo,
+      valueToNumKeys: StateStoreCheckpointInfo)
+
+  case class JoinStateStoreCkptInfo(
+      left: JoinerStateStoreCkptInfo,
+      right: JoinerStateStoreCkptInfo)
+
+  case class JoinerStateStoreCheckpointId(
+       keyToNumValues: Option[String],
+       valueToNumKeys: Option[String])
+
+  case class JoinStateStoreCheckpointId(
+       left: JoinerStateStoreCheckpointId,
+       right: JoinerStateStoreCheckpointId)
+
 }

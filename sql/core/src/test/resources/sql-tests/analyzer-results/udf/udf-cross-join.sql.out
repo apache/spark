@@ -95,7 +95,7 @@ Project [k#x, v1#x, k#x, v2#x]
 SELECT * FROM nt1 cross join nt2 where udf(nt1.v1) = "1" and udf(nt2.v2) = "22"
 -- !query analysis
 Project [k#x, v1#x, k#x, v2#x]
-+- Filter ((cast(udf(cast(v1#x as string)) as int) = cast(1 as int)) AND (cast(udf(cast(v2#x as string)) as int) = cast(22 as int)))
++- Filter ((cast(cast(udf(cast(v1#x as string)) as int) as bigint) = cast(1 as bigint)) AND (cast(cast(udf(cast(v2#x as string)) as int) as bigint) = cast(22 as bigint)))
    +- Join Cross
       :- SubqueryAlias nt1
       :  +- View (`nt1`, [k#x, v1#x])

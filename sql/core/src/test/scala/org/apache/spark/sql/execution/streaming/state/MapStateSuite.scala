@@ -22,7 +22,6 @@ import java.util.UUID
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, MapStateImplWithTTL, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.streaming.{ListState, MapState, TimeMode, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{BinaryType, StructType}
@@ -37,14 +36,17 @@ class MapStateSuite extends StateVariableSuiteBase {
     .add("key", BinaryType)
     .add("userKey", BinaryType)
 
+  import testImplicits._
+
   test("Map state operations for single instance") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        stringEncoder, TimeMode.None())
 
       val testState: MapState[String, Double] =
-        handle.getMapState[String, Double]("testState", Encoders.STRING, Encoders.scalaDouble)
+        handle.getMapState[String, Double]("testState", Encoders.STRING, Encoders.scalaDouble,
+          TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       // put initial value
       testState.updateValue("k1", 1.0)
@@ -75,12 +77,13 @@ class MapStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        stringEncoder, TimeMode.None())
 
       val testState1: MapState[Long, Double] =
-        handle.getMapState[Long, Double]("testState1", Encoders.scalaLong, Encoders.scalaDouble)
+        handle.getMapState[Long, Double]("testState1", TTLConfig.NONE)
       val testState2: MapState[Long, Int] =
-        handle.getMapState[Long, Int]("testState2", Encoders.scalaLong, Encoders.scalaInt)
+        handle.getMapState[Long, Int]("testState2",
+          TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       // put initial value
       testState1.updateValue(1L, 1.0)
@@ -114,16 +117,16 @@ class MapStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        stringEncoder, TimeMode.None())
 
       val mapTestState1: MapState[String, Int] =
-        handle.getMapState[String, Int]("mapTestState1", Encoders.STRING, Encoders.scalaInt)
+        handle.getMapState[String, Int]("mapTestState1", TTLConfig.NONE)
       val mapTestState2: MapState[String, Int] =
-        handle.getMapState[String, Int]("mapTestState2", Encoders.STRING, Encoders.scalaInt)
+        handle.getMapState[String, Int]("mapTestState2", TTLConfig.NONE)
       val valueTestState: ValueState[String] =
-        handle.getValueState[String]("valueTestState", Encoders.STRING)
+        handle.getValueState[String]("valueTestState", TTLConfig.NONE)
       val listTestState: ListState[String] =
-        handle.getListState[String]("listTestState", Encoders.STRING)
+        handle.getListState[String]("listTestState", TTLConfig.NONE)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       // put initial values
@@ -175,7 +178,7 @@ class MapStateSuite extends StateVariableSuiteBase {
       val store = provider.getStore(0)
       val timestampMs = 10
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.ProcessingTime(),
+        stringEncoder, TimeMode.ProcessingTime(),
         batchTimestampMs = Some(timestampMs))
 
       val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
@@ -196,7 +199,7 @@ class MapStateSuite extends StateVariableSuiteBase {
 
       // increment batchProcessingTime, or watermark and ensure expired value is not returned
       val nextBatchHandle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        stringEncoder,
         TimeMode.ProcessingTime(), batchTimestampMs = Some(ttlExpirationMs))
 
       val nextBatchTestState: MapStateImplWithTTL[String, String] =
@@ -228,15 +231,15 @@ class MapStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  test("test negative or zero TTL duration throws error") {
+  test("test null or negative TTL duration throws error") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val batchTimestampMs = 10
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        stringEncoder,
         TimeMode.ProcessingTime(), batchTimestampMs = Some(batchTimestampMs))
 
-      Seq(null, Duration.ZERO, Duration.ofMinutes(-1)).foreach { ttlDuration =>
+      Seq(null, Duration.ofMinutes(-1)).foreach { ttlDuration =>
         val ttlConfig = TTLConfig(ttlDuration)
         val ex = intercept[SparkUnsupportedOperationException] {
           handle.getMapState[String, String](
@@ -245,7 +248,7 @@ class MapStateSuite extends StateVariableSuiteBase {
 
         checkError(
           ex,
-          errorClass = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
+          condition = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
           parameters = Map(
             "operationType" -> "update",
             "stateName" -> "testState"
@@ -261,7 +264,7 @@ class MapStateSuite extends StateVariableSuiteBase {
       val store = provider.getStore(0)
       val timestampMs = 10
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.ProcessingTime(),
+        stringEncoder, TimeMode.ProcessingTime(),
         batchTimestampMs = Some(timestampMs))
 
       val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))

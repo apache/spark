@@ -85,6 +85,7 @@ abstract class CSVSuite
   private val badAfterGoodFile = "test-data/bad_after_good.csv"
   private val malformedRowFile = "test-data/malformedRow.csv"
   private val charFile = "test-data/char.csv"
+  private val moreColumnsFile = "test-data/more-columns.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -266,7 +267,7 @@ abstract class CSVSuite
         spark.read.format("csv").option("charset", "1-9588-osi")
           .load(testFile(carsFile8859))
       },
-      errorClass = "INVALID_PARAMETER_VALUE.CHARSET",
+      condition = "INVALID_PARAMETER_VALUE.CHARSET",
       parameters = Map(
         "charset" -> "1-9588-osi",
         "functionName" -> toSQLId("CSVOptions"),
@@ -388,13 +389,13 @@ abstract class CSVSuite
       }
       checkErrorMatchPVals(
         exception = e1,
-        errorClass = "FAILED_READ_FILE.NO_HINT",
+        condition = "FAILED_READ_FILE.NO_HINT",
         parameters = Map("path" -> s".*$carsFile.*"))
       val e2 = e1.getCause.asInstanceOf[SparkException]
-      assert(e2.getErrorClass == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+      assert(e2.getCondition == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
       checkError(
         exception = e2.getCause.asInstanceOf[SparkRuntimeException],
-        errorClass = "MALFORMED_CSV_RECORD",
+        condition = "MALFORMED_CSV_RECORD",
         parameters = Map("badRecord" -> "2015,Chevy,Volt")
       )
     }
@@ -650,7 +651,7 @@ abstract class CSVSuite
             .csv(csvDir)
         }
       },
-      errorClass = "INVALID_PARAMETER_VALUE.CHARSET",
+      condition = "INVALID_PARAMETER_VALUE.CHARSET",
       parameters = Map(
         "charset" -> "1-9588-osi",
         "functionName" -> toSQLId("CSVOptions"),
@@ -1269,7 +1270,7 @@ abstract class CSVSuite
         }
         checkErrorMatchPVals(
           exception = ex,
-          errorClass = "TASK_WRITE_FAILED",
+          condition = "TASK_WRITE_FAILED",
           parameters = Map("path" -> s".*${path.getName}.*"))
         val msg = ex.getCause.getMessage
         assert(
@@ -1509,8 +1510,9 @@ abstract class CSVSuite
             .csv(testFile(valueMalformedFile))
             .collect()
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1097",
-        parameters = Map.empty
+        condition = "INVALID_CORRUPT_RECORD_TYPE",
+        parameters = Map(
+          "columnName" -> toSQLId(columnNameOfCorruptRecord), "actualType" -> "\"INT\"")
       )
     }
   }
@@ -1523,7 +1525,7 @@ abstract class CSVSuite
         }
         checkErrorMatchPVals(
           exception = e,
-          errorClass = "FAILED_READ_FILE.NO_HINT",
+          condition = "FAILED_READ_FILE.NO_HINT",
           parameters = Map("path" -> s".*${inputFile.getName}.*")
         )
         assert(e.getCause.isInstanceOf[EOFException])
@@ -1533,7 +1535,7 @@ abstract class CSVSuite
         }
         checkErrorMatchPVals(
           exception = e2,
-          errorClass = "FAILED_READ_FILE.NO_HINT",
+          condition = "FAILED_READ_FILE.NO_HINT",
           parameters = Map("path" -> s".*${inputFile.getName}.*")
         )
         assert(e2.getCause.getCause.getCause.isInstanceOf[EOFException])
@@ -1557,7 +1559,7 @@ abstract class CSVSuite
           exception = intercept[SparkException] {
             df.collect()
           },
-          errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+          condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
           parameters = Map("path" -> s".*$dir.*")
         )
       }
@@ -1705,7 +1707,7 @@ abstract class CSVSuite
     }
     checkError(
       exception = exception,
-      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST"))
     assert(exception.getCause.getMessage.contains("""input string: "10u12""""))
 
@@ -1794,7 +1796,7 @@ abstract class CSVSuite
         spark.read.schema(schema).csv(testFile(valueMalformedFile))
           .select("_corrupt_record").collect()
       },
-      errorClass = "UNSUPPORTED_FEATURE.QUERY_ONLY_CORRUPT_RECORD_COLUMN",
+      condition = "UNSUPPORTED_FEATURE.QUERY_ONLY_CORRUPT_RECORD_COLUMN",
       parameters = Map.empty
     )
     // workaround
@@ -2013,7 +2015,7 @@ abstract class CSVSuite
         }
         checkErrorMatchPVals(
           exception = exception,
-          errorClass = "FAILED_READ_FILE.NO_HINT",
+          condition = "FAILED_READ_FILE.NO_HINT",
           parameters = Map("path" -> s".*${path.getCanonicalPath}.*"))
         assert(exception.getCause.getMessage.contains("CSV header does not conform to the schema"))
 
@@ -2029,7 +2031,7 @@ abstract class CSVSuite
         }
         checkErrorMatchPVals(
           exception = exceptionForShortSchema,
-          errorClass = "FAILED_READ_FILE.NO_HINT",
+          condition = "FAILED_READ_FILE.NO_HINT",
           parameters = Map("path" -> s".*${path.getCanonicalPath}.*"))
         assert(exceptionForShortSchema.getCause.getMessage.contains(
           "Number of column in CSV header is not equal to number of fields in the schema"))
@@ -2050,7 +2052,7 @@ abstract class CSVSuite
         }
         checkErrorMatchPVals(
           exception = exceptionForLongSchema,
-          errorClass = "FAILED_READ_FILE.NO_HINT",
+          condition = "FAILED_READ_FILE.NO_HINT",
           parameters = Map("path" -> s".*${path.getCanonicalPath}.*"))
         assert(exceptionForLongSchema.getCause.getMessage.contains(
           "Header length: 2, schema size: 3"))
@@ -2067,7 +2069,7 @@ abstract class CSVSuite
         }
         checkErrorMatchPVals(
           exception = caseSensitiveException,
-          errorClass = "FAILED_READ_FILE.NO_HINT",
+          condition = "FAILED_READ_FILE.NO_HINT",
           parameters = Map("path" -> s".*${path.getCanonicalPath}.*"))
         assert(caseSensitiveException.getCause.getMessage.contains(
           "CSV header does not conform to the schema"))
@@ -2122,7 +2124,7 @@ abstract class CSVSuite
       exception = intercept[SparkIllegalArgumentException] {
         spark.read.schema(ischema).option("header", true).option("enforceSchema", false).csv(ds)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3241",
+      condition = "_LEGACY_ERROR_TEMP_3241",
       parameters = Map("msg" ->
         """CSV header does not conform to the schema.
           | Header: columnA, columnB
@@ -2161,7 +2163,7 @@ abstract class CSVSuite
           .schema(schema)
           .csv(Seq("col1,col2", "1.0,a").toDS())
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3241",
+      condition = "_LEGACY_ERROR_TEMP_3241",
       parameters = Map("msg" ->
         """CSV header does not conform to the schema.
           | Header: col1, col2
@@ -2790,7 +2792,7 @@ abstract class CSVSuite
         exception = intercept[SparkUpgradeException] {
           csv.collect()
         },
-        errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
+        condition = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
         parameters = Map(
           "datetime" -> "'2020-01-27T20:06:11.847-08000'",
           "config" -> "\"spark.sql.legacy.timeParserPolicy\""))
@@ -2850,7 +2852,7 @@ abstract class CSVSuite
               exception = intercept[AnalysisException] {
                 readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
               },
-              errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+              condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
               parameters = Map("objectName" -> "`AAA`", "proposal" -> "`BBB`, `aaa`"),
               context =
                 ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
@@ -3073,6 +3075,23 @@ abstract class CSVSuite
         )
         checkAnswer(df2, expected2)
       }
+    }
+  }
+
+  test("SPARK-50616: We can write with a tsv file extension") {
+    withTempPath { path =>
+      val input = Seq(
+        "1423-11-12T23:41:00",
+        "1765-03-28",
+        "2016-01-28T20:00:00"
+      ).toDF().repartition(1)
+      input.write.option("extension", "tsv").csv(path.getAbsolutePath)
+
+      val files = Files.list(path.toPath)
+        .iterator().asScala.map(x => x.getFileName.toString)
+        .toList.filter(x => x.takeRight(3).equals("tsv"))
+
+      assert(files.size == 1)
     }
   }
 
@@ -3306,7 +3325,7 @@ abstract class CSVSuite
   }
 
   test("SPARK-40667: validate CSV Options") {
-    assert(CSVOptions.getAllOptions.size == 39)
+    assert(CSVOptions.getAllOptions.size == 41)
     // Please add validation on any new CSV options here
     assert(CSVOptions.isValidOption("header"))
     assert(CSVOptions.isValidOption("inferSchema"))
@@ -3345,7 +3364,9 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("compression"))
     assert(CSVOptions.isValidOption("codec"))
     assert(CSVOptions.isValidOption("sep"))
+    assert(CSVOptions.isValidOption("extension"))
     assert(CSVOptions.isValidOption("delimiter"))
+    assert(CSVOptions.isValidOption("singleVariantColumn"))
     assert(CSVOptions.isValidOption("columnPruning"))
     // Please add validation on any new parquet options with alternative here
     assert(CSVOptions.getAlternativeOption("sep").contains("delimiter"))
@@ -3439,6 +3460,232 @@ abstract class CSVSuite
         expected)
     }
   }
+
+  test("SPARK-49444: CSV parsing failure with more than max columns") {
+    val schema = new StructType()
+      .add("intColumn", IntegerType, nullable = true)
+      .add("decimalColumn", DecimalType(10, 2), nullable = true)
+
+    val fileReadException = intercept[SparkException] {
+      spark
+        .read
+        .schema(schema)
+        .option("header", "false")
+        .option("maxColumns", "2")
+        .csv(testFile(moreColumnsFile))
+        .collect()
+    }
+
+    checkErrorMatchPVals(
+      exception = fileReadException,
+      condition = "FAILED_READ_FILE.NO_HINT",
+      parameters = Map("path" -> s".*$moreColumnsFile"))
+
+    val malformedCSVException = fileReadException.getCause.asInstanceOf[SparkRuntimeException]
+
+    checkError(
+      exception = malformedCSVException,
+      condition = "MALFORMED_CSV_RECORD",
+      parameters = Map("badRecord" -> "1,3.14,string,5,7"),
+      sqlState = "KD000")
+
+    assert(malformedCSVException.getCause.isInstanceOf[TextParsingException])
+    val textParsingException = malformedCSVException.getCause.asInstanceOf[TextParsingException]
+    assert(textParsingException.getCause.isInstanceOf[ArrayIndexOutOfBoundsException])
+  }
+
+  test("csv with variant") {
+    withTempPath { path =>
+      val data =
+        """field 1,field2
+          |100,1.1
+          |2000-01-01,2000-01-01 01:02:03
+          |,true
+          |1e9,hello,extra
+          |missing
+          |""".stripMargin
+      Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
+
+      def checkSingleVariant(options: Map[String, String], expected: String*): Unit = {
+        val allOptions = options ++ Map("singleVariantColumn" -> "v")
+        checkAnswer(
+          spark.read.options(allOptions).csv(path.getCanonicalPath).selectExpr("cast(v as string)"),
+          expected.map(Row(_))
+        )
+      }
+
+      checkSingleVariant(Map(),
+        """{"_c0":"field 1","_c1":"field2"}""",
+        """{"_c0":"100","_c1":"1.1"}""",
+        """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03"}""",
+        """{"_c0":null,"_c1":"true"}""",
+        """{"_c0":"1e9","_c1":"hello","_c2":"extra"}""",
+        """{"_c0":"missing"}""")
+
+      // With a small enough partition size, every line is parsed in a separate partition, so every
+      // value has the chance to try all scalar types.
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map(),
+          """{"_c0":"field 1","_c1":"field2"}""",
+          """{"_c0":100,"_c1":1.1}""",
+          """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03+00:00"}""",
+          """{"_c0":null,"_c1":true}""",
+          """{"_c0":1000000000,"_c1":"hello","_c2":"extra"}""",
+          """{"_c0":"missing"}""")
+      }
+
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map("header" -> "true"),
+          """{"field 1":100,"field2":1.1}""",
+          """{"field 1":"2000-01-01","field2":"2000-01-01 01:02:03+00:00"}""",
+          """{"field 1":null,"field2":true}""",
+          """{"field 1":"1e9","field2":"hello"}""",
+          """{"field 1":"missing"}""")
+      }
+
+      // Validate `CSVDataSource.setHeaderForSingleVariantColumn` works, no matter whether the
+      // partition is at the file start.
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map("header" -> "true"),
+          """{"field 1":100,"field2":1.1}""",
+          """{"field 1":"2000-01-01","field2":"2000-01-01 01:02:03+00:00"}""",
+          """{"field 1":null,"field2":true}""",
+          """{"field 1":1000000000,"field2":"hello"}""",
+          """{"field 1":"missing"}""")
+      }
+
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val options = Map("header" -> "true", "singleVariantColumn" -> "v")
+        checkAnswer(
+          spark.read.options(options)
+            .schema("v variant, _corrupt_record string")
+            .csv(path.getCanonicalPath)
+            .selectExpr("cast(v as string)", "_corrupt_record"),
+          // When `header` is true, inconsistent lengths between the header and content line is
+          // treated as a corrupt record.
+          Seq(
+            Row("""{"field 1":100,"field2":1.1}""", null),
+            Row("""{"field 1":"2000-01-01","field2":"2000-01-01 01:02:03+00:00"}""", null),
+            Row("""{"field 1":null,"field2":true}""", null),
+            Row("""{"field 1":"1e9","field2":"hello"}""", "1e9,hello,extra"),
+            Row("""{"field 1":"missing"}""", "missing")))
+      }
+
+      checkError(
+        exception = intercept[SparkException] {
+          val options = Map("singleVariantColumn" -> "v", "header" -> "true", "mode" -> "failfast")
+          spark.read.options(options).csv(path.getCanonicalPath).collect()
+        }.getCause.asInstanceOf[SparkException],
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map("badRecord" -> """[{"field 1":"1e9","field2":"hello"}]""",
+          "failFastMode" -> "FAILFAST")
+      )
+
+      def checkSchema(options: Map[String, String], expected: (String, String)*): Unit = {
+        checkAnswer(
+          spark.read.options(options).schema("`field 1` variant, field2 variant")
+            .csv(path.getCanonicalPath)
+            .selectExpr("cast(`field 1` as string)", "cast(field2 as string)"),
+          expected.map(f => Row(f._1, f._2))
+        )
+      }
+
+      checkSchema(Map(),
+        ("field 1", "field2"),
+        ("100", "1.1"),
+        ("2000-01-01", "2000-01-01 01:02:03"),
+        (null, "true"),
+        ("1e9", "hello"),
+        ("missing", null))
+
+      checkSchema(Map("header" -> "true"),
+        ("100", "1.1"),
+        ("2000-01-01", "2000-01-01 01:02:03"),
+        (null, "true"),
+        ("1e9", "hello"),
+        ("missing", null))
+
+      checkError(
+        exception = intercept[SparkException] {
+          val options = Map("multiLine" -> "true", "header" -> "true", "mode" -> "failfast")
+          spark.read.options(options).schema("`field 1` variant, field2 variant")
+            .csv(path.getCanonicalPath).collect()
+        }.getCause.asInstanceOf[SparkException],
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map("badRecord" -> """["1e9","hello"]""", "failFastMode" -> "FAILFAST")
+      )
+
+      // Tests focusing on datetime parsing.
+      val datetimeData =
+        """2000-01-01
+          |2000-01-01 01:02:03
+          |2000-01-01 01:02:03+01:00
+          |""".stripMargin
+      Files.write(path.toPath, datetimeData.getBytes(StandardCharsets.UTF_8))
+
+      // Default options. Row 1 is date. Row 2/3 is timestamp.
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map(),
+          """{"_c0":"2000-01-01"}""",
+          """{"_c0":"2000-01-01 01:02:03+00:00"}""",
+          """{"_c0":"2000-01-01 00:02:03+00:00"}""")
+      }
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        checkSingleVariant(Map(),
+          """{"_c0":"2000-01-01"}""",
+          """{"_c0":"2000-01-01 01:02:03-08:00"}""",
+          """{"_c0":"1999-12-31 16:02:03-08:00"}""")
+      }
+
+      // `preferDate` disabled. Row 1/2/3 is timestamp.
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map("preferDate" -> "false"),
+          """{"_c0":"2000-01-01 00:00:00+00:00"}""",
+          """{"_c0":"2000-01-01 01:02:03+00:00"}""",
+          """{"_c0":"2000-01-01 00:02:03+00:00"}""")
+      }
+
+      // Session timestamp type is set to timestamp_ntz. Row 1 is date. Row 2 is timestamp_ntz.
+      // Row 3 is timestamp.
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map(),
+          """{"_c0":"2000-01-01"}""",
+          """{"_c0":"2000-01-01 01:02:03"}""",
+          """{"_c0":"2000-01-01 00:02:03+00:00"}""")
+      }
+
+      // `preferDate` disabled + timestamp_ntz. Row 1/2 is timestamp_ntz. Row 3 is timestamp.
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map("preferDate" -> "false"),
+          """{"_c0":"2000-01-01 00:00:00"}""",
+          """{"_c0":"2000-01-01 01:02:03"}""",
+          """{"_c0":"2000-01-01 00:02:03+00:00"}""")
+      }
+    }
+  }
+
+  test("write variant with csv is disallowed") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("create table test_table(v variant) using csv")
+      },
+      condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+      parameters = Map("columnName" -> "`v`", "columnType" -> "\"VARIANT\"", "format" -> "CSV")
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        withTempPath { path =>
+          spark.sql("select cast(1 as variant) v").write.csv(path.getCanonicalPath)
+        }
+      },
+      condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+      parameters = Map("columnName" -> "`v`", "columnType" -> "\"VARIANT\"", "format" -> "CSV")
+    )
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
@@ -3458,11 +3705,11 @@ class CSVv1Suite extends CSVSuite {
       }
       checkErrorMatchPVals(
         exception = ex,
-        errorClass = "FAILED_READ_FILE.NO_HINT",
+        condition = "FAILED_READ_FILE.NO_HINT",
         parameters = Map("path" -> s".*$carsFile"))
       checkError(
         exception = ex.getCause.asInstanceOf[SparkException],
-        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map(
           "badRecord" -> "[2015,Chevy,Volt,null,null]",
           "failFastMode" -> "FAILFAST")
@@ -3487,7 +3734,7 @@ class CSVv2Suite extends CSVSuite {
             .options(Map("header" -> "true", "mode" -> "failfast"))
             .load(testFile(carsFile)).collect()
         },
-        errorClass = "FAILED_READ_FILE.NO_HINT",
+        condition = "FAILED_READ_FILE.NO_HINT",
         parameters = Map("path" -> s".*$carsFile"),
         matchPVals = true
       )
@@ -3498,10 +3745,13 @@ class CSVv2Suite extends CSVSuite {
 class CSVLegacyTimeParserSuite extends CSVSuite {
 
   override def excluded: Seq[String] =
-    Seq("Write timestamps correctly in ISO8601 format by default")
+    Seq("Write timestamps correctly in ISO8601 format by default",
+      // The result is different because the date/timestamp parser behavior is different. Not too
+      // much value to test it.
+      "csv with variant")
 
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.LEGACY_TIME_PARSER_POLICY, "legacy")
+      .set(SQLConf.LEGACY_TIME_PARSER_POLICY.key, "legacy")
 }

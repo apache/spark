@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import platform
 from decimal import Decimal
 import os
 import time
@@ -25,6 +24,9 @@ from typing import cast
 from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.types import (
+    StructType,
+    StructField,
+    StringType,
     DateType,
     TimestampType,
     TimestampNTZType,
@@ -43,6 +45,21 @@ from pyspark.testing.sqlutils import (
 
 
 class DataFrameCreationTestsMixin:
+    def test_create_str_from_dict(self):
+        data = [
+            {"broker": {"teamId": 3398, "contactEmail": "abc.xyz@123.ca"}},
+        ]
+
+        for schema in [
+            StructType([StructField("broker", StringType())]),
+            "broker: string",
+        ]:
+            df = self.spark.createDataFrame(data, schema=schema)
+            self.assertEqual(
+                df.first().broker,
+                """{'teamId': 3398, 'contactEmail': 'abc.xyz@123.ca'}""",
+            )
+
     def test_create_dataframe_from_array_of_long(self):
         import array
 
@@ -111,11 +128,7 @@ class DataFrameCreationTestsMixin:
                 os.environ["TZ"] = orig_env_tz
             time.tzset()
 
-    # TODO(SPARK-43354): Re-enable test_create_dataframe_from_pandas_with_day_time_interval
-    @unittest.skipIf(
-        "pypy" in platform.python_implementation().lower() or not have_pandas,
-        "Fails in PyPy Python 3.8, should enable.",
-    )
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_create_dataframe_from_pandas_with_day_time_interval(self):
         # SPARK-37277: Test DayTimeIntervalType in createDataFrame without Arrow.
         import pandas as pd

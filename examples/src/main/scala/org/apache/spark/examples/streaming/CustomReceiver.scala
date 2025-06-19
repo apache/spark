@@ -87,7 +87,7 @@ class CustomReceiver(host: String, port: Int)
      val reader = new BufferedReader(
        new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
      userInput = reader.readLine()
-     while(!isStopped() && userInput != null) {
+     while (!isStopped() && userInput != null) {
        store(userInput)
        userInput = reader.readLine()
      }

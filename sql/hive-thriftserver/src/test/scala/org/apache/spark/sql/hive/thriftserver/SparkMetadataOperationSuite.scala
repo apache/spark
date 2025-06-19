@@ -35,7 +35,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
   test("Spark's own GetSchemasOperation(SparkGetSchemasOperation)") {
     def checkResult(rs: ResultSet, dbNames: Seq[String]): Unit = {
       val expected = dbNames.iterator
-      while(rs.next() || expected.hasNext) {
+      while (rs.next() || expected.hasNext) {
         assert(rs.getString("TABLE_SCHEM") === expected.next())
         assert(rs.getString("TABLE_CATALOG").isEmpty)
       }

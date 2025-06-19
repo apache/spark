@@ -52,6 +52,7 @@ message Expression {
     NamedArgumentExpression named_argument_expression = 17;
     MergeAction merge_action = 19;
     TypedAggregateExpression typed_aggregate_expression = 20;
+    SubqueryExpression subquery_expression = 21;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // relations they can add them here. During the planning the correct resolution is done.
@@ -192,6 +193,8 @@ message Expression {
       Array array = 22;
       Map map = 23;
       Struct struct = 24;
+
+      SpecializedArray specialized_array = 25;
     }
 
     message Decimal {
@@ -226,6 +229,17 @@ message Expression {
       DataType struct_type = 1;
       repeated Literal elements = 2;
     }
+
+    message SpecializedArray {
+      oneof value_type {
+        Bools bools = 1;
+        Ints ints = 2;
+        Longs longs = 3;
+        Floats floats = 4;
+        Doubles doubles = 5;
+        Strings strings = 6;
+      }
+    }
   }
 
   // An unresolved attribute that is not explicitly bound to a specific column, but the column
@@ -259,6 +273,11 @@ message Expression {
     // When it is not a user defined function, Connect will use the function name directly.
     // When it is a user defined function, Connect will parse the function name first.
     bool is_user_defined_function = 4;
+
+    // (Optional) Indicate if this function is defined in the internal function registry.
+    // If not set, the server will try to look up the function in the internal function registry
+    // and decide appropriately.
+    optional bool is_internal = 5;
   }
 
   // Expression as string.
@@ -364,6 +383,8 @@ message CommonInlineUserDefinedFunction {
     ScalarScalaUDF scalar_scala_udf = 5;
     JavaUDF java_udf = 6;
   }
+  // (Required) Indicate if this function should be applied on distinct values.
+  bool is_distinct = 7;
 }
 
 message PythonUDF {
@@ -449,5 +470,39 @@ message MergeAction {
 
     // (Required) The value of the assignment.
     Expression value = 2;
+  }
+}
+
+message SubqueryExpression {
+  // (Required) The ID of the corresponding connect plan.
+  int64 plan_id = 1;
+
+  // (Required) The type of the subquery.
+  SubqueryType subquery_type = 2;
+
+  // (Optional) Options specific to table arguments.
+  optional TableArgOptions table_arg_options = 3;
+
+  // (Optional) IN subquery values.
+  repeated Expression in_subquery_values = 4;
+
+  enum SubqueryType {
+    SUBQUERY_TYPE_UNKNOWN = 0;
+    SUBQUERY_TYPE_SCALAR = 1;
+    SUBQUERY_TYPE_EXISTS = 2;
+    SUBQUERY_TYPE_TABLE_ARG = 3;
+    SUBQUERY_TYPE_IN = 4;
+  }
+
+  // Nested message for table argument options.
+  message TableArgOptions {
+    // (Optional) The way that input rows are partitioned.
+    repeated Expression partition_spec = 1;
+
+    // (Optional) Ordering of rows in a partition.
+    repeated Expression.SortOrder order_spec = 2;
+
+    // (Optional) Whether this is a single partition.
+    optional bool with_single_partition = 3;
   }
 }

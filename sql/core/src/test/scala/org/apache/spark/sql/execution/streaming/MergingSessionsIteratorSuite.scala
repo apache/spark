@@ -197,7 +197,7 @@ class MergingSessionsIteratorSuite extends SharedSparkSession {
       exception = intercept[SparkException] {
         iterator.next()
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Input iterator is not sorted based on session!"))
 
     // afterwards, calling either hasNext() or next() will throw IllegalStateException
@@ -205,14 +205,14 @@ class MergingSessionsIteratorSuite extends SharedSparkSession {
       exception = intercept[SparkException] {
         iterator.hasNext
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "The iterator is already corrupted."))
 
     checkError(
       exception = intercept[SparkException] {
         iterator.next()
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "The iterator is already corrupted."))
   }
 

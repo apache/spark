@@ -85,6 +85,9 @@ private[spark] class IndexShuffleBlockResolver(
   private val remoteShuffleMaxDisk: Option[Long] =
     conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE)
 
+  private val checksumEnabled = conf.get(config.SHUFFLE_CHECKSUM_ENABLED)
+  private lazy val algorithm = conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
+
   def getDataFile(shuffleId: Int, mapId: Long): File = getDataFile(shuffleId, mapId, None)
 
   /**
@@ -195,9 +198,11 @@ private[spark] class IndexShuffleBlockResolver(
       logWarning(log"Error deleting index ${MDC(PATH, file.getPath())}")
     }
 
-    file = getChecksumFile(shuffleId, mapId, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
-    if (file.exists() && !file.delete()) {
-      logWarning(log"Error deleting checksum ${MDC(PATH, file.getPath())}")
+    if (checksumEnabled) {
+      file = getChecksumFile(shuffleId, mapId, algorithm)
+      if (file.exists() && !file.delete()) {
+        logWarning(log"Error deleting checksum ${MDC(PATH, file.getPath())}")
+      }
     }
   }
 
@@ -396,8 +401,7 @@ private[spark] class IndexShuffleBlockResolver(
     val (checksumFileOpt, checksumTmpOpt) = if (checksumEnabled) {
       assert(lengths.length == checksums.length,
         "The size of partition lengths and checksums should be equal")
-      val checksumFile =
-        getChecksumFile(shuffleId, mapId, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
+      val checksumFile = getChecksumFile(shuffleId, mapId, algorithm)
       (Some(checksumFile), Some(createTempFile(checksumFile)))
     } else {
       (None, None)

@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.AllTuples
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming._
@@ -355,7 +356,8 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
     // and it may not work correctly when multiple `testStream`s run concurrently.
 
     val stream = _stream.toDF()
-    val sparkSession = stream.sparkSession  // use the session in DF, not the default session
+    // use the session in DF, not the default session
+    val sparkSession = castToImpl(stream.sparkSession)
     var pos = 0
     var currentStream: StreamExecution = null
     var lastStream: StreamExecution = null
@@ -542,10 +544,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
           val metadataRoot = Option(checkpointLocation).getOrElse(defaultCheckpointLocation)
 
           additionalConfs.foreach(pair => {
-            val value =
-              if (sparkSession.conf.contains(pair._1)) {
-                Some(sparkSession.conf.get(pair._1))
-              } else None
+            val value = sparkSession.conf.getOption(pair._1)
             resetConfValues(pair._1) = value
             sparkSession.conf.set(pair._1, pair._2)
           })
@@ -870,7 +869,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
 
     (1 to iterations).foreach { i =>
       val rand = Random.nextDouble()
-      if(!running) {
+      if (!running) {
         rand match {
           case r if r < 0.7 => // AddData
             addRandomData()
@@ -898,7 +897,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
         }
       }
     }
-    if(!running) { actions += StartStream() }
+    if (!running) { actions += StartStream() }
     addCheck()
     testStream(ds)(actions.toSeq: _*)
   }

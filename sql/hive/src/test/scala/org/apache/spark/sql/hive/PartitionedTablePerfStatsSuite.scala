@@ -34,6 +34,9 @@ class PartitionedTablePerfStatsSuite
 
   override def beforeEach(): Unit = {
     super.beforeEach()
+    // Hive operation counters are doubled in dual-analyzer mode.
+    hiveContext.sparkSession.conf.set(
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
     FileStatusCache.resetForTesting()
   }
 

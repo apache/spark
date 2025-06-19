@@ -2,13 +2,13 @@
 unsafe projection
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 unsafe projection:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-single long                                        1363           1363           1        197.0           5.1       1.0X
-single nullable long                               2454           2456           2        109.4           9.1       0.6X
-7 primitive types                                  6944           6946           2         38.7          25.9       0.2X
-7 nullable primitive types                        10300          10314          19         26.1          38.4       0.1X
+single long                                        1376           1377           2        195.1           5.1       1.0X
+single nullable long                               2447           2449           3        109.7           9.1       0.6X
+7 primitive types                                  7004           7011          10         38.3          26.1       0.2X
+7 nullable primitive types                        10357          10363           7         25.9          38.6       0.1X
 
 

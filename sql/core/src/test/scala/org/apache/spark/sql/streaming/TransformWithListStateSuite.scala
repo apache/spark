@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 
 case class InputRow(key: String, action: String, value: String)
@@ -33,14 +33,13 @@ class TestListStateProcessor
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _listState = getHandle.getListState("testListState", Encoders.STRING)
+    _listState = getHandle.getListState("testListState", Encoders.STRING, TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
       rows: Iterator[InputRow],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
 
     var output = List[(String, String)]()
 
@@ -81,6 +80,101 @@ class TestListStateProcessor
   }
 }
 
+// Case classes for schema evolution testing
+case class InitialListItem(id: String, count: Int)
+case class EvolvedListItem(id: String, count: Int, lastUpdated: Long, description: String)
+
+// Initial processor with basic schema
+class InitialListStateProcessor extends StatefulProcessor[String, String, (String, Int)] {
+  @transient protected var listState: ListState[InitialListItem] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    listState = getHandle.getListState[InitialListItem](
+      "listState",
+      Encoders.product[InitialListItem],
+      TTLConfig.NONE
+    )
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, Int)] = {
+
+    // Get existing items for the key, if any
+    val existingItems = listState.get().toList
+    val currentCount = if (existingItems.isEmpty) 0 else existingItems.map(_.count).sum
+
+    // Process new items and update state
+    val newItems = rows.map { value =>
+      InitialListItem(value, currentCount + 1)
+    }.toList
+
+    if (newItems.nonEmpty) {
+      listState.appendList(newItems.toArray)
+      newItems.map(item => (key, item.count)).iterator
+    } else {
+      Iterator.empty
+    }
+  }
+}
+
+// Evolved processor with additional fields and enhanced functionality
+class EvolvedListStateProcessor extends StatefulProcessor[String, String, (String, String, Int)] {
+  @transient protected var listState: ListState[EvolvedListItem] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    listState = getHandle.getListState[EvolvedListItem](
+      "listState",
+      Encoders.product[EvolvedListItem],
+      TTLConfig.NONE
+    )
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String, Int)] = {
+
+    // Get existing items and handle schema evolution
+    val existingItems = listState.get().toList
+    val currentCount = if (existingItems.isEmpty) 0 else existingItems.map(_.count).sum
+
+    // Process new items with enhanced fields
+    val newItems = rows.map { value =>
+      EvolvedListItem(
+        id = value,
+        count = currentCount + 1,
+        lastUpdated = System.currentTimeMillis(),
+        description = s"Updated item $value with count ${currentCount + 1}"
+      )
+    }.toList
+
+    if (newItems.nonEmpty) {
+      // Clear old state and write with new schema
+      listState.clear()
+
+      // Migrate any existing items to new schema
+      val migratedItems = existingItems.map { item =>
+        EvolvedListItem(
+          id = item.id,
+          count = item.count,
+          lastUpdated = System.currentTimeMillis(),
+          description = s"Migrated item ${item.id} with count ${item.count}"
+        )
+      }
+
+      // Write both migrated and new items
+      listState.appendList((migratedItems ++ newItems).toArray)
+
+      // Return both migrated and new items
+      (migratedItems ++ newItems).map(item => (key, item.description, item.count)).iterator
+    } else {
+      Iterator.empty
+    }
+  }
+}
+
 class ToggleSaveAndEmitProcessor
   extends StatefulProcessor[String, String, String] {
 
@@ -90,16 +184,16 @@ class ToggleSaveAndEmitProcessor
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _listState = getHandle.getListState("testListState", Encoders.STRING)
-    _valueState = getHandle.getValueState("testValueState", Encoders.scalaBoolean)
+    _listState = getHandle.getListState("testListState", Encoders.STRING, TTLConfig.NONE)
+    _valueState = getHandle.getValueState("testValueState", Encoders.scalaBoolean,
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
       rows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[String] = {
-    val valueStateOption = _valueState.getOption()
+      timerValues: TimerValues): Iterator[String] = {
+    val valueStateOption = Option(_valueState.get())
 
     if (valueStateOption.isEmpty || !valueStateOption.get) {
       _listState.appendList(rows.toArray)
@@ -128,7 +222,7 @@ class ToggleSaveAndEmitProcessor
 }
 
 class TransformWithListStateSuite extends StreamTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithRocksDBFeatures with AlsoTestWithEncodingTypes {
   import testImplicits._
 
   test("test appending null value in list state throw exception") {
@@ -301,6 +395,8 @@ class TransformWithListStateSuite extends StreamTest
         CheckNewAnswer(("k5", "v5"), ("k5", "v6")),
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numListStateVars") > 0)
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 2)
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 2)
         }
       )
     }
@@ -325,6 +421,51 @@ class TransformWithListStateSuite extends StreamTest
         AddData(inputData, "k2"),
         CheckNewAnswer("k1", "k1", "k2", "k2")
       )
+    }
+  }
+
+  testWithEncoding("avro")("ListState schema evolution - add fields and enhance functionality") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
+      withTempDir { dir =>
+        val inputData = MemoryStream[String]
+
+        // First run with initial schema
+        val result1 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new InitialListStateProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = dir.getCanonicalPath),
+          // Write data with initial schema
+          AddData(inputData, "item1", "item2"),
+          CheckNewAnswer(("item1", 1), ("item2", 1)),
+          // Add more items to verify count increment
+          AddData(inputData, "item1", "item3"),
+          CheckNewAnswer(("item1", 2), ("item3", 1)),
+          StopStream
+        )
+
+        // Second run with evolved schema
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new EvolvedListStateProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = dir.getCanonicalPath),
+          // Verify reading and migration of existing state
+          AddData(inputData, "item1"),
+          CheckNewAnswer(
+            ("item1", "Migrated item item1 with count 1", 1),
+            ("item1", "Migrated item item1 with count 2", 2),
+            ("item1", "Updated item item1 with count 4", 4)),
+          StopStream
+        )
+      }
     }
   }
 }

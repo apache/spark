@@ -28,13 +28,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{PST, UTC, UTC_OPT}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with PlanTestBase {
+class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val json =
     """
       |{"store":{"fruit":[{"weight":8,"type":"apple"},{"weight":9,"type":"pear"}],
@@ -273,8 +272,9 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   }
 
   test("json_tuple escaping") {
-    GenerateUnsafeProjection.generate(
-      JsonTuple(Literal("\"quote") ::  Literal("\"quote") :: Nil) :: Nil)
+    checkJsonTuple(
+      JsonTuple(Literal("\"quote") ::  Literal("\"quote") :: Nil),
+      InternalRow.fromSeq(Seq(null).map(UTF8String.fromString)))
   }
 
   test("json_tuple - hive key 1") {
@@ -448,7 +448,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     }.getCause
     checkError(
       exception = exception.asInstanceOf[SparkException],
-      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
     )
   }
@@ -582,7 +582,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = StructType(StructField("\"quote", IntegerType) :: Nil)
     val struct = Literal.create(create_row(1), schema)
     GenerateUnsafeProjection.generate(
-      StructsToJson(Map.empty, struct, UTC_OPT) :: Nil)
+      StructsToJson(Map.empty, struct, UTC_OPT).replacement :: Nil)
   }
 
   test("to_json - struct") {
@@ -791,13 +791,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   }
 
   test("verify corrupt column") {
-    checkExceptionInExpression[AnalysisException](
+    checkErrorInExpression[AnalysisException](
       JsonToStructs(
         schema = StructType.fromDDL("i int, _unparsed boolean"),
         options = Map("columnNameOfCorruptRecord" -> "_unparsed"),
         child = Literal.create("""{"i":"a"}"""),
-        timeZoneId = UTC_OPT),
-      expectedErrMsg = "The field for corrupt records must be string type and nullable")
+        timeZoneId = UTC_OPT), null, "INVALID_CORRUPT_RECORD_TYPE",
+      Map("columnName" -> "`_unparsed`", "actualType" -> "\"BOOLEAN\""))
   }
 
   def decimalInput(langTag: String): (Decimal, String) = {

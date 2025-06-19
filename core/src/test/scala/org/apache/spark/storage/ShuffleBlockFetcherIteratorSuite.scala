@@ -37,7 +37,6 @@ import org.mockito.Mockito.{doThrow, mock, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.roaringbitmap.RoaringBitmap
-import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{MapOutputTracker, SparkFunSuite, TaskContext}
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
@@ -51,7 +50,7 @@ import org.apache.spark.storage.ShuffleBlockFetcherIterator._
 import org.apache.spark.util.Utils
 
 
-class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodTester {
+class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
 
   private var transfer: BlockTransferService = _
   private var mapOutputTracker: MapOutputTracker = _
@@ -159,8 +158,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     // Note: ShuffleBlockFetcherIterator wraps input streams in a BufferReleasingInputStream
     val wrappedInputStream = inputStream.asInstanceOf[BufferReleasingInputStream]
     verify(buffer, times(0)).release()
-    val delegateAccess = PrivateMethod[InputStream](Symbol("delegate"))
-    var in = wrappedInputStream.invokePrivate(delegateAccess())
+    var in = wrappedInputStream.delegate
     in match {
       case stream: CheckedInputStream =>
         val underlyingInputFiled = classOf[CheckedInputStream].getSuperclass.getDeclaredField("in")
@@ -1942,5 +1940,32 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     }
 
     assert(err2.getMessage.contains("corrupt at reset"))
+  }
+
+  test("SPARK-43242: Fix throw 'Unexpected type of BlockId' in shuffle corruption diagnose") {
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockBatchId(0, 0, 0, 3) -> createMockManagedBuffer())
+    answerFetchBlocks { invocation =>
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      listener.onBlockFetchSuccess(ShuffleBlockBatchId(0, 0, 0, 3).toString, mockCorruptBuffer())
+    }
+
+    val logAppender = new LogAppender("diagnose corruption")
+    withLogAppender(logAppender) {
+      val iterator = createShuffleBlockIteratorWithDefaults(
+        Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0)),
+        streamWrapperLimitSize = Some(100)
+      )
+      intercept[FetchFailedException](iterator.next())
+      verify(transfer, times(2))
+        .fetchBlocks(any(), any(), any(), any(), any(), any())
+      assert(logAppender.loggingEvents.count(
+        _.getMessage.getFormattedMessage.contains("Start corruption diagnosis")) === 1)
+      assert(logAppender.loggingEvents.exists(
+        _.getMessage.getFormattedMessage.contains("shuffle_0_0_0_3 is corrupted " +
+          "but corruption diagnosis is skipped due to lack of " +
+          "shuffle checksum support for ShuffleBlockBatchId")))
+    }
   }
 }

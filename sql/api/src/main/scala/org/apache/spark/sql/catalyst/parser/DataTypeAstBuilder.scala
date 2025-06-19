@@ -23,12 +23,14 @@ import scala.jdk.CollectionConverters._
 import org.antlr.v4.runtime.Token
 import org.antlr.v4.runtime.tree.ParseTree
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
+import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, VariantType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
 
 class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   protected def typedVisit[T](ctx: ParseTree): T = {
@@ -56,6 +58,33 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   /**
+   * Create a multi-part identifier.
+   */
+  override def visitMultipartIdentifier(ctx: MultipartIdentifierContext): Seq[String] =
+    withOrigin(ctx) {
+      ctx.parts.asScala.map(_.getText).toSeq
+    }
+
+  /**
+   * Resolve/create the TIME primitive type.
+   */
+  override def visitTimeDataType(ctx: TimeDataTypeContext): DataType = withOrigin(ctx) {
+    val precision = if (ctx.precision == null) {
+      TimeType.MICROS_PRECISION
+    } else {
+      ctx.precision.getText.toInt
+    }
+    TimeType(precision)
+  }
+
+  /**
+   * Create the TIMESTAMP_NTZ primitive type.
+   */
+  override def visitTimestampNtzDataType(ctx: TimestampNtzDataTypeContext): DataType = {
+    withOrigin(ctx)(TimestampNTZType)
+  }
+
+  /**
    * Resolve/create a primitive type.
    */
   override def visitPrimitiveDataType(ctx: PrimitiveDataTypeContext): DataType = withOrigin(ctx) {
@@ -70,14 +99,14 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       case (DOUBLE, Nil) => DoubleType
       case (DATE, Nil) => DateType
       case (TIMESTAMP, Nil) => SqlApiConf.get.timestampType
-      case (TIMESTAMP_NTZ, Nil) => TimestampNTZType
       case (TIMESTAMP_LTZ, Nil) => TimestampType
       case (STRING, Nil) =>
         typeCtx.children.asScala.toSeq match {
-          case Seq(_) => SqlApiConf.get.defaultStringType
+          case Seq(_) => StringType
           case Seq(_, ctx: CollateClauseContext) =>
-            val collationName = visitCollateClause(ctx)
-            val collationId = CollationFactory.collationNameToId(collationName)
+            val collationNameParts = visitCollateClause(ctx).toArray
+            val collationId = CollationFactory.collationNameToId(
+              CollationFactory.resolveFullyQualifiedName(collationNameParts))
             StringType(collationId)
         }
       case (CHARACTER | CHAR, length :: Nil) => CharType(length.getText.toInt)
@@ -120,7 +149,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   override def visitDayTimeIntervalDataType(ctx: DayTimeIntervalDataTypeContext): DataType = {
     val startStr = ctx.from.getText.toLowerCase(Locale.ROOT)
     val start = DayTimeIntervalType.stringToField(startStr)
-    if (ctx.to != null ) {
+    if (ctx.to != null) {
       val endStr = ctx.to.getText.toLowerCase(Locale.ROOT)
       val end = DayTimeIntervalType.stringToField(endStr)
       if (end <= start) {
@@ -217,7 +246,62 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   /**
    * Returns a collation name.
    */
-  override def visitCollateClause(ctx: CollateClauseContext): String = withOrigin(ctx) {
-    ctx.identifier.getText
+  override def visitCollateClause(ctx: CollateClauseContext): Seq[String] = withOrigin(ctx) {
+    visitMultipartIdentifier(ctx.collationName)
+  }
+
+  /**
+   * Parse and verify IDENTITY column definition.
+   *
+   * @param ctx
+   *   The parser context.
+   * @param dataType
+   *   The data type of column defined as IDENTITY column. Used for verification.
+   * @return
+   *   Tuple containing start, step and allowExplicitInsert.
+   */
+  protected def visitIdentityColumn(
+      ctx: IdentityColumnContext,
+      dataType: DataType): IdentityColumnSpec = {
+    if (dataType != LongType && dataType != IntegerType) {
+      throw QueryParsingErrors.identityColumnUnsupportedDataType(ctx, dataType.toString)
+    }
+    // We support two flavors of syntax:
+    // (1) GENERATED ALWAYS AS IDENTITY (...)
+    // (2) GENERATED BY DEFAULT AS IDENTITY (...)
+    // (1) forbids explicit inserts, while (2) allows.
+    val allowExplicitInsert = ctx.BY() != null && ctx.DEFAULT() != null
+    val (start, step) = visitIdentityColSpec(ctx.identityColSpec())
+
+    new IdentityColumnSpec(start, step, allowExplicitInsert)
+  }
+
+  override def visitIdentityColSpec(ctx: IdentityColSpecContext): (Long, Long) = {
+    val defaultStart = 1
+    val defaultStep = 1
+    if (ctx == null) {
+      return (defaultStart, defaultStep)
+    }
+    var (start, step): (Option[Long], Option[Long]) = (None, None)
+    ctx.sequenceGeneratorOption().asScala.foreach { option =>
+      if (option.start != null) {
+        if (start.isDefined) {
+          throw QueryParsingErrors.identityColumnDuplicatedSequenceGeneratorOption(ctx, "START")
+        }
+        start = Some(option.start.getText.toLong)
+      } else if (option.step != null) {
+        if (step.isDefined) {
+          throw QueryParsingErrors.identityColumnDuplicatedSequenceGeneratorOption(ctx, "STEP")
+        }
+        step = Some(option.step.getText.toLong)
+        if (step.get == 0L) {
+          throw QueryParsingErrors.identityColumnIllegalStep(ctx)
+        }
+      } else {
+        throw SparkException
+          .internalError(s"Invalid identity column sequence generator option: ${option.getText}")
+      }
+    }
+    (start.getOrElse(defaultStart), step.getOrElse(defaultStep))
   }
 }

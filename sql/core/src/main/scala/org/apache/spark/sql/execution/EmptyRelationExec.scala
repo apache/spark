@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.adaptive.LogicalQueryStage
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
@@ -62,6 +61,7 @@ case class EmptyRelationExec(@transient logical: LogicalPlan) extends LeafExecNo
       addSuffix: Boolean = false,
       maxFields: Int,
       printNodeId: Boolean,
+      printOutputColumns: Boolean,
       indent: Int = 0): Unit = {
     super.generateTreeString(depth,
       lastChildren,
@@ -71,23 +71,18 @@ case class EmptyRelationExec(@transient logical: LogicalPlan) extends LeafExecNo
       addSuffix,
       maxFields,
       printNodeId,
+      printOutputColumns,
       indent)
-    lastChildren.add(true)
-    logical.generateTreeString(
-      depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId, indent)
-    lastChildren.remove(lastChildren.size() - 1)
+    Option(logical).foreach { _ =>
+      lastChildren.add(true)
+      logical.generateTreeString(
+        depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId,
+        printOutputColumns, indent)
+      lastChildren.remove(lastChildren.size() - 1)
+    }
   }
 
   override def doCanonicalize(): SparkPlan = {
-    this.copy(logical = LocalRelation(logical.output).canonicalized)
-  }
-
-  override protected[sql] def cleanupResources(): Unit = {
-    logical.foreach {
-      case LogicalQueryStage(_, physical) =>
-        physical.cleanupResources()
-      case _ =>
-    }
-    super.cleanupResources()
+    this.copy(logical = LocalRelation(output).canonicalized)
   }
 }

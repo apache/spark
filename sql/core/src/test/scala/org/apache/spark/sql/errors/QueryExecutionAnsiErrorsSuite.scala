@@ -18,9 +18,10 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
-import org.apache.spark.sql.{QueryTest, SparkSession}
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.{CaseWhen, Cast, CheckOverflowInTableInsert, ExpressionProxy, Literal, SubExprEvaluationRuntime}
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
@@ -45,7 +46,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkArithmeticException] {
         sql("select CAST(TIMESTAMP '9999-12-31T12:13:14.56789Z' AS INT)").collect()
       },
-      errorClass = "CAST_OVERFLOW",
+      condition = "CAST_OVERFLOW",
       parameters = Map("value" -> "TIMESTAMP '9999-12-31 04:13:14.56789'",
         "sourceType" -> "\"TIMESTAMP\"",
         "targetType" -> "\"INT\"",
@@ -58,7 +59,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkArithmeticException] {
         sql("select 6/0").collect()
       },
-      errorClass = "DIVIDE_BY_ZERO",
+      condition = "DIVIDE_BY_ZERO",
       sqlState = "22012",
       parameters = Map("config" -> ansiConf),
       context = ExpectedContext(fragment = "6/0", start = 7, stop = 9))
@@ -67,7 +68,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkArithmeticException] {
         OneRowRelation().select(lit(5) / lit(0)).collect()
       },
-      errorClass = "DIVIDE_BY_ZERO",
+      condition = "DIVIDE_BY_ZERO",
       sqlState = "22012",
       parameters = Map("config" -> ansiConf),
       context = ExpectedContext(fragment = "div", callSitePattern = getCurrentClassCallSitePattern))
@@ -76,7 +77,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkArithmeticException] {
         OneRowRelation().select(lit(5).divide(lit(0))).collect()
       },
-      errorClass = "DIVIDE_BY_ZERO",
+      condition = "DIVIDE_BY_ZERO",
       sqlState = "22012",
       parameters = Map("config" -> ansiConf),
       context = ExpectedContext(
@@ -89,7 +90,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkArithmeticException] {
         sql("select interval 1 day / 0").collect()
       },
-      errorClass = "INTERVAL_DIVIDED_BY_ZERO",
+      condition = "INTERVAL_DIVIDED_BY_ZERO",
       sqlState = "22012",
       parameters = Map.empty[String, String],
       context = ExpectedContext(fragment = "interval 1 day / 0", start = 7, stop = 24))
@@ -98,11 +99,13 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
   test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {
     checkError(
       exception = intercept[SparkDateTimeException] {
-        sql("select make_timestamp(2012, 11, 30, 9, 19, 60.66666666)").collect()
+        sql("select make_timestamp(2012, 11, 30, 9, 19, 60.1)").collect()
       },
-      errorClass = "INVALID_FRACTION_OF_SECOND",
+      condition = "INVALID_FRACTION_OF_SECOND",
       sqlState = "22023",
-      parameters = Map("ansiConfig" -> ansiConf))
+      parameters = Map(
+        "secAndMicros" -> "60.1"
+      ))
   }
 
   test("NUMERIC_VALUE_OUT_OF_RANGE: cast string to decimal") {
@@ -110,7 +113,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkArithmeticException] {
         sql("select CAST('66666666666666.666' AS DECIMAL(8, 1))").collect()
       },
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       sqlState = "22003",
       parameters = Map(
         "value" -> "66666666666666.666",
@@ -126,7 +129,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkArithmeticException] {
         OneRowRelation().select(lit("66666666666666.666").cast("DECIMAL(8, 1)")).collect()
       },
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       sqlState = "22003",
       parameters = Map(
         "value" -> "66666666666666.666",
@@ -143,16 +146,16 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkArrayIndexOutOfBoundsException] {
         sql("select array(1, 2, 3, 4, 5)[8]").collect()
       },
-      errorClass = "INVALID_ARRAY_INDEX",
-      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
+      condition = "INVALID_ARRAY_INDEX",
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5"),
       context = ExpectedContext(fragment = "array(1, 2, 3, 4, 5)[8]", start = 7, stop = 29))
 
     checkError(
       exception = intercept[SparkArrayIndexOutOfBoundsException] {
         OneRowRelation().select(lit(Array(1, 2, 3, 4, 5))(8)).collect()
       },
-      errorClass = "INVALID_ARRAY_INDEX",
-      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
+      condition = "INVALID_ARRAY_INDEX",
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5"),
       context = ExpectedContext(
         fragment = "apply",
         callSitePattern = getCurrentClassCallSitePattern))
@@ -163,8 +166,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkArrayIndexOutOfBoundsException] {
         sql("select element_at(array(1, 2, 3, 4, 5), 8)").collect()
       },
-      errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
-      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
+      condition = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5"),
       context = ExpectedContext(
         fragment = "element_at(array(1, 2, 3, 4, 5), 8)",
         start = 7,
@@ -174,8 +177,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkArrayIndexOutOfBoundsException] {
         OneRowRelation().select(element_at(lit(Array(1, 2, 3, 4, 5)), 8)).collect()
       },
-      errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
-      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
+      condition = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5"),
       context =
         ExpectedContext(fragment = "element_at", callSitePattern = getCurrentClassCallSitePattern))
   }
@@ -185,7 +188,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkRuntimeException](
         sql("select element_at(array(1, 2, 3, 4, 5), 0)").collect()
       ),
-      errorClass = "INVALID_INDEX_OF_ZERO",
+      condition = "INVALID_INDEX_OF_ZERO",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "element_at(array(1, 2, 3, 4, 5), 0)",
@@ -197,7 +200,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkRuntimeException](
         OneRowRelation().select(element_at(lit(Array(1, 2, 3, 4, 5)), 0)).collect()
       ),
-      errorClass = "INVALID_INDEX_OF_ZERO",
+      condition = "INVALID_INDEX_OF_ZERO",
       parameters = Map.empty,
       context =
         ExpectedContext(fragment = "element_at", callSitePattern = getCurrentClassCallSitePattern))
@@ -208,7 +211,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkNumberFormatException] {
         sql("select CAST('111111111111xe23' AS DOUBLE)").collect()
       },
-      errorClass = "CAST_INVALID_INPUT",
+      condition = "CAST_INVALID_INPUT",
       parameters = Map(
         "expression" -> "'111111111111xe23'",
         "sourceType" -> "\"STRING\"",
@@ -223,7 +226,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkNumberFormatException] {
         OneRowRelation().select(lit("111111111111xe23").cast("DOUBLE")).collect()
       },
-      errorClass = "CAST_INVALID_INPUT",
+      condition = "CAST_INVALID_INPUT",
       parameters = Map(
         "expression" -> "'111111111111xe23'",
         "sourceType" -> "\"STRING\"",
@@ -239,10 +242,10 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkDateTimeException] {
         sql("select to_timestamp('abc', 'yyyy-MM-dd HH:mm:ss')").collect()
       },
-      errorClass = "CANNOT_PARSE_TIMESTAMP",
+      condition = "CANNOT_PARSE_TIMESTAMP",
       parameters = Map(
-        "message" -> "Text 'abc' could not be parsed at index 0",
-        "ansiConfig" -> ansiConf)
+        "func" -> "`try_to_timestamp`",
+        "message" -> "Text 'abc' could not be parsed at index 0")
     )
   }
 
@@ -255,7 +258,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
           exception = intercept[SparkArithmeticException] {
             sql(s"insert into $tableName values 12345678901234567890D")
           },
-          errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
+          condition = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"DOUBLE\"",
             "targetType" -> ("\"" + targetType + "\""),
@@ -272,7 +275,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkArithmeticException] {
         CheckOverflowInTableInsert(caseWhen, "col").eval(null)
       },
-      errorClass = "CAST_OVERFLOW",
+      condition = "CAST_OVERFLOW",
       parameters = Map("value" -> "1.2345678901234567E19D",
         "sourceType" -> "\"DOUBLE\"",
         "targetType" -> ("\"TINYINT\""),
@@ -291,7 +294,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         exception = intercept[SparkArithmeticException] {
           sql(insertCmd).collect()
         },
-        errorClass = "CAST_OVERFLOW",
+        condition = "CAST_OVERFLOW",
         parameters = Map("value" -> "-1.2345678901234567E19D",
           "sourceType" -> "\"DOUBLE\"",
           "targetType" -> "\"TINYINT\"",
@@ -306,7 +309,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         CheckOverflowInTableInsert(
           Cast(Literal.apply(12345678901234567890D), ByteType), "col").eval(null)
       }.asInstanceOf[SparkThrowable],
-      errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
+      condition = "CAST_OVERFLOW_IN_TABLE_INSERT",
       parameters = Map(
         "sourceType" -> "\"DOUBLE\"",
         "targetType" -> ("\"TINYINT\""),
@@ -322,7 +325,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkArithmeticException] {
         CheckOverflowInTableInsert(proxy, "col").eval(null)
       }.asInstanceOf[SparkThrowable],
-      errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
+      condition = "CAST_OVERFLOW_IN_TABLE_INSERT",
       parameters = Map(
         "sourceType" -> "\"DOUBLE\"",
         "targetType" -> ("\"TINYINT\""),
@@ -366,7 +369,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         checkError(
           // If error is user-facing, it will be thrown directly.
           exception = intercept[SparkArithmeticException](df3.collect()),
-          errorClass = "DIVIDE_BY_ZERO",
+          condition = "DIVIDE_BY_ZERO",
           parameters = Map("config" -> ansiConf),
           context = ExpectedContext(
             fragment = "div",
@@ -381,7 +384,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         val df4 = spark.range(0, 10, 1, 2).select(lit(1) / $"id")
         checkError(
           exception = intercept[SparkArithmeticException](df4.collect()),
-          errorClass = "DIVIDE_BY_ZERO",
+          condition = "DIVIDE_BY_ZERO",
           parameters = Map("config" -> ansiConf),
           context = ExpectedContext(
             fragment = "div",
@@ -395,5 +398,15 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         sparkContext.removeSparkListener(listener)
       }
     }
+  }
+
+  test("SPARK-49773: INVALID_TIMEZONE for bad timezone") {
+    checkError(
+      exception = intercept[SparkDateTimeException] {
+        sql("select make_timestamp(1, 2, 28, 23, 1, 1, -100)").collect()
+      },
+      condition = "INVALID_TIMEZONE",
+      parameters = Map("timeZone" -> "-100")
+    )
   }
 }

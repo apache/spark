@@ -27,8 +27,9 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -44,19 +45,56 @@ import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StateOperatorProgress}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{CompletionIterator, NextIterator, Utils}
+import org.apache.spark.util.{CollectionAccumulator, CompletionIterator, NextIterator, Utils}
 
 
-/** Used to identify the state store for a given operator. */
+/** Used to identify the state store for a given operator.
+ *
+ * stateStoreCkptIds is used to identify the checkpoint used for a specific stateful operator
+ * The basic workflow works as following:
+ * 1. When a stateful operator is created, it passes in the checkpoint IDs for each stateful
+ *    operator through the StatefulOperatorStateInfo.
+ * 2. When a stateful task starts to execute, it will find the checkpointID for its shuffle
+ *    partition and use it to recover the state store. The ID is eventually passed into
+ *    the StateStore layer and eventually  RocksDB State Store, where it is used to make sure
+ *    the it loads the correct checkpoint
+ * 3. When the stateful task is finishing, after the state store is committed, the checkpoint ID
+ *    is fetched from the state store by calling StateStore.getStateStoreCheckpointInfo() and added
+ *    to the stateStoreCkptIds accumulator by calling
+ *    StateStoreWriter.setStateStoreCheckpointInfo().
+ * 4. When ending the batch, MicroBatchExecution calls each stateful operator's
+ *    getStateStoreCheckpointInfo() which aggregates checkpointIDs from different partitions. The
+ *    driver will persistent it into commit logs (not implemented yet).
+ * 5. When forming the next batch, the driver constructs the StatefulOperatorStateInfo with the
+ *    checkpoint IDs for the previous batch.
+ * */
 case class StatefulOperatorStateInfo(
     checkpointLocation: String,
     queryRunId: UUID,
     operatorId: Long,
     storeVersion: Long,
-    numPartitions: Int) {
+    numPartitions: Int,
+    stateSchemaMetadata: Option[StateSchemaBroadcast] = None,
+    stateStoreCkptIds: Option[Array[Array[String]]] = None) {
+
+  def getStateStoreCkptId(partitionId: Int): Option[Array[String]] = {
+    stateStoreCkptIds.map(_(partitionId))
+  }
+
   override def toString(): String = {
     s"state info [ checkpoint = $checkpointLocation, runId = $queryRunId, " +
-      s"opId = $operatorId, ver = $storeVersion, numPartitions = $numPartitions]"
+      s"opId = $operatorId, ver = $storeVersion, numPartitions = $numPartitions] " +
+      s"stateStoreCkptIds = $stateStoreCkptIds"
+  }
+}
+
+object StatefulOperatorStateInfo {
+  /**
+   * Whether stateo store checkpoint version requires checkpointID to be used.
+   * @return true if state store checkpointID should be used.
+   */
+  def enableStateStoreCheckpointIds(conf: SQLConf): Boolean = {
+    conf.stateStoreCheckpointFormatVersion >= 2
   }
 }
 
@@ -108,13 +146,27 @@ case class StatefulOperatorCustomSumMetric(name: String, desc: String)
 }
 
 /** An operator that reads from a StateStore. */
-trait StateStoreReader extends StatefulOperator {
+trait StateStoreReader extends StatefulOperator with Logging {
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 }
 
+/**
+ * Used to pass state store checkpoint information to load the correct state store checkpoint for a
+ * stateful operator. Will be passed from the driver to exeuctors to load state store.
+ */
+case class StatefulOpStateStoreCheckpointInfo(
+    partitionId: Int,
+    batchVersion: Long,
+    // The checkpoint ID for a checkpoint at `batchVersion`. This is used to identify the checkpoint
+    stateStoreCkptId: Option[Array[String]],
+    // The checkpoint ID for `batchVersion` - 1, that is used to finish this batch. This is used
+    // to validate the batch is processed based on the correct checkpoint.
+    baseStateStoreCkptId: Option[Array[String]])
+
 /** An operator that writes to a StateStore. */
-trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: SparkPlan =>
+trait StateStoreWriter
+  extends StatefulOperator with PythonSQLMetrics with Logging { self: SparkPlan =>
 
   /**
    * Produce the output watermark for given input watermark (ms).
@@ -151,32 +203,141 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
 
   def operatorStateMetadataVersion: Int = 1
 
-  override lazy val metrics = statefulOperatorCustomMetrics ++ Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numRowsDroppedByWatermark" -> SQLMetrics.createMetric(sparkContext,
-      "number of rows which are dropped by watermark"),
-    "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
-    "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"),
-    "allUpdatesTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to update"),
-    "numRemovedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of removed state rows"),
-    "allRemovalsTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to remove"),
-    "commitTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to commit changes"),
-    "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state"),
-    "numStateStoreInstances" -> SQLMetrics.createMetric(sparkContext,
-      "number of state store instances")
-  ) ++ stateStoreCustomMetrics ++ pythonMetrics
+  override lazy val metrics = {
+    // Lazy initialize instance metrics, but do not include these with regular metrics
+    instanceMetrics
+    statefulOperatorCustomMetrics ++ Map(
+      "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+      "numRowsDroppedByWatermark" -> SQLMetrics
+        .createMetric(sparkContext, "number of rows which are dropped by watermark"),
+      "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
+      "numUpdatedStateRows" -> SQLMetrics
+        .createMetric(sparkContext, "number of updated state rows"),
+      "allUpdatesTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to update"),
+      "numRemovedStateRows" -> SQLMetrics
+        .createMetric(sparkContext, "number of removed state rows"),
+      "allRemovalsTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to remove"),
+      "commitTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to commit changes"),
+      "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state"),
+      "numStateStoreInstances" -> SQLMetrics
+        .createMetric(sparkContext, "number of state store instances")
+    ) ++ stateStoreCustomMetrics ++ pythonMetrics
+  }
 
-  def stateSchemaFilePath(storeName: Option[String] = None): Path = {
-    def stateInfo = getStateInfo
+  /**
+   * Map of all instance metrics (including partition ID and store names) to
+   * their SQLMetric counterpart.
+   *
+   * The instance metric objects hold additional information on how to report these metrics,
+   * while the SQLMetric objects store the metric values.
+   *
+   * This map is similar to the metrics map, but needs to be kept separate to prevent propagating
+   * all initialized instance metrics to SparkUI.
+   */
+  lazy val instanceMetrics: Map[StateStoreInstanceMetric, SQLMetric] =
+    stateStoreInstanceMetrics
+
+  override def resetMetrics(): Unit = {
+    super.resetMetrics()
+    instanceMetrics.valuesIterator.foreach(_.reset())
+  }
+
+  val stateStoreNames: Seq[String] = Seq(StateStoreId.DEFAULT_STORE_NAME)
+
+  // This method is only used to fetch the state schema directory path for
+  // operators that use StateSchemaV3, as prior versions only use a single
+  // set file path.
+  def stateSchemaDirPath(
+      storeName: Option[String] = None): Path = {
     val stateCheckpointPath =
       new Path(getStateInfo.checkpointLocation,
-        s"${stateInfo.operatorId.toString}")
+        s"${getStateInfo.operatorId.toString}")
     storeName match {
       case Some(storeName) =>
-        val storeNamePath = new Path(stateCheckpointPath, storeName)
-        new Path(new Path(storeNamePath, "_metadata"), "schema")
+        new Path(new Path(stateCheckpointPath, "_stateSchema"), storeName)
       case None =>
-        new Path(new Path(stateCheckpointPath, "_metadata"), "schema")
+        new Path(new Path(stateCheckpointPath, "_stateSchema"), "default")
+    }
+  }
+
+  def stateSchemaList(
+      stateSchemaValidationResults: List[StateSchemaValidationResult],
+      oldMetadata: Option[OperatorStateMetadata]): List[List[String]] = {
+
+    def getExistingSchemaFilePaths(metadata: OperatorStateMetadataV2): List[String] = {
+      val ssInfo = metadata.stateStoreInfo.head
+      ssInfo.stateSchemaFilePaths
+    }
+
+    // TODO: Make this work for Stream-Stream joins, where we use multiple
+    // StateStores
+    val validationResult = stateSchemaValidationResults.head
+
+    oldMetadata match {
+      case Some(v2: OperatorStateMetadataV2) =>
+        val oldSchemaPaths = getExistingSchemaFilePaths(v2)
+        if (validationResult.evolvedSchema) {
+          List(oldSchemaPaths ++ List(validationResult.schemaPath))
+        } else {
+          List(oldSchemaPaths)
+        }
+      case _ =>
+        // No previous metadata - start with schema ID 0
+        List(List(validationResult.schemaPath))
+    }
+  }
+
+  def supportsSchemaEvolution: Boolean = false
+
+  /**
+   * Aggregator used for the executors to pass new state store checkpoints' IDs to driver.
+   * For the general checkpoint ID workflow, see comments of
+   * class class [[StatefulOperatorStateInfo]]
+   */
+  val checkpointInfoAccumulator: CollectionAccumulator[StatefulOpStateStoreCheckpointInfo] = {
+    SparkContext.getActive.map(_.collectionAccumulator[StatefulOpStateStoreCheckpointInfo]).get
+  }
+
+  /**
+   * Get aggregated checkpoint ID info for all shuffle partitions
+   * For the general checkpoint ID workflow, see comments of
+   * class class [[StatefulOperatorStateInfo]]
+   */
+  def getStateStoreCheckpointInfo(): Array[StatefulOpStateStoreCheckpointInfo] = {
+    assert(
+      StatefulOperatorStateInfo.enableStateStoreCheckpointIds(conf),
+      "Should not fetch checkpoint Info if the state store checkpoint IDs are not enabled")
+    // Multiple entries can be returned for the same partitionID due to task speculative execution
+    // or task failures. All of them should represent a valid state store checkpoint and we just
+    // pick one of them.
+    // In the end, we sort them by partitionID.
+    val ret = checkpointInfoAccumulator
+      .value
+      .asScala
+      .toSeq
+      .groupBy(_.partitionId)
+      .map {
+        case (key, values) => key -> values.head
+      }
+      .toSeq
+      .sortBy(_._1)
+      .map(_._2)
+      .toArray
+    assert(
+      ret.length == getStateInfo.numPartitions,
+      s"ChekpointInfo length: ${ret.length}, numPartitions: ${getStateInfo.numPartitions}")
+    ret
+  }
+
+  /**
+   * The executor reports its state store checkpoint ID, which would be sent back to the driver.
+   * For the general checkpoint ID workflow, see comments of
+   * class class [[StatefulOperatorStateInfo]]
+   */
+  protected def setStateStoreCheckpointInfo(
+      checkpointInfo: StatefulOpStateStoreCheckpointInfo): Unit = {
+    if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(conf)) {
+      checkpointInfoAccumulator.add(checkpointInfo)
     }
   }
 
@@ -185,11 +346,43 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
    * the driver after this SparkPlan has been executed and metrics have been updated.
    */
   def getProgress(): StateOperatorProgress = {
+    val instanceMetricsToReport = instanceMetrics
+      .filter {
+        case (metricConf, sqlMetric) =>
+          // Keep instance metrics that are updated or aren't marked to be ignored,
+          // as their initial value could still be important.
+          !metricConf.ignoreIfUnchanged || !sqlMetric.isZero
+      }
+      .groupBy {
+        // Group all instance metrics underneath their common metric prefix
+        // to ignore partition and store names.
+        case (metricConf, sqlMetric) => metricConf.metricPrefix
+      }
+      .flatMap {
+        case (_, metrics) =>
+          // Select at most N metrics based on the metric's defined ordering
+          // to report to the driver. For example, ascending order would be taking the N smallest.
+          val metricConf = metrics.head._1
+          metrics
+            .map {
+              case (metricConf, sqlMetric) =>
+                // Use metric name as it will be combined with custom metrics in progress reports.
+                // All metrics that are at their initial value at this stage should not be ignored
+                // and should show their real initial value.
+                metricConf.name -> (if (sqlMetric.isZero) metricConf.initValue
+                                    else sqlMetric.value)
+            }
+            .toSeq
+            .sortBy(_._2)(metricConf.ordering)
+            .take(conf.numStateStoreInstanceMetricsToReport)
+            .toMap
+      }
     val customMetrics = (stateStoreCustomMetrics ++ statefulOperatorCustomMetrics)
       .map(entry => entry._1 -> longMetric(entry._1).value)
+    val allCustomMetrics = customMetrics ++ instanceMetricsToReport
 
     val javaConvertedCustomMetrics: java.util.HashMap[String, java.lang.Long] =
-      new java.util.HashMap(customMetrics.transform((_, v) => long2Long(v)).asJava)
+      new java.util.HashMap(allCustomMetrics.transform((_, v) => long2Long(v)).asJava)
 
     // We now don't report number of shuffle partitions inside the state operator. Instead,
     // it will be filled when the stream query progress is reported
@@ -214,7 +407,7 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
 
   /** Metadata of this stateful operator and its states stores. */
   def operatorStateMetadata(
-      stateSchemaPaths: List[String] = List.empty): OperatorStateMetadata = {
+      stateSchemaPaths: List[List[String]] = List.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     val stateStoreInfo =
@@ -238,8 +431,36 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
     val storeMetrics = store.metrics
     longMetric("numTotalStateRows") += storeMetrics.numKeys
     longMetric("stateMemory") += storeMetrics.memoryUsedBytes
-    storeMetrics.customMetrics.foreach { case (metric, value) =>
-      longMetric(metric.name) += value
+    setStoreCustomMetrics(storeMetrics.customMetrics)
+    setStoreInstanceMetrics(storeMetrics.instanceMetrics)
+
+    if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(conf)) {
+      // Set the state store checkpoint information for the driver to collect
+      val ssInfo = store.getStateStoreCheckpointInfo()
+      setStateStoreCheckpointInfo(
+        StatefulOpStateStoreCheckpointInfo(
+          ssInfo.partitionId,
+          ssInfo.batchVersion,
+          ssInfo.stateStoreCkptId.map(Array(_)),
+          ssInfo.baseStateStoreCkptId.map(Array(_))
+        )
+      )
+    }
+  }
+
+  protected def setStoreCustomMetrics(customMetrics: Map[StateStoreCustomMetric, Long]): Unit = {
+    customMetrics.foreach {
+      case (metric, value) =>
+        longMetric(metric.name) += value
+    }
+  }
+
+  protected def setStoreInstanceMetrics(
+      otherStoreInstanceMetrics: Map[StateStoreInstanceMetric, Long]): Unit = {
+    otherStoreInstanceMetrics.foreach {
+      case (metric, value) =>
+        // Update the metric's value based on the defined combine method
+        instanceMetrics(metric).set(metric.combine(instanceMetrics(metric), value))
     }
   }
 
@@ -247,6 +468,20 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
     val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
     provider.supportedCustomMetrics.map {
       metric => (metric.name, metric.createSQLMetric(sparkContext))
+    }.toMap
+  }
+
+  private def stateStoreInstanceMetrics: Map[StateStoreInstanceMetric, SQLMetric] = {
+    val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
+    val maxPartitions = stateInfo.map(_.numPartitions).getOrElse(conf.defaultNumShufflePartitions)
+
+    (0 until maxPartitions).flatMap { partitionId =>
+      provider.supportedInstanceMetrics.flatMap { metric =>
+        stateStoreNames.map { storeName =>
+          val metricWithPartition = metric.withNewId(partitionId, storeName)
+          (metricWithPartition, metricWithPartition.createSQLMetric(sparkContext))
+        }
+      }
     }.toMap
   }
 
@@ -466,7 +701,7 @@ case class StateStoreRestoreExec(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
     val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-      keyExpressions.toStructType, stateManager.getStateValueSchema))
+      0, keyExpressions.toStructType, 0, stateManager.getStateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo,
       hadoopConf, newStateSchema, session.sessionState, stateSchemaVersion))
   }
@@ -538,7 +773,8 @@ case class StateStoreSaveExec(
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
     val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-      keyExpressions.toStructType, stateManager.getStateValueSchema))
+      keySchemaId = 0, keyExpressions.toStructType, valueSchemaId = 0,
+      stateManager.getStateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo,
       hadoopConf, newStateSchema, session.sessionState, stateSchemaVersion))
   }
@@ -624,7 +860,7 @@ case class StateStoreSaveExec(
             new NextIterator[InternalRow] {
               override protected def getNext(): InternalRow = {
                 var removedValueRow: InternalRow = null
-                while(rangeIter.hasNext && removedValueRow == null) {
+                while (rangeIter.hasNext && removedValueRow == null) {
                   val rowPair = rangeIter.next()
                   if (watermarkPredicateForKeysForEviction.get.eval(rowPair.key)) {
                     stateManager.remove(store, rowPair.key)
@@ -752,7 +988,8 @@ case class SessionWindowStateStoreRestoreExec(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
     val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-      stateManager.getStateKeySchema, stateManager.getStateValueSchema))
+      keySchemaId = 0, stateManager.getStateKeySchema, valueSchemaId = 0,
+      stateManager.getStateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion))
   }
@@ -842,8 +1079,8 @@ case class SessionWindowStateStoreSaveExec(
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
-    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-      stateManager.getStateKeySchema, stateManager.getStateValueSchema))
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME, 0,
+      stateManager.getStateKeySchema, 0, stateManager.getStateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion))
   }
@@ -953,7 +1190,7 @@ case class SessionWindowStateStoreSaveExec(
   }
 
   override def operatorStateMetadata(
-      stateSchemaPaths: List[String] = List.empty): OperatorStateMetadata = {
+      stateSchemaPaths: List[List[String]] = List.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     val stateStoreInfo = Array(StateStoreMetadataV1(
@@ -1163,8 +1400,8 @@ case class StreamingDeduplicateExec(
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
-    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-      keyExpressions.toStructType, schemaForValueRow))
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME, 0,
+      keyExpressions.toStructType, 0, schemaForValueRow))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion,
       extraOptions = extraOptionOnStateStore))
@@ -1243,8 +1480,8 @@ case class StreamingDeduplicateWithinWatermarkExec(
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
-    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-      keyExpressions.toStructType, schemaForValueRow))
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME, 0,
+      keyExpressions.toStructType, 0, schemaForValueRow))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion,
       extraOptions = extraOptionOnStateStore))
@@ -1252,4 +1489,60 @@ case class StreamingDeduplicateWithinWatermarkExec(
 
   override protected def withNewChildInternal(
       newChild: SparkPlan): StreamingDeduplicateWithinWatermarkExec = copy(child = newChild)
+}
+
+trait SchemaValidationUtils extends Logging {
+
+  // Determines whether the operator should be able to evolve their schema
+  val schemaEvolutionEnabledForOperator: Boolean = false
+
+  // This method will return the column family schemas, and check whether the fields in the
+  // schema are nullable. If Avro encoding is used, we want to enforce nullability
+  def getColFamilySchemas(shouldBeNullable: Boolean): Map[String, StateStoreColFamilySchema]
+
+  def validateAndWriteStateSchema(
+      hadoopConf: Configuration,
+      batchId: Long,
+      stateSchemaVersion: Int,
+      info: StatefulOperatorStateInfo,
+      stateSchemaDir: Path,
+      session: SparkSession,
+      operatorStateMetadataVersion: Int = 2,
+      stateStoreEncodingFormat: String = StateStoreEncoding.UnsafeRow.toString
+  ): List[StateSchemaValidationResult] = {
+    assert(stateSchemaVersion >= 3)
+    val usingAvro = stateStoreEncodingFormat == StateStoreEncoding.Avro.toString
+    val newSchemas = getColFamilySchemas(usingAvro)
+    val newStateSchemaFilePath =
+      new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
+    val metadataPath = new Path(info.checkpointLocation, s"${info.operatorId}")
+    val metadataReader = OperatorStateMetadataReader.createReader(
+      metadataPath, hadoopConf, operatorStateMetadataVersion, batchId)
+    val operatorStateMetadata = try {
+      metadataReader.read()
+    } catch {
+      // If this is the first time we are running the query, there will be no metadata
+      // and this error is expected. In this case, we return None.
+      case _: Exception if batchId == 0 =>
+        None
+    }
+
+    val oldStateSchemaFilePaths: List[Path] = operatorStateMetadata match {
+      case Some(metadata) =>
+        metadata match {
+          case v2: OperatorStateMetadataV2 =>
+            v2.stateStoreInfo.head.stateSchemaFilePaths.map(new Path(_))
+          case _ => List.empty
+        }
+      case None => List.empty
+    }
+    // state schema file written here, writing the new schema list we passed here
+    List(StateSchemaCompatibilityChecker.
+      validateAndMaybeEvolveStateSchema(info, hadoopConf,
+        newSchemas.values.toList, session.sessionState, stateSchemaVersion,
+        storeName = StateStoreId.DEFAULT_STORE_NAME,
+        oldSchemaFilePaths = oldStateSchemaFilePaths,
+        newSchemaFilePath = Some(newStateSchemaFilePath),
+        schemaEvolutionEnabled = usingAvro && schemaEvolutionEnabledForOperator))
+  }
 }

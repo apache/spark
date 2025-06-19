@@ -19,7 +19,6 @@ package org.apache.spark.sql.connect.service
 
 import java.nio.file.Path
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
-import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
@@ -34,13 +33,15 @@ import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
+import org.apache.spark.sql.connect.ml.MLCache
 import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
 import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper
 import org.apache.spark.sql.connect.service.SessionHolder.{ERROR_CACHE_SIZE, ERROR_CACHE_TIMEOUT_SEC}
+import org.apache.spark.sql.pipelines.graph.PipelineUpdateContext
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.{SystemClock, Utils}
 
@@ -91,8 +92,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // Setting it to -1 indicated forever.
   @volatile private var customInactiveTimeoutMs: Option[Long] = None
 
-  private val executions: ConcurrentMap[String, ExecuteHolder] =
-    new ConcurrentHashMap[String, ExecuteHolder]()
+  private val operationIds: ConcurrentMap[String, Boolean] =
+    new ConcurrentHashMap[String, Boolean]()
 
   // The cache that maps an error id to a throwable. The throwable in cache is independent to
   // each other.
@@ -111,10 +112,18 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[spark] lazy val dataFrameCache: ConcurrentMap[String, DataFrame] =
     new ConcurrentHashMap()
 
+  // ML model cache
+  private[connect] lazy val mlCache = new MLCache(this)
+
   // Mapping from id to StreamingQueryListener. Used for methods like removeListener() in
   // StreamingQueryManager.
   private lazy val listenerCache: ConcurrentMap[String, StreamingQueryListener] =
     new ConcurrentHashMap()
+
+  // Mapping from graphId to the pipeline update context. This is used to manage the lifecycle of
+  // pipeline executions.
+  private lazy val pipelineExecutions =
+    new ConcurrentHashMap[String, PipelineUpdateContext]()
 
   // Handles Python process clean up for streaming queries. Initialized on first use in a query.
   private[connect] lazy val streamingForeachBatchRunnerCleanerCache =
@@ -138,12 +147,11 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
-   * Add ExecuteHolder to this session.
+   * Add an operation ID to this session.
    *
-   * Called only by SparkConnectExecutionManager under executionsLock.
+   * Called only by SparkConnectExecutionManager when a new execution is started.
    */
-  @GuardedBy("SparkConnectService.executionManager.executionsLock")
-  private[service] def addExecuteHolder(executeHolder: ExecuteHolder): Unit = {
+  private[service] def addOperationId(operationId: String): Unit = {
     if (closedTimeMs.isDefined) {
       // Do not accept new executions if the session is closing.
       throw new SparkSQLException(
@@ -151,26 +159,20 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
         messageParameters = Map("handle" -> sessionId))
     }
 
-    val oldExecute = executions.putIfAbsent(executeHolder.operationId, executeHolder)
-    if (oldExecute != null) {
-      // the existence of this should alrady be checked by SparkConnectExecutionManager
-      throw new IllegalStateException(
-        s"ExecuteHolder with opId=${executeHolder.operationId} already exists!")
+    val alreadyExists = operationIds.putIfAbsent(operationId, true)
+    if (alreadyExists) {
+      // The existence of it should have been checked by SparkConnectExecutionManager.
+      throw new IllegalStateException(s"ExecuteHolder with opId=${operationId} already exists!")
     }
   }
 
   /**
-   * Remove ExecuteHolder from this session.
+   * Remove an operation ID from this session.
    *
-   * Called only by SparkConnectExecutionManager under executionsLock.
+   * Called only by SparkConnectExecutionManager when an execution is ended.
    */
-  @GuardedBy("SparkConnectService.executionManager.executionsLock")
-  private[service] def removeExecuteHolder(operationId: String): Unit = {
-    executions.remove(operationId)
-  }
-
-  private[connect] def executeHolder(operationId: String): Option[ExecuteHolder] = {
-    Option(executions.get(operationId))
+  private[service] def removeOperationId(operationId: String): Unit = {
+    operationIds.remove(operationId)
   }
 
   /**
@@ -182,9 +184,12 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     val interruptedIds = new mutable.ArrayBuffer[String]()
     val operationsIds =
       SparkConnectService.streamingSessionManager.cleanupRunningQueries(this, blocking = false)
-    executions.asScala.values.foreach { execute =>
-      if (execute.interrupt()) {
-        interruptedIds += execute.operationId
+    operationIds.asScala.foreach { case (operationId, _) =>
+      val executeKey = ExecuteKey(userId, sessionId, operationId)
+      SparkConnectService.executionManager.getExecuteHolder(executeKey).foreach { executeHolder =>
+        if (executeHolder.interrupt()) {
+          interruptedIds += operationId
+        }
       }
     }
     interruptedIds.toSeq ++ operationsIds
@@ -199,10 +204,13 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     val interruptedIds = new mutable.ArrayBuffer[String]()
     val queries = SparkConnectService.streamingSessionManager.getTaggedQuery(tag, session)
     queries.foreach(q => Future(q.query.stop())(ExecutionContext.global))
-    executions.asScala.values.foreach { execute =>
-      if (execute.sparkSessionTags.contains(tag)) {
-        if (execute.interrupt()) {
-          interruptedIds += execute.operationId
+    operationIds.asScala.foreach { case (operationId, _) =>
+      val executeKey = ExecuteKey(userId, sessionId, operationId)
+      SparkConnectService.executionManager.getExecuteHolder(executeKey).foreach { executeHolder =>
+        if (executeHolder.sparkSessionTags.contains(tag)) {
+          if (executeHolder.interrupt()) {
+            interruptedIds += operationId
+          }
         }
       }
     }
@@ -216,9 +224,10 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   private[service] def interruptOperation(operationId: String): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
-    Option(executions.get(operationId)).foreach { execute =>
-      if (execute.interrupt()) {
-        interruptedIds += execute.operationId
+    val executeKey = ExecuteKey(userId, sessionId, operationId)
+    SparkConnectService.executionManager.getExecuteHolder(executeKey).foreach { executeHolder =>
+      if (executeHolder.interrupt()) {
+        interruptedIds += operationId
       }
     }
     interruptedIds.toSeq
@@ -301,13 +310,15 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
     // Clean up all artifacts.
     // Note: there can be concurrent AddArtifact calls still adding something.
-    artifactManager.cleanUpResources()
+    artifactManager.close()
 
     // Clean up running streaming queries.
     // Note: there can be concurrent streaming queries being started.
     SparkConnectService.streamingSessionManager.cleanupRunningQueries(this, blocking = true)
     streamingForeachBatchRunnerCleanerCache.cleanUpAll() // Clean up any streaming workers.
     removeAllListeners() // removes all listener and stop python listener processes if necessary.
+    // Stops all pipeline execution and clears the pipeline execution cache
+    removeAllPipelineExecutions()
 
     // if there is a server side listener, clean up related resources
     if (streamingServersideListenerHolder.isServerSideListenerRegistered) {
@@ -321,6 +332,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     // executionsLock, this guarantees that removeAllExecutionsForSession triggered here will
     // remove all executions and no new executions will be added in the meanwhile.
     SparkConnectService.executionManager.removeAllExecutionsForSession(this.key)
+
+    mlCache.clear()
 
     eventManager.postClosed()
   }
@@ -422,6 +435,58 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
+   * Caches the pipeline execution context for a given graph ID.
+   * @param graphId
+   *   The id of the graph being executed.
+   * @param pipelineUpdateContext
+   *   The context for the pipeline execution.
+   */
+  private[connect] def cachePipelineExecution(
+      graphId: String,
+      pipelineUpdateContext: PipelineUpdateContext): Unit = {
+    pipelineExecutions.compute(
+      graphId,
+      (_, existing) => {
+        if (Option(existing).isDefined) {
+          throw new IllegalStateException(
+            s"Pipeline execution for graph ID $graphId already exists. " +
+              s"Stop the existing execution before starting a new one.")
+        }
+
+        pipelineUpdateContext
+      })
+  }
+
+  /** Stops the pipeline execution and removes it from the cache. */
+  private def removeCachedPipelineExecution(graphId: String): Unit = {
+    pipelineExecutions.compute(
+      graphId,
+      (_, context) => {
+        if (context.pipelineExecution.executionStarted) {
+          context.pipelineExecution.stopPipeline()
+        }
+        // Remove the execution.
+        null
+      })
+  }
+
+  /** Stops all pipeline executions and clears the pipeline execution cache. */
+  def removeAllPipelineExecutions(): Unit = {
+    pipelineExecutions.forEach((graphId, _) => {
+      removeCachedPipelineExecution(graphId)
+    })
+    pipelineExecutions.clear()
+  }
+
+  /**
+   * Returns [[PipelineUpdateContext]] cached for the given graphId. If it is not found, return
+   * None.
+   */
+  private[connect] def getPipelineExecution(graphId: String): Option[PipelineUpdateContext] = {
+    Option(pipelineExecutions.get(graphId))
+  }
+
+  /**
    * An accumulator for Python executors.
    *
    * The accumulated results will be sent to the Python client via observed_metrics message.
@@ -444,8 +509,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   private[connect] def usePlanCache(rel: proto.Relation, cachePlan: Boolean)(
       transform: proto.Relation => LogicalPlan): LogicalPlan = {
-    val planCacheEnabled =
-      Option(session).forall(_.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED, true))
+    val planCacheEnabled = Option(session)
+      .forall(_.sessionState.conf.getConf(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED, true))
     // We only cache plans that have a plan ID.
     val hasPlanId = rel.hasCommon && rel.getCommon.hasPlanId
 

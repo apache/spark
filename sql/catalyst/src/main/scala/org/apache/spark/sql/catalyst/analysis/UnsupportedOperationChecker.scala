@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{ANALYSIS_ERROR, QUERY_PLAN}
 import org.apache.spark.sql.AnalysisException
@@ -38,7 +40,8 @@ object UnsupportedOperationChecker extends Logging {
   def checkForBatch(plan: LogicalPlan): Unit = {
     plan.foreachUp {
       case p if p.isStreaming =>
-        throwError("Queries with streaming sources must be executed with writeStream.start()")(p)
+        throwError("Queries with streaming sources must be executed with writeStream.start(), or " +
+          "from a streaming table or flow definition within a Spark Declarative Pipeline.")(p)
 
       case d: DeduplicateWithinWatermark =>
         throwError("dropDuplicatesWithinWatermark is not supported with batch " +
@@ -103,6 +106,7 @@ object UnsupportedOperationChecker extends Logging {
     case d: Deduplicate if d.isStreaming && d.keys.exists(hasEventTimeCol) => true
     case d: DeduplicateWithinWatermark if d.isStreaming => true
     case t: TransformWithState if t.isStreaming => true
+    case t: TransformWithStateInPySpark if t.isStreaming => true
     case _ => false
   }
 
@@ -136,6 +140,38 @@ object UnsupportedOperationChecker extends Logging {
     } catch {
       case e: AnalysisException if !failWhenDetected =>
         logWarning(log"${MDC(ANALYSIS_ERROR, e.message)};\n${MDC(QUERY_PLAN, plan)}", e)
+    }
+  }
+
+  private def checkAvroSupportForStatefulOperator(p: LogicalPlan): Option[String] = p match {
+    // TODO: remove operators from this list as support for avro encoding is added
+    case s: Aggregate if s.isStreaming => Some("aggregation")
+    // Since the Distinct node will be replaced to Aggregate in the optimizer rule
+    // [[ReplaceDistinctWithAggregate]], here we also need to check all Distinct node by
+    // assuming it as Aggregate.
+    case d @ Distinct(_: LogicalPlan) if d.isStreaming => Some("distinct")
+    case _ @ Join(left, right, _, _, _) if left.isStreaming && right.isStreaming => Some("join")
+    case f: FlatMapGroupsWithState if f.isStreaming => Some("flatMapGroupsWithState")
+    case f: FlatMapGroupsInPandasWithState if f.isStreaming =>
+      Some("applyInPandasWithState")
+    case d: Deduplicate if d.isStreaming => Some("dropDuplicates")
+    case d: DeduplicateWithinWatermark if d.isStreaming => Some("dropDuplicatesWithinWatermark")
+    case _ => None
+  }
+
+  // Rule to check that avro encoding format is not supported in case any
+  // non-transformWithState stateful streaming operators are present in the query.
+  def checkSupportedStoreEncodingFormats(plan: LogicalPlan): Unit = {
+    val storeEncodingFormat = SQLConf.get.stateStoreEncodingFormat
+    if (storeEncodingFormat.toLowerCase(Locale.ROOT) == "avro") {
+      plan.foreach { subPlan =>
+        val operatorOpt = checkAvroSupportForStatefulOperator(subPlan)
+        if (operatorOpt.isDefined) {
+          val errorMsg = "State store encoding format as avro is not supported for " +
+            s"operator=${operatorOpt.get} used within the query"
+          throwError(errorMsg)(plan)
+        }
+      }
     }
   }
 
@@ -198,6 +234,11 @@ object UnsupportedOperationChecker extends Logging {
           "DataFrames/Datasets")(plan)
     }
 
+    // check to see that if store encoding format is set to true, then we have no stateful
+    // operators in the query or only variants of operators that support avro encoding such as
+    // transformWithState.
+    checkSupportedStoreEncodingFormats(plan)
+
     val aggregates = collectStreamingAggregates(plan)
     // Disallow some output mode
     outputMode match {
@@ -244,7 +285,7 @@ object UnsupportedOperationChecker extends Logging {
      * data.
      */
     def containsCompleteData(subplan: LogicalPlan): Boolean = {
-      val aggs = subplan.collect { case a@Aggregate(_, _, _) if a.isStreaming => a }
+      val aggs = subplan.collect { case a@Aggregate(_, _, _, _) if a.isStreaming => a }
       // Either the subplan has no streaming source, or it has aggregation with Complete mode
       !subplan.isStreaming || (aggs.nonEmpty && outputMode == InternalOutputModes.Complete)
     }
@@ -264,7 +305,7 @@ object UnsupportedOperationChecker extends Logging {
       // Operations that cannot exists anywhere in a streaming plan
       subPlan match {
 
-        case Aggregate(groupingExpressions, aggregateExpressions, child) =>
+        case Aggregate(groupingExpressions, aggregateExpressions, child, _) =>
           val distinctAggExprs = aggregateExpressions.flatMap { expr =>
             expr.collect { case ae: AggregateExpression if ae.isDistinct => ae }
           }
@@ -484,14 +525,14 @@ object UnsupportedOperationChecker extends Logging {
 
         case Offset(_, _) => throwError("Offset is not supported on streaming DataFrames/Datasets")
 
-        case Sort(_, _, _) if !containsCompleteData(subPlan) =>
+        case Sort(_, _, _, _) if !containsCompleteData(subPlan) =>
           throwError("Sorting is not supported on streaming DataFrames/Datasets, unless it is on " +
             "aggregated DataFrame/Dataset in Complete output mode")
 
         case Sample(_, _, _, _, child) if child.isStreaming =>
           throwError("Sampling is not supported on streaming DataFrames/Datasets")
 
-        case Window(windowExpression, _, _, child) if child.isStreaming =>
+        case Window(windowExpression, _, _, child, _) if child.isStreaming =>
           val (windowFuncList, columnNameList, windowSpecList) = windowExpression.flatMap { e =>
             e.collect {
               case we: WindowExpression =>

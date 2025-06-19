@@ -33,7 +33,7 @@ Please see [Spark Security](security.html) and the specific security sections in
 
 # Launching Spark on YARN
 
-Apache Hadoop does not support Java 17 as of 3.4.0, while Apache Spark requires at least Java 17 since 4.0.0, so a different JDK should be configured for Spark applications.
+Apache Hadoop does not support Java 17 as of 3.4.1, while Apache Spark requires at least Java 17 since 4.0.0, so a different JDK should be configured for Spark applications.
 Please refer to [Configuring different JDKs for Spark Applications](#configuring-different-jdks-for-spark-applications) for details.
 
 Ensure that `HADOOP_CONF_DIR` or `YARN_CONF_DIR` points to the directory which contains the (client side) configuration files for the Hadoop cluster.
@@ -124,15 +124,15 @@ all environment variables used for launching each container. This process is use
 classpath problems in particular. (Note that enabling this requires admin privileges on cluster
 settings and a restart of all node managers. Thus, this is not applicable to hosted clusters).
 
-To use a custom log4j configuration for the application master or executors, here are the options:
+To use a custom log4j2 configuration for the application master or executors, here are the options:
 
-- upload a custom `log4j.properties` using `spark-submit`, by adding it to the `--files` list of files
+- upload a custom `log4j2.properties` using `spark-submit`, by adding it to the `--files` list of files
   to be uploaded with the application.
-- add `-Dlog4j.configuration=<location of configuration file>` to `spark.driver.extraJavaOptions`
+- add `-Dlog4j.configurationFile=<location of configuration file>` to `spark.driver.extraJavaOptions`
   (for the driver) or `spark.executor.extraJavaOptions` (for executors). Note that if using a file,
   the `file:` protocol should be explicitly provided, and the file needs to exist locally on all
   the nodes.
-- update the `$SPARK_CONF_DIR/log4j.properties` file and it will be automatically uploaded along
+- update the `$SPARK_CONF_DIR/log4j2.properties` file and it will be automatically uploaded along
   with the other configurations. Note that other 2 options has higher priority than this option if
   multiple options are specified.
 
@@ -673,7 +673,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>false</td>
   <td>
     Set to true for applications that have higher security requirements and prefer that their
-    secret is not saved in the db. The shuffle data of such applications wll not be recovered after
+    secret is not saved in the db. The shuffle data of such applications will not be recovered after
     the External Shuffle Service restarts.
   </td>
   <td>3.5.0</td>
@@ -853,7 +853,7 @@ will include a list of all tokens obtained, and their expiry details
 To start the Spark Shuffle Service on each `NodeManager` in your YARN cluster, follow these
 instructions:
 
-1. Build Spark with the [YARN profile](building-spark.html). Skip this step if you are using a
+1. Build Spark with the [YARN profile](building-spark.html#specifying-the-hadoop-version-and-enabling-yarn). Skip this step if you are using a
 pre-packaged distribution.
 1. Locate the `spark-<version>-yarn-shuffle.jar`. This should be under
 `$SPARK_HOME/common/network-yarn/target/scala-<version>` if you are building Spark yourself, and under

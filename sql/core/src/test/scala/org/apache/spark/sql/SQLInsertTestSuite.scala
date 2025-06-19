@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.types.{DataType, IntegerType, SQLUserDefinedType, UserDefinedType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -217,10 +218,10 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
           processInsert("t1", df, overwrite = false, byName = true)
         },
         v1ErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
-        v2ErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        v2ErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
         v1Parameters = Map("tableName" -> "`spark_catalog`.`default`.`t1`",
           "extraColumns" -> "`x1`"),
-        v2Parameters = Map("tableName" -> "`testcat`.`t1`", "colName" -> "`c1`")
+        v2Parameters = Map("tableName" -> "`testcat`.`t1`", "extraColumns" -> "`x1`")
       )
       val df2 = Seq((3, 2, 1, 0)).toDF(Seq("c3", "c2", "c1", "c0"): _*)
       checkV1AndV2Error(
@@ -276,7 +277,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
       checkError(
         exception = intercept[AnalysisException](
           sql(s"INSERT INTO t1 (c1, c2, c2) values(1, 2, 3)")),
-        errorClass = "COLUMN_ALREADY_EXISTS",
+        condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> "`c2`"))
     }
   }
@@ -288,7 +289,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
       checkError(
         exception =
           intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c4) values(1, 2, 3)")),
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = None,
         parameters = Map("objectName" -> "`c4`", "proposal" -> "`c1`, `c2`, `c3`"),
         context = ExpectedContext(
@@ -307,7 +308,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
             sql(s"INSERT INTO t1 (c1, c2) values(1, 2, 3)")
           },
           sqlState = None,
-          errorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+          condition = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
           parameters = Map(
             "tableName" -> ".*`t1`",
             "tableColumns" -> "`c1`, `c2`",
@@ -319,7 +320,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
             sql(s"INSERT INTO t1 (c1, c2, c3) values(1, 2)")
           },
           sqlState = None,
-          errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+          condition = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
           parameters = Map(
             "tableName" -> ".*`t1`",
             "tableColumns" -> "`c1`, `c2`, `c3`",
@@ -399,7 +400,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
           sql("INSERT OVERWRITE t PARTITION (c='2', C='3') VALUES (1)")
         },
         sqlState = None,
-        errorClass = "DUPLICATE_KEY",
+        condition = "DUPLICATE_KEY",
         parameters = Map("keyColumn" -> "`c`"),
         context = ExpectedContext("PARTITION (c='2', C='3')", 19, 42)
       )
@@ -441,7 +442,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
               exception = intercept[SparkNumberFormatException] {
                 sql("insert into t partition(a='ansi') values('ansi')")
               },
-              errorClass = "CAST_INVALID_INPUT",
+              condition = "CAST_INVALID_INPUT",
               parameters = Map(
                 "expression" -> "'ansi'",
                 "sourceType" -> "\"STRING\"",
@@ -492,7 +493,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
           exception = intercept[AnalysisException] {
             sql("alter table t drop partition(dt='8')")
           },
-          errorClass = "PARTITIONS_NOT_FOUND",
+          condition = "PARTITIONS_NOT_FOUND",
           sqlState = None,
           parameters = Map(
             "partitionList" -> "PARTITION \\(`dt` = 8\\)",
@@ -512,7 +513,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
           exception = intercept[AnalysisException] {
             sql("alter table t drop partition(dt='08')")
           },
-          errorClass = "PARTITIONS_NOT_FOUND",
+          condition = "PARTITIONS_NOT_FOUND",
           sqlState = None,
           parameters = Map(
             "partitionList" -> "PARTITION \\(`dt` = 08\\)",
@@ -550,6 +551,56 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
       assert(reusedExchanges.size == 1)
     }
   }
+
+  test("SPARK-50340: unwrap UDT before insertion") {
+    withTempView("v") {
+      Seq((1, MyInt(2))).toDF("c1", "c2").createTempView("v")
+
+      withTable("t") {
+        createTable("t", Seq("c1", "c2"), Seq("int", "int"))
+        sql("INSERT INTO t SELECT * FROM v")
+        checkAnswer(spark.table("t"), Row(1, 2))
+      }
+
+      // can upcast UDT input
+      withTable("t") {
+        createTable("t", Seq("c1", "c2"), Seq("int", "long"))
+        sql("INSERT INTO t SELECT * FROM v")
+        checkAnswer(spark.table("t"), Row(1, 2L))
+      }
+
+      // Array of UDT
+      withTable("t") {
+        createTable("t", Seq("c1", "c2"), Seq("int", "array<int>"))
+        sql("INSERT INTO t SELECT c1, array(c2) FROM v")
+        checkAnswer(spark.table("t"), Row(1, Seq(2)))
+      }
+
+      // Map of UDT
+      withTable("t") {
+        createTable("t", Seq("c1", "c2"), Seq("int", "map<int, int>"))
+        sql("INSERT INTO t SELECT c1, map(c2, c2) FROM v")
+        checkAnswer(spark.table("t"), Row(1, Map(2 -> 2)))
+      }
+
+      // Struct of UDT
+      withTable("t") {
+        createTable("t", Seq("c1", "c2"), Seq("int", "struct<f1 int, f2 int>"))
+        sql("INSERT INTO t SELECT c1, struct(c2 as f1, c2 as f2) FROM v")
+        checkAnswer(spark.table("t"), Row(1, Row(2, 2)))
+      }
+    }
+  }
+}
+
+@SQLUserDefinedType(udt = classOf[MyIntUDT])
+private case class MyInt(i: Int)
+
+private class MyIntUDT extends UserDefinedType[MyInt] {
+  override def sqlType: DataType = IntegerType
+  override def serialize(obj: MyInt): Any = obj.i
+  override def deserialize(datum: Any): MyInt = MyInt(datum.asInstanceOf[Int])
+  override def userClass: Class[MyInt] = classOf[MyInt]
 }
 
 class FileSourceSQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession {
@@ -562,7 +613,7 @@ class FileSourceSQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSe
       v2ErrorClass: String,
       v1Parameters: Map[String, String],
       v2Parameters: Map[String, String]): Unit = {
-    checkError(exception = exception, sqlState = None, errorClass = v1ErrorClass,
+    checkError(exception = exception, sqlState = None, condition = v1ErrorClass,
       parameters = v1Parameters)
   }
 
@@ -582,7 +633,7 @@ class DSV2SQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession 
       v2ErrorClass: String,
       v1Parameters: Map[String, String],
       v2Parameters: Map[String, String]): Unit = {
-    checkError(exception = exception, sqlState = None, errorClass = v2ErrorClass,
+    checkError(exception = exception, sqlState = None, condition = v2ErrorClass,
       parameters = v2Parameters)
   }
   protected override def sparkConf: SparkConf = {
@@ -598,7 +649,7 @@ class DSV2SQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession 
         exception = intercept[AnalysisException] {
           sql("INSERT OVERWRITE t PARTITION (c='1') (c) VALUES ('2')")
         },
-        errorClass = "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST",
+        condition = "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST",
         parameters = Map("staticName" -> "c"))
     }
   }

@@ -63,7 +63,7 @@ case class HashAggregateExec(
 
   require(Aggregate.supportsHashAggregate(aggregateBufferAttributes, groupingExpressions))
 
-  override lazy val allAttributes: AttributeSeq =
+  override def allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
       aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
 
@@ -682,7 +682,7 @@ case class HashAggregateExec(
          |    $unsafeRowKeys, $unsafeRowKeyHash);
          |  if ($unsafeRowBuffer == null) {
          |    // failed to allocate the first page
-         |    throw new $oomeClassName("No enough memory for aggregation");
+         |    throw new $oomeClassName("AGGREGATE_OUT_OF_MEMORY", new java.util.HashMap());
          |  }
          |}
        """.stripMargin

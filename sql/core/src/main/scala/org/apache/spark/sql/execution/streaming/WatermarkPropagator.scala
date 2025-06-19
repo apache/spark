@@ -124,12 +124,14 @@ class UseSingleWatermarkPropagator extends WatermarkPropagator {
 /**
  * This implementation simulates propagation of watermark among operators.
  *
- * The simulation algorithm traverses the physical plan tree via post-order (children first) to
- * calculate (input watermark, output watermark) for all nodes.
+ * It is considered a "simulation" because watermarks are not being physically sent between
+ * operators, but rather propagated up the tree via post-order (children first) traversal of
+ * the query plan. This allows Structured Streaming to determine the new (input watermark, output
+ * watermark) for all nodes.
  *
  * For each node, below logic is applied:
  *
- * - Input watermark for specific node is decided by `min(input watermarks from all children)`.
+ * - Input watermark for specific node is decided by `min(output watermarks from all children)`.
  *   -- Children providing no input watermark (DEFAULT_WATERMARK_MS) are excluded.
  *   -- If there is no valid input watermark from children, input watermark = DEFAULT_WATERMARK_MS.
  * - Output watermark for specific node is decided as following:

@@ -86,7 +86,7 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
     logConfDir.mkdir()
 
     val logConfFile = new File(logConfDir, "log4j2.properties")
-    Files.write(LOG4J_CONF, logConfFile, StandardCharsets.UTF_8)
+    Files.asCharSink(logConfFile, StandardCharsets.UTF_8).write(LOG4J_CONF)
 
     // Disable the disk utilization check to avoid the test hanging when people's disks are
     // getting full.
@@ -190,6 +190,10 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
       .setPropertiesFile(propsFile)
       .addAppArgs(appArgs.toArray: _*)
 
+    extraConf.get(SPARK_API_MODE.key).foreach { v =>
+      launcher.setConf(SPARK_API_MODE.key, v)
+    }
+
     sparkArgs.foreach { case (name, value) =>
       if (value != null) {
         launcher.addSparkArg(name, value)
@@ -232,11 +236,11 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
     // an error message
     val output = new Object() {
       override def toString: String = outFile
-          .map(Files.toString(_, StandardCharsets.UTF_8))
+          .map(Files.asCharSource(_, StandardCharsets.UTF_8).read())
           .getOrElse("(stdout/stderr was not captured)")
     }
     assert(finalState === SparkAppHandle.State.FINISHED, output)
-    val resultString = Files.toString(result, StandardCharsets.UTF_8)
+    val resultString = Files.asCharSource(result, StandardCharsets.UTF_8).read()
     assert(resultString === expected, output)
   }
 

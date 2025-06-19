@@ -177,6 +177,11 @@ case object REBALANCE_PARTITIONS_BY_NONE extends ShuffleOrigin
 // the output needs to be partitioned by the given columns.
 case object REBALANCE_PARTITIONS_BY_COL extends ShuffleOrigin
 
+// Indicates that the shuffle operator was added by the internal `EnsureRequirements` rule, but
+// was required by a stateful operator. The physical partitioning is static and Spark shouldn't
+// change it.
+case object REQUIRED_BY_STATEFUL_OPERATOR extends ShuffleOrigin
+
 /**
  * Performs a shuffle that will result in the desired partitioning.
  */
@@ -249,17 +254,10 @@ case class ShuffleExchangeExec(
     dep
   }
 
-  /**
-   * Caches the created ShuffleRowRDD so we can reuse that.
-   */
-  private var cachedShuffleRDD: ShuffledRowRDD = null
-
   protected override def doExecute(): RDD[InternalRow] = {
-    // Returns the same ShuffleRowRDD if this plan is used by multiple plans.
-    if (cachedShuffleRDD == null) {
-      cachedShuffleRDD = new ShuffledRowRDD(shuffleDependency, readMetrics)
-    }
-    cachedShuffleRDD
+    // The ShuffleRowRDD will be cached in SparkPlan.executeRDD and reused if this plan is used by
+    // multiple plans.
+    new ShuffledRowRDD(shuffleDependency, readMetrics)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): ShuffleExchangeExec =

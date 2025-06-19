@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.time.{Duration, Period, ZoneId, ZoneOffset}
+import java.time.{Duration, LocalTime, Period, ZoneId, ZoneOffset}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
@@ -625,8 +625,8 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val s1 = "aaa"
       val s2 = "AAA"
 
-      val murmur3Hash1 = Murmur3Hash(Seq(Collate(Literal(s1), collation)), 42)
-      val murmur3Hash2 = Murmur3Hash(Seq(Collate(Literal(s2), collation)), 42)
+      val murmur3Hash1 = Murmur3Hash(Seq(Collate(Literal(s1), ResolvedCollation(collation))), 42)
+      val murmur3Hash2 = Murmur3Hash(Seq(Collate(Literal(s2), ResolvedCollation(collation))), 42)
 
       // Interpreted hash values for s1 and s2
       val interpretedHash1 = murmur3Hash1.eval()
@@ -636,7 +636,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(murmur3Hash1, interpretedHash1)
       checkEvaluation(murmur3Hash2, interpretedHash2)
 
-      if (CollationFactory.fetchCollation(collation).supportsBinaryEquality) {
+      if (CollationFactory.fetchCollation(collation).isUtf8BinaryType) {
         assert(interpretedHash1 != interpretedHash2)
       } else {
         assert(interpretedHash1 == interpretedHash2)
@@ -752,6 +752,13 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkResult(Literal.create(-0D, DoubleType), Literal.create(0D, DoubleType))
     checkResult(Literal.create(-0F, FloatType), Literal.create(0F, FloatType))
+  }
+
+  test("Support TimeType") {
+    val time = Literal.create(LocalTime.of(23, 50, 59, 123456000), TimeType())
+    checkEvaluation(Murmur3Hash(Seq(time), 10), 545499634)
+    checkEvaluation(XxHash64(Seq(time), 10), -3550518982366774761L)
+    checkEvaluation(HiveHash(Seq(time)), -1567775210)
   }
 
   private def testHash(inputSchema: StructType): Unit = {

@@ -16,7 +16,7 @@
 #
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.sql.connect.utils import check_dependencies
-from pyspark.sql.connect.client.logging import logger
+from pyspark.sql.connect.logging import logger
 
 check_dependencies(__name__)
 

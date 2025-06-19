@@ -1024,7 +1024,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
   "sqlState" : "42000",
   "messageParameters" : {
-    "funcName" : "`default`.`myDoubleAvg`",
+    "name" : "`default`.`myDoubleAvg`",
     "statement" : "DROP TEMPORARY FUNCTION"
   },
   "queryContext" : [ {

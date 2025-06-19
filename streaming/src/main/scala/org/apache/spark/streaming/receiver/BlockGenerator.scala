@@ -142,7 +142,7 @@ private[streaming] class BlockGenerator(
         state = StoppedAddingData
       } else {
         logWarning(log"Cannot stop BlockGenerator as its not in the Active state " +
-          log"[state = ${MDC(STATUS, state)}]")
+          log"[state = ${MDC(BLOCK_GENERATOR_STATUS, state)}]")
         return
       }
     }

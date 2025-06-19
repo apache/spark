@@ -27,8 +27,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -53,10 +52,19 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
       "POWER", "SQRT", "FLOOR", "CEIL", "ROUND", "SIN", "SINH", "COS", "COSH", "TAN",
       "TANH", "COT", "ASIN", "ACOS", "ATAN", "ATAN2", "DEGREES", "RADIANS", "SIGN",
       "PI", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE", "TRIM", "MD5", "SHA1", "SHA2",
-      "BIT_LENGTH", "CHAR_LENGTH", "CONCAT")
+      "BIT_LENGTH", "CHAR_LENGTH", "CONCAT", "RPAD", "LPAD")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
+
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    Set(42102, 42103, 42104, 90079).contains(e.getErrorCode)
+  }
+
+  // See https://www.h2database.com/javadoc/org/h2/api/ErrorCode.html
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    Option(exception.getSQLState).exists(_.startsWith("42"))
+  }
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
@@ -198,9 +206,10 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
 
   override def classifyException(
       e: Throwable,
-      errorClass: String,
+      condition: String,
       messageParameters: Map[String, String],
-      description: String): AnalysisException = {
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
     e match {
       case exception: SQLException =>
         // Error codes are from https://www.h2database.com/javadoc/org/h2/api/ErrorCode.html
@@ -230,13 +239,13 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
             throw new NoSuchNamespaceException(errorClass = "SCHEMA_NOT_FOUND",
               messageParameters = Map("schemaName" -> quotedName))
           // INDEX_ALREADY_EXISTS_1
-          case 42111 if errorClass == "FAILED_JDBC.CREATE_INDEX" =>
+          case 42111 if condition == "FAILED_JDBC.CREATE_INDEX" =>
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
             throw new IndexAlreadyExistsException(
               indexName = indexName, tableName = tableName, cause = Some(e))
           // INDEX_NOT_FOUND_1
-          case 42112 if errorClass == "FAILED_JDBC.DROP_INDEX" =>
+          case 42112 if condition == "FAILED_JDBC.DROP_INDEX" =>
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
             throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
@@ -244,7 +253,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
         }
       case _ => // do nothing
     }
-    super.classifyException(e, errorClass, messageParameters, description)
+    super.classifyException(e, condition, messageParameters, description, isRuntime)
   }
 
   override def compileExpression(expr: Expression): Option[String] = {
@@ -283,22 +292,14 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
     }
 
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
-      if (isSupportedFunction(funcName)) {
-        funcName match {
-          case "MD5" =>
-            "RAWTOHEX(HASH('MD5', " + inputs.mkString(",") + "))"
-          case "SHA1" =>
-            "RAWTOHEX(HASH('SHA-1', " + inputs.mkString(",") + "))"
-          case "SHA2" =>
-            "RAWTOHEX(HASH('SHA-" + inputs(1) + "'," + inputs(0) + "))"
-          case _ => super.visitSQLFunction(funcName, inputs)
-        }
-      } else {
-        throw new SparkUnsupportedOperationException(
-          errorClass = "_LEGACY_ERROR_TEMP_3177",
-          messageParameters = Map(
-            "class" -> this.getClass.getSimpleName,
-            "funcName" -> funcName))
+      funcName match {
+        case "MD5" =>
+          "RAWTOHEX(HASH('MD5', " + inputs.mkString(",") + "))"
+        case "SHA1" =>
+          "RAWTOHEX(HASH('SHA-1', " + inputs.mkString(",") + "))"
+        case "SHA2" =>
+          "RAWTOHEX(HASH('SHA-" + inputs(1) + "'," + inputs(0) + "))"
+        case _ => super.visitSQLFunction(funcName, inputs)
       }
     }
   }

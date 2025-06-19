@@ -16,28 +16,28 @@ Project [(0x00 < 0xFF) AS (X'00' < X'FF')#x]
 -- !query
 select '1 ' = 1Y
 -- !query analysis
-Project [(cast(1  as tinyint) = 1) AS (1  = 1)#x]
+Project [(cast(1  as bigint) = cast(1 as bigint)) AS (1  = 1)#x]
 +- OneRowRelation
 
 
 -- !query
 select '\t1 ' = 1Y
 -- !query analysis
-Project [(cast(	1  as tinyint) = 1) AS (	1  = 1)#x]
+Project [(cast(	1  as bigint) = cast(1 as bigint)) AS (	1  = 1)#x]
 +- OneRowRelation
 
 
 -- !query
 select '1 ' = 1S
 -- !query analysis
-Project [(cast(1  as smallint) = 1) AS (1  = 1)#x]
+Project [(cast(1  as bigint) = cast(1 as bigint)) AS (1  = 1)#x]
 +- OneRowRelation
 
 
 -- !query
 select '1 ' = 1
 -- !query analysis
-Project [(cast(1  as int) = 1) AS (1  = 1)#x]
+Project [(cast(1  as bigint) = cast(1 as bigint)) AS (1  = 1)#x]
 +- OneRowRelation
 
 
@@ -51,7 +51,7 @@ Project [(cast( 1 as bigint) = 1) AS ( 1 = 1)#x]
 -- !query
 select ' 1' = cast(1.0 as float)
 -- !query analysis
-Project [(cast( 1 as float) = cast(1.0 as float)) AS ( 1 = CAST(1.0 AS FLOAT))#x]
+Project [(cast( 1 as double) = cast(cast(1.0 as float) as double)) AS ( 1 = CAST(1.0 AS FLOAT))#x]
 +- OneRowRelation
 
 

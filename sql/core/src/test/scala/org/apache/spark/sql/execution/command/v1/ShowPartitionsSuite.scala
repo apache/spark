@@ -57,7 +57,7 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
           exception = intercept[AnalysisException] {
             sql(s"SHOW PARTITIONS $view")
           },
-          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+          condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> s"`spark_catalog`.`default`.`view1`",
             "operation" -> "SHOW PARTITIONS"
@@ -80,7 +80,7 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
         exception = intercept[AnalysisException] {
           sql(s"SHOW PARTITIONS $viewName")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> "`test_view`",
           "operation" -> "SHOW PARTITIONS"
@@ -124,7 +124,7 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
         exception = intercept[AnalysisException] {
           sql(s"SHOW PARTITIONS $viewName")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> "`test_view`",
           "operation" -> "SHOW PARTITIONS"
@@ -163,7 +163,7 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
+        condition = "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
         parameters = Map("name" -> tableName))
     }
   }

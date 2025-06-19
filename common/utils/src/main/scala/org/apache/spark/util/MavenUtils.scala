@@ -342,7 +342,7 @@ private[spark] object MavenUtils extends Logging {
   }
 
   /* Set ivy settings for location of cache, if option is supplied */
-  private def processIvyPathArg(ivySettings: IvySettings, ivyPath: Option[String]): Unit = {
+  private[util] def processIvyPathArg(ivySettings: IvySettings, ivyPath: Option[String]): Unit = {
     val alternateIvyDir = ivyPath.filterNot(_.trim.isEmpty).getOrElse {
       // To protect old Ivy-based systems like old Spark from Apache Ivy 2.5.2's incompatibility.
       System.getProperty("ivy.home",

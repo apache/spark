@@ -35,6 +35,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -324,7 +325,7 @@ private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: 
 
   private var _transferred = 0L
 
-  private val buffer = ByteBuffer.allocateDirect(64 * 1024)
+  private val buffer = Platform.allocateDirectBuffer(64 * 1024)
   buffer.flip()
 
   override def count(): Long = blockSize

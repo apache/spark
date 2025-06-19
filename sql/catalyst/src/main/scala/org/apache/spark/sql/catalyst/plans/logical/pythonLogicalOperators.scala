@@ -167,27 +167,83 @@ case class FlatMapGroupsInPandasWithState(
  * output/return 0 or more rows. For a streaming dataframe, we will repeatedly invoke the interface
  * methods for new rows in each trigger and the user's state/state variables will be stored
  * persistently across invocations.
+ *
+ * Note that before invoking the function, please project the grouping attributes of input dataframe
+ * and initial state dataframe to the front of the output attributes. The attributes are not fully
+ * resolved when this function is invoked. Will return left and right attributes by taking the first
+ * `groupingAttributesLen` and `initGroupingAttrsLen` after attributes are resolved.
+ * The dedup of grouping attributes will happen in the physical operator.
  * @param functionExpr function called on each group
- * @param groupingAttributes used to group the data
+ * @param groupingAttributesLen length of the seq of grouping attributes for input dataframe.
  * @param outputAttrs used to define the output rows
  * @param outputMode defines the output mode for the statefulProcessor
  * @param timeMode the time mode semantics of the stateful processor for timers and TTL.
+ * @param userFacingDataType the data type of the input and return type in user functions.
  * @param child logical plan of the underlying data
+ * @param initialState logical plan of initial state
+ * @param initGroupingAttrsLen length of the seq of grouping attributes for initial state dataframe
  */
-case class TransformWithStateInPandas(
+case class TransformWithStateInPySpark(
     functionExpr: Expression,
-    groupingAttributes: Seq[Attribute],
+    groupingAttributesLen: Int,
     outputAttrs: Seq[Attribute],
     outputMode: OutputMode,
     timeMode: TimeMode,
-    child: LogicalPlan) extends UnaryNode {
+    userFacingDataType: TransformWithStateInPySpark.UserFacingDataType.Value,
+    child: LogicalPlan,
+    hasInitialState: Boolean,
+    initialState: LogicalPlan,
+    initGroupingAttrsLen: Int,
+    initialStateSchema: StructType) extends BinaryNode {
+  override def left: LogicalPlan = child
+
+  override def right: LogicalPlan = initialState
 
   override def output: Seq[Attribute] = outputAttrs
 
   override def producedAttributes: AttributeSet = AttributeSet(outputAttrs)
 
-  override protected def withNewChildInternal(
-      newChild: LogicalPlan): TransformWithStateInPandas = copy(child = newChild)
+  override lazy val references: AttributeSet =
+    AttributeSet(leftAttributes ++ rightReferences ++ functionExpr.references) -- producedAttributes
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): TransformWithStateInPySpark =
+    copy(child = newLeft, initialState = newRight)
+
+  def leftAttributes: Seq[Attribute] = {
+    assert(resolved, "This method is expected to be called after resolution.")
+    left.output.take(groupingAttributesLen)
+  }
+
+  def rightAttributes: Seq[Attribute] = {
+    assert(resolved, "This method is expected to be called after resolution.")
+    if (hasInitialState) {
+      right.output.take(initGroupingAttrsLen)
+    } else {
+      // Dummy variables for passing the distribution & ordering check
+      // in physical operators.
+      left.output.take(groupingAttributesLen)
+    }
+  }
+
+  // Include the initial state columns in the references to avoid being column pruned.
+  private def rightReferences: Seq[Attribute] = {
+    assert(resolved, "This method is expected to be called after resolution.")
+    if (hasInitialState) {
+      right.output
+    } else {
+      // Dummy variables for passing the distribution & ordering check
+      // in physical operators.
+      left.output.take(groupingAttributesLen)
+    }
+  }
+}
+
+object TransformWithStateInPySpark {
+  object UserFacingDataType extends Enumeration {
+    val PYTHON_ROW = Value("python_row")
+    val PANDAS = Value("pandas")
+  }
 }
 
 /**

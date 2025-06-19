@@ -25,6 +25,8 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileSplit, LineRecordReader}
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
+import org.apache.spark.util.Utils
+
 /**
  * An adaptor from a [[PartitionedFile]] to an [[Iterator]] of [[Text]], which are all of the lines
  * in that file.
@@ -54,14 +56,16 @@ class HadoopFileLinesReader(
     val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
     val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
 
-    val reader = lineSeparator match {
-      case Some(sep) => new LineRecordReader(sep)
-      // If the line separator is `None`, it covers `\r`, `\r\n` and `\n`.
-      case _ => new LineRecordReader()
+    Utils.tryInitializeResource(
+      lineSeparator match {
+        case Some(sep) => new LineRecordReader(sep)
+        // If the line separator is `None`, it covers `\r`, `\r\n` and `\n`.
+        case _ => new LineRecordReader()
+      }
+    ) { reader =>
+      reader.initialize(fileSplit, hadoopAttemptContext)
+      new RecordReaderIterator(reader)
     }
-
-    reader.initialize(fileSplit, hadoopAttemptContext)
-    new RecordReaderIterator(reader)
   }
 
   override def hasNext: Boolean = _iterator.hasNext

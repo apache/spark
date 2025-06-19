@@ -118,7 +118,7 @@ class InterceptorRegistrySuite extends SharedSparkSession {
         exception = intercept[SparkException] {
           SparkConnectInterceptorRegistry.chainInterceptors(sb)
         },
-        errorClass = "CONNECT.INTERCEPTOR_CTOR_MISSING",
+        condition = "CONNECT.INTERCEPTOR_CTOR_MISSING",
         parameters =
           Map("cls" -> "org.apache.spark.sql.connect.service.TestingInterceptorNoTrivialCtor"))
     }
@@ -132,7 +132,7 @@ class InterceptorRegistrySuite extends SharedSparkSession {
         exception = intercept[SparkException] {
           SparkConnectInterceptorRegistry.createConfiguredInterceptors()
         },
-        errorClass = "CONNECT.INTERCEPTOR_CTOR_MISSING",
+        condition = "CONNECT.INTERCEPTOR_CTOR_MISSING",
         parameters =
           Map("cls" -> "org.apache.spark.sql.connect.service.TestingInterceptorNoTrivialCtor"))
     }
@@ -144,7 +144,7 @@ class InterceptorRegistrySuite extends SharedSparkSession {
         exception = intercept[SparkException] {
           SparkConnectInterceptorRegistry.createConfiguredInterceptors()
         },
-        errorClass = "CONNECT.INTERCEPTOR_RUNTIME_ERROR",
+        condition = "CONNECT.INTERCEPTOR_RUNTIME_ERROR",
         parameters = Map("msg" -> "Bad Error"))
     }
   }

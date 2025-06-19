@@ -358,7 +358,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
                |""".stripMargin)
           checkError(
             exception = intercept[AnalysisException](spark.table("non_partition_table")),
-            errorClass = "_LEGACY_ERROR_TEMP_3096",
+            condition = "_LEGACY_ERROR_TEMP_3096",
             parameters = Map(
               "resLen" -> "2",
               "relLen" -> "1",
@@ -422,12 +422,19 @@ class DataSourceWithHiveMetastoreCatalogSuite
         "a struct<" +
           "`a.a`:int," +
           "`a.b`:struct<" +
-          "  `a b b`:array<string>," +
-          "  `a b c`:map<int, string>" +
+          "  `a b b`:array<string>" +
+          "  ,`a b c`:map<int, string>" +
+          "  ,````:int" +
           "  >" +
           ">"
       sql("CREATE TABLE t(" + schema + ")")
       assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(schema))
+
+      // Also test views with this schema
+      withView("v") {
+        sql("CREATE VIEW v AS SELECT * FROM t")
+        assert(spark.table("v").schema === CatalystSqlParser.parseTableSchema(schema))
+      }
     }
   }
 

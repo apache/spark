@@ -31,7 +31,7 @@ import org.apache.spark.sql.streaming.OutputMode.Update
 import org.apache.spark.util.Utils
 
 class RocksDBStateStoreIntegrationSuite extends StreamTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithRocksDBFeatures {
   import testImplicits._
 
   testWithColumnFamilies("RocksDBStateStore",
@@ -107,8 +107,9 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
               "rocksdbTotalBytesReadByCompaction", "rocksdbTotalBytesWrittenByCompaction",
               "rocksdbTotalCompactionLatencyMs", "rocksdbWriterStallLatencyMs",
               "rocksdbTotalBytesReadThroughIterator", "rocksdbTotalBytesWrittenByFlush",
-              "rocksdbPinnedBlocksMemoryUsage", "rocksdbNumExternalColumnFamilies",
-              "rocksdbNumInternalColumnFamilies"))
+              "rocksdbPinnedBlocksMemoryUsage", "rocksdbNumInternalColFamiliesKeys",
+              "rocksdbNumExternalColumnFamilies", "rocksdbNumInternalColumnFamilies",
+              "SnapshotLastUploaded.partition_0_default"))
           }
         } finally {
           query.stop()
@@ -119,7 +120,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
 
   private def getFormatVersion(query: StreamingQuery): Int = {
     query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.sparkSession
-      .conf.get(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION)
+      .sessionState.conf.getConf(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION)
   }
 
   testWithColumnFamilies("SPARK-36519: store RocksDB format version in the checkpoint",
@@ -215,6 +216,49 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
             val stateOperatorMetrics = nextProgress.stateOperators(0)
             assert(stateOperatorMetrics.numRowsTotal === 0)
           }
+        } finally {
+          query.stop()
+        }
+      }
+    }
+  }
+
+  testWithColumnFamilies("SPARK-51823: unload state stores on commit",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    withTempDir { dir =>
+      withSQLConf(
+        (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName),
+        (SQLConf.CHECKPOINT_LOCATION.key -> dir.getCanonicalPath),
+        (SQLConf.SHUFFLE_PARTITIONS.key -> "1"),
+        (SQLConf.STATE_STORE_UNLOAD_ON_COMMIT.key -> "true")) {
+        // Make sure we start with a fresh without any stale state store entries
+        Utils.clearLocalRootDirs()
+
+        val inputData = MemoryStream[Int]
+
+        val query = inputData.toDS().toDF("value")
+          .select($"value")
+          .groupBy($"value")
+          .agg(count("*"))
+          .writeStream
+          .format("console")
+          .outputMode("complete")
+          .start()
+        try {
+          inputData.addData(1, 2)
+          inputData.addData(2, 3)
+          query.processAllAvailable()
+
+          // StateStore should be unloaded, so its tmp dir shouldn't exist
+          var tmpFiles = new File(Utils.getLocalDir(sparkConf)).listFiles()
+          assert(tmpFiles.filter(_.getName().startsWith("StateStore")).isEmpty)
+
+          inputData.addData(3, 4)
+          inputData.addData(4, 5)
+          query.processAllAvailable()
+
+          tmpFiles = new File(Utils.getLocalDir(sparkConf)).listFiles()
+          assert(tmpFiles.filter(_.getName().startsWith("StateStore")).isEmpty)
         } finally {
           query.stop()
         }

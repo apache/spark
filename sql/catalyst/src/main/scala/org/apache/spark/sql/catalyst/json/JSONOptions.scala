@@ -91,7 +91,7 @@ class JSONOptions(
   val parseMode: ParseMode =
     parameters.get(MODE).map(ParseMode.fromString).getOrElse(PermissiveMode)
   val columnNameOfCorruptRecord =
-    parameters.getOrElse(COLUMN_NAME_OF_CORRUPTED_RECORD, defaultColumnNameOfCorruptRecord)
+    parameters.getOrElse(COLUMN_NAME_OF_CORRUPT_RECORD, defaultColumnNameOfCorruptRecord)
 
   // Whether to ignore column of all null values or empty array/struct during schema inference
   val dropFieldIfAllNull = parameters.get(DROP_FIELD_IF_ALL_NULL).map(_.toBoolean).getOrElse(false)
@@ -150,7 +150,8 @@ class JSONOptions(
     sep
   }
 
-  protected def checkedEncoding(enc: String): String = enc
+  protected def checkedEncoding(enc: String): String =
+    CharsetProvider.forName(enc, caller = "JSONOptions").name()
 
   /**
    * Standard encoding (charset) name. For example UTF-8, UTF-16LE and UTF-32BE.
@@ -233,16 +234,16 @@ class JSONOptionsInRead(
   }
 
   protected override def checkedEncoding(enc: String): String = {
-    val isDenied = JSONOptionsInRead.denyList.contains(Charset.forName(enc))
+    val charset = CharsetProvider.forName(enc, caller = "JSONOptionsInRead")
+    val isDenied = JSONOptionsInRead.denyList.contains(charset)
     require(multiLine || !isDenied,
       s"""The $enc encoding must not be included in the denyList when multiLine is disabled:
          |denylist: ${JSONOptionsInRead.denyList.mkString(", ")}""".stripMargin)
 
-    val isLineSepRequired =
-        multiLine || Charset.forName(enc) == StandardCharsets.UTF_8 || lineSeparator.nonEmpty
+    val isLineSepRequired = multiLine || charset == StandardCharsets.UTF_8 || lineSeparator.nonEmpty
     require(isLineSepRequired, s"The lineSep option must be specified for the $enc encoding")
 
-    enc
+    charset.name()
   }
 }
 
@@ -283,10 +284,10 @@ object JSONOptions extends DataSourceOptions {
   val LINE_SEP = newOption("lineSep")
   val PRETTY = newOption("pretty")
   val INFER_TIMESTAMP = newOption("inferTimestamp")
-  val COLUMN_NAME_OF_CORRUPTED_RECORD = newOption("columnNameOfCorruptRecord")
+  val COLUMN_NAME_OF_CORRUPT_RECORD = newOption(DataSourceOptions.COLUMN_NAME_OF_CORRUPT_RECORD)
   val TIME_ZONE = newOption("timeZone")
   val WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT = newOption("writeNonAsciiCharacterAsCodePoint")
-  val SINGLE_VARIANT_COLUMN = newOption("singleVariantColumn")
+  val SINGLE_VARIANT_COLUMN = newOption(DataSourceOptions.SINGLE_VARIANT_COLUMN)
   val USE_UNSAFE_ROW = newOption("useUnsafeRow")
   // Options with alternative
   val ENCODING = "encoding"

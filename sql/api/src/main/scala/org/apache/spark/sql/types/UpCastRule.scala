@@ -22,13 +22,8 @@ package org.apache.spark.sql.types
 private[sql] object UpCastRule {
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
   // The conversion for integral and floating point types have a linear widening hierarchy:
-  val numericPrecedence: IndexedSeq[NumericType] = IndexedSeq(
-    ByteType,
-    ShortType,
-    IntegerType,
-    LongType,
-    FloatType,
-    DoubleType)
+  val numericPrecedence: IndexedSeq[NumericType] =
+    IndexedSeq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
 
   /**
    * Returns true iff we can safely up-cast the `from` type to `to` type without any truncating or
@@ -45,8 +40,11 @@ private[sql] object UpCastRule {
     case (DateType, TimestampNTZType) => true
     case (TimestampNTZType, TimestampType) => true
     case (TimestampType, TimestampNTZType) => true
-    case (_: AtomicType, StringType) => true
-    case (_: CalendarIntervalType, StringType) => true
+
+    case (s1: StringType, s2: StringType) => StringHelper.isMoreConstrained(s1, s2)
+    // TODO: allow upcast from int/double/decimal to char/varchar of sufficient length
+    case (_: AtomicType, s: StringType) => StringHelper.isPlainString(s)
+    case (_: CalendarIntervalType, s: StringType) => StringHelper.isPlainString(s)
     case (NullType, _) => true
 
     // Spark supports casting between long and timestamp, please see `longToTimestamp` and
@@ -62,10 +60,9 @@ private[sql] object UpCastRule {
 
     case (StructType(fromFields), StructType(toFields)) =>
       fromFields.length == toFields.length &&
-        fromFields.zip(toFields).forall {
-          case (f1, f2) =>
-            resolvableNullability(f1.nullable, f2.nullable) && canUpCast(f1.dataType, f2.dataType)
-        }
+      fromFields.zip(toFields).forall { case (f1, f2) =>
+        resolvableNullability(f1.nullable, f2.nullable) && canUpCast(f1.dataType, f2.dataType)
+      }
 
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
@@ -75,7 +72,7 @@ private[sql] object UpCastRule {
     case _ => false
   }
 
-  private def legalNumericPrecedence(from: DataType, to: DataType): Boolean = {
+  def legalNumericPrecedence(from: DataType, to: DataType): Boolean = {
     val fromPrecedence = numericPrecedence.indexOf(from)
     val toPrecedence = numericPrecedence.indexOf(to)
     fromPrecedence >= 0 && fromPrecedence < toPrecedence

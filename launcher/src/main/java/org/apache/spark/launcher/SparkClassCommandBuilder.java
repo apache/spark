@@ -82,10 +82,6 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
         javaOptsKeys.add("SPARK_BEELINE_OPTS");
         yield "SPARK_BEELINE_MEMORY";
       }
-      case "org.apache.spark.sql.application.ConnectRepl" -> {
-        isRemote = true;
-        yield "SPARK_DRIVER_MEMORY";
-      }
       default -> "SPARK_DRIVER_MEMORY";
     };
 

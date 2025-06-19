@@ -557,31 +557,33 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
     val testDf = df1.join(df2, "k").groupBy("k").agg(count("v1"), sum("v1"), avg("v2"))
     // trigger the final plan for AQE
     testDf.collect()
-    // AdaptiveSparkPlan (21)
+
+    // AdaptiveSparkPlan (22)
     // +- == Final Plan ==
-    //    * HashAggregate (12)
-    //    +- AQEShuffleRead (11)
-    //       +- ShuffleQueryStage (10)
-    //          +- Exchange (9)
-    //             +- * HashAggregate (8)
-    //                +- * Project (7)
-    //                   +- * BroadcastHashJoin Inner BuildRight (6)
-    //                      :- * LocalTableScan (1)
-    //                      +- BroadcastQueryStage (5)
-    //                         +- BroadcastExchange (4)
-    //                            +- * Project (3)
-    //                               +- * LocalTableScan (2)
+    //   ResultQueryStage (13)
+    //   +- * HashAggregate (12)
+    //      +- AQEShuffleRead (11)
+    //         +- ShuffleQueryStage (10)
+    //            +- Exchange (9)
+    //               +- * HashAggregate (8)
+    //                  +- * Project (7)
+    //                     +- * BroadcastHashJoin Inner BuildRight (6)
+    //                        :- * LocalTableScan (1)
+    //                        +- BroadcastQueryStage (5)
+    //                           +- BroadcastExchange (4)
+    //                              +- * Project (3)
+    //                                 +- * LocalTableScan (2)
     // +- == Initial Plan ==
-    //    HashAggregate (20)
-    //    +- Exchange (19)
-    //       +- HashAggregate (18)
-    //          +- Project (17)
-    //             +- BroadcastHashJoin Inner BuildRight (16)
-    //                :- Project (14)
-    //                :  +- LocalTableScan (13)
-    //                +- BroadcastExchange (15)
-    //                   +- Project (3)
-    //                      +- LocalTableScan (2)
+    //   HashAggregate (21)
+    //   +- Exchange (20)
+    //      +- HashAggregate (19)
+    //         +- Project (18)
+    //            +- BroadcastHashJoin Inner BuildRight (17)
+    //               :- Project (15)
+    //               :  +- LocalTableScan (14)
+    //               +- BroadcastExchange (16)
+    //                  +- Project (3)
+    //                     +- LocalTableScan (2)
     checkKeywordsExistsInExplain(
       testDf,
       FormattedMode,
@@ -599,18 +601,18 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         |Arguments: coalesced
         |""".stripMargin,
       """
-        |(16) BroadcastHashJoin
+        |(17) BroadcastHashJoin
         |Left keys [1]: [k#x]
         |Right keys [1]: [k#x]
         |Join type: Inner
         |Join condition: None
         |""".stripMargin,
       """
-        |(19) Exchange
+        |(20) Exchange
         |Input [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
         |""".stripMargin,
       """
-        |(21) AdaptiveSparkPlan
+        |(22) AdaptiveSparkPlan
         |Output [4]: [k#x, count(v1)#xL, sum(v1)#xL, avg(v2)#x]
         |Arguments: isFinalPlan=true
         |""".stripMargin
@@ -656,7 +658,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
           |Output [1]: [id#xL]
           |Arguments: 0""".stripMargin,
         """
-          |(12) AdaptiveSparkPlan
+          |(13) AdaptiveSparkPlan
           |Output [2]: [key#xL, value#xL]
           |Arguments: isFinalPlan=true
           |""".stripMargin,
@@ -664,11 +666,11 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
           |Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery subquery#x, [id=#x]
           |""".stripMargin,
         """
-          |(16) ShuffleQueryStage
+          |(17) ShuffleQueryStage
           |Output [1]: [max#xL]
           |Arguments: 0""".stripMargin,
         """
-          |(20) AdaptiveSparkPlan
+          |(22) AdaptiveSparkPlan
           |Output [1]: [max(id)#xL]
           |Arguments: isFinalPlan=true
           |""".stripMargin

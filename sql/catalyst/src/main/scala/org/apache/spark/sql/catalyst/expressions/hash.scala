@@ -61,9 +61,10 @@ import org.apache.spark.util.ArrayImplicits._
   since = "1.5.0",
   group = "hash_funcs")
 case class Md5(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  extends UnaryExpression
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
@@ -101,9 +102,12 @@ case class Md5(child: Expression)
   group = "hash_funcs")
 // scalastyle:on line.size.limit
 case class Sha2(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression
+  with ImplicitCastInputTypes
+  with Serializable
+  with DefaultStringProducingExpression {
+  override def nullIntolerant: Boolean = true
 
-  override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType, IntegerType)
@@ -167,9 +171,10 @@ case class Sha2(left: Expression, right: Expression)
   since = "1.5.0",
   group = "hash_funcs")
 case class Sha1(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  extends UnaryExpression
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
@@ -199,7 +204,8 @@ case class Sha1(child: Expression)
   since = "1.5.0",
   group = "hash_funcs")
 case class Crc32(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def dataType: DataType = LongType
 
@@ -250,6 +256,8 @@ case class Crc32(child: Expression)
  *                             input with seed.
  *  - binary:                  use murmur3 to hash the bytes with seed.
  *  - string:                  get the bytes of string and hash it.
+ *  - time:                    it stores long value of `microseconds` since the midnight, use
+ *                             murmur3 to hash the long input with seed.
  *  - array:                   The `result` starts with seed, then use `result` as seed, recursively
  *                             calculate hash value for each element, and assign the element hash
  *                             value to `result`.
@@ -501,7 +509,7 @@ abstract class HashExpression[E] extends Expression {
     case NullType => ""
     case BooleanType => genHashBoolean(input, result)
     case ByteType | ShortType | IntegerType | DateType => genHashInt(input, result)
-    case LongType => genHashLong(input, result)
+    case LongType | _: TimeType => genHashLong(input, result)
     case TimestampType | TimestampNTZType => genHashTimestamp(input, result)
     case FloatType => genHashFloat(input, result)
     case DoubleType => genHashDouble(input, result)

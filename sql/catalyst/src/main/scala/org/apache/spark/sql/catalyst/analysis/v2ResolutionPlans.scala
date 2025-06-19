@@ -23,13 +23,14 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, LeafExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_FUNC}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_FUNC, UNRESOLVED_PROCEDURE}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, ProcedureCatalog, Table, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
+import org.apache.spark.sql.connector.catalog.procedures.Procedure
 import org.apache.spark.sql.types.{DataType, StructField}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -135,6 +136,12 @@ case class UnresolvedFunctionName(
 case class UnresolvedIdentifier(nameParts: Seq[String], allowTemp: Boolean = false)
   extends UnresolvedLeafNode
 
+/**
+ * A procedure identifier that should be resolved into [[ResolvedProcedure]].
+ */
+case class UnresolvedProcedure(nameParts: Seq[String]) extends UnresolvedLeafNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_PROCEDURE)
+}
 
 /**
  * A resolved leaf node whose statistics has no meaning.
@@ -192,6 +199,12 @@ case class ResolvedFieldName(path: Seq[String], field: StructField) extends Fiel
 
 case class ResolvedFieldPosition(position: ColumnPosition) extends FieldPosition
 
+case class ResolvedProcedure(
+    catalog: ProcedureCatalog,
+    ident: Identifier,
+    procedure: Procedure) extends LeafNodeWithoutStats {
+  override def output: Seq[Attribute] = Nil
+}
 
 /**
  * A plan containing resolved persistent views.
@@ -239,12 +252,25 @@ case class ResolvedNonPersistentFunc(
  */
 case class ResolvedIdentifier(
     catalog: CatalogPlugin,
-    identifier: Identifier) extends LeafNodeWithoutStats {
-  override def output: Seq[Attribute] = Nil
+    identifier: Identifier,
+    override val output: Seq[Attribute] = Nil) extends LeafNodeWithoutStats
+
+object ResolvedIdentifier {
+  def unapply(ri: ResolvedIdentifier): Option[(CatalogPlugin, Identifier)] = {
+    Some((ri.catalog, ri.identifier))
+  }
 }
 
 // A fake v2 catalog to hold temp views.
 object FakeSystemCatalog extends CatalogPlugin {
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
   override def name(): String = "system"
+}
+
+/**
+ * A fake v2 catalog to hold local variables for SQL scripting.
+ */
+object FakeLocalCatalog extends CatalogPlugin {
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
+  override def name(): String = "local"
 }

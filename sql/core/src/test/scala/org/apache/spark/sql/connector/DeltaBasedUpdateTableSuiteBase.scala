@@ -32,7 +32,7 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
       exception = intercept[AnalysisException] {
         sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
       },
-      errorClass = "NULLABLE_ROW_ID_ATTRIBUTES",
+      condition = "NULLABLE_ROW_ID_ATTRIBUTES",
       parameters = Map("nullableRowIdAttrs" -> "pk#\\d+")
     )
   }
@@ -62,7 +62,7 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
       exception = intercept[AnalysisException] {
         sql(s"UPDATE $tableNameAsString SET dep = 'invalid' WHERE id <= 1 AND rand() > 0.5")
       },
-      errorClass = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+      condition = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
       parameters = Map("sqlExprs" -> "\"((id <= 1) AND (rand() > 0.5))\""),
       context = ExpectedContext(
         fragment = "UPDATE cat.ns1.test_table SET dep = 'invalid' WHERE id <= 1 AND rand() > 0.5",

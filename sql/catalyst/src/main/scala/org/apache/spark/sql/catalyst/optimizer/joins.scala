@@ -211,17 +211,17 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
 
-    case a @ Aggregate(_, _, Join(left, _, LeftOuter, _, _))
+    case a @ Aggregate(_, _, Join(left, _, LeftOuter, _, _), _)
         if a.references.subsetOf(left.outputSet) && allDuplicateAgnostic(a) =>
       a.copy(child = left)
-    case a @ Aggregate(_, _, Join(_, right, RightOuter, _, _))
+    case a @ Aggregate(_, _, Join(_, right, RightOuter, _, _), _)
         if a.references.subsetOf(right.outputSet) && allDuplicateAgnostic(a) =>
       a.copy(child = right)
-    case a @ Aggregate(_, _, p @ Project(projectList, Join(left, _, LeftOuter, _, _)))
+    case a @ Aggregate(_, _, p @ Project(projectList, Join(left, _, LeftOuter, _, _)), _)
         if projectList.forall(_.deterministic) && p.references.subsetOf(left.outputSet) &&
           allDuplicateAgnostic(a) =>
       a.copy(child = p.copy(child = left))
-    case a @ Aggregate(_, _, p @ Project(projectList, Join(_, right, RightOuter, _, _)))
+    case a @ Aggregate(_, _, p @ Project(projectList, Join(_, right, RightOuter, _, _)), _)
         if projectList.forall(_.deterministic) && p.references.subsetOf(right.outputSet) &&
           allDuplicateAgnostic(a) =>
       a.copy(child = p.copy(child = right))
@@ -293,19 +293,23 @@ trait JoinSelectionHelper extends Logging {
       join: Join,
       hintOnly: Boolean,
       conf: SQLConf): Option[BuildSide] = {
-    val buildLeft = if (hintOnly) {
-      hintToBroadcastLeft(join.hint)
-    } else {
-      canBroadcastBySize(join.left, conf) && !hintToNotBroadcastLeft(join.hint)
+    def shouldBuildLeft(): Boolean = {
+      if (hintOnly) {
+        hintToBroadcastLeft(join.hint)
+      } else {
+        canBroadcastBySize(join.left, conf) && !hintToNotBroadcastLeft(join.hint)
+      }
     }
-    val buildRight = if (hintOnly) {
-      hintToBroadcastRight(join.hint)
-    } else {
-      canBroadcastBySize(join.right, conf) && !hintToNotBroadcastRight(join.hint)
+    def shouldBuildRight(): Boolean = {
+      if (hintOnly) {
+        hintToBroadcastRight(join.hint)
+      } else {
+        canBroadcastBySize(join.right, conf) && !hintToNotBroadcastRight(join.hint)
+      }
     }
     getBuildSide(
-      canBuildBroadcastLeft(join.joinType) && buildLeft,
-      canBuildBroadcastRight(join.joinType) && buildRight,
+      canBuildBroadcastLeft(join.joinType) && shouldBuildLeft(),
+      canBuildBroadcastRight(join.joinType) && shouldBuildRight(),
       join.left,
       join.right
     )
@@ -315,32 +319,36 @@ trait JoinSelectionHelper extends Logging {
       join: Join,
       hintOnly: Boolean,
       conf: SQLConf): Option[BuildSide] = {
-    val buildLeft = if (hintOnly) {
-      hintToShuffleHashJoinLeft(join.hint)
-    } else {
-      hintToPreferShuffleHashJoinLeft(join.hint) ||
-        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.left, conf) &&
-          muchSmaller(join.left, join.right, conf)) ||
-        forceApplyShuffledHashJoin(conf)
+    def shouldBuildLeft(): Boolean = {
+      if (hintOnly) {
+        hintToShuffleHashJoinLeft(join.hint)
+      } else {
+        hintToPreferShuffleHashJoinLeft(join.hint) ||
+          (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.left, conf) &&
+            muchSmaller(join.left, join.right, conf)) ||
+          forceApplyShuffledHashJoin(conf)
+      }
     }
-    val buildRight = if (hintOnly) {
-      hintToShuffleHashJoinRight(join.hint)
-    } else {
-      hintToPreferShuffleHashJoinRight(join.hint) ||
-        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.right, conf) &&
-          muchSmaller(join.right, join.left, conf)) ||
-        forceApplyShuffledHashJoin(conf)
+    def shouldBuildRight(): Boolean = {
+      if (hintOnly) {
+        hintToShuffleHashJoinRight(join.hint)
+      } else {
+        hintToPreferShuffleHashJoinRight(join.hint) ||
+          (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.right, conf) &&
+            muchSmaller(join.right, join.left, conf)) ||
+          forceApplyShuffledHashJoin(conf)
+      }
     }
     getBuildSide(
-      canBuildShuffledHashJoinLeft(join.joinType) && buildLeft,
-      canBuildShuffledHashJoinRight(join.joinType) && buildRight,
+      canBuildShuffledHashJoinLeft(join.joinType) && shouldBuildLeft(),
+      canBuildShuffledHashJoinRight(join.joinType) && shouldBuildRight(),
       join.left,
       join.right
     )
   }
 
-  def getBroadcastNestedLoopJoinBuildSide(hint: JoinHint): Option[BuildSide] = {
-    if (hintToNotBroadcastAndReplicateLeft(hint)) {
+  def getBroadcastNestedLoopJoinBuildSide(hint: JoinHint, joinType: JoinType): Option[BuildSide] = {
+    if (hintToNotBroadcastAndReplicateLeft(hint) || joinType == LeftSingle) {
       Some(BuildRight)
     } else if (hintToNotBroadcastAndReplicateRight(hint)) {
       Some(BuildLeft)
@@ -375,7 +383,7 @@ trait JoinSelectionHelper extends Logging {
 
   def canBuildBroadcastRight(joinType: JoinType): Boolean = {
     joinType match {
-      case _: InnerLike | LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin => true
+      case _: InnerLike | LeftOuter | LeftSingle | LeftSemi | LeftAnti | _: ExistenceJoin => true
       case _ => false
     }
   }
@@ -389,7 +397,7 @@ trait JoinSelectionHelper extends Logging {
 
   def canBuildShuffledHashJoinRight(joinType: JoinType): Boolean = {
     joinType match {
-      case _: InnerLike | LeftOuter | FullOuter | RightOuter |
+      case _: InnerLike | LeftOuter | LeftSingle | FullOuter | RightOuter |
            LeftSemi | LeftAnti | _: ExistenceJoin => true
       case _ => false
     }

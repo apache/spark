@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.io.Serializable
+import java.io.Closeable
 import java.util.Properties
 
 import org.apache.spark.annotation.{DeveloperApi, Evolving, Since}
@@ -305,4 +305,24 @@ abstract class TaskContext extends Serializable {
 
   /** Gets local properties set upstream in the driver. */
   private[spark] def getLocalProperties: Properties
+
+  /** Whether the current task is allowed to interrupt. */
+  private[spark] def interruptible(): Boolean
+
+  /**
+   * Pending the interruption request until the task is able to
+   * interrupt after creating the resource uninterruptibly.
+   */
+  private[spark] def pendingInterrupt(threadToInterrupt: Option[Thread], reason: String): Unit
+
+  /**
+   * Creating a closeable resource uninterruptibly. A task is not allowed to interrupt in this
+   * state until the resource creation finishes. E.g.,
+   * {{{
+   *  val linesReader = TaskContext.get().createResourceUninterruptibly {
+   *    new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
+   *  }
+   * }}}
+   */
+  private[spark] def createResourceUninterruptibly[T <: Closeable](resourceBuilder: => T): T
 }

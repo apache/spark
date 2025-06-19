@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
 
 /**
@@ -221,6 +222,24 @@ class SparkSessionExtensions {
    */
   def injectResolutionRule(builder: RuleBuilder): Unit = {
     resolutionRuleBuilders += builder
+  }
+
+  private[this] val hintResolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]
+
+  /**
+   * Build the analyzer hint resolution rules using the given [[SparkSession]].
+   */
+  private[sql] def buildHintResolutionRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    hintResolutionRuleBuilders.map(_.apply(session)).toSeq
+  }
+
+  /**
+   * Inject an analyzer hint resolution rule builder into the [[SparkSession]]. These analyzer
+   * rules will be executed as part of the early resolution phase of the analyzer, together with
+   * other hint resolution rules.
+   */
+  def injectHintResolutionRule(builder: RuleBuilder): Unit = {
+    hintResolutionRuleBuilders += builder
   }
 
   private[this] val postHocResolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]

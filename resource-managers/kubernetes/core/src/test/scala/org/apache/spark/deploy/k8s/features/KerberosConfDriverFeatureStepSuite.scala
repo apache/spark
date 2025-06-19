@@ -55,7 +55,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
 
   test("create krb5.conf config map if local config provided") {
     val krbConf = File.createTempFile("krb5", ".conf", tmpDir)
-    Files.write("some data", krbConf, UTF_8)
+    Files.asCharSink(krbConf, UTF_8).write("some data")
 
     val sparkConf = new SparkConf(false)
       .set(KUBERNETES_KERBEROS_KRB5_FILE, krbConf.getAbsolutePath())
@@ -70,7 +70,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
 
   test("create keytab secret if client keytab file used") {
     val keytab = File.createTempFile("keytab", ".bin", tmpDir)
-    Files.write("some data", keytab, UTF_8)
+    Files.asCharSink(keytab, UTF_8).write("some data")
 
     val sparkConf = new SparkConf(false)
       .set(KEYTAB, keytab.getAbsolutePath())

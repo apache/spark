@@ -49,7 +49,7 @@ trait ShowNamespacesSuiteBase extends command.ShowNamespacesSuiteBase {
       sql("SHOW NAMESPACES in dummy")
     }
     checkError(e,
-      errorClass = "SCHEMA_NOT_FOUND",
+      condition = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> s"`$catalog`.`dummy`"))
   }
 }

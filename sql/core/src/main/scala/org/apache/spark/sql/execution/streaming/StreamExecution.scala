@@ -35,17 +35,19 @@ import org.apache.logging.log4j.CloseableThreadContext
 import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{CHECKPOINT_PATH, CHECKPOINT_ROOT, LOGICAL_PLAN, PATH, PRETTY_ID_STRING, QUERY_ID, RUN_ID, SPARK_DATA_STREAM}
-import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.classic.{SparkSession, StreamingQuery}
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate, Write}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
-import org.apache.spark.sql.execution.streaming.sources.ForeachBatchUserFuncException
+import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchUserFuncException, ForeachUserFuncException}
+import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataV2FileManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
-import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamingQueryListener, StreamingQueryProgress, StreamingQueryStatus, Trigger}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
@@ -149,16 +151,20 @@ abstract class StreamExecution(
    */
   protected def sources: Seq[SparkDataStream]
 
-  /** Metadata associated with the whole query */
-  protected val streamMetadata: StreamMetadata = {
-    val metadataPath = new Path(checkpointFile("metadata"))
-    val hadoopConf = sparkSession.sessionState.newHadoopConf()
-    StreamMetadata.read(metadataPath, hadoopConf).getOrElse {
-      val newMetadata = new StreamMetadata(UUID.randomUUID.toString)
-      StreamMetadata.write(newMetadata, metadataPath, hadoopConf)
-      newMetadata
-    }
-  }
+  /** Isolated spark session to run the batches with. */
+  protected val sparkSessionForStream: SparkSession = sparkSession.cloneSession()
+
+  /**
+   * Manages the metadata from this checkpoint location.
+   */
+  protected val checkpointMetadata =
+    new StreamingQueryCheckpointMetadata(sparkSessionForStream, resolvedCheckpointRoot)
+
+  private val streamMetadata: StreamMetadata = checkpointMetadata.streamMetadata
+
+  lazy val offsetLog: OffsetSeqLog = checkpointMetadata.offsetLog
+
+  lazy val commitLog: CommitLog = checkpointMetadata.commitLog
 
   /**
    * A map of current watermarks, keyed by the position of the watermark operator in the
@@ -207,9 +213,6 @@ abstract class StreamExecution(
   lazy val streamMetrics = new MetricsReporter(
     this, s"spark.streaming.${Option(name).getOrElse(id)}")
 
-  /** Isolated spark session to run the batches with. */
-  private val sparkSessionForStream = sparkSession.cloneSession()
-
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
    * [[org.apache.spark.util.UninterruptibleThread]] to workaround KAFKA-1894: interrupting a
@@ -221,26 +224,9 @@ abstract class StreamExecution(
         // To fix call site like "run at <unknown>:0", we bridge the call site from the caller
         // thread to this micro batch thread
         sparkSession.sparkContext.setCallSite(callSite)
-        JobArtifactSet.withActiveJobArtifactState(jobArtifactState) {
-          runStream()
-        }
+        runStream()
       }
     }
-
-  /**
-   * A write-ahead-log that records the offsets that are present in each batch. In order to ensure
-   * that a given batch will always consist of the same data, we write to this log *before* any
-   * processing is done.  Thus, the Nth record in this log indicated data that is currently being
-   * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
-   */
-  val offsetLog = new OffsetSeqLog(sparkSession, checkpointFile("offsets"))
-
-  /**
-   * A log that records the batch ids that have completed. This is used to check if a batch was
-   * fully processed, and its output was committed to the sink, hence no need to process it again.
-   * This is used (for instance) during restart, to help identify which batch to run next.
-   */
-  val commitLog = new CommitLog(sparkSession, checkpointFile("commits"))
 
   /** Whether all fields of the query have been initialized */
   private def isInitialized: Boolean = state.get != INITIALIZING
@@ -302,7 +288,14 @@ abstract class StreamExecution(
       // `postEvent` does not throw non fatal exception.
       val startTimestamp = triggerClock.getTimeMillis()
       postEvent(
-        new QueryStartedEvent(id, runId, name, progressReporter.formatTimestamp(startTimestamp)))
+        new QueryStartedEvent(
+          id,
+          runId,
+          name,
+          progressReporter.formatTimestamp(startTimestamp),
+          sparkSession.sparkContext.getJobTags()
+        )
+      )
 
       // Unblock starting thread
       startLatch.countDown()
@@ -346,9 +339,11 @@ abstract class StreamExecution(
         getLatestExecutionContext().updateStatusMessage("Stopped")
       case e: Throwable =>
         val message = if (e.getMessage == null) "" else e.getMessage
-        val cause = if (e.isInstanceOf[ForeachBatchUserFuncException]) {
+        val cause = if (e.isInstanceOf[ForeachBatchUserFuncException] ||
+          e.isInstanceOf[ForeachUserFuncException]) {
           // We want to maintain the current way users get the causing exception
-          // from the StreamingQueryException. Hence the ForeachBatch exception is unwrapped here.
+          // from the StreamingQueryException.
+          // Hence the ForeachBatch/Foreach exception is unwrapped here.
           e.getCause
         } else {
           e
@@ -367,16 +362,10 @@ abstract class StreamExecution(
           messageParameters = Map(
             "id" -> id.toString,
             "runId" -> runId.toString,
-            "message" -> message,
-            "queryDebugString" -> toDebugString(includeLogicalPlan = isInitialized),
-            "startOffset" -> getLatestExecutionContext().startOffsets.toOffsetSeq(
-              sources.toSeq, getLatestExecutionContext().offsetSeqMetadata).toString,
-            "endOffset" -> getLatestExecutionContext().endOffsets.toOffsetSeq(
-              sources.toSeq, getLatestExecutionContext().offsetSeqMetadata).toString
-          ))
+            "message" -> message))
 
         errorClassOpt = e match {
-          case t: SparkThrowable => Option(t.getErrorClass)
+          case t: SparkThrowable => Option(t.getCondition)
           case _ => None
         }
 
@@ -485,7 +474,7 @@ abstract class StreamExecution(
   @throws[TimeoutException]
   protected def interruptAndAwaitExecutionThreadTermination(): Unit = {
     val timeout = math.max(
-      sparkSession.conf.get(SQLConf.STREAMING_STOP_TIMEOUT), 0)
+      sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_STOP_TIMEOUT), 0)
     queryExecutionThread.interrupt()
     queryExecutionThread.join(timeout)
     if (queryExecutionThread.isAlive) {
@@ -690,10 +679,36 @@ abstract class StreamExecution(
     offsetLog.purge(threshold)
     commitLog.purge(threshold)
   }
+
+  protected def purgeStatefulMetadata(plan: SparkPlan): Unit = {
+    plan.collect { case statefulOperator: StatefulOperator =>
+      statefulOperator match {
+        case ssw: StateStoreWriter =>
+          ssw.operatorStateMetadataVersion match {
+            case 2 =>
+              // checkpointLocation of the operator is runId/state, and commitLog path is
+              // runId/commits, so we want the parent of the checkpointLocation to get the
+              // commit log path.
+              val parentCheckpointLocation =
+                new Path(statefulOperator.getStateInfo.checkpointLocation).getParent
+
+              val fileManager = new OperatorStateMetadataV2FileManager(
+                parentCheckpointLocation,
+                sparkSession,
+                ssw
+              )
+              fileManager.purgeMetadataFiles()
+            case _ =>
+          }
+        case _ =>
+      }
+    }
+  }
 }
 
 object StreamExecution {
   val QUERY_ID_KEY = "sql.streaming.queryId"
+  val RUN_ID_KEY = "sql.streaming.runId"
   val IS_CONTINUOUS_PROCESSING = "__is_continuous_processing"
   val IO_EXCEPTION_NAMES = Seq(
     classOf[InterruptedException].getName,
@@ -728,6 +743,7 @@ object StreamExecution {
           if e2.getCause != null =>
         isInterruptionException(e2.getCause, sc)
       case fe: ForeachBatchUserFuncException => isInterruptionException(fe.getCause, sc)
+      case fes: ForeachUserFuncException => isInterruptionException(fes.getCause, sc)
       case se: SparkException =>
         if (se.getCause == null) {
           isCancelledJobGroup(se.getMessage)

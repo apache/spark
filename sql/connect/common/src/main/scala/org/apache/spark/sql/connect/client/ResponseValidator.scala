@@ -18,7 +18,7 @@ package org.apache.spark.sql.connect.client
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-import com.google.protobuf.GeneratedMessageV3
+import com.google.protobuf.GeneratedMessage
 import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 
@@ -59,7 +59,7 @@ class ResponseValidator extends Logging {
     isSessionActive.getAcquire
   }
 
-  def verifyResponse[RespT <: GeneratedMessageV3](fn: => RespT): RespT = {
+  def verifyResponse[RespT <: GeneratedMessage](fn: => RespT): RespT = {
     val response =
       try {
         fn
@@ -100,7 +100,7 @@ class ResponseValidator extends Logging {
    * Wraps an existing iterator with another closeable iterator that verifies the response. This
    * is needed for server-side streaming calls that are converted to iterators.
    */
-  def wrapIterator[T <: GeneratedMessageV3, V <: CloseableIterator[T]](
+  def wrapIterator[T <: GeneratedMessage, V <: CloseableIterator[T]](
       inner: V): WrappedCloseableIterator[T] = {
     new WrappedCloseableIterator[T] {
 
@@ -118,7 +118,7 @@ class ResponseValidator extends Logging {
    * Wraps an existing stream observer with another stream observer that verifies the response.
    * This is necessary for client-side streaming calls.
    */
-  def wrapStreamObserver[T <: GeneratedMessageV3](inner: StreamObserver[T]): StreamObserver[T] = {
+  def wrapStreamObserver[T <: GeneratedMessage](inner: StreamObserver[T]): StreamObserver[T] = {
     new StreamObserver[T] {
       private val innerObserver = inner
       override def onNext(value: T): Unit = {

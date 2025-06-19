@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import com.esotericsoftware.kryo.{DefaultSerializer, Kryo, Serializer => KryoSerializer}
+import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SparkException, TaskContext}
@@ -30,11 +32,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Sta
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.columnar.{CachedBatch, CachedBatchSerializer, SimpleMetricsCachedBatch, SimpleMetricsCachedBatchSerializer}
-import org.apache.spark.sql.execution.{ColumnarToRowTransition, InputAdapter, QueryExecution, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.types.{BooleanType, ByteType, DoubleType, FloatType, IntegerType, LongType, ShortType, StructType, UserDefinedType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{LongAccumulator, Utils}
@@ -47,8 +49,55 @@ import org.apache.spark.util.ArrayImplicits._
  * @param buffers The buffers for serialized columns
  * @param stats The stat of columns
  */
-case class DefaultCachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
+@DefaultSerializer(classOf[DefaultCachedBatchKryoSerializer])
+case class DefaultCachedBatch(
+     numRows: Int,
+     buffers: Array[Array[Byte]],
+     stats: InternalRow)
   extends SimpleMetricsCachedBatch
+
+class DefaultCachedBatchKryoSerializer extends KryoSerializer[DefaultCachedBatch] {
+  override def write(kryo: Kryo, output: KryoOutput, batch: DefaultCachedBatch): Unit = {
+    output.writeInt(batch.numRows)
+    SparkException.require(batch.buffers != null, "INVALID_KRYO_SERIALIZER_NO_DATA",
+      Map("obj" -> "DefaultCachedBatch.buffers",
+        "serdeOp" -> "serialize",
+        "serdeClass" -> this.getClass.getName))
+    output.writeInt(batch.buffers.length + 1) // +1 to distinguish Kryo.NULL
+    for (i <- batch.buffers.indices) {
+      val buffer = batch.buffers(i)
+        SparkException.require(buffer != null, "INVALID_KRYO_SERIALIZER_NO_DATA",
+          Map("obj" -> s"DefaultCachedBatch.buffers($i)",
+            "serdeOp" -> "serialize",
+            "serdeClass" -> this.getClass.getName))
+      output.writeInt(buffer.length + 1)  // +1 to distinguish Kryo.NULL
+      output.writeBytes(buffer)
+    }
+    kryo.writeClassAndObject(output, batch.stats)
+  }
+
+  override def read(
+      kryo: Kryo, input: KryoInput, cls: Class[DefaultCachedBatch]): DefaultCachedBatch = {
+    val numRows = input.readInt()
+    val length = input.readInt()
+    SparkException.require(length != Kryo.NULL, "INVALID_KRYO_SERIALIZER_NO_DATA",
+      Map("obj" -> "DefaultCachedBatch.buffers",
+        "serdeOp" -> "deserialize",
+        "serdeClass" -> this.getClass.getName))
+    val buffers = 0.until(length - 1).map { i => // -1 to restore
+      val subLength = input.readInt()
+      SparkException.require(subLength != Kryo.NULL, "INVALID_KRYO_SERIALIZER_NO_DATA",
+          Map("obj" -> s"DefaultCachedBatch.buffers($i)",
+          "serdeOp" -> "deserialize",
+          "serdeClass" -> this.getClass.getName))
+      val innerArray = new Array[Byte](subLength - 1) // -1 to restore
+      input.readBytes(innerArray)
+      innerArray
+    }.toArray
+    val stats = kryo.readClassAndObject(input).asInstanceOf[InternalRow]
+    DefaultCachedBatch(numRows, buffers, stats)
+  }
+}
 
 /**
  * The default implementation of CachedBatchSerializer.
@@ -207,7 +256,8 @@ case class CachedRDDBuilder(
     serializer: CachedBatchSerializer,
     storageLevel: StorageLevel,
     @transient cachedPlan: SparkPlan,
-    tableName: Option[String]) {
+    tableName: Option[String],
+    @transient logicalPlan: LogicalPlan) {
 
   @transient @volatile private var _cachedColumnBuffers: RDD[CachedBatch] = null
   @transient @volatile private var _cachedColumnBuffersAreLoaded: Boolean = false
@@ -271,18 +321,28 @@ case class CachedRDDBuilder(
   }
 
   private def buildBuffers(): RDD[CachedBatch] = {
-    val cb = if (supportsColumnarInput) {
-      serializer.convertColumnarBatchToCachedBatch(
-        cachedPlan.executeColumnar(),
-        cachedPlan.output,
-        storageLevel,
-        cachedPlan.conf)
-    } else {
-      serializer.convertInternalRowToCachedBatch(
-        cachedPlan.execute(),
-        cachedPlan.output,
-        storageLevel,
-        cachedPlan.conf)
+    val cb = try {
+      if (supportsColumnarInput) {
+        serializer.convertColumnarBatchToCachedBatch(
+          cachedPlan.executeColumnar(),
+          cachedPlan.output,
+          storageLevel,
+          cachedPlan.conf)
+      } else {
+        serializer.convertInternalRowToCachedBatch(
+          cachedPlan.execute(),
+          cachedPlan.output,
+          storageLevel,
+          cachedPlan.conf)
+      }
+    } catch {
+      case e: Throwable if cachedPlan.isInstanceOf[AdaptiveSparkPlanExec] =>
+        // SPARK-49982: during RDD execution, AQE will execute all stages except ResultStage. If any
+        // failure happen, the failure will be cached and the next SQL cache caller will hit the
+        // negative cache. Therefore we need to recache the plan.
+        val session = cachedPlan.session
+        session.sharedState.cacheManager.recacheByPlan(session, logicalPlan)
+        throw e
     }
     val cached = cb.mapPartitionsInternal { it =>
       TaskContext.get().addTaskCompletionListener[Unit] { context =>
@@ -350,7 +410,7 @@ object InMemoryRelation {
     } else {
       qe.executedPlan
     }
-    val cacheBuilder = CachedRDDBuilder(serializer, storageLevel, child, tableName)
+    val cacheBuilder = CachedRDDBuilder(serializer, storageLevel, child, tableName, qe.logical)
     val relation = new InMemoryRelation(child.output, cacheBuilder, optimizedPlan.outputOrdering)
     relation.statsOfPlanToCache = optimizedPlan.stats
     relation
@@ -365,7 +425,7 @@ object InMemoryRelation {
       child: SparkPlan,
       tableName: Option[String],
       optimizedPlan: LogicalPlan): InMemoryRelation = {
-    val cacheBuilder = CachedRDDBuilder(serializer, storageLevel, child, tableName)
+    val cacheBuilder = CachedRDDBuilder(serializer, storageLevel, child, tableName, optimizedPlan)
     val relation = new InMemoryRelation(child.output, cacheBuilder, optimizedPlan.outputOrdering)
     relation.statsOfPlanToCache = optimizedPlan.stats
     relation
@@ -456,4 +516,7 @@ case class InMemoryRelation(
 
   override def simpleString(maxFields: Int): String =
     s"InMemoryRelation [${truncatedString(output, ", ", maxFields)}], ${cacheBuilder.storageLevel}"
+
+  override def stringArgs: Iterator[Any] =
+    Iterator(output, cacheBuilder.storageLevel, outputOrdering)
 }

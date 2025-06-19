@@ -104,7 +104,7 @@ case class First(child: Expression, ignoreNulls: Boolean)
 
   override lazy val mergeExpressions: Seq[Expression] = {
     // For first, we can just check if valueSet.left is set to true. If it is set
-    // to true, we use first.right. If not, we use first.right (even if valueSet.right is
+    // to true, we use first.left. If not, we use first.right (even if valueSet.right is
     // false, we are safe to do so because first.right will be null in this case).
     Seq(
       /* first = */ If(valueSet.left, first.left, first.right),

@@ -43,9 +43,12 @@ import org.apache.spark.sql.internal.{InvokeInlineUserDefinedFunction, UserDefin
  *
  * Based loosely on Aggregator from Algebird: https://github.com/twitter/algebird
  *
- * @tparam IN The input type for the aggregation.
- * @tparam BUF The type of the intermediate value of the reduction.
- * @tparam OUT The type of the final output result.
+ * @tparam IN
+ *   The input type for the aggregation.
+ * @tparam BUF
+ *   The type of the intermediate value of the reduction.
+ * @tparam OUT
+ *   The type of the final output result.
  * @since 1.6.0
  */
 @SerialVersionUID(2093413866369130093L)
@@ -58,7 +61,7 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable with UserDefinedFu
   def zero: BUF
 
   /**
-   * Combine two values to produce a new value.  For performance, the function may modify `b` and
+   * Combine two values to produce a new value. For performance, the function may modify `b` and
    * return it instead of constructing new object for b.
    * @since 1.6.0
    */
@@ -93,8 +96,6 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable with UserDefinedFu
    * @since 1.6.0
    */
   def toColumn: TypedColumn[IN, OUT] = {
-    new TypedColumn[IN, OUT](
-      InvokeInlineUserDefinedFunction(this, Nil),
-      outputEncoder)
+    new TypedColumn[IN, OUT](InvokeInlineUserDefinedFunction(this, Nil), outputEncoder)
   }
 }

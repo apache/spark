@@ -31,16 +31,17 @@ import org.apache.spark.sql.types.{BinaryType, DecimalType}
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., 2022-CU14-ubuntu-22.04):
+ * To run this test suite for a specific version (e.g., 2022-CU15-ubuntu-22.04):
  * {{{
  *   ENABLE_DOCKER_INTEGRATION_TESTS=1
- *   MSSQLSERVER_DOCKER_IMAGE_NAME=mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
+ *   MSSQLSERVER_DOCKER_IMAGE_NAME=mcr.microsoft.com/mssql/server:2022-CU15-ubuntu-22.04
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.MsSqlServerIntegrationSuite"
  * }}}
  */
 @DockerTest
-class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
+class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite
+  with SharedJDBCIntegrationTests {
   override val db = new MsSQLServerDatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {
@@ -490,7 +491,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
           .option("query", "SELECT @myvariant1 as variant1, @myvariant2 as variant2")
           .load()
       },
-      errorClass = "UNRECOGNIZED_SQL_TYPE",
+      condition = "UNRECOGNIZED_SQL_TYPE",
       parameters = Map("typeName" -> "sql_variant", "jdbcType" -> "-156"))
   }
 }

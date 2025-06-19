@@ -64,13 +64,14 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
       properties: util.Map[String, String]): Unit = {
     JdbcUtils.withConnection(jdbcOptions) { conn =>
       JdbcUtils.classifyException(
-        errorClass = "FAILED_JDBC.CREATE_INDEX",
+        condition = "FAILED_JDBC.CREATE_INDEX",
         messageParameters = Map(
           "url" -> jdbcOptions.getRedactUrl(),
           "indexName" -> toSQLId(indexName),
           "tableName" -> toSQLId(name)),
         dialect = JdbcDialects.get(jdbcOptions.url),
-        description = s"Failed to create index $indexName in ${name()}") {
+        description = s"Failed to create index $indexName in ${name()}",
+        isRuntime = false) {
         JdbcUtils.createIndex(
           conn, indexName, ident, columns, columnsProperties, properties, jdbcOptions)
       }
@@ -86,13 +87,14 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
   override def dropIndex(indexName: String): Unit = {
     JdbcUtils.withConnection(jdbcOptions) { conn =>
       JdbcUtils.classifyException(
-        errorClass = "FAILED_JDBC.DROP_INDEX",
+        condition = "FAILED_JDBC.DROP_INDEX",
         messageParameters = Map(
           "url" -> jdbcOptions.getRedactUrl(),
           "indexName" -> toSQLId(indexName),
           "tableName" -> toSQLId(name)),
         dialect = JdbcDialects.get(jdbcOptions.url),
-        description = s"Failed to drop index $indexName in ${name()}") {
+        description = s"Failed to drop index $indexName in ${name()}",
+        isRuntime = false) {
         JdbcUtils.dropIndex(conn, indexName, ident, jdbcOptions)
       }
     }

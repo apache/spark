@@ -203,7 +203,7 @@ class StreamingQueryManager:
 
     active.__doc__ = PySparkStreamingQueryManager.active.__doc__
 
-    def get(self, id: str) -> Optional[StreamingQuery]:
+    def get(self, id: str) -> Optional["StreamingQuery"]:
         cmd = pb2.StreamingQueryManagerCommand()
         cmd.get_query = id
         response = self._execute_streaming_query_manager_cmd(cmd)

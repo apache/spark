@@ -51,9 +51,11 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveAggregateFunctions" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveAliases" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveBinaryArithmetic" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveCollationName" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveDeserializer" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveEncodersInUDF" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveFunctions" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveProcedures" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveGenerate" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveGroupingAnalytics" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveHigherOrderFunctions" ::
@@ -70,6 +72,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveSubqueryColumnAliases" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveTables" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveTempViews" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveTranspose" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveUnpivot" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveUpCast" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveUserSpecifiedColumns" ::
@@ -79,6 +82,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$WrapLateralColumnAliasReference" ::
       "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$AnsiCombinedTypeCoercionRule" ::
       "org.apache.spark.sql.catalyst.analysis.ApplyCharTypePadding" ::
+      "org.apache.spark.sql.catalyst.analysis.CollationTypeCasts" ::
       "org.apache.spark.sql.catalyst.analysis.DeduplicateRelations" ::
       "org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases" ::
       "org.apache.spark.sql.catalyst.analysis.EliminateUnions" ::
@@ -105,6 +109,10 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.UpdateOuterReferences" ::
       "org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveUpdateEventTimeWatermarkColumn" ::
+      "org.apache.spark.sql.catalyst.expressions.EliminatePipeOperators" ::
+      "org.apache.spark.sql.catalyst.expressions.ValidateAndStripPipeExpressions" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveUnresolvedHaving" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveTableConstraints" ::
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseProject" ::
@@ -174,7 +182,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison" ::  Nil
   }
 
-  if(Utils.isTesting) {
+  if (Utils.isTesting) {
     rulesNeedingIds = rulesNeedingIds ++ {
       // In the production code path, the following rules are run in CombinedTypeCoercionRule, and
       // hence we only need to add them for unit testing.

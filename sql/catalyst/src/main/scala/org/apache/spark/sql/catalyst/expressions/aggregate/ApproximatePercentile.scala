@@ -21,6 +21,7 @@ import java.nio.ByteBuffer
 
 import com.google.common.primitives.{Doubles, Ints, Longs}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -32,7 +33,6 @@ import org.apache.spark.sql.catalyst.types.PhysicalNumericType
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.{defaultCompressThreshold, Stats}
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -189,7 +189,7 @@ case class ApproximatePercentile(
           PhysicalNumericType.numeric(n)
             .toDouble(value.asInstanceOf[PhysicalNumericType#InternalType])
         case other: DataType =>
-          throw QueryExecutionErrors.dataTypeUnexpectedError(other)
+          throw SparkException.internalError(s"Unexpected data type $other")
       }
       buffer.add(doubleValue)
     }
@@ -214,7 +214,7 @@ case class ApproximatePercentile(
       case DoubleType => doubleResult
       case _: DecimalType => doubleResult.map(Decimal(_))
       case other: DataType =>
-        throw QueryExecutionErrors.dataTypeUnexpectedError(other)
+        throw SparkException.internalError(s"Unexpected data type $other")
     }
     if (result.length == 0) {
       null

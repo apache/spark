@@ -44,13 +44,13 @@ class AlterTableRenameParserSuite extends AnalysisTest {
     val sql1 = "ALTER TABLE RENAME TO x.y.z"
     checkError(
       exception = parseException(parsePlan)(sql1),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'TO'", "hint" -> ""))
 
     val sql2 = "ALTER TABLE _ RENAME TO .z"
     checkError(
       exception = parseException(parsePlan)(sql2),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'.'", "hint" -> ""))
   }
 }

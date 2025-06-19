@@ -17,8 +17,6 @@
 
 package org.apache.spark.network.shuffledb;
 
-import com.google.common.base.Throwables;
-
 import java.io.IOException;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -47,7 +45,7 @@ public class LevelDBIterator implements DBIterator {
         try {
           close();
         } catch (IOException ioe) {
-          throw Throwables.propagate(ioe);
+          throw new RuntimeException(ioe);
         }
       }
       return next != null;

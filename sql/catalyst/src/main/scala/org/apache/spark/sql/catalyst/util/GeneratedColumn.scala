@@ -127,7 +127,7 @@ object GeneratedColumn {
     } catch {
       case ex: AnalysisException =>
         // Improve error message if possible
-        if (ex.getErrorClass == "UNRESOLVED_COLUMN.WITH_SUGGESTION") {
+        if (ex.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION") {
           ex.messageParameters.get("objectName").foreach { unresolvedCol =>
             val resolver = SQLConf.get.resolver
             // Whether `col` = `unresolvedCol` taking into account case-sensitivity
@@ -144,7 +144,7 @@ object GeneratedColumn {
             }
           }
         }
-        if (ex.getErrorClass == "UNRESOLVED_ROUTINE") {
+        if (ex.getCondition == "UNRESOLVED_ROUTINE") {
           // Cannot resolve function using built-in catalog
           ex.messageParameters.get("routineName").foreach { fnName =>
             throw unsupportedExpressionError(s"failed to resolve $fnName to a built-in function")

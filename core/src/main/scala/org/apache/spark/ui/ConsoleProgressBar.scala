@@ -35,7 +35,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
   // Carriage return
   private val CR = '\r'
   // Update period of progress bar, in milliseconds
-  private val updatePeriodMSec = sc.getConf.get(UI_CONSOLE_PROGRESS_UPDATE_INTERVAL)
+  private val updatePeriodMSec = sc.conf.get(UI_CONSOLE_PROGRESS_UPDATE_INTERVAL)
   // Delay to show up a progress bar, in milliseconds
   private val firstDelayMSec = 500L
 
@@ -48,7 +48,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
 
   // Schedule a refresh thread to run periodically
   private val timer = ThreadUtils.newDaemonSingleThreadScheduledExecutor("refresh progress")
-  timer.scheduleAtFixedRate(
+  private val timerFuture = timer.scheduleAtFixedRate(
     () => refresh(), firstDelayMSec, updatePeriodMSec, TimeUnit.MILLISECONDS)
 
   /**
@@ -121,5 +121,8 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
    * Tear down the timer thread.  The timer thread is a GC root, and it retains the entire
    * SparkContext if it's not terminated.
    */
-  def stop(): Unit = ThreadUtils.shutdown(timer)
+  def stop(): Unit = {
+    timerFuture.cancel(false)
+    ThreadUtils.shutdown(timer)
+  }
 }

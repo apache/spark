@@ -9,7 +9,7 @@ Project [to_xml((indent,), named_struct(a, 1, b, 2), Some(America/Los_Angeles)) 
 -- !query
 select to_xml(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy', 'indent', ''))
 -- !query analysis
-Project [to_xml((timestampFormat,dd/MM/yyyy), (indent,), named_struct(time, to_timestamp(2015-08-26, Some(yyyy-MM-dd), TimestampType, Some(America/Los_Angeles), false)), Some(America/Los_Angeles)) AS to_xml(named_struct(time, to_timestamp(2015-08-26, yyyy-MM-dd)))#x]
+Project [to_xml((timestampFormat,dd/MM/yyyy), (indent,), named_struct(time, to_timestamp(2015-08-26, Some(yyyy-MM-dd), TimestampType, Some(America/Los_Angeles), true)), Some(America/Los_Angeles)) AS to_xml(named_struct(time, to_timestamp(2015-08-26, yyyy-MM-dd)))#x]
 +- OneRowRelation
 
 
@@ -352,6 +352,30 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 8,
     "stopIndex" : 26,
     "fragment" : "schema_of_xml(null)"
+  } ]
+}
+
+
+-- !query
+select schema_of_xml(42)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"42\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"schema_of_xml(42)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "schema_of_xml(42)"
   } ]
 }
 

@@ -24,7 +24,7 @@ import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -43,7 +43,7 @@ abstract class CollatedFilterPushDownToParquetSuite extends QueryTest
   val collatedStructNestedCol = "f1"
   val collatedStructFieldAccess = s"$collatedStructCol.$collatedStructNestedCol"
   val collatedArrayCol = "c3"
-  val collatedMapCol = "c4"
+  val nonCollatedMapCol = "c4"
 
   val lcaseCollation = "'UTF8_LCASE'"
 
@@ -69,7 +69,7 @@ abstract class CollatedFilterPushDownToParquetSuite extends QueryTest
            |  named_struct('$collatedStructNestedCol',
            |    COLLATE(c, $lcaseCollation)) as $collatedStructCol,
            |  array(COLLATE(c, $lcaseCollation)) as $collatedArrayCol,
-           |  map(COLLATE(c, $lcaseCollation), 1) as $collatedMapCol
+           |  map(c, 1) as $nonCollatedMapCol
            |FROM VALUES ('aaa'), ('AAA'), ('bbb')
            |as data(c)
            |""".stripMargin)
@@ -215,9 +215,9 @@ abstract class CollatedFilterPushDownToParquetSuite extends QueryTest
 
   test("map - parquet does not support null check on complex types") {
     testPushDown(
-      filterString = s"map_keys($collatedMapCol) != array(collate('aaa', $lcaseCollation))",
+      filterString = s"map_keys($nonCollatedMapCol) != array('aaa')",
       expectedPushedFilters = Seq.empty,
-      expectedRowCount = 1)
+      expectedRowCount = 2)
   }
 }
 
@@ -231,7 +231,7 @@ class CollatedFilterPushDownToParquetV1Suite extends CollatedFilterPushDownToPar
     var maybeRelation: Option[HadoopFsRelation] = None
     val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
       case PhysicalOperation(_, filters,
-          LogicalRelation(relation: HadoopFsRelation, _, _, _)) =>
+          LogicalRelationWithTable(relation: HadoopFsRelation, _)) =>
         maybeRelation = Some(relation)
         filters
     }.flatten

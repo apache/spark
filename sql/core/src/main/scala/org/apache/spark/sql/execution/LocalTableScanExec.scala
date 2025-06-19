@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
+import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.ArrayImplicits._
 
@@ -32,7 +33,11 @@ import org.apache.spark.util.ArrayImplicits._
  */
 case class LocalTableScanExec(
     output: Seq[Attribute],
-    @transient rows: Seq[InternalRow]) extends LeafExecNode with InputRDDCodegen {
+    @transient rows: Seq[InternalRow],
+    @transient stream: Option[SparkDataStream])
+  extends LeafExecNode
+  with StreamSourceAwareSparkPlan
+  with InputRDDCodegen {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -97,8 +102,15 @@ case class LocalTableScanExec(
 
   override def inputRDD: RDD[InternalRow] = rdd
 
+  override def getStream: Option[SparkDataStream] = stream
+
   private def sendDriverMetrics(): Unit = {
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+  }
+
+  // Don't care about `stream` when canonicalizing.
+  override protected def doCanonicalize(): SparkPlan = {
+    super.doCanonicalize().asInstanceOf[LocalTableScanExec].copy(stream = None)
   }
 }

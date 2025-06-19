@@ -25,10 +25,10 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, RowIterator}
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types.{BooleanType, IntegralType, LongType}
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegralType, LongType}
 
 /**
  * @param relationTerm variable name for HashedRelation
@@ -52,7 +52,7 @@ trait HashJoin extends JoinCodegenSupport {
     joinType match {
       case _: InnerLike =>
         left.output ++ right.output
-      case LeftOuter =>
+      case LeftOuter | LeftSingle =>
         left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
         left.output.map(_.withNullability(true)) ++ right.output
@@ -75,7 +75,7 @@ trait HashJoin extends JoinCodegenSupport {
       }
     case BuildRight =>
       joinType match {
-        case _: InnerLike | LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin =>
+        case _: InnerLike | LeftOuter | LeftSingle | LeftSemi | LeftAnti | _: ExistenceJoin =>
           left.outputPartitioning
         case x =>
           throw new IllegalArgumentException(
@@ -93,7 +93,7 @@ trait HashJoin extends JoinCodegenSupport {
       }
     case BuildRight =>
       joinType match {
-        case _: InnerLike | LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin =>
+        case _: InnerLike | LeftOuter | LeftSingle | LeftSemi | LeftAnti | _: ExistenceJoin =>
           left.outputOrdering
         case x =>
           throw new IllegalArgumentException(
@@ -110,7 +110,7 @@ trait HashJoin extends JoinCodegenSupport {
     require(leftKeys.length == rightKeys.length &&
       leftKeys.map(_.dataType)
         .zip(rightKeys.map(_.dataType))
-        .forall(types => DataTypeUtils.sameType(types._1, types._2)),
+        .forall(types => DataType.equalsStructurally(types._1, types._2, ignoreNullability = true)),
       "Join keys from two sides should have same length and types")
     buildSide match {
       case BuildLeft => (leftKeys, rightKeys)
@@ -138,9 +138,8 @@ trait HashJoin extends JoinCodegenSupport {
     UnsafeProjection.create(streamedBoundKeys)
 
   @transient protected[this] lazy val boundCondition = if (condition.isDefined) {
-    if (joinType == FullOuter && buildSide == BuildLeft) {
-      // Put join left side before right side. This is to be consistent with
-      // `ShuffledHashJoinExec.fullOuterJoin`.
+    if ((joinType == FullOuter || joinType == LeftOuter) && buildSide == BuildLeft) {
+      // Put join left side before right side.
       Predicate.create(condition.get, buildPlan.output ++ streamedPlan.output).eval _
     } else {
       Predicate.create(condition.get, streamedPlan.output ++ buildPlan.output).eval _
@@ -192,7 +191,8 @@ trait HashJoin extends JoinCodegenSupport {
 
   private def outerJoin(
       streamedIter: Iterator[InternalRow],
-      hashedRelation: HashedRelation): Iterator[InternalRow] = {
+      hashedRelation: HashedRelation,
+      singleJoin: Boolean = false): Iterator[InternalRow] = {
     val joinedRow = new JoinedRow()
     val keyGenerator = streamSideKeyGenerator()
     val nullRow = new GenericInternalRow(buildPlan.output.length)
@@ -219,6 +219,9 @@ trait HashJoin extends JoinCodegenSupport {
             while (buildIter != null && buildIter.hasNext) {
               val nextBuildRow = buildIter.next()
               if (boundCondition(joinedRow.withRight(nextBuildRow))) {
+                if (found && singleJoin) {
+                  throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
+                }
                 found = true
                 return true
               }
@@ -330,6 +333,8 @@ trait HashJoin extends JoinCodegenSupport {
         innerJoin(streamedIter, hashed)
       case LeftOuter | RightOuter =>
         outerJoin(streamedIter, hashed)
+      case LeftSingle =>
+        outerJoin(streamedIter, hashed, singleJoin = true)
       case LeftSemi =>
         semiJoin(streamedIter, hashed)
       case LeftAnti =>
@@ -355,7 +360,7 @@ trait HashJoin extends JoinCodegenSupport {
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     joinType match {
       case _: InnerLike => codegenInner(ctx, input)
-      case LeftOuter | RightOuter => codegenOuter(ctx, input)
+      case LeftOuter | RightOuter | LeftSingle => codegenOuter(ctx, input)
       case LeftSemi => codegenSemi(ctx, input)
       case LeftAnti => codegenAnti(ctx, input)
       case _: ExistenceJoin => codegenExistence(ctx, input)
@@ -493,6 +498,17 @@ trait HashJoin extends JoinCodegenSupport {
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
       val found = ctx.freshName("found")
+      // For LeftSingle joins generate the check on the number of build rows that match every
+      // probe row. Return an error for >1 matches.
+      val evaluateSingleCheck = if (joinType == LeftSingle) {
+        s"""
+           |if ($found) {
+           |  throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
+           |}
+           |""".stripMargin
+      } else {
+        ""
+      }
 
       s"""
          |// generate join key for stream side
@@ -506,6 +522,7 @@ trait HashJoin extends JoinCodegenSupport {
          |    (UnsafeRow) $matches.next() : null;
          |  ${checkCondition.trim}
          |  if ($conditionPassed) {
+         |    $evaluateSingleCheck
          |    $found = true;
          |    $numOutput.add(1);
          |    ${consume(ctx, resultVars)}

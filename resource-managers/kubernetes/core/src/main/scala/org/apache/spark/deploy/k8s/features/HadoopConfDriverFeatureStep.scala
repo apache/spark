@@ -116,7 +116,7 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     if (confDir.isDefined) {
       val fileMap = confFiles.map { file =>
-        (file.getName(), Files.toString(file, StandardCharsets.UTF_8))
+        (file.getName(), Files.asCharSource(file, StandardCharsets.UTF_8).read())
       }.toMap.asJava
 
       Seq(new ConfigMapBuilder()

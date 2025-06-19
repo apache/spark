@@ -47,7 +47,7 @@ class TryCastSuite extends CastWithAnsiOnSuite {
   override def checkErrorInExpression[T <: SparkThrowable : ClassTag](
       expression: => Expression,
       inputRow: InternalRow,
-      errorClass: String,
+      condition: String,
       parameters: Map[String, String]): Unit = {
     checkEvaluation(expression, null, inputRow)
   }

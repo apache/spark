@@ -126,7 +126,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "INVALID_FRACTION_OF_SECOND",
   "sqlState" : "22023",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "secAndMicros" : "60.007"
   }
 }
 
@@ -154,10 +154,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
+  "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 61"
+    "rangeMessage" : "Invalid value for SecondOfMinute (valid values 0 - 59): 61"
   }
 }
 
@@ -185,10 +186,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
+  "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 99"
+    "rangeMessage" : "Invalid value for SecondOfMinute (valid values 0 - 59): 99"
   }
 }
 
@@ -200,10 +202,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
+  "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 999"
+    "rangeMessage" : "Invalid value for SecondOfMinute (valid values 0 - 59): 999"
   }
 }
 
@@ -392,7 +395,9 @@ org.apache.spark.SparkDateTimeException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "to_timestamp(1)"
   } ]
 }
 
@@ -407,7 +412,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '2019-10-06 10:11:12.' could not be parsed at index 20"
   }
 }
@@ -479,7 +484,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '2019-10-06 10:11:12.1234567PST' could not be parsed, unparsed text found at index 26"
   }
 }
@@ -503,7 +508,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '223456 2019-10-06 10:11:12.123456PST' could not be parsed at index 27"
   }
 }
@@ -575,7 +580,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '12.1232019-10-06S10:11' could not be parsed at index 7"
   }
 }
@@ -591,7 +596,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '12.1232019-10-06S10:11' could not be parsed at index 9"
   }
 }
@@ -671,7 +676,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Invalid date 'February 29' as '1970' is not a leap year"
   }
 }
@@ -899,7 +904,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2130",
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'yyyy-MM-dd GGGGG'"
@@ -914,7 +920,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2130",
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'dd MM yyyy EEEEEE'"
@@ -929,7 +936,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2130",
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'dd MM yyyy EEEEE'"

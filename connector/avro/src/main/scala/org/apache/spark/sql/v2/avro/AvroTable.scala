@@ -37,15 +37,17 @@ case class AvroTable(
     fallbackFileFormat: Class[_ <: FileFormat])
   extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
   override def newScanBuilder(options: CaseInsensitiveStringMap): AvroScanBuilder =
-    new AvroScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
+    AvroScanBuilder(sparkSession, fileIndex, schema, dataSchema, mergedOptions(options))
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
     AvroUtils.inferSchema(sparkSession, options.asScala.toMap, files)
 
-  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder =
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     new WriteBuilder {
-      override def build(): Write = AvroWrite(paths, formatName, supportsDataType, info)
+      override def build(): Write =
+        AvroWrite(paths, formatName, supportsDataType, mergedWriteInfo(info))
     }
+  }
 
   override def supportsDataType(dataType: DataType): Boolean = AvroUtils.supportsDataType(dataType)
 

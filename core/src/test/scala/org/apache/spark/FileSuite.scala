@@ -334,8 +334,8 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
       for (i <- 0 until 8) {
         val tempFile = new File(tempDir, s"part-0000$i")
-        Files.write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1", tempFile,
-          StandardCharsets.UTF_8)
+        Files.asCharSink(tempFile, StandardCharsets.UTF_8)
+          .write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1")
       }
 
       for (p <- Seq(1, 2, 8)) {

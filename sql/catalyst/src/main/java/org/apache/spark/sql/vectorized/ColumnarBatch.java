@@ -46,6 +46,16 @@ public class ColumnarBatch implements AutoCloseable {
   }
 
   /**
+   * Called to close all the columns if their resources are freeable between batches.
+   * This is used to clean up memory allocated during columnar processing.
+   */
+  public void closeIfFreeable() {
+    for (ColumnVector c: columns) {
+      c.closeIfFreeable();
+    }
+  }
+
+  /**
    * Returns an iterator over the rows in this batch.
    */
   public Iterator<InternalRow> rowIterator() {

@@ -28,13 +28,17 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, CurrentOrigin, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.trees.TreePatternBits.toPatternBits
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.MULTI_COMMUTATIVE_OP_OPT_THRESHOLD
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.BitSet
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the basic expression abstract classes in Catalyst.
@@ -53,8 +57,6 @@ import org.apache.spark.sql.types._
  * - [[Unevaluable]]: an expression that is not supposed to be evaluated.
  * - [[CodegenFallback]]: an expression that does not have code gen implemented and falls back to
  *                        interpreted mode.
- * - [[NullIntolerant]]: an expression that is null intolerant (i.e. any null input will result in
- *                       null output).
  * - [[NonSQLExpression]]: a common base trait for the expressions that do not have SQL
  *                         expressions like representation. For example, `ScalaUDF`, `ScalaUDAF`,
  *                         and object `MapObjects` and `Invoke`.
@@ -140,6 +142,14 @@ abstract class Expression extends TreeNode[Expression] {
    * }}}
    */
   def stateful: Boolean = false
+
+
+  /**
+   * When an expression inherits this, meaning the expression is null intolerant (i.e. any null
+   * input will result in null output). We will use this information during constructing IsNotNull
+   * constraints.
+   */
+  def nullIntolerant: Boolean = false
 
   /**
    * Returns true if the expression could potentially throw an exception when evaluated.
@@ -365,6 +375,14 @@ abstract class Expression extends TreeNode[Expression] {
     throw SparkException.internalError(s"$nodeName does not implement simpleStringWithNodeId")
   }
 
+  final override def validateNodePatterns(): Unit = {
+    if (Utils.isTesting) {
+      assert(
+        !toPatternBits(nodePatterns: _*).intersects(ExpressionPatternBitMask.mask),
+        s"${this.getClass.getName} returns Operator patterns")
+    }
+  }
+
   protected def typeSuffix =
     if (resolved) {
       dataType match {
@@ -376,33 +394,33 @@ abstract class Expression extends TreeNode[Expression] {
     }
 }
 
-/**
- * An expression that cannot be evaluated but is guaranteed to be replaced with a foldable value
- * by query optimizer (e.g. CurrentDate).
- */
-trait FoldableUnevaluable extends Expression {
-  override def foldable: Boolean = true
-
-  final override def eval(input: InternalRow = null): Any =
-    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
-
-  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+object ExpressionPatternBitMask {
+  val mask: BitSet = {
+    val bits = new BitSet(TreePattern.maxId)
+    bits.setUntil(TreePattern.maxId)
+    bits.clearUntil(OPERATOR_START.id)
+    bits
+  }
 }
+
 
 /**
  * An expression that cannot be evaluated. These expressions don't live past analysis or
  * optimization time (e.g. Star) and should not be evaluated during query planning and
  * execution.
  */
-trait Unevaluable extends Expression with FoldableUnevaluable {
+trait Unevaluable extends Expression {
 
-  /** Unevaluable is not foldable by default because we don't have an eval for it.
-   * Exception are expressions that will be replaced by a literal by Optimizer (e.g. CurrentDate).
-   * Hence we allow overriding overriding of this field in special cases.
-   */
+  /** Unevaluable is not foldable because we don't have an eval for it. */
   final override def foldable: Boolean = false
+
+  override def eval(input: InternalRow = null): Any =
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
+
 
 /**
  * An expression that gets replaced at runtime (currently by the optimizer) into a different
@@ -420,8 +438,12 @@ trait RuntimeReplaceable extends Expression {
   // are semantically equal.
   override lazy val canonicalized: Expression = replacement.canonicalized
 
-  final override def eval(input: InternalRow = null): Any =
-    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+  final override def eval(input: InternalRow = null): Any = {
+    // For convenience, we allow to evaluate `RuntimeReplaceable` expressions, in case we need to
+    // get a constant from foldable expression before the query execution starts.
+    assert(input == null)
+    replacement.eval()
+  }
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
@@ -790,9 +812,13 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes wi
 
   override def inputTypes: Seq[AbstractDataType] = Seq(inputType, inputType)
 
+  protected def sameType(left: DataType, right: DataType): Boolean = {
+    DataTypeUtils.sameType(left, right)
+  }
+
   override def checkInputDataTypes(): TypeCheckResult = {
     // First check whether left and right have the same type, then check if the type is acceptable.
-    if (!DataTypeUtils.sameType(left.dataType, right.dataType)) {
+    if (!sameType(left.dataType, right.dataType)) {
       DataTypeMismatch(
         errorSubClass = "BINARY_OP_DIFF_TYPES",
         messageParameters = Map(
@@ -1344,12 +1370,29 @@ trait UserDefinedExpression {
 }
 
 trait CommutativeExpression extends Expression {
-  /** Collects adjacent commutative operations. */
-  private def gatherCommutative(
+  /**
+   * Collects adjacent commutative operations.
+   *
+   * Exposed for testing
+   */
+  private[spark] def gatherCommutative(
       e: Expression,
-      f: PartialFunction[CommutativeExpression, Seq[Expression]]): Seq[Expression] = e match {
-    case c: CommutativeExpression if f.isDefinedAt(c) => f(c).flatMap(gatherCommutative(_, f))
-    case other => other.canonicalized :: Nil
+      f: PartialFunction[CommutativeExpression, Seq[Expression]]): Seq[Expression] = {
+    val resultBuffer = scala.collection.mutable.Buffer[Expression]()
+    val queue = scala.collection.mutable.Queue[Expression](e)
+
+    // [SPARK-49977]: Use iterative approach to avoid creating many temporary List objects
+    // for deep expression trees through recursion.
+    while (queue.nonEmpty) {
+      val current = queue.dequeue()
+      current match {
+        case c: CommutativeExpression if f.isDefinedAt(c) =>
+          queue ++= f(c)
+        case other =>
+          resultBuffer += other.canonicalized
+      }
+    }
+    resultBuffer.toSeq
   }
 
   /**
@@ -1434,4 +1477,11 @@ case class MultiCommutativeOp(
     this.copy(operands = newChildren)(originalRoot)
 
   override protected final def otherCopyArgs: Seq[AnyRef] = originalRoot :: Nil
+}
+
+/**
+ * Trait for expressions whose data type should be a default string type.
+ */
+trait DefaultStringProducingExpression extends Expression {
+  override def dataType: DataType = StringType
 }

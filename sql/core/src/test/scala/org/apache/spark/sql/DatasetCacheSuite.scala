@@ -25,6 +25,7 @@ import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableS
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.Metadata
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.tags.SlowSQLTest
 
@@ -311,5 +312,20 @@ class DatasetCacheSuite extends QueryTest
         assert(!finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
       }
     }
+  }
+
+  test("SPARK-50682: inner Alias should be canonicalized") {
+    // Put a metadata in the Alias so that it won't be removed by the analyzer.
+    val metadata = Metadata.fromJson("""{"k": "v"}""")
+    val df1 = spark.range(5).select(struct($"id".as("name", metadata)))
+    df1.cache()
+    // This is exactly the same as df1.
+    val df2 = spark.range(5).select(struct($"id".as("name", metadata)))
+    assert(df2.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+
+    val metadata2 = Metadata.fromJson("""{"k2": "v2"}""")
+    // Same with df1 except for the Alias metadata
+    val df3 = spark.range(5).select(struct($"id".as("name", metadata2)))
+    assert(!df3.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
   }
 }

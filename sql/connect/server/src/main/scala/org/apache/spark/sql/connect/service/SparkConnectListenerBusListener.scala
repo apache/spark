@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.service
 
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -41,7 +42,8 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
   // The server side listener that is responsible to stream streaming query events back to client.
   // There is only one listener per sessionHolder, but each listener is responsible for all events
   // of all streaming queries in the SparkSession.
-  var streamingQueryServerSideListener: Option[SparkConnectListenerBusListener] = None
+  var streamingQueryServerSideListener: AtomicReference[SparkConnectListenerBusListener] =
+    new AtomicReference()
   // The cache for QueryStartedEvent, key is query runId and value is the actual QueryStartedEvent.
   // Events for corresponding query will be sent back to client with
   // the WriteStreamOperationStart response, so that the client can handle the event before
@@ -50,10 +52,8 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
   val streamingQueryStartedEventCache
       : ConcurrentMap[String, StreamingQueryListener.QueryStartedEvent] = new ConcurrentHashMap()
 
-  val lock = new Object()
-
-  def isServerSideListenerRegistered: Boolean = lock.synchronized {
-    streamingQueryServerSideListener.isDefined
+  def isServerSideListenerRegistered: Boolean = {
+    streamingQueryServerSideListener.getAcquire() != null
   }
 
   /**
@@ -65,10 +65,10 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
    * @param responseObserver
    *   the responseObserver created from the first long running executeThread.
    */
-  def init(responseObserver: StreamObserver[ExecutePlanResponse]): Unit = lock.synchronized {
+  def init(responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val serverListener = new SparkConnectListenerBusListener(this, responseObserver)
     sessionHolder.session.streams.addListener(serverListener)
-    streamingQueryServerSideListener = Some(serverListener)
+    streamingQueryServerSideListener.setRelease(serverListener)
   }
 
   /**
@@ -77,13 +77,13 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
    * exception. It removes the listener from the session, clears the cache. Also it sends back the
    * final ResultComplete response.
    */
-  def cleanUp(): Unit = lock.synchronized {
-    streamingQueryServerSideListener.foreach { listener =>
+  def cleanUp(): Unit = {
+    val listener = streamingQueryServerSideListener.getAndSet(null)
+    if (listener != null) {
       sessionHolder.session.streams.removeListener(listener)
       listener.sendResultComplete()
+      streamingQueryStartedEventCache.clear()
     }
-    streamingQueryStartedEventCache.clear()
-    streamingQueryServerSideListener = None
   }
 }
 
@@ -160,9 +160,11 @@ private[sql] class SparkConnectListenerBusListener(
   }
 
   override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
-    logDebug(
-      s"[SessionId: ${sessionHolder.sessionId}][UserId: ${sessionHolder.userId}] " +
-        s"Sending QueryTerminatedEvent to client, id: ${event.id} runId: ${event.runId}.")
+    logInfo(
+      log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionHolder.sessionId)}]" +
+        log"[UserId: ${MDC(LogKeys.USER_ID, sessionHolder.userId)}] " +
+        log"Sending QueryTerminatedEvent to client, id: ${MDC(LogKeys.QUERY_ID, event.id)} " +
+        log"runId: ${MDC(LogKeys.QUERY_RUN_ID, event.runId)}.")
     send(event.json, StreamingQueryEventType.QUERY_TERMINATED_EVENT)
   }
 

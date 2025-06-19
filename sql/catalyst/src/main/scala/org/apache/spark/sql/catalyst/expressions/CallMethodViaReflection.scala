@@ -26,8 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -64,6 +63,7 @@ case class CallMethodViaReflection(
       children: Seq[Expression],
       failOnError: Boolean = true)
   extends Nondeterministic
+  with DefaultStringProducingExpression
   with CodegenFallback
   with QueryErrorsBase {
 
@@ -84,7 +84,7 @@ case class CallMethodViaReflection(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
               "inputName" -> toSQLId("class"),
-              "inputType" -> toSQLType(StringTypeAnyCollation),
+              "inputType" -> toSQLType(StringTypeWithCollation),
               "inputExpr" -> toSQLExpr(children.head)
             )
           )
@@ -97,7 +97,7 @@ case class CallMethodViaReflection(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
               "inputName" -> toSQLId("method"),
-              "inputType" -> toSQLType(StringTypeAnyCollation),
+              "inputType" -> toSQLType(StringTypeWithCollation),
               "inputExpr" -> toSQLExpr(children(1))
             )
           )
@@ -114,7 +114,8 @@ case class CallMethodViaReflection(
               "paramIndex" -> ordinalNumber(idx),
               "requiredType" -> toSQLType(
                 TypeCollection(BooleanType, ByteType, ShortType,
-                  IntegerType, LongType, FloatType, DoubleType, StringTypeAnyCollation)),
+                  IntegerType, LongType, FloatType, DoubleType,
+                  StringTypeWithCollation(supportsTrimCollation = true))),
               "inputSql" -> toSQLExpr(e),
               "inputType" -> toSQLType(e.dataType))
           )
@@ -138,7 +139,6 @@ case class CallMethodViaReflection(
   }
 
   override def nullable: Boolean = true
-  override val dataType: DataType = SQLConf.get.defaultStringType
   override protected def initializeInternal(partitionIndex: Int): Unit = {}
 
   override protected def evalInternal(input: InternalRow): Any = {

@@ -319,7 +319,7 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
             .load(path.getAbsolutePath)
 
           val exception = intercept[SparkException](dfRead.collect())
-          assert(exception.getErrorClass.startsWith("FAILED_READ_FILE"))
+          assert(exception.getCondition.startsWith("FAILED_READ_FILE"))
           assert(exception.getCause.getMessage.contains(
             ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME))
         }

@@ -28,11 +28,12 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.SparkException
 import org.apache.spark.internal.config
 import org.apache.spark.paths.SparkPath.{fromUrlString => sp}
-import org.apache.spark.sql._
+import org.apache.spark.sql.{execution, DataFrame, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet}
 import org.apache.spark.sql.catalyst.util
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.functions._
@@ -691,7 +692,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
     if (buckets > 0) {
       val bucketed = df.queryExecution.analyzed transform {
-        case l @ LogicalRelation(r: HadoopFsRelation, _, _, _) =>
+        case l @ LogicalRelationWithTable(r: HadoopFsRelation, _) =>
           l.copy(relation =
             r.copy(bucketSpec =
               Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil)))(r.sparkSession))
@@ -721,7 +722,7 @@ object LastArguments {
 }
 
 /** A test [[FileFormat]] that records the arguments passed to buildReader, and returns nothing. */
-class TestFileFormat extends TextBasedFileFormat {
+case class TestFileFormat() extends TextBasedFileFormat {
 
   override def toString: String = "TestFileFormat"
 

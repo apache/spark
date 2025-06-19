@@ -27,23 +27,7 @@ import org.apache.spark.sql.types._
  */
 private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
 
-  override def sqlType: StructType = {
-    // type: 0 = sparse, 1 = dense
-    // the dense matrix is built by numRows, numCols, values and isTransposed, all of which are
-    // set as not nullable, except values since in the future, support for binary matrices might
-    // be added for which values are not needed.
-    // the sparse matrix needs colPtrs and rowIndices, which are set as
-    // null, while building the dense matrix.
-    StructType(Array(
-      StructField("type", ByteType, nullable = false),
-      StructField("numRows", IntegerType, nullable = false),
-      StructField("numCols", IntegerType, nullable = false),
-      StructField("colPtrs", ArrayType(IntegerType, containsNull = false), nullable = true),
-      StructField("rowIndices", ArrayType(IntegerType, containsNull = false), nullable = true),
-      StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true),
-      StructField("isTransposed", BooleanType, nullable = false)
-      ))
-  }
+  override def sqlType: StructType = MatrixUDT.sqlType
 
   override def serialize(obj: Matrix): InternalRow = {
     val row = new GenericInternalRow(7)
@@ -107,4 +91,25 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
   override def pyUDT: String = "pyspark.ml.linalg.MatrixUDT"
 
   private[spark] override def asNullable: MatrixUDT = this
+}
+
+private[spark] object MatrixUDT {
+
+  val sqlType: StructType = {
+    // type: 0 = sparse, 1 = dense
+    // the dense matrix is built by numRows, numCols, values and isTransposed, all of which are
+    // set as not nullable, except values since in the future, support for binary matrices might
+    // be added for which values are not needed.
+    // the sparse matrix needs colPtrs and rowIndices, which are set as
+    // null, while building the dense matrix.
+    StructType(Array(
+      StructField("type", ByteType, nullable = false),
+      StructField("numRows", IntegerType, nullable = false),
+      StructField("numCols", IntegerType, nullable = false),
+      StructField("colPtrs", ArrayType(IntegerType, containsNull = false), nullable = true),
+      StructField("rowIndices", ArrayType(IntegerType, containsNull = false), nullable = true),
+      StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true),
+      StructField("isTransposed", BooleanType, nullable = false)
+    ))
+  }
 }

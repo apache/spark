@@ -64,7 +64,11 @@ SET TIME ZONE INTERVAL 3 DAYS
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0044",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
+  "sqlState" : "22006",
+  "messageParameters" : {
+    "input" : "3"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -80,7 +84,11 @@ SET TIME ZONE INTERVAL 24 HOURS
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0044",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
+  "sqlState" : "22006",
+  "messageParameters" : {
+    "input" : "24"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -96,7 +104,11 @@ SET TIME ZONE INTERVAL '19:40:32' HOUR TO SECOND
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0044",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
+  "sqlState" : "22006",
+  "messageParameters" : {
+    "input" : "19"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -128,7 +140,11 @@ SET TIME ZONE INTERVAL 10 HOURS 1 MILLISECOND
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0044",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
+  "sqlState" : "22006",
+  "messageParameters" : {
+    "input" : "36000"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

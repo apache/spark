@@ -17,11 +17,12 @@
 
 package org.apache.spark.ml.util
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.VectorUDT
-import org.apache.spark.sql.catalyst.util.AttributeNameParser
+import org.apache.spark.sql.catalyst.util.{AttributeNameParser, QuotingUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-
 
 /**
  * Utils for handling schemas.
@@ -40,7 +41,7 @@ private[spark] object SchemaUtils {
       colName: String,
       dataType: DataType,
       msg: String = ""): Unit = {
-    val actualDataType = schema(colName).dataType
+    val actualDataType = SchemaUtils.getSchemaField(schema, colName).dataType
     val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
     require(actualDataType.equals(dataType),
       s"Column $colName must be of type ${dataType.getClass}:${dataType.catalogString} " +
@@ -206,6 +207,10 @@ private[spark] object SchemaUtils {
     checkColumnTypes(schema, colName, typeCandidates)
   }
 
+  def toSQLId(parts: String): String = {
+    AttributeNameParser.parseAttributeName(parts).map(QuotingUtils.quoteIdentifier).mkString(".")
+  }
+
   /**
    * Get schema field.
    * @param schema input schema
@@ -213,11 +218,16 @@ private[spark] object SchemaUtils {
    */
   def getSchemaField(schema: StructType, colName: String): StructField = {
     val colSplits = AttributeNameParser.parseAttributeName(colName)
-    var field = schema(colSplits(0))
-    for (colSplit <- colSplits.slice(1, colSplits.length)) {
-      field = field.dataType.asInstanceOf[StructType](colSplit)
+    val fieldOpt = schema.findNestedField(colSplits, resolver = SQLConf.get.resolver)
+    if (fieldOpt.isEmpty) {
+      throw new SparkIllegalArgumentException(
+        errorClass = "FIELD_NOT_FOUND",
+        messageParameters = Map(
+          "fieldName" -> toSQLId(colName),
+          "fields" -> schema.fields.map(f => toSQLId(f.name)).mkString(", "))
+      )
     }
-    field
+    fieldOpt.get._2
   }
 
   /**
@@ -227,5 +237,16 @@ private[spark] object SchemaUtils {
    */
   def getSchemaFieldType(schema: StructType, colName: String): DataType = {
     getSchemaField(schema, colName).dataType
+  }
+
+  /**
+   * Check whether a certain column name exists in the schema.
+   * @param schema input schema
+   * @param colName column name, nested column name is supported.
+   */
+  def checkSchemaFieldExist(schema: StructType, colName: String): Boolean = {
+    val colSplits = AttributeNameParser.parseAttributeName(colName)
+    val fieldOpt = schema.findNestedField(colSplits, resolver = SQLConf.get.resolver)
+    fieldOpt.isDefined
   }
 }

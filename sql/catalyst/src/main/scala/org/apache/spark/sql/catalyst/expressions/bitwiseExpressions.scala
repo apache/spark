@@ -176,8 +176,8 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
   since = "1.4.0",
   group = "bitwise_funcs")
 case class BitwiseNot(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
-
+  extends UnaryExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
 
   override def dataType: DataType = child.dataType
@@ -218,7 +218,8 @@ case class BitwiseNot(child: Expression)
   since = "3.0.0",
   group = "bitwise_funcs")
 case class BitwiseCount(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+  extends UnaryExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(IntegralType, BooleanType))
 
@@ -269,7 +270,8 @@ object BitwiseGetUtil {
   since = "3.2.0",
   group = "bitwise_funcs")
 case class BitwiseGet(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends BinaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType, IntegerType)
 

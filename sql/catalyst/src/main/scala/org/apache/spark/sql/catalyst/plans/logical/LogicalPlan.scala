@@ -433,10 +433,23 @@ object LogicalPlanIntegrity {
    * - has globally-unique attribute IDs
    * - has the same result schema as the previous plan
    * - has no dangling attribute references
+   * If `lightweight` is true, we only run the first check above.
    */
   def validateOptimizedPlan(
       previousPlan: LogicalPlan,
-      currentPlan: LogicalPlan): Option[String] = {
+      currentPlan: LogicalPlan,
+      lightweight: Boolean): Option[String] = {
+    // Lightweight validation logic. If `lightweight` is true, we only run this validation.
+    if (lightweight) {
+      val validation = if (previousPlan.resolved && !currentPlan.resolved) {
+        Some("The plan was previously resolved and now became unresolved.")
+      } else {
+        None
+      }
+      return validation
+    }
+
+    // Full validation logic.
     var validation = if (!currentPlan.resolved) {
       Some("The plan becomes unresolved: " + currentPlan.treeString + "\nThe previous plan: " +
         previousPlan.treeString)

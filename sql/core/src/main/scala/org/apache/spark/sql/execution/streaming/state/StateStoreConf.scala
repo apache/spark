@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.internal.SQLConf
 
 /** A class that contains configuration parameters for [[StateStore]]s. */
 class StateStoreConf(
-    @transient private val sqlConf: SQLConf,
+    @transient private[state] val sqlConf: SQLConf,
     val extraOptions: Map[String, String] = Map.empty)
   extends Serializable {
 
@@ -31,6 +32,11 @@ class StateStoreConf(
    * Size of MaintenanceThreadPool to perform maintenance tasks for StateStore
    */
   val numStateStoreMaintenanceThreads: Int = sqlConf.numStateStoreMaintenanceThreads
+
+  /**
+   * Timeout for state store maintenance operations to complete on shutdown
+   */
+  val stateStoreMaintenanceShutdownTimeout: Long = sqlConf.stateStoreMaintenanceShutdownTimeout
 
   /**
    * Minimum number of delta files in a chain after which HDFSBackedStateStore will
@@ -81,6 +87,24 @@ class StateStoreConf(
 
   /** The interval of maintenance tasks. */
   val maintenanceInterval = sqlConf.streamingMaintenanceInterval
+
+  /** The interval of maintenance tasks. */
+  val stateStoreEncodingFormat = sqlConf.stateStoreEncodingFormat
+
+  /**
+   * When creating new state store checkpoint, which format version to use.
+   */
+  val enableStateStoreCheckpointIds =
+    StatefulOperatorStateInfo.enableStateStoreCheckpointIds(sqlConf)
+
+  /**
+   * Whether the coordinator is reporting state stores trailing behind in snapshot uploads.
+   */
+  val reportSnapshotUploadLag: Boolean =
+    sqlConf.stateStoreCoordinatorReportSnapshotUploadLag
+
+  /** Whether to unload the store on task completion. */
+  val unloadOnCommit = sqlConf.stateStoreUnloadOnCommit
 
   /**
    * Additional configurations related to state store. This will capture all configs in

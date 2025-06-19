@@ -40,7 +40,6 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
   }
 
   test("SPARK-34057: UnresolvedTableOrView should retain sql text position") {
-    verifyTableOrViewPosition("DESCRIBE TABLE unknown", "unknown")
     verifyTableOrPermanentViewPosition("ANALYZE TABLE unknown COMPUTE STATISTICS", "unknown")
     verifyTableOrViewPosition("ANALYZE TABLE unknown COMPUTE STATISTICS FOR COLUMNS col", "unknown")
     verifyTableOrViewPosition("ANALYZE TABLE unknown COMPUTE STATISTICS FOR ALL COLUMNS", "unknown")
@@ -48,7 +47,7 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
     verifyTableOrViewPosition("REFRESH TABLE unknown", "unknown")
     verifyTableOrViewPosition("SHOW COLUMNS FROM unknown", "unknown")
     // Special case where namespace is prepended to the table name.
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       parsePlan("SHOW COLUMNS FROM unknown IN db"),
       "TABLE_OR_VIEW_NOT_FOUND",
       Map("relationName" -> "`db`.`unknown`"),
@@ -94,7 +93,7 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
   private def verifyPosition(sql: String, table: String): Unit = {
     val startPos = sql.indexOf(table)
     assert(startPos != -1)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       parsePlan(sql),
       "TABLE_OR_VIEW_NOT_FOUND",
       Map("relationName" -> s"`$table`"),

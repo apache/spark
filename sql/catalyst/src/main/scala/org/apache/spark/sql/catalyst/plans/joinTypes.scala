@@ -95,6 +95,10 @@ case object LeftAnti extends JoinType {
   override def sql: String = "LEFT ANTI"
 }
 
+case object LeftSingle extends JoinType {
+  override def sql: String = "LEFT SINGLE"
+}
+
 case class ExistenceJoin(exists: Attribute) extends JoinType {
   override def sql: String = {
     // This join type is only used in the end of optimizer and physical plans, we will not
@@ -155,3 +159,25 @@ sealed abstract class AsOfJoinDirection
 case object Forward extends AsOfJoinDirection
 case object Backward extends AsOfJoinDirection
 case object Nearest extends AsOfJoinDirection
+
+object LateralJoinType {
+
+  val supported = Seq(
+    "inner",
+    "leftouter", "left", "left_outer",
+    "cross"
+  )
+
+  def apply(typ: String): JoinType = typ.toLowerCase(Locale.ROOT).replace("_", "") match {
+    case "inner" => Inner
+    case "leftouter" | "left" => LeftOuter
+    case "cross" => Cross
+    case _ =>
+      throw new AnalysisException(
+        errorClass = "UNSUPPORTED_JOIN_TYPE",
+        messageParameters = Map(
+          "typ" -> typ,
+          "supported" -> supported.mkString("'", "', '", "'"))
+      )
+  }
+}

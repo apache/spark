@@ -58,9 +58,11 @@ object Constants {
   // Default and fixed ports
   val DEFAULT_DRIVER_PORT = 7078
   val DEFAULT_BLOCKMANAGER_PORT = 7079
+  val DEFAULT_SPARK_CONNECT_SERVER_PORT = 15002
   val DRIVER_PORT_NAME = "driver-rpc-port"
   val BLOCK_MANAGER_PORT_NAME = "blockmanager"
   val UI_PORT_NAME = "spark-ui"
+  val SPARK_CONNECT_SERVER_PORT_NAME = "spark-connect"
 
   // Environment Variables
   val ENV_DRIVER_POD_IP = "SPARK_DRIVER_POD_IP"
@@ -104,6 +106,7 @@ object Constants {
   val DEFAULT_DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
   val DEFAULT_EXECUTOR_CONTAINER_NAME = "spark-kubernetes-executor"
   val NON_JVM_MEMORY_OVERHEAD_FACTOR = 0.4d
+  val CONNECT_GRPC_BINDING_PORT = "spark.connect.grpc.binding.port"
 
   // Hadoop Configuration
   val HADOOP_CONF_VOLUME = "hadoop-properties"

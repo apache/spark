@@ -36,14 +36,14 @@ object RemoveRedundantSorts extends Rule[LogicalPlan] {
       return plan
     }
     plan match {
-      case s @ Sort(orders, false, child) =>
+      case s @ Sort(orders, false, child, _) =>
         if (SortOrder.orderingSatisfies(child.outputOrdering, orders)) {
           recursiveRemoveSort(child, optimizeGlobalSort = false)
         } else {
           s.withNewChildren(Seq(recursiveRemoveSort(child, optimizeGlobalSort = true)))
         }
 
-      case s @ Sort(orders, true, child) =>
+      case s @ Sort(orders, true, child, _) =>
         val newChild = recursiveRemoveSort(child, optimizeGlobalSort = false)
         if (optimizeGlobalSort) {
           // For this case, the upper sort is local so the ordering of present sort is unnecessary,

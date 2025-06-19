@@ -102,6 +102,8 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
 
     .. versionadded:: 3.5.0
 
+    .. deprecated:: 4.0.0
+
     Examples
     --------
     >>> from pyspark.ml.connect import Pipeline
@@ -151,6 +153,8 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
         Set pipeline stages.
 
         .. versionadded:: 3.5.0
+
+        .. deprecated:: 4.0.0
 
         Parameters
         ----------
@@ -214,6 +218,8 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
 
         .. versionadded:: 3.5.0
 
+        .. deprecated:: 4.0.0
+
         Parameters
         ----------
         extra : dict, optional
@@ -237,6 +243,8 @@ class PipelineModel(Model, _PipelineReadWrite):
     Represents a compiled pipeline with transformers and fitted models.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     def __init__(self, stages: Optional[List[Params]] = None):
@@ -253,6 +261,8 @@ class PipelineModel(Model, _PipelineReadWrite):
         Creates a copy of this instance.
 
         .. versionadded:: 3.5.0
+
+        .. deprecated:: 4.0.0
 
         :param extra: extra parameters
         :returns: new instance

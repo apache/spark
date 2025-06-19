@@ -27,6 +27,7 @@ import threading
 import traceback
 import typing
 import socket
+import warnings
 from types import TracebackType
 from typing import Any, Callable, IO, Iterator, List, Optional, TextIO, Tuple, Union
 
@@ -61,6 +62,11 @@ if typing.TYPE_CHECKING:
         ArrowGroupedMapUDFType,
         ArrowCogroupedMapUDFType,
         PandasGroupedMapUDFTransformWithStateType,
+        PandasGroupedMapUDFTransformWithStateInitStateType,
+        GroupedMapUDFTransformWithStateType,
+        GroupedMapUDFTransformWithStateInitStateType,
+        ArrowScalarUDFType,
+        ArrowScalarIterUDFType,
     )
     from pyspark.sql._typing import (
         SQLArrowBatchedUDFType,
@@ -116,22 +122,6 @@ class VersionUtils:
                 + " version string, but it could not find the major and minor"
                 + " version numbers."
             )
-
-
-class LogUtils:
-    """
-    Utils for querying structured Spark logs with Spark SQL.
-    """
-
-    LOG_SCHEMA = (
-        "ts TIMESTAMP, "
-        "level STRING, "
-        "msg STRING, "
-        "context map<STRING, STRING>, "
-        "exception STRUCT<class STRING, msg STRING, "
-        "stacktrace ARRAY<STRUCT<class STRING, method STRING, file STRING,line STRING>>>,"
-        "logger STRING"
-    )
 
 
 def fail_on_stopiteration(f: Callable) -> Callable:
@@ -262,10 +252,6 @@ def try_simplify_traceback(tb: TracebackType) -> Optional[TracebackType]:
     if "pypy" in platform.python_implementation().lower():
         # Traceback modification is not supported with PyPy in PySpark.
         return None
-    if sys.version_info[:2] < (3, 7):
-        # Traceback creation is not supported Python < 3.7.
-        # See https://bugs.python.org/issue30579.
-        return None
 
     import pyspark
 
@@ -385,7 +371,8 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
 
     >>> Thread(target=inheritable_thread_target(target_func)).start()  # doctest: +SKIP
 
-    If you're using Spark Connect, you should explicitly provide Spark session as follows:
+    If you're using Spark Connect or if you want to inherit the tags properly,
+    you should explicitly provide Spark session as follows:
 
     >>> @inheritable_thread_target(session)  # doctest: +SKIP
     ... def target_func():
@@ -401,31 +388,70 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
         assert session is not None, "Spark Connect session must be provided."
 
         def outer(ff: Callable) -> Callable:
+            thread_local = session.client.thread_local  # type: ignore[union-attr, operator]
             session_client_thread_local_attrs = [
                 (attr, copy.deepcopy(value))
                 for (
                     attr,
                     value,
-                ) in session.client.thread_local.__dict__.items()  # type: ignore[union-attr]
+                ) in thread_local.__dict__.items()
             ]
 
             @functools.wraps(ff)
             def inner(*args: Any, **kwargs: Any) -> Any:
+                # Propagates the active remote spark session to the current thread.
+                from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+
+                RemoteSparkSession._set_default_and_active_session(
+                    session  # type: ignore[arg-type]
+                )
                 # Set thread locals in child thread.
                 for attr, value in session_client_thread_local_attrs:
-                    setattr(session.client.thread_local, attr, value)  # type: ignore[union-attr]
+                    setattr(
+                        session.client.thread_local,  # type: ignore[union-attr, operator]
+                        attr,
+                        value,
+                    )
                 return ff(*args, **kwargs)
 
             return inner
 
         return outer
 
-    # Non Spark Connect
+    # Non Spark Connect with SparkSession or Callable
+    from pyspark.sql import SparkSession
     from pyspark import SparkContext
     from py4j.clientserver import ClientServer
 
     if isinstance(SparkContext._gateway, ClientServer):
         # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
+
+        if isinstance(f, SparkSession):
+            session = f
+            assert session is not None
+            tags = set(session.getTags())
+            # Local properties are copied when wrapping the function.
+            assert SparkContext._active_spark_context is not None
+            properties = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
+
+            def outer(ff: Callable) -> Callable:
+                @functools.wraps(ff)
+                def wrapped(*args: Any, **kwargs: Any) -> Any:
+                    # Apply properties and tags in the child thread.
+                    assert SparkContext._active_spark_context is not None
+                    SparkContext._active_spark_context._jsc.sc().setLocalProperties(properties)
+                    for tag in tags:
+                        session.addTag(tag)  # type: ignore[union-attr]
+                    return ff(*args, **kwargs)
+
+                return wrapped
+
+            return outer
+
+        warnings.warn(
+            "Spark session is not provided. Tags will not be inherited.",
+            UserWarning,
+        )
 
         # NOTICE the internal difference vs `InheritableThread`. `InheritableThread`
         # copies local properties when the thread starts but `inheritable_thread_target`
@@ -446,22 +472,40 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
         return f  # type: ignore[return-value]
 
 
-def handle_worker_exception(e: BaseException, outfile: IO) -> None:
+def handle_worker_exception(
+    e: BaseException, outfile: IO, hide_traceback: Optional[bool] = None
+) -> None:
     """
     Handles exception for Python worker which writes SpecialLengths.PYTHON_EXCEPTION_THROWN (-2)
     and exception traceback info to outfile. JVM could then read from the outfile and perform
     exception handling there.
+
+    Parameters
+    ----------
+    e : BaseException
+        Exception handled
+    outfile : IO
+        IO object to write the exception info
+    hide_traceback : bool, optional
+        Whether to hide the traceback in the output.
+        By default, hides the traceback if environment variable SPARK_HIDE_TRACEBACK is set.
     """
-    try:
-        exc_info = None
+
+    if hide_traceback is None:
+        hide_traceback = bool(os.environ.get("SPARK_HIDE_TRACEBACK", False))
+
+    def format_exception() -> str:
+        if hide_traceback:
+            return "".join(traceback.format_exception_only(type(e), e))
         if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
             tb = try_simplify_traceback(sys.exc_info()[-1])  # type: ignore[arg-type]
             if tb is not None:
                 e.__cause__ = None
-                exc_info = "".join(traceback.format_exception(type(e), e, tb))
-        if exc_info is None:
-            exc_info = traceback.format_exc()
+                return "".join(traceback.format_exception(type(e), e, tb))
+        return traceback.format_exc()
 
+    try:
+        exc_info = format_exception()
         write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
         write_with_length(exc_info.encode("utf-8"), outfile)
     except IOError:
@@ -508,7 +552,8 @@ class InheritableThread(threading.Thread):
             def copy_local_properties(*a: Any, **k: Any) -> Any:
                 # Set tags in child thread.
                 assert hasattr(self, "_tags")
-                session.client.thread_local.tags = self._tags  # type: ignore[union-attr, has-type]
+                thread_local = session.client.thread_local  # type: ignore[union-attr, operator]
+                thread_local.tags = self._tags  # type: ignore[has-type]
                 return target(*a, **k)
 
             super(InheritableThread, self).__init__(
@@ -519,11 +564,15 @@ class InheritableThread(threading.Thread):
             from pyspark import SparkContext
             from py4j.clientserver import ClientServer
 
+            self._session = session  # type: ignore[assignment]
             if isinstance(SparkContext._gateway, ClientServer):
                 # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
                 def copy_local_properties(*a: Any, **k: Any) -> Any:
                     # self._props is set before starting the thread to match the behavior with JVM.
                     assert hasattr(self, "_props")
+                    if hasattr(self, "_tags"):
+                        for tag in self._tags:  # type: ignore[has-type]
+                            self._session.addTag(tag)
                     assert SparkContext._active_spark_context is not None
                     SparkContext._active_spark_context._jsc.sc().setLocalProperties(self._props)
                     return target(*a, **k)
@@ -542,9 +591,10 @@ class InheritableThread(threading.Thread):
         if is_remote():
             # Spark Connect
             assert hasattr(self, "_session")
-            if not hasattr(self._session.client.thread_local, "tags"):
-                self._session.client.thread_local.tags = set()
-            self._tags = set(self._session.client.thread_local.tags)
+            thread_local = self._session.client.thread_local  # type: ignore[union-attr, operator]
+            if not hasattr(thread_local, "tags"):
+                thread_local.tags = set()
+            self._tags = set(thread_local.tags)
         else:
             # Non Spark Connect
             from pyspark import SparkContext
@@ -558,6 +608,9 @@ class InheritableThread(threading.Thread):
                 self._props = (
                     SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
                 )
+                if self._session is not None:
+                    self._tags = self._session.getTags()
+
         return super(InheritableThread, self).start()
 
 
@@ -587,6 +640,17 @@ class PythonEvalType:
     SQL_GROUPED_MAP_ARROW_UDF: "ArrowGroupedMapUDFType" = 209
     SQL_COGROUPED_MAP_ARROW_UDF: "ArrowCogroupedMapUDFType" = 210
     SQL_TRANSFORM_WITH_STATE_PANDAS_UDF: "PandasGroupedMapUDFTransformWithStateType" = 211
+    SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF: "PandasGroupedMapUDFTransformWithStateInitStateType" = (  # noqa: E501
+        212
+    )
+    SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF: "GroupedMapUDFTransformWithStateType" = 213
+    SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF: "GroupedMapUDFTransformWithStateInitStateType" = (  # noqa: E501
+        214
+    )
+
+    # Arrow UDFs
+    SQL_SCALAR_ARROW_UDF: "ArrowScalarUDFType" = 250
+    SQL_SCALAR_ARROW_ITER_UDF: "ArrowScalarIterUDFType" = 251
 
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
@@ -607,9 +671,9 @@ def _create_local_socket(sock_info: "JavaArray") -> "io.BufferedRWPair":
     """
     sockfile: "io.BufferedRWPair"
     sock: "socket.socket"
-    port: int = sock_info[0]
+    conn_info: int = sock_info[0]
     auth_secret: str = sock_info[1]
-    sockfile, sock = local_connect_and_auth(port, auth_secret)
+    sockfile, sock = local_connect_and_auth(conn_info, auth_secret)
     # The RDD materialization time is unpredictable, if we set a timeout for socket reading
     # operation, it will very possibly fail. See SPARK-18281.
     sock.settimeout(None)
@@ -686,7 +750,9 @@ def _local_iterator_from_socket(sock_info: "JavaArray", serializer: "Serializer"
     return iter(PyLocalIterable(sock_info, serializer))
 
 
-def local_connect_and_auth(port: Optional[Union[str, int]], auth_secret: str) -> Tuple:
+def local_connect_and_auth(
+    conn_info: Optional[Union[str, int]], auth_secret: Optional[str]
+) -> Tuple:
     """
     Connect to local host, authenticate with it, and return a (sockfile,sock) for that connection.
     Handles IPV4 & IPV6, does some error handling.
@@ -694,26 +760,49 @@ def local_connect_and_auth(port: Optional[Union[str, int]], auth_secret: str) ->
     Parameters
     ----------
     port : str or int, optional
-    auth_secret : str
+    auth_secret : str, optional
 
     Returns
     -------
     tuple
         with (sockfile, sock)
     """
+    is_unix_domain_socket = isinstance(conn_info, str) and auth_secret is None
+    if is_unix_domain_socket:
+        sock_path = conn_info
+        assert isinstance(sock_path, str)
+        sock = None
+        try:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.settimeout(int(os.environ.get("SPARK_AUTH_SOCKET_TIMEOUT", 15)))
+            sock.connect(sock_path)
+            sockfile = sock.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
+            return (sockfile, sock)
+        except socket.error as e:
+            if sock is not None:
+                sock.close()
+            raise PySparkRuntimeError(
+                errorClass="CANNOT_OPEN_SOCKET",
+                messageParameters={
+                    "errors": "tried to connect to %s, but an error occurred: %s"
+                    % (sock_path, str(e)),
+                },
+            )
+
     sock = None
     errors = []
     # Support for both IPv4 and IPv6.
     addr = "127.0.0.1"
     if os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
         addr = "::1"
-    for res in socket.getaddrinfo(addr, port, socket.AF_UNSPEC, socket.SOCK_STREAM):
+    for res in socket.getaddrinfo(addr, conn_info, socket.AF_UNSPEC, socket.SOCK_STREAM):
         af, socktype, proto, _, sa = res
         try:
             sock = socket.socket(af, socktype, proto)
             sock.settimeout(int(os.environ.get("SPARK_AUTH_SOCKET_TIMEOUT", 15)))
             sock.connect(sa)
             sockfile = sock.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
+            assert isinstance(auth_secret, str)
             _do_server_auth(sockfile, auth_secret)
             return (sockfile, sock)
         except socket.error as e:
@@ -752,7 +841,7 @@ _is_remote_only = None
 def is_remote_only() -> bool:
     """
     Returns if the current running environment is only for Spark Connect.
-    If users install pyspark-connect alone, RDD API does not exist.
+    If users install pyspark-client alone, RDD API does not exist.
 
     .. versionadded:: 4.0.0
 
@@ -790,8 +879,36 @@ def is_remote_only() -> bool:
         return _is_remote_only
 
 
+# This function will be called in `pyspark` script as well,
+# so this should be available without a running Spark.
+# If move or rename, please update the script too.
+def spark_connect_mode() -> str:
+    """
+    Return the env var SPARK_CONNECT_MODE; otherwise "1" if `pyspark_connect` is available.
+    """
+    connect_by_default = os.environ.get("SPARK_CONNECT_MODE")
+    if connect_by_default is not None:
+        return connect_by_default
+    try:
+        import pyspark_connect  # noqa: F401
+
+        return "1"
+    except ImportError:
+        return "0"
+
+
+def default_api_mode() -> str:
+    """
+    Return the default API mode.
+    """
+    if spark_connect_mode() == "1":
+        return "connect"
+    else:
+        return "classic"
+
+
 if __name__ == "__main__":
-    if "pypy" not in platform.python_implementation().lower() and sys.version_info[:2] >= (3, 7):
+    if "pypy" not in platform.python_implementation().lower() and sys.version_info[:2] >= (3, 9):
         import doctest
         import pyspark.util
         from pyspark.core.context import SparkContext

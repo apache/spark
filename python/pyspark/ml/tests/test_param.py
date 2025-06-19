@@ -368,12 +368,12 @@ class ParamTests(SparkSessionTestCase):
         self.assertFalse(binarizer.isSet(binarizer.outputCol))
         self.assertEqual(result[0][0], 1.0)
 
-    def test_lr_evaluate_invaild_type(self):
+    def test_lr_evaluate_invalid_type(self):
         lr = LinearRegressionModel()
         invalid_type = ""
         self.assertRaises(TypeError, lr.evaluate, invalid_type)
 
-    def test_glr_evaluate_invaild_type(self):
+    def test_glr_evaluate_invalid_type(self):
         glr = GeneralizedLinearRegressionModel()
         invalid_type = ""
         self.assertRaises(TypeError, glr.evaluate, invalid_type)

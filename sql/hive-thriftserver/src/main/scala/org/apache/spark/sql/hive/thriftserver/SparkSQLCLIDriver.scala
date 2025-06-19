@@ -458,27 +458,28 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           if (sessionState.getIsVerbose) {
             out.println(cmd)
           }
-          val rc = driver.run(cmd)
+          try {
+            driver.run(cmd)
+          } catch {
+            case t: Throwable =>
+              ret = 1
+              val format = SparkSQLEnv.sparkSession.sessionState.conf.errorMessageFormat
+              val msg = t match {
+                case st: SparkThrowable with Throwable =>
+                  SparkThrowableHelper.getMessage(st, format)
+                case _ => t.getMessage
+              }
+              err.println(msg)
+              if (format == ErrorMessageFormat.PRETTY &&
+                !sessionState.getIsSilent &&
+                (!t.isInstanceOf[AnalysisException] || t.getCause != null)) {
+                t.printStackTrace(err)
+              }
+              driver.close()
+              return ret
+          }
           val endTimeNs = System.nanoTime()
           val timeTaken: Double = TimeUnit.NANOSECONDS.toMillis(endTimeNs - startTimeNs) / 1000.0
-
-          ret = rc.getResponseCode
-          if (ret != 0) {
-            val format = SparkSQLEnv.sparkSession.sessionState.conf.errorMessageFormat
-            val e = rc.getException
-            val msg = e match {
-              case st: SparkThrowable with Throwable => SparkThrowableHelper.getMessage(st, format)
-              case _ => e.getMessage
-            }
-            err.println(msg)
-            if (format == ErrorMessageFormat.PRETTY &&
-                !sessionState.getIsSilent &&
-                (!e.isInstanceOf[AnalysisException] || e.getCause != null)) {
-              e.printStackTrace(err)
-            }
-            driver.close()
-            return ret
-          }
 
           val res = new JArrayList[String]()
 

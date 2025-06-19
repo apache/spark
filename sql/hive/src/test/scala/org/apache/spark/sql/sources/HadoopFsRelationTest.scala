@@ -246,7 +246,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
           testDF.write.format(dataSourceName)
             .mode(SaveMode.ErrorIfExists).save(file.getCanonicalPath)
         },
-        errorClass = "PATH_ALREADY_EXISTS",
+        condition = "PATH_ALREADY_EXISTS",
         parameters = Map("outputPath" -> "file:.*"),
         matchPVals = true
       )
@@ -354,7 +354,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
             .partitionBy("p1", "p2")
             .save(file.getCanonicalPath)
         },
-        errorClass = "PATH_ALREADY_EXISTS",
+        condition = "PATH_ALREADY_EXISTS",
         parameters = Map("outputPath" -> "file:.*"),
         matchPVals = true
       )

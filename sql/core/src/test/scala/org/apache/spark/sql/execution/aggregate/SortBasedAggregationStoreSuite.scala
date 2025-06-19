@@ -88,7 +88,7 @@ class SortBasedAggregationStoreSuite  extends SparkFunSuite with LocalSparkConte
     }
 
     val iter = store.destructiveIterator()
-    while(iter.hasNext) {
+    while (iter.hasNext) {
       val agg = iter.next()
       assert(agg.aggregationBuffer.getInt(0) == expected(agg.groupingKey.getInt(0)))
     }

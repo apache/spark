@@ -71,7 +71,7 @@ secrets to be secure.
   <td>false</td>
   <td>
     Set to true for applications that have higher security requirements and prefer that their
-    secret is not saved in the db. The shuffle data of such applications wll not be recovered after
+    secret is not saved in the db. The shuffle data of such applications will not be recovered after
     the External Shuffle Service restarts.
   </td>
   <td>3.5.0</td>
@@ -813,6 +813,12 @@ They are generally private services, and should only be accessible within the ne
 organization that deploys Spark. Access to the hosts and ports used by Spark services should
 be limited to origin hosts that need to access the services.
 
+However, like the REST Submission port, Spark also supports HTTP `Authorization` header
+with a cryptographically signed JSON Web Token (JWT) for all UI ports.
+To use it, a user needs to configure
+`spark.ui.filters=org.apache.spark.ui.JWSFilter` and
+`spark.org.apache.spark.ui.JWSFilter.param.secretKey=BASE64URL-ENCODED-KEY`.
+
 Below are the primary ports that Spark uses for its communication and how to
 configure those ports.
 
@@ -940,7 +946,7 @@ mechanism (see `java.util.ServiceLoader`). Implementations of
 `org.apache.spark.security.HadoopDelegationTokenProvider` can be made available to Spark
 by listing their names in the corresponding file in the jar's `META-INF/services` directory.
 
-Delegation token support is currently only supported in YARN mode. Consult the
+Delegation token support is currently only supported in YARN and Kubernetes mode. Consult the
 deployment-specific page for more information.
 
 The following options provides finer-grained control for this feature:

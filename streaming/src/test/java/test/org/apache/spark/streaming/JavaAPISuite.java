@@ -1641,7 +1641,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   private static List<List<String>> fileTestPrepare(File testDir) throws IOException {
     File existingFile = new File(testDir, "0");
-    Files.write("0\n", existingFile, StandardCharsets.UTF_8);
+    Files.asCharSink(existingFile, StandardCharsets.UTF_8).write("0\n");
     Assertions.assertTrue(existingFile.setLastModified(1000));
     Assertions.assertEquals(1000, existingFile.lastModified());
     return Arrays.asList(Arrays.asList("0"));

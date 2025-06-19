@@ -31,6 +31,7 @@ from pyspark.sql.connect.plan import (
     CommonInlineUserDefinedTableFunction,
     PythonUDTF,
 )
+from pyspark.sql.connect.table_arg import TableArg
 from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
@@ -78,7 +79,7 @@ def _create_py_udtf(
                 == "true"
             )
         except PySparkRuntimeError as e:
-            if e.getErrorClass() == "NO_ACTIVE_OR_DEFAULT_SESSION":
+            if e.getCondition() == "NO_ACTIVE_OR_DEFAULT_SESSION":
                 pass  # Just uses the default if no session found.
             else:
                 raise e
@@ -143,6 +144,8 @@ class UserDefinedTableFunction:
         def to_expr(col: "ColumnOrName") -> Expression:
             if isinstance(col, Column):
                 return col._expr
+            elif isinstance(col, TableArg):
+                return col._subquery_expr
             else:
                 return ColumnReference(col)  # type: ignore[arg-type]
 

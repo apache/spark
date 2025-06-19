@@ -191,11 +191,13 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         exception = intercept[AnalysisException] {
           df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1156",
+        condition = "COLUMN_NOT_DEFINED_IN_TABLE",
         parameters = Map(
-          "colName" -> "NAME",
-          "tableSchema" ->
-            "Some(StructType(StructField(name,StringType,true),StructField(id,IntegerType,true)))"))
+          "colType" -> "\"STRING\"",
+          "colName" -> "`NAME`",
+          "tableName" -> "`TEST`.`APPENDTEST`",
+          "tableCols" -> "`NAME`, `ID`")
+      )
     }
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -224,11 +226,13 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
           df3.write.mode(SaveMode.Overwrite).option("truncate", true)
             .jdbc(url1, "TEST.TRUNCATETEST", properties)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1156",
+        condition = "COLUMN_NOT_DEFINED_IN_TABLE",
         parameters = Map(
-          "colName" -> "seq",
-          "tableSchema" ->
-            "Some(StructType(StructField(name,StringType,true),StructField(id,IntegerType,true)))"))
+          "colType" -> "\"INT\"",
+          "colName" -> "`seq`",
+          "tableName" -> "`TEST`.`TRUNCATETEST`",
+          "tableCols" -> "`name`, `id`, `seq`")
+      )
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
       JdbcDialects.registerDialect(H2Dialect())
@@ -256,11 +260,13 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
       exception = intercept[AnalysisException] {
         df2.write.mode(SaveMode.Append).jdbc(url, "TEST.INCOMPATIBLETEST", new Properties())
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1156",
+      condition = "COLUMN_NOT_DEFINED_IN_TABLE",
       parameters = Map(
-        "colName" -> "seq",
-        "tableSchema" ->
-          "Some(StructType(StructField(name,StringType,true),StructField(id,IntegerType,true)))"))
+        "colType" -> "\"INT\"",
+        "colName" -> "`seq`",
+        "tableName" -> "`TEST`.`INCOMPATIBLETEST`",
+        "tableCols" -> "`name`, `id`, `seq`")
+    )
   }
 
   test("INSERT to JDBC Datasource") {
@@ -507,7 +513,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
           .option("createTableColumnTypes", "name CLOB(2000)")
           .jdbc(url1, "TEST.USERDBTYPETEST", properties)
       },
-      errorClass = "UNSUPPORTED_DATATYPE",
+      condition = "UNSUPPORTED_DATATYPE",
       parameters = Map("typeName" -> "\"CLOB(2000)\""))
   }
 
@@ -519,7 +525,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
           .option("createTableColumnTypes", "`name char(20)") // incorrectly quoted column
           .jdbc(url1, "TEST.USERDBTYPETEST", properties)
       },
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'`'", "hint" -> ""))
   }
 
@@ -533,7 +539,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
       }
       checkError(
         exception = e,
-        errorClass = "COLUMN_ALREADY_EXISTS",
+        condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> "`name`"))
     }
   }

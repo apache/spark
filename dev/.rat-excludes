@@ -7,6 +7,7 @@ cache
 .generated-mima-class-excludes
 .generated-mima-member-excludes
 .rat-excludes
+.mvn/jvm.config
 .*md
 .java-version
 derby.log
@@ -31,12 +32,13 @@ graphlib-dot.min.js
 sorttable.js
 vis-timeline-graph2d.min.js
 vis-timeline-graph2d.min.css
-dataTables.bootstrap4.*.min.css
-dataTables.bootstrap4.*.min.js
+dataTables.bootstrap4.min.css
+dataTables.bootstrap4.min.js
 dataTables.rowsGroup.js
 jquery.blockUI.min.js
 jquery.cookies.2.2.0.min.js
-jquery.dataTables.*.min.js
+jquery.dataTables.min.css
+jquery.dataTables.min.js
 jquery.mustache.js
 .*\.avsc
 .*\.txt
@@ -46,6 +48,7 @@ jquery.mustache.js
 pyspark-coverage-site/*
 cloudpickle/*
 join.py
+tblib.py
 SparkILoop.scala
 sbt
 sbt-launch-lib.bash
@@ -125,9 +128,6 @@ exported_table/*
 node_modules
 spark-events-broken/*
 SqlBaseLexer.tokens
-# Spark Connect related files with custom licence
-any.proto
-empty.proto
 .*\.explain
 .*\.proto.bin
 LimitedInputStream.java
@@ -138,4 +138,6 @@ people.xml
 ui-test/package.json
 ui-test/package-lock.json
 core/src/main/resources/org/apache/spark/ui/static/package.json
+testCommitLog
 .*\.har
+.nojekyll

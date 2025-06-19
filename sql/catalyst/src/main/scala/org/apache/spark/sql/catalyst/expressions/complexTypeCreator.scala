@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeNonCSAICollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -79,7 +79,7 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
 
   private val defaultElementType: DataType = {
     if (useStringTypeWhenEmpty) {
-      SQLConf.get.defaultStringType
+      StringType
     } else {
       NullType
     }
@@ -196,7 +196,7 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
 
   private val defaultElementType: DataType = {
     if (useStringTypeWhenEmpty) {
-      SQLConf.get.defaultStringType
+      StringType
     } else {
       NullType
     }
@@ -301,8 +301,8 @@ object CreateMap {
   since = "2.4.0",
   group = "map_funcs")
 case class MapFromArrays(left: Expression, right: Expression)
-  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
-
+  extends BinaryExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -354,7 +354,7 @@ case class MapFromArrays(left: Expression, right: Expression)
 case object NamePlaceholder extends LeafExpression with Unevaluable {
   override lazy val resolved: Boolean = false
   override def nullable: Boolean = false
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def dataType: DataType = StringType
   override def prettyName: String = "NamePlaceholder"
   override def toString: String = prettyName
 }
@@ -457,6 +457,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
       case (name, expr) =>
         val metadata = expr match {
           case ne: NamedExpression => ne.metadata
+          case gsf: GetStructField => gsf.metadata
           case _ => Metadata.empty
         }
         StructField(name.toString, expr.dataType, expr.nullable, metadata)
@@ -562,14 +563,17 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
   group = "map_funcs")
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
-  extends TernaryExpression with ExpectsInputTypes with NullIntolerant {
-
+  extends TernaryExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
   def this(child: Expression, pairDelim: Expression) = {
-    this(child, pairDelim, Literal(":"))
+    this(child, pairDelim, Literal.create(":", StringType))
   }
 
   def this(child: Expression) = {
-    this(child, Literal(","), Literal(":"))
+    this(
+      child,
+      Literal.create(",", StringType),
+      Literal.create(":", StringType))
   }
 
   override def stateful: Boolean = true
@@ -579,7 +583,7 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   override def third: Expression = keyValueDelim
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, StringTypeAnyCollation, StringTypeAnyCollation)
+    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation, StringTypeNonCSAICollation)
 
   override def dataType: DataType = MapType(first.dataType, first.dataType)
 

@@ -49,7 +49,7 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
       sql(s"ALTER DATABASE $catalog.$ns SET PROPERTIES ('d'='d')")
     }
     checkError(e,
-      errorClass = "SCHEMA_NOT_FOUND",
+      condition = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> s"`$catalog`.`$ns`"))
   }
 
@@ -88,7 +88,7 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
             exception = intercept[ParseException] {
               sql(sqlText)
             },
-            errorClass = "UNSUPPORTED_FEATURE.SET_NAMESPACE_PROPERTY",
+            condition = "UNSUPPORTED_FEATURE.SET_NAMESPACE_PROPERTY",
             parameters = Map("property" -> key, "msg" -> ".*"),
             sqlState = None,
             context = ExpectedContext(
@@ -100,7 +100,8 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
       }
     }
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
-      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
+        .filterNot(prop => prop == PROP_COLLATION || prop == PROP_COMMENT).foreach { key =>
         withNamespace(ns) {
           // Set the location explicitly because v2 catalog may not set the default location.
           // Without this, `meta.get(key)` below may return null.

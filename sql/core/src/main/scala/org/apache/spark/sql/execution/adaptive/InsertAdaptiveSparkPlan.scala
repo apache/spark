@@ -44,6 +44,8 @@ import org.apache.spark.sql.internal.SQLConf
 case class InsertAdaptiveSparkPlan(
     adaptiveExecutionContext: AdaptiveExecutionContext) extends Rule[SparkPlan] {
 
+  override def conf: SQLConf = adaptiveExecutionContext.session.sessionState.conf
+
   override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, false)
 
   private def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
@@ -151,7 +153,7 @@ case class InsertAdaptiveSparkPlan(
     // Apply the same instance of this rule to sub-queries so that sub-queries all share the
     // same `stageCache` for Exchange reuse.
     this.applyInternal(
-      QueryExecution.createSparkPlan(adaptiveExecutionContext.session,
+      QueryExecution.createSparkPlan(
         adaptiveExecutionContext.session.sessionState.planner, plan.clone()), true)
   }
 

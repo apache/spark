@@ -578,6 +578,82 @@ class Expression(google.protobuf.message.Message):
                 ],
             ) -> None: ...
 
+        class SpecializedArray(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            BOOLS_FIELD_NUMBER: builtins.int
+            INTS_FIELD_NUMBER: builtins.int
+            LONGS_FIELD_NUMBER: builtins.int
+            FLOATS_FIELD_NUMBER: builtins.int
+            DOUBLES_FIELD_NUMBER: builtins.int
+            STRINGS_FIELD_NUMBER: builtins.int
+            @property
+            def bools(self) -> pyspark.sql.connect.proto.common_pb2.Bools: ...
+            @property
+            def ints(self) -> pyspark.sql.connect.proto.common_pb2.Ints: ...
+            @property
+            def longs(self) -> pyspark.sql.connect.proto.common_pb2.Longs: ...
+            @property
+            def floats(self) -> pyspark.sql.connect.proto.common_pb2.Floats: ...
+            @property
+            def doubles(self) -> pyspark.sql.connect.proto.common_pb2.Doubles: ...
+            @property
+            def strings(self) -> pyspark.sql.connect.proto.common_pb2.Strings: ...
+            def __init__(
+                self,
+                *,
+                bools: pyspark.sql.connect.proto.common_pb2.Bools | None = ...,
+                ints: pyspark.sql.connect.proto.common_pb2.Ints | None = ...,
+                longs: pyspark.sql.connect.proto.common_pb2.Longs | None = ...,
+                floats: pyspark.sql.connect.proto.common_pb2.Floats | None = ...,
+                doubles: pyspark.sql.connect.proto.common_pb2.Doubles | None = ...,
+                strings: pyspark.sql.connect.proto.common_pb2.Strings | None = ...,
+            ) -> None: ...
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "bools",
+                    b"bools",
+                    "doubles",
+                    b"doubles",
+                    "floats",
+                    b"floats",
+                    "ints",
+                    b"ints",
+                    "longs",
+                    b"longs",
+                    "strings",
+                    b"strings",
+                    "value_type",
+                    b"value_type",
+                ],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "bools",
+                    b"bools",
+                    "doubles",
+                    b"doubles",
+                    "floats",
+                    b"floats",
+                    "ints",
+                    b"ints",
+                    "longs",
+                    b"longs",
+                    "strings",
+                    b"strings",
+                    "value_type",
+                    b"value_type",
+                ],
+            ) -> None: ...
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["value_type", b"value_type"]
+            ) -> (
+                typing_extensions.Literal["bools", "ints", "longs", "floats", "doubles", "strings"]
+                | None
+            ): ...
+
         NULL_FIELD_NUMBER: builtins.int
         BINARY_FIELD_NUMBER: builtins.int
         BOOLEAN_FIELD_NUMBER: builtins.int
@@ -598,6 +674,7 @@ class Expression(google.protobuf.message.Message):
         ARRAY_FIELD_NUMBER: builtins.int
         MAP_FIELD_NUMBER: builtins.int
         STRUCT_FIELD_NUMBER: builtins.int
+        SPECIALIZED_ARRAY_FIELD_NUMBER: builtins.int
         @property
         def null(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
         binary: builtins.bytes
@@ -627,6 +704,8 @@ class Expression(google.protobuf.message.Message):
         def map(self) -> global___Expression.Literal.Map: ...
         @property
         def struct(self) -> global___Expression.Literal.Struct: ...
+        @property
+        def specialized_array(self) -> global___Expression.Literal.SpecializedArray: ...
         def __init__(
             self,
             *,
@@ -650,6 +729,7 @@ class Expression(google.protobuf.message.Message):
             array: global___Expression.Literal.Array | None = ...,
             map: global___Expression.Literal.Map | None = ...,
             struct: global___Expression.Literal.Struct | None = ...,
+            specialized_array: global___Expression.Literal.SpecializedArray | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -686,6 +766,8 @@ class Expression(google.protobuf.message.Message):
                 b"null",
                 "short",
                 b"short",
+                "specialized_array",
+                b"specialized_array",
                 "string",
                 b"string",
                 "struct",
@@ -733,6 +815,8 @@ class Expression(google.protobuf.message.Message):
                 b"null",
                 "short",
                 b"short",
+                "specialized_array",
+                b"specialized_array",
                 "string",
                 b"string",
                 "struct",
@@ -769,6 +853,7 @@ class Expression(google.protobuf.message.Message):
                 "array",
                 "map",
                 "struct",
+                "specialized_array",
             ]
             | None
         ): ...
@@ -847,6 +932,7 @@ class Expression(google.protobuf.message.Message):
         ARGUMENTS_FIELD_NUMBER: builtins.int
         IS_DISTINCT_FIELD_NUMBER: builtins.int
         IS_USER_DEFINED_FUNCTION_FIELD_NUMBER: builtins.int
+        IS_INTERNAL_FIELD_NUMBER: builtins.int
         function_name: builtins.str
         """(Required) name (or unparsed name for user defined function) for the unresolved function."""
         @property
@@ -864,6 +950,11 @@ class Expression(google.protobuf.message.Message):
         When it is not a user defined function, Connect will use the function name directly.
         When it is a user defined function, Connect will parse the function name first.
         """
+        is_internal: builtins.bool
+        """(Optional) Indicate if this function is defined in the internal function registry.
+        If not set, the server will try to look up the function in the internal function registry
+        and decide appropriately.
+        """
         def __init__(
             self,
             *,
@@ -871,20 +962,34 @@ class Expression(google.protobuf.message.Message):
             arguments: collections.abc.Iterable[global___Expression] | None = ...,
             is_distinct: builtins.bool = ...,
             is_user_defined_function: builtins.bool = ...,
+            is_internal: builtins.bool | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_is_internal", b"_is_internal", "is_internal", b"is_internal"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "_is_internal",
+                b"_is_internal",
                 "arguments",
                 b"arguments",
                 "function_name",
                 b"function_name",
                 "is_distinct",
                 b"is_distinct",
+                "is_internal",
+                b"is_internal",
                 "is_user_defined_function",
                 b"is_user_defined_function",
             ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_is_internal", b"_is_internal"]
+        ) -> typing_extensions.Literal["is_internal"] | None: ...
 
     class ExpressionString(google.protobuf.message.Message):
         """Expression as string."""
@@ -1184,6 +1289,7 @@ class Expression(google.protobuf.message.Message):
     NAMED_ARGUMENT_EXPRESSION_FIELD_NUMBER: builtins.int
     MERGE_ACTION_FIELD_NUMBER: builtins.int
     TYPED_AGGREGATE_EXPRESSION_FIELD_NUMBER: builtins.int
+    SUBQUERY_EXPRESSION_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___ExpressionCommon: ...
@@ -1228,6 +1334,8 @@ class Expression(google.protobuf.message.Message):
     @property
     def typed_aggregate_expression(self) -> global___TypedAggregateExpression: ...
     @property
+    def subquery_expression(self) -> global___SubqueryExpression: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         relations they can add them here. During the planning the correct resolution is done.
@@ -1256,6 +1364,7 @@ class Expression(google.protobuf.message.Message):
         named_argument_expression: global___NamedArgumentExpression | None = ...,
         merge_action: global___MergeAction | None = ...,
         typed_aggregate_expression: global___TypedAggregateExpression | None = ...,
+        subquery_expression: global___SubqueryExpression | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -1287,6 +1396,8 @@ class Expression(google.protobuf.message.Message):
             b"named_argument_expression",
             "sort_order",
             b"sort_order",
+            "subquery_expression",
+            b"subquery_expression",
             "typed_aggregate_expression",
             b"typed_aggregate_expression",
             "unresolved_attribute",
@@ -1336,6 +1447,8 @@ class Expression(google.protobuf.message.Message):
             b"named_argument_expression",
             "sort_order",
             b"sort_order",
+            "subquery_expression",
+            b"subquery_expression",
             "typed_aggregate_expression",
             b"typed_aggregate_expression",
             "unresolved_attribute",
@@ -1379,6 +1492,7 @@ class Expression(google.protobuf.message.Message):
             "named_argument_expression",
             "merge_action",
             "typed_aggregate_expression",
+            "subquery_expression",
             "extension",
         ]
         | None
@@ -1414,6 +1528,7 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     PYTHON_UDF_FIELD_NUMBER: builtins.int
     SCALAR_SCALA_UDF_FIELD_NUMBER: builtins.int
     JAVA_UDF_FIELD_NUMBER: builtins.int
+    IS_DISTINCT_FIELD_NUMBER: builtins.int
     function_name: builtins.str
     """(Required) Name of the user-defined function."""
     deterministic: builtins.bool
@@ -1429,6 +1544,8 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     def scalar_scala_udf(self) -> global___ScalarScalaUDF: ...
     @property
     def java_udf(self) -> global___JavaUDF: ...
+    is_distinct: builtins.bool
+    """(Required) Indicate if this function should be applied on distinct values."""
     def __init__(
         self,
         *,
@@ -1438,6 +1555,7 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
         python_udf: global___PythonUDF | None = ...,
         scalar_scala_udf: global___ScalarScalaUDF | None = ...,
         java_udf: global___JavaUDF | None = ...,
+        is_distinct: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -1463,6 +1581,8 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
             b"function",
             "function_name",
             b"function_name",
+            "is_distinct",
+            b"is_distinct",
             "java_udf",
             b"java_udf",
             "python_udf",
@@ -1801,3 +1921,141 @@ class MergeAction(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["condition"] | None: ...
 
 global___MergeAction = MergeAction
+
+class SubqueryExpression(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class _SubqueryType:
+        ValueType = typing.NewType("ValueType", builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
+
+    class _SubqueryTypeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            SubqueryExpression._SubqueryType.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        SUBQUERY_TYPE_UNKNOWN: SubqueryExpression._SubqueryType.ValueType  # 0
+        SUBQUERY_TYPE_SCALAR: SubqueryExpression._SubqueryType.ValueType  # 1
+        SUBQUERY_TYPE_EXISTS: SubqueryExpression._SubqueryType.ValueType  # 2
+        SUBQUERY_TYPE_TABLE_ARG: SubqueryExpression._SubqueryType.ValueType  # 3
+        SUBQUERY_TYPE_IN: SubqueryExpression._SubqueryType.ValueType  # 4
+
+    class SubqueryType(_SubqueryType, metaclass=_SubqueryTypeEnumTypeWrapper): ...
+    SUBQUERY_TYPE_UNKNOWN: SubqueryExpression.SubqueryType.ValueType  # 0
+    SUBQUERY_TYPE_SCALAR: SubqueryExpression.SubqueryType.ValueType  # 1
+    SUBQUERY_TYPE_EXISTS: SubqueryExpression.SubqueryType.ValueType  # 2
+    SUBQUERY_TYPE_TABLE_ARG: SubqueryExpression.SubqueryType.ValueType  # 3
+    SUBQUERY_TYPE_IN: SubqueryExpression.SubqueryType.ValueType  # 4
+
+    class TableArgOptions(google.protobuf.message.Message):
+        """Nested message for table argument options."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        PARTITION_SPEC_FIELD_NUMBER: builtins.int
+        ORDER_SPEC_FIELD_NUMBER: builtins.int
+        WITH_SINGLE_PARTITION_FIELD_NUMBER: builtins.int
+        @property
+        def partition_spec(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___Expression
+        ]:
+            """(Optional) The way that input rows are partitioned."""
+        @property
+        def order_spec(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___Expression.SortOrder
+        ]:
+            """(Optional) Ordering of rows in a partition."""
+        with_single_partition: builtins.bool
+        """(Optional) Whether this is a single partition."""
+        def __init__(
+            self,
+            *,
+            partition_spec: collections.abc.Iterable[global___Expression] | None = ...,
+            order_spec: collections.abc.Iterable[global___Expression.SortOrder] | None = ...,
+            with_single_partition: builtins.bool | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_with_single_partition",
+                b"_with_single_partition",
+                "with_single_partition",
+                b"with_single_partition",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_with_single_partition",
+                b"_with_single_partition",
+                "order_spec",
+                b"order_spec",
+                "partition_spec",
+                b"partition_spec",
+                "with_single_partition",
+                b"with_single_partition",
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal[
+                "_with_single_partition", b"_with_single_partition"
+            ],
+        ) -> typing_extensions.Literal["with_single_partition"] | None: ...
+
+    PLAN_ID_FIELD_NUMBER: builtins.int
+    SUBQUERY_TYPE_FIELD_NUMBER: builtins.int
+    TABLE_ARG_OPTIONS_FIELD_NUMBER: builtins.int
+    IN_SUBQUERY_VALUES_FIELD_NUMBER: builtins.int
+    plan_id: builtins.int
+    """(Required) The ID of the corresponding connect plan."""
+    subquery_type: global___SubqueryExpression.SubqueryType.ValueType
+    """(Required) The type of the subquery."""
+    @property
+    def table_arg_options(self) -> global___SubqueryExpression.TableArgOptions:
+        """(Optional) Options specific to table arguments."""
+    @property
+    def in_subquery_values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Expression]:
+        """(Optional) IN subquery values."""
+    def __init__(
+        self,
+        *,
+        plan_id: builtins.int = ...,
+        subquery_type: global___SubqueryExpression.SubqueryType.ValueType = ...,
+        table_arg_options: global___SubqueryExpression.TableArgOptions | None = ...,
+        in_subquery_values: collections.abc.Iterable[global___Expression] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_table_arg_options", b"_table_arg_options", "table_arg_options", b"table_arg_options"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_table_arg_options",
+            b"_table_arg_options",
+            "in_subquery_values",
+            b"in_subquery_values",
+            "plan_id",
+            b"plan_id",
+            "subquery_type",
+            b"subquery_type",
+            "table_arg_options",
+            b"table_arg_options",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_table_arg_options", b"_table_arg_options"]
+    ) -> typing_extensions.Literal["table_arg_options"] | None: ...
+
+global___SubqueryExpression = SubqueryExpression

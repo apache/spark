@@ -82,7 +82,7 @@ class ResolveLambdaVariablesSuite extends PlanTest {
 
     checkError(
       exception = intercept[AnalysisException](Analyzer.execute(p)),
-      errorClass = "INVALID_LAMBDA_FUNCTION_CALL.DUPLICATE_ARG_NAMES",
+      condition = "INVALID_LAMBDA_FUNCTION_CALL.DUPLICATE_ARG_NAMES",
       parameters = Map(
         "args" -> "`x`, `x`",
         "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\"")
@@ -96,7 +96,7 @@ class ResolveLambdaVariablesSuite extends PlanTest {
 
     checkError(
       exception = intercept[AnalysisException](Analyzer.execute(p)),
-      errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NUM_ARGS_MISMATCH",
+      condition = "INVALID_LAMBDA_FUNCTION_CALL.NUM_ARGS_MISMATCH",
       parameters = Map("expectedNumArgs" -> "3", "actualNumArgs" -> "1")
     )
   }

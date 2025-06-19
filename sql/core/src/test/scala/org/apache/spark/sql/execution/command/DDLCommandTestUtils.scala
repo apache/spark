@@ -26,6 +26,7 @@ import org.scalatest.Tag
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -61,7 +62,7 @@ trait DDLCommandTestUtils extends SQLTestUtils {
       (f: String => Unit): Unit = {
     val nsCat = s"$cat.$ns"
     withNamespace(nsCat) {
-      sql(s"CREATE NAMESPACE $nsCat")
+      sql(s"CREATE NAMESPACE IF NOT EXISTS $nsCat")
       val t = s"$nsCat.$tableName"
       withTable(t) {
         f(t)
@@ -171,6 +172,11 @@ trait DDLCommandTestUtils extends SQLTestUtils {
     val part1Loc = part0Loc.replace(from, to)
     FileUtils.copyDirectory(new File(part0Loc), new File(part1Loc))
     part1Loc
+  }
+
+  def tableLegacyProperties: Seq[String] = {
+    val excludedProperties = Set(TableCatalog.PROP_COMMENT, TableCatalog.PROP_COLLATION)
+    CatalogV2Util.TABLE_RESERVED_PROPERTIES.filterNot(excludedProperties.contains)
   }
 }
 

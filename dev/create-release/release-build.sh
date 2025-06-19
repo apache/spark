@@ -137,6 +137,12 @@ if [[ "$1" == "finalize" ]]; then
     --repository-url https://upload.pypi.org/legacy/ \
     "pyspark_connect-$PYSPARK_VERSION.tar.gz" \
     "pyspark_connect-$PYSPARK_VERSION.tar.gz.asc"
+  svn update "pyspark_client-$RELEASE_VERSION.tar.gz"
+  svn update "pyspark_client-$RELEASE_VERSION.tar.gz.asc"
+  twine upload -u __token__ -p $PYPI_API_TOKEN \
+    --repository-url https://upload.pypi.org/legacy/ \
+    "pyspark_client-$RELEASE_VERSION.tar.gz" \
+    "pyspark_client-$RELEASE_VERSION.tar.gz.asc"
   cd ..
   rm -rf svn-spark
   echo "PySpark uploaded"
@@ -152,9 +158,13 @@ if [[ "$1" == "finalize" ]]; then
   git push origin HEAD:asf-site
   cd ..
   rm -rf spark-website
-  svn rm --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Remove RC artifacts" --no-auth-cache \
-    "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-docs"
   echo "docs uploaded"
+
+  # Moves the docs from dev directory to release directory.
+  echo "Moving Spark docs to the release directory"
+  svn mv --username "$ASF_USERNAME" --password "$ASF_PASSWORD" -m"Apache Spark $RELEASE_VERSION" \
+    --no-auth-cache "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-docs/_site" "$RELEASE_LOCATION/docs/$RELEASE_VERSION"
+  echo "Spark docs moved"
 
   # Moves the binaries from dev directory to release directory.
   echo "Moving Spark binaries to the release directory"
@@ -169,6 +179,76 @@ if [[ "$1" == "finalize" ]]; then
   (cd svn-spark && svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Update KEYS")
   echo "KEYS sync'ed"
   rm -rf svn-spark
+
+  # TODO: Test it in the actual release
+  # Release artifacts in the Nexus repository
+  # Find latest orgapachespark-* repo for this release version
+  REPO_ID=$(curl --retry 10 --retry-all-errors -s -u "$ASF_USERNAME:$ASF_PASSWORD" \
+    https://repository.apache.org/service/local/staging/profile_repositories | \
+    grep -A 5 "<repositoryId>orgapachespark-" | \
+    awk '/<repositoryId>/ { id = $0 } /<description>/ && $0 ~ /Apache Spark '"$RELEASE_VERSION"'/ { print id }' | \
+    grep -oP '(?<=<repositoryId>)orgapachespark-[0-9]+(?=</repositoryId>)' | \
+    sort -V | tail -n 1)
+
+  if [[ -z "$REPO_ID" ]]; then
+    echo "No matching staging repository found for Apache Spark $RELEASE_VERSION"
+    exit 1
+  fi
+
+  echo "Using repository ID: $REPO_ID"
+
+  # Release the repository
+  curl --retry 10 --retry-all-errors -s -u "$APACHE_USERNAME:$APACHE_PASSWORD" \
+    -H "Content-Type: application/json" \
+    -X POST https://repository.apache.org/service/local/staging/bulk/promote \
+    -d "{\"data\": {\"stagedRepositoryIds\": [\"$REPO_ID\"], \"description\": \"Apache Spark $RELEASE_VERSION\"}}"
+
+  # Wait for release to complete
+  echo "Waiting for release to complete..."
+  while true; do
+    STATUS=$(curl --retry 10 --retry-all-errors -s -u "$APACHE_USERNAME:$APACHE_PASSWORD" \
+      https://repository.apache.org/service/local/staging/repository/$REPO_ID | \
+      grep -oPm1 "(?<=<type>)[^<]+")
+    echo "Current state: $STATUS"
+    if [[ "$STATUS" == "released" ]]; then
+      echo "Release complete."
+      break
+    elif [[ "$STATUS" == "release_failed" || "$STATUS" == "error" ]]; then
+      echo "Release failed."
+      exit 1
+    elif [[ "$STATUS" == "open" ]]; then
+      echo "Repository is still open. Cannot release. Please close it first."
+      exit 1
+    fi
+    sleep 10
+  done
+
+  # Drop the repository after release
+  curl --retry 10 --retry-all-errors -s -u "$APACHE_USERNAME:$APACHE_PASSWORD" \
+    -H "Content-Type: application/json" \
+    -X POST https://repository.apache.org/service/local/staging/bulk/drop \
+    -d "{\"data\": {\"stagedRepositoryIds\": [\"$REPO_ID\"], \"description\": \"Dropped after release\"}}"
+
+  echo "Done."
+
+  # TODO: Test it in the actual official release
+  # Remove old releases from the mirror
+  # Extract major.minor prefix
+  RELEASE_SERIES=$(echo "$RELEASE_VERSION" | cut -d. -f1-2)
+  
+  # Fetch existing dist URLs
+  OLD_VERSION=$(svn ls https://dist.apache.org/repos/dist/release/spark/ | \
+    grep "^spark-$RELEASE_SERIES" | \
+    grep -v "^spark-$RELEASE_VERSION/" | \
+    sed 's#/##' | sed 's/^spark-//' | \
+    sort -V | tail -n 1)
+  
+  if [[ -n "$OLD_VERSION" ]]; then
+    echo "Removing old version: spark-$OLD_VERSION"
+    svn rm "https://dist.apache.org/repos/dist/release/spark/spark-$OLD_VERSION" -m "Remove older $RELEASE_SERIES release after $RELEASE_VERSION"
+  else
+    echo "No previous $RELEASE_SERIES version found to remove. Manually remove it if there is."
+  fi
 
   exit 0
 fi
@@ -276,6 +356,10 @@ if [[ "$1" == "package" ]]; then
     if [[ $BUILD_PACKAGE == *"withr"* ]]; then
       R_FLAG="--r"
     fi
+    SPARK_CONNECT_FLAG=""
+    if [[ $BUILD_PACKAGE == *"withconnect"* ]]; then
+      SPARK_CONNECT_FLAG="--connect"
+    fi
 
     echo "Building binary dist $NAME"
     cp -r spark spark-$SPARK_VERSION-bin-$NAME
@@ -295,7 +379,7 @@ if [[ "$1" == "package" ]]; then
 
     echo "Creating distribution"
     ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz \
-      $PIP_FLAG $R_FLAG $FLAGS 2>&1 >  ../binary-release-$NAME.log
+      $PIP_FLAG $R_FLAG $SPARK_CONNECT_FLAG $FLAGS 2>&1 >  ../binary-release-$NAME.log
     cd ..
 
     if [[ -n $R_FLAG ]]; then
@@ -326,6 +410,14 @@ if [[ "$1" == "package" ]]; then
         --output $PYTHON_CONNECT_DIST_NAME.asc \
         --detach-sig $PYTHON_CONNECT_DIST_NAME
       shasum -a 512 $PYTHON_CONNECT_DIST_NAME > $PYTHON_CONNECT_DIST_NAME.sha512
+
+      PYTHON_CLIENT_DIST_NAME=pyspark_client-$PYSPARK_VERSION.tar.gz
+      cp spark-$SPARK_VERSION-bin-$NAME/python/dist/$PYTHON_CLIENT_DIST_NAME .
+
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
+        --output $PYTHON_CLIENT_DIST_NAME.asc \
+        --detach-sig $PYTHON_CLIENT_DIST_NAME
+      shasum -a 512 $PYTHON_CLIENT_DIST_NAME > $PYTHON_CLIENT_DIST_NAME.sha512
     fi
 
     echo "Copying and signing regular binary distribution"
@@ -334,6 +426,16 @@ if [[ "$1" == "package" ]]; then
       --output spark-$SPARK_VERSION-bin-$NAME.tgz.asc \
       --detach-sig spark-$SPARK_VERSION-bin-$NAME.tgz
     shasum -a 512 spark-$SPARK_VERSION-bin-$NAME.tgz > spark-$SPARK_VERSION-bin-$NAME.tgz.sha512
+
+    if [[ -n $SPARK_CONNECT_FLAG ]]; then
+      echo "Copying and signing Spark Connect binary distribution"
+      SPARK_CONNECT_DIST_NAME=spark-$SPARK_VERSION-bin-$NAME-connect.tgz
+      cp spark-$SPARK_VERSION-bin-$NAME/$SPARK_CONNECT_DIST_NAME .
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
+        --output $SPARK_CONNECT_DIST_NAME.asc \
+        --detach-sig $SPARK_CONNECT_DIST_NAME
+      shasum -a 512 $SPARK_CONNECT_DIST_NAME > $SPARK_CONNECT_DIST_NAME.sha512
+    fi
   }
 
   # List of binary packages built. Populates two associative arrays, where the key is the "name" of
@@ -353,7 +455,12 @@ if [[ "$1" == "package" ]]; then
   fi
 
   declare -A BINARY_PKGS_EXTRA
-  BINARY_PKGS_EXTRA["hadoop3"]="withpip,withr"
+  if [[ $SPARK_VERSION > "3.5.99" ]]; then
+    # Since 4.0, we publish a new distribution with Spark Connect enable.
+    BINARY_PKGS_EXTRA["hadoop3"]="withpip,withr,withconnect"
+  else
+    BINARY_PKGS_EXTRA["hadoop3"]="withpip,withr"
+  fi
 
   # This is dead code as Scala 2.12 is no longer supported, but we keep it as a template for
   # adding new Scala version support in the future. This secondary Scala version only has one
@@ -483,7 +590,7 @@ if [[ "$1" == "publish-release" ]]; then
   if ! is_dry_run; then
     echo "Creating Nexus staging repository"
     repo_request="<promoteRequest><data><description>Apache Spark $SPARK_VERSION (commit $git_hash)</description></data></promoteRequest>"
-    out=$(curl -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
+    out=$(curl --retry 10 --retry-all-errors -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
       -H "Content-Type:application/xml" -v \
       $NEXUS_ROOT/profiles/$NEXUS_PROFILE/start)
     staged_repo_id=$(echo $out | sed -e "s/.*\(orgapachespark-[0-9]\{4\}\).*/\1/")
@@ -530,21 +637,132 @@ if [[ "$1" == "publish-release" ]]; then
   if ! is_dry_run; then
     nexus_upload=$NEXUS_ROOT/deployByRepositoryId/$staged_repo_id
     echo "Uploading files to $nexus_upload"
-    for file in $(find . -type f)
-    do
-      # strip leading ./
-      file_short=$(echo $file | sed -e "s/\.\///")
-      dest_url="$nexus_upload/org/apache/spark/$file_short"
-      echo "  Uploading $file_short"
-      curl --retry 3 --retry-all-errors -u $ASF_USERNAME:$ASF_PASSWORD --upload-file $file_short $dest_url
-    done
+
+    # Temp file to track errors
+    error_flag_file=$(mktemp)
+
+    find . -type f | sed -e 's|^\./||' | \
+    xargs -P 4 -n 1 -I {} bash -c '
+      file_short="{}"
+      dest_url="'$NEXUS_ROOT'/deployByRepositoryId/'$staged_repo_id'/org/apache/spark/$file_short"
+      echo "[START] $file_short"
+
+      if curl --retry 10 --retry-all-errors -sS -u "$ASF_USERNAME:$ASF_PASSWORD" \
+          --upload-file "$file_short" "$dest_url"; then
+        echo "[ OK  ] $file_short"
+      else
+        echo "[FAIL ] $file_short"
+        echo "fail" >> '"$error_flag_file"'
+      fi
+    '
+
+    # Check if any failures were recorded
+    if [ -s "$error_flag_file" ]; then
+      echo "One or more uploads failed."
+      rm "$error_flag_file"
+      exit 1
+    else
+      echo "All uploads succeeded."
+      rm "$error_flag_file"
+    fi
 
     echo "Closing nexus staging repository"
     repo_request="<promoteRequest><data><stagedRepositoryId>$staged_repo_id</stagedRepositoryId><description>Apache Spark $SPARK_VERSION (commit $git_hash)</description></data></promoteRequest>"
-    out=$(curl -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
+    out=$(curl --retry 10 --retry-all-errors -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
       -H "Content-Type:application/xml" -v \
       $NEXUS_ROOT/profiles/$NEXUS_PROFILE/finish)
     echo "Closed Nexus staging repository: $staged_repo_id"
+
+    echo "Sending the RC vote email"
+    EMAIL_TO="dev@spark.apache.org"
+    EMAIL_SUBJECT="[VOTE] Release Spark ${SPARK_VERSION} (RC${SPARK_RC_COUNT})"
+
+    # Calculate deadline in Pacific Time (PST/PDT)
+    DEADLINE=$(TZ=America/Los_Angeles date -d "+4 days" "+%a, %d %b %Y %H:%M:%S %Z")
+
+    JIRA_API_URL="https://issues.apache.org/jira/rest/api/2/project/SPARK/versions"
+    JIRA_VERSION_ID=$(curl -s "$JIRA_API_URL" | \
+      # Split JSON objects by replacing '},{' with a newline-separated pattern
+      tr '}' '\n' | \
+      # Find the block containing the exact version name
+      grep -F "\"name\":\"$SPARK_VERSION\"" -A 5 | \
+      # Extract the line with "id"
+      grep '"id"' | \
+      # Extract the numeric id value (assuming "id":"123456")
+      sed -E 's/.*"id":"?([0-9]+)"?.*/\1/' | \
+      head -1)
+
+    # Configure msmtp
+    cat > ~/.msmtprc <<EOF
+defaults
+auth           on
+tls            on
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+logfile        ~/.msmtp.log
+
+account        apache
+host           mail-relay.apache.org
+port           587
+from           $ASF_USERNAME@apache.org
+user           $ASF_USERNAME
+password       $ASF_PASSWORD
+
+account default : apache
+EOF
+
+    chmod 600 ~/.msmtprc
+
+    # Compose and send the email
+    {
+      echo "From: $ASF_USERNAME@apache.org"
+      echo "To: $EMAIL_TO"
+      echo "Subject: $EMAIL_SUBJECT"
+      echo
+      echo "Please vote on releasing the following candidate as Apache Spark version ${SPARK_VERSION}."
+      echo
+      echo "The vote is open until ${DEADLINE} and passes if a majority +1 PMC votes are cast, with"
+      echo "a minimum of 3 +1 votes."
+      echo
+      echo "[ ] +1 Release this package as Apache Spark ${SPARK_VERSION}"
+      echo "[ ] -1 Do not release this package because ..."
+      echo
+      echo "To learn more about Apache Spark, please see https://spark.apache.org/"
+      echo
+      echo "The tag to be voted on is ${GIT_REF} (commit ${git_hash}):"
+      echo "https://github.com/apache/spark/tree/${GIT_REF}"
+      echo
+      echo "The release files, including signatures, digests, etc. can be found at:"
+      echo "https://dist.apache.org/repos/dist/dev/spark/${GIT_REF}-bin/"
+      echo
+      echo "Signatures used for Spark RCs can be found in this file:"
+      echo "https://downloads.apache.org/spark/KEYS"
+      echo
+      echo "The staging repository for this release can be found at:"
+      echo "https://repository.apache.org/content/repositories/${staged_repo_id}/"
+      echo
+      echo "The documentation corresponding to this release can be found at:"
+      echo "https://dist.apache.org/repos/dist/dev/spark/${GIT_REF}-docs/"
+      echo
+      echo "The list of bug fixes going into ${SPARK_VERSION} can be found at the following URL:"
+      echo "https://issues.apache.org/jira/projects/SPARK/versions/${JIRA_VERSION_ID}"
+      echo
+      echo "FAQ"
+      echo
+      echo "========================="
+      echo "How can I help test this release?"
+      echo "========================="
+      echo
+      echo "If you are a Spark user, you can help us test this release by taking"
+      echo "an existing Spark workload and running on this release candidate, then"
+      echo "reporting any regressions."
+      echo
+      echo "If you're working in PySpark you can set up a virtual env and install"
+      echo "the current RC via \"pip install https://dist.apache.org/repos/dist/dev/spark/${GIT_REF}-bin/pyspark-${SPARK_VERSION}.tar.gz\""
+      echo "and see if anything important breaks."
+      echo "In the Java/Scala, you can add the staging repository to your project's resolvers and test"
+      echo "with the RC (make sure to clean up the artifact cache before/after so"
+      echo "you don't end up building with an out of date RC going forward)."
+    } | msmtp -t
   fi
 
   popd

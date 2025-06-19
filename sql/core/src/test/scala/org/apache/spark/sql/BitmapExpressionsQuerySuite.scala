@@ -214,7 +214,7 @@ class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("bitmap_count(a)")
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"bitmap_count(a)\"",
         "paramIndex" -> "first",
@@ -236,7 +236,7 @@ class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("bitmap_or_agg(a)")
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"bitmap_or_agg(a)\"",
         "paramIndex" -> "first",

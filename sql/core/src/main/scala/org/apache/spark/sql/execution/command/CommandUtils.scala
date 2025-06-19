@@ -26,7 +26,6 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{COUNT, DATABASE_NAME, ERROR, TABLE_NAME, TIME}
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.ResolvedIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, CatalogTableType, ExternalCatalogUtils}
@@ -35,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex}
@@ -330,7 +330,7 @@ object CommandUtils extends Logging {
     val attributePercentiles = mutable.HashMap[Attribute, ArrayData]()
     if (attrsToGenHistogram.nonEmpty) {
       val percentiles = (0 to conf.histogramNumBins)
-        .map(i => i.toDouble / conf.histogramNumBins).toArray
+        .map(i => i.toDouble / conf.histogramNumBins).toArray[Any]
 
       val namedExprs = attrsToGenHistogram.map { attr =>
         val aggFunc =
@@ -411,7 +411,7 @@ object CommandUtils extends Logging {
       case DoubleType | FloatType => fixedLenTypeStruct
       case BooleanType => fixedLenTypeStruct
       case _: DatetimeType => fixedLenTypeStruct
-      case BinaryType | StringType =>
+      case BinaryType | _: StringType =>
         // For string and binary type, we don't compute min, max or histogram
         val nullLit = Literal(null, col.dataType)
         struct(

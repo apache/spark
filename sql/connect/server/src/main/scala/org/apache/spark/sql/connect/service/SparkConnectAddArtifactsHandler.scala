@@ -30,8 +30,8 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
 import org.apache.spark.sql.artifact.ArtifactManager
-import org.apache.spark.sql.artifact.util.ArtifactUtils
 import org.apache.spark.sql.connect.utils.ErrorUtils
+import org.apache.spark.sql.util.ArtifactUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -87,8 +87,8 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
     ErrorUtils.handleError(
       "addArtifacts.onNext",
       responseObserver,
-      holder.userId,
-      holder.sessionId,
+      req.getUserContext.getUserId,
+      req.getSessionId,
       None,
       false,
       Some(() => {
