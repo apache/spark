@@ -351,28 +351,62 @@ class ArrowPythonUDFTests(ArrowPythonUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
         super(ArrowPythonUDFTests, cls).setUpClass()
-        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
+        # Run tests with both Arrow enabled and disabled
+        cls._arrow_enabled_values = [True, False]
 
-    @classmethod
-    def tearDownClass(cls):
+    def setUp(self):
+        super().setUp()
+        self._arrow_enabled_iter = iter(self._arrow_enabled_values)
+        self._set_arrow_conf()
+
+    def _set_arrow_conf(self):
         try:
-            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
-        finally:
-            super(ArrowPythonUDFTests, cls).tearDownClass()
+            enabled = next(self._arrow_enabled_iter)
+        except StopIteration:
+            enabled = True  # fallback
+        self.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", str(enabled).lower())
+        self._arrow_enabled = enabled
+
+    def tearDown(self):
+        self.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
+        super().tearDown()
+
+    def run(self, result=None):
+        # Run each test with both Arrow enabled and disabled
+        for enabled in self._arrow_enabled_values:
+            self.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", str(enabled).lower())
+            self._arrow_enabled = enabled
+            super().run(result)
 
 
 class ArrowPythonUDFLegacyTests(ArrowPythonUDFLegacyTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
         super(ArrowPythonUDFLegacyTests, cls).setUpClass()
-        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
+        cls._arrow_enabled_values = [True, False]
 
-    @classmethod
-    def tearDownClass(cls):
+    def setUp(self):
+        super().setUp()
+        self._arrow_enabled_iter = iter(self._arrow_enabled_values)
+        self._set_arrow_conf()
+
+    def _set_arrow_conf(self):
         try:
-            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
-        finally:
-            super(ArrowPythonUDFLegacyTests, cls).tearDownClass()
+            enabled = next(self._arrow_enabled_iter)
+        except StopIteration:
+            enabled = True  # fallback
+        self.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", str(enabled).lower())
+        self._arrow_enabled = enabled
+
+    def tearDown(self):
+        self.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
+        super().tearDown()
+
+    def run(self, result=None):
+        for enabled in self._arrow_enabled_values:
+            self.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", str(enabled).lower())
+            self._arrow_enabled = enabled
+            super().run(result)
 
 
 class ArrowPythonUDFCombinedTests(ArrowPythonUDFCombinedTestsMixin, ReusedSQLTestCase):

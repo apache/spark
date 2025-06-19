@@ -57,7 +57,6 @@ from pyspark.sql.pandas.serializers import (
     CogroupArrowUDFSerializer,
     CogroupPandasUDFSerializer,
     ArrowStreamUDFSerializer,
-    ArrowOptUDFSerializer,
     ArrowStreamGroupUDFSerializer,
     ApplyInPandasWithStateSerializer,
     TransformWithStateInPandasSerializer,
@@ -162,77 +161,47 @@ def wrap_scalar_pandas_udf(f, args_offsets, kwargs_offsets, return_type, runner_
     )
 
 
-def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
-    if use_legacy_pandas_udf_conversion(runner_conf):
-        return wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, runner_conf)
-    else:
-        return wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf)
-
-def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf):
-    import pyarrow as pa
-
+def wrap_scalar_arrow_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
-    zero_arg_exec = False
-    if len(args_kwargs_offsets) == 0:
-        args_kwargs_offsets = (0,)
-        zero_arg_exec = True
 
     arrow_return_type = to_arrow_type(
         return_type, prefers_large_types=use_large_var_types(runner_conf)
     )
 
-    result_func = lambda pdf: pdf  # noqa: E731
-    if type(return_type) == StringType:
-        result_func = lambda r: str(r) if r is not None else r  # noqa: E731
-    elif type(return_type) == BinaryType:
-        result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
-
-    if zero_arg_exec:
-        def get_args(*args: pa.RecordBatch):
-            if len(args) > 0:
-                # args[0] is a pyarrow.RecordBatch
-                batch_size = args[0].num_rows
-            else:
-                batch_size = 1
-            return [() for _ in range(batch_size)]
-    else:
-        def get_args(*args: pa.RecordBatch):
-            arrays = [
-                arg.combine_chunks() if isinstance(arg, pa.ChunkedArray) else arg
-                for arg in args
-            ]
-            return zip(*(arr.to_pylist() if hasattr(arr, 'to_pylist') else arr.tolist() for arr in arrays))
-
-    @fail_on_stopiteration
-    def evaluate(*args: pa.RecordBatch):
-        results = [result_func(func(*row)) for row in get_args(*args)]
-        try:
-            arr = pa.array(results, type=arrow_return_type)
-            print("\n\n **** arr result:", arr)
-        except (pa.lib.ArrowInvalid, pa.lib.ArrowTypeError) as e:
-            raise PySparkRuntimeError(
-                errorClass="UDF_ARROW_TYPE_CONVERSION_ERROR",
+    def verify_result_type(result):
+        if not hasattr(result, "__len__"):
+            pd_type = "pyarrow.Array"
+            raise PySparkTypeError(
+                errorClass="UDF_RETURN_TYPE",
                 messageParameters={
-                    "value": str(results),
-                    "arrow_type": str(arrow_return_type),
-                    "error": str(e),
+                    "expected": pd_type,
+                    "actual": type(result).__name__,
                 },
-            ) from e
-        return (arr, arrow_return_type)
+            )
+        return result
 
-    def make_output(*a):
-        out = evaluate(*a)
-        if isinstance(out, list):
-            return out
-        else:
-            return [out]
+    def verify_result_length(result, length):
+        if len(result) != length:
+            raise PySparkRuntimeError(
+                errorClass="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
+                messageParameters={
+                    "udf_type": "arrow_udf",
+                    "expected": str(length),
+                    "actual": str(len(result)),
+                },
+            )
+        return result
 
     return (
         args_kwargs_offsets,
-        make_output,
+        lambda *a: (
+            verify_result_length(verify_result_type(func(*a)), len(a[0])),
+            arrow_return_type,
+        ),
     )
 
-def wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, runner_conf):
+
+def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     import pandas as pd
 
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
@@ -1128,8 +1097,6 @@ def assign_cols_by_name(runner_conf):
 def use_large_var_types(runner_conf):
     return runner_conf.get("spark.sql.execution.arrow.useLargeVarTypes", "false").lower() == "true"
 
-def use_legacy_pandas_udf_conversion(runner_conf):
-    return runner_conf.get("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "false").lower() == "true"
 
 # Read and process a serialized user-defined table function (UDTF) from a socket.
 # It expects the UDTF to be in a specific format and performs various checks to
@@ -1941,12 +1908,6 @@ def read_udfs(pickleSer, infile, eval_type):
             ser = ArrowStreamUDFSerializer()
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
             ser = ArrowStreamGroupUDFSerializer(_assign_cols_by_name)
-        elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF and not use_legacy_pandas_udf_conversion(runner_conf):
-            input_types = (
-                [f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))]
-                if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
-                else None
-            )
         elif eval_type in (
             PythonEvalType.SQL_SCALAR_ARROW_UDF,
             PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
@@ -2367,10 +2328,6 @@ def read_udfs(pickleSer, infile, eval_type):
                     pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
                 )
             )
-
-        # Ensure 'ser' is set for this branch
-        batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
-        ser = BatchedSerializer(CPickleSerializer(), batch_size)
 
         def mapper(a):
             result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
