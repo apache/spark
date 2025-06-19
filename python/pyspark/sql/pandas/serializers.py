@@ -194,7 +194,7 @@ class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
     def load_stream(self, stream):
         return ArrowStreamSerializer.load_stream(self, stream)
 
-class ArrowBatchUDFSerializerSerializer(ArrowStreamSerializer):
+class ArrowBatchUDFSerializer(ArrowStreamSerializer):
     """
     Serializer used by Python worker to evaluate Arrow UDFs
     """
@@ -206,7 +206,7 @@ class ArrowBatchUDFSerializerSerializer(ArrowStreamSerializer):
         assign_cols_by_name,
         arrow_cast,
     ):
-        super(ArrowBatchUDFSerializerSerializer, self).__init__()
+        super(ArrowBatchUDFSerializer, self).__init__()
         self._timezone = timezone
         self._safecheck = safecheck
         self._assign_cols_by_name = assign_cols_by_name
@@ -268,7 +268,7 @@ class ArrowBatchUDFSerializerSerializer(ArrowStreamSerializer):
         return ArrowStreamSerializer.dump_stream(self, wrap_and_init_stream(), stream)
 
     def __repr__(self):
-        return "ArrowBatchUDFSerializerSerializer"
+        return "ArrowBatchUDFSerializer"
 
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
     """
