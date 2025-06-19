@@ -1985,7 +1985,7 @@ class SparkConnectClient(object):
         profile_id = properties["create_resource_profile_command_result"]
         return profile_id
 
-    def _delete_ml_cache(self, cache_ids: List[str], evict_only: bool = False) -> List[str]:
+    def _delete_ml_cache(self, cache_ids: List[str]) -> List[str]:
         # try best to delete the cache
         try:
             if len(cache_ids) > 0:
@@ -1993,7 +1993,6 @@ class SparkConnectClient(object):
                 command.ml_command.delete.obj_refs.extend(
                     [pb2.ObjectRef(id=cache_id) for cache_id in cache_ids]
                 )
-                command.ml_command.delete.evict_only = evict_only
                 (_, properties, _) = self.execute_command(command)
 
                 assert properties is not None
