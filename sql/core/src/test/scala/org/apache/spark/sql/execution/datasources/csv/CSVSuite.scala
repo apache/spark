@@ -87,6 +87,7 @@ abstract class CSVSuite
   private val malformedRowFile = "test-data/malformedRow.csv"
   private val charFile = "test-data/char.csv"
   private val moreColumnsFile = "test-data/more-columns.csv"
+  private val zstCompressedCarsFile = "test-data/cars.csv.zst"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -3776,6 +3777,17 @@ abstract class CSVSuite
         checkAnswer(df, expectedOutput)
       }
     }
+  }
+
+  test("ZSTD compressed csv test with type inference") {
+    val cars = spark
+      .read
+      .format("csv")
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .load(testFile(zstCompressedCarsFile))
+
+    verifyCars(cars, withHeader = true, checkTypes = true)
   }
 }
 

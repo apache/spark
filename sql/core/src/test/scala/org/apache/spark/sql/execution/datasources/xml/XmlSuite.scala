@@ -195,6 +195,16 @@ class XmlSuite
     assert(results.length === 3)
   }
 
+  test("DSL test zstd compressed file") {
+    val results = spark.read
+      .option("rowTag", "ROW")
+      .xml(getTestResourcePath(resDir + "cars.xml.zst"))
+      .select("year")
+      .collect()
+
+    assert(results.length === 3)
+  }
+
   test("DSL test bad charset name") {
     val exception = intercept[SparkException] {
       spark.read
