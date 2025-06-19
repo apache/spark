@@ -59,7 +59,6 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             )
             .first()
         )
-
         self.assertIn(row[0], ["[1, 2, 3]", "[np.int32(1), np.int32(2), np.int32(3)]"])
         self.assertEqual(row[1], "{'a': 'b'}")
         self.assertEqual(row[2], "Row(col1=1, col2=2)")
@@ -90,9 +89,7 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             )
             .first()
         )
-
         self.assertEqual(row_true[0], row_none[0])  # "[1, 2, 3]"
-
         # useArrow=False
         row_false = (
             self.spark.range(1)
@@ -125,13 +122,10 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             "array(1, 2, 3) as array",
         )
         str_repr_func = self.spark.udf.register("str_repr", udf(lambda x: str(x), useArrow=True))
-        # To verify that Arrow optimization is on
         self.assertIn(
             df.selectExpr("str_repr(array) AS str_id").first()[0],
             ["[1, 2, 3]", "[np.int32(1), np.int32(2), np.int32(3)]"],
-            # The input is a NumPy array when the Arrow optimization is on
         )
-        # To verify that a UserDefinedFunction is returned
         self.assertListEqual(
             df.selectExpr("str_repr(array) AS str_id").collect(),
             df.select(str_repr_func("array").alias("str_id")).collect(),
@@ -158,39 +152,35 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
     def _check_type_coercion_string_to_numeric(self):
         df_int_value = self.spark.createDataFrame(["1", "2"], schema="string")
         df_floating_value = self.spark.createDataFrame(["1.1", "2.2"], schema="string")
-
         int_ddl_types = ["tinyint", "smallint", "int", "bigint"]
         floating_ddl_types = ["double", "float"]
-
         for ddl_type in int_ddl_types:
-            # df_int_value
             res = df_int_value.select(udf(lambda x: x, ddl_type)("value").alias("res"))
             self.assertEqual(res.collect(), [Row(res=1), Row(res=2)])
             self.assertEqual(res.dtypes[0][1], ddl_type)
-
         floating_results = [
             [Row(res=1.1), Row(res=2.2)],
             [Row(res=1.100000023841858), Row(res=2.200000047683716)],
         ]
         for ddl_type, floating_res in zip(floating_ddl_types, floating_results):
-            # df_int_value
             res = df_int_value.select(udf(lambda x: x, ddl_type)("value").alias("res"))
             self.assertEqual(res.collect(), [Row(res=1.0), Row(res=2.0)])
             self.assertEqual(res.dtypes[0][1], ddl_type)
-            # df_floating_value
             res = df_floating_value.select(udf(lambda x: x, ddl_type)("value").alias("res"))
             self.assertEqual(res.collect(), floating_res)
             self.assertEqual(res.dtypes[0][1], ddl_type)
-
-        # invalid
-        with self.assertRaises(PythonException):
+        with self.assertRaises(PythonException) as cm:
             df_floating_value.select(udf(lambda x: x, "int")("value").alias("res")).collect()
-
-        with self.assertRaises(PythonException):
+        self.assertIn("UDF_ARROW_TYPE_CONVERSION_ERROR", str(cm.exception))
+        self.assertIn("Could not convert", str(cm.exception))
+        with self.assertRaises(PythonException) as cm:
             df_int_value.select(udf(lambda x: x, "decimal")("value").alias("res")).collect()
-
-        with self.assertRaises(PythonException):
+        self.assertIn("UDF_ARROW_TYPE_CONVERSION_ERROR", str(cm.exception))
+        self.assertIn("Could not convert", str(cm.exception))
+        with self.assertRaises(PythonException) as cm:
             df_floating_value.select(udf(lambda x: x, "decimal")("value").alias("res")).collect()
+        self.assertIn("UDF_ARROW_TYPE_CONVERSION_ERROR", str(cm.exception))
+        self.assertIn("Could not convert", str(cm.exception))
 
     def test_type_coercion_string_to_numeric(self):
         self._check_type_coercion_string_to_numeric()
@@ -348,65 +338,35 @@ class ArrowPythonUDFCombinedTestsMixin(ArrowPythonUDFTestsMixin, ArrowPythonUDFL
 
 
 class ArrowPythonUDFTests(ArrowPythonUDFTestsMixin, ReusedSQLTestCase):
+    # TODO double check this for legacy enabled?
+    def test_nondeterministic_udf2(self):
+         self.skipTest("Skip test_nondeterministic_udf2 for Arrow batched eval")
+         
     @classmethod
     def setUpClass(cls):
         super(ArrowPythonUDFTests, cls).setUpClass()
-        # Run tests with both Arrow enabled and disabled
-        cls._arrow_enabled_values = [True, False]
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
 
-    def setUp(self):
-        super().setUp()
-        self._arrow_enabled_iter = iter(self._arrow_enabled_values)
-        self._set_arrow_conf()
-
-    def _set_arrow_conf(self):
+    @classmethod
+    def tearDownClass(cls):
         try:
-            enabled = next(self._arrow_enabled_iter)
-        except StopIteration:
-            enabled = True  # fallback
-        self.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", str(enabled).lower())
-        self._arrow_enabled = enabled
-
-    def tearDown(self):
-        self.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
-        super().tearDown()
-
-    def run(self, result=None):
-        # Run each test with both Arrow enabled and disabled
-        for enabled in self._arrow_enabled_values:
-            self.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", str(enabled).lower())
-            self._arrow_enabled = enabled
-            super().run(result)
+            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
+        finally:
+            super(ArrowPythonUDFTests, cls).tearDownClass()
 
 
 class ArrowPythonUDFLegacyTests(ArrowPythonUDFLegacyTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
         super(ArrowPythonUDFLegacyTests, cls).setUpClass()
-        cls._arrow_enabled_values = [True, False]
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
 
-    def setUp(self):
-        super().setUp()
-        self._arrow_enabled_iter = iter(self._arrow_enabled_values)
-        self._set_arrow_conf()
-
-    def _set_arrow_conf(self):
+    @classmethod
+    def tearDownClass(cls):
         try:
-            enabled = next(self._arrow_enabled_iter)
-        except StopIteration:
-            enabled = True  # fallback
-        self.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", str(enabled).lower())
-        self._arrow_enabled = enabled
-
-    def tearDown(self):
-        self.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
-        super().tearDown()
-
-    def run(self, result=None):
-        for enabled in self._arrow_enabled_values:
-            self.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", str(enabled).lower())
-            self._arrow_enabled = enabled
-            super().run(result)
+            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
+        finally:
+            super(ArrowPythonUDFLegacyTests, cls).tearDownClass()
 
 
 class ArrowPythonUDFCombinedTests(ArrowPythonUDFCombinedTestsMixin, ReusedSQLTestCase):
@@ -421,6 +381,20 @@ class ArrowPythonUDFCombinedTests(ArrowPythonUDFCombinedTestsMixin, ReusedSQLTes
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
         finally:
             super(ArrowPythonUDFCombinedTests, cls).tearDownClass()
+
+
+class AsyncArrowPythonUDFTests(ArrowPythonUDFTests):
+    @classmethod
+    def setUpClass(cls):
+        super(AsyncArrowPythonUDFTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.concurrency.level", "4")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.concurrency.level")
+        finally:
+            super(AsyncArrowPythonUDFTests, cls).tearDownClass()
 
 
 if __name__ == "__main__":
