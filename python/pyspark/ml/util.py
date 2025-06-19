@@ -40,7 +40,6 @@ from typing import (
 from contextlib import contextmanager
 
 from pyspark import since
-from pyspark.errors.exceptions.connect import SparkException
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import SparkSession
 from pyspark.sql.utils import is_remote
@@ -319,6 +318,8 @@ def try_remote_call(f: FuncT) -> FuncT:
                 return deserialize(properties)
 
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.errors.exceptions.connect import SparkException
+
             try:
                 return remote_call()
             except SparkException as e:
