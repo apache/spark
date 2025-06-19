@@ -193,7 +193,125 @@ class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
 
     def load_stream(self, stream):
         return ArrowStreamSerializer.load_stream(self, stream)
-    
+
+class ArrowBatchUDFSerializerSerializer(ArrowStreamSerializer):
+    """
+    Serializer used by Python worker to evaluate Arrow UDFs
+    """
+
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        assign_cols_by_name,
+        arrow_cast,
+    ):
+        super(ArrowBatchUDFSerializerSerializer, self).__init__()
+        self._timezone = timezone
+        self._safecheck = safecheck
+        self._assign_cols_by_name = assign_cols_by_name
+        self._arrow_cast = arrow_cast
+
+    def _create_array(self, arr, arrow_type, arrow_cast):
+        import pyarrow as pa
+
+        assert(isinstance(arr, pa.Array), arr)
+        assert(isinstance(arrow_type, pa.DataType), arrow_type)
+
+        # TODO: should we handle timezone here?
+
+        try:
+            return arr
+        except pa.lib.ArrowException:
+            if arrow_cast:
+                return arr.cast(target_type=arrow_type, safe=self._safecheck)
+            else:
+                raise
+
+    def dump_stream(self, iterator, stream):
+        """
+        Override because Arrow UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
+        This should be sent after creating the first record batch so in case of an error, it can
+        be sent back to the JVM before the Arrow stream starts.
+        """
+        import pyarrow as pa
+
+        def wrap_and_init_stream():
+            should_write_start_length = True
+            for packed in iterator:
+                # Flatten tuple of lists to a single list if needed
+                if isinstance(packed, tuple) and all(isinstance(x, list) for x in packed):
+                    packed = [item for sublist in packed for item in sublist]
+                if isinstance(packed, tuple) and len(packed) == 2 and isinstance(packed[1], pa.DataType):
+                    # single array UDF in a projection
+                    arrs = [self._create_array(packed[0], packed[1], self._arrow_cast)]
+                elif isinstance(packed, list):
+                    # multiple array UDFs in a projection
+                    arrs = [self._create_array(t[0], t[1], self._arrow_cast) for t in packed]
+                elif isinstance(packed, tuple) and len(packed) == 3:
+                    # single value UDF with type information
+                    value, arrow_type, spark_type = packed
+                    arr = pa.array(value, type=arrow_type)
+                    arrs = [self._create_array(arr, arrow_type, self._arrow_cast)]
+                else:
+                    arr = pa.array([packed], type=pa.int32())
+                    arrs = [self._create_array(arr, pa.int32(), self._arrow_cast)]
+
+                batch = pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
+
+                # Write the first record batch with initialization.
+                if should_write_start_length:
+                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
+                    should_write_start_length = False
+                yield batch
+
+        return ArrowStreamSerializer.dump_stream(self, wrap_and_init_stream(), stream)
+
+    def __repr__(self):
+        return "ArrowBatchUDFSerializerSerializer"
+
+class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
+    """
+    Serializes pyarrow.RecordBatch data with Arrow streaming format.
+
+    Loads Arrow record batches as ``[[pyarrow.RecordBatch]]`` (one ``[pyarrow.RecordBatch]`` per
+    group) and serializes ``[([pyarrow.RecordBatch], arrow_type)]``.
+
+    Parameters
+    ----------
+    assign_cols_by_name : bool
+        If True, then DataFrames will get columns by name
+    """
+
+    def __init__(self, assign_cols_by_name):
+        super(ArrowStreamGroupUDFSerializer, self).__init__()
+        self._assign_cols_by_name = assign_cols_by_name
+
+    def dump_stream(self, iterator, stream):
+        import pyarrow as pa
+
+        # flatten inner list [([pa.RecordBatch], arrow_type)] into [(pa.RecordBatch, arrow_type)]
+        # so strip off inner iterator induced by ArrowStreamUDFSerializer.load_stream
+        batch_iter = (
+            (batch, arrow_type)
+            for batches, arrow_type in iterator  # tuple constructed in wrap_grouped_map_arrow_udf
+            for batch in batches
+        )
+
+        if self._assign_cols_by_name:
+            batch_iter = (
+                (
+                    pa.RecordBatch.from_arrays(
+                        [batch.column(field.name) for field in arrow_type],
+                        names=[field.name for field in arrow_type],
+                    ),
+                    arrow_type,
+                )
+                for batch, arrow_type in batch_iter
+            )
+
+        super(ArrowStreamGroupUDFSerializer, self).dump_stream(batch_iter, stream)
+
 class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
     """
     Serializer used by Python worker to evaluate Arrow UDFs
@@ -258,125 +376,6 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
 
     def __repr__(self):
         return "ArrowStreamArrowUDFSerializer"
-
-class ArrowStreamArrowUDF2Serializer(ArrowStreamSerializer):
-    """
-    Serializer used by Python worker to evaluate Arrow UDFs
-    """
-
-    def __init__(
-        self,
-        timezone,
-        safecheck,
-        assign_cols_by_name,
-        arrow_cast,
-    ):
-        super(ArrowStreamArrowUDF2Serializer, self).__init__()
-        self._timezone = timezone
-        self._safecheck = safecheck
-        self._assign_cols_by_name = assign_cols_by_name
-        self._arrow_cast = arrow_cast
-
-    def _create_array(self, arr, arrow_type, arrow_cast):
-        import pyarrow as pa
-
-        assert(isinstance(arr, pa.Array), arr)
-        assert(isinstance(arrow_type, pa.DataType), arrow_type)
-
-        # TODO: should we handle timezone here?
-
-        try:
-            return arr
-        except pa.lib.ArrowException:
-            if arrow_cast:
-                return arr.cast(target_type=arrow_type, safe=self._safecheck)
-            else:
-                raise
-
-    def dump_stream(self, iterator, stream):
-        """
-        Override because Arrow UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
-        This should be sent after creating the first record batch so in case of an error, it can
-        be sent back to the JVM before the Arrow stream starts.
-        """
-        import pyarrow as pa
-
-        def wrap_and_init_stream():
-            should_write_start_length = True
-            for packed in iterator:
-                # Flatten tuple of lists to a single list if needed
-                if isinstance(packed, tuple) and all(isinstance(x, list) for x in packed):
-                    packed = [item for sublist in packed for item in sublist]
-                if isinstance(packed, tuple) and len(packed) == 2 and isinstance(packed[1], pa.DataType):
-                    # single array UDF in a projection
-                    arrs = [self._create_array(packed[0], packed[1], self._arrow_cast)]
-                elif isinstance(packed, list):
-                    # multiple array UDFs in a projection
-                    arrs = [self._create_array(t[0], t[1], self._arrow_cast) for t in packed]
-                elif isinstance(packed, tuple) and len(packed) == 3:
-                    # single value UDF with type information
-                    value, arrow_type, spark_type = packed
-                    arr = pa.array(value, type=arrow_type)
-                    arrs = [self._create_array(arr, arrow_type, self._arrow_cast)]
-                else:
-                    arr = pa.array([packed], type=pa.int32())
-                    arrs = [self._create_array(arr, pa.int32(), self._arrow_cast)]
-
-                batch = pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
-
-                # Write the first record batch with initialization.
-                if should_write_start_length:
-                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
-                    should_write_start_length = False
-                yield batch
-
-        return ArrowStreamSerializer.dump_stream(self, wrap_and_init_stream(), stream)
-
-    def __repr__(self):
-        return "ArrowStreamArrowUDF2Serializer"
-
-class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
-    """
-    Serializes pyarrow.RecordBatch data with Arrow streaming format.
-
-    Loads Arrow record batches as ``[[pyarrow.RecordBatch]]`` (one ``[pyarrow.RecordBatch]`` per
-    group) and serializes ``[([pyarrow.RecordBatch], arrow_type)]``.
-
-    Parameters
-    ----------
-    assign_cols_by_name : bool
-        If True, then DataFrames will get columns by name
-    """
-
-    def __init__(self, assign_cols_by_name):
-        super(ArrowStreamGroupUDFSerializer, self).__init__()
-        self._assign_cols_by_name = assign_cols_by_name
-
-    def dump_stream(self, iterator, stream):
-        import pyarrow as pa
-
-        # flatten inner list [([pa.RecordBatch], arrow_type)] into [(pa.RecordBatch, arrow_type)]
-        # so strip off inner iterator induced by ArrowStreamUDFSerializer.load_stream
-        batch_iter = (
-            (batch, arrow_type)
-            for batches, arrow_type in iterator  # tuple constructed in wrap_grouped_map_arrow_udf
-            for batch in batches
-        )
-
-        if self._assign_cols_by_name:
-            batch_iter = (
-                (
-                    pa.RecordBatch.from_arrays(
-                        [batch.column(field.name) for field in arrow_type],
-                        names=[field.name for field in arrow_type],
-                    ),
-                    arrow_type,
-                )
-                for batch, arrow_type in batch_iter
-            )
-
-        super(ArrowStreamGroupUDFSerializer, self).dump_stream(batch_iter, stream)
-
 
 class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     """
