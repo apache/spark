@@ -313,6 +313,7 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
 
         super(ArrowStreamGroupUDFSerializer, self).dump_stream(batch_iter, stream)
 
+
 class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     """
     Serializes pandas.Series as Arrow data with Arrow streaming format.
@@ -501,6 +502,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
 
     def __repr__(self):
         return "ArrowStreamPandasSerializer"
+
 
 class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
     """
@@ -702,6 +704,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
     def __repr__(self):
         return "ArrowStreamPandasUDFSerializer"
 
+
 class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
     """
     Serializer used by Python worker to evaluate Arrow UDFs
@@ -766,6 +769,7 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
 
     def __repr__(self):
         return "ArrowStreamArrowUDFSerializer"
+
 
 class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
     """
