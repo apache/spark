@@ -770,6 +770,7 @@ class ArrowOptUDFSerializer(ArrowStreamSerializer):
     def __repr__(self):
         return "ArrowOptUDFSerializer"
 
+
 class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
     """
     Serializer used by Python worker to evaluate Arrow-optimized Python UDTFs.
