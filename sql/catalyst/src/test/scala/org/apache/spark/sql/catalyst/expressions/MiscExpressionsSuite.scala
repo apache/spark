@@ -141,14 +141,14 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Invalid input
     checkErrorInExpression[SparkRuntimeException](
       ZstdDecompress(Literal("invalid input".getBytes("UTF-8"))),
-      errorClass = "INVALID_PARAMETER_VALUE.ZSTD_DECOMPRESS_INPUT",
+      condition = "INVALID_PARAMETER_VALUE.ZSTD_DECOMPRESS_INPUT",
       parameters = Map("parameter" -> "`input`", "functionName" -> "`zstd_decompress`")
     )
 
     // Invalid input: empty byte array
     checkErrorInExpression[SparkRuntimeException](
       ZstdDecompress(Literal("".getBytes("UTF-8"))),
-      errorClass = "INVALID_PARAMETER_VALUE.ZSTD_DECOMPRESS_INPUT",
+      condition = "INVALID_PARAMETER_VALUE.ZSTD_DECOMPRESS_INPUT",
       parameters = Map("parameter" -> "`input`", "functionName" -> "`zstd_decompress`")
     )
   }
