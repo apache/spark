@@ -598,7 +598,8 @@ case class TryAesDecrypt(
   group = "misc_funcs")
 // scalastyle:on line.size.limit
 case class ZstdCompress(input: Expression, level: Expression, streamingMode: Expression)
-    extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+    extends TernaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   def this(input: Expression, level: Expression) =
     this(input, level, Literal(false))
@@ -668,9 +669,8 @@ case class ZstdCompress(input: Expression, level: Expression, streamingMode: Exp
   group = "misc_funcs")
 // scalastyle:on line.size.limit
 case class ZstdDecompress(input: Expression)
-extends UnaryExpression
-    with ImplicitCastInputTypes
-    with NullIntolerant {
+    extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
@@ -727,7 +727,8 @@ extends UnaryExpression
   group = "misc_funcs")
 // scalastyle:on line.size.limit
 case class TryZstdDecompress(input: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+    extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
