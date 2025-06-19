@@ -1840,6 +1840,7 @@ def read_udfs(pickleSer, infile, eval_type):
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
@@ -1940,14 +1941,14 @@ def read_udfs(pickleSer, infile, eval_type):
             ser = ArrowStreamUDFSerializer()
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
             ser = ArrowStreamGroupUDFSerializer(_assign_cols_by_name)
-        elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF \
-                and not use_legacy_pandas_udf_conversion(runner_conf):
+        elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF and not use_legacy_pandas_udf_conversion(runner_conf):
             input_types = (
                 [f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))]
                 if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
                 else None
             )
         elif eval_type in (
+            PythonEvalType.SQL_SCALAR_ARROW_UDF,
             PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
         ):
             # Arrow cast for type coercion is disabled by default
@@ -2366,6 +2367,10 @@ def read_udfs(pickleSer, infile, eval_type):
                     pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
                 )
             )
+
+        # Ensure 'ser' is set for this branch
+        batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
+        ser = BatchedSerializer(CPickleSerializer(), batch_size)
 
         def mapper(a):
             result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
