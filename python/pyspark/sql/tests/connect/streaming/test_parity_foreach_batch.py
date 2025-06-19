@@ -136,8 +136,6 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
             if q:
                 q.stop()
 
-    def test_streaming_foreach_batch_external_column(self):
-        super().test_streaming_foreach_batch_external_column()
 
 if __name__ == "__main__":
     import unittest
