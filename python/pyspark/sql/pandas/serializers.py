@@ -239,9 +239,10 @@ class ArrowBatchUDFSerializer(ArrowStreamSerializer):
         def wrap_and_init_stream():
             should_write_start_length = True
             for packed in iterator:
-                # Flatten tuple of lists to a single list if needed
+                # Flatten tuple of lists into a single list
                 if isinstance(packed, tuple) and all(isinstance(x, list) for x in packed):
                     packed = [item for sublist in packed for item in sublist]
+
                 if isinstance(packed, tuple) and len(packed) == 2 and isinstance(packed[1], pa.DataType):
                     # single array UDF in a projection
                     arrs = [self._create_array(packed[0], packed[1], self._arrow_cast)]
