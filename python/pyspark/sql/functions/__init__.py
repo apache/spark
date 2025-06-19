@@ -491,8 +491,11 @@ __all__ = [  # noqa: F405
     "spark_partition_id",
     "try_aes_decrypt",
     "try_reflect",
+    "try_zstd_decompress",
     "typeof",
     "user",
+    "zstd_compress",
+    "zstd_decompress",
     # "uuid": Excluded because of the name conflict with builtin uuid module
     "version",
     # UDF, UDTF and UDT
