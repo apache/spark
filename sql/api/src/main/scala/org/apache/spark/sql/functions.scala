@@ -3764,21 +3764,18 @@ object functions {
    * @param input
    *   The binary value to compress
    * @param level
-   * Optional integer argument that represents the compression level. The compression level controls
-   * the trade-off between compression speed and compression ratio. Valid values: between 1 and 22
-   * inclusive, where 1 means fastest but lowest compression ratio, and 22 means slowest but highest
-   * compression ratio. The default level is 3 if not specified
+   *   Optional integer argument that represents the compression level. The compression level
+   *   controls the trade-off between compression speed and compression ratio. Valid values:
+   *   between 1 and 22 inclusive, where 1 means fastest but lowest compression ratio, and 22
+   *   means slowest but highest compression ratio. The default level is 3 if not specified
    * @param streamingMode
-   * Optional boolean argument that represents whether to use streaming mode. If true, the function
-   * will compress the input in streaming mode. The default value is false.
+   *   Optional boolean argument that represents whether to use streaming mode. If true, the
+   *   function will compress the input in streaming mode. The default value is false.
    *
    * @group misc_funcs
    * @since 4.0.0
    */
-  def zstd_compress(
-      input: Column,
-      level: Column,
-      streamingMode: Column): Column =
+  def zstd_compress(input: Column, level: Column, streamingMode: Column): Column =
     Column.fn("zstd_compress", input, level, streamingMode)
 
   /**
@@ -3806,8 +3803,8 @@ object functions {
     Column.fn("zstd_compress", input)
 
   /**
-   * Returns the decompressed value of `expr` using Zstandard.
-   * On decompression failure, it throws an exception.
+   * Returns the decompressed value of `expr` using Zstandard. On decompression failure, it throws
+   * an exception.
    *
    * @param input
    *   The binary value to decompress
@@ -3819,8 +3816,8 @@ object functions {
     Column.fn("zstd_decompress", input)
 
   /**
-   * Returns the decompressed value of `expr` using Zstandard.
-   * On decompression failure, it returns NULL.
+   * Returns the decompressed value of `expr` using Zstandard. On decompression failure, it
+   * returns NULL.
    *
    * @param input
    *   The binary value to decompress
