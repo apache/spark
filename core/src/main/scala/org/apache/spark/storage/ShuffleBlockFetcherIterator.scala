@@ -625,7 +625,6 @@ final class ShuffleBlockFetcherIterator(
         // If we see an exception, stop immediately.
         logError(s"Error occurred while fetching local blocks", e)
         addFailureFetchResult(FailureFetchResult(blockId, mapIndex, blockManagerId, e))
-
         false
     }
   }

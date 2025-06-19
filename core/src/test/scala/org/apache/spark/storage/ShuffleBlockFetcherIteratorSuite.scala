@@ -136,12 +136,12 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     when(mockExternalBlockStoreClient.getHostLocalDirs(any(), any(), any(), any()))
       .thenAnswer { invocation =>
         import scala.jdk.CollectionConverters._
-        if (hostLocalDirs != null) {
-          invocation.getArgument[CompletableFuture[java.util.Map[String, Array[String]]]](3)
-            .complete(hostLocalDirs.asJava)
-        } else {
+        if (hostLocalDirs == null) {
           invocation.getArgument[CompletableFuture[java.util.Map[String, Array[String]]]](3)
             .completeExceptionally(new RuntimeException("force fail"))
+        } else {
+          invocation.getArgument[CompletableFuture[java.util.Map[String, Array[String]]]](3)
+            .complete(hostLocalDirs.asJava)
         }
       }
 
