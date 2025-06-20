@@ -99,6 +99,21 @@ object ExtractValue {
   }
 
   /**
+   * Check that [[attribute]] can be fully extracted using the given [[nestedFields]].
+   */
+  def isExtractable(
+      attribute: Attribute, nestedFields: Seq[String], resolver: Resolver): Boolean = {
+    nestedFields
+      .foldLeft(Some(attribute): Option[Expression]) {
+        case (Some(expression), field) =>
+          ExtractValue.extractValue(expression, Literal(field), resolver)
+        case _ =>
+          None
+      }
+      .isDefined
+  }
+
+  /**
    * Find the ordinal of StructField, report error if no desired field or over one
    * desired fields are found.
    */
