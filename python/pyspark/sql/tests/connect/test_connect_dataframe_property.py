@@ -64,6 +64,15 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
             df_columns.remove(col)
         assert len(df.columns) == 4
 
+        cdf = self.connect.createDataFrame(data, schema)
+        cdf_schema = cdf.schema
+        assert len(cdf._cached_schema_serialized) > 0
+        assert cdf_schema.jsonValue() == cdf._cached_schema.jsonValue()
+        assert len(cdf_schema.fields) == 4
+        cdf_schema.fields.pop(0)
+        assert cdf.schema.jsonValue() == cdf._cached_schema.jsonValue()
+        assert len(cdf.schema.fields) == 4
+
     def test_cached_schema_to(self):
         cdf = self.connect.read.table(self.tbl_name)
         sdf = self.spark.read.table(self.tbl_name)
