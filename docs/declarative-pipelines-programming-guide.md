@@ -15,7 +15,6 @@ SDP is designed for both batch and streaming data processing, supporting common 
 - Data ingestion from cloud storage (Amazon S3, Azure ADLS Gen2, Google Cloud Storage)
 - Data ingestion from message buses (Apache Kafka, Amazon Kinesis, Google Pub/Sub, Azure EventHub)
 - Incremental batch and streaming transformations
-- Real-time stream processing
 
 The key advantage of SDP is its declarative approach - you define what tables should exist and what their contents should be, and SDP handles the orchestration, compute management, and error handling automatically.
 
@@ -315,6 +314,15 @@ CREATE MATERIALIZED VIEW basic_mv
 AS SELECT * FROM samples.nyctaxi.trips;
 ```
 
+### Creating a Temporary View with SQL
+
+The basic syntax for creating a temporary view with SQL is:
+
+```sql
+CREATE TEMPORARY VIEW basic_tv
+AS SELECT * FROM samples.nyctaxi.trips;
+```
+
 ### Creating a Streaming Table with SQL
 
 When creating a streaming table, use the `STREAM` keyword to indicate streaming semantics for the source:
@@ -361,25 +369,13 @@ CREATE STREAMING TABLE customers_us;
 
 -- add the first append flow
 CREATE FLOW append1
-AS INSERT INTO customers_us BY NAME
+AS INSERT INTO customers_us
 SELECT * FROM STREAM(customers_us_west);
 
 -- add the second append flow
 CREATE FLOW append2
-AS INSERT INTO customers_us BY NAME
+AS INSERT INTO customers_us
 SELECT * FROM STREAM(customers_us_east);
-```
-
-### Parameterizing Values in SQL
-
-Use `SET` to specify a configuration value in a query that declares a table or view:
-
-```sql
-SET startDate='2025-01-01';
-
-CREATE MATERIALIZED VIEW filtered
-AS SELECT * FROM src
-WHERE date > ${startDate}
 ```
 
 ## Important Considerations
