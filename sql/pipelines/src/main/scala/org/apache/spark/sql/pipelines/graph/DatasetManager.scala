@@ -178,7 +178,7 @@ object DatasetManager extends Logging {
     }
 
     // Wipe the data if we need to
-    if ((isFullRefresh || !table.isStreamingTableOpt.get) && existingTableOpt.isDefined) {
+    if ((isFullRefresh || !table.isStreamingTable) && existingTableOpt.isDefined) {
       context.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
     }
 
@@ -186,7 +186,7 @@ object DatasetManager extends Logging {
     if (existingTableOpt.isDefined) {
       val existingSchema = existingTableOpt.get.schema()
 
-      val targetSchema = if (table.isStreamingTableOpt.get && !isFullRefresh) {
+      val targetSchema = if (table.isStreamingTable && !isFullRefresh) {
         SchemaMergingUtils.mergeSchemas(existingSchema, outputSchema)
       } else {
         outputSchema

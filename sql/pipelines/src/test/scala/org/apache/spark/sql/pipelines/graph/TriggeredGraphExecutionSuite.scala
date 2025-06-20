@@ -55,8 +55,8 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
     import session.implicits._
 
     val pipelineDef = new TestGraphRegistrationContext(spark) {
-      registerTable("a", query = Option(dfFlowFunc(Seq(1, 2).toDF("x"))))
-      registerTable("b", query = Option(readFlowFunc("a")))
+      registerMaterializedView("a", query = dfFlowFunc(Seq(1, 2).toDF("x")))
+      registerMaterializedView("b", query = readFlowFunc("a"))
     }
     val unresolvedGraph = pipelineDef.toDataflowGraph
     val resolvedGraph = unresolvedGraph.resolve()
@@ -101,8 +101,8 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
     import session.implicits._
 
     val pipelineDef = new TestGraphRegistrationContext(spark) {
-      registerTable("a", query = Option(dfFlowFunc(Seq(1, 2).toDF("x"))))
-      registerTable("b", query = Option(readFlowFunc("a")))
+      registerMaterializedView("a", query = dfFlowFunc(Seq(1, 2).toDF("x")))
+      registerMaterializedView("b", query = readFlowFunc("a"))
       registerView("c", query = readStreamFlowFunc("a"))
       registerTable("d", query = Option(readStreamFlowFunc("c")))
     }
@@ -478,27 +478,27 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
 
     val specifiedSchema = new StructType().add("x", "int", nullable = true)
     val pipelineDef = new TestGraphRegistrationContext(spark) {
-      registerTable(
+      registerMaterializedView(
         "specified_schema",
-        query = Option(dfFlowFunc(Seq(1, 2).toDF("x"))),
+        query = dfFlowFunc(Seq(1, 2).toDF("x")),
         specifiedSchema = Option(specifiedSchema)
       )
 
-      registerTable(
+      registerMaterializedView(
         "specified_schema_stream",
-        query = Option(dfFlowFunc(Seq(1, 2).toDF("x"))),
+        query = dfFlowFunc(Seq(1, 2).toDF("x")),
         specifiedSchema = Option(specifiedSchema)
       )
 
-      registerTable(
+      registerMaterializedView(
         "specified_schema_downstream",
-        query = Option(readStreamFlowFunc("specified_schema")),
+        query = readFlowFunc("specified_schema"),
         specifiedSchema = Option(specifiedSchema)
       )
 
-      registerTable(
+      registerMaterializedView(
         "specified_schema_downbatch",
-        query = Option(readFlowFunc("specified_schema_stream")),
+        query = readFlowFunc("specified_schema_stream"),
         specifiedSchema = Option(specifiedSchema)
       )
     }
@@ -609,20 +609,18 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
     import session.implicits._
 
     val pipelineDef = new TestGraphRegistrationContext(spark) {
-      registerTable("integer_input", query = Option(dfFlowFunc(Seq(1, 2, 3, 4).toDF("value"))))
-      registerTable(
+      registerMaterializedView("integer_input", query = dfFlowFunc(Seq(1, 2, 3, 4).toDF("value")))
+      registerMaterializedView(
         "double",
-        query = Option(sqlFlowFunc(spark, "SELECT value * 2 as value FROM integer_input"))
+        query = sqlFlowFunc(spark, "SELECT value * 2 as value FROM integer_input")
       )
-      registerTable(
+      registerMaterializedView(
         "string_input",
-        query = Option(dfFlowFunc(Seq("a", "b", "c", "d").toDF("value")))
+        query = dfFlowFunc(Seq("a", "b", "c", "d").toDF("value"))
       )
-      registerTable(
+      registerMaterializedView(
         "append_x",
-        query = Option(
-          sqlFlowFunc(spark, "SELECT CONCAT(value, 'x') as value FROM string_input")
-        )
+        query = sqlFlowFunc(spark, "SELECT CONCAT(value, 'x') as value FROM string_input")
       )
     }
 
@@ -666,28 +664,24 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
     import session.implicits._
 
     val pipelineDef = new TestGraphRegistrationContext(spark) {
-      registerTable("integer_input", query = Option(dfFlowFunc(Seq(1, 2, 3, 4).toDF("nums"))))
-      registerTable(
+      registerMaterializedView("integer_input", query = dfFlowFunc(Seq(1, 2, 3, 4).toDF("nums")))
+      registerMaterializedView(
         "double",
-        query = Option(sqlFlowFunc(spark, "SELECT nums * 2 as nums FROM integer_input"))
+        query = sqlFlowFunc(spark, "SELECT nums * 2 as nums FROM integer_input")
       )
-      registerTable(
+      registerMaterializedView(
         "string_input",
-        query = Option(dfFlowFunc(Seq("a", "b", "c", "d").toDF("text")))
+        query = dfFlowFunc(Seq("a", "b", "c", "d").toDF("text"))
       )
-      registerTable(
+      registerMaterializedView(
         "append_x",
-        query = Option(
-          sqlFlowFunc(spark, "SELECT CONCAT(text, 'x') as text FROM string_input")
-        )
+        query = sqlFlowFunc(spark, "SELECT CONCAT(text, 'x') as text FROM string_input")
       )
-      registerTable(
+      registerMaterializedView(
         "merged",
-        query = Option(
-          sqlFlowFunc(
-            spark,
-            "SELECT * FROM double FULL OUTER JOIN append_x ON nums::STRING = text"
-          )
+        query = sqlFlowFunc(
+          spark,
+          "SELECT * FROM double FULL OUTER JOIN append_x ON nums::STRING = text"
         )
       )
     }
@@ -745,34 +739,28 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
     import session.implicits._
 
     val pipelineDef = new TestGraphRegistrationContext(spark) {
-      registerTable(
+      registerMaterializedView(
         "input_table",
-        query = Option(
-          dfFlowFunc(
-            Seq((1, 1), (1, 2), (2, 3), (2, 4)).toDF("x", "y")
-          )
+        query = dfFlowFunc(
+          Seq((1, 1), (1, 2), (2, 3), (2, 4)).toDF("x", "y")
         )
       )
-      registerTable(
+      registerMaterializedView(
         "left_split",
-        query = Option(
-          sqlFlowFunc(
-            spark,
-            "SELECT x FROM input_table WHERE x IS NOT NULL"
-          )
+        query = sqlFlowFunc(
+          spark,
+          "SELECT x FROM input_table WHERE x IS NOT NULL"
         )
       )
-      registerTable(
+      registerMaterializedView(
         "right_split",
-        query = Option(sqlFlowFunc(spark, "SELECT y FROM input_table WHERE y IS NOT NULL"))
+        query = sqlFlowFunc(spark, "SELECT y FROM input_table WHERE y IS NOT NULL")
       )
-      registerTable(
+      registerMaterializedView(
         "merged",
-        query = Option(
-          sqlFlowFunc(
-            spark,
-            "SELECT * FROM left_split FULL OUTER JOIN right_split ON x = y"
-          )
+        query = sqlFlowFunc(
+          spark,
+          "SELECT * FROM left_split FULL OUTER JOIN right_split ON x = y"
         )
       )
     }
@@ -883,7 +871,10 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
         "evens",
         query = sqlFlowFunc(spark, "SELECT * FROM all WHERE value % 2 = 0")
       )
-      registerTable("max_evens", query = Option(sqlFlowFunc(spark, "SELECT MAX(value) FROM evens")))
+      registerMaterializedView(
+        "max_evens",
+        query = sqlFlowFunc(spark, "SELECT MAX(value) FROM evens")
+      )
     }
     val graph1 = pipelineDef.toDataflowGraph
 

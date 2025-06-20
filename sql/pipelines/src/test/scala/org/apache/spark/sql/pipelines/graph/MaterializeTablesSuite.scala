@@ -39,19 +39,15 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
-        registerFlow(
-          "a",
-          "a",
-          query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2"))
-        )
-        registerTable(
+        registerMaterializedView(
           "a",
           specifiedSchema = Option(
             new StructType()
               .add("x", IntegerType, nullable = false, "comment1")
               .add("x2", IntegerType, nullable = true, "comment2")
           ),
-          comment = Option("p-comment")
+          comment = Option("p-comment"),
+          query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2"))
         )
       }.resolveToDataflowGraph()
     )
@@ -71,19 +67,15 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
-        registerFlow(
-          "a",
-          "a",
-          query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2"))
-        )
-        registerTable(
+        registerMaterializedView(
           "a",
           specifiedSchema = Option(
             new StructType()
               .add("x", IntegerType, nullable = false, "comment3")
               .add("x2", IntegerType, nullable = true, "comment4")
           ),
-          comment = Option("p-comment")
+          comment = Option("p-comment"),
+          query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2"))
         )
       }.resolveToDataflowGraph()
     )
@@ -99,19 +91,15 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
-        registerFlow(
-          "a",
-          "a",
-          query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2"))
-        )
-        registerTable(
+        registerMaterializedView(
           "a",
           specifiedSchema = Option(
             new StructType()
               .add("x", IntegerType, nullable = false)
               .add("x2", IntegerType, nullable = true)
           ),
-          comment = Option("p-comment")
+          comment = Option("p-comment"),
+          query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2"))
         )
       }.resolveToDataflowGraph()
     )
@@ -205,9 +193,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
         query = Option(dfFlowFunc(spark.readStream.format("rate").load()))
       )
       // Defines a column called timestamp as `int`.
-      registerTable(
+      registerMaterializedView(
         "b",
-        query = Option(sqlFlowFunc(spark, "SELECT value AS timestamp FROM a"))
+        query = sqlFlowFunc(spark, "SELECT value AS timestamp FROM a")
       )
     }
     materializeGraph(new P1().resolveToDataflowGraph())
@@ -226,9 +214,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
         query = Option(dfFlowFunc(spark.readStream.format("rate").load()))
       )
       // Defines a column called timestamp as `timestamp`.
-      registerTable(
+      registerMaterializedView(
         "b",
-        query = Option(sqlFlowFunc(spark, "SELECT timestamp FROM a"))
+        query = sqlFlowFunc(spark, "SELECT timestamp FROM a")
       )
     }
     materializeGraph(new P2().resolveToDataflowGraph())
@@ -313,14 +301,14 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
-        registerFlow("t4", "t4", query = dfFlowFunc(Seq[Short](1, 2).toDF("x")))
-        registerTable(
+        registerMaterializedView(
           "t4",
           specifiedSchema = Option(
             new StructType()
               .add("x", IntegerType, nullable = true, "this is column x")
               .add("z", LongType, nullable = true, "this is column z")
-          )
+          ),
+          query = dfFlowFunc(Seq[Short](1, 2).toDF("x"))
         )
       }.resolveToDataflowGraph()
     )
@@ -367,10 +355,10 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     // Works fine for a complete table
     materializeGraph(new TestGraphRegistrationContext(spark) {
-      registerTable(
+      registerMaterializedView(
         "t6",
         specifiedSchema = Option(new StructType().add("x", IntegerType)),
-        query = Option(dfFlowFunc(Seq(1, 2).toDF("x")))
+        query = dfFlowFunc(Seq(1, 2).toDF("x"))
       )
     }.resolveToDataflowGraph())
     val table2 = catalog.loadTable(identifier)
@@ -585,7 +573,7 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
       val rawGraph =
         new TestGraphRegistrationContext(spark) {
           registerView("a", query = dfFlowFunc(Seq((1, 2), (2, 3)).toDF("x", "y")))
-          registerTable("b", query = Option(sqlFlowFunc(spark, "SELECT x FROM a")))
+          registerMaterializedView("b", query = sqlFlowFunc(spark, "SELECT x FROM a"))
         }.resolveToDataflowGraph()
 
       val graph = materializeGraph(rawGraph)
@@ -619,7 +607,7 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
       materializeGraph(
         new TestGraphRegistrationContext(spark) {
           registerView("a", query = dfFlowFunc(Seq((1, 2), (2, 3)).toDF("x", "y")))
-          registerTable("b", query = Option(sqlFlowFunc(spark, "SELECT y FROM a")))
+          registerMaterializedView("b", query = sqlFlowFunc(spark, "SELECT y FROM a"))
         }.resolveToDataflowGraph()
       )
       val table2 = catalog.loadTable(identifier)
