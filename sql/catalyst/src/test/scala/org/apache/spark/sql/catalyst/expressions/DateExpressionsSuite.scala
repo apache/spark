@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{DateTimeException, Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId}
+import java.time.{DateTimeException, Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
@@ -2139,5 +2139,21 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           TimestampType, TimestampType)
       }
     }
+  }
+
+  test("make timestamp_ntz from date and time") {
+    def dateLit(d: String): Expression = Literal(LocalDate.parse(d))
+    def timeLit(t: String): Expression = Literal(LocalTime.parse(t))
+    def tsNtz(s: String): Long = localDateTimeToMicros(LocalDateTime.parse(s), UTC)
+
+    checkEvaluation(MakeTimestampNTZ(dateLit("1970-01-01"), timeLit("00:00:00")), 0L)
+    checkEvaluation(MakeTimestampNTZ(dateLit("2025-06-20"), timeLit("15:20:30.123456")),
+      tsNtz("2025-06-20T15:20:30.123456"))
+    checkEvaluation(MakeTimestampNTZ(Literal(null, DateType), timeLit("15:20:30.123456")),
+      null)
+    checkEvaluation(MakeTimestampNTZ(dateLit("2025-06-20"), Literal(null, TimeType())),
+      null)
+    checkEvaluation(MakeTimestampNTZ(Literal(null, DateType), Literal(null, TimeType())),
+      null)
   }
 }
