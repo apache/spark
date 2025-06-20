@@ -496,15 +496,49 @@ case class ApplyColumnarRulesAndInsertTransitions(
   extends Rule[SparkPlan] {
 
   /**
-   * Inserts an transition to columnar formatted data.
+   * Ensures columnar output on the input query plan. Transitions will be inserted
+   * on demand.
    */
-  private def insertRowToColumnar(plan: SparkPlan): SparkPlan = {
+  private def ensureOutputsColumnar(plan: SparkPlan): SparkPlan = {
     if (!plan.supportsColumnar) {
       // The tree feels kind of backwards
       // Columnar Processing will start here, so transition from row to columnar
+      assert(plan.supportsRowBased, s"Plan should support row-based output to " +
+          s"add a to-columnar transition: $plan")
       RowToColumnarExec(insertTransitions(plan, outputsColumnar = false))
     } else if (!plan.isInstanceOf[RowToColumnarTransition]) {
-      plan.withNewChildren(plan.children.map(insertRowToColumnar))
+      plan.withNewChildren(plan.children.map(ensureOutputsColumnar))
+    } else {
+      plan
+    }
+  }
+
+  /**
+   * Ensures row-based output on the input query plan. Transitions will be inserted
+   * on demand.
+   */
+  private def ensureOutputsRowBased(plan: SparkPlan): SparkPlan = {
+    if (!plan.supportsRowBased) {
+      // `outputsColumnar` is false but the plan only outputs columnar format, so add a
+      // to-row transition here.
+      assert(plan.supportsColumnar, s"Plan should support columnar output to " +
+          s"add a to-row transition: $plan")
+      ColumnarToRowExec(ensureOutputsColumnar(plan))
+    } else if (!plan.isInstanceOf[ColumnarToRowTransition]) {
+      val outputsColumnar = plan match {
+        // With planned write, the write command invokes child plan's `executeWrite` which is
+        // neither columnar nor row-based.
+        case write: DataWritingCommandExec
+          if write.cmd.isInstanceOf[V1WriteCommand] && conf.plannedWriteEnabled =>
+          write.child.supportsColumnar
+        // If it is not required to output columnar (`outputsColumnar` is false), and the plan
+        // supports row-based and columnar, we don't need to output row-based data on its children
+        // nodes. So we set `outputsColumnar` to true.
+        case _ if plan.supportsColumnar && plan.supportsRowBased => true
+        case _ =>
+          false
+      }
+      plan.withNewChildren(plan.children.map(insertTransitions(_, outputsColumnar)))
     } else {
       plan
     }
@@ -515,28 +549,9 @@ case class ApplyColumnarRulesAndInsertTransitions(
    */
   private def insertTransitions(plan: SparkPlan, outputsColumnar: Boolean): SparkPlan = {
     if (outputsColumnar) {
-      insertRowToColumnar(plan)
-    } else if (plan.supportsColumnar && !plan.supportsRowBased) {
-      // `outputsColumnar` is false but the plan only outputs columnar format, so add a
-      // to-row transition here.
-      ColumnarToRowExec(insertRowToColumnar(plan))
-    } else if (plan.isInstanceOf[ColumnarToRowTransition]) {
-      plan
+      ensureOutputsColumnar(plan)
     } else {
-      val outputsColumnar = plan match {
-        // With planned write, the write command invokes child plan's `executeWrite` which is
-        // neither columnar nor row-based.
-        case write: DataWritingCommandExec
-            if write.cmd.isInstanceOf[V1WriteCommand] && conf.plannedWriteEnabled =>
-          write.child.supportsColumnar
-        // If it is not required to output columnar (`outputsColumnar` is false), and the plan
-        // supports row-based and columnar, we don't need to output row-based data on its children
-        // nodes. So we set `outputsColumnar` to true.
-        case _ if plan.supportsColumnar && plan.supportsRowBased => true
-        case _ =>
-          false
-      }
-      plan.withNewChildren(plan.children.map(insertTransitions(_, outputsColumnar)))
+      ensureOutputsRowBased(plan)
     }
   }
 
