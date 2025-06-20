@@ -75,9 +75,7 @@ case class MergeRowsExec(
     "numTargetRowsCopied" -> SQLMetrics.createMetric(sparkContext,
       "Number of target rows rewritten unmodified because they did not meet any condition."),
     "numTargetRowsUnused" -> SQLMetrics.createMetric(sparkContext,
-      """Number of target rows processed that did not meet any condition.
-         |These will be dropped for delta-based merge and
-         |rewritten unmodified for group-based merge.""".stripMargin),
+      "Number of target rows dropped because they did not meet any condition."),
     "numSourceRowsUnused" -> SQLMetrics.createMetric(sparkContext,
       "Number of source rows processed that did not meet any condition."))
 
@@ -249,7 +247,6 @@ case class MergeRowsExec(
               // for source + target present rows
               // to retain the row if no other case matches
               longMetric("numTargetRowsCopied") += 1
-              longMetric("numTargetRowsUnused") += 1
               if (sourcePresent) {
                 longMetric("numSourceRowsUnused") += 1
               }

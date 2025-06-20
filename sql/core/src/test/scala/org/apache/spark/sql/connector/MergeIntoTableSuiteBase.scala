@@ -1796,9 +1796,10 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
            |""".stripMargin
       }
 
-      assertMetric(mergeExec, "numTargetRowsCopied", 2, Some(0))
       // group based merge does a outer join on target to retain the original rows
-      assertMetric(mergeExec, "numTargetRowsUnused", 2, Some(1))
+      // so pulls in more rows than delta based merge
+      assertMetric(mergeExec, "numTargetRowsCopied", 2, Some(0))
+      assertMetric(mergeExec, "numTargetRowsUnused", 0, Some(1))
       assertMetric(mergeExec, "numSourceRowsUnused", 1)
 
       checkAnswer(
@@ -1876,7 +1877,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
 
       assertMetric(mergeExec, "numTargetRowsCopied", 3, Some(0))
-      assertMetric(mergeExec, "numTargetRowsUnused", 3)
+      assertMetric(mergeExec, "numTargetRowsUnused", 0, Some(3))
       assertMetric(mergeExec, "numSourceRowsUnused", 1)
 
       checkAnswer(
@@ -1917,7 +1918,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       }
 
       assertMetric(mergeExec, "numTargetRowsCopied", 3, Some(0))
-      assertMetric(mergeExec, "numTargetRowsUnused", 3)
+      assertMetric(mergeExec, "numTargetRowsUnused", 0, Some(3))
       assertMetric(mergeExec, "numSourceRowsUnused", 2)
 
       checkAnswer(
