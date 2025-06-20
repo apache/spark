@@ -529,7 +529,7 @@ case class ApplyColumnarRulesAndInsertTransitions(
         // With planned write, the write command invokes child plan's `executeWrite` which is
         // neither columnar nor row-based.
         case write: DataWritingCommandExec
-          if write.cmd.isInstanceOf[V1WriteCommand] && conf.plannedWriteEnabled =>
+            if write.cmd.isInstanceOf[V1WriteCommand] && conf.plannedWriteEnabled =>
           write.child.supportsColumnar
         // If it is not required to output columnar (`outputsColumnar` is false), and the plan
         // supports row-based and columnar, we don't need to output row-based data on its children
