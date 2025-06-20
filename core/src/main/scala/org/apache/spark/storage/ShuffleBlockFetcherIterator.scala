@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{InputStream, IOException}
 import java.nio.channels.ClosedByInterruptException
-import java.util.concurrent.{BlockingQueue, LinkedBlockingDeque, LinkedBlockingQueue, TimeUnit}
+import java.util.concurrent.{LinkedBlockingDeque, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.CheckedInputStream
 import javax.annotation.concurrent.GuardedBy
@@ -82,7 +82,6 @@ import org.apache.spark.util.{Clock, CompletionIterator, SystemClock, TaskComple
  * @param shuffleMetrics used to report shuffle metrics.
  * @param doBatchFetch fetch continuous shuffle blocks from same executor in batch if the server
  *                     side supports.
- * @param failFastOnFetchFailureEnabled fail fast when fetch failure happens.
  */
 private[spark]
 final class ShuffleBlockFetcherIterator(
@@ -103,7 +102,6 @@ final class ShuffleBlockFetcherIterator(
     checksumAlgorithm: String,
     shuffleMetrics: ShuffleReadMetricsReporter,
     doBatchFetch: Boolean,
-    failFastOnFetchFailureEnabled: Boolean = false,
     clock: Clock = new SystemClock())
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
@@ -134,13 +132,7 @@ final class ShuffleBlockFetcherIterator(
    * A queue to hold our results. This turns the asynchronous model provided by
    * [[org.apache.spark.network.BlockTransferService]] into a synchronous model (iterator).
    */
-  private[this] val results: BlockingQueue[FetchResult] = {
-    if (failFastOnFetchFailureEnabled) {
-      new LinkedBlockingDeque[FetchResult]()
-    } else {
-      new LinkedBlockingQueue[FetchResult]()
-    }
-  }
+  private[this] val results = new LinkedBlockingDeque[FetchResult]()
 
   /**
    * Current [[FetchResult]] being processed. We track this so we can release the current buffer
@@ -1271,12 +1263,7 @@ final class ShuffleBlockFetcherIterator(
   }
 
   private[this] def addFailureFetchResult(result: FailureFetchResult): Unit = {
-    results match {
-      case deque: LinkedBlockingDeque[FetchResult] =>
-        deque.putFirst(result)
-      case _ =>
-        results.put(result)
-    }
+    results.putFirst(result)
   }
 
   /**
