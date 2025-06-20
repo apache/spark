@@ -25,7 +25,7 @@ import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId}
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 
-import com.fasterxml.jackson.core.JsonFactory
+import com.fasterxml.jackson.core.{JsonFactory, StreamReadConstraints}
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
@@ -4095,6 +4095,49 @@ abstract class JsonSuite
       Seq(Row("{true, null}"), Row("""{{"a":[],"b":null}, null}"""), Row("""{{"a":1}, null}"""),
         Row("{null, bad json}"), Row("{[1,2,3], null}"))
     )
+  }
+
+  test("Test JSON data source maxStringLen option") {
+    // Create a JSON string that is way longer than DEFAULT_MAX_STRING_LEN.
+    val longStringSize = StreamReadConstraints.DEFAULT_MAX_STRING_LEN * 10
+    val longString: String = "a" * longStringSize
+    val longStringJson = s"""{ "longString": "$longString" }"""
+
+    withTempDir { tmpDir =>
+      // Create a JSON file with a string that is longer than DEFAULT_MAX_STRING_LEN.
+      val inputPath = new File(tmpDir, "input.json").toPath
+      Files.write(inputPath, longStringJson.getBytes)
+
+      // With JSON_MAX_STRING_LENGTH set to Int.max, should be able to read and write
+      // the long string.
+      withSQLConf(SQLConf.JSON_MAX_STRING_LENGTH.key -> s"${Int.MaxValue}") {
+        val df = spark.read.schema("longString string")
+          .json(inputPath.toString)
+        assert(df.collect() === Row(longString) :: Nil)
+
+         val e = intercept[SparkException] {
+          spark.read.schema("longString string")
+            .option("maxStringLen", 10)
+            .option("mode", "FAILFAST")
+            .json(inputPath.toString)
+            .collect()
+        }
+        assert(e.getCause.getMessage.contains(
+          "Malformed records are detected in record parsing"))
+      }
+
+      withSQLConf(SQLConf.JSON_MAX_STRING_LENGTH.key -> s"${longStringSize - 1}") {
+        val e = intercept[SparkException] {
+          spark.read.schema("longString string")
+            .option("mode", "FAILFAST")
+            .json(inputPath.toString)
+            .collect()
+        }
+        assert(e.getCondition.startsWith("FAILED_READ_FILE"))
+        assert(e.getCause.getMessage.contains(
+          "Malformed records are detected in record parsing"))
+      }
+    }
   }
 }
 
