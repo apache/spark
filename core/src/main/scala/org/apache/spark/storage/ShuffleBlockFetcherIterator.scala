@@ -102,7 +102,7 @@ final class ShuffleBlockFetcherIterator(
     checksumAlgorithm: String,
     shuffleMetrics: ShuffleReadMetricsReporter,
     doBatchFetch: Boolean,
-    clock: Clock = new SystemClock())
+  clock: Clock = new SystemClock())
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
   import ShuffleBlockFetcherIterator._
@@ -358,7 +358,7 @@ final class ShuffleBlockFetcherIterator(
                 results.put(FallbackOnPushMergedFailureResult(
                   block, address, infoMap(blockId)._1, remainingBlocks.isEmpty))
               } else {
-                addFailureFetchResult(FailureFetchResult(block, infoMap(blockId)._2, address, e))
+                results.putFirst(FailureFetchResult(block, infoMap(blockId)._2, address, e))
               }
           }
         }
@@ -594,7 +594,7 @@ final class ShuffleBlockFetcherIterator(
                 log"Error occurred while fetching local blocks, ${MDC(ERROR, ce.getMessage)}")
             case ex: Exception => logError("Error occurred while fetching local blocks", ex)
           }
-          addFailureFetchResult(
+          results.putFirst(
             FailureFetchResult(blockId, mapIndex, blockManager.blockManagerId, e))
           return
       }
@@ -616,7 +616,7 @@ final class ShuffleBlockFetcherIterator(
       case e: Exception =>
         // If we see an exception, stop immediately.
         logError(s"Error occurred while fetching local blocks", e)
-        addFailureFetchResult(FailureFetchResult(blockId, mapIndex, blockManagerId, e))
+        results.putFirst(FailureFetchResult(blockId, mapIndex, blockManagerId, e))
         false
     }
   }
@@ -669,7 +669,7 @@ final class ShuffleBlockFetcherIterator(
             val bmId = bmIds.head
             val blockInfoSeq = hostLocalBlocksWithMissingDirs(bmId)
             val (blockId, _, mapIndex) = blockInfoSeq.head
-            addFailureFetchResult(FailureFetchResult(blockId, mapIndex, bmId, throwable))
+            results.putFirst(FailureFetchResult(blockId, mapIndex, bmId, throwable))
         }
       }
     }
@@ -1260,10 +1260,6 @@ final class ShuffleBlockFetcherIterator(
           SHUFFLE_PUSH_MAP_ID.toLong, SHUFFLE_PUSH_MAP_ID, reduceId, msg, e)
       case _ => throw SparkCoreErrors.failToGetNonShuffleBlockError(blockId, e)
     }
-  }
-
-  private[this] def addFailureFetchResult(result: FailureFetchResult): Unit = {
-    results.putFirst(result)
   }
 
   /**
