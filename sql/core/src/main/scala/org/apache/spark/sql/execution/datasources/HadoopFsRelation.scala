@@ -21,9 +21,9 @@ import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.execution.FileRelation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister}
 import org.apache.spark.sql.types.{StructField, StructType}
-
 
 /**
  * Acts as a container for all of the metadata required to read from a datasource. All discovery,
@@ -55,7 +55,8 @@ case class HadoopFsRelation(
   // schema respects the order of the data schema for the overlapping columns, and it
   // respects the data types of the partition schema.
   val (schema: StructType, overlappedPartCols: Map[String, StructField]) =
-    if (options.contains(DataSourceOptions.SINGLE_VARIANT_COLUMN)) {
+    if (options.contains(DataSourceOptions.SINGLE_VARIANT_COLUMN) &&
+      SQLConf.get.includePartitionColumnsInSingleVariantColumn) {
       (dataSchema, Map.empty)
     } else {
       PartitioningUtils.mergeDataAndPartitionSchema(
@@ -76,7 +77,6 @@ case class HadoopFsRelation(
     val compressionFactor = sparkSession.sessionState.conf.fileCompressionFactor
     (location.sizeInBytes * compressionFactor).toLong
   }
-
 
   override def inputFiles: Array[String] = location.inputFiles
 }

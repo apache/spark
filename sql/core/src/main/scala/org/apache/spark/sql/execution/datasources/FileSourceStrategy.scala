@@ -18,12 +18,14 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
+
 import scala.collection.mutable
+
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{NUM_PRUNED, POST_SCAN_FILTERS, PUSHED_FILTERS, TOTAL}
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.{expressions, DataSourceOptions}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.{DataSourceOptions, expressions}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -164,7 +166,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         filters.filter(_.deterministic), l.output)
 
       val partitionColumns =
-        if (fsRelation.options.contains(DataSourceOptions.SINGLE_VARIANT_COLUMN)) {
+        if (fsRelation.options.contains(DataSourceOptions.SINGLE_VARIANT_COLUMN) &&
+            SQLConf.get.includePartitionColumnsInSingleVariantColumn) {
           Seq.empty
         } else {
           l.resolve(

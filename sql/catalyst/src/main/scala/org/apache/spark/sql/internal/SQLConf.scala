@@ -5949,6 +5949,16 @@ object SQLConf {
       .createWithDefault(2)
   }
 
+  val INCLUDE_PARTITION_COLUMNS_IN_SINGLE_VARIANT_COLUMN = {
+    buildConf("spark.sql.includePartitionColumnsInSingleVariantColumn")
+      .internal()
+      .doc("When set to true, the partition columns will be included in the single variant " +
+        "column when reading from files with partition columns in the file path.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+  }
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -7020,6 +7030,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   }
 
   def maxFlowRetryAttempts: Int = getConf(SQLConf.PIPELINES_MAX_FLOW_RETRY_ATTEMPTS)
+
+  def includePartitionColumnsInSingleVariantColumn: Boolean = getConf(
+    SQLConf.INCLUDE_PARTITION_COLUMNS_IN_SINGLE_VARIANT_COLUMN
+  )
 
   /** ********************** SQLConf functionality methods ************ */
 

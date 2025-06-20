@@ -373,7 +373,7 @@ class UnivocityParser(
       }
 
       // Add the partition columns to the variant object
-      if (partitionSchema.nonEmpty) {
+      if (partitionSchema.nonEmpty && SQLConf.get.includePartitionColumnsInSingleVariantColumn) {
         partitionSchema.zipWithIndex.foreach { case (field, index) =>
           val value = partitionValues.get(index, field.dataType)
           if (value != null) {

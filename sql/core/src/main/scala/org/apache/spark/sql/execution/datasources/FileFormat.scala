@@ -137,7 +137,8 @@ trait FileFormat {
     val dataReader = buildReader(
       sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
 
-    if (options.contains(DataSourceOptions.SINGLE_VARIANT_COLUMN)) {
+    if (options.contains(DataSourceOptions.SINGLE_VARIANT_COLUMN) &&
+      SQLConf.get.includePartitionColumnsInSingleVariantColumn) {
       // In singleVariantColumn mode, the partition values should be pushed down to the parser and
       // included in variant column of the output rows
       return (file: PartitionedFile) => dataReader(file)

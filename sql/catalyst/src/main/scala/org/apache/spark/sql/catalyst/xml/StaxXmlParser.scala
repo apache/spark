@@ -1019,20 +1019,22 @@ object StaxXmlParser {
 
         case _: EndElement =>
           // In the end, add partition values if they exist
-          if (partitionSchema.nonEmpty) {
-            partitionSchema.fields.zipWithIndex.foreach { case (field, i) =>
-              val value = partitionValues.get(i, field.dataType)
-              if (value != null) {
-                val builder = new VariantBuilder(true)
-                appendXMLCharacterToVariant(builder, value.toString, options)
-                val variants = fieldToVariants.getOrElseUpdate(
-                  field.name,
-                  new java.util.ArrayList[Variant]()
-                )
-                // Override the data values if the partition column overlaps with any data column
-                variants.clear()
-                variants.add(builder.result())
-              }
+          if (partitionSchema.nonEmpty &&
+            SQLConf.get.includePartitionColumnsInSingleVariantColumn) {
+            partitionSchema.fields.zipWithIndex.foreach {
+              case (field, i) =>
+                val value = partitionValues.get(i, field.dataType)
+                if (value != null) {
+                  val builder = new VariantBuilder(true)
+                  appendXMLCharacterToVariant(builder, value.toString, options)
+                  val variants = fieldToVariants.getOrElseUpdate(
+                    field.name,
+                    new java.util.ArrayList[Variant]()
+                  )
+                  // Override the data values if the partition column overlaps with any data column
+                  variants.clear()
+                  variants.add(builder.result())
+                }
             }
           }
 
