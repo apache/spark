@@ -816,13 +816,12 @@ private[spark] object Utils
           Some(dir.getAbsolutePath)
         } else {
           logError(log"Failed to create dir in ${MDC(PATH, root)}. Ignoring this directory.")
-
           None
         }
       } catch {
         case e: IOException =>
           logError(
-            log"Failed to create local root dir in ${MDC(PATH, root)}. Ignoring this directory.")
+            log"Failed to create local root dir in ${MDC(PATH, root)}. Ignoring this directory.", e)
           None
       }
     }
