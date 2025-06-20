@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, TimestampFormatter}
@@ -2554,6 +2555,32 @@ case class MakeDate(
     copy(year = newFirst, month = newSecond, day = newThird)
 }
 
+case class MakeTimestampNTZ(left: Expression, right: Expression)
+  extends BinaryExpression
+  with RuntimeReplaceable
+  with ExpectsInputTypes {
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    TimestampNTZType,
+    "makeTimestampNTZ",
+    Seq(left, right),
+    Seq(left.dataType, right.dataType)
+  )
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      DateType,
+      TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*))
+
+  override def prettyName: String = "make_timestamp_ntz"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = {
+    copy(left = newLeft, right = newRight)
+  }
+}
+
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(year, month, day, hour, min, sec) - Create local date-time from year, month, day, hour, min, sec fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.",
@@ -2576,6 +2603,8 @@ case class MakeDate(
        2019-07-01 00:00:00
       > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
        NULL
+      > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887');
+       2014-12-28 06:30:45.887
   """,
   group = "datetime_funcs",
   since = "3.4.0")
@@ -2583,7 +2612,9 @@ case class MakeDate(
 object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
-    if (numArgs == 6) {
+    if (numArgs == 2) {
+      MakeTimestampNTZ(expressions(0), expressions(1))
+    } else if (numArgs == 6) {
       MakeTimestamp(
         expressions(0),
         expressions(1),
@@ -2593,7 +2624,7 @@ object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
         expressions(5),
         dataType = TimestampNTZType)
     } else {
-      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(6), numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2, 6), numArgs)
     }
   }
 }

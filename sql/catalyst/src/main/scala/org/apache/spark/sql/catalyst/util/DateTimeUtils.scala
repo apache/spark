@@ -822,4 +822,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
         throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
     }
   }
+
+  def makeTimestampNTZ(days: Int, nanos: Long): Long = {
+    localDateTimeToMicros(LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos)))
+  }
 }
