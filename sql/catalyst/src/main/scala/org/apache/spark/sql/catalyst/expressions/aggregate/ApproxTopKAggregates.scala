@@ -134,7 +134,7 @@ case class ApproxTopK(
   override def merge(buffer: ItemsSketch[Any], input: ItemsSketch[Any]): ItemsSketch[Any] =
     buffer.merge(input)
 
-  override def eval(buffer: ItemsSketch[Any]): Any = {
+  override def eval(buffer: ItemsSketch[Any]): GenericArrayData = {
     ApproxTopK.genEvalResult(buffer, k, itemDataType)
   }
 
@@ -251,7 +251,10 @@ object ApproxTopK {
     buffer
   }
 
-  private def genEvalResult(itemsSketch: ItemsSketch[Any], k: Int, itemDataType: DataType): Any = {
+  private def genEvalResult(
+      itemsSketch: ItemsSketch[Any],
+      k: Int,
+      itemDataType: DataType): GenericArrayData = {
     val items = itemsSketch.getFrequentItems(ErrorType.NO_FALSE_POSITIVES)
     val resultLength = math.min(items.length, k)
     val result = new Array[AnyRef](resultLength)

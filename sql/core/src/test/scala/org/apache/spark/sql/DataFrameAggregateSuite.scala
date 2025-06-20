@@ -26,6 +26,8 @@ import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.catalyst.expressions.{Abs, BoundReference, Literal}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{ApproxTopK, Sum}
 import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -2796,6 +2798,38 @@ class DataFrameAggregateSuite extends QueryTest
       ),
       queryContext = Array(ExpectedContext("approx_top_k(expr)", 7, 24))
     )
+  }
+
+  test("SPARK-52515null: does not count NULL values") {
+    val res = sql(
+      "SELECT approx_top_k(expr, 2)" +
+        "FROM VALUES 'a', 'a', 'b', 'b', 'b', NULL, NULL, NULL AS tab(expr);")
+    checkAnswer(res, Row(Seq(Row("b", 3), Row("a", 2))))
+  }
+
+  test("SPARK-52515: Accepts literal and foldable inputs") {
+    val agg = new ApproxTopK(
+      first = BoundReference(0, LongType, nullable = true),
+      second = Abs(Literal(10)),
+      third = Abs(Literal(-10))
+    )
+    assert(agg.checkInputDataTypes().isSuccess)
+  }
+
+  test("SPARK-52515: Fail if parameters are not foldable") {
+    val badAgg = new ApproxTopK(
+      first = BoundReference(0, LongType, nullable = true),
+      second = Sum(BoundReference(1, LongType, nullable = true)),
+      third = Literal(10)
+    )
+    assert(badAgg.checkInputDataTypes().isFailure)
+
+    val badAgg2 = new ApproxTopK(
+      first = BoundReference(0, LongType, nullable = true),
+      second = Literal(10),
+      third = Sum(BoundReference(1, LongType, nullable = true))
+    )
+    assert(badAgg2.checkInputDataTypes().isFailure)
   }
 }
 
