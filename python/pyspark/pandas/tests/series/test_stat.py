@@ -443,7 +443,6 @@ class SeriesStatMixin:
         self.assert_eq(krdiv, prdiv)
         self.assert_eq(krmod, prmod)
 
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_mod(self):
         pser = pd.Series([100, None, -300, None, 500, -700], name="Koalas")
         psser = ps.from_pandas(pser)

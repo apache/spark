@@ -229,6 +229,7 @@ class FrameBinaryOpsMixin:
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(psdf["a"] % psdf["b"], pdf["a"] % pdf["b"])
+        self.assert_eq(psdf["a"] % 0, pdf["a"] % 0)
 
         # Negative
         psdf = ps.DataFrame({"a": ["x"], "b": [1]})
