@@ -503,8 +503,6 @@ case class ApplyColumnarRulesAndInsertTransitions(
     if (!plan.supportsColumnar) {
       // The tree feels kind of backwards
       // Columnar Processing will start here, so transition from row to columnar
-      assert(plan.supportsRowBased, s"Plan should support row-based output to " +
-          s"add a to-columnar transition: $plan")
       RowToColumnarExec(insertTransitions(plan, outputsColumnar = false))
     } else if (!plan.isInstanceOf[RowToColumnarTransition]) {
       plan.withNewChildren(plan.children.map(ensureOutputsColumnar))
@@ -518,11 +516,9 @@ case class ApplyColumnarRulesAndInsertTransitions(
    * on demand.
    */
   private def ensureOutputsRowBased(plan: SparkPlan): SparkPlan = {
-    if (!plan.supportsRowBased) {
+    if (plan.supportsColumnar && !plan.supportsRowBased) {
       // `outputsColumnar` is false but the plan only outputs columnar format, so add a
       // to-row transition here.
-      assert(plan.supportsColumnar, s"Plan should support columnar output to " +
-          s"add a to-row transition: $plan")
       ColumnarToRowExec(ensureOutputsColumnar(plan))
     } else if (!plan.isInstanceOf[ColumnarToRowTransition]) {
       val outputsColumnar = plan match {
