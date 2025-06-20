@@ -23,7 +23,7 @@ The key advantage of SDP is its declarative approach - you define what tables sh
 
 ### Flows
 
-A flow is the foundational data processing concept in SDP which supports both streaming and batch semantics. A flow reads data from a source, applies user-defined processing logic, and writes the result into a target. SDP represents datasets as nodes in a dataflow graph, with flows as the edges between these objects.
+A flow is the foundational data processing concept in SDP which supports both streaming and batch semantics. A flow reads data from a source, applies user-defined processing logic, and writes the result into a target dataset.
 
 For example, when you author a query like:
 
@@ -32,19 +32,70 @@ CREATE STREAMING TABLE target_table AS
 SELECT * FROM STREAM source_table
 ```
 
-SDP creates the table named `target_table` and automatically creates a flow that reads new data from `source_table` and writes it to `target_table`.
+SDP creates the table named `target_table` along with a flow that reads new data from `source_table` and writes it to `target_table`.
 
-### Streaming Tables
+### Datasets
 
-A streaming table definition of a table and one or more streaming flows written into it. Streaming tables support incremental processing of data, allowing you to process only new data as it arrives.
+A dataset is queryable object that's the output of one of more flows within a pipeline. Flows in the pipeline can also read from datasets produced in the pipeline.
 
-### Materialized Views
+#### Streaming Tables
 
-A materialized view is a view that is precomputed into a table and can be used as a batch target. A materialized view can have only one flow writing to it. Materialized views are automatically kept up-to-date as their source data changes.
+A streaming table is a definition of a table and one or more streaming flows written into it. Streaming tables support incremental processing of data, allowing you to process only new data as it arrives.
+
+#### Materialized Views
+
+A materialized view is a view that is precomputed into a table. A materialized view always has exactly one batch flow writing to it.
+
+#### Temporary Views
+
+A temporary view is a view that is scoped to an execution of the pipeline. It can be referenced from flows within the pipeline. It's useful for encapsulating transformations and intermediate logical entities that multiple other elements of the pipeline depend on.
 
 ### Pipelines
 
 A pipeline is the primary unit of development and execution in SDP. A pipeline can contain one or more flows, streaming tables, and materialized views. While your pipeline runs, it analyzes the dependencies of your defined objects and orchestrates their order of execution and parallelization automatically.
+
+### Pipeline Projects
+
+A pipeline project is a set of source files that contain code that define the datasets and flows that make up a pipeline. These source files can be `.py` or `.sql` files.
+
+A YAML-formatted pipeline spec file contains the top-level configuration for the pipeline project. It supports the following fields:
+- **definitions** (Required) - Paths where definition files can be found.
+- **database** (Optional) - The default target database for pipeline outputs.
+- **catalog** (Optional) - The default target catalog for pipeline outputs.
+- **configuration** (Optional) - Map of Spark configuration properties.
+
+An example pipeline spec file:
+
+```yaml
+definitions:
+  - glob:
+      include: transformations/**/*.py
+  - glob:
+      include: transformations/**/*.sql
+catalog: my_catalog
+database: my_db
+configuration:
+  spark.sql.shuffle.partitions: "1000"
+```
+
+It's conventional to name pipeline spec files `pipeline.yml`.
+
+The `spark-pipelines init` command, described below, makes it easy to generate a pipeline project with default configuration and directory structure.
+
+
+## The `spark-pipelines` Command Line Interface
+
+The `spark-pipelines` command line interface (CLI) is the primary way to execute a pipeline. It also contains an `init` subcommand for generating a pipeline project.
+
+`spark-pipelines` is built on top of `spark-submit`, meaning that it supports all cluster managers supported by `spark-submit`. It supports all `spark-submit` arguments except for `--class`.
+
+### `spark-pipelines run`
+
+`spark-pipelines run` launches an execution of a pipeline and monitors its progress until it completes. The `--spec` parameter allows selecting the pipeline spec file. If not provided, the CLI will look in the current directory and parent directories for a file named `pipeline.yml` or `pipeline.yaml`.
+
+### `spark-pipelines init`
+
+`spark-pipelines init` generates a simple pipeline project, including a spec file and example definitions.
 
 ## Programming with SDP in Python
 
@@ -63,7 +114,7 @@ from pyspark import pipelines as sdp
 
 @sdp.materialized_view
 def basic_mv():
-    return spark.read.table("samples.nyctaxi.trips")
+    return spark.table("samples.nyctaxi.trips")
 ```
 
 Optionally, you can specify the table name using the `name` argument:
@@ -73,8 +124,22 @@ from pyspark import pipelines as sdp
 
 @sdp.materialized_view(name="trips_mv")
 def basic_mv():
-    return spark.read.table("samples.nyctaxi.trips")
+    return spark.table("samples.nyctaxi.trips")
 ```
+
+### Creating a Temporary View with Python
+
+The `@sdp.temporary_view` decorator tells SDP to create a temporary view based on the results returned by a function that performs a batch read:
+
+```python
+from pyspark import pipelines as sdp
+
+@sdp.temporary_view
+def basic_tv():
+    return spark.table("samples.nyctaxi.trips")
+```
+
+This temporary view can be read by other queries within the pipeline, but can't be read outside the scope of the pipeline.
 
 ### Creating a Streaming Table with Python
 
@@ -88,7 +153,7 @@ def basic_st():
     return spark.readStream.table("samples.nyctaxi.trips")
 ```
 
-### Loading Data from Object Storage
+### Loading Data from a Streaming Source
 
 SDP supports loading data from all formats supported by Spark. For example, you can create a streaming table whose query reads from a Kafka topic:
 
@@ -98,7 +163,7 @@ from pyspark import pipelines as sdp
 @sdp.table
 def ingestion_st():
     return (
-        spark.format("kafka")
+        spark.readStream.format("kafka")
         .option("kafka.bootstrap.servers", "localhost:9092")
         .option("subscribe", "orders")
         .load()
@@ -117,7 +182,7 @@ def batch_mv():
 
 ### Querying Tables Defined in Your Pipeline
 
-You can reference other tables defined in your pipeline:
+You can reference other tables defined in your pipeline in the same way you'd reference tables defined outside your pipeline:
 
 ```python
 from pyspark import pipelines as sdp
@@ -126,7 +191,7 @@ from pyspark.sql.functions import col
 @sdp.table
 def orders():
     return (
-        spark.format("kafka")
+        spark.readStream.format("kafka")
         .option("kafka.bootstrap.servers", "localhost:9092")
         .option("subscribe", "orders")
         .load()
@@ -138,8 +203,8 @@ def customers():
 
 @sdp.materialized_view
 def customer_orders():
-    return (spark.read.table("orders")
-        .join(spark.read.table("customers"), "customer_id")
+    return (spark.table("orders")
+        .join(spark.table("customers"), "customer_id")
         .select("customer_id",
             "order_number",
             "state",
@@ -149,7 +214,7 @@ def customer_orders():
 
 @sdp.materialized_view
 def daily_orders_by_state():
-    return (spark.read.table("customer_orders")
+    return (spark.table("customer_orders")
         .groupBy("state", "order_date")
         .count().withColumnRenamed("count", "order_count")
     )
@@ -165,8 +230,8 @@ from pyspark.sql.functions import collect_list, col
 
 @sdp.temporary_view()
 def customer_orders():
-    orders = spark.read.table("samples.tpch.orders")
-    customer = spark.read.table("samples.tpch.customer")
+    orders = spark.table("samples.tpch.orders")
+    customer = spark.table("samples.tpch.customer")
 
     return (orders.join(customer, orders.o_custkey == customer.c_custkey)
         .select(
@@ -182,8 +247,8 @@ def customer_orders():
 
 @sdp.temporary_view()
 def nation_region():
-    nation = spark.read.table("samples.tpch.nation")
-    region = spark.read.table("samples.tpch.region")
+    nation = spark.table("samples.tpch.nation")
+    region = spark.table("samples.tpch.region")
 
     return (nation.join(region, nation.n_regionkey == region.r_regionkey)
         .select(
@@ -194,14 +259,14 @@ def nation_region():
     )
 
 # Extract region names from region table
-region_list = spark.read.table("samples.tpch.region").select(collect_list("r_name")).collect()[0][0]
+region_list = spark.table("samples.tpch.region").select(collect_list("r_name")).collect()[0][0]
 
 # Iterate through region names to create new region-specific materialized views
 for region in region_list:
     @sdp.table(name=f"{region.lower().replace(' ', '_')}_customer_orders")
     def regional_customer_orders(region_filter=region):
-        customer_orders = spark.read.table("customer_orders")
-        nation_region = spark.read.table("nation_region")
+        customer_orders = spark.table("customer_orders")
+        nation_region = spark.table("nation_region")
 
         return (customer_orders.join(nation_region, customer_orders.nationkey == nation_region.nationkey)
             .select(
