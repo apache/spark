@@ -16,7 +16,7 @@
 #
 
 import numbers
-from typing import Any, Union
+from typing import Any, Union, Callable
 
 import numpy as np
 import pandas as pd
@@ -273,11 +273,13 @@ class IntegralOps(NumericOps):
             raise TypeError("Floor division can not be applied to given types.")
         spark_session = left._internal.spark_frame.sparkSession
         use_try_divide = is_ansi_mode_enabled(spark_session)
-        safe_div: Callable[[PySparkColumn, PySparkColumn], PySparkColumn]
-        if use_try_divide:
-            safe_div = F.try_divide
-        else:
-            safe_div = lambda x, y: x.__div__(y)
+
+        def fallback_div(x: PySparkColumn, y: PySparkColumn) -> PySparkColumn:
+            return x.__div__(y)
+
+        safe_div: Callable[[PySparkColumn, PySparkColumn], PySparkColumn] = (
+            F.try_divide if use_try_divide else fallback_div
+        )
 
         def floordiv(left: PySparkColumn, right: Any) -> PySparkColumn:
             return F.when(F.lit(right is np.nan), np.nan).otherwise(
@@ -378,7 +380,13 @@ class FractionalOps(NumericOps):
             raise TypeError("Floor division can not be applied to given types.")
         spark_session = left._internal.spark_frame.sparkSession
         use_try_divide = is_ansi_mode_enabled(spark_session)
-        safe_div = F.try_divide if use_try_divide else lambda x, y: x.__div__(y)  # type: ignore
+
+        def fallback_div(x: PySparkColumn, y: PySparkColumn) -> PySparkColumn:
+            return x.__div__(y)
+
+        safe_div: Callable[[PySparkColumn, PySparkColumn], PySparkColumn] = (
+            F.try_divide if use_try_divide else fallback_div
+        )
 
         def floordiv(left: PySparkColumn, right: Any) -> PySparkColumn:
             return F.when(F.lit(right is np.nan), np.nan).otherwise(
