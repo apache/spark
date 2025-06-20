@@ -3668,6 +3668,42 @@ abstract class CSVSuite
     }
   }
 
+  test("CSV with partition columns and singleVariantColumn") {
+    // By default, the partition columns are not included in the single variant column.
+    withTempDir { dir =>
+      val path = s"${dir.getCanonicalPath}/year=2021/month=01"
+      val partitionDir = new java.io.File(path)
+      partitionDir.mkdirs()
+      val data =
+        """field 1,field2
+          |100,1.1
+          |""".stripMargin
+      Files.write(
+        new java.io.File(s"${path}/data.csv").toPath, data.getBytes(StandardCharsets.UTF_8)
+      )
+
+      val options = Map("header" -> "true", "singleVariantColumn" -> "v")
+
+      withSQLConf("spark.sql.includePartitionColumnsInSingleVariantColumn" -> "false") {
+        val df1 = spark.read.options(options).csv(dir.getCanonicalPath)
+        assert(df1.schema.size == 3)
+        checkAnswer(
+          df1.selectExpr("cast(v as string)", "month", "year"),
+          Seq(Row("""{"field 1":100,"field2":1.1}""", 1, 2021))
+        )
+      }
+
+      withSQLConf("spark.sql.includePartitionColumnsInSingleVariantColumn" -> "true") {
+        val df2 = spark.read.options(options).csv(dir.getCanonicalPath)
+        assert(df2.schema.size == 1)
+        checkAnswer(
+          df2.selectExpr("cast(v as string)"),
+          Seq(Row("""{"field 1":100,"field2":1.1,"month":1,"year":2021}"""))
+        )
+      }
+    }
+  }
+
   test("write variant with csv is disallowed") {
     checkError(
       exception = intercept[AnalysisException] {

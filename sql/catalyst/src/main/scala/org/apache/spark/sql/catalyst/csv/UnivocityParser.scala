@@ -380,7 +380,7 @@ class UnivocityParser(
             val id = builder.addKey(field.name)
             fields.add(new VariantBuilder.FieldEntry(field.name, id, builder.getWritePos - start))
             field.dataType match {
-              case LongType => builder.appendLong(value.toString.toLong)
+              case IntegerType | LongType => builder.appendLong(value.toString.toLong)
               case _: DecimalType => builder.appendDecimal(
                 decimalParser(value.toString)
               )
