@@ -6728,6 +6728,13 @@
     ],
     "sqlState" : "22023"
   },
+  "VARIANT_DATA_SCHEMA_CONFLICT_WITH_PARTITION_SCHEMA" : {
+    "message" : [
+      "The data schema <dataSchema> conflicts with the partition schema <partitionSchema> in the variant column.",
+      "Please enable \"spark.sql.variant.allowDuplicateKeys\" to resolve the conflicts."
+    ],
+    "sqlState" : "0A000"
+  },
   "VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create view <relationName> because it already exists.",

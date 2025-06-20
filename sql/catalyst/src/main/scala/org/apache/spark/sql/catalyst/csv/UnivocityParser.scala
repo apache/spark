@@ -362,7 +362,14 @@ class UnivocityParser(
         val extra = numFields - singleVariantFieldConverters.length
         singleVariantFieldConverters.appendAll(Array.fill(extra)(new VariantValueConverter))
       }
-      val builder = new VariantBuilder(false)
+      if (partitionSchema.exists(f1 => dataSchema.exists(f2 => f1.name == f2.name))) {
+        if (!SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)) {
+          throw QueryExecutionErrors.variantDataSchemaConflictWithPartitionSchema(
+            dataSchema, partitionSchema
+          )
+        }
+      }
+      val builder = new VariantBuilder(true)
       val start = builder.getWritePos
       val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](numFields)
       for (i <- 0 until numFields) {

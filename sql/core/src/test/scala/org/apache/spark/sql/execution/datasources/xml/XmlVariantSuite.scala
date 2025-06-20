@@ -938,7 +938,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
   // ====== SingleVariantColumn with partition schema =========
   // ==========================================================
 
-  test("File partition columns should be handled correctly in singleVariantColumn mode") {
+  test("XML with hive-style partition columns in singleVariantColumn mode") {
     withTempDir { dir =>
       // Create partitioned directory structure and copy file to each partition
       val path = s"${dir.getCanonicalPath}/year=2021/month=01"

@@ -3668,7 +3668,7 @@ abstract class CSVSuite
     }
   }
 
-  test("CSV with partition columns and singleVariantColumn") {
+  test("CSV with hive-style partition columns and singleVariantColumn") {
     // By default, the partition columns are not included in the single variant column.
     withTempDir { dir =>
       val path = s"${dir.getCanonicalPath}/year=2021/month=01"

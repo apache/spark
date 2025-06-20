@@ -132,30 +132,7 @@ class JacksonParser(
       parser.nextToken()
     }
     try {
-      val builder = VariantBuilder.parseJsonAndReturnBuilder(parser, variantAllowDuplicateKeys)
-      // Handle partition schema
-      if (partitionSchema.nonEmpty) {
-        partitionSchema.fields.zipWithIndex.foreach { case (field, i) =>
-          val value = partitionValues.get(i, field.dataType)
-          if (value != null) {
-            builder.addKey(field.name)
-            field.dataType match {
-              case LongType => builder.appendLong(value.toString.toLong)
-              case _: DecimalType => builder.appendDecimal(
-                decimalParser(value.toString)
-              )
-              case DateType => builder.appendDate(dateFormatter.parse(value.toString))
-              case TimestampNTZType =>
-                builder.appendTimestampNtz(timestampNTZFormatter.parse(value.toString))
-              case TimestampType =>
-                builder.appendTimestamp(timestampFormatter.parse(value.toString))
-              case BooleanType => builder.appendBoolean(value.toString.toBoolean)
-              case StringType => builder.appendString(value.toString)
-            }
-          }
-        }
-      }
-      val v = builder.result()
+      val v = VariantBuilder.parseJson(parser, variantAllowDuplicateKeys)
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
       case _: VariantSizeLimitException =>

@@ -1031,7 +1031,8 @@ object StaxXmlParser {
                     field.name,
                     new java.util.ArrayList[Variant]()
                   )
-                  // Override the data values if the partition column overlaps with any data column
+                  // If the partition schema overlaps with the data schema, we **OVERRIDE** the
+                  // data with the partition values.
                   variants.clear()
                   variants.add(builder.result())
                 }

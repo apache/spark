@@ -4096,6 +4096,38 @@ abstract class JsonSuite
         Row("{null, bad json}"), Row("{[1,2,3], null}"))
     )
   }
+
+  test("JSON with hive-style partition columns in singleVariantColumn mode") {
+    withTempDir { dir =>
+      val path = s"${dir.getCanonicalPath}/year=2021/month=01"
+      val partitionDir = new java.io.File(path)
+      partitionDir.mkdirs()
+      val data = s"""{"field1":100,"field2":1.1}"""
+      Files.write(
+        new java.io.File(s"${path}/data.json").toPath, data.getBytes(StandardCharsets.UTF_8)
+      )
+
+      val options = Map("header" -> "true", "singleVariantColumn" -> "var")
+
+      withSQLConf("spark.sql.includePartitionColumnsInSingleVariantColumn" -> "false") {
+        val df1 = spark.read.options(options).json(dir.getCanonicalPath)
+        assert(df1.schema.size == 3)
+        checkAnswer(
+          df1.selectExpr("to_json(var)", "month", "year"),
+          Seq(Row("""{"field1":100,"field2":1.1}""", 1, 2021))
+        )
+      }
+
+      withSQLConf("spark.sql.includePartitionColumnsInSingleVariantColumn" -> "true") {
+        val df2 = spark.read.options(options).json(dir.getCanonicalPath)
+        assert(df2.schema.size == 1)
+        checkAnswer(
+          df2.selectExpr("to_json(var)"),
+          Seq(Row("""{"field1":100,"field2":1.1,"year":2021,"month":1}"""))
+        )
+      }
+    }
+  }
 }
 
 class JsonV1Suite extends JsonSuite {
