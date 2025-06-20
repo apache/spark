@@ -2800,7 +2800,7 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
-  test("SPARK-52515null: does not count NULL values") {
+  test("SPARK-52515: does not count NULL values") {
     val res = sql(
       "SELECT approx_top_k(expr, 2)" +
         "FROM VALUES 'a', 'a', 'b', 'b', 'b', NULL, NULL, NULL AS tab(expr);")
