@@ -128,7 +128,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
    * @return
    *   the key
    */
-  def register(obj: Object): String = {
+  def register(obj: Object): String = this.synchronized {
     val objectId = UUID.randomUUID().toString
 
     if (obj.isInstanceOf[Summary]) {
@@ -180,7 +180,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
    * @return
    *   the cached object
    */
-  def get(refId: String): Object = {
+   def get(refId: String): Object = this.synchronized {
     if (refId == helperID) {
       helper
     } else {
@@ -229,7 +229,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
    * @param refId
    *   the key used to look up the corresponding object
    */
-  def remove(refId: String, evictOnly: Boolean = false): Boolean = {
+  def remove(refId: String, evictOnly: Boolean = false): Boolean = this.synchronized {
     val modelIsRemoved = _removeModel(refId, evictOnly)
 
     modelIsRemoved
@@ -238,7 +238,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   /**
    * Clear all the caches
    */
-  def clear(): Int = {
+  def clear(): Int = this.synchronized {
     val size = cachedModel.size()
     cachedModel.clear()
     if (getMemoryControlEnabled) {
@@ -247,7 +247,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     size
   }
 
-  def getInfo(): Array[String] = {
+  def getInfo(): Array[String] = this.synchronized {
     val info = mutable.ArrayBuilder.make[String]
     cachedModel.forEach { case (key, value) =>
       info += s"id: $key, obj: ${value.obj.getClass}, size: ${value.sizeBytes}"
