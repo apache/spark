@@ -412,25 +412,24 @@ private[connect] object MLHandler extends Logging {
 
   private def createModelSummary(
       sessionHolder: SessionHolder,
-      createSummaryCmd: proto.MlCommand.CreateSummary
-  ): proto.MlCommandResult =
+      createSummaryCmd: proto.MlCommand.CreateSummary): proto.MlCommandResult =
     sessionHolder.mlCache.synchronized {
-    val refId = createSummaryCmd.getModelRef.getId
-    val model = sessionHolder.mlCache.get(refId).asInstanceOf[HasTrainingSummary[_]]
-    val isCreated = if (!model.hasSummary) {
-      val dataset = MLUtils.parseRelationProto(createSummaryCmd.getDataset, sessionHolder)
-      val modelPath = sessionHolder.mlCache.getModelOffloadingPath(refId)
-      val summaryPath = modelPath.resolve("summary").toString
-      model.loadSummary(summaryPath, dataset)
-      true
-    } else {
-      false
+      val refId = createSummaryCmd.getModelRef.getId
+      val model = sessionHolder.mlCache.get(refId).asInstanceOf[HasTrainingSummary[_]]
+      val isCreated = if (!model.hasSummary) {
+        val dataset = MLUtils.parseRelationProto(createSummaryCmd.getDataset, sessionHolder)
+        val modelPath = sessionHolder.mlCache.getModelOffloadingPath(refId)
+        val summaryPath = modelPath.resolve("summary").toString
+        model.loadSummary(summaryPath, dataset)
+        true
+      } else {
+        false
+      }
+      proto.MlCommandResult
+        .newBuilder()
+        .setParam(LiteralValueProtoConverter.toLiteralProto(isCreated))
+        .build()
     }
-    proto.MlCommandResult
-      .newBuilder()
-      .setParam(LiteralValueProtoConverter.toLiteralProto(isCreated))
-      .build()
-  }
 
   def transformMLRelation(relation: proto.MlRelation, sessionHolder: SessionHolder): DataFrame = {
     relation.getMlTypeCase match {

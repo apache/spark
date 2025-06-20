@@ -180,7 +180,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
    * @return
    *   the cached object
    */
-   def get(refId: String): Object = this.synchronized {
+  def get(refId: String): Object = this.synchronized {
     if (refId == helperID) {
       helper
     } else {
