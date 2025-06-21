@@ -1481,6 +1481,8 @@ class SessionCatalog(
         // For a permanent function, because we loaded it to the FunctionRegistry
         // when it's first used, we also need to drop it from the FunctionRegistry.
         functionRegistry.dropFunction(qualifiedIdent)
+      } else if (tableFunctionRegistry.functionExists(qualifiedIdent)) {
+        tableFunctionRegistry.dropFunction(qualifiedIdent)
       }
       externalCatalog.dropFunction(db, funcName)
     } else if (!ignoreIfNotExists) {
