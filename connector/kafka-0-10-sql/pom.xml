@@ -79,6 +79,16 @@
       <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
     </dependency>
     <dependency>
+      <groupId>com.sparkconnector</groupId>
+      <artifactId>SparkConnectorForEventHub</artifactId>
+      <version>1.0.0</version>
+    </dependency>
+    <dependency>
+      <groupId>trident</groupId>
+      <artifactId>trident-token-library</artifactId>
+      <version>1</version> <!-- or latest stable -->
+    </dependency>
+    <dependency>
       <groupId>org.apache.kafka</groupId>
       <artifactId>kafka-clients</artifactId>
       <version>${kafka.version}</version>
