@@ -206,9 +206,10 @@ case class AggregateInPandasExec(
       case Some(sessionExpression) =>
         val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
         val spillThreshold = conf.windowExecBufferSpillThreshold
+        val spillSizeThreshold = conf.windowExecBufferSpillSizeThreshold
 
         new UpdatingSessionsIterator(iter, groupingWithoutSessionExpressions, sessionExpression,
-          child.output, inMemoryThreshold, spillThreshold)
+          child.output, inMemoryThreshold, spillThreshold, spillSizeThreshold)
 
       case None => iter
     }
