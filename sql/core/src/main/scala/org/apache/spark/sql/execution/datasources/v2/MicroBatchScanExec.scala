@@ -41,7 +41,7 @@ case class MicroBatchScanExec(
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
-    case other: MicroBatchScanExec => this.stream == other.stream
+    case other: MicroBatchScanExec => this.getClass == other.getClass && this.stream == other.stream
     case _ => false
   }
 
