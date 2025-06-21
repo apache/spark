@@ -36,7 +36,6 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 private[spark] class SparkAsyncProfiler(conf: SparkConf, executorId: String) extends Logging {
 
   private var running = false
-  private val enableProfiler = conf.get(PROFILER_EXECUTOR_ENABLED)
   private val profilerOptions = conf.get(PROFILER_ASYNC_PROFILER_OPTIONS)
   private val profilerDfsDirOpt = conf.get(PROFILER_DFS_DIR)
   private val profilerLocalDir = conf.get(PROFILER_LOCAL_DIR)
@@ -67,9 +66,7 @@ private[spark] class SparkAsyncProfiler(conf: SparkConf, executorId: String) ext
   @volatile private var writing: Boolean = false
 
   val profiler: Option[AsyncProfiler] = {
-    Option(
-      if (enableProfiler && AsyncProfilerLoader.isSupported) AsyncProfilerLoader.load() else null
-    )
+    Option(if (AsyncProfilerLoader.isSupported) AsyncProfilerLoader.load() else null)
   }
 
   def start(): Unit = {
