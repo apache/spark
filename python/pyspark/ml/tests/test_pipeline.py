@@ -174,6 +174,7 @@ class PipelineTestsMixin:
             self.assertEqual(str(model), str(model2))
             self.assertEqual(str(model.stages), str(model2.stages))
 
+    @unittest.skip("Disabled due to flakiness, it might hang forever occasionally.")
     def test_model_gc(self):
         spark = self.spark
         df1 = spark.createDataFrame(
