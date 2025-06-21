@@ -4218,13 +4218,14 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
   private def updateOuterReferenceInSubquery(
       plan: LogicalPlan,
       refExprs: Seq[Expression]): LogicalPlan = {
-    plan resolveExpressions { case e =>
-      val outerAlias =
-        refExprs.find(stripAlias(_).semanticEquals(stripOuterReference(e)))
-      outerAlias match {
-        case Some(a: Alias) => OuterReference(a.toAttribute)
-        case _ => e
-      }
+    plan resolveExpressions {
+      case e if e.containsPattern(OUTER_REFERENCE) =>
+        val outerAlias =
+          refExprs.find(stripAlias(_).semanticEquals(stripOuterReference(e)))
+        outerAlias match {
+          case Some(a: Alias) => OuterReference(a.toAttribute)
+          case _ => e
+        }
     }
   }
 
