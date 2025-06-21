@@ -114,7 +114,11 @@ class JacksonParser(
         Some(InternalRow(parseVariant(parser)))
       }
       case _: StructType if options.singleVariantColumn.isDefined => (parser: JsonParser) => {
-        Some(InternalRow(parseVariant(parser)))
+        if (partitionSchema.nonEmpty && SQLConf.get.includePartitionColumnsInSingleVariantColumn) {
+          Some(InternalRow(parseVariantWithPartitionValues(parser)))
+        } else {
+          Some(InternalRow(parseVariant(parser)))
+        }
       }
       case st: StructType => makeStructRootConverter(st)
       case mt: MapType => makeMapRootConverter(mt)
@@ -138,6 +142,26 @@ class JacksonParser(
       case _: VariantSizeLimitException =>
         throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, "JacksonParser")
     }
+  }
+
+  protected final def parseVariantWithPartitionValues(parser: JsonParser): VariantVal = {
+    // When singleVariantColumn is defined and we have partition columns, build the variant
+    // value with the partition fields
+    val partitionColumnNames = partitionSchema.fields.map(_.name).toArray
+    val partitionColumnValues = (0 until partitionValues.numFields).map { i =>
+      if (!partitionValues.isNullAt(i)) {
+        partitionValues.get(i, partitionSchema.fields(i).dataType)
+      } else {
+        null
+      }
+    }.toArray
+    val v = VariantBuilder.parseJsonWithPartitionValues(
+      parser,
+      variantAllowDuplicateKeys,
+      partitionColumnNames,
+      partitionColumnValues
+    )
+    new VariantVal(v.getValue, v.getMetadata)
   }
 
   private def makeStructRootConverter(st: StructType): JsonParser => Iterable[InternalRow] = {

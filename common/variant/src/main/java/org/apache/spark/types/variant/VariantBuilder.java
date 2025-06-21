@@ -541,6 +541,91 @@ public class VariantBuilder {
     }
   }
 
+  /**
+   * Parse a JSON parser as a Variant value and merge partition columns into the
+   * result.
+   *
+   * @param parser             The JSON parser to parse
+   * @param allowDuplicateKeys Whether to allow duplicate keys
+   * @param partitionColumns   Array of partition column names, can be null
+   * @param partitionValues    Array of partition values corresponding to
+   *                           partitionColumns, can be null
+   * @return A Variant containing the merged JSON and partition data
+   * @throws IOException if any JSON parsing error happens
+   */
+  public static Variant parseJsonWithPartitionValues(
+      JsonParser parser,
+      boolean allowDuplicateKeys,
+      String[] partitionColumns,
+      Object[] partitionValues) throws IOException {
+    VariantBuilder builder = new VariantBuilder(allowDuplicateKeys);
+
+    // Start building an object
+    ArrayList<FieldEntry> fields = new ArrayList<>();
+    int start = builder.getWritePos();
+
+    // First, parse the JSON content and collect its fields
+    while (parser.nextToken() != JsonToken.END_OBJECT) {
+      String key = parser.currentName();
+      parser.nextToken();
+      int id = builder.addKey(key);
+      fields.add(new FieldEntry(key, id, builder.getWritePos() - start));
+      builder.buildJson(parser);
+    }
+
+    // Then add partition columns if they exist
+    if (partitionColumns != null && partitionValues != null) {
+      for (int i = 0; i < partitionColumns.length; i++) {
+        if (partitionValues[i] != null) {
+          int id = builder.addKey(partitionColumns[i]);
+          fields.add(new FieldEntry(partitionColumns[i], id, builder.getWritePos() - start));
+          builder.appendPartitionValue(partitionValues[i]);
+        }
+      }
+    }
+
+    // Finish writing the object with all fields
+    builder.finishWritingObject(start, fields);
+    return builder.result();
+  }
+
+  /**
+   * Append a partition value to the variant builder. This method handles
+   * different data types that partition values might have.
+   */
+  public void appendPartitionValue(Object value) {
+    if (value == null) {
+      appendNull();
+    } else if (value instanceof String) {
+      appendString((String) value);
+    } else if (value instanceof Integer) {
+      appendLong((Integer) value);
+    } else if (value instanceof Long) {
+      appendLong((Long) value);
+    } else if (value instanceof Double) {
+      appendDouble((Double) value);
+    } else if (value instanceof Float) {
+      appendFloat((Float) value);
+    } else if (value instanceof Boolean) {
+      appendBoolean((Boolean) value);
+    } else if (value instanceof java.math.BigDecimal) {
+      appendDecimal((java.math.BigDecimal) value);
+    } else if (value instanceof java.sql.Date) {
+      // Convert java.sql.Date to days since epoch
+      long millis = ((java.sql.Date) value).getTime();
+      int days = (int) (millis / (24 * 60 * 60 * 1000L));
+      appendDate(days);
+    } else if (value instanceof java.sql.Timestamp) {
+      // Convert java.sql.Timestamp to microseconds since epoch
+      long millis = ((java.sql.Timestamp) value).getTime();
+      long micros = millis * 1000L;
+      appendTimestamp(micros);
+    } else {
+      // For any other type, convert to string
+      appendString(value.toString());
+    }
+  }
+
   // Choose the smallest unsigned integer type that can store `value`. It must be within
   // `[0, SIZE_LIMIT]`.
   private int getIntegerSize(int value) {

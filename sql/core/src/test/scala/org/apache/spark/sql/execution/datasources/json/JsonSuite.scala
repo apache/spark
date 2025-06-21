@@ -4123,7 +4123,7 @@ abstract class JsonSuite
         assert(df2.schema.size == 1)
         checkAnswer(
           df2.selectExpr("to_json(var)"),
-          Seq(Row("""{"field1":100,"field2":1.1,"year":2021,"month":1}"""))
+          Seq(Row("""{"field1":100,"field2":1.1,"month":1,"year":2021}"""))
         )
       }
     }
