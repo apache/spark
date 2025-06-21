@@ -334,7 +334,6 @@
       --add-opens=java.base/sun.nio.cs=ALL-UNNAMED
       --add-opens=java.base/sun.security.action=ALL-UNNAMED
       --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
-      -Djdk.reflect.useDirectMethodHandle=false
       -Dio.netty.tryReflectionSetAccessible=true
       --enable-native-access=ALL-UNNAMED
     </extraJavaTestArgs>
