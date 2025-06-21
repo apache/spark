@@ -1,4 +1,21 @@
 #!/usr/bin/env python3
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
 """
 Comprehensive test script for SPARK-52401 fix.
 Tests multiple scenarios where DataFrame operations should reflect table updates.
@@ -23,36 +40,32 @@ def test_multiple_appends():
         spark.createDataFrame([], schema).write.saveAsTable(table_name)
         df = spark.table(table_name)
         
+        # Verify initial state
+        assert df.count() == 0
+        assert df.collect() == []
+        
         # First append
         spark.createDataFrame([(1, "foo")], schema).write.mode("append").saveAsTable(table_name)
-        
-        # Verify first append
-        count1 = df.count()
-        collect1 = df.collect()
-        print(f"After first append: count()={count1}, collect()={collect1}")
+        assert df.count() == 1
+        assert len(df.collect()) == 1
         
         # Second append
         spark.createDataFrame([(2, "bar")], schema).write.mode("append").saveAsTable(table_name)
+        assert df.count() == 2
+        assert len(df.collect()) == 2
         
-        # Verify both appends
-        count2 = df.count()
-        collect2 = df.collect()
-        print(f"After second append: count()={count2}, collect()={collect2}")
+        # Third append
+        spark.createDataFrame([(3, "baz")], schema).write.mode("append").saveAsTable(table_name)
+        assert df.count() == 3
+        assert len(df.collect()) == 3
         
-        # Verify results
-        expected_data = [(1, "foo"), (2, "bar")]
-        success = (count2 == 2 and 
-                  len(collect2) == 2 and 
-                  all(row in collect2 for row in expected_data))
+        print("✅ Multiple appends test passed!")
         
-        print(f"Multiple appends test: {'✅ SUCCESS' if success else '❌ FAILURE'}")
-        return success
-        
+    except Exception as e:
+        print(f"❌ Multiple appends test failed: {e}")
+        raise
     finally:
-        try:
-            spark.sql(f"DROP TABLE IF EXISTS {table_name}")
-        except:
-            pass
+        spark.sql(f"DROP TABLE IF EXISTS {table_name}")
         spark.stop()
 
 def test_dataframe_operations():
@@ -115,32 +128,66 @@ def test_overwrite_operations():
         df = spark.table(table_name)
         
         # Verify initial state
-        initial_count = df.count()
-        initial_collect = df.collect()
-        print(f"Initial state: count()={initial_count}, collect()={initial_collect}")
+        assert df.count() == 1
+        assert len(df.collect()) == 1
         
         # Overwrite with new data
         spark.createDataFrame([(2, "bar"), (3, "baz")], schema).write.mode("overwrite").saveAsTable(table_name)
+        assert df.count() == 2
+        assert len(df.collect()) == 2
         
-        # Verify overwrite
-        final_count = df.count()
-        final_collect = df.collect()
-        print(f"After overwrite: count()={final_count}, collect()={final_collect}")
+        print("✅ Overwrite operations test passed!")
         
-        # Verify results
-        expected_data = [(2, "bar"), (3, "baz")]
-        success = (final_count == 2 and 
-                  len(final_collect) == 2 and 
-                  all(row in final_collect for row in expected_data))
-        
-        print(f"Overwrite test: {'✅ SUCCESS' if success else '❌ FAILURE'}")
-        return success
-        
+    except Exception as e:
+        print(f"❌ Overwrite operations test failed: {e}")
+        raise
     finally:
-        try:
-            spark.sql(f"DROP TABLE IF EXISTS {table_name}")
-        except:
-            pass
+        spark.sql(f"DROP TABLE IF EXISTS {table_name}")
+        spark.stop()
+
+def test_mixed_operations():
+    """Test mixed append and overwrite operations."""
+    spark = pyspark.sql.SparkSession.builder.appName("SPARK-52401-Mixed").getOrCreate()
+    
+    schema = StructType([
+        StructField("col1", IntegerType(), True),
+        StructField("col2", StringType(), True)
+    ])
+    
+    table_name = "test_table_mixed"
+    
+    try:
+        # Create empty table
+        spark.createDataFrame([], schema).write.saveAsTable(table_name)
+        df = spark.table(table_name)
+        
+        # Verify initial state
+        assert df.count() == 0
+        assert df.collect() == []
+        
+        # Append data
+        spark.createDataFrame([(1, "foo")], schema).write.mode("append").saveAsTable(table_name)
+        assert df.count() == 1
+        assert len(df.collect()) == 1
+        
+        # Overwrite data
+        spark.createDataFrame([(2, "bar")], schema).write.mode("overwrite").saveAsTable(table_name)
+        assert df.count() == 1
+        assert len(df.collect()) == 1
+        assert df.collect()[0]["col1"] == 2
+        
+        # Append more data
+        spark.createDataFrame([(3, "baz")], schema).write.mode("append").saveAsTable(table_name)
+        assert df.count() == 2
+        assert len(df.collect()) == 2
+        
+        print("✅ Mixed operations test passed!")
+        
+    except Exception as e:
+        print(f"❌ Mixed operations test failed: {e}")
+        raise
+    finally:
+        spark.sql(f"DROP TABLE IF EXISTS {table_name}")
         spark.stop()
 
 def main():
@@ -150,7 +197,8 @@ def main():
     tests = [
         ("Multiple Appends", test_multiple_appends),
         ("DataFrame Operations", test_dataframe_operations),
-        ("Overwrite Operations", test_overwrite_operations)
+        ("Overwrite Operations", test_overwrite_operations),
+        ("Mixed Operations", test_mixed_operations)
     ]
     
     results = []
