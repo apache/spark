@@ -70,13 +70,8 @@ class AttributeRelation(LogicalPlan):
     could be a model or a summary. This attribute returns a DataFrame.
     """
 
-    def __init__(
-        self,
-        ref_id: str,
-        methods: List[pb2.Fetch.Method],
-        child: Optional["LogicalPlan"] = None,
-    ) -> None:
-        super().__init__(child)
+    def __init__(self, ref_id: str, methods: List[pb2.Fetch.Method]) -> None:
+        super().__init__(None)
         self._ref_id = ref_id
         self._methods = methods
 
@@ -84,6 +79,4 @@ class AttributeRelation(LogicalPlan):
         plan = self._create_proto_relation()
         plan.ml_relation.fetch.obj_ref.CopyFrom(pb2.ObjectRef(id=self._ref_id))
         plan.ml_relation.fetch.methods.extend(self._methods)
-        if self._child is not None:
-            plan.ml_relation.model_summary_dataset.CopyFrom(self._child.plan(session))
         return plan
