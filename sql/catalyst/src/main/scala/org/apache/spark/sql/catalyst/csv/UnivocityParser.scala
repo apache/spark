@@ -346,6 +346,8 @@ class UnivocityParser(
     (tokens: Array[String], index: Int) => tokens(tokenIndexArr(index))
   }
 
+  val variantAllowDuplicateKeys = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)
+
   /**
    * The entire line of CSV data is collected into a single variant object. When `headerColumnNames`
    * is defined, the field names will be extracted from it. Otherwise, the field names will have a
