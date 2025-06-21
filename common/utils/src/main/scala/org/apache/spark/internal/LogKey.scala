@@ -786,6 +786,7 @@ private[spark] object LogKeys {
   case object STATE_STORE_PROVIDER extends LogKey
   case object STATE_STORE_PROVIDER_ID extends LogKey
   case object STATE_STORE_PROVIDER_IDS extends LogKey
+  case object STATE_STORE_STATE extends LogKey
   case object STATE_STORE_VERSION extends LogKey
   case object STATS extends LogKey
   case object STATUS extends LogKey
@@ -868,6 +869,7 @@ private[spark] object LogKeys {
   case object TRAIN_VALIDATION_SPLIT_METRIC extends LogKey
   case object TRAIN_VALIDATION_SPLIT_METRICS extends LogKey
   case object TRANSFER_TYPE extends LogKey
+  case object TRANSITION extends LogKey
   case object TREE_NODE extends LogKey
   case object TRIGGER_INTERVAL extends LogKey
   case object UI_ACLS extends LogKey
