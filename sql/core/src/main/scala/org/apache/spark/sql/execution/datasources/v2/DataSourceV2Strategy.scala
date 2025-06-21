@@ -61,7 +61,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   private def hadoopConf = session.sessionState.newHadoopConf()
 
   private def refreshCache(r: DataSourceV2Relation)(): Unit = {
-    session.sharedState.cacheManager.recacheByPlan(session, r)
+    // For append operations, we should invalidate the cache instead of recaching
+    // because the underlying table data has changed and we want to read fresh data
+    // on the next access. recacheByPlan would re-execute the same logical plan
+    // which doesn't reflect the table changes.
+    session.sharedState.cacheManager.uncacheQuery(session, r, cascade = true)
   }
 
   private def recacheTable(r: ResolvedTable)(): Unit = {
