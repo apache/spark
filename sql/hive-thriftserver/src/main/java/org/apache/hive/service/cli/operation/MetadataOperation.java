@@ -42,8 +42,8 @@ public abstract class MetadataOperation extends Operation {
   protected static TableSchema RESULT_SET_SCHEMA;
   private static final char SEARCH_STRING_ESCAPE = '\\';
 
-  protected MetadataOperation(HiveSession parentSession, OperationType opType) {
-    super(parentSession, opType);
+  protected MetadataOperation(HiveSession parentSession, OperationManager operationManager, OperationType opType) {
+    super(parentSession, operationManager, opType);
     setHasResultSet(true);
   }
 
