@@ -509,6 +509,27 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       includeLastResort = includeLastResort)
   }
 
+  // Tries to resolve `UnresolvedAttribute` by the children with Plan Ids.
+  // Returns `None` if fail to resolve.
+  private[sql] def tryResolveUnresolvedAttributeByPlanChildren(
+      u: UnresolvedAttribute,
+      q: LogicalPlan,
+      includeLastResort: Boolean = false): Option[Expression] = {
+    resolveDataFrameColumn(u, q.children).map { r =>
+      resolveExpression(
+        r,
+        resolveColumnByName = nameParts => {
+          q.resolveChildren(nameParts, conf.resolver)
+        },
+        getAttrCandidates = () => {
+          assert(q.children.length == 1)
+          q.children.head.output
+        },
+        throws = true,
+        includeLastResort = includeLastResort)
+    }
+  }
+
   /**
    * The last resort to resolve columns. Currently it does two things:
    *  - Try to resolve column names as outer references

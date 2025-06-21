@@ -34,10 +34,16 @@ class ResolveDataFrameDropColumns(val catalogManager: CatalogManager)
     case d: DataFrameDropColumns if d.childrenResolved =>
       // expressions in dropList can be unresolved, e.g.
       //   df.drop(col("non-existing-column"))
-      val dropped = d.dropList.map {
+      val dropped = d.dropList.flatMap {
         case u: UnresolvedAttribute =>
-          resolveExpressionByPlanChildren(u, d)
-        case e => e
+          if (u.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty) {
+            // Plan ID comes from Spark Connect,
+            // here we ignore the column if fail to resolve by plan Id.
+            tryResolveUnresolvedAttributeByPlanChildren(u, d)
+          } else {
+            Some(resolveExpressionByPlanChildren(u, d))
+          }
+        case e => Some(e)
       }
       val remaining = d.child.output.filterNot(attr => dropped.exists(_.semanticEquals(attr)))
       if (remaining.size == d.child.output.size) {
