@@ -98,6 +98,7 @@ jobs:
             sparkr=`./dev/is-changed.py -m sparkr`
             tpcds=`./dev/is-changed.py -m sql`
             docker=`./dev/is-changed.py -m docker-integration-tests`
+            repl=true
             buf=true
             ui=true
             docs=true
@@ -108,6 +109,7 @@ jobs:
             sparkr=false
             tpcds=false
             docker=false
+            repl=true
             buf=false
             ui=false
             docs=false
@@ -126,6 +128,7 @@ jobs:
               \"docs\" : \"$docs\",
               \"yarn\" : \"$yarn\",
               \"k8s-integration-tests\" : \"$kubernetes\",
+              \"repl\" : \"$repl\",
               \"buf\" : \"$buf\",
               \"ui\" : \"$ui\",
             }"
@@ -775,6 +778,85 @@ jobs:
     - name: Python CodeGen check
       if: inputs.branch != 'branch-3.5'
       run: ./dev/check-protos.py
+
+  repl:
+    needs: [precondition]
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).repl == 'true'
+    name: REPL (spark-sql, spark-shell and pyspark)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      PYSPARK_DRIVER_PYTHON: python3.11
+      PYSPARK_PYTHON: python3.11
+    steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          repository: apache/spark
+          ref: ${{ inputs.branch }}
+      - name: Sync the current branch with the latest in Apache Spark
+        if: github.repository != 'apache/spark'
+        run: |
+          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+      - name: Install Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 17
+      - name: Install Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies for PySpark
+        run: |
+          python3.11 -m pip install ipython numpy scipy 'protobuf==5.28.3' 'pyarrow>=19.0.0' 'six==1.16.0' 'pandas==2.2.3' 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.28.3' 'googleapis-common-protos==1.65.0'
+          python3.11 -m pip list
+      - name: Build Spark
+        run: |
+          ./build/sbt -Phive -Phive-thriftserver clean package
+      - name: Spark SQL
+        shell: 'script -q -e -c "bash {0}"'
+        run: |
+          echo 'SELECT 512 + 512;' | ./bin/spark-sql 2>&1 > spark-sql-repl.log
+          grep '1024' spark-sql-repl.log
+      - name: Spark Shell (Classic)
+        shell: 'script -q -e -c "bash {0}"'
+        run: |
+          echo 'Thread.sleep(10000); spark.range(512).union(spark.range(512)).count()' | ./bin/spark-shell 2>&1 > spark-shell-repl.log
+          grep 'res.*Long.*1024' spark-shell-repl.log
+      - name: Spark Shell (Connect)
+        shell: 'script -q -e -c "bash {0}"'
+        run: |
+          export TERM=vt100
+          echo 'Thread.sleep(10000); spark.range(512).union(spark.range(512)).count()' | ./bin/spark-shell --remote local 2>&1 > spark-connect-repl.log
+          grep 'res.*Long.*1024' spark-connect-repl.log
+      #      - name: PySpark (Classic)
+      #        shell: 'script -q -e -c "bash {0}"'
+      #        run: |
+      #          export SPARK_HOME=$(pwd)
+      #          export PYSPARK_DRIVER_PYTHON=$(which python3)
+      #          export PYSPARK_PYTHON=$(which python3)
+      #          echo 'spark.range(512).union(spark.range(512)).count()' | ./bin/pyspark 2>&1 > pyspark-repl.log
+      #          grep 'Out.*1024' pyspark-repl.log
+      #      - name: PySpark (Connect)
+      #        shell: 'script -q -e -c "bash {0}"'
+      #        run: |
+      #          export SPARK_HOME=$(pwd)
+      #          export PYSPARK_DRIVER_PYTHON=$(which python3)
+      #          export PYSPARK_PYTHON=$(which python3)
+      #          echo 'spark.range(512).union(spark.range(512)).count()' | ./bin/pyspark --remote local 2>&1 > pyspark-connect-repl.log
+      #          grep 'Out.*1024' pyspark-connect-repl.log
+      - name: Upload log files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: repl-tests-result
+          path: "*-repl.log"
 
   # Static analysis
   lint:
