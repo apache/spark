@@ -26,7 +26,11 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 
 trait SparkParserUtils {
 
-  /** Unescape backslash-escaped string enclosed by quotes. */
+  /**
+   * Unescape backslash-escaped string enclosed by quotes, with support for:
+   *   1. Double-quote escaping (`""`, `''`)
+   *   2. Traditional backslash escaping (\n, \t, \", etc.)
+   */
   def unescapeSQLString(b: String): String = {
     def appendEscapedChar(n: Char, sb: JStringBuilder): Unit = {
       n match {
@@ -36,6 +40,7 @@ trait SparkParserUtils {
         case 'r' => sb.append('\r')
         case 't' => sb.append('\t')
         case 'Z' => sb.append('\u001A')
+        case '"' => sb.append('"') // Handle escaped double quote
         // The following 2 lines are exactly what MySQL does TODO: why do we do this?
         case '%' => sb.append("\\%")
         case '_' => sb.append("\\_")
@@ -71,10 +76,20 @@ trait SparkParserUtils {
       firstChar == 'r' || firstChar == 'R'
     }
 
+    val isDoubleQuotedString = {
+      b.charAt(0) == '"'
+    }
+
+    val isSingleQuotedString = {
+      b.charAt(0) == '\''
+    }
+
     if (isRawString) {
       // Skip the 'r' or 'R' and the first and last quotations enclosing the string literal.
       b.substring(2, b.length - 1)
-    } else if (b.indexOf('\\') == -1) {
+    } else if (b.indexOf('\\') == -1 &&
+      (!isDoubleQuotedString || b.indexOf("\"\"") == -1) &&
+      (!isSingleQuotedString || b.indexOf("''") == -1)) {
       // Fast path for the common case where the string has no escaped characters,
       // in which case we just skip the first and last quotations enclosing the string literal.
       b.substring(1, b.length - 1)
@@ -85,7 +100,15 @@ trait SparkParserUtils {
       val length = b.length - 1
       while (i < length) {
         val c = b.charAt(i)
-        if (c != '\\' || i + 1 == length) {
+        // First check for double-quote escaping (`""`, `''`)
+        if (isDoubleQuotedString && c == '"' && i + 1 < length && b.charAt(i + 1) == '"') {
+          sb.append('"')
+          i += 2
+        } else if (isSingleQuotedString && c == '\'' && i + 1 < length && b.charAt(
+            i + 1) == '\'') {
+          sb.append('\'')
+          i += 2
+        } else if (c != '\\' || i + 1 == length) {
           // Either a regular character or a backslash at the end of the string:
           sb.append(c)
           i += 1

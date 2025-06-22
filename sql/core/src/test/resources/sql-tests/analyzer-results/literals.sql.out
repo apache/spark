@@ -706,3 +706,17 @@ select -0, -0.0
 -- !query analysis
 Project [0 AS 0#x, 0.0 AS 0.0#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT " ""aa"" ", " \"aa\" ", '""aa""'
+-- !query analysis
+Project [ "aa"  AS  "aa" #x,  "aa"  AS  "aa" #x, ""aa"" AS ""aa""#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ' ''aa'' ', ' \'aa\' ', "''aa''"
+-- !query analysis
+Project [ 'aa'  AS  'aa' #x,  'aa'  AS  'aa' #x, ''aa'' AS ''aa''#x]
++- OneRowRelation

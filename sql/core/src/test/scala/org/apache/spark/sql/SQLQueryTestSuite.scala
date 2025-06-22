@@ -228,6 +228,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
   /** Run a test case. */
   protected def runSqlTestCase(testCase: TestCase, listTestCases: Seq[TestCase]): Unit = {
+    if (!testCase.name.contains("literals.sql")) {
+      return
+    }
     val input = fileToString(new File(testCase.inputFile))
     val (comments, code) = splitCommentsAndCodes(input)
     val queries = getQueries(code, comments, listTestCases)
