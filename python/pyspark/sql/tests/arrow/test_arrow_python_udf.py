@@ -262,70 +262,70 @@ class ArrowPythonUDFLegacyTestsMixin(BaseUDFTestsMixin):
     def test_complex_input_types(self):
         for pandas_conversion in [True, False]:
             with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled": str(pandas_conversion).lower()}
+                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
             ):
                 self._check_complex_input_types()
 
     def test_use_arrow(self):
         for pandas_conversion in [True, False]:
             with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled": str(pandas_conversion).lower()}
+                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
             ):
                 self._check_use_arrow()
 
     def test_eval_type(self):
         for pandas_conversion in [True, False]:
             with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled": str(pandas_conversion).lower()}
+                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
             ):
                 self._check_eval_type()
 
     def test_register(self):
         for pandas_conversion in [True, False]:
             with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled": str(pandas_conversion).lower()}
+                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
             ):
                 self._check_register()
 
     def test_nested_array_input(self):
         for pandas_conversion in [True, False]:
             with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled": str(pandas_conversion).lower()}
+                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
             ):
                 self._check_nested_array_input()
 
     def test_type_coercion_string_to_numeric(self):
         for pandas_conversion in [True, False]:
             with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled": str(pandas_conversion).lower()}
+                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
             ):
                 self._check_type_coercion_string_to_numeric()
 
     def test_err_return_type(self):
         for pandas_conversion in [True, False]:
             with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled": str(pandas_conversion).lower()}
+                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
             ):
                 self._check_err_return_type()
 
     def test_named_arguments_negative(self):
         for pandas_conversion in [True, False]:
             with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled": str(pandas_conversion).lower()}
+                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
             ):
                 self._check_named_arguments_negative()
 
     def test_udf_with_udt(self):
         for pandas_conversion in [True, False]:
             with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled": str(pandas_conversion).lower()}
+                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
             ):
                 self._check_udf_with_udt()
 
     def test_udf_use_arrow_and_session_conf(self):
         for pandas_conversion in [True, False]:
             with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled": str(pandas_conversion).lower()}
+                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
             ):
                 self._check_udf_use_arrow_and_session_conf()
 
