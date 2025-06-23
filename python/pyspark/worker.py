@@ -1042,6 +1042,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         # The below doesn't support named argument, but shares the same protocol.
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
     ):
         args_offsets = []
         kwargs_offsets = {}
@@ -1094,13 +1095,13 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
     # the last returnType will be the return type of UDF
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
         return wrap_scalar_pandas_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf)
-    elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:	
+    elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:
         return wrap_scalar_arrow_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF:
         return wrap_arrow_batch_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
         return args_offsets, wrap_pandas_batch_iter_udf(func, return_type, runner_conf)
-    elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF:	
+    elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF:
         return args_offsets, wrap_arrow_array_iter_udf(func, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
         return args_offsets, wrap_pandas_batch_iter_udf(func, return_type, runner_conf)
@@ -1981,7 +1982,7 @@ def read_udfs(pickleSer, infile, eval_type):
             ser = ArrowStreamGroupUDFSerializer(_assign_cols_by_name)
         elif eval_type in (
             PythonEvalType.SQL_SCALAR_ARROW_UDF,
-            PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+            PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
         ):
             # Arrow cast for type coercion is disabled by default
             ser = ArrowStreamArrowUDFSerializer(timezone, safecheck, _assign_cols_by_name, False)
