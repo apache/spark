@@ -231,8 +231,10 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
     if zero_arg_exec:
         def get_args(*args: pa.RecordBatch):
             if len(args) > 0:
-                # args[0] is a pyarrow.RecordBatch
-                batch_size = args[0].num_rows
+                if hasattr(args[0], "num_rows"):
+                    batch_size = args[0].num_rows
+                else:
+                    batch_size = len(args[0])
             else:
                 batch_size = 1
             return [() for _ in range(batch_size)]

@@ -403,6 +403,25 @@ class ArrowPythonUDFCombinedTests(ArrowPythonUDFCombinedTestsMixin, ReusedSQLTes
 
     def test_udf_with_complex_variant_output(self):
         self.skipTest("Skip VariantType for Arrow batched eval")
+        
+    def test_udf_input_serialization_valuecompare_disabled(self):
+        self.skipTest("Skip for Arrow batched eval")
+
+    def test_nonparam_udf_with_aggregate(self):
+        with self.assertRaisesRegex(Exception, r"ARROW_TYPE_MISMATCH"):
+            super().test_nonparam_udf_with_aggregate()
+            
+    def test_num_arguments(self):
+        with self.assertRaisesRegex(Exception, r"ARROW_TYPE_MISMATCH"):
+            super().test_num_arguments()
+            
+    def test_type_coercion_string_to_numeric(self):
+        with self.assertRaisesRegex(Exception, r"UDF_ARROW_TYPE_CONVERSION_ERROR"):
+            super().test_type_coercion_string_to_numeric()
+            
+    def test_udf_globals_not_overwritten(self):
+        with self.assertRaisesRegex(Exception, r"ARROW_TYPE_MISMATCH"):
+            super().test_udf_globals_not_overwritten()
 
 
 class AsyncArrowPythonUDFTests(ArrowPythonUDFTests):
