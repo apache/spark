@@ -201,11 +201,13 @@ def wrap_scalar_arrow_udf(f, args_offsets, kwargs_offsets, return_type, runner_c
         ),
     )
 
+
 def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     if use_legacy_pandas_udf_conversion(runner_conf):
         return wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, runner_conf)
     else:
         return wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf)
+
 
 def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     import pyarrow as pa
@@ -297,7 +299,6 @@ def wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, ru
     if zero_arg_exec:
 
         def get_args(*args: pd.Series):
-
             return [() for _ in args[0]]
 
     else:
