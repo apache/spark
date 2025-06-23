@@ -503,7 +503,7 @@ case class ApplyColumnarRulesAndInsertTransitions(
     if (!plan.supportsColumnar) {
       // The tree feels kind of backwards
       // Columnar Processing will start here, so transition from row to columnar
-      RowToColumnarExec(insertTransitions(plan, outputsColumnar = false))
+      RowToColumnarExec(ensureOutputsRowBased(plan))
     } else if (!plan.isInstanceOf[RowToColumnarTransition]) {
       plan.withNewChildren(plan.children.map(ensureOutputsColumnar))
     } else {
