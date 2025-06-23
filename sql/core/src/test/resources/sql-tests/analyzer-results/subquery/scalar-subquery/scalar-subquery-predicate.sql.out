@@ -1766,3 +1766,27 @@ Project [t0a#x, t0b#x]
       +- View (`t0`, [t0a#x, t0b#x])
          +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
             +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT MAX(a.col1)
+FROM VALUES (1) AS a(col1)
+GROUP BY a.col1
+HAVING COUNT(*) = (
+        SELECT COUNT(*)
+        FROM VALUES (1),(1),(2),(2) AS c(col1)
+        WHERE c.col1 >= a.col1
+        LIMIT 1
+    )
+-- !query analysis
+Project [max(col1)#x]
++- Filter (count(1)#xL = scalar-subquery#x [col1#x])
+   :  +- GlobalLimit 1
+   :     +- LocalLimit 1
+   :        +- Aggregate [count(1) AS count(1)#xL]
+   :           +- Filter (col1#x >= outer(col1#x))
+   :              +- SubqueryAlias c
+   :                 +- LocalRelation [col1#x]
+   +- Aggregate [col1#x], [max(col1#x) AS max(col1)#x, count(1) AS count(1)#xL, col1#x]
+      +- SubqueryAlias a
+         +- LocalRelation [col1#x]
