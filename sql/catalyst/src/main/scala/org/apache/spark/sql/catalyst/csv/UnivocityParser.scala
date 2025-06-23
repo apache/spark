@@ -53,7 +53,9 @@ class UnivocityParser(
     dataSchema: StructType,
     requiredSchema: StructType,
     val options: CSVOptions,
-    filters: Seq[Filter]) extends Logging {
+    filters: Seq[Filter],
+    partitionSchema: StructType = StructType(Seq.empty),
+    partitionValues: InternalRow = InternalRow.empty) extends Logging {
   require(requiredSchema.toSet.subsetOf(dataSchema.toSet),
     s"requiredSchema (${requiredSchema.catalogString}) should be the subset of " +
       s"dataSchema (${dataSchema.catalogString}).")
@@ -344,6 +346,8 @@ class UnivocityParser(
     (tokens: Array[String], index: Int) => tokens(tokenIndexArr(index))
   }
 
+  val variantAllowDuplicateKeys = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)
+
   /**
    * The entire line of CSV data is collected into a single variant object. When `headerColumnNames`
    * is defined, the field names will be extracted from it. Otherwise, the field names will have a
@@ -360,7 +364,14 @@ class UnivocityParser(
         val extra = numFields - singleVariantFieldConverters.length
         singleVariantFieldConverters.appendAll(Array.fill(extra)(new VariantValueConverter))
       }
-      val builder = new VariantBuilder(false)
+      if (partitionSchema.exists(f1 => dataSchema.exists(f2 => f1.name == f2.name))) {
+        if (!SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)) {
+          throw QueryExecutionErrors.variantDataSchemaConflictWithPartitionSchema(
+            dataSchema, partitionSchema
+          )
+        }
+      }
+      val builder = new VariantBuilder(true)
       val start = builder.getWritePos
       val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](numFields)
       for (i <- 0 until numFields) {
@@ -369,6 +380,31 @@ class UnivocityParser(
         fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
         singleVariantFieldConverters(i).convertInput(builder, tokens(i))
       }
+
+      // Add the partition columns to the variant object
+      if (partitionSchema.nonEmpty && SQLConf.get.includePartitionColumnsInSingleVariantColumn) {
+        partitionSchema.zipWithIndex.foreach { case (field, index) =>
+          val value = partitionValues.get(index, field.dataType)
+          if (value != null) {
+            val id = builder.addKey(field.name)
+            fields.add(new VariantBuilder.FieldEntry(field.name, id, builder.getWritePos - start))
+            field.dataType match {
+              case IntegerType | LongType => builder.appendLong(value.toString.toLong)
+              case _: DecimalType => builder.appendDecimal(
+                decimalParser(value.toString)
+              )
+              case DateType => builder.appendDate(dateFormatter.parse(value.toString))
+              case TimestampNTZType =>
+                builder.appendTimestampNtz(timestampNTZFormatter.parse(value.toString))
+              case TimestampType =>
+                builder.appendTimestamp(timestampFormatter.parse(value.toString))
+              case BooleanType => builder.appendBoolean(value.toString.toBoolean)
+              case StringType => builder.appendString(value.toString)
+            }
+          }
+        }
+      }
+
       builder.finishWritingObject(start, fields)
       val v = builder.result()
       row(0) = new VariantVal(v.getValue, v.getMetadata)

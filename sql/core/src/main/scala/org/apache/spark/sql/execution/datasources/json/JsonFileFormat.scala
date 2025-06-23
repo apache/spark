@@ -117,7 +117,9 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
         actualSchema,
         parsedOptions,
         allowArrayAsStructs = true,
-        filters)
+        filters,
+        partitionSchema,
+        file.partitionValues)
       JsonDataSource(parsedOptions).readFile(
         broadcastedHadoopConf.value.value,
         file,
