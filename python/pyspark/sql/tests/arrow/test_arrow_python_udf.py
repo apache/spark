@@ -401,6 +401,9 @@ class ArrowPythonUDFCombinedTests(ArrowPythonUDFCombinedTestsMixin, ReusedSQLTes
         finally:
             super(ArrowPythonUDFCombinedTests, cls).tearDownClass()
 
+    def test_udf_with_complex_variant_output(self):
+        self.skipTest("Skip VariantType for Arrow batched eval")
+
 
 class AsyncArrowPythonUDFTests(ArrowPythonUDFTests):
     @classmethod
