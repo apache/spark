@@ -2586,7 +2586,7 @@ case class MakeTimestampNTZ(left: Expression, right: Expression)
   usage = """
     _FUNC_(year, month, day, hour, min, sec) - Create local date-time from year, month, day, hour, min, sec fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.
 
-    _FUNC_(date, time) - Create timestamp from date, time and time zone.
+    _FUNC_(date, time) - Create a local date-time from date and time fields.
     """,
   arguments = """
     Arguments:
