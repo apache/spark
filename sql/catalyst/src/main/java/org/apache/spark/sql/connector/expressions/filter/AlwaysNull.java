@@ -31,17 +31,17 @@ import org.apache.spark.sql.types.DataTypes;
 public final class AlwaysNull extends Predicate implements Literal<Boolean> {
 
     public AlwaysNull() {
-        super("ALWAYS_NULL", new Predicate[]{});
+      super("ALWAYS_NULL", new Predicate[]{});
     }
 
     @Override
     public Boolean value() {
-        return null;
+      return null;
     }
 
     @Override
     public DataType dataType() {
-        return DataTypes.BooleanType;
+      return DataTypes.BooleanType;
     }
 
     @Override
