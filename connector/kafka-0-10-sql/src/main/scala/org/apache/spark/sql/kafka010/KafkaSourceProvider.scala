@@ -19,17 +19,14 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 import java.util.{Locale, UUID}
-
 import scala.jdk.CollectionConverters._
-
 import EventStreamsKafkaConnector.KafkaOptionsUtils
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySerializer}
-
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{LogKeys, Logging, MDC}
 import org.apache.spark.kafka010.KafkaConfigUpdater
-import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext, SaveMode}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric}
@@ -43,6 +40,7 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkClassUtils
 
 /**
  * The provider class for all Kafka readers and writers. It is designed such that it throws
@@ -85,6 +83,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       parameters: Map[String, String]): Source = {
     val caseInsensitiveParameters = CaseInsensitiveMap(parameters)
     validateStreamOptions(caseInsensitiveParameters)
+
     // Each running query should use its own group id. Otherwise, the query may be only assigned
     // partial data since Kafka will assign partitions to multiple consumers having the same group
     // id. Hence, we should generate a unique id for each query.
@@ -130,8 +129,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       parameters: Map[String, String]): BaseRelation = {
     val caseInsensitiveParameters = CaseInsensitiveMap(parameters)
     validateBatchOptions(caseInsensitiveParameters)
-    val translatedKafkaParameters = translateEventStreamProperties(caseInsensitiveParameters)
-    val specifiedKafkaParams = convertToSpecifiedParams(translatedKafkaParameters)
+    val specifiedKafkaParams = convertToSpecifiedParams(caseInsensitiveParameters)
 
     val startingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
       caseInsensitiveParameters, STARTING_TIMESTAMP_OPTION_KEY,
@@ -360,25 +358,18 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
   private def translateEventStreamProperties(params: CaseInsensitiveMap[String])
   : CaseInsensitiveMap[String] = {
-    if (params.contains(EVENTSTREAM_NAME_OPTION_KEY) ||
-      params.contains(EVENTSTREAM_ARTIFACT_ID_OPTION_KEY) ||
-      params.contains(EVENTSTREAM_CONSUMER_GROUP_OPTION_KEY)) {
-      validateEventStreamOptions(params)
-      return CaseInsensitiveMap(KafkaOptionsUtils.buildKafkaOptionsFromSparkConfig(params));
+    if (SparkClassUtils.classIsLoadable("EventStreamUtils")) {
+      val clazz = SparkClassUtils.classForName("EventStreamUtils")
+      val method = clazz.getMethod(
+        "buildKafkaOptionsFromSparkConfig",
+        classOf[scala.collection.immutable.Map[String, String]]
+      )
+      val convertedParams = method
+        .invoke(null, params)
+        .asInstanceOf[scala.collection.immutable.Map[String, String]]
+      return new CaseInsensitiveMap[String](convertedParams)
     }
     params;
-  }
-
-  private def validateEventStreamOptions(params: CaseInsensitiveMap[String]) = {
-    // Stream specific options
-    if (!params.contains(EVENTSTREAM_NAME_OPTION_KEY) ||
-      !params.contains(EVENTSTREAM_ARTIFACT_ID_OPTION_KEY) ||
-      !params.contains(EVENTSTREAM_CONSUMER_GROUP_OPTION_KEY)) {
-      throw new IllegalArgumentException(
-        "All threee EventStream properties - " +
-          "(eventstream.itemid, eventstream.name and eventstrream.conumergroup) " +
-          "are necessarry to run spark with eventstream configs ")
-    }
   }
 
   private def validateBatchOptions(params: CaseInsensitiveMap[String]) = {
