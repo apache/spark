@@ -109,6 +109,7 @@ from pyspark.sql.connect.shell.progress import Progress, ProgressHandler, from_p
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
     from pyspark.sql.connect._typing import DataTypeOrString
+    from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.datasource import DataSource
 
 
@@ -606,6 +607,7 @@ class SparkConnectClient(object):
         channel_options: Optional[List[Tuple[str, Any]]] = None,
         retry_policy: Optional[Dict[str, Any]] = None,
         use_reattachable_execute: bool = True,
+        session_hooks: Optional[list["SparkSession.Hook"]] = None,
     ):
         """
         Creates a new SparkSession for the Spark Connect interface.
@@ -636,6 +638,8 @@ class SparkConnectClient(object):
                     a failed request. Default: 60000(ms).
         use_reattachable_execute: bool
             Enable reattachable execution.
+        session_hooks: list[SparkSession.Hook], optional
+            List of session hooks to call.
         """
         self.thread_local = threading.local()
 
@@ -675,6 +679,7 @@ class SparkConnectClient(object):
             self._user_id, self._session_id, self._channel, self._builder.metadata()
         )
         self._use_reattachable_execute = use_reattachable_execute
+        self._session_hooks = session_hooks or []
         # Configure logging for the SparkConnect client.
 
         # Capture the server-side session ID and set it to None initially. It will
@@ -1365,6 +1370,9 @@ class SparkConnectClient(object):
         """
         logger.debug("Execute")
 
+        for hook in self._session_hooks:
+            req = hook.on_execute_plan(req)
+
         def handle_response(b: pb2.ExecutePlanResponse) -> None:
             self._verify_response_integrity(b)
 
@@ -1405,6 +1413,9 @@ class SparkConnectClient(object):
             # inside an if statement to not incur a performance cost converting proto to string
             # when not at debug log level.
             logger.debug(f"ExecuteAndFetchAsIterator. Request: {self._proto_to_string(req)}")
+
+        for hook in self._session_hooks:
+            req = hook.on_execute_plan(req)
 
         num_records = 0
 
