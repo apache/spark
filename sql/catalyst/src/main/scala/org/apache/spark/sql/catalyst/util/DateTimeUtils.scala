@@ -108,8 +108,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Returns the hour value of a given TIME (TimeType) value.
    */
-  def getHoursOfTime(micros: Long): Int = {
-    nanosToLocalTime(micros).getHour
+  def getHoursOfTime(nanos: Long): Int = {
+    nanosToLocalTime(nanos).getHour
   }
 
   /**
@@ -123,8 +123,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Returns the minute value of a given TIME (TimeType) value.
    */
-  def getMinutesOfTime(micros: Long): Int = {
-    nanosToLocalTime(micros).getMinute
+  def getMinutesOfTime(nanos: Long): Int = {
+    nanosToLocalTime(nanos).getMinute
   }
 
   /**
@@ -138,8 +138,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Returns the second value of a given TIME (TimeType) value.
    */
-  def getSecondsOfTime(micros: Long): Int = {
-    nanosToLocalTime(micros).getSecond
+  def getSecondsOfTime(nanos: Long): Int = {
+    nanosToLocalTime(nanos).getSecond
   }
   /**
    * Returns the seconds part and its fractional part with microseconds.
