@@ -31,7 +31,7 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(COMMAND), ruleId) {
-    // Writes a delta of rows to an existing table doesn't produce any new rows, thus enforcing
+    // Deleting a delta of rows from an existing table doesn't produce any new rows, thus enforcing
     // check constraints is unnecessary.
     case w: WriteDelta if w.operation.command() == RowLevelOperation.Command.DELETE =>
       w
