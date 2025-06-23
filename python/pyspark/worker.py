@@ -2000,6 +2000,7 @@ def read_udfs(pickleSer, infile, eval_type):
     is_map_arrow_iter = eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF
 
     if is_scalar_iter or is_map_pandas_iter or is_map_arrow_iter:
+        # TODO: Better error message for num_udfs != 1
         if is_scalar_iter:
             assert num_udfs == 1, "One SCALAR_ITER UDF expected here."
         if is_map_pandas_iter:
