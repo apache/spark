@@ -5949,6 +5949,17 @@ object SQLConf {
       .createWithDefault(2)
   }
 
+  val COLLAPSE_INNER_CAST_TO_DECIMAL =
+    buildConf("spark.sql.collapseInnerCastToDecimal.enabled")
+      .internal()
+      .doc(
+        "If true, collapse inner cast to DecimalType if it is redundant (if the inner one has " +
+        "lower precision and scale than the outer one)."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
