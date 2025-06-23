@@ -125,8 +125,8 @@ object LiteralGenerator {
 
   lazy val timeLiteralGen: Gen[Literal] = {
     // Valid range for TimeType is [00:00:00, 23:59:59.999999]
-    val minTime = DateTimeUtils.localTimeToMicros(LocalTime.MIN)
-    val maxTime = DateTimeUtils.localTimeToMicros(LocalTime.MAX)
+    val minTime = DateTimeUtils.localTimeToNanos(LocalTime.MIN)
+    val maxTime = DateTimeUtils.localTimeToNanos(LocalTime.MAX)
     for { t <- Gen.choose(minTime, maxTime) }
       yield Literal(t, TimeType())
   }

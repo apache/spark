@@ -3478,4 +3478,49 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       verifySqlScriptResult(sqlScript, expected)
     }
   }
+
+  test("Duplicate SQLEXCEPTION Handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 2;
+        |  END;
+        |
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        runSqlScript(sqlScript)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      parameters = Map("condition" -> "SQLEXCEPTION")
+    )
+  }
+
+  test("Duplicate NOT FOUND Handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR NOT FOUND
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  DECLARE EXIT HANDLER FOR NOT FOUND
+        |  BEGIN
+        |    SELECT 2;
+        |  END;
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        runSqlScript(sqlScript)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      parameters = Map("condition" -> "NOT FOUND")
+    )
+  }
 }

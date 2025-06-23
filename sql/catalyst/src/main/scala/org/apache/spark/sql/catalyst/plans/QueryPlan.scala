@@ -24,6 +24,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.UnknownRuleId
@@ -54,6 +55,32 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   self: PlanType =>
 
   def output: Seq[Attribute]
+
+  override def nodeWithOutputColumnsString(maxColumns: Int): String = {
+    try {
+      nodeName + {
+        if (this.output.length > maxColumns) {
+          val outputWithNullability = this.output.take(maxColumns).map { attr =>
+            attr.toString + s"[nullable=${attr.nullable}]"
+          }
+
+          outputWithNullability.mkString(" <output=", ", ",
+            s" ... ${this.output.length - maxColumns} more columns>")
+        } else {
+          val outputWithNullability = this.output.map { attr =>
+            attr.toString + s"[nullable=${attr.nullable}]"
+          }
+
+          outputWithNullability.mkString(" <output=", ", ", ">")
+        }
+      }
+    } catch {
+      case _: UnresolvedException =>
+        // If we encounter an UnresolvedException, it's high likely that the call of `this.output`
+        // throws it. In this case, we may have to give up and only show the nodeName.
+        nodeName + " <output='Unresolved'>"
+    }
+  }
 
   /**
    * Returns the set of attributes that are output by this node.
@@ -795,9 +822,10 @@ object QueryPlan extends PredicateHelper {
       verbose: Boolean,
       addSuffix: Boolean,
       maxFields: Int = SQLConf.get.maxToStringFields,
-      printOperatorId: Boolean = false): Unit = {
+      printOperatorId: Boolean = false,
+      printOutputColumns: Boolean = false): Unit = {
     try {
-      plan.treeString(append, verbose, addSuffix, maxFields, printOperatorId)
+      plan.treeString(append, verbose, addSuffix, maxFields, printOperatorId, printOutputColumns)
     } catch {
       case e: AnalysisException => append(e.toString)
     }

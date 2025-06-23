@@ -5949,6 +5949,28 @@ object SQLConf {
       .createWithDefault(2)
   }
 
+  val HADOOP_LINE_RECORD_READER_ENABLED =
+    buildConf("spark.sql.execution.datasources.hadoopLineRecordReader.enabled")
+      .internal()
+      .doc("Enable the imported Hadoop's LineRecordReader. This was imported and renamed to " +
+        "HadoopLineRecordReader to add support for compression option and other " +
+        "future codecs like ZSTD, etc. Setting the conf to false will use the LineRecordReader " +
+        "class from the hadoop jar instead of the imported one.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENFORCE_TYPE_COERCION_BEFORE_UNION_DEDUPLICATION =
+    buildConf("spark.sql.enforceTypeCoercionBeforeUnionDeduplication.enabled")
+      .internal()
+      .doc(
+        "When set to true, we enforce type coercion to run before deduplication of UNION " +
+        "children outputs. Otherwise, order is relative to rule ordering."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -7020,6 +7042,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   }
 
   def maxFlowRetryAttempts: Int = getConf(SQLConf.PIPELINES_MAX_FLOW_RETRY_ATTEMPTS)
+
+  def hadoopLineRecordReaderEnabled: Boolean = getConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

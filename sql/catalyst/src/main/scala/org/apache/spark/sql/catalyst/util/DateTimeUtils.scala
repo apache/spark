@@ -109,7 +109,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * Returns the hour value of a given TIME (TimeType) value.
    */
   def getHoursOfTime(micros: Long): Int = {
-    microsToLocalTime(micros).getHour
+    nanosToLocalTime(micros).getHour
   }
 
   /**
@@ -124,7 +124,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * Returns the minute value of a given TIME (TimeType) value.
    */
   def getMinutesOfTime(micros: Long): Int = {
-    microsToLocalTime(micros).getMinute
+    nanosToLocalTime(micros).getMinute
   }
 
   /**
@@ -139,7 +139,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * Returns the second value of a given TIME (TimeType) value.
    */
   def getSecondsOfTime(micros: Long): Int = {
-    microsToLocalTime(micros).getSecond
+    nanosToLocalTime(micros).getSecond
   }
   /**
    * Returns the seconds part and its fractional part with microseconds.
@@ -151,16 +151,16 @@ object DateTimeUtils extends SparkDateTimeUtils {
 
   /**
    * Returns the second value with fraction from a given TIME (TimeType) value.
-   * @param micros
-   *   The number of microseconds since the epoch.
+   * @param nanos
+   *   The number of nanoseconds since the epoch.
    * @param precision
    *   The time fractional seconds precision, which indicates the number of decimal digits
    *   maintained.
    */
-  def getSecondsOfTimeWithFraction(micros: Long, precision: Int): Decimal = {
-    val seconds = (micros / MICROS_PER_SECOND) % SECONDS_PER_MINUTE
+  def getSecondsOfTimeWithFraction(nanos: Long, precision: Int): Decimal = {
+    val seconds = (nanos / NANOS_PER_SECOND) % SECONDS_PER_MINUTE
     val scaleFactor = math.pow(10, precision).toLong
-    val scaledFraction = (micros % MICROS_PER_SECOND) * scaleFactor / MICROS_PER_SECOND
+    val scaledFraction = (nanos % NANOS_PER_SECOND) * scaleFactor / NANOS_PER_SECOND
     val fraction = scaledFraction.toDouble / scaleFactor
     Decimal(seconds + fraction, 8, 6)
   }
@@ -816,10 +816,22 @@ object DateTimeUtils extends SparkDateTimeUtils {
 
       val nanos = Math.floorMod(unscaledSecFrac, MICROS_PER_SECOND) * NANOS_PER_MICROS
       val lt = LocalTime.of(hours, minutes, fullSecs.toInt, nanos.toInt)
-      localTimeToMicros(lt)
+      localTimeToNanos(lt)
     } catch {
       case e @ (_: DateTimeException | _: ArithmeticException) =>
         throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
     }
+  }
+
+  /**
+   * Makes a timestamp without time zone from a date and a local time.
+   *
+   * @param days The number of days since the epoch. 1970-01-01.
+   *             Negative numbers represent earlier days.
+   * @param nanos The number of nanoseconds within the day since the midnight.
+   * @return The number of microseconds since the epoch of 1970-01-01 00:00:00Z.
+   */
+  def makeTimestampNTZ(days: Int, nanos: Long): Long = {
+    localDateTimeToMicros(LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos)))
   }
 }

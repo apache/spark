@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import scala.annotation.unused
-
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.pipelines.logging.{
   FlowProgressEventLogger,
@@ -31,10 +29,6 @@ import org.apache.spark.sql.pipelines.logging.{
  * @param unresolvedGraph The graph (unresolved) to be executed in this update.
  * @param eventCallback A callback function to be called when an event is added to the event buffer.
  */
-@unused(
-  "TODO(SPARK-51727) construct this spark connect server when we expose APIs for users " +
-  "to interact with a pipeline"
-)
 class PipelineUpdateContextImpl(
     override val unresolvedGraph: DataflowGraph,
     eventCallback: PipelineEvent => Unit
