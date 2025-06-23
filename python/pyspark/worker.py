@@ -979,6 +979,7 @@ def wrap_kwargs_support(f, args_offsets, kwargs_offsets):
 def _supports_profiler(eval_type: int) -> bool:
     return eval_type not in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
@@ -1038,11 +1039,12 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         PythonEvalType.SQL_BATCHED_UDF,
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         # The below doesn't support named argument, but shares the same protocol.
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
     ):
         args_offsets = []
         kwargs_offsets = {}
