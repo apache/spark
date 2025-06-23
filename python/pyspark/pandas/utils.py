@@ -20,6 +20,7 @@ Commonly used utils in pandas-on-Spark.
 
 import functools
 from contextlib import contextmanager
+import json
 import os
 from typing import (
     Any,
@@ -1071,10 +1072,28 @@ def xor(df1: PySparkDataFrame, df2: PySparkDataFrame) -> PySparkDataFrame:
 
 
 def is_ansi_mode_enabled(spark: SparkSession) -> bool:
-    return (
-        ps.get_option("compute.ansi_mode_support", spark_session=spark)
-        and spark.conf.get("spark.sql.ansi.enabled") == "true"
-    )
+    if is_remote():
+        from pyspark.sql.connect.session import SparkSession as ConnectSession
+        from pyspark.pandas.config import _key_format, _options_dict
+
+        client = cast(ConnectSession, spark).client
+        (ansi_mode_support, ansi_enabled) = client.get_config_with_defaults(
+            (
+                _key_format("compute.ansi_mode_support"),
+                json.dumps(_options_dict["compute.ansi_mode_support"].default),
+            ),
+            ("spark.sql.ansi.enabled", None),
+        )
+        if ansi_enabled is None:
+            ansi_enabled = spark.conf.get("spark.sql.ansi.enabled")
+            # Explicitly set the default value to reduce the roundtrip for the next time.
+            spark.conf.set("spark.sql.ansi.enabled", ansi_enabled)
+        return json.loads(ansi_mode_support) and ansi_enabled.lower() == "true"
+    else:
+        return (
+            ps.get_option("compute.ansi_mode_support", spark_session=spark)
+            and spark.conf.get("spark.sql.ansi.enabled").lower() == "true"
+        )
 
 
 def _test() -> None:
