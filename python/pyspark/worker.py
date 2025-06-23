@@ -160,7 +160,8 @@ def wrap_scalar_pandas_udf(f, args_offsets, kwargs_offsets, return_type, runner_
             arrow_return_type,
         ),
     )
-    
+
+
 def wrap_scalar_arrow_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
 
