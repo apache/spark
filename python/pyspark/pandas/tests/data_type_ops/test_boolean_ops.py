@@ -25,7 +25,6 @@ from pandas.api.types import CategoricalDtype
 from pyspark import pandas as ps
 from pyspark.pandas import option_context
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.utils import is_ansi_mode_test, ansi_mode_not_supported_message
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
     extension_float_dtypes_available,
@@ -100,7 +99,6 @@ class BooleanOpsTestsMixin:
             else:
                 self.assertRaises(TypeError, lambda: b_psser * psser)
 
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_truediv(self):
         pdf, psdf = self.pdf, self.psdf
 
@@ -116,7 +114,6 @@ class BooleanOpsTestsMixin:
         for col in self.non_numeric_df_cols:
             self.assertRaises(TypeError, lambda: b_psser / psdf[col])
 
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_floordiv(self):
         pdf, psdf = self.pdf, self.psdf
 
