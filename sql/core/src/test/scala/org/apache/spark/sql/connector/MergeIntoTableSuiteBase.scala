@@ -1798,8 +1798,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
       // group based merge does a outer join on target to retain the original rows
       // so pulls in more rows than delta based merge
-      assertMetric(mergeExec, "numTargetRowsCopied", 2, Some(0))
-      assertMetric(mergeExec, "numTargetRowsUnused", 0, Some(1))
+      assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 2)
+      assertMetric(mergeExec, "numTargetRowsUnused", if (deltaMerge) 1 else 0)
       assertMetric(mergeExec, "numSourceRowsUnused", 1)
 
       checkAnswer(
@@ -1876,8 +1876,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       }
 
 
-      assertMetric(mergeExec, "numTargetRowsCopied", 3, Some(0))
-      assertMetric(mergeExec, "numTargetRowsUnused", 0, Some(3))
+      assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
+      assertMetric(mergeExec, "numTargetRowsUnused", if (deltaMerge) 3 else 0)
       assertMetric(mergeExec, "numSourceRowsUnused", 1)
 
       checkAnswer(
@@ -1917,8 +1917,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
            |""".stripMargin
       }
 
-      assertMetric(mergeExec, "numTargetRowsCopied", 3, Some(0))
-      assertMetric(mergeExec, "numTargetRowsUnused", 0, Some(3))
+      assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
+      assertMetric(mergeExec, "numTargetRowsUnused", if (deltaMerge) 3 else 0)
       assertMetric(mergeExec, "numSourceRowsUnused", 2)
 
       checkAnswer(
@@ -1972,17 +1972,11 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   private def assertMetric(
       mergeExec: MergeRowsExec,
       metricName: String,
-      expected: Long,
-      deltaExpected: Option[Long] = None): Unit = {
+      expected: Long): Unit = {
     mergeExec.metrics.get(metricName) match {
       case Some(metric) =>
-        val actualExpected =
-          deltaExpected match {
-            case Some(deltaExpectedValue) if deltaMerge => deltaExpectedValue
-            case _ => expected
-          }
-        assert(metric.value == actualExpected,
-          s"Expected $metricName to be $actualExpected, but got ${metric.value}")
+        assert(metric.value == expected,
+          s"Expected $metricName to be $expected, but got ${metric.value}")
       case None => fail(s"$metricName metric not found")
     }
   }
