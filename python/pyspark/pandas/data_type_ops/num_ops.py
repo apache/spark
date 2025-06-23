@@ -96,9 +96,15 @@ class NumericOps(DataTypeOps):
         _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Modulo can not be applied to given types.")
+        spark_session = left._internal.spark_frame.sparkSession
 
         def mod(left: PySparkColumn, right: Any) -> PySparkColumn:
-            return ((left % right) + right) % right
+            if is_ansi_mode_enabled(spark_session):
+                return F.when(F.lit(right == 0), F.lit(None)).otherwise(
+                    ((left % right) + right) % right
+                )
+            else:
+                return ((left % right) + right) % right
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         return column_op(mod)(left, right)
