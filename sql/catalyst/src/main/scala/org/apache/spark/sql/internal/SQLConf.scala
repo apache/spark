@@ -5016,6 +5016,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val JSON_MAX_STRING_LENGTH =
+    buildConf("spark.sql.json.defaultMaxStringLength")
+      .doc("Global default maximum string length limit when reading JSON data. It will be " +
+        "overridden if a JSONOption maxStringLen is provided.")
+      .version("3.5.0")
+      .intConf
+      .createWithDefault(Int.MaxValue)
+
   val VARIANT_ALLOW_DUPLICATE_KEYS =
     buildConf("spark.sql.variant.allowDuplicateKeys")
       .internal()

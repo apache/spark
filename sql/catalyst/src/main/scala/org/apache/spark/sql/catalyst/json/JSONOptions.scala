@@ -55,7 +55,7 @@ class JSONOptions(
   private val maxStringLen: Int = parameters
     .get("maxStringLen")
     .map(_.toInt)
-    .getOrElse(StreamReadConstraints.DEFAULT_MAX_STRING_LEN)
+    .getOrElse(SQLConf.get.getConf(SQLConf.JSON_MAX_STRING_LENGTH))
 
   def this(
     parameters: Map[String, String],
