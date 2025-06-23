@@ -101,7 +101,7 @@ class InMemoryFileIndex(
   }
 
   override def equals(other: Any): Boolean = other match {
-    case hdfs: InMemoryFileIndex => rootPaths.toSet == hdfs.rootPaths.toSet
+    case hdfs: InMemoryFileIndex => rootPaths.sorted == hdfs.rootPaths.sorted
     case _ => false
   }
 
