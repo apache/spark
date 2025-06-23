@@ -29,10 +29,11 @@ import com.fasterxml.jackson.core.JsonFactory
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
-import org.apache.hadoop.io.compress.GzipCodec
+import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUpgradeException, TestUtils}
 import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.io.ZStdCompressionCodec
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.{functions => F, _}
@@ -4053,6 +4054,116 @@ abstract class JsonSuite
         Seq(Row(1, 2, "true"), Row(1, 2, """{"a":[],"b":null}"""), Row(1, 2, """{"a":1}"""),
           Row(1, 2, "[1,2,3]"))
       )
+    }
+  }
+
+  test("from_json with variant") {
+    val df = Seq(
+      "true",
+      """{"a": [], "b": null}""",
+      """{"a": 1}""",
+      "bad json",
+      "[1, 2, 3]"
+    ).toDF("value")
+    checkAnswer(
+      df.selectExpr("cast(from_json(value, 'var variant', " +
+        "map('singleVariantColumn', 'var')) as string)"),
+      Seq(Row("{true}"), Row("""{{"a":[],"b":null}}"""), Row("""{{"a":1}}"""), Row("{null}"),
+        Row("{[1,2,3]}"))
+    )
+    checkAnswer(
+      df.selectExpr("cast(from_json(value, 'var variant, _corrupt_record string', " +
+        "map('singleVariantColumn', 'var')) as string)"),
+      Seq(Row("{true, null}"), Row("""{{"a":[],"b":null}, null}"""), Row("""{{"a":1}, null}"""),
+        Row("{null, bad json}"), Row("{[1,2,3], null}"))
+    )
+  }
+
+  private def createTestFiles(dir: File, fileFormatWriter: Boolean,
+    multiline: Boolean): Seq[Row] = {
+    val numRecord = 100
+    val codecExtensionMap = HadoopCompressionCodec.values()
+      .map(c => (c.lowerCaseName(),
+        Option(c.getCompressionCodec).map(_.getDefaultExtension).getOrElse(""))) ++
+      Seq(("zstd", ".zst"), ("zstd", ".zstd"), ("gzip", ".gzip"))
+
+    val codecFactory = new CompressionCodecFactory(spark.sessionState.newHadoopConf())
+    codecExtensionMap.foreach { case (codec, ext) =>
+
+      val records: Seq[(Int, String)] = (1 to numRecord).map(id => (id, s"value_${codec}$ext"))
+      val file = new File(dir, s"test_$codec.json$ext")
+
+      // file data source writers do not support zstd codec yet.
+      if (fileFormatWriter && !multiline && !codec.equals("zstd")) {
+        // Json writer cannot write root-level json arrays.
+        val df = records.toDF("id", "value")
+        df.coalesce(1).write
+          .option("compression", codec)
+          .json(file.getCanonicalPath)
+
+        val compressedFiles = new File(file.getCanonicalPath).listFiles()
+
+        compressedFiles.foreach { file =>
+          if (file.isFile && file.getName.startsWith("part")) {
+            val newName = file.getName.split("\\.").init.mkString(".") + ext
+            val status = file.renameTo(new File(dir, newName))
+            assert(status)
+          }
+        }
+      } else {
+        val lines = records.map {
+          case (id, value) =>
+            s"""{"id": ${id}, "value": "$value"}"""
+        }
+        val data = if (multiline) {
+          lines.mkString("[\n", ",\n", "\n]")
+        } else {
+          lines.mkString("\n")
+        }
+
+        val os = new FileOutputStream(file)
+
+        val outputStream = codec match {
+          case "zstd" =>
+            new ZStdCompressionCodec(sparkConf).compressedOutputStream(os)
+          case codec if ext.nonEmpty =>
+            val compressionCodec = codecFactory.getCodecByName(codec)
+            compressionCodec.createOutputStream(os)
+          case _ => os
+        }
+        outputStream.write(data.getBytes(StandardCharsets.UTF_8))
+        outputStream.close()
+      }
+    }
+
+    val expectedOutput = codecExtensionMap.flatMap {
+      case (codec, ext) =>
+        val data = (1 to numRecord).map(i => Row(i, s"value_${codec}$ext"))
+        data
+    }.toSeq
+    assert(expectedOutput.length == codecExtensionMap.length * numRecord)
+    expectedOutput
+  }
+
+  test("Test all supported codec and extension including zst, zstd and gzip") {
+    for (
+      multiLine <- Seq(true, false);
+      fileFormatWriter <- Seq(true, false)
+    ) {
+      logInfo(
+        s"Testing with multiLine=$multiLine, " +
+          s"fileFormatWriter=$fileFormatWriter"
+      )
+      withTempDir { dir =>
+        val options = Map(
+          "multiLine" -> multiLine.toString,
+          "recursiveFileLookup" -> "true"
+        )
+
+        val expectedOutput = createTestFiles(dir, fileFormatWriter, multiLine)
+        val df = spark.read.options(options).json(dir.getCanonicalPath)
+        checkAnswer(df, expectedOutput)
+      }
     }
   }
 }
