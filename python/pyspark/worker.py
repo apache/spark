@@ -442,39 +442,39 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
             )
 
 
-def wrap_arrow_array_iter_udf(f, return_type, runner_conf):	
-    arrow_return_type = to_arrow_type(	
-        return_type, prefers_large_types=use_large_var_types(runner_conf)	
-    )	
+def wrap_arrow_array_iter_udf(f, return_type, runner_conf):
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=use_large_var_types(runner_conf)
+    )
 
-    def verify_result(result):	
-        if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):	
-            raise PySparkTypeError(	
-                errorClass="UDF_RETURN_TYPE",	
-                messageParameters={	
-                    "expected": "iterator of pyarrow.Array",	
-                    "actual": type(result).__name__,	
-                },	
-            )	
-        return result	
+    def verify_result(result):
+        if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
+            raise PySparkTypeError(
+                errorClass="UDF_RETURN_TYPE",
+                messageParameters={
+                    "expected": "iterator of pyarrow.Array",
+                    "actual": type(result).__name__,
+                },
+            )
+        return result
 
-    def verify_element(elem):	
-        import pyarrow as pa	
+    def verify_element(elem):
+        import pyarrow as pa
 
-        if not isinstance(elem, pa.Array):	
-            raise PySparkTypeError(	
-                errorClass="UDF_RETURN_TYPE",	
-                messageParameters={	
-                    "expected": "iterator of pyarrow.Array",	
-                    "actual": "iterator of {}".format(type(elem).__name__),	
-                },	
-            )	
+        if not isinstance(elem, pa.Array):
+            raise PySparkTypeError(
+                errorClass="UDF_RETURN_TYPE",
+                messageParameters={
+                    "expected": "iterator of pyarrow.Array",
+                    "actual": "iterator of {}".format(type(elem).__name__),
+                },
+            )
 
-        return elem	
+        return elem
 
-    return lambda *iterator: map(	
-        lambda res: (res, arrow_return_type), map(verify_element, verify_result(f(*iterator)))	
-    )	
+    return lambda *iterator: map(
+        lambda res: (res, arrow_return_type), map(verify_element, verify_result(f(*iterator)))
+    )
 
 
 def wrap_arrow_batch_iter_udf(f, return_type, runner_conf):
