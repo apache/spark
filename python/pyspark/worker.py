@@ -442,6 +442,41 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
             )
 
 
+def wrap_arrow_array_iter_udf(f, return_type, runner_conf):	
+    arrow_return_type = to_arrow_type(	
+        return_type, prefers_large_types=use_large_var_types(runner_conf)	
+    )	
+
+    def verify_result(result):	
+        if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):	
+            raise PySparkTypeError(	
+                errorClass="UDF_RETURN_TYPE",	
+                messageParameters={	
+                    "expected": "iterator of pyarrow.Array",	
+                    "actual": type(result).__name__,	
+                },	
+            )	
+        return result	
+
+    def verify_element(elem):	
+        import pyarrow as pa	
+
+        if not isinstance(elem, pa.Array):	
+            raise PySparkTypeError(	
+                errorClass="UDF_RETURN_TYPE",	
+                messageParameters={	
+                    "expected": "iterator of pyarrow.Array",	
+                    "actual": "iterator of {}".format(type(elem).__name__),	
+                },	
+            )	
+
+        return elem	
+
+    return lambda *iterator: map(	
+        lambda res: (res, arrow_return_type), map(verify_element, verify_result(f(*iterator)))	
+    )	
+
+
 def wrap_arrow_batch_iter_udf(f, return_type, runner_conf):
     arrow_return_type = to_arrow_type(
         return_type, prefers_large_types=use_large_var_types(runner_conf)
@@ -1059,10 +1094,14 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
     # the last returnType will be the return type of UDF
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
         return wrap_scalar_pandas_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf)
+    elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:	
+        return wrap_scalar_arrow_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF:
         return wrap_arrow_batch_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
         return args_offsets, wrap_pandas_batch_iter_udf(func, return_type, runner_conf)
+    elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF:	
+        return args_offsets, wrap_arrow_array_iter_udf(func, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
         return args_offsets, wrap_pandas_batch_iter_udf(func, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
