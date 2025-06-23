@@ -822,4 +822,16 @@ object DateTimeUtils extends SparkDateTimeUtils {
         throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
     }
   }
+
+  /**
+   * Makes a timestamp without time zone from a date and a local time.
+   *
+   * @param days The number of days since the epoch. 1970-01-01.
+   *             Negative numbers represent earlier days.
+   * @param nanos The number of nanoseconds within the day since the midnight.
+   * @return The number of microseconds since the epoch of 1970-01-01 00:00:00Z.
+   */
+  def makeTimestampNTZ(days: Int, nanos: Long): Long = {
+    localDateTimeToMicros(LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos)))
+  }
 }
