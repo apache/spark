@@ -71,6 +71,9 @@ message DataType {
     Unparsed unparsed = 24;
   }
 
+  // Reserved for geometry and geography types
+  reserved 26, 27;
+
   message Boolean {
     uint32 type_variation_reference = 1;
   }

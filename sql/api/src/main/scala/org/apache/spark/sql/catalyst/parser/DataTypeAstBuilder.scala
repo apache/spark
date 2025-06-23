@@ -78,6 +78,13 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   /**
+   * Create the TIMESTAMP_NTZ primitive type.
+   */
+  override def visitTimestampNtzDataType(ctx: TimestampNtzDataTypeContext): DataType = {
+    withOrigin(ctx)(TimestampNTZType)
+  }
+
+  /**
    * Resolve/create a primitive type.
    */
   override def visitPrimitiveDataType(ctx: PrimitiveDataTypeContext): DataType = withOrigin(ctx) {
@@ -92,7 +99,6 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       case (DOUBLE, Nil) => DoubleType
       case (DATE, Nil) => DateType
       case (TIMESTAMP, Nil) => SqlApiConf.get.timestampType
-      case (TIMESTAMP_NTZ, Nil) => TimestampNTZType
       case (TIMESTAMP_LTZ, Nil) => TimestampType
       case (STRING, Nil) =>
         typeCtx.children.asScala.toSeq match {

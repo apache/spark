@@ -5949,6 +5949,17 @@ object SQLConf {
       .createWithDefault(2)
   }
 
+  val HADOOP_LINE_RECORD_READER_ENABLED =
+    buildConf("spark.sql.execution.datasources.hadoopLineRecordReader.enabled")
+      .internal()
+      .doc("Enable the imported Hadoop's LineRecordReader. This was imported and renamed to " +
+        "HadoopLineRecordReader to add support for compression option and other " +
+        "future codecs like ZSTD, etc. Setting the conf to false will use the LineRecordReader " +
+        "class from the hadoop jar instead of the imported one.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val INCLUDE_PARTITION_COLUMNS_IN_SINGLE_VARIANT_COLUMN = {
     buildConf("spark.sql.includePartitionColumnsInSingleVariantColumn")
       .internal()
@@ -7030,6 +7041,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   }
 
   def maxFlowRetryAttempts: Int = getConf(SQLConf.PIPELINES_MAX_FLOW_RETRY_ATTEMPTS)
+
+  def hadoopLineRecordReaderEnabled: Boolean = getConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED)
 
   def includePartitionColumnsInSingleVariantColumn: Boolean = getConf(
     SQLConf.INCLUDE_PARTITION_COLUMNS_IN_SINGLE_VARIANT_COLUMN
