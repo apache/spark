@@ -422,7 +422,7 @@ class SetShuffleManagerPlugin extends SparkPlugin {
   }
 }
 
-object SetShuffleManagerPlugin {
+private object SetShuffleManagerPlugin {
   class MyShuffleManager(conf: SparkConf) extends SortShuffleManager(conf)
 }
 
