@@ -735,3 +735,10 @@ WITH RECURSIVE win(id, val) AS (
     FROM win WHERE id < 3
 )
 SELECT * FROM win;
+
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    (SELECT n + 1 FROM t1 WHERE n < 5 ORDER BY n)
+)
+SELECT * FROM t1;

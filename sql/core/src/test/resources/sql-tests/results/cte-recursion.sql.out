@@ -1822,3 +1822,20 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
   "sqlState" : "42836"
 }
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    (SELECT n + 1 FROM t1 WHERE n < 5 ORDER BY n)
+)
+SELECT * FROM t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836"
+}

@@ -3418,7 +3418,7 @@
     "subClass" : {
       "PLACE" : {
         "message" : [
-          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins and in aggregates"
+          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins, in aggregates, window functions or sorts"
         ]
       }
     },
