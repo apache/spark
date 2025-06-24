@@ -24,7 +24,7 @@ import java.util.Locale
 import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
 import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
 
-import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFiles, SparkRuntimeException}
+import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFiles, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
@@ -2510,6 +2510,57 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       checkAnswer(sql("SELECT * FROM t1"),
         sql("select 1, null, timestamp_ntz'2018-11-17 13:33:33'"))
     }
+  }
+
+  test("Executing relation with STREAM fails") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 AS SELECT 1")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("CREATE TABLE t2 AS SELECT * FROM STREAM t1")
+        },
+        condition = "_LEGACY_ERROR_TEMP_3102",
+        sqlState = None,
+        parameters = Map("msg" -> ("Queries with streaming sources must be executed with " +
+          "writeStream.start(), or from a streaming table or flow definition within a Spark " +
+          "Declarative Pipeline."))
+      )
+    }
+  }
+
+  test("CREATE MATERIALIZED VIEW cannot be directly executed") {
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sql(s"CREATE MATERIALIZED VIEW table1 AS SELECT 1")
+      },
+      condition = "UNSUPPORTED_FEATURE.CREATE_PIPELINE_DATASET_QUERY_EXECUTION",
+      sqlState = "0A000",
+      parameters = Map("pipelineDatasetType" -> "MATERIALIZED VIEW")
+    )
+  }
+
+  test("CREATE STREAMING TABLE cannot be directly executed") {
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sql(s"CREATE STREAMING TABLE table1 AS SELECT 1")
+      },
+      condition = "UNSUPPORTED_FEATURE.CREATE_PIPELINE_DATASET_QUERY_EXECUTION",
+      sqlState = "0A000",
+      parameters = Map("pipelineDatasetType" -> "STREAMING TABLE")
+    )
+  }
+
+  test(s"CREATE FLOW statement cannot be directly executed") {
+    sql("CREATE TABLE table1 AS SELECT 1")
+    sql("CREATE TABLE table2 AS SELECT 2")
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sql("CREATE FLOW f AS INSERT INTO table2 SELECT * FROM table1")
+      },
+      condition = "UNSUPPORTED_FEATURE.CREATE_FLOW_QUERY_EXECUTION",
+      sqlState = "0A000",
+      parameters = Map.empty
+    )
   }
 }
 

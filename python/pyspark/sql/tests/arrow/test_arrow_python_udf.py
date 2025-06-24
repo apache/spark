@@ -221,6 +221,28 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             ):
                 super().test_udf_with_udt()
 
+    def test_udf_use_arrow_and_session_conf(self):
+        with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": "true"}):
+            self.assertEqual(
+                udf(lambda x: str(x), useArrow=None).evalType, PythonEvalType.SQL_ARROW_BATCHED_UDF
+            )
+            self.assertEqual(
+                udf(lambda x: str(x), useArrow=True).evalType, PythonEvalType.SQL_ARROW_BATCHED_UDF
+            )
+            self.assertEqual(
+                udf(lambda x: str(x), useArrow=False).evalType, PythonEvalType.SQL_BATCHED_UDF
+            )
+        with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": "false"}):
+            self.assertEqual(
+                udf(lambda x: str(x), useArrow=None).evalType, PythonEvalType.SQL_BATCHED_UDF
+            )
+            self.assertEqual(
+                udf(lambda x: str(x), useArrow=True).evalType, PythonEvalType.SQL_ARROW_BATCHED_UDF
+            )
+            self.assertEqual(
+                udf(lambda x: str(x), useArrow=False).evalType, PythonEvalType.SQL_BATCHED_UDF
+            )
+
 
 class ArrowPythonUDFTests(ArrowPythonUDFTestsMixin, ReusedSQLTestCase):
     @classmethod

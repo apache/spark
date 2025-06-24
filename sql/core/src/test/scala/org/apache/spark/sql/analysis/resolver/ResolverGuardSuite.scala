@@ -181,7 +181,7 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
     checkResolverGuard("SELECT * FROM (SELECT * FROM (SELECT * FROM VALUES(1)))", shouldPass = true)
   }
 
-  for(setOperation <- Seq("UNION", "INTERSECT", "EXCEPT")) {
+  for (setOperation <- Seq("UNION", "INTERSECT", "EXCEPT")) {
     test(s"$setOperation ALL") {
       checkResolverGuard(
         s"SELECT * FROM VALUES(1) $setOperation ALL SELECT * FROM VALUES(2)",
@@ -230,12 +230,16 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
     checkResolverGuard("SELECT current_timestamp", shouldPass = true)
   }
 
-  test("Group by all") {
+  test("Group by") {
     checkResolverGuard("SELECT col1, count(col1) FROM VALUES(1) GROUP BY ALL", shouldPass = true)
+    checkResolverGuard("SELECT col1 FROM VALUES(1) GROUP BY 1", shouldPass = true)
+    checkResolverGuard("SELECT col1, col1 + 1 FROM VALUES(1) GROUP BY 1, col1", shouldPass = true)
   }
 
-  test("Order by all") {
+  test("Order by") {
     checkResolverGuard("SELECT col1 FROM VALUES(1) ORDER BY ALL", shouldPass = true)
+    checkResolverGuard("SELECT col1 FROM VALUES(1) ORDER BY 1", shouldPass = true)
+    checkResolverGuard("SELECT col1, col1 + 1 FROM VALUES(1) ORDER BY 1, col1", shouldPass = true)
   }
 
   test("Scalar subquery") {
@@ -266,19 +270,23 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("EXPLAIN") {
+    checkResolverGuard("EXPLAIN EXTENDED SELECT * FROM VALUES (1)", shouldPass = true)
+    checkResolverGuard("EXPLAIN EXPLAIN SELECT * FROM VALUES (1)", shouldPass = true)
+  }
+
+  test("DESCRIBE") {
+    checkResolverGuard("DESCRIBE QUERY SELECT * FROM VALUES (1)", shouldPass = true)
+  }
+
+  test("HAVING") {
+    checkResolverGuard(
+      "SELECT col1 FROM VALUES(1) GROUP BY col1 HAVING col1 > 1",
+      shouldPass = true
+    )
+  }
+
   // Queries that shouldn't pass the OperatorResolverGuard
-
-  // We temporarily disable group by ordinal until we address SPARK-51820 in single-pass.
-  test("Group by ordinal") {
-    checkResolverGuard("SELECT col1 FROM VALUES(1) GROUP BY 1", shouldPass = false)
-    checkResolverGuard("SELECT col1, col1 + 1 FROM VALUES(1) GROUP BY 1, col1", shouldPass = false)
-  }
-
-  // We temporarily disable order by ordinal until we address SPARK-51820 in single-pass.
-  test("Order by ordinal") {
-    checkResolverGuard("SELECT col1 FROM VALUES(1) ORDER BY 1", shouldPass = false)
-    checkResolverGuard("SELECT col1, col1 + 1 FROM VALUES(1) ORDER BY 1, col1", shouldPass = false)
-  }
 
   test("Unsupported literal functions") {
     checkResolverGuard("SELECT current_user", shouldPass = false)

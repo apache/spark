@@ -1157,10 +1157,10 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     "it refers to non-existent table with same name") {
     val plan = UnresolvedWith(
       UnresolvedRelation(TableIdentifier("t")),
-      Seq("t" -> SubqueryAlias("t",
+      Seq(("t", SubqueryAlias("t",
         Project(
           Alias(Literal(1), "x")() :: Nil,
-          UnresolvedRelation(TableIdentifier("t", Option("nonexist")))))))
+          UnresolvedRelation(TableIdentifier("t", Option("nonexist"))))), None)))
     assertAnalysisErrorCondition(plan,
       expectedErrorCondition = "TABLE_OR_VIEW_NOT_FOUND",
       Map("relationName" -> "`nonexist`.`t`"))

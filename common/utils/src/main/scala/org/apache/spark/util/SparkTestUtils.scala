@@ -25,7 +25,7 @@ import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
 import scala.jdk.CollectionConverters._
 
-trait SparkTestUtils {
+private[spark] trait SparkTestUtils {
   // Adapted from the JavaCompiler.java doc examples
   private val SOURCE = JavaFileObject.Kind.SOURCE
 
@@ -103,4 +103,4 @@ trait SparkTestUtils {
 
 }
 
-object SparkTestUtils extends SparkTestUtils
+private[spark] object SparkTestUtils extends SparkTestUtils

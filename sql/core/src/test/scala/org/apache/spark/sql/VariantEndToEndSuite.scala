@@ -30,7 +30,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarArray
 import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.types.variant.VariantUtil._
-import org.apache.spark.unsafe.types.VariantVal
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -101,6 +101,26 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     )
     // scalastyle:on nonascii
     check("[0.0, 1.00, 1.10, 1.23]", "[0,1,1.1,1.23]")
+
+    // Validate options work.
+    checkAnswer(Seq("""{"a": NaN}""").toDF("v")
+      .selectExpr("from_json(v, 'variant', map('allowNonNumericNumbers', 'false'))"), Row(null))
+    checkAnswer(Seq("""{"a": NaN}""").toDF("v")
+      .selectExpr("from_json(v, 'variant', map('allowNonNumericNumbers', 'true'))"),
+      Row(
+        VariantExpressionEvalUtils.castToVariant(InternalRow(Double.NaN),
+          StructType.fromDDL("a double"))))
+    // String input "NaN" will remain a string instead of double.
+    checkAnswer(Seq("""{"a": "NaN"}""").toDF("v")
+      .selectExpr("from_json(v, 'variant', map('allowNonNumericNumbers', 'true'))"),
+      Row(
+        VariantExpressionEvalUtils.castToVariant(InternalRow(UTF8String.fromString("NaN")),
+          StructType.fromDDL("a string"))))
+    // to_json should put special floating point values in quotes.
+    checkAnswer(Seq("""{"a": NaN}""").toDF("v")
+      .selectExpr("to_json(from_json(v, 'variant', map('allowNonNumericNumbers', 'true')))"),
+      Row("""{"a":"NaN"}"""))
+
   }
 
   test("try_parse_json/to_json round-trip") {
@@ -346,6 +366,7 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("from_json(_, 'variant') with duplicate keys") {
     val json: String = """{"a": 1, "b": 2, "c": "3", "a": 4}"""
+
     withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "true") {
       val df = Seq(json).toDF("j")
         .selectExpr("from_json(j,'variant')")
@@ -359,24 +380,25 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
       val expectedMetadata: Array[Byte] = Array(VERSION, 3, 0, 1, 2, 3, 'a', 'b', 'c')
       assert(actual === new VariantVal(expectedValue, expectedMetadata))
     }
-    // Check whether the parse_json and from_json expressions throw the correct exception.
-    Seq("from_json(j, 'variant')", "parse_json(j)").foreach { expr =>
-      withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "false") {
-        val df = Seq(json).toDF("j").selectExpr(expr)
-        val exception = intercept[SparkException] {
-          df.collect()
-        }
-        checkError(
-          exception = exception,
-          condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-          parameters = Map("badRecord" -> json, "failFastMode" -> "FAILFAST")
-        )
-        checkError(
-          exception = exception.getCause.asInstanceOf[SparkRuntimeException],
-          condition = "VARIANT_DUPLICATE_KEY",
-          parameters = Map("key" -> "a")
-        )
+
+    withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "false") {
+      // In default mode (PERMISSIVE), JSON with duplicate keys is still invalid, but no error will
+      // be thrown.
+      checkAnswer(Seq(json).toDF("j").selectExpr("from_json(j, 'variant')"), Row(null))
+
+      val exception = intercept[SparkException] {
+        Seq(json).toDF("j").selectExpr("from_json(j, 'variant', map('mode', 'FAILFAST'))").collect()
       }
+      checkError(
+        exception = exception,
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
+      )
+      checkError(
+        exception = exception.getCause.asInstanceOf[SparkRuntimeException],
+        condition = "VARIANT_DUPLICATE_KEY",
+        parameters = Map("key" -> "a")
+      )
     }
   }
 

@@ -64,18 +64,18 @@ case class OrcScan(
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    val broadcastedConf = sparkSession.sparkContext.broadcast(
-      new SerializableConfiguration(hadoopConf))
-    val memoryMode = if (sparkSession.sessionState.conf.offHeapColumnVectorEnabled) {
+    val broadcastedConf =
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
+    val memoryMode = if (conf.offHeapColumnVectorEnabled) {
       MemoryMode.OFF_HEAP
     } else {
       MemoryMode.ON_HEAP
     }
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
-    OrcPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
+    OrcPartitionReaderFactory(conf, broadcastedConf,
       dataSchema, readDataSchema, readPartitionSchema, pushedFilters, pushedAggregate,
-      new OrcOptions(options.asScala.toMap, sparkSession.sessionState.conf), memoryMode)
+      new OrcOptions(options.asScala.toMap, conf), memoryMode)
   }
 
   override def equals(obj: Any): Boolean = obj match {

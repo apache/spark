@@ -17,35 +17,25 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import java.util
-
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.connector.expressions.Transform
 
 class InMemoryRowLevelOperationTableCatalog extends InMemoryTableCatalog {
   import CatalogV2Implicits._
 
-  override def createTable(
-      ident: Identifier,
-      columns: Array[Column],
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
     }
 
-    InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
+    InMemoryTableCatalog.maybeSimulateFailedTableCreation(tableInfo.properties)
 
     val tableName = s"$name.${ident.quoted}"
-    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
-    val table = new InMemoryRowLevelOperationTable(tableName, schema, partitions, properties)
+    val schema = CatalogV2Util.v2ColumnsToStructType(tableInfo.columns)
+    val table = new InMemoryRowLevelOperationTable(
+      tableName, schema, tableInfo.partitions, tableInfo.properties, tableInfo.constraints())
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
-  }
-
-  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
-    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties)
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {

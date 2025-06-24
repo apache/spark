@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{FunctionResolution, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   MetadataResolver,
   ProhibitedResolver,
@@ -89,9 +89,12 @@ class DataSourceResolverSuite extends QueryTest with SharedSparkSession {
       sqlText: String,
       expectedTableName: String,
       expectedTableSchema: StructType) = {
+    val relationResolution =
+      Resolver.createRelationResolution(spark.sessionState.catalogManager)
     val metadataResolver = new MetadataResolver(
       spark.sessionState.catalogManager,
-      Resolver.createRelationResolution(spark.sessionState.catalogManager)
+      relationResolution,
+      new FunctionResolution(spark.sessionState.catalogManager, relationResolution)
     )
     val dataSourceResolver = new DataSourceResolver(spark)
 

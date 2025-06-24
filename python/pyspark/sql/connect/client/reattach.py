@@ -342,6 +342,3 @@ class ExecutePlanResponseReattachableIterator(Generator):
     def close(self) -> None:
         self._release_all()
         return super().close()
-
-    def __del__(self) -> None:
-        return self.close()

@@ -465,7 +465,7 @@ object ArtifactManager extends Logging {
   val ARTIFACT_DIRECTORY_PREFIX = "artifacts"
 
   private[artifact] lazy val artifactRootDirectory =
-    Utils.createTempDir(ARTIFACT_DIRECTORY_PREFIX).toPath
+    Utils.createTempDir(namePrefix = ARTIFACT_DIRECTORY_PREFIX).toPath
 
   private[artifact] object SparkContextResourceType extends Enumeration {
     type ResourceType = Value

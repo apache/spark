@@ -23,20 +23,99 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{
-  AssertTrue,
-  Cast,
-  CommonExpressionDef,
-  CommonExpressionId,
-  CommonExpressionRef,
-  If,
-  Literal,
-  TimeZoneAwareExpression
-}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.types.BooleanType
 
 class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
+
+  test("Normalize Project") {
+    val baselineCol1 = $"col1".int
+    val testCol1 = baselineCol1.newInstance()
+    val baselinePlan = LocalRelation(baselineCol1).select(baselineCol1)
+    val testPlan = LocalRelation(testCol1).select(testCol1)
+
+    assert(baselinePlan != testPlan)
+    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
+
+  test("Normalize ordering in a project list of an inner Project under Project") {
+    val baselinePlan =
+      LocalRelation($"col1".int, $"col2".string).select($"col1", $"col2").select($"col1")
+    val testPlan =
+      LocalRelation($"col1".int, $"col2".string).select($"col2", $"col1").select($"col1")
+
+    assert(baselinePlan != testPlan)
+    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
+
+  test("Normalize ordering in a project list of an inner Project under Aggregate") {
+    val baselinePlan =
+      LocalRelation($"col1".int, $"col2".string).select($"col1", $"col2").groupBy($"col1")($"col1")
+    val testPlan =
+      LocalRelation($"col1".int, $"col2".string).select($"col2", $"col1").groupBy($"col1")($"col1")
+
+    assert(baselinePlan != testPlan)
+    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
+
+  test("Normalize ordering in an aggregate list of an inner Aggregate under Project") {
+    val baselinePlan = LocalRelation($"col1".int, $"col2".string)
+      .groupBy($"col1", $"col2")($"col1", $"col2")
+      .select($"col1")
+    val testPlan = LocalRelation($"col1".int, $"col2".string)
+      .groupBy($"col1", $"col2")($"col2", $"col1")
+      .select($"col1")
+
+    assert(baselinePlan != testPlan)
+    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
+
+  test("Normalize ordering in an aggregate list of an inner Aggregate under Project and Filter") {
+    val baselinePlan = LocalRelation($"col1".int, $"col2".string)
+      .groupBy($"col1", $"col2")($"col1", $"col2")
+      .where($"col1" === 1)
+      .select($"col1")
+    val testPlan = LocalRelation($"col1".int, $"col2".string)
+      .groupBy($"col1", $"col2")($"col2", $"col1")
+      .where($"col1" === 1)
+      .select($"col1")
+
+    assert(baselinePlan != testPlan)
+    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
+
+  test("Normalize ordering in an aggregate list of an inner Aggregate under Project and Sort") {
+    val baselinePlan = LocalRelation($"col1".int, $"col2".string)
+      .groupBy($"col1", $"col2")($"col1", $"col2")
+      .orderBy(SortOrder($"col1", Ascending))
+      .select($"col1")
+    val testPlan = LocalRelation($"col1".int, $"col2".string)
+      .groupBy($"col1", $"col2")($"col2", $"col1")
+      .orderBy(SortOrder($"col1", Ascending))
+      .select($"col1")
+
+    assert(baselinePlan != testPlan)
+    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
+
+  test(
+    "Normalize ordering in an aggregate list of an inner Aggregate under Project Sort and Filter"
+  ) {
+    val baselinePlan = LocalRelation($"col1".int, $"col2".string)
+      .groupBy($"col1", $"col2")($"col1", $"col2")
+      .where($"col1" === 1)
+      .orderBy(SortOrder($"col1", Ascending))
+      .select($"col1")
+    val testPlan = LocalRelation($"col1".int, $"col2".string)
+      .groupBy($"col1", $"col2")($"col2", $"col1")
+      .where($"col1" === 1)
+      .orderBy(SortOrder($"col1", Ascending))
+      .select($"col1")
+
+    assert(baselinePlan != testPlan)
+    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
 
   test("Normalize InheritAnalysisRules expressions") {
     val castWithoutTimezone =

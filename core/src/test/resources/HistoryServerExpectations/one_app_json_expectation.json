@@ -1,16 +1,16 @@
 {
-  "id" : "local-1422981780767",
-  "name" : "Spark shell",
   "attempts" : [ {
-    "startTime" : "2015-02-03T16:42:59.720GMT",
-    "endTime" : "2015-02-03T16:43:08.731GMT",
-    "lastUpdated" : "",
-    "duration" : 9011,
-    "sparkUser" : "irashid",
-    "completed" : true,
     "appSparkVersion" : "",
+    "completed" : true,
+    "duration" : 9011,
+    "endTime" : "2015-02-03T16:43:08.731GMT",
     "endTimeEpoch" : 1422981788731,
-    "startTimeEpoch" : 1422981779720,
-    "lastUpdatedEpoch" : 0
-  } ]
+    "lastUpdated" : "",
+    "lastUpdatedEpoch" : 0,
+    "sparkUser" : "irashid",
+    "startTime" : "2015-02-03T16:42:59.720GMT",
+    "startTimeEpoch" : 1422981779720
+  } ],
+  "id" : "local-1422981780767",
+  "name" : "Spark shell"
 }

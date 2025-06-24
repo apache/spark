@@ -487,7 +487,8 @@ private[parquet] class ParquetRowConverter(
             .asInstanceOf[TimeLogicalTypeAnnotation].getUnit == TimeUnit.MICROS =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-            this.updater.setLong(value)
+            val nanos = DateTimeUtils.microsToNanos(value)
+            this.updater.setLong(nanos)
           }
         }
 

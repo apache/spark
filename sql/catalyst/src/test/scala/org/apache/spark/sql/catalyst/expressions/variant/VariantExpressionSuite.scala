@@ -93,21 +93,21 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     check(Array(primitiveHeader(INT1), 0), Array[Byte](3, 0, 0))
     check(Array(primitiveHeader(INT1), 0), Array[Byte](2, 0, 0))
 
-    // Construct binary values that are over 1 << 24 bytes, but otherwise valid.
+    // Construct binary values that are over SIZE_LIMIT bytes, but otherwise valid.
     val bigVersion = Array[Byte]((VERSION | (3 << 6)).toByte)
-    val a = Array.fill(1 << 24)('a'.toByte)
+    val a = Array.fill(SIZE_LIMIT)('a'.toByte)
     val hugeMetadata = bigVersion ++ Array[Byte](2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1) ++
       a ++ Array[Byte]('b')
     check(Array(primitiveHeader(TRUE)), hugeMetadata, "VARIANT_CONSTRUCTOR_SIZE_LIMIT")
 
     // The keys are 'aaa....' and 'b'. Values are "yyy..." and 'true'.
-    val y = Array.fill(1 << 24)('y'.toByte)
+    val y = Array.fill(SIZE_LIMIT)('y'.toByte)
     val hugeObject = Array[Byte](objectHeader(true, 4, 4)) ++
       /* size */ padded(Array(2), 4) ++
       /* id list */ padded(Array(0, 1), 4) ++
-      // Second value starts at offset 5 + (1 << 24), which is `5001` little-endian. The last value
-      // is 1 byte, so the one-past-the-end value is `6001`
-      /* offset list */ Array[Byte](0, 0, 0, 0, 5, 0, 0, 1, 6, 0, 0, 1) ++
+      // Second value starts at offset 5 + (SIZE_LIMIT), which is `5008` little-endian. The last
+      // value is 1 byte, so the one-past-the-end value is `6008`
+      /* offset list */ Array[Byte](0, 0, 0, 0, 5, 0, 0, 8, 6, 0, 0, 8) ++
       /* field data */ Array[Byte](primitiveHeader(LONG_STR), 0, 0, 0, 1) ++ y ++ Array[Byte](
         primitiveHeader(TRUE)
       )

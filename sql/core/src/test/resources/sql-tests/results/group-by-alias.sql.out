@@ -328,6 +328,61 @@ struct<subq1:int>
 
 
 -- !query
+SELECT 111 AS abc GROUP BY 'a', abc
+-- !query schema
+struct<abc:int>
+-- !query output
+111
+
+
+-- !query
+SELECT *, 111 AS abc FROM VALUES ('a', 'b', 'c') GROUP BY col1, col2, col3, abc
+-- !query schema
+struct<col1:string,col2:string,col3:string,abc:int>
+-- !query output
+a	b	c	111
+
+
+-- !query
+SELECT col1 as a, col2 AS a FROM values('a','b') GROUP BY col2, a
+-- !query schema
+struct<a:string,a:string>
+-- !query output
+a	b
+
+
+-- !query
+SELECT 1 AS a, 2 AS a FROM VALUES (1) t (a) GROUP BY a HAVING a > 1 ORDER BY a
+-- !query schema
+struct<a:int,a:int>
+-- !query output
+
+
+
+-- !query
+SELECT 1 AS a, 2 AS a FROM VALUES (1) t (col1) GROUP BY a HAVING a > 1 ORDER BY a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`a`",
+    "referenceNames" : "[`a`, `a`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 66,
+    "stopIndex" : 66,
+    "fragment" : "a"
+  } ]
+}
+
+
+-- !query
 set spark.sql.groupByAliases=false
 -- !query schema
 struct<key:string,value:string>

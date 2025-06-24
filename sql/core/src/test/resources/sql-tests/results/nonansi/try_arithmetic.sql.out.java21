@@ -80,6 +80,14 @@ NULL
 
 
 -- !query
+SELECT try_add(sum(1), 1) GROUP BY ALL
+-- !query schema
+struct<try_add(sum(1), 1):bigint>
+-- !query output
+2
+
+
+-- !query
 SELECT try_add(date'2021-01-01', 1)
 -- !query schema
 struct<try_add(DATE '2021-01-01', 1):date>
@@ -282,6 +290,14 @@ NULL
 
 
 -- !query
+SELECT try_divide(sum(1), 1) GROUP BY ALL
+-- !query schema
+struct<try_divide(sum(1), 1):double>
+-- !query output
+1.0
+
+
+-- !query
 SELECT try_divide(interval 2 year, 2)
 -- !query schema
 struct<try_divide(INTERVAL '2' YEAR, 2):interval year to month>
@@ -410,6 +426,14 @@ NULL
 
 
 -- !query
+SELECT try_subtract(sum(1), 1) GROUP BY ALL
+-- !query schema
+struct<try_subtract(sum(1), 1):bigint>
+-- !query output
+0
+
+
+-- !query
 SELECT try_subtract(interval 2 year, interval 3 year)
 -- !query schema
 struct<try_subtract(INTERVAL '2' YEAR, INTERVAL '3' YEAR):interval year>
@@ -519,6 +543,14 @@ SELECT try_multiply(1, 1.0 / 0.0)
 struct<try_multiply(1, (1.0 / 0.0)):decimal(10,6)>
 -- !query output
 NULL
+
+
+-- !query
+SELECT try_multiply(sum(1), 1) GROUP BY ALL
+-- !query schema
+struct<try_multiply(sum(1), 1):bigint>
+-- !query output
+1
 
 
 -- !query

@@ -380,6 +380,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def schemaLevelCollationsNotEnabledError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.SCHEMA_LEVEL_COLLATIONS",
+      messageParameters = Map.empty
+    )
+  }
+
   def trimCollationNotEnabledError(): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.TRIM_COLLATION",
@@ -1269,7 +1276,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidBucketNumberError(bucketingMaxBuckets: Int, numBuckets: Int): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1083",
+      errorClass = "INVALID_BUCKET_COUNT",
       messageParameters = Map(
         "bucketingMaxBuckets" -> bucketingMaxBuckets.toString,
         "numBuckets" -> numBuckets.toString))
@@ -3686,6 +3693,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       ))
   }
 
+  def defaultValueNonDeterministicError(
+      statement: String,
+      colName: String,
+      defaultValue: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_DEFAULT_VALUE.NON_DETERMINISTIC",
+      messageParameters = Map(
+        "statement" -> toSQLStmt(statement),
+        "colName" -> toSQLId(colName),
+        "defaultValue" -> defaultValue
+      ))
+  }
+
   def nullableColumnOrFieldError(name: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "NULLABLE_COLUMN_OR_FIELD",
@@ -3973,6 +3993,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotRenameTableAcrossSchemaError(): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "CANNOT_RENAME_ACROSS_SCHEMA", messageParameters = Map("type" -> "table")
+    )
+  }
+
+  def unsupportedCreatePipelineFlowQueryExecutionError(): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.CREATE_FLOW_QUERY_EXECUTION"
+    )
+  }
+
+  def unsupportedCreatePipelineDatasetQueryExecutionError(
+      pipelineDatasetType: String): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.CREATE_PIPELINE_DATASET_QUERY_EXECUTION",
+      messageParameters = Map("pipelineDatasetType" -> pipelineDatasetType)
     )
   }
 
@@ -4355,5 +4389,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       ),
       origin = origin
     )
+  }
+
+  def unsupportedStreamingTVF(funcName: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION",
+      messageParameters = Map("funcName" -> toSQLId(funcName)))
   }
 }

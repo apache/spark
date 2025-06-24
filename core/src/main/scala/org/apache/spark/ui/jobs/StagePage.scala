@@ -142,6 +142,14 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       <div>
         <ul class="list-unstyled">
           <li>
+            <Strong>Submitted:</Strong>
+            {StageDataUtil.getFormattedSubmissionTime(stageData)}
+          </li>
+          <li>
+            <strong>Duration</strong>
+            {StageDataUtil.getFormattedDuration(stageData)}
+          </li>
+          <li>
             <strong>Resource Profile Id: </strong>
             {stageData.resourceProfileId}
           </li>

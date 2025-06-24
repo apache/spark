@@ -26,6 +26,7 @@ import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
 import "spark/connect/ml.proto";
+import "spark/connect/pipelines.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
@@ -398,6 +399,12 @@ message ExecutePlanResponse {
 
     // ML command response
     MlCommandResult ml_command_result = 20;
+
+    // Response containing pipeline event that is streamed back to the client during a pipeline run
+    PipelineEventResult pipeline_event_result = 21;
+
+    // Pipeline command response
+    PipelineCommandResult pipeline_command_result = 22;
 
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;

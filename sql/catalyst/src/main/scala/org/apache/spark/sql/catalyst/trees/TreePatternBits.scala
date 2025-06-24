@@ -60,3 +60,18 @@ trait TreePatternBits {
     false
   }
 }
+
+object TreePatternBits {
+
+  // Constructs a tree pattern BitSet that contains all tree patterns in `patterns`.
+  def toPatternBits(patterns: TreePattern*): BitSet = {
+    val bits: BitSet = new BitSet(TreePattern.maxId)
+    bits.clear()
+    val iterator = patterns.iterator
+    while (iterator.hasNext) {
+      bits.set(iterator.next().id)
+    }
+    bits
+  }
+}
+

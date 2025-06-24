@@ -34,7 +34,8 @@ import org.apache.spark.sql.catalyst.expressions.{
   Expression,
   ExpressionWithRandomSeed,
   InheritAnalysisRules,
-  Literal
+  Literal,
+  TryEval
 }
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 
@@ -51,48 +52,59 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
  *  {{{ SELECT ARRAY(*) FROM VALUES (1); }}}
  *  it is resolved using [[ExpressionResolver.resolveStar]].
  *
- * After resolving the function with [[FunctionResolution.resolveFunction]], performs further
- * resolution in following cases:
- *  - result of [[FunctionResolution.resolveFunction]] is [[ExpressionWithRandomSeed]] in which
- *  case it is necessary to initialize the random seed.
- *  - result of [[FunctionResolution.resolveFunction]] is [[InheritAnalysisRules]], in which case
- *    it is necessary to resolve its replacement expression.
- *  - result of [[FunctionResolution.resolveFunction]] is [[AggregateExpression]] or
- *  [[BinaryArithmetic]], in which case it is necessary to perform further resolution and checks on
- *  its children.
+ * After resolving the function with [[FunctionResolution.resolveFunction]] specific expression
+ * nodes require further resolution. See [[resolve]] for more details.
  *
  * Finally apply type coercion to the result of previous step and in case that the resulting
  * expression is [[TimeZoneAwareExpression]], apply timezone.
  */
 class FunctionResolver(
     expressionResolver: ExpressionResolver,
-    timezoneAwareExpressionResolver: TimezoneAwareExpressionResolver,
     functionResolution: FunctionResolution,
     aggregateExpressionResolver: AggregateExpressionResolver,
     binaryArithmeticResolver: BinaryArithmeticResolver)
     extends TreeNodeResolver[UnresolvedFunction, Expression]
-    with ProducesUnresolvedSubtree {
+    with ProducesUnresolvedSubtree
+    with CoercesExpressionTypes {
 
   private val random = new Random()
-
-  private val typeCoercionResolver: TypeCoercionResolver =
-    new TypeCoercionResolver(timezoneAwareExpressionResolver)
+  private val traversals = expressionResolver.getExpressionTreeTraversals
+  private val expressionResolutionContextStack =
+    expressionResolver.getExpressionResolutionContextStack
 
   /**
    * Main method used to resolve an [[UnresolvedFunction]]. It resolves it in the following steps:
+   *  - Check if the `unresolvedFunction` is an aggregate expression. Set
+   *    `resolvingTreeUnderAggregateExpression` to `true` in that case so we can properly resolve
+   *    attributes in ORDER BY and HAVING.
    *  - If the function is `count(*)` it is replaced with `count(1)` (please check
    *    [[normalizeCountExpression]] documentation for more details). Otherwise, we resolve the
    *    children of it.
    *  - Resolve the function using [[FunctionResolution.resolveFunction]].
-   *  - If the result from previous step is an [[AggregateExpression]], [[BinaryArithmetic]] or
-   *    [[InheritAnalysisRules]], perform further resolution on its children. If the result is an
-   *    [[ExpressionWithRandomSeed]], initialize the seed.
+   *  - Perform further resolution on specific nodes:
+   *    - Initialize the seed of [[InheritAnalysisRules]];
+   *    - Resolve the replacement expression of [[InheritAnalysisRules]];
+   *    - Type coerce [[TryEval]]'s child. Copying tags is specifically important for
+   *      [[FunctionRegistry.FUNC_ALIAS]];
+   *    - Use [[AggregateExpressionResolver]] to resolve [[AggregateExpression]];
+   *    - Use [[BinaryArithmeticResolver]] to resolve [[BinaryArithmetic]]. Specifically important
+   *      for cases like:
+   *      - {{{ SELECT `+`(1,2); }}}
+   *      - df.select(1+2)
    *  - Apply [[TypeCoercion]] rules to the result of previous step. In case that the resulting
    *    expression of the previous step is [[BinaryArithmetic]], skip this one as type coercion is
    *    already applied.
    *  - Apply timezone, if the resulting expression is [[TimeZoneAwareExpression]].
    */
   override def resolve(unresolvedFunction: UnresolvedFunction): Expression = {
+    val expressionInfo = functionResolution.lookupBuiltinOrTempFunction(
+      unresolvedFunction.nameParts,
+      Some(unresolvedFunction)
+    )
+    if (expressionInfo.exists(_.getGroup == "agg_funcs")) {
+      expressionResolutionContextStack.peek().resolvingTreeUnderAggregateExpression = true
+    }
+
     val functionWithResolvedChildren =
       if (isCountStarExpansionAllowed(unresolvedFunction)) {
         normalizeCountExpression(unresolvedFunction)
@@ -112,35 +124,42 @@ class FunctionResolver(
         if (!withNewSeed.seedExpression.foldable) {
           throwSeedExpressionIsUnfoldable(expressionWithRandomSeed)
         }
-        withNewSeed
+        coerceExpressionTypes(
+          expression = withNewSeed,
+          expressionTreeTraversal = traversals.current
+        )
       case inheritAnalysisRules: InheritAnalysisRules =>
-        // Since this [[InheritAnalysisRules]] node is created by
-        // [[FunctionResolution.resolveFunction]], we need to re-resolve its replacement
-        // expression.
         val resolvedInheritAnalysisRules =
           withResolvedChildren(inheritAnalysisRules, expressionResolver.resolve _)
-        typeCoercionResolver.resolve(resolvedInheritAnalysisRules)
+        coerceExpressionTypes(
+          expression = resolvedInheritAnalysisRules,
+          expressionTreeTraversal = traversals.current
+        )
+      case tryEval: TryEval =>
+        val coercedTryEval = tryEval.copy(
+          child = coerceExpressionTypes(
+            expression = tryEval.child,
+            expressionTreeTraversal = traversals.current
+          )
+        )
+        coercedTryEval.copyTagsFrom(tryEval)
+        coercedTryEval
       case aggregateExpression: AggregateExpression =>
-        // In case `functionResolution.resolveFunction` produces a `AggregateExpression` we
-        // need to apply further resolution which is done in the
-        // `AggregateExpressionResolver`.
-        val resolvedAggregateExpression = aggregateExpressionResolver.resolve(aggregateExpression)
-        typeCoercionResolver.resolve(resolvedAggregateExpression)
+        val resolvedAggregateExpression =
+          aggregateExpressionResolver.resolveWithoutRecursingIntoChildren(aggregateExpression)
+        coerceExpressionTypes(
+          expression = resolvedAggregateExpression,
+          expressionTreeTraversal = traversals.current
+        )
       case binaryArithmetic: BinaryArithmetic =>
-        // In case `functionResolution.resolveFunction` produces a `BinaryArithmetic` we
-        // need to apply further resolution which is done in the `BinaryArithmeticResolver`.
-        //
-        // Examples for this case are following (SQL and Dataframe):
-        //  - {{{ SELECT `+`(1,2); }}}
-        //  - df.select(1+2)
         binaryArithmeticResolver.resolve(binaryArithmetic)
       case other =>
-        typeCoercionResolver.resolve(other)
+        coerceExpressionTypes(expression = other, expressionTreeTraversal = traversals.current)
     }
 
-    timezoneAwareExpressionResolver.withResolvedTimezone(
+    TimezoneAwareExpressionResolver.resolveTimezone(
       resolvedFunction,
-      conf.sessionLocalTimeZone
+      traversals.current.sessionLocalTimeZone
     )
   }
 

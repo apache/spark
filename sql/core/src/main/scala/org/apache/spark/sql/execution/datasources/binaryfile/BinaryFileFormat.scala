@@ -96,7 +96,7 @@ case class BinaryFileFormat() extends FileFormat with DataSourceRegister {
         """.stripMargin)
 
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val filterFuncs = filters.flatMap(filter => createFilterFunction(filter))
     val maxLength = sparkSession.sessionState.conf.getConf(SOURCES_BINARY_FILE_MAX_LENGTH)
 

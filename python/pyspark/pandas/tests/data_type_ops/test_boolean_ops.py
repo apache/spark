@@ -243,6 +243,7 @@ class BooleanOpsTestsMixin:
         self.assert_eq(
             pd.Series([0.10000000000000009, 0.10000000000000009, None], dtype=float, name="bool"),
             0.1 % b_psser,
+            check_exact=False,  # [0.1, 0.1, nan] for pandas-on-Spark
         )
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) % b_psser)
         self.assertRaises(TypeError, lambda: True % b_psser)

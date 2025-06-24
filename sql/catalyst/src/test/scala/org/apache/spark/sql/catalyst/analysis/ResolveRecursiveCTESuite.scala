@@ -42,9 +42,21 @@ class ResolveRecursiveCTESuite extends AnalysisTest {
         Seq(CTERelationDef(anchor.union(recursion).subquery("t"), cteId)))
     }
 
+    val analyzed = getAnalyzer.execute(getBeforePlan())
+
+    val outputExprIds = analyzed match {
+      case WithCTE(_, cteDefs) =>
+        cteDefs.head.child match {
+          case SubqueryAlias(_, UnionLoop(_, _, _, exprIds, _, _)) =>
+            exprIds
+        }
+    }
+
     def getAfterPlan(): LogicalPlan = {
-      val recursion = UnionLoopRef(cteId, anchor.output, accumulated = false).subquery("t")
-      val cteDef = CTERelationDef(UnionLoop(cteId, anchor, recursion).subquery("t"), cteId)
+      val recursion = UnionLoopRef(cteId, anchor.output.map(_.withNullability(true)),
+        accumulated = false).subquery("t")
+      val cteDef = CTERelationDef(UnionLoop(cteId, anchor, recursion,
+        outputExprIds).subquery("t"), cteId)
       val cteRef = CTERelationRef(
         cteId,
         _resolved = true,
@@ -53,7 +65,7 @@ class ResolveRecursiveCTESuite extends AnalysisTest {
       WithCTE(cteRef, Seq(cteDef))
     }
 
-    comparePlans(getAnalyzer.execute(getBeforePlan()), getAfterPlan())
+    comparePlans(analyzed, getAfterPlan())
   }
 
   // Motivated by:
@@ -75,14 +87,25 @@ class ResolveRecursiveCTESuite extends AnalysisTest {
       WithCTE(cteRef.copy(recursive = false), Seq(cteDef))
     }
 
+    val analyzed = getAnalyzer.execute(getBeforePlan())
+
+    val outputExprIds = analyzed match {
+      case WithCTE(_, cteDefs) =>
+        cteDefs.head.child match {
+          case SubqueryAlias(_, Project(_, UnionLoop(_, _, _, exprIds, _, _))) =>
+            exprIds
+        }
+    }
+
     def getAfterPlan(): LogicalPlan = {
-      val col = anchor.output.head
-      val recursion = UnionLoopRef(cteId, anchor.output, accumulated = false)
+      val col = anchor.output.head.withNullability(true)
+      val recursion = UnionLoopRef(cteId, anchor.output.map(_.withNullability(true)),
+        accumulated = false)
         .select(col.as("n"))
         .subquery("t")
       val cteDef = CTERelationDef(
-        UnionLoop(cteId, anchor, recursion).select(col.as("n")).subquery("t"),
-        cteId)
+        UnionLoop(cteId, anchor, recursion, outputExprIds)
+          .select(col.as("n")).subquery("t"), cteId)
       val cteRef = CTERelationRef(
         cteId,
         _resolved = true,
@@ -91,6 +114,6 @@ class ResolveRecursiveCTESuite extends AnalysisTest {
       WithCTE(cteRef, Seq(cteDef))
     }
 
-    comparePlans(getAnalyzer.execute(getBeforePlan()), getAfterPlan())
+    comparePlans(analyzed, getAfterPlan())
   }
 }

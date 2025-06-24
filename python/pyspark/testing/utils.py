@@ -91,6 +91,9 @@ jinja2_requirement_message = None if have_jinja2 else "No module named 'jinja2'"
 have_openpyxl = have_package("openpyxl")
 openpyxl_requirement_message = None if have_openpyxl else "No module named 'openpyxl'"
 
+have_yaml = have_package("yaml")
+yaml_requirement_message = None if have_yaml else "No module named 'yaml'"
+
 pandas_requirement_message = None
 try:
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
@@ -113,6 +116,12 @@ except Exception as e:
     pyarrow_requirement_message = str(e)
 
 have_pyarrow = pyarrow_requirement_message is None
+
+is_ansi_mode_test = True
+if os.environ.get("SPARK_ANSI_SQL_MODE") == "false":
+    is_ansi_mode_test = False
+
+ansi_mode_not_supported_message = "ANSI mode is not supported" if is_ansi_mode_test else None
 
 
 def read_int(b):

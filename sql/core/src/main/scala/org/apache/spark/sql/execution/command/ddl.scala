@@ -66,6 +66,7 @@ import org.apache.spark.util.ArrayImplicits._
  * {{{
  *   CREATE (DATABASE|SCHEMA) [IF NOT EXISTS] database_name
  *     [COMMENT database_comment]
+ *     [DEFAULT COLLATION collation]
  *     [LOCATION database_directory]
  *     [WITH DBPROPERTIES (property_name=property_value, ...)];
  * }}}

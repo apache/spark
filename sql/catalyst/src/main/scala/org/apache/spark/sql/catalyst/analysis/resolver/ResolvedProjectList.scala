@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
+import org.apache.spark.sql.catalyst.expressions.{Alias, NamedExpression}
 
 /**
  * Structure used to return results of the resolved project list.
@@ -26,8 +26,11 @@ import org.apache.spark.sql.catalyst.expressions.NamedExpression
  *  - hasAggregateExpressions: True if the resolved project list contains any aggregate
  *                             expressions.
  *  - hasLateralColumnAlias: True if the resolved project list contains any lateral column aliases.
+ *  - aggregateListAliases: List of aliases in aggregate list if there are aggregate expressions in
+ *                          the [[Project]].
  */
 case class ResolvedProjectList(
     expressions: Seq[NamedExpression],
     hasAggregateExpressions: Boolean,
-    hasLateralColumnAlias: Boolean)
+    hasLateralColumnAlias: Boolean,
+    aggregateListAliases: Seq[Alias])

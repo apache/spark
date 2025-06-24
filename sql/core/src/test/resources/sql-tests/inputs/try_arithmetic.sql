@@ -9,6 +9,7 @@ SELECT try_add(-9223372036854775808L, -1);
 SELECT try_add(1, (2147483647 + 1));
 SELECT try_add(1L, (9223372036854775807L + 1L));
 SELECT try_add(1, 1.0 / 0.0);
+SELECT try_add(sum(1), 1) GROUP BY ALL;
 
 -- Date + Integer
 SELECT try_add(date'2021-01-01', 1);
@@ -42,6 +43,7 @@ SELECT try_divide(1L, (9223372036854775807L + 1L));
 SELECT try_divide(1, 1.0 / 0.0);
 SELECT try_divide(1, decimal(0));
 SELECT try_divide(1, "0");
+SELECT try_divide(sum(1), 1) GROUP BY ALL;
 
 -- Interval / Numeric
 SELECT try_divide(interval 2 year, 2);
@@ -62,6 +64,7 @@ SELECT try_subtract(-9223372036854775808L, 1);
 SELECT try_subtract(1, (2147483647 + 1));
 SELECT try_subtract(1L, (9223372036854775807L + 1L));
 SELECT try_subtract(1, 1.0 / 0.0);
+SELECT try_subtract(sum(1), 1) GROUP BY ALL;
 
 -- Interval - Interval
 SELECT try_subtract(interval 2 year, interval 3 year);
@@ -80,6 +83,7 @@ SELECT try_multiply(-9223372036854775808L, -2);
 SELECT try_multiply(1, (2147483647 + 1));
 SELECT try_multiply(1L, (9223372036854775807L + 1L));
 SELECT try_multiply(1, 1.0 / 0.0);
+SELECT try_multiply(sum(1), 1) GROUP BY ALL;
 
 -- Interval * Numeric
 SELECT try_multiply(interval 2 year, 2);

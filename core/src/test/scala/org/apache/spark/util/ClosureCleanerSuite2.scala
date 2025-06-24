@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import java.io.NotSerializableException
 
-import org.scalatest.{BeforeAndAfterAll, PrivateMethodTester}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.serializer.SerializerInstance
@@ -28,7 +28,7 @@ import org.apache.spark.serializer.SerializerInstance
  * Another test suite for the closure cleaner that is finer-grained.
  * For tests involving end-to-end Spark jobs, see {{ClosureCleanerSuite}}.
  */
-class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with PrivateMethodTester {
+class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll {
 
   // Start a SparkContext so that the closure serializer is accessible
   // We do not actually use this explicitly otherwise

@@ -299,9 +299,9 @@ select (x+y)*1, sum(z)
  from (select 1 as x, 2 as y, 3 as z) s
  group by grouping sets (x+y, x)
 -- !query analysis
-Aggregate [(x#x + y#x)#x, x#x, spark_grouping_id#xL], [((x#x + y#x)#x * 1) AS ((x + y) * 1)#x, sum(z#x) AS sum(z)#xL]
-+- Expand [[x#x, y#x, z#x, (x#x + y#x)#x, null, 1], [x#x, y#x, z#x, null, x#x, 2]], [x#x, y#x, z#x, (x#x + y#x)#x, x#x, spark_grouping_id#xL]
-   +- Project [x#x, y#x, z#x, (x#x + y#x) AS (x#x + y#x)#x, x#x AS x#x]
+Aggregate [(x + y)#x, x#x, spark_grouping_id#xL], [((x + y)#x * 1) AS ((x + y) * 1)#x, sum(z#x) AS sum(z)#xL]
++- Expand [[x#x, y#x, z#x, (x + y)#x, null, 1], [x#x, y#x, z#x, null, x#x, 2]], [x#x, y#x, z#x, (x + y)#x, x#x, spark_grouping_id#xL]
+   +- Project [x#x, y#x, z#x, (x#x + y#x) AS (x + y)#x, x#x AS x#x]
       +- SubqueryAlias s
          +- Project [1 AS x#x, 2 AS y#x, 3 AS z#x]
             +- OneRowRelation
@@ -593,9 +593,9 @@ select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by grouping sets ((a,b),(a+1,b+1),(a+2,b+2)) order by 3,4,7 /* 3,6 */
 -- !query analysis
 Sort [grouping(a)#x ASC NULLS FIRST, grouping(b)#x ASC NULLS FIRST, max(v)#x ASC NULLS FIRST], true
-+- Aggregate [a#x, b#x, (a#x + 1)#x, (b#x + 1)#x, (a#x + 2)#x, (b#x + 2)#x, spark_grouping_id#xL], [a#x, b#x, cast((shiftright(spark_grouping_id#xL, 5) & 1) as tinyint) AS grouping(a)#x, cast((shiftright(spark_grouping_id#xL, 4) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, count(1) AS count(1)#xL, max(v#x) AS max(v)#x]
-   +- Expand [[a#x, b#x, v#x, a#x, b#x, null, null, null, null, 15], [a#x, b#x, v#x, null, null, (a#x + 1)#x, (b#x + 1)#x, null, null, 51], [a#x, b#x, v#x, null, null, null, null, (a#x + 2)#x, (b#x + 2)#x, 60]], [a#x, b#x, v#x, a#x, b#x, (a#x + 1)#x, (b#x + 1)#x, (a#x + 2)#x, (b#x + 2)#x, spark_grouping_id#xL]
-      +- Project [a#x, b#x, v#x, a#x AS a#x, b#x AS b#x, (a#x + 1) AS (a#x + 1)#x, (b#x + 1) AS (b#x + 1)#x, (a#x + 2) AS (a#x + 2)#x, (b#x + 2) AS (b#x + 2)#x]
++- Aggregate [a#x, b#x, (a + 1)#x, (b + 1)#x, (a + 2)#x, (b + 2)#x, spark_grouping_id#xL], [a#x, b#x, cast((shiftright(spark_grouping_id#xL, 5) & 1) as tinyint) AS grouping(a)#x, cast((shiftright(spark_grouping_id#xL, 4) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, count(1) AS count(1)#xL, max(v#x) AS max(v)#x]
+   +- Expand [[a#x, b#x, v#x, a#x, b#x, null, null, null, null, 15], [a#x, b#x, v#x, null, null, (a + 1)#x, (b + 1)#x, null, null, 51], [a#x, b#x, v#x, null, null, null, null, (a + 2)#x, (b + 2)#x, 60]], [a#x, b#x, v#x, a#x, b#x, (a + 1)#x, (b + 1)#x, (a + 2)#x, (b + 2)#x, spark_grouping_id#xL]
+      +- Project [a#x, b#x, v#x, a#x AS a#x, b#x AS b#x, (a#x + 1) AS (a + 1)#x, (b#x + 1) AS (b + 1)#x, (a#x + 2) AS (a + 2)#x, (b#x + 2) AS (b + 2)#x]
          +- SubqueryAlias gstest1
             +- View (`gstest1`, [a#x, b#x, v#x])
                +- Project [cast(col1#x as int) AS a#x, cast(col2#x as int) AS b#x, cast(col3#x as int) AS v#x]
@@ -634,9 +634,9 @@ select v||'a', case grouping(v||'a') when 1 then 1 else 0 end, count(*)
  group by rollup(i, v||'a') order by 1,3
 -- !query analysis
 Sort [concat(v, a)#x ASC NULLS FIRST, count(1)#xL ASC NULLS FIRST], true
-+- Aggregate [i#x, concat(v#x, a)#x, spark_grouping_id#xL], [concat(v#x, a)#x AS concat(v, a)#x, CASE WHEN (cast(cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) as int) = 1) THEN 1 ELSE 0 END AS CASE WHEN (grouping(concat(v, a)) = 1) THEN 1 ELSE 0 END#x, count(1) AS count(1)#xL]
-   +- Expand [[i#x, v#x, i#x, concat(v#x, a)#x, 0], [i#x, v#x, i#x, null, 1], [i#x, v#x, null, null, 3]], [i#x, v#x, i#x, concat(v#x, a)#x, spark_grouping_id#xL]
-      +- Project [i#x, v#x, i#x AS i#x, concat(v#x, a) AS concat(v#x, a)#x]
++- Aggregate [i#x, concat(v, a)#x, spark_grouping_id#xL], [concat(v, a)#x AS concat(v, a)#x, CASE WHEN (cast(cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) as int) = 1) THEN 1 ELSE 0 END AS CASE WHEN (grouping(concat(v, a)) = 1) THEN 1 ELSE 0 END#x, count(1) AS count(1)#xL]
+   +- Expand [[i#x, v#x, i#x, concat(v, a)#x, 0], [i#x, v#x, i#x, null, 1], [i#x, v#x, null, null, 3]], [i#x, v#x, i#x, concat(v, a)#x, spark_grouping_id#xL]
+      +- Project [i#x, v#x, i#x AS i#x, concat(v#x, a) AS concat(v, a)#x]
          +- SubqueryAlias u
             +- LocalRelation [i#x, v#x]
 
@@ -647,9 +647,9 @@ select v||'a', case when grouping(v||'a') = 1 then 1 else 0 end, count(*)
  group by rollup(i, v||'a') order by 1,3
 -- !query analysis
 Sort [concat(v, a)#x ASC NULLS FIRST, count(1)#xL ASC NULLS FIRST], true
-+- Aggregate [i#x, concat(v#x, a)#x, spark_grouping_id#xL], [concat(v#x, a)#x AS concat(v, a)#x, CASE WHEN (cast(cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) as int) = 1) THEN 1 ELSE 0 END AS CASE WHEN (grouping(concat(v, a)) = 1) THEN 1 ELSE 0 END#x, count(1) AS count(1)#xL]
-   +- Expand [[i#x, v#x, i#x, concat(v#x, a)#x, 0], [i#x, v#x, i#x, null, 1], [i#x, v#x, null, null, 3]], [i#x, v#x, i#x, concat(v#x, a)#x, spark_grouping_id#xL]
-      +- Project [i#x, v#x, i#x AS i#x, concat(v#x, a) AS concat(v#x, a)#x]
++- Aggregate [i#x, concat(v, a)#x, spark_grouping_id#xL], [concat(v, a)#x AS concat(v, a)#x, CASE WHEN (cast(cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) as int) = 1) THEN 1 ELSE 0 END AS CASE WHEN (grouping(concat(v, a)) = 1) THEN 1 ELSE 0 END#x, count(1) AS count(1)#xL]
+   +- Expand [[i#x, v#x, i#x, concat(v, a)#x, 0], [i#x, v#x, i#x, null, 1], [i#x, v#x, null, null, 3]], [i#x, v#x, i#x, concat(v, a)#x, spark_grouping_id#xL]
+      +- Project [i#x, v#x, i#x AS i#x, concat(v#x, a) AS concat(v, a)#x]
          +- SubqueryAlias u
             +- LocalRelation [i#x, v#x]
 

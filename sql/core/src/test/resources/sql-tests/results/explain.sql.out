@@ -885,7 +885,7 @@ Output [1]: [col1#x]
 Accumulated: false
 
 (4) Filter
-Arguments: (col1#x < 9)
+Arguments: (isnotnull(col1#x) AND (col1#x < 9))
 
 (5) Project
 Arguments: [(col1#x + 1) AS (level + 1)#x]

@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.regression
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
@@ -499,6 +501,21 @@ class AFTSurvivalRegressionModel private[ml] (
 object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel] {
   private[ml] case class Data(coefficients: Vector, intercept: Double, scale: Double)
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeVector(data.coefficients, dos)
+    dos.writeDouble(data.intercept)
+    dos.writeDouble(data.scale)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val coefficients = deserializeVector(dis)
+    val intercept = dis.readDouble()
+    val scale = dis.readDouble()
+    Data(coefficients, intercept, scale)
+  }
+
   @Since("1.6.0")
   override def read: MLReader[AFTSurvivalRegressionModel] = new AFTSurvivalRegressionModelReader
 
@@ -516,7 +533,7 @@ object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel]
       // Save model data: coefficients, intercept, scale
       val data = Data(instance.coefficients, instance.intercept, instance.scale)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -529,7 +546,7 @@ object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel]
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
       val model = new AFTSurvivalRegressionModel(
         metadata.uid, data.coefficients, data.intercept, data.scale
       )

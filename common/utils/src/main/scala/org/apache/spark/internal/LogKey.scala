@@ -291,6 +291,7 @@ private[spark] object LogKeys {
   case object FINAL_PATH extends LogKey
   case object FINISH_TIME extends LogKey
   case object FINISH_TRIGGER_DURATION extends LogKey
+  case object FLOW_NAME extends LogKey
   case object FREE_MEMORY_SIZE extends LogKey
   case object FROM_OFFSET extends LogKey
   case object FROM_TIME extends LogKey

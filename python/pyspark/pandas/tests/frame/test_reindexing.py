@@ -25,6 +25,7 @@ from pyspark.errors import PySparkValueError
 from pyspark.pandas.config import option_context
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import is_ansi_mode_test, ansi_mode_not_supported_message
 
 
 # This file contains test cases for 'Reindexing / Selection / Label manipulation'
@@ -764,6 +765,7 @@ class FrameReindexingMixin:
         self.assertRaises(AssertionError, lambda: psdf.swapaxes(0, 1, copy=False))
         self.assertRaises(ValueError, lambda: psdf.swapaxes(0, -1))
 
+    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_isin(self):
         pdf = pd.DataFrame(
             {

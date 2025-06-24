@@ -55,6 +55,7 @@ from pyspark.ml.classification import (
     MultilayerPerceptronClassificationTrainingSummary,
 )
 from pyspark.ml.regression import DecisionTreeRegressionModel
+from pyspark.sql import is_remote
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -241,37 +242,45 @@ class ClassificationTestsMixin:
         model = lr.fit(df)
         self.assertEqual(lr.uid, model.uid)
         self.assertTrue(model.hasSummary)
-        s = model.summary
-        # test that api is callable and returns expected types
-        self.assertTrue(isinstance(s.predictions, DataFrame))
-        self.assertEqual(s.probabilityCol, "probability")
-        self.assertEqual(s.labelCol, "label")
-        self.assertEqual(s.featuresCol, "features")
-        self.assertEqual(s.predictionCol, "prediction")
-        objHist = s.objectiveHistory
-        self.assertTrue(isinstance(objHist, list) and isinstance(objHist[0], float))
-        self.assertGreater(s.totalIterations, 0)
-        self.assertTrue(isinstance(s.labels, list))
-        self.assertTrue(isinstance(s.truePositiveRateByLabel, list))
-        self.assertTrue(isinstance(s.falsePositiveRateByLabel, list))
-        self.assertTrue(isinstance(s.precisionByLabel, list))
-        self.assertTrue(isinstance(s.recallByLabel, list))
-        self.assertTrue(isinstance(s.fMeasureByLabel(), list))
-        self.assertTrue(isinstance(s.fMeasureByLabel(1.0), list))
-        self.assertTrue(isinstance(s.roc, DataFrame))
-        self.assertAlmostEqual(s.areaUnderROC, 1.0, 2)
-        self.assertTrue(isinstance(s.pr, DataFrame))
-        self.assertTrue(isinstance(s.fMeasureByThreshold, DataFrame))
-        self.assertTrue(isinstance(s.precisionByThreshold, DataFrame))
-        self.assertTrue(isinstance(s.recallByThreshold, DataFrame))
-        self.assertAlmostEqual(s.accuracy, 1.0, 2)
-        self.assertAlmostEqual(s.weightedTruePositiveRate, 1.0, 2)
-        self.assertAlmostEqual(s.weightedFalsePositiveRate, 0.0, 2)
-        self.assertAlmostEqual(s.weightedRecall, 1.0, 2)
-        self.assertAlmostEqual(s.weightedPrecision, 1.0, 2)
-        self.assertAlmostEqual(s.weightedFMeasure(), 1.0, 2)
-        self.assertAlmostEqual(s.weightedFMeasure(1.0), 1.0, 2)
 
+        def check_summary():
+            s = model.summary
+            # test that api is callable and returns expected types
+            self.assertTrue(isinstance(s.predictions, DataFrame))
+            self.assertEqual(s.probabilityCol, "probability")
+            self.assertEqual(s.labelCol, "label")
+            self.assertEqual(s.featuresCol, "features")
+            self.assertEqual(s.predictionCol, "prediction")
+            objHist = s.objectiveHistory
+            self.assertTrue(isinstance(objHist, list) and isinstance(objHist[0], float))
+            self.assertGreater(s.totalIterations, 0)
+            self.assertTrue(isinstance(s.labels, list))
+            self.assertTrue(isinstance(s.truePositiveRateByLabel, list))
+            self.assertTrue(isinstance(s.falsePositiveRateByLabel, list))
+            self.assertTrue(isinstance(s.precisionByLabel, list))
+            self.assertTrue(isinstance(s.recallByLabel, list))
+            self.assertTrue(isinstance(s.fMeasureByLabel(), list))
+            self.assertTrue(isinstance(s.fMeasureByLabel(1.0), list))
+            self.assertTrue(isinstance(s.roc, DataFrame))
+            self.assertAlmostEqual(s.areaUnderROC, 1.0, 2)
+            self.assertTrue(isinstance(s.pr, DataFrame))
+            self.assertTrue(isinstance(s.fMeasureByThreshold, DataFrame))
+            self.assertTrue(isinstance(s.precisionByThreshold, DataFrame))
+            self.assertTrue(isinstance(s.recallByThreshold, DataFrame))
+            self.assertAlmostEqual(s.accuracy, 1.0, 2)
+            self.assertAlmostEqual(s.weightedTruePositiveRate, 1.0, 2)
+            self.assertAlmostEqual(s.weightedFalsePositiveRate, 0.0, 2)
+            self.assertAlmostEqual(s.weightedRecall, 1.0, 2)
+            self.assertAlmostEqual(s.weightedPrecision, 1.0, 2)
+            self.assertAlmostEqual(s.weightedFMeasure(), 1.0, 2)
+            self.assertAlmostEqual(s.weightedFMeasure(1.0), 1.0, 2)
+
+        check_summary()
+        if is_remote():
+            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+            check_summary()
+
+        s = model.summary
         # test evaluation (with training dataset) produces a summary with same values
         # one check is enough to verify a summary is returned, Scala version runs full test
         sameSummary = model.evaluate(df)
@@ -292,31 +301,39 @@ class ClassificationTestsMixin:
         lr = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight", fitIntercept=False)
         model = lr.fit(df)
         self.assertTrue(model.hasSummary)
-        s = model.summary
-        # test that api is callable and returns expected types
-        self.assertTrue(isinstance(s.predictions, DataFrame))
-        self.assertEqual(s.probabilityCol, "probability")
-        self.assertEqual(s.labelCol, "label")
-        self.assertEqual(s.featuresCol, "features")
-        self.assertEqual(s.predictionCol, "prediction")
-        objHist = s.objectiveHistory
-        self.assertTrue(isinstance(objHist, list) and isinstance(objHist[0], float))
-        self.assertGreater(s.totalIterations, 0)
-        self.assertTrue(isinstance(s.labels, list))
-        self.assertTrue(isinstance(s.truePositiveRateByLabel, list))
-        self.assertTrue(isinstance(s.falsePositiveRateByLabel, list))
-        self.assertTrue(isinstance(s.precisionByLabel, list))
-        self.assertTrue(isinstance(s.recallByLabel, list))
-        self.assertTrue(isinstance(s.fMeasureByLabel(), list))
-        self.assertTrue(isinstance(s.fMeasureByLabel(1.0), list))
-        self.assertAlmostEqual(s.accuracy, 0.75, 2)
-        self.assertAlmostEqual(s.weightedTruePositiveRate, 0.75, 2)
-        self.assertAlmostEqual(s.weightedFalsePositiveRate, 0.25, 2)
-        self.assertAlmostEqual(s.weightedRecall, 0.75, 2)
-        self.assertAlmostEqual(s.weightedPrecision, 0.583, 2)
-        self.assertAlmostEqual(s.weightedFMeasure(), 0.65, 2)
-        self.assertAlmostEqual(s.weightedFMeasure(1.0), 0.65, 2)
 
+        def check_summary():
+            s = model.summary
+            # test that api is callable and returns expected types
+            self.assertTrue(isinstance(s.predictions, DataFrame))
+            self.assertEqual(s.probabilityCol, "probability")
+            self.assertEqual(s.labelCol, "label")
+            self.assertEqual(s.featuresCol, "features")
+            self.assertEqual(s.predictionCol, "prediction")
+            objHist = s.objectiveHistory
+            self.assertTrue(isinstance(objHist, list) and isinstance(objHist[0], float))
+            self.assertGreater(s.totalIterations, 0)
+            self.assertTrue(isinstance(s.labels, list))
+            self.assertTrue(isinstance(s.truePositiveRateByLabel, list))
+            self.assertTrue(isinstance(s.falsePositiveRateByLabel, list))
+            self.assertTrue(isinstance(s.precisionByLabel, list))
+            self.assertTrue(isinstance(s.recallByLabel, list))
+            self.assertTrue(isinstance(s.fMeasureByLabel(), list))
+            self.assertTrue(isinstance(s.fMeasureByLabel(1.0), list))
+            self.assertAlmostEqual(s.accuracy, 0.75, 2)
+            self.assertAlmostEqual(s.weightedTruePositiveRate, 0.75, 2)
+            self.assertAlmostEqual(s.weightedFalsePositiveRate, 0.25, 2)
+            self.assertAlmostEqual(s.weightedRecall, 0.75, 2)
+            self.assertAlmostEqual(s.weightedPrecision, 0.583, 2)
+            self.assertAlmostEqual(s.weightedFMeasure(), 0.65, 2)
+            self.assertAlmostEqual(s.weightedFMeasure(1.0), 0.65, 2)
+
+        check_summary()
+        if is_remote():
+            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+            check_summary()
+
+        s = model.summary
         # test evaluation (with training dataset) produces a summary with same values
         # one check is enough to verify a summary is returned, Scala version runs full test
         sameSummary = model.evaluate(df)
@@ -426,15 +443,21 @@ class ClassificationTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
 
-        # model summary
-        self.assertTrue(model.hasSummary)
-        summary = model.summary()
-        self.assertIsInstance(summary, LinearSVCSummary)
-        self.assertIsInstance(summary, LinearSVCTrainingSummary)
-        self.assertEqual(summary.labels, [0.0, 1.0])
-        self.assertEqual(summary.accuracy, 0.5)
-        self.assertEqual(summary.areaUnderROC, 0.75)
-        self.assertEqual(summary.predictions.columns, expected_cols)
+        def check_summary():
+            # model summary
+            self.assertTrue(model.hasSummary)
+            summary = model.summary()
+            self.assertIsInstance(summary, LinearSVCSummary)
+            self.assertIsInstance(summary, LinearSVCTrainingSummary)
+            self.assertEqual(summary.labels, [0.0, 1.0])
+            self.assertEqual(summary.accuracy, 0.5)
+            self.assertEqual(summary.areaUnderROC, 0.75)
+            self.assertEqual(summary.predictions.columns, expected_cols)
+
+        check_summary()
+        if is_remote():
+            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+            check_summary()
 
         summary2 = model.evaluate(df)
         self.assertIsInstance(summary2, LinearSVCSummary)
@@ -526,13 +549,20 @@ class ClassificationTestsMixin:
 
         # model summary
         self.assertTrue(model.hasSummary)
-        summary = model.summary()
-        self.assertIsInstance(summary, FMClassificationSummary)
-        self.assertIsInstance(summary, FMClassificationTrainingSummary)
-        self.assertEqual(summary.labels, [0.0, 1.0])
-        self.assertEqual(summary.accuracy, 0.25)
-        self.assertEqual(summary.areaUnderROC, 0.5)
-        self.assertEqual(summary.predictions.columns, expected_cols)
+
+        def check_summary():
+            summary = model.summary()
+            self.assertIsInstance(summary, FMClassificationSummary)
+            self.assertIsInstance(summary, FMClassificationTrainingSummary)
+            self.assertEqual(summary.labels, [0.0, 1.0])
+            self.assertEqual(summary.accuracy, 0.25)
+            self.assertEqual(summary.areaUnderROC, 0.5)
+            self.assertEqual(summary.predictions.columns, expected_cols)
+
+        check_summary()
+        if is_remote():
+            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+            check_summary()
 
         summary2 = model.evaluate(df)
         self.assertIsInstance(summary2, FMClassificationSummary)
@@ -773,21 +803,27 @@ class ClassificationTestsMixin:
             self.assertEqual(tree.transform(df).count(), 4)
             self.assertEqual(tree.transform(df).columns, expected_cols)
 
-        # model summary
-        summary = model.summary
-        self.assertTrue(isinstance(summary, BinaryRandomForestClassificationSummary))
-        self.assertTrue(isinstance(summary, BinaryRandomForestClassificationTrainingSummary))
-        self.assertEqual(summary.labels, [0.0, 1.0])
-        self.assertEqual(summary.accuracy, 0.75)
-        self.assertEqual(summary.areaUnderROC, 0.875)
-        self.assertEqual(summary.predictions.columns, expected_cols)
+        def check_summary():
+            # model summary
+            summary = model.summary
+            self.assertTrue(isinstance(summary, BinaryRandomForestClassificationSummary))
+            self.assertTrue(isinstance(summary, BinaryRandomForestClassificationTrainingSummary))
+            self.assertEqual(summary.labels, [0.0, 1.0])
+            self.assertEqual(summary.accuracy, 0.75)
+            self.assertEqual(summary.areaUnderROC, 0.875)
+            self.assertEqual(summary.predictions.columns, expected_cols)
+
+        check_summary()
+        if is_remote():
+            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+            check_summary()
 
         summary2 = model.evaluate(df)
         self.assertTrue(isinstance(summary2, BinaryRandomForestClassificationSummary))
         self.assertFalse(isinstance(summary2, BinaryRandomForestClassificationTrainingSummary))
         self.assertEqual(summary2.labels, [0.0, 1.0])
         self.assertEqual(summary2.accuracy, 0.75)
-        self.assertEqual(summary.areaUnderROC, 0.875)
+        self.assertEqual(summary2.areaUnderROC, 0.875)
         self.assertEqual(summary2.predictions.columns, expected_cols)
 
         # Model save & load
@@ -859,13 +895,19 @@ class ClassificationTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
 
-        # model summary
-        summary = model.summary
-        self.assertTrue(isinstance(summary, RandomForestClassificationSummary))
-        self.assertTrue(isinstance(summary, RandomForestClassificationTrainingSummary))
-        self.assertEqual(summary.labels, [0.0, 1.0, 2.0])
-        self.assertEqual(summary.accuracy, 0.5)
-        self.assertEqual(summary.predictions.columns, expected_cols)
+        def check_summary():
+            # model summary
+            summary = model.summary
+            self.assertTrue(isinstance(summary, RandomForestClassificationSummary))
+            self.assertTrue(isinstance(summary, RandomForestClassificationTrainingSummary))
+            self.assertEqual(summary.labels, [0.0, 1.0, 2.0])
+            self.assertEqual(summary.accuracy, 0.5)
+            self.assertEqual(summary.predictions.columns, expected_cols)
+
+        check_summary()
+        if is_remote():
+            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+            check_summary()
 
         summary2 = model.evaluate(df)
         self.assertTrue(isinstance(summary2, RandomForestClassificationSummary))
@@ -953,14 +995,20 @@ class ClassificationTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
 
-        # model summary
-        self.assertTrue(model.hasSummary)
-        summary = model.summary()
-        self.assertIsInstance(summary, MultilayerPerceptronClassificationSummary)
-        self.assertIsInstance(summary, MultilayerPerceptronClassificationTrainingSummary)
-        self.assertEqual(summary.labels, [0.0, 1.0])
-        self.assertEqual(summary.accuracy, 0.75)
-        self.assertEqual(summary.predictions.columns, expected_cols)
+        def check_summary():
+            # model summary
+            self.assertTrue(model.hasSummary)
+            summary = model.summary()
+            self.assertIsInstance(summary, MultilayerPerceptronClassificationSummary)
+            self.assertIsInstance(summary, MultilayerPerceptronClassificationTrainingSummary)
+            self.assertEqual(summary.labels, [0.0, 1.0])
+            self.assertEqual(summary.accuracy, 0.75)
+            self.assertEqual(summary.predictions.columns, expected_cols)
+
+        check_summary()
+        if is_remote():
+            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+            check_summary()
 
         summary2 = model.evaluate(df)
         self.assertIsInstance(summary2, MultilayerPerceptronClassificationSummary)

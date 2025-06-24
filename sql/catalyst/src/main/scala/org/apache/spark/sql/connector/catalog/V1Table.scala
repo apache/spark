@@ -79,6 +79,8 @@ private[sql] object V1Table {
   def addV2TableProperties(v1Table: CatalogTable): Map[String, String] = {
     val external = v1Table.tableType == CatalogTableType.EXTERNAL
     val managed = v1Table.tableType == CatalogTableType.MANAGED
+    val tableTypeProperties: Option[(String, String)] = getV2TableType(v1Table)
+        .map(tableType => TableCatalog.PROP_TABLE_TYPE -> tableType)
 
     v1Table.properties ++
       v1Table.storage.properties.map { case (key, value) =>
@@ -91,7 +93,21 @@ private[sql] object V1Table {
       } ++
       (if (managed) Some(TableCatalog.PROP_IS_MANAGED_LOCATION -> "true") else None) ++
       (if (external) Some(TableCatalog.PROP_EXTERNAL -> "true") else None) ++
+      tableTypeProperties ++
       Some(TableCatalog.PROP_OWNER -> v1Table.owner)
+  }
+
+  /**
+   * Returns v2 table type that should be part of v2 table properties.
+   * If there is no mapping between v1 table type and v2 table type, then None is returned.
+   */
+  private def getV2TableType(v1Table: CatalogTable): Option[String] = {
+    v1Table.tableType match {
+      case CatalogTableType.EXTERNAL => Some(TableSummary.EXTERNAL_TABLE_TYPE)
+      case CatalogTableType.MANAGED => Some(TableSummary.MANAGED_TABLE_TYPE)
+      case CatalogTableType.VIEW => Some(TableSummary.VIEW_TABLE_TYPE)
+      case _ => None
+    }
   }
 }
 

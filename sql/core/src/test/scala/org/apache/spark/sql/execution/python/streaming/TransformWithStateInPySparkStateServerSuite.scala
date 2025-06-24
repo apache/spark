@@ -64,7 +64,7 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
   var valueStateMap: mutable.HashMap[String, ValueStateInfo] = mutable.HashMap()
   var listStateMap: mutable.HashMap[String, ListStateInfo] = mutable.HashMap()
   var mapStateMap: mutable.HashMap[String, MapStateInfo] = mutable.HashMap()
-  var expiryTimerIter: Iterator[(Any, Long)] = _
+  var expiryTimerIter: mutable.HashMap[String, Iterator[(Row, Long)]] = _
   var listTimerMap: mutable.HashMap[String, Iterator[Long]] = mutable.HashMap()
 
   override def beforeEach(): Unit = {
@@ -87,7 +87,8 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     // reset the iterator map to empty so be careful to call it if you want to access the iterator
     // map later.
     val testRow = getIntegerRow(1)
-    expiryTimerIter = Iterator.single(testRow, 1L /* a random long type value */)
+    expiryTimerIter = mutable.HashMap[String, Iterator[(Row, Long)]](
+      iteratorId -> Iterator.single((testRow, 1L /* a random long type value */)))
     val iteratorMap = mutable.HashMap[String, Iterator[Row]](iteratorId -> Iterator(testRow))
     val keyValueIteratorMap = mutable.HashMap[String, Iterator[(Row, Row)]](iteratorId ->
       Iterator((testRow, testRow)))
@@ -402,8 +403,10 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
       .setIterator(StateMessage.Iterator.newBuilder().setIteratorId(iteratorId).build()).build()
     stateServer.handleMapStateRequest(message)
     verify(mapState, times(0)).iterator()
-    verify(arrowStreamWriter).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    // 1 for proto response
+    verify(outputStream).writeInt(any)
+    // 1 for sending proto message
+    verify(outputStream).write(any[Array[Byte]])
   }
 
   test("map state iterator - iterator in map with multiple batches") {
@@ -421,15 +424,20 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     // First call should send 2 records.
     stateServer.handleMapStateRequest(message)
     verify(mapState, times(0)).iterator()
-    verify(arrowStreamWriter, times(maxRecordsPerBatch)).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    // 1 for proto response
+    verify(outputStream).writeInt(any)
+    // 1 for proto message
+    verify(outputStream).write(any[Array[Byte]])
     // Second call should send the remaining 2 records.
     stateServer.handleMapStateRequest(message)
     verify(mapState, times(0)).iterator()
-    // Since Mockito's verify counts the total number of calls, the expected number of writeRow call
-    // should be 2 * maxRecordsPerBatch.
-    verify(arrowStreamWriter, times(2 * maxRecordsPerBatch)).writeRow(any)
-    verify(arrowStreamWriter, times(2)).finalizeCurrentArrowBatch()
+    // Since Mockito's verify counts the total number of calls, the expected number of writeInt
+    // and write should be accumulated from the prior count; the number of calls are the same
+    // with prior one.
+    // 1 for proto response
+    verify(outputStream, times(2)).writeInt(any)
+    // 1 for sending proto message
+    verify(outputStream, times(2)).write(any[Array[Byte]])
   }
 
   test("map state iterator - iterator not in map") {
@@ -448,8 +456,10 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     verify(mapState).iterator()
     // Verify that only maxRecordsPerBatch (2) rows are written to the output stream while still
     // having 1 row left in the iterator.
-    verify(arrowStreamWriter, times(maxRecordsPerBatch)).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    // 1 for proto response
+    verify(outputStream, times(1)).writeInt(any)
+    // 1 for proto message
+    verify(outputStream, times(1)).write(any[Array[Byte]])
   }
 
   test("map state keys - iterator in map") {
@@ -457,8 +467,10 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
       .setKeys(Keys.newBuilder().setIteratorId(iteratorId).build()).build()
     stateServer.handleMapStateRequest(message)
     verify(mapState, times(0)).keys()
-    verify(arrowStreamWriter).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    // 1 for proto response
+    verify(outputStream).writeInt(any)
+    // 1 for sending proto message
+    verify(outputStream).write(any[Array[Byte]])
   }
 
   test("map state keys - iterator not in map") {
@@ -476,8 +488,10 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     verify(mapState).keys()
     // Verify that only maxRecordsPerBatch (2) rows are written to the output stream while still
     // having 1 row left in the iterator.
-    verify(arrowStreamWriter, times(maxRecordsPerBatch)).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    // 1 for proto response
+    verify(outputStream, times(1)).writeInt(any)
+    // 1 for proto message
+    verify(outputStream, times(1)).write(any[Array[Byte]])
   }
 
   test("map state values - iterator in map") {
@@ -485,8 +499,10 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
       .setValues(Values.newBuilder().setIteratorId(iteratorId).build()).build()
     stateServer.handleMapStateRequest(message)
     verify(mapState, times(0)).values()
-    verify(arrowStreamWriter).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    // 1 for proto response
+    verify(outputStream, times(1)).writeInt(any)
+    // 1 for sending proto message
+    verify(outputStream, times(1)).write(any[Array[Byte]])
   }
 
   test("map state values - iterator not in map") {
@@ -505,8 +521,10 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     verify(mapState).values()
     // Verify that only maxRecordsPerBatch (2) rows are written to the output stream while still
     // having 1 row left in the iterator.
-    verify(arrowStreamWriter, times(maxRecordsPerBatch)).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    // 1 for proto response
+    verify(outputStream, times(1)).writeInt(any)
+    // 1 for proto message
+    verify(outputStream, times(1)).write(any[Array[Byte]])
   }
 
   test("remove key") {
@@ -541,13 +559,13 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
 
   test("get expiry timers") {
     val message = TimerRequest.newBuilder().setExpiryTimerRequest(
-      ExpiryTimerRequest.newBuilder().setExpiryTimestampMs(
+      ExpiryTimerRequest.newBuilder().setIteratorId(iteratorId).setExpiryTimestampMs(
         10L
       ).build()
     ).build()
     stateServer.handleTimerRequest(message)
-    verify(arrowStreamWriter).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+    verify(outputStream).write(any[Array[Byte]])
   }
 
   test("stateful processor register timer") {
@@ -580,8 +598,8 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     ).build()
     stateServer.handleStatefulProcessorCall(message)
     verify(statefulProcessorHandle, times(0)).listTimers()
-    verify(arrowStreamWriter).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+    verify(outputStream).write(any[Array[Byte]])
   }
 
   test("stateful processor list timer - iterator not in map") {
@@ -599,8 +617,8 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     when(statefulProcessorHandle.listTimers()).thenReturn(Iterator(1))
     stateServer.handleStatefulProcessorCall(message)
     verify(statefulProcessorHandle, times(1)).listTimers()
-    verify(arrowStreamWriter).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+    verify(outputStream).write(any[Array[Byte]])
   }
 
   test("utils request - parse string schema") {

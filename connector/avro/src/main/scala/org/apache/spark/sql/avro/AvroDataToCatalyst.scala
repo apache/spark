@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMo
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
-private[sql] case class AvroDataToCatalyst(
+case class AvroDataToCatalyst(
     child: Expression,
     jsonFormatSchema: String,
     options: Map[String, String])

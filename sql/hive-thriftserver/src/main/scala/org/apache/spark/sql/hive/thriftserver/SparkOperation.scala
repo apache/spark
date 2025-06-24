@@ -25,9 +25,9 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{HIVE_OPERATION_TYPE, STATEMENT_ID}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType
+import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType.{EXTERNAL, MANAGED, VIEW}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.util.Utils
 
 /**
@@ -47,6 +47,21 @@ private[hive] trait SparkOperation extends Operation with Logging {
     }
   }
 
+  private def sessionState: SessionState = session.sessionState
+
+  final protected def catalog: SessionCatalog = sessionState.catalog
+
+  final protected def conf: SQLConf = sessionState.conf
+
+  final protected def sparkContext: SparkContext = session.sparkContext
+
+  final protected def withClassLoader(f: ClassLoader => Unit): Unit = {
+    val sharedState: SharedState = session.sharedState
+    val executionHiveClassLoader = sharedState.jarClassLoader
+    Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
+    f(executionHiveClassLoader)
+  }
+
   abstract override def close(): Unit = {
     super.close()
     cleanup()
@@ -62,7 +77,7 @@ private[hive] trait SparkOperation extends Operation with Logging {
   // - set appropriate SparkSession
   // - set scheduler pool for the operation
   def withLocalProperties[T](f: => T): T = {
-    val originalProps = Utils.cloneProperties(session.sparkContext.getLocalProperties)
+    val originalProps = Utils.cloneProperties(sparkContext.getLocalProperties)
     val originalSession = SparkSession.getActiveSession
 
     try {
@@ -72,7 +87,7 @@ private[hive] trait SparkOperation extends Operation with Logging {
       // Set scheduler pool
       session.conf.getOption(SQLConf.THRIFTSERVER_POOL.key) match {
         case Some(pool) =>
-          session.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
+          sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
         case None =>
       }
       CURRENT_USER.set(getParentSession.getUserName)
@@ -81,7 +96,7 @@ private[hive] trait SparkOperation extends Operation with Logging {
     } finally {
       CURRENT_USER.remove()
       // reset local properties, will also reset SPARK_SCHEDULER_POOL
-      session.sparkContext.setLocalProperties(originalProps)
+      sparkContext.setLocalProperties(originalProps)
 
       originalSession match {
         case Some(session) => SparkSession.setActiveSession(session)

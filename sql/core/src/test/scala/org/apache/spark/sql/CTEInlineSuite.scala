@@ -839,7 +839,8 @@ abstract class CTEInlineSuiteBase
   test("SPARK-51625: command in CTE relations should trigger inline") {
     val plan = UnresolvedWith(
       child = UnresolvedRelation(Seq("t")),
-      cteRelations = Seq("t" -> SubqueryAlias("t", ShowTables(CurrentNamespace, pattern = None)))
+      cteRelations = Seq(("t", SubqueryAlias("t", ShowTables(CurrentNamespace, pattern = None)),
+        None))
     )
     assert(!spark.sessionState.analyzer.execute(plan).exists {
       case _: WithCTE => true

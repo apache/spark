@@ -402,7 +402,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "UNSUPPORTED_TYPED_LITERAL",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "supportedTypes" : "\"DATE\", \"TIMESTAMP_NTZ\", \"TIMESTAMP_LTZ\", \"TIMESTAMP\", \"INTERVAL\", \"X\"",
+    "supportedTypes" : "\"DATE\", \"TIMESTAMP_NTZ\", \"TIMESTAMP_LTZ\", \"TIMESTAMP\", \"INTERVAL\", \"X\", \"TIME\"",
     "unsupportedType" : "\"GEO\""
   },
   "queryContext" : [ {

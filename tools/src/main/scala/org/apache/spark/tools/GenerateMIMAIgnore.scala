@@ -157,7 +157,7 @@ object GenerateMIMAIgnore {
    * and subpackages both from directories and jars present on the classpath.
    */
   private def getClasses(packageName: String): Set[String] = {
-    val finder = ClassFinder(maybeOverrideAsmVersion = Some(Opcodes.ASM7))
+    val finder = ClassFinder(maybeOverrideAsmVersion = Some(Opcodes.ASM8))
     finder
       .getClasses()
       .map(_.name)

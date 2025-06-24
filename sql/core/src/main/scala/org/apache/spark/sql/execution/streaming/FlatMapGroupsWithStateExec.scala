@@ -226,8 +226,9 @@ trait FlatMapGroupsWithStateExecBase
       // If the user provided initial state we need to have the initial state and the
       // data in the same partition so that we can still have just one commit at the end.
       val storeConf = new StateStoreConf(session.sessionState.conf)
-      val hadoopConfBroadcast = sparkContext.broadcast(
-        new SerializableConfiguration(session.sessionState.newHadoopConf()))
+      val hadoopConfBroadcast =
+        SerializableConfiguration.broadcast(session.sparkContext,
+          session.sessionState.newHadoopConf())
       child.execute().stateStoreAwareZipPartitions(
         initialState.execute(),
         getStateInfo,

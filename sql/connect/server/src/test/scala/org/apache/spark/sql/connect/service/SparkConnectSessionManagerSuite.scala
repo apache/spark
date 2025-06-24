@@ -23,6 +23,8 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkSQLException
+import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl}
+import org.apache.spark.sql.pipelines.logging.PipelineEvent
 import org.apache.spark.sql.test.SharedSparkSession
 
 class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndAfterEach {
@@ -136,7 +138,6 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndA
   test("SessionHolder is recorded with status closed after close") {
     val key = SessionKey("user", UUID.randomUUID().toString)
     val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
-
     val activeSessionInfo = SparkConnectService.sessionManager.listActiveSessions.find(
       _.sessionId == sessionHolder.sessionId)
     assert(activeSessionInfo.isDefined)
@@ -151,5 +152,22 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndA
     assert(closedSessionInfo.isDefined)
     assert(closedSessionInfo.get.status == SessionStatus.Closed)
     assert(closedSessionInfo.get.closedTimeMs.isDefined)
+  }
+
+  test("Pipeline execution cache is cleared when the session holder is closed") {
+    val key = SessionKey("user", UUID.randomUUID().toString)
+    val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+    val graphId = "test_graph"
+    val pipelineUpdateContext = new PipelineUpdateContextImpl(
+      new DataflowGraph(Seq(), Seq(), Seq()),
+      (_: PipelineEvent) => None)
+    sessionHolder.cachePipelineExecution(graphId, pipelineUpdateContext)
+    assert(
+      sessionHolder.getPipelineExecution(graphId).nonEmpty,
+      "pipeline execution was not cached")
+    SparkConnectService.sessionManager.closeSession(sessionHolder.key)
+    assert(
+      sessionHolder.getPipelineExecution(graphId).isEmpty,
+      "pipeline execution was not removed")
   }
 }

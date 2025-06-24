@@ -232,8 +232,28 @@ public interface TableChange {
    * @param fieldNames field names of the column to update
    * @param newDefaultValue the new default value SQL string (Spark SQL dialect).
    * @return a TableChange for the update
+   *
+   * @deprecated Please use {@link #updateColumnDefaultValue(String[], DefaultValue)} instead.
    */
+  @Deprecated(since = "4.1.0")
   static TableChange updateColumnDefaultValue(String[] fieldNames, String newDefaultValue) {
+    return new UpdateColumnDefaultValue(fieldNames, new ColumnDefaultValue(newDefaultValue, null));
+  }
+
+  /**
+   * Create a TableChange for updating the default value of a field.
+   * <p>
+   * The name is used to find the field to update.
+   * <p>
+   * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
+   *
+   * @param fieldNames field names of the column to update
+   * @param newDefaultValue the new default value SQL (Spark SQL dialect and
+   *                        V2 expression representation if it can be converted).
+   *                        Null indicates dropping column default value
+   * @return a TableChange for the update
+   */
+  static TableChange updateColumnDefaultValue(String[] fieldNames, DefaultValue newDefaultValue) {
     return new UpdateColumnDefaultValue(fieldNames, newDefaultValue);
   }
 
@@ -709,11 +729,11 @@ public interface TableChange {
    */
   final class UpdateColumnDefaultValue implements ColumnChange {
     private final String[] fieldNames;
-    private final String newDefaultValue;
+    private final DefaultValue newCurrentDefault;
 
-    private UpdateColumnDefaultValue(String[] fieldNames, String newDefaultValue) {
+    private UpdateColumnDefaultValue(String[] fieldNames, DefaultValue newCurrentDefault) {
       this.fieldNames = fieldNames;
-      this.newDefaultValue = newDefaultValue;
+      this.newCurrentDefault = newCurrentDefault;
     }
 
     @Override
@@ -725,22 +745,33 @@ public interface TableChange {
      * Returns the column default value SQL string (Spark SQL dialect). The default value literal
      * is not provided as updating column default values does not need to back-fill existing data.
      * Empty string means dropping the column default value.
+     *
+     * @deprecated Use {@link #newCurrentDefault()} instead.
      */
-    public String newDefaultValue() { return newDefaultValue; }
+    @Deprecated(since = "4.1.0")
+    public String newDefaultValue() {
+      return newCurrentDefault == null ? "" : newCurrentDefault.getSql();
+    }
+
+    /**
+     * Returns the column default value as {@link DefaultValue}.  The default value literal
+     * is not provided as updating column default values does not need to back-fill existing data.
+     * Null means dropping the column default value.
+     */
+    public DefaultValue newCurrentDefault() { return newCurrentDefault; }
 
     @Override
     public boolean equals(Object o) {
-      if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       UpdateColumnDefaultValue that = (UpdateColumnDefaultValue) o;
       return Arrays.equals(fieldNames, that.fieldNames) &&
-        newDefaultValue.equals(that.newDefaultValue());
+        Objects.equals(newCurrentDefault, that.newCurrentDefault);
     }
 
     @Override
     public int hashCode() {
-      int result = Objects.hash(newDefaultValue);
-      result = 31 * result + Arrays.hashCode(fieldNames);
+      int result = Arrays.hashCode(fieldNames);
+      result = 31 * result + Objects.hashCode(newCurrentDefault);
       return result;
     }
   }

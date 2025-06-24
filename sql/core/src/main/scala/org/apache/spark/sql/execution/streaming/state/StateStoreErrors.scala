@@ -18,9 +18,10 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
- * Object for grouping error messages from (most) exceptions thrown from State API V2
+ * Object for grouping error messages from (most) exceptions thrown from State Store
  *
  * ERROR_CLASS has a prefix of "STATE_STORE_" to indicate where the error is from
  */
@@ -39,14 +40,14 @@ object StateStoreErrors {
     )
   }
 
-  def keyRowFormatValidationFailure(errorMsg: String):
+  def keyRowFormatValidationFailure(errorMsg: String, stateStoreID: String):
     StateStoreKeyRowFormatValidationFailure = {
-    new StateStoreKeyRowFormatValidationFailure(errorMsg)
+    new StateStoreKeyRowFormatValidationFailure(errorMsg, stateStoreID)
   }
 
-  def valueRowFormatValidationFailure(errorMsg: String):
+  def valueRowFormatValidationFailure(errorMsg: String, stateStoreID: String):
     StateStoreValueRowFormatValidationFailure = {
-    new StateStoreValueRowFormatValidationFailure(errorMsg)
+    new StateStoreValueRowFormatValidationFailure(errorMsg, stateStoreID)
   }
 
   def unsupportedOperationOnMissingColumnFamily(operationName: String, colFamilyName: String):
@@ -221,6 +222,22 @@ object StateStoreErrors {
   def stateStoreOperationOutOfOrder(errorMsg: String): StateStoreOperationOutOfOrder = {
     new StateStoreOperationOutOfOrder(errorMsg)
   }
+
+  def cannotLoadStore(e: Throwable): Throwable = {
+    e match {
+      case e: SparkException
+        if Option(e.getCondition).exists(_.contains("CANNOT_LOAD_STATE_STORE")) =>
+          e
+      case e: ConvertableToCannotLoadStoreError =>
+        e.convertToCannotLoadStoreError()
+      case e: Throwable =>
+        QueryExecutionErrors.cannotLoadStore(e)
+    }
+  }
+}
+
+trait ConvertableToCannotLoadStoreError {
+  def convertToCannotLoadStoreError(): SparkException
 }
 
 class StateStoreDuplicateStateVariableDefined(stateVarName: String)
@@ -435,15 +452,31 @@ class StateStoreFailedToGetChangelogWriter(version: Long, e: Throwable)
     messageParameters = Map("version" -> version.toString),
     cause = e)
 
-class StateStoreKeyRowFormatValidationFailure(errorMsg: String)
+class StateStoreKeyRowFormatValidationFailure(errorMsg: String, stateStoreID: String)
   extends SparkRuntimeException(
     errorClass = "STATE_STORE_KEY_ROW_FORMAT_VALIDATION_FAILURE",
-    messageParameters = Map("errorMsg" -> errorMsg))
+    messageParameters = Map("errorMsg" -> errorMsg, "stateStoreID" -> stateStoreID))
+  with ConvertableToCannotLoadStoreError {
+    override def convertToCannotLoadStoreError(): SparkException = {
+      new SparkException(
+        errorClass = "CANNOT_LOAD_STATE_STORE.KEY_ROW_FORMAT_VALIDATION_FAILURE",
+        messageParameters = Map("msg" -> this.getMessage),
+        cause = null)
+    }
+  }
 
-class StateStoreValueRowFormatValidationFailure(errorMsg: String)
+class StateStoreValueRowFormatValidationFailure(errorMsg: String, stateStoreID: String)
   extends SparkRuntimeException(
     errorClass = "STATE_STORE_VALUE_ROW_FORMAT_VALIDATION_FAILURE",
-    messageParameters = Map("errorMsg" -> errorMsg))
+    messageParameters = Map("errorMsg" -> errorMsg, "stateStoreID" -> stateStoreID))
+  with ConvertableToCannotLoadStoreError {
+    override def convertToCannotLoadStoreError(): SparkException = {
+      new SparkException(
+        errorClass = "CANNOT_LOAD_STATE_STORE.VALUE_ROW_FORMAT_VALIDATION_FAILURE",
+        messageParameters = Map("msg" -> this.getMessage),
+        cause = null)
+    }
+  }
 
 class StateStoreProviderDoesNotSupportFineGrainedReplay(inputClass: String)
   extends SparkUnsupportedOperationException(

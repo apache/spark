@@ -261,6 +261,7 @@ def is_variant(at: "pa.DataType") -> bool:
     return any(
         (
             field.name == "metadata"
+            and field.metadata is not None
             and b"variant" in field.metadata
             and field.metadata[b"variant"] == b"true"
         )

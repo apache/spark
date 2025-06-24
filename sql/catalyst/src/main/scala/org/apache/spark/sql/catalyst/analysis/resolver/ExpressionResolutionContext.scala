@@ -43,6 +43,8 @@ package org.apache.spark.sql.catalyst.analysis.resolver
  *   Otherwise, extra [[Alias]]es have to be stripped away.
  * @param resolvingGroupingExpressions A flag indicating whether an expression we are resolving is
  *   one of [[Aggregate.groupingExpressions]].
+ * @param resolvingTreeUnderAggregateExpression A flag indicating whether an expression we are
+ *   resolving a tree under [[AggregateExpression]].
  */
 class ExpressionResolutionContext(
     val isRoot: Boolean = false,
@@ -52,7 +54,8 @@ class ExpressionResolutionContext(
     var hasAttributeOutsideOfAggregateExpressions: Boolean = false,
     var hasLateralColumnAlias: Boolean = false,
     var isTopOfProjectList: Boolean = false,
-    var resolvingGroupingExpressions: Boolean = false) {
+    var resolvingGroupingExpressions: Boolean = false,
+    var resolvingTreeUnderAggregateExpression: Boolean = false) {
 
   /**
    * Propagate generic information that is valid across the whole expression tree from the
@@ -81,7 +84,8 @@ object ExpressionResolutionContext {
       )
     } else {
       new ExpressionResolutionContext(
-        resolvingGroupingExpressions = parent.resolvingGroupingExpressions
+        resolvingGroupingExpressions = parent.resolvingGroupingExpressions,
+        resolvingTreeUnderAggregateExpression = parent.resolvingTreeUnderAggregateExpression
       )
     }
   }

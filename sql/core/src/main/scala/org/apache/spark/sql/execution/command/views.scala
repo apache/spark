@@ -586,13 +586,21 @@ object ViewHelper extends SQLConfHelper with Logging {
     // names.
     SchemaUtils.checkColumnNameDuplication(fieldNames.toImmutableArraySeq, conf.resolver)
 
+    val queryColumnNameProps = if (viewSchemaMode == SchemaEvolution) {
+      // If the view schema mode is SCHEMA EVOLUTION, we can avoid generating the query output
+      // column names as table properties, and always use view schema as they are always same
+      Seq()
+    } else {
+      generateQueryColumnNames(queryOutput.toImmutableArraySeq)
+    }
+
     // Generate the view default catalog and namespace, as well as captured SQL configs.
     val manager = session.sessionState.catalogManager
     removeReferredTempNames(removeSQLConfigs(removeQueryColumnNames(properties))) ++
       catalogAndNamespaceToProps(
         manager.currentCatalog.name, manager.currentNamespace.toImmutableArraySeq) ++
       sqlConfigsToProps(conf) ++
-      generateQueryColumnNames(queryOutput.toImmutableArraySeq) ++
+      queryColumnNameProps ++
       referredTempNamesToProps(tempViewNames, tempFunctionNames, tempVariableNames) ++
       viewSchemaModeToProps(viewSchemaMode)
   }

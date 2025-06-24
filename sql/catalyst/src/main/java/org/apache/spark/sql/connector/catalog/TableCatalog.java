@@ -26,6 +26,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.StructType;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -61,6 +62,11 @@ public interface TableCatalog extends CatalogPlugin {
    * A reserved property to specify a table was created with EXTERNAL.
    */
   String PROP_EXTERNAL = "external";
+
+  /**
+   * A reserved property that indicates table entity type (external, managed, view, etc.).
+   */
+  String PROP_TABLE_TYPE = "table_type";
 
   /**
    * A reserved property to specify the description of the table.
@@ -102,6 +108,35 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws NoSuchNamespaceException If the namespace does not exist (optional).
    */
   Identifier[] listTables(String[] namespace) throws NoSuchNamespaceException;
+
+  /**
+   * List the table summaries in a namespace from the catalog.
+   * <p>
+   * This method should return all tables entities from a catalog regardless of type (i.e. views
+   * should be listed as well).
+   *
+   * @param namespace a multi-part namespace
+   * @return an array of Identifiers for tables
+   * @throws NoSuchNamespaceException If the namespace does not exist (optional).
+   * @throws NoSuchTableException If certain table listed by listTables API does not exist.
+   */
+  default TableSummary[] listTableSummaries(String[] namespace)
+          throws NoSuchNamespaceException, NoSuchTableException {
+    Identifier[] tableIdentifiers = this.listTables(namespace);
+    ArrayList<TableSummary> tableSummaries = new ArrayList<>(tableIdentifiers.length);
+    for (Identifier identifier : tableIdentifiers) {
+      Table table = this.loadTable(identifier);
+
+      // If table type property is not present, we assume that table type is `FOREIGN`.
+      String tableType = table.properties().getOrDefault(
+              TableCatalog.PROP_TABLE_TYPE,
+              TableSummary.FOREIGN_TABLE_TYPE);
+
+      tableSummaries.add(TableSummary.of(identifier, tableType));
+    };
+
+    return tableSummaries.toArray(TableSummary[]::new);
+  }
 
   /**
    * Load table metadata by {@link Identifier identifier} from the catalog.

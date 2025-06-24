@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import scala.collection.mutable
 import scala.util.parsing.combinator.RegexParsers
 
@@ -149,6 +151,30 @@ private[ml] case class ResolvedRFormula(
     }
     val termStr = ts.mkString("[", ",", "]")
     s"ResolvedRFormula(label=$label, terms=$termStr, hasIntercept=$hasIntercept)"
+  }
+}
+
+private[ml] object ResolvedRFormula {
+  private[ml] def serializeData(data: ResolvedRFormula, dos: DataOutputStream): Unit = {
+    import org.apache.spark.ml.util.ReadWriteUtils._
+
+    dos.writeUTF(data.label)
+    serializeGenericArray[Seq[String]](
+      data.terms.toArray, dos,
+      (strSeq, dos) => serializeStringArray(strSeq.toArray, dos)
+    )
+    dos.writeBoolean(data.hasIntercept)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): ResolvedRFormula = {
+    import org.apache.spark.ml.util.ReadWriteUtils._
+
+    val label = dis.readUTF()
+    val terms = deserializeGenericArray[Seq[String]](
+      dis, dis => deserializeStringArray(dis).toSeq
+    ).toSeq
+    val hasIntercept = dis.readBoolean()
+    ResolvedRFormula(label, terms, hasIntercept)
   }
 }
 

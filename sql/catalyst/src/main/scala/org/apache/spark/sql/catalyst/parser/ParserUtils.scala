@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util
 import java.util.Locale
 
-import scala.collection.immutable
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 import scala.util.matching.Regex
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
@@ -139,7 +138,7 @@ object ParserUtils extends SparkParserUtils {
   }
 }
 
-class SqlScriptingParsingContext {
+class CompoundBodyParsingContext {
 
   object State extends Enumeration {
     type State = Value
@@ -158,7 +157,12 @@ class SqlScriptingParsingContext {
   }
 
   /** Transition to CONDITION state. */
-  def condition(errorCondition: ErrorCondition): Unit = {
+  def condition(errorCondition: ErrorCondition, allowConditionDeclare: Boolean): Unit = {
+    if (!allowConditionDeclare) {
+      throw SqlScriptingErrors.conditionDeclarationNotAtStartOfCompound(
+        errorCondition.origin, errorCondition.conditionName
+      )
+    }
     transitionTo(State.CONDITION, None, errorCondition = Some(errorCondition))
   }
 
@@ -234,7 +238,7 @@ class SqlScriptingParsingContext {
 
       // Invalid transitions to CONDITION state.
       case (State.STATEMENT, State.CONDITION) =>
-        throw SqlScriptingErrors.conditionDeclarationOnlyAtBeginning(
+        throw SqlScriptingErrors.conditionDeclarationNotAtStartOfCompound(
           CurrentOrigin.get,
           errorCondition.get.conditionName)
 
@@ -253,6 +257,11 @@ class SqlScriptingParsingContext {
           s"Invalid state transition from $currentState to $newState")
     }
   }
+}
+
+class SqlScriptingParsingContext {
+  val labelContext: SqlScriptingLabelContext = new SqlScriptingLabelContext()
+  val conditionContext: SqlScriptingConditionContext = new SqlScriptingConditionContext()
 }
 
 class SqlScriptingLabelContext {
@@ -327,7 +336,7 @@ class SqlScriptingLabelContext {
           throw SqlScriptingErrors.duplicateLabels(CurrentOrigin.get, txt)
         }
       }
-      seenLabels.add(beginLabelCtx.get.multipartIdentifier().getText)
+      seenLabels.add(txt)
       txt
     } else {
       // Do not add the label to the seenLabels set if it is not defined.
@@ -359,4 +368,18 @@ object SqlScriptingLabelContext {
   def isForbiddenLabelName(labelName: String): Boolean = {
     forbiddenLabelNames.exists(_.matches(labelName.toLowerCase(Locale.ROOT)))
   }
+}
+
+class SqlScriptingConditionContext {
+  private val conditionNameToSqlStateMap = mutable.HashMap[String, String]()
+
+  def contains(conditionName: String): Boolean = conditionNameToSqlStateMap.contains(conditionName)
+
+  def getSqlStateForCondition(conditionName: String): Option[String] =
+    conditionNameToSqlStateMap.get(conditionName)
+
+  def add(condition: ErrorCondition): Unit =
+    conditionNameToSqlStateMap += condition.conditionName -> condition.sqlState
+
+  def remove(toRemove: Iterable[String]): Unit = conditionNameToSqlStateMap --= toRemove
 }

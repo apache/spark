@@ -118,7 +118,6 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       distributionStrictlyRequired: Boolean = true,
       numRowsPerSplit: Int = Int.MaxValue): Table = {
     // scalastyle:on argcount
-    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
     }
@@ -126,7 +125,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
     val tableName = s"$name.${ident.quoted}"
-    val table = new InMemoryTable(tableName, schema, partitions, properties, constraints,
+    val table = new InMemoryTable(tableName, columns, partitions, properties, constraints,
       distribution, ordering, requiredNumPartitions, advisoryPartitionSize,
       distributionStrictlyRequired, numRowsPerSplit)
     tables.put(ident, table)
@@ -150,14 +149,21 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
+    table.increaseCurrentVersion()
+    val currentVersion = table.currentVersion()
     val newTable = new InMemoryTable(
       name = table.name,
-      schema = schema,
+      columns = CatalogV2Util.structTypeToV2Columns(schema),
       partitioning = finalPartitioning,
       properties = properties,
       constraints = constraints)
       .withData(table.data)
-
+    newTable.setCurrentVersion(currentVersion)
+    changes.foreach {
+      case a: TableChange.AddConstraint =>
+        newTable.setValidatedVersion(a.validatedTableVersion())
+      case _ =>
+    }
     tables.put(ident, newTable)
 
     newTable
@@ -171,7 +177,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     }
 
     Option(tables.remove(oldIdent)) match {
-      case Some(table) =>
+      case Some(table: InMemoryBaseTable) =>
+        table.increaseCurrentVersion()
         tables.put(newIdent, table)
       case _ =>
         throw new NoSuchTableException(oldIdent.asMultipartIdentifier)

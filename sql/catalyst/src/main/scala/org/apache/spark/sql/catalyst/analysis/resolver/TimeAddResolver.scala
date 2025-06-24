@@ -28,29 +28,28 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, TimeAdd}
 /**
  * Helper resolver for [[TimeAdd]] which is produced by resolving [[BinaryArithmetic]] nodes.
  */
-class TimeAddResolver(
-    expressionResolver: ExpressionResolver,
-    timezoneAwareExpressionResolver: TimezoneAwareExpressionResolver)
+class TimeAddResolver(expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[TimeAdd, Expression]
-    with ResolvesExpressionChildren {
+    with ResolvesExpressionChildren
+    with CoercesExpressionTypes {
 
-  private val typeCoercionTransformations: Seq[Expression => Expression] =
-    if (conf.ansiEnabled) {
-      TimeAddResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
-    } else {
-      TimeAddResolver.TYPE_COERCION_TRANSFORMATIONS
-    }
-  private val typeCoercionResolver: TypeCoercionResolver =
-    new TypeCoercionResolver(timezoneAwareExpressionResolver, typeCoercionTransformations)
+  private val traversals = expressionResolver.getExpressionTreeTraversals
+
+  protected override val ansiTransformations: CoercesExpressionTypes.Transformations =
+    TimeAddResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
+  protected override val nonAnsiTransformations: CoercesExpressionTypes.Transformations =
+    TimeAddResolver.TYPE_COERCION_TRANSFORMATIONS
 
   override def resolve(unresolvedTimeAdd: TimeAdd): Expression = {
     val timeAddWithResolvedChildren =
       withResolvedChildren(unresolvedTimeAdd, expressionResolver.resolve _)
-    val timeAddWithTypeCoercion: Expression = typeCoercionResolver
-      .resolve(timeAddWithResolvedChildren)
-    timezoneAwareExpressionResolver.withResolvedTimezone(
+    val timeAddWithTypeCoercion: Expression = coerceExpressionTypes(
+      expression = timeAddWithResolvedChildren,
+      expressionTreeTraversal = traversals.current
+    )
+    TimezoneAwareExpressionResolver.resolveTimezone(
       timeAddWithTypeCoercion,
-      conf.sessionLocalTimeZone
+      traversals.current.sessionLocalTimeZone
     )
   }
 }

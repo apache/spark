@@ -44,6 +44,16 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
     }
 
   /**
+   * Get [[View]]'s default collation if explicitly set.
+   */
+  def getDefaultCollation: Option[String] =
+    if (viewResolutionContextStack.isEmpty) {
+      None
+    } else {
+      viewResolutionContextStack.peek().collation
+    }
+
+  /**
    * This method preserves the resolved [[UnresolvedRelation]] for the further view resolution
    * process.
    *
@@ -89,8 +99,12 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
       SQLConf.withExistingConf(
         View.effectiveSQLConf(unresolvedView.desc.viewSQLConfigs, unresolvedView.isTempView)
       ) {
-        cteRegistry.withNewScope(isRoot = true, isOpaque = true) {
+        cteRegistry.pushScope(isRoot = true, isOpaque = true)
+
+        try {
           resolver.lookupMetadataAndResolve(unresolvedView.child)
+        } finally {
+          cteRegistry.popScope()
         }
       }
     }
@@ -111,6 +125,8 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
   private def withViewResolutionContext(unresolvedView: View)(
       body: => LogicalPlan): (LogicalPlan, ViewResolutionContext) = {
     AnalysisContext.withAnalysisContext(unresolvedView.desc) {
+      val currentAnalysisContext = AnalysisContext.get
+
       val prevContext = if (viewResolutionContextStack.isEmpty()) {
         ViewResolutionContext(
           nestedViewDepth = 0,
@@ -149,12 +165,13 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
  *
  * @param nestedViewDepth Current nested view depth. Cannot exceed the `maxNestedViewDepth`.
  * @param maxNestedViewDepth Maximum allowed nested view depth. Configured in the upper context
- *   based on [[SQLConf.MAX_NESTED_VIEW_DEPTH]].
+ * @param collation View's default collation if explicitly set.
  * @param catalogAndNamespace Catalog and camespace under which the [[View]] was created.
  */
 case class ViewResolutionContext(
     nestedViewDepth: Int,
     maxNestedViewDepth: Int,
+    collation: Option[String] = None,
     catalogAndNamespace: Option[Seq[String]] = None) {
   def validate(unresolvedView: View): Unit = {
     if (nestedViewDepth > maxNestedViewDepth) {

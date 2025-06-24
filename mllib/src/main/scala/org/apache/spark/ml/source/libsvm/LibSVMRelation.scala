@@ -153,7 +153,7 @@ private[libsvm] case class LibSVMFileFormat()
     val isSparse = libSVMOptions.isSparse
 
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
 
     (file: PartitionedFile) => {
       val linesReader = Utils.createResourceUninterruptiblyIfInTaskThread(

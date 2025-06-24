@@ -318,7 +318,7 @@ class Column(TableValuedFunctionArgument):
     def bitwiseOR(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> "Column":
-        """ "
+        """
         Compute bitwise OR of this expression with another expression.
 
         .. versionchanged:: 3.4.0

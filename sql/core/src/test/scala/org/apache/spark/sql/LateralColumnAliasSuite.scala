@@ -23,7 +23,7 @@ import org.scalatest.Tag
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, ExpressionSet}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1382,5 +1382,14 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       Row("alex", true) :: Row("amy", true) :: Row("cathy", false) ::
         Row("david", false) :: Row("jen", false) :: Nil
     )
+  }
+
+  test("Order in inner project lists should respect original project list order") {
+    val plan = sql("SELECT 0 AS a, 1 AS b, b AS c, a AS d").queryExecution.analyzed
+    plan match {
+      case Project(outerProjectList, Project(innerProjectList, _)) =>
+        assert(outerProjectList.map(_.name) == Seq("a", "b", "c", "d"))
+        assert(innerProjectList.map(_.name) == Seq("a", "b"))
+    }
   }
 }

@@ -16,6 +16,12 @@ CreateViewCommand `t2`, VALUES (1.0, 1), (2.0, 4) tbl(c1, c2), false, true, Loca
 
 
 -- !query
+CREATE TABLE jsonTable (col1 INT, col2 INT, col3 INT, col4 INT) USING json
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`jsonTable`, false
+
+
+-- !query
 SELECT *
 FROM   (SELECT * FROM t1
         UNION ALL
@@ -242,6 +248,25 @@ Aggregate [sum(v#x) AS sum(v)#x]
 
 
 -- !query
+SELECT col1, col2, col3, NULLIF('','') AS col4
+FROM jsonTable
+UNION ALL
+SELECT col2, col2, null AS col3, col4
+FROM jsonTable
+-- !query analysis
+Union false, false
+:- Project [col1#x, col2#x, col3#x, cast(col4#x as bigint) AS col4#xL]
+:  +- Project [col1#x, col2#x, col3#x, nullif(, ) AS col4#x]
+:     +- SubqueryAlias spark_catalog.default.jsontable
+:        +- Relation spark_catalog.default.jsontable[col1#x,col2#x,col3#x,col4#x] json
++- Project [col2#x, col2#x AS col2#x, col3#x, col4#xL]
+   +- Project [col2#x, col2#x, cast(col3#x as int) AS col3#x, cast(col4#x as bigint) AS col4#xL]
+      +- Project [col2#x, col2#x, null AS col3#x, col4#x]
+         +- SubqueryAlias spark_catalog.default.jsontable
+            +- Relation spark_catalog.default.jsontable[col1#x,col2#x,col3#x,col4#x] json
+
+
+-- !query
 DROP VIEW IF EXISTS t1
 -- !query analysis
 DropTempViewCommand t1
@@ -275,3 +300,10 @@ DropTempViewCommand p2
 DROP VIEW IF EXISTS p3
 -- !query analysis
 DropTempViewCommand p3
+
+
+-- !query
+DROP TABLE IF EXISTS jsonTable
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.jsonTable

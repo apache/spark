@@ -26,7 +26,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   UnresolvedWith
 }
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION, UNRESOLVED_RELATION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{
+  PLAN_EXPRESSION,
+  UNRESOLVED_RELATION,
+  UNRESOLVED_WITH
+}
 
 /**
  * The [[IdentifierAndCteSubstitutor]] is responsible for substituting the IDENTIFIERs (not yet
@@ -90,19 +94,27 @@ class IdentifierAndCteSubstitutor {
    */
   private def handleWith(unresolvedWith: UnresolvedWith): LogicalPlan = {
     val cteRelationsAfterSubstitution = unresolvedWith.cteRelations.map { cteRelation =>
-      val (cteName, ctePlan) = cteRelation
+      val (cteName, ctePlan, maxDepth) = cteRelation
 
-      val ctePlanAfter = cteRegistry.withNewScope() {
+      cteRegistry.pushScope()
+
+      val ctePlanAfter = try {
         substitute(ctePlan).asInstanceOf[SubqueryAlias]
+      } finally {
+        cteRegistry.popScope()
       }
 
       cteRegistry.currentScope.registerCte(cteName, CTERelationDef(ctePlanAfter))
 
-      (cteName, ctePlanAfter)
+      (cteName, ctePlanAfter, maxDepth)
     }
 
-    val childAfterSubstitution = cteRegistry.withNewScope() {
+    cteRegistry.pushScope()
+
+    val childAfterSubstitution = try {
       substitute(unresolvedWith.child)
+    } finally {
+      cteRegistry.popScope()
     }
 
     val result = withOrigin(unresolvedWith.origin) {
@@ -148,8 +160,12 @@ class IdentifierAndCteSubstitutor {
 
       case operator if operator.children.size > 1 =>
         val newChildren = operator.children.map { child =>
-          cteRegistry.withNewScopeUnderMultiChildOperator(operator, child) {
+          cteRegistry.pushScopeForMultiChildOperator(operator, child)
+
+          try {
             substitute(child)
+          } finally {
+            cteRegistry.popScope()
           }
         }
         operator.withNewChildren(newChildren)
@@ -166,8 +182,12 @@ class IdentifierAndCteSubstitutor {
       _.containsPattern(PLAN_EXPRESSION)
     ) {
       case subqueryExpression: SubqueryExpression =>
-        val newPlan = cteRegistry.withNewScope(isRoot = true) {
+        cteRegistry.pushScope(isRoot = true)
+
+        val newPlan = try {
           substitute(subqueryExpression.plan)
+        } finally {
+          cteRegistry.popScope()
         }
 
         val result = withOrigin(subqueryExpression.origin) {
@@ -180,5 +200,5 @@ class IdentifierAndCteSubstitutor {
 }
 
 object IdentifierAndCteSubstitutor {
-  val NODES_OF_INTEREST = Seq(CTE, UNRESOLVED_RELATION)
+  val NODES_OF_INTEREST = Seq(UNRESOLVED_RELATION, UNRESOLVED_WITH)
 }

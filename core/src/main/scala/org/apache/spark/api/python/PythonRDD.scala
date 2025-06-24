@@ -366,7 +366,7 @@ private[spark] object PythonRDD extends Logging {
     val kc = Utils.classForName[K](keyClass)
     val vc = Utils.classForName[V](valueClass)
     val rdd = sc.sc.sequenceFile[K, V](path, kc, vc, minSplits)
-    val confBroadcasted = sc.sc.broadcast(new SerializableConfiguration(sc.hadoopConfiguration()))
+    val confBroadcasted = SerializableConfiguration.broadcast(sc.sc, sc.hadoopConfiguration())
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
@@ -392,7 +392,7 @@ private[spark] object PythonRDD extends Logging {
     val rdd =
       newAPIHadoopRDDFromClassNames[K, V, F](sc,
         Some(path), inputFormatClass, keyClass, valueClass, mergedConf)
-    val confBroadcasted = sc.sc.broadcast(new SerializableConfiguration(mergedConf))
+    val confBroadcasted = SerializableConfiguration.broadcast(sc.sc, mergedConf)
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
@@ -418,7 +418,7 @@ private[spark] object PythonRDD extends Logging {
     val rdd =
       newAPIHadoopRDDFromClassNames[K, V, F](sc,
         None, inputFormatClass, keyClass, valueClass, conf)
-    val confBroadcasted = sc.sc.broadcast(new SerializableConfiguration(conf))
+    val confBroadcasted = SerializableConfiguration.broadcast(sc.sc, conf)
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
@@ -461,7 +461,7 @@ private[spark] object PythonRDD extends Logging {
     val rdd =
       hadoopRDDFromClassNames[K, V, F](sc,
         Some(path), inputFormatClass, keyClass, valueClass, mergedConf)
-    val confBroadcasted = sc.sc.broadcast(new SerializableConfiguration(mergedConf))
+    val confBroadcasted = SerializableConfiguration.broadcast(sc.sc, mergedConf)
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
@@ -487,7 +487,7 @@ private[spark] object PythonRDD extends Logging {
     val rdd =
       hadoopRDDFromClassNames[K, V, F](sc,
         None, inputFormatClass, keyClass, valueClass, conf)
-    val confBroadcasted = sc.sc.broadcast(new SerializableConfiguration(conf))
+    val confBroadcasted = SerializableConfiguration.broadcast(sc.sc, conf)
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))

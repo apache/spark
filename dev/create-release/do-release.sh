@@ -52,9 +52,13 @@ function should_build {
 if should_build "tag" && [ $SKIP_TAG = 0 ]; then
   run_silent "Creating release tag $RELEASE_TAG..." "tag.log" \
     "$SELF/release-tag.sh"
-  echo "It may take some time for the tag to be synchronized to github."
-  echo "Press enter when you've verified that the new tag ($RELEASE_TAG) is available."
-  read
+  if [ -z "$ANSWER" ]; then
+    echo "It may take some time for the tag to be synchronized to github."
+    echo "Press enter when you've verified that the new tag ($RELEASE_TAG) is available."
+    read
+  else
+    sleep 10
+  fi
 else
   echo "Skipping tag creation for $RELEASE_TAG."
 fi

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
+import java.util.UUID
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -26,7 +27,7 @@ import org.scalatest.Tag
 import org.apache.spark.{SparkContext, SparkException, TaskContext}
 import org.apache.spark.sql.{DataFrame, ForeachWriter}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream}
+import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -154,6 +155,7 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false,
       stateSchemaProvider: Option[StateSchemaProvider] = None): Unit = {
+    hadoopConf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
     innerProvider.init(
       stateStoreId,
       keySchema,

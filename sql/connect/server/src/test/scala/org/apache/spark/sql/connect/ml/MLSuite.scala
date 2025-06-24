@@ -135,8 +135,6 @@ class MLSuite extends MLHelper {
   // Estimator/Model works
   test("LogisticRegression works") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
-    sessionHolder.session.conf
-      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED.key, "false")
 
     // estimator read/write
     val ret = readWrite(sessionHolder, getLogisticRegression, getMaxIter)
@@ -259,37 +257,6 @@ class MLSuite extends MLHelper {
     }
   }
 
-  test("Exception: cannot retrieve object") {
-    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
-    sessionHolder.session.conf
-      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED.key, "false")
-    val modelId = trainLogisticRegressionModel(sessionHolder)
-
-    // Fetch summary attribute
-    val accuracyCommand = proto.MlCommand
-      .newBuilder()
-      .setFetch(
-        proto.Fetch
-          .newBuilder()
-          .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
-          .addMethods(proto.Fetch.Method.newBuilder().setMethod("summary"))
-          .addMethods(proto.Fetch.Method.newBuilder().setMethod("accuracy")))
-      .build()
-
-    // Successfully fetch summary.accuracy from the cached model
-    MLHandler.handleMlCommand(sessionHolder, accuracyCommand)
-
-    // Remove the model from cache
-    sessionHolder.mlCache.clear()
-
-    // No longer able to retrieve the model from cache
-    val e = intercept[MLCacheInvalidException] {
-      MLHandler.handleMlCommand(sessionHolder, accuracyCommand)
-    }
-    val msg = e.getMessage
-    assert(msg.contains(s"$modelId from the ML cache"))
-  }
-
   test("access the attribute which is not in allowed list") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     val modelId = trainLogisticRegressionModel(sessionHolder)
@@ -385,28 +352,63 @@ class MLSuite extends MLHelper {
         .toArray sameElements Array("a", "b", "c"))
   }
 
+  test("tree model training early stop for limiting model size") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED.key, "true")
+
+    for (estimator <- Seq(getDecisionTreeClassifier, getRandomForestClassifier)) {
+      for (maxModelSize <- Seq(20000, 50000)) {
+        sessionHolder.session.conf.set(
+          Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE.key,
+          maxModelSize.toString)
+        trainTreeModel(sessionHolder, estimator)
+        val lastModelSize = org.apache.spark.ml.tree.impl.RandomForest.lastEarlyStoppedModelSize
+        assert(lastModelSize < maxModelSize)
+        assert(lastModelSize >= maxModelSize.toDouble / 2.5)
+      }
+    }
+  }
+
+  test("GBT tree model training early stop for limiting model size") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED.key, "true")
+
+    for (maxModelSize <- Seq(20000, 50000, 130000)) {
+      sessionHolder.session.conf.set(
+        Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE.key,
+        maxModelSize.toString)
+      trainTreeModel(sessionHolder, getGBTClassifier)
+      val lastModelSize =
+        org.apache.spark.ml.tree.impl.GradientBoostedTrees.lastEarlyStoppedModelSize
+      assert(lastModelSize < maxModelSize)
+      assert(lastModelSize >= maxModelSize.toDouble / 2.5)
+    }
+  }
+
   test("MLCache offloading works") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     sessionHolder.session.conf
-      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED.key, "true")
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED.key, "true")
 
     val memorySizeBytes = 1024 * 16
     sessionHolder.session.conf.set(
-      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_MAX_IN_MEMORY_SIZE.key,
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE.key,
       memorySizeBytes)
     val modelIdList = scala.collection.mutable.ListBuffer[String]()
     modelIdList.append(trainLogisticRegressionModel(sessionHolder))
     assert(sessionHolder.mlCache.cachedModel.size() == 1)
-    assert(sessionHolder.mlCache.totalSizeBytes.get() > 0)
-    val modelSizeBytes = sessionHolder.mlCache.totalSizeBytes.get()
+    assert(sessionHolder.mlCache.totalMLCacheInMemorySizeBytes.get() > 0)
+    val modelSizeBytes = sessionHolder.mlCache.totalMLCacheInMemorySizeBytes.get()
     val maxNumModels = memorySizeBytes / modelSizeBytes.toInt
 
     // All models will be kept if the total size is less than the memory limit.
     for (i <- 1 until maxNumModels) {
       modelIdList.append(trainLogisticRegressionModel(sessionHolder))
       assert(sessionHolder.mlCache.cachedModel.size() == i + 1)
-      assert(sessionHolder.mlCache.totalSizeBytes.get() > 0)
-      assert(sessionHolder.mlCache.totalSizeBytes.get() <= memorySizeBytes)
+      assert(sessionHolder.mlCache.totalMLCacheInMemorySizeBytes.get() > 0)
+      assert(sessionHolder.mlCache.totalMLCacheInMemorySizeBytes.get() <= memorySizeBytes)
     }
 
     // Old models will be offloaded
@@ -414,13 +416,46 @@ class MLSuite extends MLHelper {
     for (_ <- 0 until 3) {
       modelIdList.append(trainLogisticRegressionModel(sessionHolder))
       assert(sessionHolder.mlCache.cachedModel.size() == maxNumModels)
-      assert(sessionHolder.mlCache.totalSizeBytes.get() > 0)
-      assert(sessionHolder.mlCache.totalSizeBytes.get() <= memorySizeBytes)
+      assert(sessionHolder.mlCache.totalMLCacheInMemorySizeBytes.get() > 0)
+      assert(sessionHolder.mlCache.totalMLCacheInMemorySizeBytes.get() <= memorySizeBytes)
     }
 
     // Assert all models can be loaded back from disk after they are offloaded.
     for (modelId <- modelIdList) {
       assert(sessionHolder.mlCache.get(modelId) != null)
     }
+  }
+
+  test("Model size limit") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE.key, "4000")
+    intercept[MLModelSizeOverflowException] {
+      trainLogisticRegressionModel(sessionHolder)
+    }
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE.key, "8000")
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_STORAGE_SIZE.key, "10000")
+    trainLogisticRegressionModel(sessionHolder)
+    intercept[MLCacheSizeOverflowException] {
+      trainLogisticRegressionModel(sessionHolder)
+    }
+  }
+
+  def trainTreeModel(
+      sessionHolder: SessionHolder,
+      estimator: proto.MlOperator.Builder): String = {
+    val fitCommand = proto.MlCommand
+      .newBuilder()
+      .setFit(
+        proto.MlCommand.Fit
+          .newBuilder()
+          .setDataset(createRelationProtoForTreeModel(128, 10000))
+          .setEstimator(estimator)
+          .setParams(getMaxDepth(30)))
+      .build()
+    val fitResult = MLHandler.handleMlCommand(sessionHolder, fitCommand)
+    fitResult.getOperatorInfo.getObjRef.getId
   }
 }

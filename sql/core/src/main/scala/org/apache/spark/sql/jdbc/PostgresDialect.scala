@@ -54,6 +54,12 @@ private case class PostgresDialect()
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getSQLState == "42P01" ||
+      e.getSQLState == "3F000" ||
+      e.getSQLState == "42704"
+  }
+
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     sqlType match {
@@ -235,6 +241,11 @@ private case class PostgresDialect()
 
     s"CREATE INDEX ${quoteIdentifier(indexName)} ON ${quoteIdentifier(tableIdent.name())}" +
       s" $indexType (${columnList.mkString(", ")}) $indexProperties"
+  }
+
+  // See https://www.postgresql.org/docs/current/errcodes-appendix.html
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    Option(exception.getSQLState).exists(_.startsWith("42"))
   }
 
   // SHOW INDEX syntax

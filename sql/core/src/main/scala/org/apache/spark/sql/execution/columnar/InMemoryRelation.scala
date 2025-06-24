@@ -381,22 +381,8 @@ object InMemoryRelation {
   /* Visible for testing */
   private[columnar] def clearSerializer(): Unit = synchronized { ser = None }
 
-  def convertToColumnarIfPossible(plan: SparkPlan): SparkPlan = plan match {
-    case gen: WholeStageCodegenExec => gen.child match {
-      case c2r: ColumnarToRowTransition => c2r.child match {
-        case ia: InputAdapter => ia.child
-        case _ => plan
-      }
-      case _ => plan
-    }
-    case c2r: ColumnarToRowTransition => // This matches when whole stage code gen is disabled.
-      c2r.child
-    case adaptive: AdaptiveSparkPlanExec =>
-      // If AQE is enabled for cached plan and table cache supports columnar in, we should mark
-      // `AdaptiveSparkPlanExec.supportsColumnar` as true to avoid inserting `ColumnarToRow`, so
-      // that `CachedBatchSerializer` can use `convertColumnarBatchToCachedBatch` to cache data.
-      adaptive.copy(supportsColumnar = true)
-    case _ => plan
+  def convertToColumnarIfPossible(plan: SparkPlan): SparkPlan = {
+    getSerializer(plan.conf).convertToColumnarPlanIfPossible(plan)
   }
 
   def apply(
@@ -406,7 +392,7 @@ object InMemoryRelation {
     val optimizedPlan = qe.optimizedPlan
     val serializer = getSerializer(optimizedPlan.conf)
     val child = if (serializer.supportsColumnarInput(optimizedPlan.output)) {
-      convertToColumnarIfPossible(qe.executedPlan)
+      serializer.convertToColumnarPlanIfPossible(qe.executedPlan)
     } else {
       qe.executedPlan
     }
@@ -433,8 +419,9 @@ object InMemoryRelation {
 
   def apply(cacheBuilder: CachedRDDBuilder, qe: QueryExecution): InMemoryRelation = {
     val optimizedPlan = qe.optimizedPlan
-    val newBuilder = if (cacheBuilder.serializer.supportsColumnarInput(optimizedPlan.output)) {
-      cacheBuilder.copy(cachedPlan = convertToColumnarIfPossible(qe.executedPlan))
+    val serializer = cacheBuilder.serializer
+    val newBuilder = if (serializer.supportsColumnarInput(optimizedPlan.output)) {
+      cacheBuilder.copy(cachedPlan = serializer.convertToColumnarPlanIfPossible(qe.executedPlan))
     } else {
       cacheBuilder.copy(cachedPlan = qe.executedPlan)
     }

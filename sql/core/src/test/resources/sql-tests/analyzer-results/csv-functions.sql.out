@@ -171,6 +171,30 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select schema_of_csv(42)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"42\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"schema_of_csv(42)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "schema_of_csv(42)"
+  } ]
+}
+
+
+-- !query
 CREATE TEMPORARY VIEW csvTable(csvField, a) AS SELECT * FROM VALUES ('1,abc', 'a')
 -- !query analysis
 CreateViewCommand `csvTable`, [(csvField,None), (a,None)], SELECT * FROM VALUES ('1,abc', 'a'), false, false, LocalTempView, UNSUPPORTED, true

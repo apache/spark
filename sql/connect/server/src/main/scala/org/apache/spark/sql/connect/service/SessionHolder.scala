@@ -41,6 +41,7 @@ import org.apache.spark.sql.connect.ml.MLCache
 import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
 import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper
 import org.apache.spark.sql.connect.service.SessionHolder.{ERROR_CACHE_SIZE, ERROR_CACHE_TIMEOUT_SEC}
+import org.apache.spark.sql.pipelines.graph.PipelineUpdateContext
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.{SystemClock, Utils}
 
@@ -118,6 +119,11 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // StreamingQueryManager.
   private lazy val listenerCache: ConcurrentMap[String, StreamingQueryListener] =
     new ConcurrentHashMap()
+
+  // Mapping from graphId to the pipeline update context. This is used to manage the lifecycle of
+  // pipeline executions.
+  private lazy val pipelineExecutions =
+    new ConcurrentHashMap[String, PipelineUpdateContext]()
 
   // Handles Python process clean up for streaming queries. Initialized on first use in a query.
   private[connect] lazy val streamingForeachBatchRunnerCleanerCache =
@@ -311,6 +317,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     SparkConnectService.streamingSessionManager.cleanupRunningQueries(this, blocking = true)
     streamingForeachBatchRunnerCleanerCache.cleanUpAll() // Clean up any streaming workers.
     removeAllListeners() // removes all listener and stop python listener processes if necessary.
+    // Stops all pipeline execution and clears the pipeline execution cache
+    removeAllPipelineExecutions()
 
     // if there is a server side listener, clean up related resources
     if (streamingServersideListenerHolder.isServerSideListenerRegistered) {
@@ -424,6 +432,58 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   private[connect] def listListenerIds(): Seq[String] = {
     listenerCache.keySet().asScala.toSeq
+  }
+
+  /**
+   * Caches the pipeline execution context for a given graph ID.
+   * @param graphId
+   *   The id of the graph being executed.
+   * @param pipelineUpdateContext
+   *   The context for the pipeline execution.
+   */
+  private[connect] def cachePipelineExecution(
+      graphId: String,
+      pipelineUpdateContext: PipelineUpdateContext): Unit = {
+    pipelineExecutions.compute(
+      graphId,
+      (_, existing) => {
+        if (Option(existing).isDefined) {
+          throw new IllegalStateException(
+            s"Pipeline execution for graph ID $graphId already exists. " +
+              s"Stop the existing execution before starting a new one.")
+        }
+
+        pipelineUpdateContext
+      })
+  }
+
+  /** Stops the pipeline execution and removes it from the cache. */
+  private def removeCachedPipelineExecution(graphId: String): Unit = {
+    pipelineExecutions.compute(
+      graphId,
+      (_, context) => {
+        if (context.pipelineExecution.executionStarted) {
+          context.pipelineExecution.stopPipeline()
+        }
+        // Remove the execution.
+        null
+      })
+  }
+
+  /** Stops all pipeline executions and clears the pipeline execution cache. */
+  def removeAllPipelineExecutions(): Unit = {
+    pipelineExecutions.forEach((graphId, _) => {
+      removeCachedPipelineExecution(graphId)
+    })
+    pipelineExecutions.clear()
+  }
+
+  /**
+   * Returns [[PipelineUpdateContext]] cached for the given graphId. If it is not found, return
+   * None.
+   */
+  private[connect] def getPipelineExecution(graphId: String): Option[PipelineUpdateContext] = {
+    Option(pipelineExecutions.get(graphId))
   }
 
   /**

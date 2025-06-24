@@ -22,6 +22,7 @@ import "spark/connect/common.proto";
 import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/ml.proto";
+import "spark/connect/pipelines.proto";
 
 package spark.connect;
 
@@ -51,6 +52,7 @@ message Command {
     MergeIntoTableCommand merge_into_table_command = 16;
     MlCommand ml_command = 17;
     ExecuteExternalCommand execute_external_command = 18;
+    PipelineCommand pipeline_command = 19;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.

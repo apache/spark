@@ -40,7 +40,8 @@ object UnsupportedOperationChecker extends Logging {
   def checkForBatch(plan: LogicalPlan): Unit = {
     plan.foreachUp {
       case p if p.isStreaming =>
-        throwError("Queries with streaming sources must be executed with writeStream.start()")(p)
+        throwError("Queries with streaming sources must be executed with writeStream.start(), or " +
+          "from a streaming table or flow definition within a Spark Declarative Pipeline.")(p)
 
       case d: DeduplicateWithinWatermark =>
         throwError("dropDuplicatesWithinWatermark is not supported with batch " +

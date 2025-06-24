@@ -18,16 +18,19 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.SqlScriptingLocalVariableManager
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
+import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
+import org.apache.spark.sql.types.StructType
 
 /**
  * SQL scripting executor - executes script and returns result statements.
  * This supports returning multiple result statements from a single script.
  * The caller of the SqlScriptingExecution API must wrap the interpretation and execution of
- * statements with the [[withLocalVariableManager]] method, and adhere to the contract of executing
+ * statements with the [[withContextManager]] method, and adhere to the contract of executing
  * the returned statement before continuing iteration. Executing the statement needs to be done
  * inside withErrorHandling block.
  *
@@ -57,15 +60,30 @@ class SqlScriptingExecution(
     ctx
   }
 
-  private val variableManager = new SqlScriptingLocalVariableManager(context)
-  private val variableManagerHandle = SqlScriptingLocalVariableManager.create(variableManager)
+  private val contextManager = new SqlScriptingContextManagerImpl(context)
+  private val contextManagerHandle = SqlScriptingContextManager.create(contextManager)
 
   /**
    * Handles scripting context creation/access/deletion. Calls to execution API must be wrapped
    * with this method.
    */
-  def withLocalVariableManager[R](f: => R): R = {
-    variableManagerHandle.runWith(f)
+  def withContextManager[R](f: => R): R = {
+    contextManagerHandle.runWith(f)
+  }
+
+  /**
+   * Helper method to inject leave statement into the execution plan.
+   * @param executionPlan Execution plan to inject leave statement into.
+   * @param label Label of the leave statement.
+   */
+  private def injectLeaveStatement(executionPlan: NonLeafStatementExec, label: String): Unit = {
+    // Go as deep as possible, to find a leaf node. Instead of a statement that
+    //   should be executed next, inject LEAVE statement in its place.
+    var currExecPlan = executionPlan
+    while (currExecPlan.curr.exists(_.isInstanceOf[NonLeafStatementExec])) {
+      currExecPlan = currExecPlan.curr.get.asInstanceOf[NonLeafStatementExec]
+    }
+    currExecPlan.curr = Some(new LeaveStatementExec(label))
   }
 
   /** Helper method to iterate get next statements from the first available frame. */
@@ -91,12 +109,8 @@ class SqlScriptingExecution(
           && lastFrame.scopeLabel.get == context.firstHandlerScopeLabel.get) {
           context.firstHandlerScopeLabel = None
         }
-
-        var execPlan: CompoundBodyExec = context.frames.last.executionPlan
-        while (execPlan.curr.exists(_.isInstanceOf[CompoundBodyExec])) {
-          execPlan = execPlan.curr.get.asInstanceOf[CompoundBodyExec]
-        }
-        execPlan.curr = Some(new LeaveStatementExec(lastFrame.scopeLabel.get))
+        // Inject leave statement into the execution plan of the last frame.
+        injectLeaveStatement(context.frames.last.executionPlan, lastFrame.scopeLabel.get)
       }
     }
     // If there are still frames available, get the next statement.
@@ -161,6 +175,7 @@ class SqlScriptingExecution(
         context.frames.append(
           handlerFrame
         )
+        handler.reset()
         handlerFrame.executionPlan.enterScope()
       case None =>
         throw e.asInstanceOf[Throwable]
@@ -175,6 +190,53 @@ class SqlScriptingExecution(
         handleException(sparkThrowable)
       case throwable: Throwable =>
         throw throwable
+    }
+  }
+}
+
+object SqlScriptingExecution {
+
+  /**
+   * Executes given script and return the result of the last statement.
+   * If script contains no queries, an empty `DataFrame` is returned.
+   *
+   * @param script A SQL script to execute.
+   * @param args   A map of parameter names to SQL literal expressions.
+   * @return The result as a `DataFrame`.
+   */
+  def executeSqlScript(
+      session: SparkSession,
+      script: CompoundBody,
+      args: Map[String, Expression] = Map.empty): LogicalPlan = {
+    val sse = new SqlScriptingExecution(script, session, args)
+    sse.withContextManager {
+      var result: Option[Seq[Row]] = None
+
+      // We must execute returned df before calling sse.getNextResult again because sse.hasNext
+      // advances the script execution and executes all statements until the next result. We must
+      // collect results immediately to maintain execution order.
+      // This ensures we respect the contract of SqlScriptingExecution API.
+      var df: Option[DataFrame] = sse.getNextResult
+      var resultSchema: Option[StructType] = None
+      while (df.isDefined) {
+        sse.withErrorHandling {
+          // Collect results from the current DataFrame.
+          result = Some(df.get.collect().toSeq)
+          resultSchema = Some(df.get.schema)
+        }
+        df = sse.getNextResult
+      }
+
+      if (result.isEmpty) {
+        // Return empty LocalRelation.
+        LocalRelation.fromExternalRows(Seq.empty, Seq.empty)
+      } else {
+        // If `result` is defined, then `resultSchema` must be defined as well.
+        assert(resultSchema.isDefined)
+
+        val attributes = DataTypeUtils.toAttributes(resultSchema.get)
+        LocalRelation.fromExternalRows(attributes, result.get)
+      }
     }
   }
 }

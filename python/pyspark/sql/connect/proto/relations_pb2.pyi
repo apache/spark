@@ -707,28 +707,57 @@ class MlRelation(google.protobuf.message.Message):
 
     TRANSFORM_FIELD_NUMBER: builtins.int
     FETCH_FIELD_NUMBER: builtins.int
+    MODEL_SUMMARY_DATASET_FIELD_NUMBER: builtins.int
     @property
     def transform(self) -> global___MlRelation.Transform: ...
     @property
     def fetch(self) -> global___Fetch: ...
+    @property
+    def model_summary_dataset(self) -> global___Relation:
+        """(Optional) the dataset for restoring the model summary"""
     def __init__(
         self,
         *,
         transform: global___MlRelation.Transform | None = ...,
         fetch: global___Fetch | None = ...,
+        model_summary_dataset: global___Relation | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "fetch", b"fetch", "ml_type", b"ml_type", "transform", b"transform"
+            "_model_summary_dataset",
+            b"_model_summary_dataset",
+            "fetch",
+            b"fetch",
+            "ml_type",
+            b"ml_type",
+            "model_summary_dataset",
+            b"model_summary_dataset",
+            "transform",
+            b"transform",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "fetch", b"fetch", "ml_type", b"ml_type", "transform", b"transform"
+            "_model_summary_dataset",
+            b"_model_summary_dataset",
+            "fetch",
+            b"fetch",
+            "ml_type",
+            b"ml_type",
+            "model_summary_dataset",
+            b"model_summary_dataset",
+            "transform",
+            b"transform",
         ],
     ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal["_model_summary_dataset", b"_model_summary_dataset"],
+    ) -> typing_extensions.Literal["model_summary_dataset"] | None: ...
+    @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["ml_type", b"ml_type"]
     ) -> typing_extensions.Literal["transform", "fetch"] | None: ...

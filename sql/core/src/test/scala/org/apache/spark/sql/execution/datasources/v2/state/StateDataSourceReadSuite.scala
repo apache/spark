@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2.state
 
 import java.io.{File, FileWriter}
 import java.nio.ByteOrder
+import java.util.UUID
 
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.Assertions
@@ -28,7 +29,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Encoders, Row}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, GenericInternalRow}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream, OffsetSeqLog}
+import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream, OffsetSeqLog, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
@@ -588,6 +589,8 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
    */
   private def getNewStateStoreProvider(checkpointDir: String): StateStoreProvider = {
     val provider = newStateStoreProvider()
+    val conf = new Configuration()
+    conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
     provider.init(
       StateStoreId(checkpointDir, 0, 0),
       keySchema,
@@ -595,7 +598,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
       NoPrefixKeyStateEncoderSpec(keySchema),
       useColumnFamilies = false,
       StateStoreConf(spark.sessionState.conf),
-      new Configuration)
+      conf)
     provider
   }
 

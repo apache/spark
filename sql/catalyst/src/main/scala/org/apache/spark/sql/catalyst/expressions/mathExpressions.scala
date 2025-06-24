@@ -1383,8 +1383,10 @@ case class ShiftRightUnsigned(left: Expression, right: Expression) extends BitSh
     copy(left = newLeft, right = newRight)
 }
 
+// scalastyle:off nonascii
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns sqrt(`expr1`**2 + `expr2`**2).",
+  usage = "_FUNC_(expr1, expr2) - Returns sqrt(`expr1`\u00B2 + `expr2`\u00B2).",
+  // scalastyle:on nonascii
   examples = """
     Examples:
       > SELECT _FUNC_(3, 4);

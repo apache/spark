@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector;
 
-import org.apache.spark.annotation.Unstable;
+import org.apache.spark.annotation.Stable;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
@@ -30,7 +30,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  *
  * @since 3.0.0
  */
-@Unstable
+@Stable
 public interface ExternalCommandRunner {
 
   /**

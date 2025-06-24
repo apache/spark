@@ -47,7 +47,7 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
   @transient private val hadoopConf = sc.hadoopConfiguration
   @transient private val cpath = new Path(checkpointPath)
   @transient private val fs = cpath.getFileSystem(hadoopConf)
-  private val broadcastedConf = sc.broadcast(new SerializableConfiguration(hadoopConf))
+  private val broadcastedConf = SerializableConfiguration.broadcast(sc, hadoopConf)
 
   // Fail fast if checkpoint directory does not exist
   require(fs.exists(cpath), s"Checkpoint directory does not exist: $checkpointPath")
@@ -161,8 +161,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     }
 
     // Save to file, and reload it as an RDD
-    val broadcastedConf = sc.broadcast(
-      new SerializableConfiguration(sc.hadoopConfiguration))
+    val broadcastedConf = SerializableConfiguration.broadcast(sc)
     // TODO: This is expensive because it computes the RDD again unnecessarily (SPARK-8582)
     sc.runJob(originalRDD,
       writePartitionToCheckpointFile[T](checkpointDirPath.toString, broadcastedConf) _)

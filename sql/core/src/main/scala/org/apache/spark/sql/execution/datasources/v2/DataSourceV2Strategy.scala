@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable}
+import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
@@ -533,6 +534,18 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case _ => false
       }
       UncacheTableExec(r.table, cascade = !isTempView(r.table)) :: Nil
+
+    case a @ AddCheckConstraint(PhysicalOperation(_, _, d: DataSourceV2ScanRelation), check) =>
+      assert(d.relation.catalog.isDefined, "Catalog should be defined after analysis")
+      assert(d.relation.identifier.isDefined, "Identifier should be defined after analysis")
+      val catalog = d.relation.catalog.get.asTableCatalog
+      val ident = d.relation.identifier.get
+      val condition = a.checkConstraint.condition
+      val change = TableChange.addConstraint(
+        check.toV2Constraint,
+        d.relation.table.currentVersion)
+      ResolveTableConstraints.validateCatalogForTableChange(Seq(change), catalog, ident)
+      AddCheckConstraintExec(catalog, ident, change, condition, planLater(a.child)) :: Nil
 
     case a: AlterTableCommand if a.table.resolved =>
       val table = a.table.asInstanceOf[ResolvedTable]

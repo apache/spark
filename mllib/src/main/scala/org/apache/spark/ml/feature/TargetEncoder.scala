@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -406,6 +408,23 @@ object TargetEncoderModel extends MLReadable[TargetEncoderModel] {
     index: Int, categories: Array[Double],
     counts: Array[Double], stats: Array[Double])
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    dos.writeInt(data.index)
+    serializeDoubleArray(data.categories, dos)
+    serializeDoubleArray(data.counts, dos)
+    serializeDoubleArray(data.stats, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val index = dis.readInt()
+    val categories = deserializeDoubleArray(dis)
+    val counts = deserializeDoubleArray(dis)
+    val stats = deserializeDoubleArray(dis)
+    Data(index, categories, counts, stats)
+  }
+
   private[TargetEncoderModel]
   class TargetEncoderModelWriter(instance: TargetEncoderModel) extends MLWriter {
 
@@ -417,7 +436,7 @@ object TargetEncoderModel extends MLReadable[TargetEncoderModel] {
         Data(index, _categories.toArray, _counts.toArray, _stats.toArray)
       }.toSeq
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveArray[Data](dataPath, datum.toArray, sparkSession)
+      ReadWriteUtils.saveArray[Data](dataPath, datum.toArray, sparkSession, serializeData)
     }
   }
 
@@ -429,7 +448,7 @@ object TargetEncoderModel extends MLReadable[TargetEncoderModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
 
-      val datum = ReadWriteUtils.loadArray[Data](dataPath, sparkSession)
+      val datum = ReadWriteUtils.loadArray[Data](dataPath, sparkSession, deserializeData)
       val stats = datum.map { data =>
         (data.index, data.categories.zip(data.counts.zip(data.stats)).toMap)
       }.sortBy(_._1).map(_._2)

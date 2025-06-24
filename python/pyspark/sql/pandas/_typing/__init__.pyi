@@ -60,6 +60,87 @@ PandasGroupedMapUDFTransformWithStateInitStateType = Literal[212]
 GroupedMapUDFTransformWithStateType = Literal[213]
 GroupedMapUDFTransformWithStateInitStateType = Literal[214]
 
+# Arrow UDFs
+ArrowScalarUDFType = Literal[250]
+ArrowScalarIterUDFType = Literal[251]
+
+class ArrowVariadicScalarToScalarFunction(Protocol):
+    def __call__(self, *_: pyarrow.Array) -> pyarrow.Array: ...
+
+ArrowScalarToScalarFunction = Union[
+    ArrowVariadicScalarToScalarFunction,
+    Callable[[pyarrow.Array], pyarrow.Array],
+    Callable[[pyarrow.Array, pyarrow.Array], pyarrow.Array],
+    Callable[[pyarrow.Array, pyarrow.Array, pyarrow.Array], pyarrow.Array],
+    Callable[[pyarrow.Array, pyarrow.Array, pyarrow.Array, pyarrow.Array], pyarrow.Array],
+    Callable[
+        [pyarrow.Array, pyarrow.Array, pyarrow.Array, pyarrow.Array, pyarrow.Array], pyarrow.Array
+    ],
+    Callable[
+        [pyarrow.Array, pyarrow.Array, pyarrow.Array, pyarrow.Array, pyarrow.Array, pyarrow.Array],
+        pyarrow.Array,
+    ],
+    Callable[
+        [
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+        ],
+        pyarrow.Array,
+    ],
+    Callable[
+        [
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+        ],
+        pyarrow.Array,
+    ],
+    Callable[
+        [
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+        ],
+        pyarrow.Array,
+    ],
+    Callable[
+        [
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+        ],
+        pyarrow.Array,
+    ],
+]
+
+ArrowScalarIterFunction = Union[
+    Callable[[Iterable[pyarrow.Array]], Iterable[pyarrow.Array]],
+    Callable[[Tuple[pyarrow.Array, ...]], Iterable[pyarrow.Array]],
+]
+
 class PandasVariadicScalarToScalarFunction(Protocol):
     def __call__(self, *_: DataFrameOrSeriesLike_) -> DataFrameOrSeriesLike_: ...
 

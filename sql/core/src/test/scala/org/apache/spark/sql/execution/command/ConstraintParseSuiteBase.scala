@@ -26,13 +26,8 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
 abstract class ConstraintParseSuiteBase extends AnalysisTest with SharedSparkSession {
   protected def validConstraintCharacteristics = Seq(
     ("", "", ConstraintCharacteristic(enforced = None, rely = None)),
-    ("NOT ENFORCED", "", ConstraintCharacteristic(enforced = Some(false), rely = None)),
     ("", "RELY", ConstraintCharacteristic(enforced = None, rely = Some(true))),
-    ("", "NORELY", ConstraintCharacteristic(enforced = None, rely = Some(false))),
-    ("NOT ENFORCED", "RELY",
-      ConstraintCharacteristic(enforced = Some(false), rely = Some(true))),
-    ("NOT ENFORCED", "NORELY",
-      ConstraintCharacteristic(enforced = Some(false), rely = Some(false)))
+    ("", "NORELY", ConstraintCharacteristic(enforced = None, rely = Some(false)))
   )
 
   protected def enforcedConstraintCharacteristics = Seq(
@@ -41,6 +36,19 @@ abstract class ConstraintParseSuiteBase extends AnalysisTest with SharedSparkSes
     ("ENFORCED", "NORELY", ConstraintCharacteristic(enforced = Some(true), rely = Some(false))),
     ("RELY", "ENFORCED", ConstraintCharacteristic(enforced = Some(true), rely = Some(true))),
     ("NORELY", "ENFORCED", ConstraintCharacteristic(enforced = Some(true), rely = Some(false)))
+  )
+
+  protected def notEnforcedConstraintCharacteristics = Seq(
+    ("NOT ENFORCED", "RELY",
+      ConstraintCharacteristic(enforced = Some(false), rely = Some(true))),
+    ("NOT ENFORCED", "NORELY",
+      ConstraintCharacteristic(enforced = Some(false), rely = Some(false))),
+    ("RELY", "NOT ENFORCED",
+      ConstraintCharacteristic(enforced = Some(false), rely = Some(true))),
+    ("NORELY", "NOT ENFORCED",
+      ConstraintCharacteristic(enforced = Some(false), rely = Some(false))),
+    ("NOT ENFORCED", "",
+      ConstraintCharacteristic(enforced = Some(false), rely = None))
   )
 
   protected val invalidConstraintCharacteristics = Seq(

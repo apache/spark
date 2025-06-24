@@ -15,9 +15,9 @@ AS testData(a, b), false, true, LocalTempView, UNSUPPORTED, true
 -- !query
 SELECT a + b, b, SUM(a - b) FROM testData GROUP BY a + b, b WITH CUBE
 -- !query analysis
-Aggregate [(a#x + b#x)#x, b#x, spark_grouping_id#xL], [(a#x + b#x)#x AS (a + b)#x, b#x, sum((a#x - b#x)) AS sum((a - b))#xL]
-+- Expand [[a#x, b#x, (a#x + b#x)#x, b#x, 0], [a#x, b#x, (a#x + b#x)#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, (a#x + b#x)#x, b#x, spark_grouping_id#xL]
-   +- Project [a#x, b#x, (a#x + b#x) AS (a#x + b#x)#x, b#x AS b#x]
+Aggregate [(a + b)#x, b#x, spark_grouping_id#xL], [(a + b)#x AS (a + b)#x, b#x, sum((a#x - b#x)) AS sum((a - b))#xL]
++- Expand [[a#x, b#x, (a + b)#x, b#x, 0], [a#x, b#x, (a + b)#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, (a + b)#x, b#x, spark_grouping_id#xL]
+   +- Project [a#x, b#x, (a#x + b#x) AS (a + b)#x, b#x AS b#x]
       +- SubqueryAlias testdata
          +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
@@ -43,9 +43,9 @@ Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) AS sum(b)#xL]
 -- !query
 SELECT a + b, b, SUM(a - b) FROM testData GROUP BY a + b, b WITH ROLLUP
 -- !query analysis
-Aggregate [(a#x + b#x)#x, b#x, spark_grouping_id#xL], [(a#x + b#x)#x AS (a + b)#x, b#x, sum((a#x - b#x)) AS sum((a - b))#xL]
-+- Expand [[a#x, b#x, (a#x + b#x)#x, b#x, 0], [a#x, b#x, (a#x + b#x)#x, null, 1], [a#x, b#x, null, null, 3]], [a#x, b#x, (a#x + b#x)#x, b#x, spark_grouping_id#xL]
-   +- Project [a#x, b#x, (a#x + b#x) AS (a#x + b#x)#x, b#x AS b#x]
+Aggregate [(a + b)#x, b#x, spark_grouping_id#xL], [(a + b)#x AS (a + b)#x, b#x, sum((a#x - b#x)) AS sum((a - b))#xL]
++- Expand [[a#x, b#x, (a + b)#x, b#x, 0], [a#x, b#x, (a + b)#x, null, 1], [a#x, b#x, null, null, 3]], [a#x, b#x, (a + b)#x, b#x, spark_grouping_id#xL]
+   +- Project [a#x, b#x, (a#x + b#x) AS (a + b)#x, b#x AS b#x]
       +- SubqueryAlias testdata
          +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
@@ -531,9 +531,9 @@ Aggregate [k#x, b#x, spark_grouping_id#xL], [k#x, b#x, sum((a#x - b#x)) AS sum((
 -- !query
 SELECT a + b, b AS k, SUM(a - b) FROM testData GROUP BY a + b, k GROUPING SETS(k)
 -- !query analysis
-Aggregate [(a#x + b#x)#x, k#x, spark_grouping_id#xL], [(a#x + b#x)#x AS (a + b)#x, k#x, sum((a#x - b#x)) AS sum((a - b))#xL]
-+- Expand [[a#x, b#x, null, k#x, 2]], [a#x, b#x, (a#x + b#x)#x, k#x, spark_grouping_id#xL]
-   +- Project [a#x, b#x, (a#x + b#x) AS (a#x + b#x)#x, b#x AS k#x]
+Aggregate [(a + b)#x, k#x, spark_grouping_id#xL], [(a + b)#x AS (a + b)#x, k#x, sum((a#x - b#x)) AS sum((a - b))#xL]
++- Expand [[a#x, b#x, null, k#x, 2]], [a#x, b#x, (a + b)#x, k#x, spark_grouping_id#xL]
+   +- Project [a#x, b#x, (a#x + b#x) AS (a + b)#x, b#x AS k#x]
       +- SubqueryAlias testdata
          +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]

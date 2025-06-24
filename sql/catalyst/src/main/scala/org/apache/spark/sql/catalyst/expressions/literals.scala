@@ -49,7 +49,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LITERAL, NULL_LITERAL, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localTimeToMicros}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localTimeToNanos}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -89,7 +89,7 @@ object Literal {
     case l: LocalDateTime => Literal(DateTimeUtils.localDateTimeToMicros(l), TimestampNTZType)
     case ld: LocalDate => Literal(ld.toEpochDay.toInt, DateType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
-    case lt: LocalTime => Literal(localTimeToMicros(lt), TimeType())
+    case lt: LocalTime => Literal(localTimeToNanos(lt), TimeType())
     case d: Duration => Literal(durationToMicros(d), DayTimeIntervalType())
     case p: Period => Literal(periodToMonths(p), YearMonthIntervalType())
     case a: Array[Byte] => Literal(a, BinaryType)

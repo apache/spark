@@ -71,40 +71,39 @@ case class ParquetScan(
       readDataSchemaAsJson)
     hadoopConf.set(
       SQLConf.SESSION_LOCAL_TIMEZONE.key,
-      sparkSession.sessionState.conf.sessionLocalTimeZone)
+      conf.sessionLocalTimeZone)
     hadoopConf.setBoolean(
       SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key,
-      sparkSession.sessionState.conf.nestedSchemaPruningEnabled)
+      conf.nestedSchemaPruningEnabled)
     hadoopConf.setBoolean(
       SQLConf.CASE_SENSITIVE.key,
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+      conf.caseSensitiveAnalysis)
 
     // Sets flags for `ParquetToSparkSchemaConverter`
     hadoopConf.setBoolean(
       SQLConf.PARQUET_BINARY_AS_STRING.key,
-      sparkSession.sessionState.conf.isParquetBinaryAsString)
+      conf.isParquetBinaryAsString)
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
-      sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
+      conf.isParquetINT96AsTimestamp)
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key,
-      sparkSession.sessionState.conf.parquetInferTimestampNTZEnabled)
+      conf.parquetInferTimestampNTZEnabled)
     hadoopConf.setBoolean(
       SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
-      sparkSession.sessionState.conf.legacyParquetNanosAsLong)
+      conf.legacyParquetNanosAsLong)
 
-    val broadcastedConf = sparkSession.sparkContext.broadcast(
-      new SerializableConfiguration(hadoopConf))
-    val sqlConf = sparkSession.sessionState.conf
+    val broadcastedConf =
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     ParquetPartitionReaderFactory(
-      sqlConf,
+      conf,
       broadcastedConf,
       dataSchema,
       readDataSchema,
       readPartitionSchema,
       pushedFilters,
       pushedAggregate,
-      new ParquetOptions(options.asCaseSensitiveMap.asScala.toMap, sqlConf))
+      new ParquetOptions(options.asCaseSensitiveMap.asScala.toMap, conf))
   }
 
   override def equals(obj: Any): Boolean = obj match {

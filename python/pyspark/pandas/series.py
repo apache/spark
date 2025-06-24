@@ -7336,11 +7336,16 @@ def _test() -> None:
     import sys
     from pyspark.sql import SparkSession
     import pyspark.pandas.series
+    from pyspark.testing.utils import is_ansi_mode_test
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.series.__dict__.copy()
     globs["ps"] = pyspark.pandas
+
+    if is_ansi_mode_test:
+        del pyspark.pandas.series.Series.autocorr.__doc__
+
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.series tests").getOrCreate()
     )

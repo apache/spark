@@ -62,7 +62,7 @@ private[image] case class ImageFileFormat() extends FileFormat with DataSourceRe
       "Image data source only produces a single data column named \"image\".")
 
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
 
     val imageSourceOptions = new ImageOptions(options)
 

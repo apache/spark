@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
@@ -26,17 +28,29 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.catalog.{Identifier, TableSummary}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLConf, toSQLStmt}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   val tempDir = Utils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
+  private val tableCatalog: JDBCTableCatalog = {
+    val catalog = new JDBCTableCatalog()
+    val catalogOptions = Map(
+      "url" -> url,
+      "driver" -> "org.h2.Driver"
+    )
+
+    catalog.initialize("jdbc_table_catalog", new CaseInsensitiveStringMap(catalogOptions.asJava))
+    catalog
+  }
 
   object JdbcClientTypes {
     val CHAR = "CHARACTER"
@@ -150,6 +164,15 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         checkErrorTableAlreadyExists(exp, "`dst_table`")
       }
     }
+  }
+
+  test("list table summary") {
+    val tableSummaries = tableCatalog.listTableSummaries(Array("test"))
+    val expectedTable = TableSummary.of(
+      Identifier.of(Array("test"), "people"),
+      TableSummary.FOREIGN_TABLE_TYPE
+    )
+    assertResult(Array(expectedTable))(tableSummaries)
   }
 
   test("load a table") {

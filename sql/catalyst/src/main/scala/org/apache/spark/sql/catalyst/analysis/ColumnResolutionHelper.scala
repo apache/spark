@@ -23,7 +23,7 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.SqlScriptingLocalVariableManager
+import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils.wrapOuterReference
 import org.apache.spark.sql.catalyst.parser.SqlScriptingLabelContext.isForbiddenLabelName
@@ -210,7 +210,11 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         case u @ UnresolvedHaving(_, agg: Aggregate) =>
           agg.resolveChildren(nameParts, conf.resolver)
             .orElse(u.resolveChildren(nameParts, conf.resolver))
-            .map(wrapOuterReference)
+            .map {
+              case alias: Alias =>
+                wrapOuterReference(alias.child)
+              case other => wrapOuterReference(other)
+            }
         case other =>
           other.resolveChildren(nameParts, conf.resolver).map(wrapOuterReference)
       }
@@ -260,7 +264,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       nameParts.map(_.toLowerCase(Locale.ROOT))
     }
 
-    SqlScriptingLocalVariableManager.get()
+    SqlScriptingContextManager.get().map(_.getVariableManager)
       // If we are in EXECUTE IMMEDIATE lookup only session variables.
       .filterNot(_ => AnalysisContext.get.isExecuteImmediate)
       // If variable name is qualified with session.<varName> treat it as a session variable.

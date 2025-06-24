@@ -26,7 +26,6 @@ import com.fasterxml.jackson.core.json.JsonReadFeature
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
-import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonGenerator, JacksonParser, JsonInferSchema, JSONOptions}
 import org.apache.spark.sql.catalyst.util.{ArrayData, FailFastMode, FailureSafeParser, MapData, PermissiveMode}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -123,6 +122,8 @@ case class JsonToStructsEvaluator(
       (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getArray(0) else null
     case _: MapType =>
       (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getMap(0) else null
+    case _: VariantType =>
+      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getVariant(0) else null
   }
 
   @transient
@@ -152,13 +153,7 @@ case class JsonToStructsEvaluator(
 
   final def evaluate(json: UTF8String): Any = {
     if (json == null) return null
-    nullableSchema match {
-      case _: VariantType =>
-        VariantExpressionEvalUtils.parseJson(json,
-          allowDuplicateKeys = variantAllowDuplicateKeys)
-      case _ =>
-        converter(parser.parse(json))
-    }
+    converter(parser.parse(json))
   }
 }
 

@@ -19,8 +19,8 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue}
-import org.apache.spark.sql.connector.expressions.LiteralValue
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, TableChange, TableInfo}
+import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
@@ -62,6 +62,59 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         Row(3, 300, "hr", "explicit-text"),
         Row(4, 400, "software", "explicit-text"),
         Row(5, 500, "hr", null)))
+  }
+
+  test("update table with expression-based default values") {
+    val columns = Array(
+      Column.create("pk", IntegerType),
+      Column.create("salary", IntegerType),
+      Column.create("dep", StringType))
+    val tableInfo = new TableInfo.Builder().withColumns(columns).build()
+    catalog.createTable(ident, tableInfo)
+
+    append("pk INT, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    val addColumn = TableChange.addColumn(
+      Array("value"),
+      IntegerType,
+      false, /* not nullable */
+      null, /* no comment */
+      null, /* no position */
+      new ColumnDefaultValue(
+        new GeneralScalarExpression(
+          "+",
+          Array(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
+        LiteralValue(123, IntegerType)))
+    catalog.alterTable(ident, addColumn)
+
+    append("pk INT, salary INT, dep STRING, value INT",
+      """{ "pk": 4, "salary": 400, "dep": "hr", "value": -4 }
+        |{ "pk": 5, "salary": 500, "dep": "hr", "value": -5 }
+        |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 100, "hr", 123),
+        Row(2, 200, "software", 123),
+        Row(3, 300, "hr", 123),
+        Row(4, 400, "hr", -4),
+        Row(5, 500, "hr", -5)))
+
+    sql(s"UPDATE $tableNameAsString SET value = DEFAULT WHERE pk >= 5")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 100, "hr", 123),
+        Row(2, 200, "software", 123),
+        Row(3, 300, "hr", 123),
+        Row(4, 400, "hr", -4),
+        Row(5, 500, "hr", 123)))
   }
 
   test("EXPLAIN only update") {
@@ -619,5 +672,47 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       condition = "NOT_NULL_ASSERT_VIOLATION",
       sqlState = "42000",
       parameters = Map("walkedTypePath" -> "\ns\nn_i\n"))
+  }
+
+
+
+  test("update table with recursive CTE") {
+    withTempView("source") {
+      sql(
+        s"""CREATE TABLE $tableNameAsString (
+           | val INT)
+           |""".stripMargin)
+
+      append("val INT",
+        """{ "val": 1 }
+          |{ "val": 9 }
+          |{ "val": 8 }
+          |{ "val": 4 }
+          |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1),
+          Row(9),
+          Row(8),
+          Row(4)))
+
+      sql(
+        s"""WITH RECURSIVE s(val) AS (
+           |  SELECT 1
+           |  UNION ALL
+           |  SELECT val + 1 FROM s WHERE val < 5
+           |) UPDATE $tableNameAsString SET val = val + 1 WHERE val IN (SELECT val FROM s)
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(2),
+          Row(9),
+          Row(8),
+          Row(5)))
+    }
   }
 }

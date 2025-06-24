@@ -23,25 +23,25 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryMinus}
 /**
  * Resolver for [[UnaryMinus]]. Resolves children and applies type coercion to target node.
  */
-class UnaryMinusResolver(
-    expressionResolver: ExpressionResolver,
-    timezoneAwareExpressionResolver: TimezoneAwareExpressionResolver)
-  extends TreeNodeResolver[UnaryMinus, Expression]
-  with ResolvesExpressionChildren {
+class UnaryMinusResolver(expressionResolver: ExpressionResolver)
+    extends TreeNodeResolver[UnaryMinus, Expression]
+    with ResolvesExpressionChildren
+    with CoercesExpressionTypes {
 
-  private val typeCoercionTransformations: Seq[Expression => Expression] =
-    if (conf.ansiEnabled) {
-      UnaryMinusResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
-    } else {
-      UnaryMinusResolver.TYPE_COERCION_TRANSFORMATIONS
-    }
-  private val typeCoercionResolver: TypeCoercionResolver =
-    new TypeCoercionResolver(timezoneAwareExpressionResolver, typeCoercionTransformations)
+  private val traversals = expressionResolver.getExpressionTreeTraversals
+
+  protected override val ansiTransformations: CoercesExpressionTypes.Transformations =
+    UnaryMinusResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
+  protected override val nonAnsiTransformations: CoercesExpressionTypes.Transformations =
+    UnaryMinusResolver.TYPE_COERCION_TRANSFORMATIONS
 
   override def resolve(unresolvedUnaryMinus: UnaryMinus): Expression = {
     val unaryMinusWithResolvedChildren =
       withResolvedChildren(unresolvedUnaryMinus, expressionResolver.resolve _)
-    typeCoercionResolver.resolve(unaryMinusWithResolvedChildren)
+    coerceExpressionTypes(
+      expression = unaryMinusWithResolvedChildren,
+      expressionTreeTraversal = traversals.current
+    )
   }
 }
 

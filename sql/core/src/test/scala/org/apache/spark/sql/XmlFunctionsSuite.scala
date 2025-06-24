@@ -366,7 +366,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42601",
       parameters = Map(
         "error" -> "'InvalidType'",
-        "hint" -> ": extra input 'InvalidType'"
+        "hint" -> ""
       ),
       context = ExpectedContext(
         fragment = "from_xml(value, 'time InvalidType')",
