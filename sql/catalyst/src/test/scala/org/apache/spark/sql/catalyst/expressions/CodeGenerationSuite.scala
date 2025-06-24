@@ -473,24 +473,22 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
         JavaCode.variable("dummy", BooleanType)))
 
     // raw testing of basic functionality
-    {
-      val ctx = new CodegenContext
-      val e = ref.genCode(ctx)
-      // before
-      ctx.subExprEliminationExprs += wrap(ref) -> SubExprEliminationState(
-        ExprCode(EmptyBlock, e.isNull, e.value))
+    val ctx = new CodegenContext
+    val e = ref.genCode(ctx)
+    // before
+    ctx.subExprEliminationExprs += wrap(ref) -> SubExprEliminationState(
+      ExprCode(EmptyBlock, e.isNull, e.value))
+    assert(ctx.subExprEliminationExprs.contains(wrap(ref)))
+    // call withSubExprEliminationExprs, should now contain both
+    ctx.withSubExprEliminationExprs(Map(wrap(add1) -> dummy)) {
+      assert(ctx.subExprEliminationExprs.contains(wrap(add1)))
       assert(ctx.subExprEliminationExprs.contains(wrap(ref)))
-      // call withSubExprEliminationExprs
-      ctx.withSubExprEliminationExprs(Map(wrap(add1) -> dummy)) {
-        assert(ctx.subExprEliminationExprs.contains(wrap(add1)))
-        assert(!ctx.subExprEliminationExprs.contains(wrap(ref)))
-        Seq.empty
-      }
-      // after
-      assert(ctx.subExprEliminationExprs.nonEmpty)
-      assert(ctx.subExprEliminationExprs.contains(wrap(ref)))
-      assert(!ctx.subExprEliminationExprs.contains(wrap(add1)))
+      Seq.empty
     }
+    // after, should only contain the original
+    assert(ctx.subExprEliminationExprs.nonEmpty)
+    assert(ctx.subExprEliminationExprs.contains(wrap(ref)))
+    assert(!ctx.subExprEliminationExprs.contains(wrap(add1)))
   }
 
   test("SPARK-23986: freshName can generate duplicated names") {
