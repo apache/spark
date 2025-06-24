@@ -24,8 +24,6 @@ class DeltaBasedMergeIntoTableSuite extends DeltaBasedMergeIntoTableSuiteBase {
 
   import testImplicits._
 
-  override protected def deltaMerge = true
-
   override protected lazy val extraTableProps: java.util.Map[String, String] = {
     val props = new java.util.HashMap[String, String]()
     props.put("supports-deltas", "true")

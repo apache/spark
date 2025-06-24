@@ -269,9 +269,11 @@ case class MergeRowsExec(
       if (targetPresent) {
         longMetric("numTargetRowsUnused") += 1
       }
+
       if (sourcePresent) {
         longMetric("numSourceRowsUnused") += 1
       }
+
       null
     }
   }
