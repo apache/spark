@@ -363,11 +363,21 @@ EOF
     else
       CURRENT_TARGET=""
     fi
-    if [[ "$CURRENT_TARGET" != "$RELEASE_VERSION" ]]; then
-      ln -sfn "$RELEASE_VERSION" "$LINK_PATH"
-      echo "Updated symlink $LINK_PATH -> $RELEASE_VERSION"
+
+    if [[ "$CURRENT_TARGET" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      IFS='.' read -r cur_maj cur_min cur_patch <<< "$CURRENT_TARGET"
+
+      if [[ "$rel_maj" -gt "$cur_maj" ]]; then
+        ln -sfn "$RELEASE_VERSION" "$LINK_PATH"
+        echo "Updated symlink $LINK_PATH -> $RELEASE_VERSION (major version increased)"
+      elif [[ "$rel_maj" -eq "$cur_maj" && "$rel_min" -gt "$cur_min" ]]; then
+        ln -sfn "$RELEASE_VERSION" "$LINK_PATH"
+        echo "Updated symlink $LINK_PATH -> $RELEASE_VERSION (minor version increased)"
+      else
+        echo "Symlink $LINK_PATH points to $CURRENT_TARGET with equal or newer major.minor, no change"
+      fi
     else
-      echo "Symlink $LINK_PATH already points to $RELEASE_VERSION, no change"
+      echo "No valid existing version target."
     fi
   else
     echo "Patch release detected ($RELEASE_VERSION), not updating symlink"
