@@ -94,6 +94,7 @@ case class ConcatWs(children: Seq[Expression])
 
   override def nullable: Boolean = children.head.nullable
   override def foldable: Boolean = children.forall(_.foldable)
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.isEmpty) {
@@ -1297,6 +1298,7 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   protected def doEval(srcString: UTF8String): UTF8String
   protected def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String
@@ -2050,6 +2052,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 
 
   override def foldable: Boolean = children.forall(_.foldable)
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
   override def nullable: Boolean = children(0).nullable
   override def dataType: DataType = children(0).dataType
 
@@ -2617,6 +2620,7 @@ case class Levenshtein(
   override def nullIntolerant: Boolean = true
 
   override def foldable: Boolean = children.forall(_.foldable)
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def eval(input: InternalRow): Any = {
     val leftEval = left.eval(input)

@@ -273,6 +273,8 @@ abstract class HashExpression[E] extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   override def nullable: Boolean = false
 
   private def hasMapType(dt: DataType): Boolean = {

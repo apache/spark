@@ -104,6 +104,17 @@ abstract class Expression extends TreeNode[Expression] {
   def foldable: Boolean = false
 
   /**
+   * Returns true if the expression can be folded without relying on external context,
+   * such as current time zone, session configurations, or catalogs.
+   *
+   * This is useful for storing expressions in catalogs and connectors, such as default values or
+   * check constraints, allowing immediate evaluation instead of storing the expression as-is.
+   *
+   * Default is false to ensure explicit marking of context independence.
+   */
+  def contextIndependentFoldable: Boolean = false
+
+  /**
    * Returns true when the current expression always return the same result for fixed inputs from
    * children. The non-deterministic expressions should not change in number and order. They should
    * not be evaluated during the query planning.
@@ -545,6 +556,8 @@ trait Nondeterministic extends Expression {
 trait ConditionalExpression extends Expression {
   final override def foldable: Boolean = children.forall(_.foldable)
 
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   /**
    * Return the children expressions which can always be hit at runtime.
    */
@@ -575,6 +588,7 @@ abstract class LeafExpression extends Expression with LeafLike[Expression]
 abstract class UnaryExpression extends Expression with UnaryLike[Expression] {
 
   override def foldable: Boolean = child.foldable
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
   override def nullable: Boolean = child.nullable
 
   /**
@@ -695,6 +709,8 @@ object UnaryExpression {
 abstract class BinaryExpression extends Expression with BinaryLike[Expression] {
 
   override def foldable: Boolean = left.foldable && right.foldable
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def nullable: Boolean = left.nullable || right.nullable
 
@@ -949,6 +965,8 @@ abstract class QuaternaryExpression extends Expression with QuaternaryLike[Expre
 
   override def foldable: Boolean = children.forall(_.foldable)
 
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   override def nullable: Boolean = children.exists(_.nullable)
 
   /**
@@ -1053,6 +1071,8 @@ abstract class QuaternaryExpression extends Expression with QuaternaryLike[Expre
 abstract class QuinaryExpression extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def nullable: Boolean = children.exists(_.nullable)
 

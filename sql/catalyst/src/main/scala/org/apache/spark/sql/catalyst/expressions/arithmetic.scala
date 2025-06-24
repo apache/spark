@@ -1193,6 +1193,7 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
 
@@ -1281,6 +1282,7 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
 

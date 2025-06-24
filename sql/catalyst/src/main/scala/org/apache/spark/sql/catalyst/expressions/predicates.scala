@@ -481,6 +481,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(IN)
   private val legacyNullInEmptyBehavior =

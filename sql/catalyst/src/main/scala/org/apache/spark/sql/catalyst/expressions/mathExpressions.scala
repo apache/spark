@@ -48,6 +48,7 @@ abstract class LeafMathExpression(c: Double, name: String)
 
   override def dataType: DataType = DoubleType
   override def foldable: Boolean = true
+  override def contextIndependentFoldable: Boolean = true
   override def nullable: Boolean = false
   override def toString: String = s"$name()"
   override def prettyName: String = name

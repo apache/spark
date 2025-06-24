@@ -415,6 +415,12 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   Literal.validateLiteralValue(value, dataType)
 
   override def foldable: Boolean = true
+
+  override def contextIndependentFoldable: Boolean = {
+    DataTypeUtils.matchesPattern(dataType,
+      dt => dt.isInstanceOf[TimestampType] || dt.isInstanceOf[UserDefinedType[_]])
+  }
+
   override def nullable: Boolean = value == null
 
   private def timeZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)

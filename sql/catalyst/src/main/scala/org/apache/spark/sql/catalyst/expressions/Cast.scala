@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.types.{PhysicalFractionalType, PhysicalIntegralType, PhysicalNumericType}
+import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalFractionalType, PhysicalIntegralType, PhysicalNumericType}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -492,6 +492,11 @@ case class Cast(
   override protected def withNewChildInternal(newChild: Expression): Cast = copy(child = newChild)
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
+
+  override def contextIndependentFoldable: Boolean = {
+    DataTypeUtils.matchesPattern(dataType,
+      dt => dt.isInstanceOf[TimestampType] || dt.isInstanceOf[UserDefinedType[_]])
+  }
 
   def ansiEnabled: Boolean = {
     evalMode == EvalMode.ANSI || (evalMode == EvalMode.TRY && !canUseLegacyCastForTryCast)
