@@ -79,6 +79,7 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             )
             .first()
         )
+
         # useArrow=None
         row_none = (
             self.spark.range(1)
@@ -125,14 +126,14 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             "array(1, 2, 3) as array",
         )
         str_repr_func = self.spark.udf.register("str_repr", udf(lambda x: str(x), useArrow=True))
-        
+
         # To verify that Arrow optimization is on
         self.assertIn(
             df.selectExpr("str_repr(array) AS str_id").first()[0],
             ["[1, 2, 3]", "[np.int32(1), np.int32(2), np.int32(3)]"],
             # The input is a NumPy array when the Arrow optimization is on
         )
-        
+
         # To verify that a UserDefinedFunction is returned
         self.assertListEqual(
             df.selectExpr("str_repr(array) AS str_id").collect(),
@@ -182,6 +183,7 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             self.assertEqual(res.collect(), floating_res)
             self.assertEqual(res.dtypes[0][1], ddl_type)
         # invalid
+
         with self.assertRaises(PythonException) as cm:
             df_floating_value.select(udf(lambda x: x, "int")("value").alias("res")).collect()
         self.assertIn("UDF_ARROW_TYPE_CONVERSION_ERROR", str(cm.exception))
