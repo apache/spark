@@ -2809,25 +2809,25 @@ class DataFrameAggregateSuite extends QueryTest
 
   test("SPARK-52515: Accepts literal and foldable inputs") {
     val agg = new ApproxTopK(
-      first = BoundReference(0, LongType, nullable = true),
-      second = Abs(Literal(10)),
-      third = Abs(Literal(-10))
+      expr = BoundReference(0, LongType, nullable = true),
+      k = Abs(Literal(10)),
+      maxItemsTracked = Abs(Literal(-10))
     )
     assert(agg.checkInputDataTypes().isSuccess)
   }
 
   test("SPARK-52515: Fail if parameters are not foldable") {
     val badAgg = new ApproxTopK(
-      first = BoundReference(0, LongType, nullable = true),
-      second = Sum(BoundReference(1, LongType, nullable = true)),
-      third = Literal(10)
+      expr = BoundReference(0, LongType, nullable = true),
+      k = Sum(BoundReference(1, LongType, nullable = true)),
+      maxItemsTracked = Literal(10)
     )
     assert(badAgg.checkInputDataTypes().isFailure)
 
     val badAgg2 = new ApproxTopK(
-      first = BoundReference(0, LongType, nullable = true),
-      second = Literal(10),
-      third = Sum(BoundReference(1, LongType, nullable = true))
+      expr = BoundReference(0, LongType, nullable = true),
+      k = Literal(10),
+      maxItemsTracked = Sum(BoundReference(1, LongType, nullable = true))
     )
     assert(badAgg2.checkInputDataTypes().isFailure)
   }
