@@ -40,7 +40,6 @@ trait SparkParserUtils {
         case 'r' => sb.append('\r')
         case 't' => sb.append('\t')
         case 'Z' => sb.append('\u001A')
-        case '"' => sb.append('"') // Handle escaped double quote
         // The following 2 lines are exactly what MySQL does TODO: why do we do this?
         case '%' => sb.append("\\%")
         case '_' => sb.append("\\_")

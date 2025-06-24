@@ -155,6 +155,215 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+select 1 from "not_""exists"
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`not_\"exists`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 28,
+    "fragment" : "\"not_\"\"exists\""
+  } ]
+}
+
+
+-- !query
+USE SCHEMA "not_""exist"
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
+{
+  "errorClass" : "SCHEMA_NOT_FOUND",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "schemaName" : "`spark_catalog`.`not_\"exist`"
+  }
+}
+
+
+-- !query
+ALTER TABLE "not_""exist" ADD COLUMN not_exist int
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`not_\"exist`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 25,
+    "fragment" : "\"not_\"\"exist\""
+  } ]
+}
+
+
+-- !query
+ALTER TABLE not_exist ADD COLUMN "not_""exist" int
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`not_exist`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 21,
+    "fragment" : "not_exist"
+  } ]
+}
+
+
+-- !query
+SELECT 1 AS "not_""exist" FROM not_exist
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`not_exist`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 40,
+    "fragment" : "not_exist"
+  } ]
+}
+
+
+-- !query
+SELECT 1 FROM not_exist AS X("he""llo")
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`not_exist`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 23,
+    "fragment" : "not_exist"
+  } ]
+}
+
+
+-- !query
+SELECT "not_""exist"()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`not_\"exist`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "\"not_\"\"exist\"()"
+  } ]
+}
+
+
+-- !query
+SELECT "not_""exist".not_exist()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`not_\"exist`.`not_exist`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "\"not_\"\"exist\".not_exist()"
+  } ]
+}
+
+
+-- !query
+CREATE SCHEMA "my""schema"
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SCHEMA_OR_RELATION_NAME",
+  "sqlState" : "42602",
+  "messageParameters" : {
+    "name" : "`my\"schema`"
+  }
+}
+
+
+-- !query
+DROP SCHEMA "my""schema"
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
+{
+  "errorClass" : "SCHEMA_NOT_FOUND",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "schemaName" : "`spark_catalog`.`my\"schema`"
+  }
+}
+
+
+-- !query
+CREATE TEMPORARY VIEW "v""iew"(c1) AS SELECT 1
+-- !query analysis
+CreateViewCommand `v"iew`, [(c1,None)], SELECT 1, false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [1 AS 1#x]
+      +- OneRowRelation
+
+
+-- !query
+DROP VIEW "v""iew"
+-- !query analysis
+DropTempViewCommand `v"iew`
+
+
+-- !query
+CREATE TEMPORARY VIEW v("c""1") AS SELECT 1
+-- !query analysis
+CreateViewCommand `v`, [(c"1,None)], SELECT 1, false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [1 AS 1#x]
+      +- OneRowRelation
+
+
+-- !query
+DROP VIEW v
+-- !query analysis
+DropTempViewCommand v
+
+
+-- !query
 SELECT 1 FROM `hello`
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -330,6 +539,26 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT "he""llo"
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`he\"llo`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "\"he\"\"llo\""
+  } ]
+}
+
+
+-- !query
 CREATE TEMPORARY VIEW v(c1 COMMENT "hello") AS SELECT 1
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
@@ -378,9 +607,30 @@ Project [hello AS hello#x]
 
 
 -- !query
+SELECT 'he''llo'
+-- !query analysis
+Project [he'llo AS he'llo#x]
++- OneRowRelation
+
+
+-- !query
 CREATE TEMPORARY VIEW v(c1 COMMENT 'hello') AS SELECT 1
 -- !query analysis
 CreateViewCommand `v`, [(c1,Some(hello))], SELECT 1, false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [1 AS 1#x]
+      +- OneRowRelation
+
+
+-- !query
+DROP VIEW v
+-- !query analysis
+DropTempViewCommand v
+
+
+-- !query
+CREATE TEMPORARY VIEW v(c1 COMMENT 'he''llo') AS SELECT 1
+-- !query analysis
+CreateViewCommand `v`, [(c1,Some(he'llo))], SELECT 1, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [1 AS 1#x]
       +- OneRowRelation
 
