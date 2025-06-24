@@ -509,9 +509,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       includeLastResort = includeLastResort)
   }
 
-  // Tries to resolve `UnresolvedAttribute` by the children with Plan Ids.
+  // Try to resolve `UnresolvedAttribute` by the children with Plan Ids.
   // Returns `None` if fail to resolve.
-  private[sql] def tryResolveUnresolvedAttributeByPlanChildren(
+  private[sql] def tryResolveColumnByPlanChildren(
       u: UnresolvedAttribute,
       q: LogicalPlan,
       includeLastResort: Boolean = false): Option[Expression] = {

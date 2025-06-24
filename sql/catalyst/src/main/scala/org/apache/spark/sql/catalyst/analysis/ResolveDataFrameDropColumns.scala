@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.plans.logical.{DataFrameDropColumns, LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.DF_DROP_COLUMNS
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
@@ -27,9 +27,9 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
  * Note that DataFrameDropColumns allows and ignores non-existing columns.
  */
 class ResolveDataFrameDropColumns(val catalogManager: CatalogManager)
-  extends Rule[LogicalPlan] with ColumnResolutionHelper  {
+  extends SQLConfHelper with ColumnResolutionHelper  {
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(DF_DROP_COLUMNS)) {
     case d: DataFrameDropColumns if d.childrenResolved =>
       // expressions in dropList can be unresolved, e.g.
@@ -39,7 +39,7 @@ class ResolveDataFrameDropColumns(val catalogManager: CatalogManager)
           if (u.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty) {
             // Plan ID comes from Spark Connect,
             // here we ignore the column if fail to resolve by plan Id.
-            tryResolveUnresolvedAttributeByPlanChildren(u, d)
+            tryResolveColumnByPlanChildren(u, d)
           } else {
             Some(resolveExpressionByPlanChildren(u, d))
           }

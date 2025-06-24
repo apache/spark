@@ -200,7 +200,7 @@ class DataFrameTestsMixin:
         self.assertEqual(df.drop(col("name"), col("age")).columns, ["active"])
         self.assertEqual(df.drop(col("name"), col("age"), col("random")).columns, ["active"])
 
-    def test_drop_II(self):
+    def test_drop_notexistent_col(self):
         df1 = self.spark.createDataFrame(
             [("a", "b", "c")],
             schema="colA string, colB string, colC string",
