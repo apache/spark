@@ -28,6 +28,7 @@ import org.apache.datasketches.common.Util;
 import org.apache.datasketches.memory.Memory;
 
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.DecimalType;
 
 import static org.apache.datasketches.common.ByteArrayUtil.copyBytes;
 import static org.apache.datasketches.common.ByteArrayUtil.putIntLE;
@@ -36,27 +37,29 @@ public class ArrayOfDecimalsSerDe extends ArrayOfItemsSerDe<Decimal> {
 
     private final int precision;
     private final int scale;
+    private final DecimalType decimalType;
     private final ArrayOfItemsSerDe<?> delegate;
 
-    public ArrayOfDecimalsSerDe(int precision, int scale) {
-        this.precision = precision;
-        this.scale = scale;
+    public ArrayOfDecimalsSerDe(DecimalType decimalType) {
+        this.decimalType = decimalType;
+        this.precision = decimalType.precision();
+        this.scale = decimalType.scale();
 
-        if (precision <= Decimal.MAX_INT_DIGITS()) {
+        if (DecimalType.is32BitDecimalType(decimalType)) {
             this.delegate = new ArrayOfNumbersSerDe();
-        } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
+        } else if (DecimalType.is64BitDecimalType(decimalType)) {
             this.delegate = new ArrayOfLongsSerDe();
         } else {
-            this.delegate = new ArrayOfDecimalByteArrSerDe(precision, scale);
+            this.delegate = new ArrayOfDecimalByteArrSerDe(decimalType);
         }
     }
 
     @Override
     public byte[] serializeToByteArray(Decimal item) {
         Objects.requireNonNull(item, "Item must not be null");
-        if (precision <= Decimal.MAX_INT_DIGITS()) {
+        if (DecimalType.is32BitDecimalType(decimalType)) {
             return ((ArrayOfNumbersSerDe) delegate).serializeToByteArray(decimalToInt(item));
-        } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
+        } else if (DecimalType.is64BitDecimalType(decimalType)) {
             return ((ArrayOfLongsSerDe) delegate).serializeToByteArray(item.toUnscaledLong());
         } else {
             return ((ArrayOfDecimalByteArrSerDe) delegate).serializeToByteArray(item);
@@ -66,13 +69,13 @@ public class ArrayOfDecimalsSerDe extends ArrayOfItemsSerDe<Decimal> {
     @Override
     public byte[] serializeToByteArray(Decimal[] items) {
         Objects.requireNonNull(items, "Item must not be null");
-        if (precision <= Decimal.MAX_INT_DIGITS()) {
+        if (DecimalType.is32BitDecimalType(decimalType)) {
             Number[] intItems = new Number[items.length];
             for (int i = 0; i < items.length; i++) {
                 intItems[i] = decimalToInt(items[i]);
             }
             return ((ArrayOfNumbersSerDe) delegate).serializeToByteArray(intItems);
-        } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
+        } else if (DecimalType.is64BitDecimalType(decimalType)) {
             Long[] longItems = new Long[items.length];
             for (int i = 0; i < items.length; i++) {
                 longItems[i] = items[i].toUnscaledLong();
@@ -86,14 +89,14 @@ public class ArrayOfDecimalsSerDe extends ArrayOfItemsSerDe<Decimal> {
     @Override
     public Decimal[] deserializeFromMemory(Memory mem, long offsetBytes, int numItems) {
         Objects.requireNonNull(mem, "Memory must not be null");
-        if (precision <= Decimal.MAX_INT_DIGITS()) {
+        if (DecimalType.is32BitDecimalType(decimalType)) {
             Number[] intArray = ((ArrayOfNumbersSerDe) delegate).deserializeFromMemory(mem, offsetBytes, numItems);
             Decimal[] result = new Decimal[intArray.length];
             for (int i = 0; i < intArray.length; i++) {
                 result[i] = Decimal.createUnsafe((int) intArray[i], precision, scale);
             }
             return result;
-        } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
+        } else if (DecimalType.is64BitDecimalType(decimalType)) {
             Long[] longArray = ((ArrayOfLongsSerDe) delegate).deserializeFromMemory(mem, offsetBytes, numItems);
             Decimal[] result = new Decimal[longArray.length];
             for (int i = 0; i < longArray.length; i++) {
@@ -108,9 +111,9 @@ public class ArrayOfDecimalsSerDe extends ArrayOfItemsSerDe<Decimal> {
     @Override
     public int sizeOf(Decimal item) {
         Objects.requireNonNull(item, "Item must not be null");
-        if (precision <= Decimal.MAX_INT_DIGITS()) {
+        if (DecimalType.is32BitDecimalType(decimalType)) {
             return ((ArrayOfNumbersSerDe) delegate).sizeOf(decimalToInt(item));
-        } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
+        } else if (DecimalType.is64BitDecimalType(decimalType)) {
             return ((ArrayOfLongsSerDe) delegate).sizeOf(item.toUnscaledLong());
         } else {
             return ((ArrayOfDecimalByteArrSerDe) delegate).sizeOf(item);
@@ -148,10 +151,10 @@ public class ArrayOfDecimalsSerDe extends ArrayOfItemsSerDe<Decimal> {
         private final int precision;
         private final int scale;
 
-        public ArrayOfDecimalByteArrSerDe(int precision, int scale) {
-            assert precision > Decimal.MAX_LONG_DIGITS();
-            this.precision = precision;
-            this.scale = scale;
+        public ArrayOfDecimalByteArrSerDe(DecimalType decimalType) {
+            assert DecimalType.isByteArrayDecimalType(decimalType);
+            this.precision = decimalType.precision();
+            this.scale = decimalType.scale();
         }
 
         @Override

@@ -298,7 +298,7 @@ object ApproxTopK {
       case _: StringType =>
         new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
       case dt: DecimalType =>
-        new ArrayOfDecimalsSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[Any]]
+        new ArrayOfDecimalsSerDe(dt).asInstanceOf[ArrayOfItemsSerDe[Any]]
     }
   }
 }

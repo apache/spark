@@ -2712,6 +2712,18 @@ class DataFrameAggregateSuite extends QueryTest
       Row(Seq(Row(new java.math.BigDecimal("0.0"), 3), Row(new java.math.BigDecimal("1.0"), 2))))
   }
 
+  test("SPARK-52515: test of Decimal(4, 1) type") {
+    val res = sql(
+      "SELECT approx_top_k(expr, 2) AS top_k_result " +
+        "FROM VALUES CAST(0.0 AS DECIMAL(4, 1)), CAST(0.0 AS DECIMAL(4, 1)), " +
+        "CAST(0.0 AS DECIMAL(4, 1)), CAST(1.0 AS DECIMAL(4, 1)), " +
+        "CAST(1.0 AS DECIMAL(4, 1)), CAST(2.0 AS DECIMAL(4, 1)), " +
+        "CAST(3.0 AS DECIMAL(4, 1)), CAST(4.0 AS DECIMAL(4, 1)) AS tab(expr);")
+    checkAnswer(
+      res,
+      Row(Seq(Row(new java.math.BigDecimal("0.0"), 3), Row(new java.math.BigDecimal("1.0"), 2))))
+  }
+
   test("SPARK-52515: test of Decimal(10, 2) type") {
     val res = sql(
       "SELECT approx_top_k(expr, 2) AS top_k_result " +
@@ -2724,16 +2736,17 @@ class DataFrameAggregateSuite extends QueryTest
       Row(Seq(Row(new java.math.BigDecimal("0.00"), 3), Row(new java.math.BigDecimal("1.00"), 2))))
   }
 
-  test("SPARK-52515: test of Decimal(20, 1) type") {
+  test("SPARK-52515: test of Decimal(20, 3) type") {
     val res = sql(
       "SELECT approx_top_k(expr, 2) AS top_k_result " +
-        "FROM VALUES CAST(0.0 AS DECIMAL(20, 1)), CAST(0.0 AS DECIMAL(20, 1)), " +
-        "CAST(0.0 AS DECIMAL(20, 1)), CAST(1.0 AS DECIMAL(20, 1)), " +
-        "CAST(1.0 AS DECIMAL(20, 1)), CAST(2.0 AS DECIMAL(20, 1)), " +
-        "CAST(3.0 AS DECIMAL(20, 1)), CAST(4.0 AS DECIMAL(20, 1)) AS tab(expr);")
+        "FROM VALUES CAST(0.0 AS DECIMAL(20, 3)), CAST(0.0 AS DECIMAL(20, 3)), " +
+        "CAST(0.0 AS DECIMAL(20, 3)), CAST(1.0 AS DECIMAL(20, 3)), " +
+        "CAST(1.0 AS DECIMAL(20, 3)), CAST(2.0 AS DECIMAL(20, 3)), " +
+        "CAST(3.0 AS DECIMAL(20, 3)), CAST(4.0 AS DECIMAL(20, 3)) AS tab(expr);")
     checkAnswer(
       res,
-      Row(Seq(Row(new java.math.BigDecimal("0.0"), 3), Row(new java.math.BigDecimal("1.0"), 2))))
+      Row(Seq(Row(new java.math.BigDecimal("0.000"), 3),
+        Row(new java.math.BigDecimal("1.000"), 2))))
   }
 
   test("SPARK-52515: invalid k value") {
