@@ -1275,6 +1275,13 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test("SPARK-35383: Fill missing S3A magic committer configs if needed") {
+    Seq(
+      "org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter",
+      "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol"
+    ).foreach { className =>
+      assert(!Utils.classIsLoadable(className))
+    }
+
     val c1 = new SparkConf().setAppName("s3a-test").setMaster("local")
     sc = new SparkContext(c1)
     assert(!sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
@@ -1287,18 +1294,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     resetSparkContext()
     val c3 = c1.clone.set("spark.hadoop.fs.s3a.bucket.mybucket.committer.magic.enabled", "true")
     sc = new SparkContext(c3)
-    Seq(
-      "spark.hadoop.fs.s3a.committer.magic.enabled" -> "true",
-      "spark.hadoop.fs.s3a.committer.name" -> "magic",
-      "spark.hadoop.mapreduce.outputcommitter.factory.scheme.s3a" ->
-        "org.apache.hadoop.fs.s3a.commit.S3ACommitterFactory",
-      "spark.sql.parquet.output.committer.class" ->
-        "org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter",
-      "spark.sql.sources.commitProtocolClass" ->
-        "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol"
-    ).foreach { case (k, v) =>
-      assert(v == sc.getConf.get(k))
-    }
+    assert(!sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
 
     // Respect a user configuration
     resetSparkContext()

@@ -1,0 +1,26 @@
+================================================================================================
+key-value pairs sort
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.15+6-LTS on Linux 6.11.0-1014-azure
+AMD EPYC 7763 64-Core Processor
+key-value pairs sort 25000000:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Tuple-sort using Arrays.sort()                    20545          20560          21          1.2         821.8       1.0X
+KV-sort using Sorter                              26696          26797         143          0.9        1067.8       0.8X
+
+
+================================================================================================
+primitive int array sort
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.15+6-LTS on Linux 6.11.0-1014-azure
+AMD EPYC 7763 64-Core Processor
+primitive int array sort 25000000:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+Java Arrays.sort() on non-primitive int array            15325          15510         263          1.6         613.0       1.0X
+Java Arrays.sort() on primitive int array                 2088           2141          76         12.0          83.5       7.3X
+Sorter without key reuse on primitive int array           8254           8262          10          3.0         330.2       1.9X
+Sorter with key reuse on primitive int array             10184          10186           3          2.5         407.3       1.5X
+
+

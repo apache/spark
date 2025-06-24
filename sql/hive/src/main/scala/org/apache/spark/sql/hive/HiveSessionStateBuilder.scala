@@ -88,12 +88,13 @@ class HiveSessionStateBuilder(
   override protected def analyzer: Analyzer = new Analyzer(catalogManager) {
     override val singlePassResolverExtensions: Seq[ResolverExtension] = Seq(
       new LogicalRelationResolver,
-      new HiveTableRelationResolver(catalog)
+      new HiveTableRelationNoopResolver
     )
 
     override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] = Seq(
       new DataSourceResolver(session),
-      new FileResolver(session)
+      new FileResolver(session),
+      new HiveTableRelationResolver(catalog)
     )
 
     override val singlePassPostHocResolutionRules: Seq[Rule[LogicalPlan]] =

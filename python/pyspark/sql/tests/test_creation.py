@@ -24,6 +24,9 @@ from typing import cast
 from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.types import (
+    StructType,
+    StructField,
+    StringType,
     DateType,
     TimestampType,
     TimestampNTZType,
@@ -42,6 +45,21 @@ from pyspark.testing.sqlutils import (
 
 
 class DataFrameCreationTestsMixin:
+    def test_create_str_from_dict(self):
+        data = [
+            {"broker": {"teamId": 3398, "contactEmail": "abc.xyz@123.ca"}},
+        ]
+
+        for schema in [
+            StructType([StructField("broker", StringType())]),
+            "broker: string",
+        ]:
+            df = self.spark.createDataFrame(data, schema=schema)
+            self.assertEqual(
+                df.first().broker,
+                """{'teamId': 3398, 'contactEmail': 'abc.xyz@123.ca'}""",
+            )
+
     def test_create_dataframe_from_array_of_long(self):
         import array
 

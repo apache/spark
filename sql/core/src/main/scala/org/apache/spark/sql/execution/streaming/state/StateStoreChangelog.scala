@@ -371,7 +371,11 @@ class StateStoreChangelogReaderFactory(
       // Or if the first record in the changelog file in V1 has a large enough
       // key, readUTF() will throw a UTFDataFormatException so we should return
       // version 1 (SPARK-51922).
-      case _: java.io.EOFException | _: java.io.UTFDataFormatException => 1
+      case _: java.io.EOFException |
+           _: java.io.UTFDataFormatException |
+           // SPARK-52553 - Can throw this if the bytes in the file is coincidentally
+           // decoded as UTF string like "v)".
+           _: NumberFormatException => 1
     }
   }
 

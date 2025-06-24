@@ -248,7 +248,7 @@ private[hive] class SparkExecuteStatementOperation(
         // then they may both call cleanup() before Spark Jobs are started. But before background
         // task interrupted, it may have started some spark job, so we need to cancel again to
         // make sure job was cancelled when background thread was interrupted
-        if (statementId != null) {
+        if (!sparkContext.isStopped && statementId != null) {
           sparkContext.cancelJobGroup(statementId,
             "The corresponding Thriftserver query has failed.")
         }

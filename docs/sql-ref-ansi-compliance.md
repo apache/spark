@@ -794,6 +794,7 @@ Below is a list of all the keywords in Spark SQL.
 |WINDOW|non-reserved|non-reserved|reserved|
 |WITH|reserved|non-reserved|reserved|
 |WITHIN|reserved|non-reserved|reserved|
+|WITHOUT|non-reserved|non-reserved|non-reserved|
 |X|non-reserved|non-reserved|non-reserved|
 |YEAR|non-reserved|non-reserved|non-reserved|
 |YEARS|non-reserved|non-reserved|non-reserved|

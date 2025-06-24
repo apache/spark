@@ -180,14 +180,16 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
   }
 
   private def collectEvaluableUDFsFromExpressions(expressions: Seq[Expression]): Seq[PythonUDF] = {
-    // If first UDF is SQL_SCALAR_PANDAS_ITER_UDF, then only return this UDF,
+    // If first UDF is SQL_SCALAR_PANDAS_ITER_UDF or SQL_SCALAR_ARROW_ITER_UDF,
+    // then only return this UDF,
     // otherwise check if subsequent UDFs are of the same type as the first UDF. (since we can only
     // extract UDFs of the same eval type)
 
     var firstVisitedScalarUDFEvalType: Option[Int] = None
 
     def canChainUDF(evalType: Int): Boolean = {
-      if (evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF) {
+      if (evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF ||
+        evalType == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF) {
         false
       } else {
         evalType == firstVisitedScalarUDFEvalType.get
@@ -304,7 +306,8 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
             case PythonEvalType.SQL_SCALAR_PANDAS_UDF
                  | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
                  | PythonEvalType.SQL_ARROW_BATCHED_UDF
-                 | PythonEvalType.SQL_SCALAR_ARROW_UDF =>
+                 | PythonEvalType.SQL_SCALAR_ARROW_UDF
+                 | PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF =>
               ArrowEvalPython(validUdfs, resultAttrs, child, evalType)
             case _ =>
               throw SparkException.internalError("Unexpected UDF evalType")

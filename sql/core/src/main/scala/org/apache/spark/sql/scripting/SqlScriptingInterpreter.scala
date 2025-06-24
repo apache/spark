@@ -122,12 +122,21 @@ case class SqlScriptingInterpreter(session: SparkSession) {
 
       // Get NOT FOUND handler.
       notFoundHandler = if (handler.exceptionHandlerTriggers.notFound) {
-        Some(handlerExec)
+        if (notFoundHandler.isDefined) {
+          throw SqlScriptingErrors.duplicateHandlerForSameCondition(CurrentOrigin.get, "NOT FOUND")
+        } else {
+          Some(handlerExec)
+        }
       } else None
 
       // Get SQLEXCEPTION handler.
       sqlExceptionHandler = if (handler.exceptionHandlerTriggers.sqlException) {
-        Some(handlerExec)
+        if (sqlExceptionHandler.isDefined) {
+          throw SqlScriptingErrors
+            .duplicateHandlerForSameCondition(CurrentOrigin.get, "SQLEXCEPTION")
+        } else {
+          Some(handlerExec)
+        }
       } else None
     })
 
