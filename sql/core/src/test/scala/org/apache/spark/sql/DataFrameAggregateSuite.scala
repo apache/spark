@@ -2686,6 +2686,23 @@ class DataFrameAggregateSuite extends QueryTest
         Row(Timestamp.valueOf("2023-01-05 00:00:00"), 2))))
   }
 
+  test("SPARK-52515: test of Timestamp_ntz type") {
+    val res = sql(
+      "SELECT approx_top_k(expr, 2) " +
+        "FROM VALUES TIMESTAMP_NTZ'2023-01-01 00:00:00', " +
+        "TIMESTAMP_NTZ'2023-01-01 00:00:00', " +
+        "TIMESTAMP_NTZ'2023-01-02 00:00:00', " +
+        "TIMESTAMP_NTZ'2023-01-02 00:00:00', " +
+        "TIMESTAMP_NTZ'2023-01-03 00:00:00', " +
+        "TIMESTAMP_NTZ'2023-01-04 00:00:00', " +
+        "TIMESTAMP_NTZ'2023-01-05 00:00:00', " +
+        "TIMESTAMP_NTZ'2023-01-05 00:00:00' AS tab(expr);")
+    checkAnswer(
+      res,
+      Row(Seq(Row(LocalDateTime.of(2023, 1, 5, 0, 0), 2),
+        Row(LocalDateTime.of(2023, 1, 1, 0, 0), 2))))
+  }
+
   test("SPARK-52515: test of Decimal type") {
     val res = sql(
       "SELECT approx_top_k(expr, 2) AS top_k_result " +

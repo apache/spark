@@ -140,9 +140,8 @@ case class ApproxTopK(
   override def merge(buffer: ItemsSketch[Any], input: ItemsSketch[Any]): ItemsSketch[Any] =
     buffer.merge(input)
 
-  override def eval(buffer: ItemsSketch[Any]): GenericArrayData = {
+  override def eval(buffer: ItemsSketch[Any]): GenericArrayData =
     ApproxTopK.genEvalResult(buffer, kVal, itemDataType)
-  }
 
   override def serialize(buffer: ItemsSketch[Any]): Array[Byte] =
     buffer.toByteArray(ApproxTopK.genSketchSerDe(itemDataType))
@@ -207,7 +206,7 @@ object ApproxTopK {
     itemType match {
       case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType |
            _: LongType | _: FloatType | _: DoubleType | _: DateType |
-           _: TimestampType | _: StringType | _: DecimalType => true
+           _: TimestampType | _: TimestampNTZType | _: StringType | _: DecimalType => true
       case _ => false
     }
 
@@ -226,7 +225,7 @@ object ApproxTopK {
         new ItemsSketch[Boolean](maxMapSize).asInstanceOf[ItemsSketch[Any]]
       case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
         new ItemsSketch[Number](maxMapSize).asInstanceOf[ItemsSketch[Any]]
-      case _: LongType | _: TimestampType =>
+      case _: LongType | _: TimestampType | _: TimestampNTZType =>
         new ItemsSketch[Long](maxMapSize).asInstanceOf[ItemsSketch[Any]]
       case _: DoubleType =>
         new ItemsSketch[Double](maxMapSize).asInstanceOf[ItemsSketch[Any]]
@@ -253,6 +252,7 @@ object ApproxTopK {
         case _: DoubleType => buffer.update(v.asInstanceOf[Double])
         case _: DateType => buffer.update(v.asInstanceOf[Int])
         case _: TimestampType => buffer.update(v.asInstanceOf[Long])
+        case _: TimestampNTZType => buffer.update(v.asInstanceOf[Long])
         case st: StringType =>
           val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
           buffer.update(cKey.toString)
@@ -272,8 +272,9 @@ object ApproxTopK {
     for (i <- 0 until resultLength) {
       val row = items(i)
       itemDataType match {
-        case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType | _: LongType |
-             _: FloatType | _: DoubleType | _: DateType | _: TimestampType | _: DecimalType =>
+        case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType |
+             _: LongType | _: FloatType | _: DoubleType | _: DecimalType |
+             _: DateType | _: TimestampType | _: TimestampNTZType =>
           result(i) = InternalRow.apply(row.getItem, row.getEstimate)
         case _: StringType =>
           val item = UTF8String.fromString(row.getItem.asInstanceOf[String])
@@ -288,7 +289,7 @@ object ApproxTopK {
       case _: BooleanType => new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
       case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
         new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-      case _: LongType | _: TimestampType =>
+      case _: LongType | _: TimestampType | _: TimestampNTZType =>
         new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
       case _: DoubleType =>
         new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
