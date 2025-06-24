@@ -2659,9 +2659,6 @@
                       <exclude>*:*_2.11</exclude>
                       <exclude>*:*_2.10</exclude>
                     </excludes>
-                    <include>
-                      <include> synapase utils 2.12...</include>
-                    </include>
                     <searchTransitive>true</searchTransitive>
                   </bannedDependencies>
                   <enforceBytecodeVersion>
