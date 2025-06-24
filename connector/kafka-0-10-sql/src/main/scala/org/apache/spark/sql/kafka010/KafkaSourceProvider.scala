@@ -85,7 +85,6 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       parameters: Map[String, String]): Source = {
     val caseInsensitiveParameters = CaseInsensitiveMap(parameters)
     validateStreamOptions(caseInsensitiveParameters)
-
     // Each running query should use its own group id. Otherwise, the query may be only assigned
     // partial data since Kafka will assign partitions to multiple consumers having the same group
     // id. Hence, we should generate a unique id for each query.
@@ -633,10 +632,10 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private val deserClassName = classOf[ByteArrayDeserializer].getName
 
   def checkStartOffsetNotGreaterThanEndOffset(
-    startOffset: Long,
-    endOffset: Long,
-    topicPartition: TopicPartition,
-    exception: (Long, Long, TopicPartition) => Exception): Unit = {
+      startOffset: Long,
+      endOffset: Long,
+      topicPartition: TopicPartition,
+      exception: (Long, Long, TopicPartition) => Exception): Unit = {
     // earliest or latest offsets are negative and should not be compared
     if (startOffset > endOffset && startOffset >= 0 && endOffset >= 0) {
       throw exception(startOffset, endOffset, topicPartition)
