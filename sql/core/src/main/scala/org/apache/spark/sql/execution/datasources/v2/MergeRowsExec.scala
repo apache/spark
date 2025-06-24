@@ -47,6 +47,14 @@ case class MergeRowsExec(
     output: Seq[Attribute],
     child: SparkPlan) extends UnaryExecNode {
 
+  override lazy val metrics: Map[String, SQLMetric] = Map(
+    "numTargetRowsCopied" -> SQLMetrics.createMetric(sparkContext,
+      "Number of target rows rewritten unmodified because they did not meet any condition."),
+    "numTargetRowsUnused" -> SQLMetrics.createMetric(sparkContext,
+      "Number of target rows dropped because they did not meet any condition."),
+    "numSourceRowsUnused" -> SQLMetrics.createMetric(sparkContext,
+      "Number of source rows processed that did not meet any condition."))
+
   @transient override lazy val producedAttributes: AttributeSet = {
     AttributeSet(output.filterNot(attr => inputSet.contains(attr)))
   }
@@ -70,14 +78,6 @@ case class MergeRowsExec(
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = {
     copy(child = newChild)
   }
-
-  override lazy val metrics: Map[String, SQLMetric] = Map(
-    "numTargetRowsCopied" -> SQLMetrics.createMetric(sparkContext,
-      "Number of target rows rewritten unmodified because they did not meet any condition."),
-    "numTargetRowsUnused" -> SQLMetrics.createMetric(sparkContext,
-      "Number of target rows dropped because they did not meet any condition."),
-    "numSourceRowsUnused" -> SQLMetrics.createMetric(sparkContext,
-      "Number of source rows processed that did not meet any condition."))
 
   protected override def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions(processPartition)
@@ -141,7 +141,7 @@ case class MergeRowsExec(
   }
 
   case class CopyExec(projection: Projection) extends InstructionExec {
-    override def condition: BasePredicate = createPredicate(TrueLiteral)
+    override lazy val condition: BasePredicate = createPredicate(TrueLiteral)
     def apply(row: InternalRow): InternalRow = projection.apply(row)
   }
 
