@@ -107,8 +107,9 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns true if the expression can be folded without relying on external context,
    * such as current time zone, session configurations, or catalogs.
    *
-   * This is useful for storing expressions in catalogs and connectors, such as default values or
-   * check constraints, allowing immediate evaluation instead of storing the expression as-is.
+   * When an expression is context-independent foldable, it can be safely evaluated during DDL
+   * operations like creating tables, views, or constraints. This allows systems to store the
+   * computed value rather than the expression itself, improving both simplicity and performance.
    *
    * Default is false to ensure explicit marking of context independence.
    */
