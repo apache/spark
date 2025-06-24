@@ -131,6 +131,10 @@ class ArrowStreamSerializer(Serializer):
         reader = pa.ipc.open_stream(stream)
         for batch in reader:
             yield batch
+    
+    def arrow_to_pandas(self, arrow_column, idx, struct_in_pandas="dict", ndarray_as_list=False, spark_type=None):
+        # Default: just use to_pylist()
+        return arrow_column.to_pylist()
 
     def __repr__(self):
         return "ArrowStreamSerializer"
@@ -205,12 +209,16 @@ class ArrowBatchUDFSerializer(ArrowStreamSerializer):
         safecheck,
         assign_cols_by_name,
         arrow_cast,
+        struct_in_pandas="row",
+        ndarray_as_list=False,
     ):
         super(ArrowBatchUDFSerializer, self).__init__()
         self._timezone = timezone
         self._safecheck = safecheck
         self._assign_cols_by_name = assign_cols_by_name
         self._arrow_cast = arrow_cast
+        self._struct_in_pandas = struct_in_pandas
+        self._ndarray_as_list = ndarray_as_list
 
     def _create_array(self, arr, arrow_type, arrow_cast):
         import pyarrow as pa
@@ -227,6 +235,17 @@ class ArrowBatchUDFSerializer(ArrowStreamSerializer):
                 return arr.cast(target_type=arrow_type, safe=self._safecheck)
             else:
                 raise
+
+    def load_stream(self, stream):
+        import pyarrow as pa
+        batches = super(ArrowBatchUDFSerializer, self).load_stream(stream)
+        for batch in batches:
+            table = pa.Table.from_batches([batch])
+            columns = [
+                self.arrow_to_pandas(c, i)
+                for i, c in enumerate(table.itercolumns())
+            ]
+            yield columns
 
     def dump_stream(self, iterator, stream):
         """
@@ -270,6 +289,44 @@ class ArrowBatchUDFSerializer(ArrowStreamSerializer):
 
     def __repr__(self):
         return "ArrowBatchUDFSerializer"
+
+    def arrow_to_pandas(self, arrow_column, idx, ndarray_as_list=False, spark_type=None):
+        import pyarrow.types as types
+        from pyspark.sql import Row
+        # If the arrow type is struct and struct_in_pandas is 'row', return a Series of Row objects
+        if (
+            self._struct_in_pandas == "row"
+            # and types.is_struct(arrow_column.type)
+            # and not is_variant(arrow_column.type)
+        ):
+            # Recursively convert each field
+            series = [
+                super(ArrowBatchUDFSerializer, self)
+                .arrow_to_pandas(
+                    column,
+                    i,
+                    self._struct_in_pandas,
+                    self._ndarray_as_list,
+                    spark_type=None,
+                )
+                for i, (column, field) in enumerate(zip(arrow_column.flatten(), arrow_column.type))
+            ]
+            # Build Row class for the struct fields
+            row_cls = Row(*[field.name for field in arrow_column.type])
+            # Each row is a tuple of field values
+            return series[0].__class__([
+                row_cls(*vals) for vals in zip(*series)
+            ])
+        else:
+            return ArrowStreamPandasSerializer.arrow_to_pandas(
+                self,
+                arrow_column,
+                idx,
+                struct_in_pandas=self._struct_in_pandas,
+                ndarray_as_list=ndarray_as_list,
+                spark_type=spark_type,
+            )
+
 
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
     """

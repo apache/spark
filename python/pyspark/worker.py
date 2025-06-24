@@ -244,7 +244,7 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
                 arg.combine_chunks() if isinstance(arg, pa.ChunkedArray) else arg
                 for arg in args
             ]
-            return zip(*(arr.to_pylist() if hasattr(arr, 'to_pylist') else arr.tolist() for arr in arrays))
+            return zip(*arrays)
 
     @fail_on_stopiteration
     def evaluate(*args: pa.RecordBatch):
@@ -1996,7 +1996,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
                 else None
             )
-            ser = ArrowBatchUDFSerializer(timezone, safecheck, _assign_cols_by_name, False)
+            ser = ArrowBatchUDFSerializer(timezone, safecheck, _assign_cols_by_name, False, "row")
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.
