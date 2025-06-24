@@ -138,7 +138,7 @@ jobs:
             exit 1
           fi
 
-          if [ "$empty_count" -eq 3 ]; then
+          if [ -z "$RELEASE_VERSION" ] && [ -z "$SPARK_RC_COUNT" ]; then
             echo "Dry run mode enabled"
             export DRYRUN_MODE=1
             ASF_PASSWORD="not_used"
