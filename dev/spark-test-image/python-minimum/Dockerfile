@@ -24,11 +24,12 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark wi
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20250327
+ENV FULL_REFRESH_DATE=20250624
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
 
+# Should keep the installation consistent with https://apache.github.io/spark/api/python/getting_started/install.html
 RUN apt-get update && apt-get install -y \
     build-essential \
     ca-certificates \
@@ -52,6 +53,8 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     openjdk-17-jdk-headless \
     pkg-config \
+    python3.10 \
+    python3-psutil \
     qpdf \
     tzdata \
     software-properties-common \
@@ -59,7 +62,6 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev
 
 
-# Should keep the installation consistent with https://apache.github.io/spark/api/python/getting_started/install.html
 
 # Install Python 3.9
 RUN add-apt-repository ppa:deadsnakes/ppa
