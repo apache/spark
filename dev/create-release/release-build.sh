@@ -157,8 +157,228 @@ if [[ "$1" == "finalize" ]]; then
   git commit -m "Add docs for Apache Spark $RELEASE_VERSION"
   git push origin HEAD:asf-site
   cd ..
-  rm -rf spark-website
   echo "docs uploaded"
+
+  echo "Uploading release docs to spark-website"
+  cd spark-website
+
+  # TODO: Test it in the actual release
+  # 1. Add download link to documentation.md
+  python3 <<EOF
+import re
+
+release_version = "${RELEASE_VERSION}"
+newline = f'  <li><a href="{{{{site.baseurl}}}}/docs/{release_version}/">Spark {release_version}</a></li>'
+inserted = False
+
+def parse_version(v):
+    return [int(p) for p in v.strip().split(".")]
+
+def vercmp(v1, v2):
+    a = parse_version(v1)
+    b = parse_version(v2)
+    return (a > b) - (a < b)
+
+with open("documentation.md") as f:
+    lines = f.readlines()
+
+with open("documentation.md", "w") as f:
+    for line in lines:
+        match = re.search(r'docs/(\d+\.\d+\.\d+)/', line)
+        if not inserted and match:
+            existing_version = match.group(1)
+            if vercmp(release_version, existing_version) >= 0:
+                f.write(newline + "\n")
+                inserted = True
+        f.write(line)
+    if not inserted:
+        f.write(newline + "\n")
+EOF
+
+  echo "Edited documentation.md"
+
+  # 2. Add download link to js/downloads.js
+  RELEASE_DATE=$(TZ=America/Los_Angeles date +"%m/%d/%Y")
+  IFS='.' read -r rel_maj rel_min rel_patch <<< "$RELEASE_VERSION"
+  NEW_PACKAGES="packagesV14"
+  if [[ "$rel_maj" -ge 4 ]]; then
+    NEW_PACKAGES="packagesV15"
+  fi
+
+  python3 <<EOF
+import re
+
+release_version = "${RELEASE_VERSION}"
+release_date = "${RELEASE_DATE}"
+new_packages = "${NEW_PACKAGES}"
+newline = f'addRelease("{release_version}", new Date("{release_date}"), {new_packages}, true);'
+
+new_major, new_minor, new_patch = [int(p) for p in release_version.split(".")]
+
+def parse_version(v):
+    return [int(p) for p in v.strip().split(".")]
+
+def vercmp(v1, v2):
+    a = parse_version(v1)
+    b = parse_version(v2)
+    return (a > b) - (a < b)
+
+inserted = replaced = False
+
+with open("js/downloads.js") as f:
+    lines = f.readlines()
+
+with open("js/downloads.js", "w") as f:
+    for line in lines:
+        m = re.search(r'addRelease\("(\d+\.\d+\.\d+)"', line)
+        if m:
+            existing_version = m.group(1)
+            cmp_result = vercmp(release_version, existing_version)
+            ex_major, ex_minor, ex_patch = parse_version(existing_version)
+
+            if cmp_result == 0:
+                f.write(newline + "\n")
+                replaced = True
+            elif not replaced and ex_major == new_major and ex_minor == new_minor:
+                f.write(newline + "\n")
+                replaced = True
+            elif not replaced and not inserted and cmp_result > 0:
+                f.write(newline + "\n")
+                f.write(line)
+                inserted = True
+            else:
+                f.write(line)
+        else:
+            f.write(line)
+    if not replaced and not inserted:
+        f.write(newline + "\n")
+EOF
+
+  echo "Edited js/downloads.js"
+
+  # 3. Add news post
+  RELEASE_DATE=$(TZ=America/Los_Angeles date +"%Y-%m-%d")
+  FILENAME="news/_posts/${RELEASE_DATE}-spark-${RELEASE_VERSION//./-}-released.md"
+  mkdir -p news/_posts
+  cat > "$FILENAME" <<EOF
+---
+layout: post
+title: Spark ${RELEASE_VERSION} released
+categories:
+- News
+tags: []
+status: publish
+type: post
+published: true
+meta:
+  _edit_last: '4'
+  _wpas_done_all: '1'
+---
+We are happy to announce the availability of <a href="{{site.baseurl}}/releases/spark-release-${RELEASE_VERSION}.html" title="Spark Release ${RELEASE_VERSION}">Apache Spark ${RELEASE_VERSION}</a>! Visit the <a href="{{site.baseurl}}/releases/spark-release-${RELEASE_VERSION}.html" title="Spark Release ${RELEASE_VERSION}">release notes</a> to read about the new features, or <a href="{{site.baseurl}}/downloads.html">download</a> the release today.
+EOF
+
+  echo "Created $FILENAME"
+
+  # 4. Add release notes with Python to extract JIRA version ID
+  RELEASE_DATE=$(TZ=America/Los_Angeles date +"%Y-%m-%d")
+  JIRA_PROJECT_ID=12315420
+  JIRA_URL="https://issues.apache.org/jira/rest/api/2/project/SPARK/versions"
+  JSON=$(curl -s "$JIRA_URL")
+
+  VERSION_ID=$(python3 - <<EOF
+import sys, json
+
+release_version = "${RELEASE_VERSION}"
+json_str = """$JSON"""
+
+try:
+    versions = json.loads(json_str)
+except Exception as e:
+    print(f"Error parsing JSON: {e}", file=sys.stderr)
+    sys.exit(1)
+
+version_id = ""
+for v in versions:
+    if v.get("name") == release_version:
+        version_id = v.get("id", "")
+        break
+
+print(version_id)
+EOF
+  )
+
+  if [[ -z "$VERSION_ID" ]]; then
+    echo "Error: Couldn't find JIRA version ID for $RELEASE_VERSION" >&2
+  fi
+
+  JIRA_LINK="https://issues.apache.org/jira/secure/ReleaseNote.jspa?projectId=${JIRA_PROJECT_ID}&version=${VERSION_ID}"
+
+  IFS='.' read -r rel_maj rel_min rel_patch <<< "$RELEASE_VERSION"
+  if [[ "$rel_patch" -eq 0 ]]; then
+    ACKNOWLEDGE="patches and features to this release."
+    BODY="Apache Spark ${RELEASE_VERSION} is a new feature release. It introduces new functionality and improvements. We encourage users to try it and provide feedback."
+  else
+    ACKNOWLEDGE="patches to this release."
+    BODY="Apache Spark ${RELEASE_VERSION} is a maintenance release containing security and correctness fixes. This release is based on the branch-${rel_maj}.${rel_min} maintenance branch of Spark. We strongly recommend all ${rel_maj}.${rel_min} users to upgrade to this stable release."
+  fi
+
+  BODY+="
+
+You can find the list of resolved issues and detailed changes in the [JIRA release notes](${JIRA_LINK}).
+
+We would like to acknowledge all community members for contributing ${ACKNOWLEDGE}"
+
+  FILENAME="releases/_posts/${RELEASE_DATE}-spark-release-${RELEASE_VERSION}.md"
+  mkdir -p releases/_posts
+  cat > "$FILENAME" <<EOF
+---
+layout: post
+title: Spark Release ${RELEASE_VERSION}
+categories: []
+tags: []
+status: publish
+type: post
+published: true
+meta:
+  _edit_last: '4'
+  _wpas_done_all: '1'
+---
+
+${BODY}
+EOF
+
+  echo "Created $FILENAME"
+
+  # 5. Build the website
+  bundle install
+  bundle exec jekyll build
+
+  # 6. Update latest symlink if minor/major release
+  LINK_PATH="site/docs/latest"
+  TARGET_DIR="site/docs/$RELEASE_VERSION"
+  IFS='.' read -r rel_maj rel_min rel_patch <<< "$RELEASE_VERSION"
+  if [[ "$rel_patch" -eq 0 ]]; then
+    if [[ -L "$LINK_PATH" ]]; then
+      CURRENT_TARGET=$(readlink "$LINK_PATH")
+    else
+      CURRENT_TARGET=""
+    fi
+    if [[ "$CURRENT_TARGET" != "$RELEASE_VERSION" ]]; then
+      ln -sfn "$RELEASE_VERSION" "$LINK_PATH"
+      echo "Updated symlink $LINK_PATH -> $RELEASE_VERSION"
+    else
+      echo "Symlink $LINK_PATH already points to $RELEASE_VERSION, no change"
+    fi
+  else
+    echo "Patch release detected ($RELEASE_VERSION), not updating symlink"
+  fi
+
+  git add .
+  git commit -m "Add release docs for Apache Spark $RELEASE_VERSION"
+  git push origin HEAD:asf-site
+  cd ..
+  echo "release docs uploaded"
+  rm -rf spark-website
 
   # Moves the docs from dev directory to release directory.
   echo "Moving Spark docs to the release directory"
