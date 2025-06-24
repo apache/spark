@@ -2843,6 +2843,21 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("SPARK-52515: invalid item type map") {
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        sql("SELECT approx_top_k(expr) FROM VALUES map('red', 1, 'green', 2) AS tab(expr);")
+      },
+      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+      parameters = Map(
+        "sqlExpr" -> "\"approx_top_k(expr, 5, 10000)\"",
+        "msg" -> "map columns are not supported",
+        "hint" -> ""
+      ),
+      queryContext = Array(ExpectedContext("approx_top_k(expr)", 7, 24))
+    )
+  }
+
   test("SPARK-52515: does not count NULL values") {
     val res = sql(
       "SELECT approx_top_k(expr, 2)" +
