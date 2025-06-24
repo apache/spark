@@ -69,12 +69,11 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     val exprs = bindReferences[Expression](projectList, child.output)
     val (subExprsCode, resultVars, localValInputs) = if (conf.subexpressionEliminationEnabled) {
       // subexpression elimination
-      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(exprs)
+      val subExprs = ctx.subexpressionElimination(exprs)
       val genVars = ctx.withSubExprEliminationExprs(subExprs.states) {
         exprs.map(_.genCode(ctx))
       }
-      (ctx.evaluateSubExprEliminationState(subExprs.states.values), genVars,
-        subExprs.exprCodesNeedEvaluate)
+      (subExprs.subExprCode, genVars, subExprs.exprCodesNeedEvaluate)
     } else {
       ("", exprs.map(_.genCode(ctx)), Seq.empty)
     }
