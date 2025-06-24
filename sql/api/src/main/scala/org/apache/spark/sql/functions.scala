@@ -765,66 +765,6 @@ object functions {
   }
 
   /**
-   * Aggregate function: returns approximate top k (i.e., k-most-frequent) items of a column,
-   * using Frequent Items Sketches from Apache DataSketches
-   *
-   * @group agg_funcs
-   * @since 4.1.0
-   */
-  def approx_top_k(e: Column, k: Int, maxItemsTracked: Int): Column =
-    Column.fn("approx_top_k", e, lit(k), lit(maxItemsTracked))
-
-  /**
-   * Aggregate function: returns approximate top k (i.e., k-most-frequent) items of a column,
-   * using Frequent Items Sketches from Apache DataSketches
-   *
-   * @group agg_funcs
-   * @since 4.1.0
-   */
-  def approx_top_k(columnName: String, k: Int, maxItemsTracked: Int): Column =
-    approx_top_k(Column(columnName), k, maxItemsTracked)
-
-  /**
-   * Aggregate function: returns approximate top k (i.e., k-most-frequent) items of a column,
-   * using Frequent Items Sketches from Apache DataSketches
-   *
-   * @group agg_funcs
-   * @since 4.1.0
-   */
-  def approx_top_k(e: Column, k: Int): Column =
-    Column.fn("approx_top_k", e, lit(k))
-
-  /**
-   * Aggregate function: returns approximate top k (i.e., k-most-frequent) items of a column,
-   * using Frequent Items Sketches from Apache DataSketches
-   *
-   * @group agg_funcs
-   * @since 4.1.0
-   */
-  def approx_top_k(columnName: String, k: Int): Column =
-    approx_top_k(Column(columnName), k)
-
-  /**
-   * Aggregate function: returns approximate top k (i.e., k-most-frequent) items of a column,
-   * using Frequent Items Sketches from Apache DataSketches
-   *
-   * @group agg_funcs
-   * @since 4.1.0
-   */
-  def approx_top_k(e: Column): Column =
-    Column.fn("approx_top_k", e)
-
-  /**
-   * Aggregate function: returns approximate top k (i.e., k-most-frequent) items of a column,
-   * using Frequent Items Sketches from Apache DataSketches
-   *
-   * @group agg_funcs
-   * @since 4.1.0
-   */
-  def approx_top_k(columnName: String): Column =
-    approx_top_k(Column(columnName))
-
-  /**
    * Aggregate function: returns the kurtosis of the values in a group.
    *
    * @group agg_funcs
