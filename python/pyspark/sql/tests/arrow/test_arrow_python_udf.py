@@ -338,29 +338,6 @@ class ArrowPythonUDFCombinedTestsMixin(ArrowPythonUDFTestsMixin, ArrowPythonUDFL
 
 
 class ArrowPythonUDFTests(ArrowPythonUDFTestsMixin, ReusedSQLTestCase):
-    # TODO double check this for legacy enabled?
-    def test_nondeterministic_udf2(self):
-         self.skipTest("Skip nondeterministic UDF for Arrow batched eval")
-         
-    # TODO double check?
-    def test_udf_with_udt(self):
-         self.skipTest("Skip UDT for Arrow batched eval")
-
-    def test_udf_with_variant_input(self):
-         self.skipTest("Skip VariantType for Arrow batched eval")
-
-    def test_udf_with_complex_variant_input(self):
-         self.skipTest("Skip VariantType for Arrow batched eval")
-
-    def test_udf_with_variant_output(self):
-         self.skipTest("Skip VariantType for Arrow batched eval")
-
-    def test_udf_with_complex_variant_output(self):
-         self.skipTest("Skip VariantType for Arrow batched eval")
-
-    def test_chained_udfs_with_variant(self):
-         self.skipTest("Skip VariantType for Arrow batched eval")
-
     @classmethod
     def setUpClass(cls):
         super(ArrowPythonUDFTests, cls).setUpClass()
