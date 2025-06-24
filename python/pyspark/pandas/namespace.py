@@ -3630,7 +3630,11 @@ def to_numeric(arg, errors="raise"):
     """
     if isinstance(arg, Series):
         if errors == "coerce":
-            return arg._with_new_scol(arg.spark.column.try_cast("float"))
+            spark_session = arg._internal.spark_frame.sparkSession
+            if is_ansi_mode_enabled(spark_session):
+                return arg._with_new_scol(arg.spark.column.try_cast("float"))
+            else:
+                return arg._with_new_scol(arg.spark.column.cast("float"))
         elif errors == "raise":
             scol = arg.spark.column
             scol_casted = scol.cast("float")
