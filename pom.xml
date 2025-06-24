@@ -1945,11 +1945,11 @@
           </exclusion>
           <exclusion>
             <groupId>org.codehaus.janino</groupId>
-            <artifactId>commons-compiler</artifactId>
+            <artifactId>janino</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.codehaus.janino</groupId>
-            <artifactId>janino</artifactId>
+            <artifactId>commons-compiler</artifactId>
           </exclusion>
           <exclusion>
             <groupId>net.hydromatic</groupId>
