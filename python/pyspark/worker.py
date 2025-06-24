@@ -2414,7 +2414,6 @@ def read_udfs(pickleSer, infile, eval_type):
 
         def mapper(a):
             if hasattr(a, 'num_columns') and a.num_columns == 0:
-                # Return an empty result or None as appropriate
                 return None
             result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
             # In the special case of a single UDF this will return a single result rather

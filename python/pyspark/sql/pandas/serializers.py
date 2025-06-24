@@ -133,7 +133,6 @@ class ArrowStreamSerializer(Serializer):
             yield batch
     
     def arrow_to_pandas(self, arrow_column, idx, struct_in_pandas="dict", ndarray_as_list=False, spark_type=None):
-        # Default: just use to_pylist()
         return arrow_column.to_pylist()
 
     def __repr__(self):
@@ -226,8 +225,6 @@ class ArrowBatchUDFSerializer(ArrowStreamSerializer):
         assert(isinstance(arr, pa.Array), arr)
         assert(isinstance(arrow_type, pa.DataType), arrow_type)
 
-        # TODO: should we handle timezone here?
-
         try:
             return arr
         except pa.lib.ArrowException:
@@ -293,13 +290,12 @@ class ArrowBatchUDFSerializer(ArrowStreamSerializer):
     def arrow_to_pandas(self, arrow_column, idx, ndarray_as_list=False, spark_type=None):
         import pyarrow.types as types
         from pyspark.sql import Row
-        # If the arrow type is struct and struct_in_pandas is 'row', return a Series of Row objects
+        
         if (
             self._struct_in_pandas == "row"
-            # and types.is_struct(arrow_column.type)
-            # and not is_variant(arrow_column.type)
+            and types.is_struct(arrow_column.type)
+            and not is_variant(arrow_column.type)
         ):
-            # Recursively convert each field
             series = [
                 super(ArrowBatchUDFSerializer, self)
                 .arrow_to_pandas(
@@ -311,9 +307,7 @@ class ArrowBatchUDFSerializer(ArrowStreamSerializer):
                 )
                 for i, (column, field) in enumerate(zip(arrow_column.flatten(), arrow_column.type))
             ]
-            # Build Row class for the struct fields
             row_cls = Row(*[field.name for field in arrow_column.type])
-            # Each row is a tuple of field values
             return series[0].__class__([
                 row_cls(*vals) for vals in zip(*series)
             ])
