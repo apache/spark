@@ -2769,6 +2769,16 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("SPARK-52515: invalid maxItemsTracked > 1000000") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT approx_top_k(expr, 10, 1000001) FROM VALUES (0), (1) AS tab(expr);").collect()
+      },
+      condition = "APPROX_TOP_K_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT",
+      parameters = Map("maxItemsTracked" -> "1000001", "limit" -> "1000000")
+    )
+  }
+
   test("SPARK-52515: invalid item type array") {
     checkError(
       exception = intercept[ExtendedAnalysisException] {

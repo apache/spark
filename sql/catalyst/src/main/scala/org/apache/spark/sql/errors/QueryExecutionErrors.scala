@@ -2791,6 +2791,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "k" -> toSQLValue(k, IntegerType)))
   }
 
+  def approxTopKMaxItemsTrackedExceedsLimit(maxItemsTracked: Int, limit: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "APPROX_TOP_K_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT",
+      messageParameters = Map(
+        "maxItemsTracked" -> toSQLValue(maxItemsTracked, IntegerType),
+        "limit" -> toSQLValue(limit, IntegerType)))
+  }
+
   def mergeCardinalityViolationError(): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "MERGE_CARDINALITY_VIOLATION",

@@ -172,6 +172,7 @@ object ApproxTopK {
 
   private val DEFAULT_K: Int = 5
   private val DEFAULT_MAX_ITEMS_TRACKED: Int = 10000
+  private val MAX_ITEMS_TRACKED_LIMIT: Int = 1000000
 
   private def checkExpressionNotNull(expr: Expression, exprName: String): Unit = {
     if (expr == null || expr.eval() == null) {
@@ -186,6 +187,10 @@ object ApproxTopK {
   }
 
   private def checkMaxItemsTracked(maxItemsTracked: Int, k: Int): Unit = {
+    if (maxItemsTracked > MAX_ITEMS_TRACKED_LIMIT) {
+      throw QueryExecutionErrors.approxTopKMaxItemsTrackedExceedsLimit(
+        maxItemsTracked, MAX_ITEMS_TRACKED_LIMIT)
+    }
     if (maxItemsTracked < k) {
       throw QueryExecutionErrors.approxTopKMaxItemsTrackedLessThanK(maxItemsTracked, k)
     }
