@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.analysis.resolver
 
+import java.util.HashSet
+
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.UnresolvedStar
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedStar}
 import org.apache.spark.sql.catalyst.analysis.resolver.{NameScope, NameScopeStack, NameTarget}
 import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
   AttributeReference,
+  ExprId,
   GetArrayItem,
   GetArrayStructFields,
   GetMapValue,
@@ -426,7 +429,7 @@ class NameScopeSuite extends PlanTest {
 
     stack.overwriteCurrent(output = Some(Seq(col1Integer, col2Integer, col9NestedStruct, col10Map)))
 
-    stack.withNewScope(isSubqueryRoot = true) {
+    withNewScope(stack, isSubqueryRoot = true) {
       stack.overwriteCurrent(output = Some(Seq(col1IntegerOther, col3Boolean)))
 
       assert(
@@ -489,10 +492,10 @@ class NameScopeSuite extends PlanTest {
 
     stack.overwriteCurrent(output = Some(Seq(col1Integer, col2Integer)))
 
-    stack.withNewScope(isSubqueryRoot = true) {
-      stack.withNewScope() {
-        stack.withNewScope() {
-          stack.withNewScope() {
+    withNewScope(stack, isSubqueryRoot = true) {
+      withNewScope(stack) {
+        withNewScope(stack) {
+          withNewScope(stack) {
             assert(
               stack.resolveMultipartName(Seq("col1")) == NameTarget(
                 candidates = Seq(OuterReference(col1Integer)),
@@ -511,7 +514,7 @@ class NameScopeSuite extends PlanTest {
 
           stack.overwriteCurrent(output = Some(Seq(col1IntegerOther, col3Boolean)))
 
-          stack.withNewScope() {
+          withNewScope(stack) {
             assert(
               stack.resolveMultipartName(Seq("col1")) == NameTarget(
                 candidates = Seq(OuterReference(col1Integer)),
@@ -537,10 +540,10 @@ class NameScopeSuite extends PlanTest {
 
     stack.overwriteCurrent(output = Some(Seq(col1Integer, col2Integer)))
 
-    stack.withNewScope(isSubqueryRoot = true) {
+    withNewScope(stack, isSubqueryRoot = true) {
       stack.overwriteCurrent(output = Some(Seq(col1IntegerOther)))
 
-      stack.withNewScope(isSubqueryRoot = true) {
+      withNewScope(stack, isSubqueryRoot = true) {
         stack.overwriteCurrent(output = Some(Seq(col3Boolean)))
 
         assert(
@@ -591,14 +594,14 @@ class NameScopeSuite extends PlanTest {
   test("Hidden output gets properly propagated in a stack") {
     val stack = new NameScopeStack
 
-    stack.withNewScope() {
+    withNewScope(stack) {
 
       stack.overwriteCurrent(output = Some(Seq(col1Integer)), hiddenOutput = Some(Seq(col1Integer)))
 
-      stack.withNewScope(isSubqueryRoot = true) {
+      withNewScope(stack, isSubqueryRoot = true) {
 
-        stack.withNewScope() {
-          stack.withNewScope() {
+        withNewScope(stack) {
+          withNewScope(stack) {
             stack.overwriteCurrent(
               output = Some(Seq(col1Integer, col2Integer)),
               hiddenOutput = Some(Seq(col1Integer, col2Integer, col3Boolean))
@@ -672,7 +675,7 @@ class NameScopeSuite extends PlanTest {
 
     stack.overwriteCurrent(output = Some(Seq(col3Boolean)))
 
-    val output = stack.withNewScope() {
+    val output = withNewScope(stack) {
       assert(stack.current.output.isEmpty)
 
       stack.overwriteCurrent(output = Some(Seq(col1Integer, col2Integer)))
@@ -695,13 +698,13 @@ class NameScopeSuite extends PlanTest {
 
     stack.overwriteCurrent(output = Some(Seq(col1Integer)))
 
-    val output = stack.withNewScope() {
+    val output = withNewScope(stack) {
       stack.overwriteCurrent(output = Some(Seq(col2Integer)))
 
-      val output = stack.withNewScope() {
+      val output = withNewScope(stack) {
         stack.overwriteCurrent(output = Some(Seq(col3Boolean)))
 
-        val output = stack.withNewScope() {
+        val output = withNewScope(stack) {
           stack.overwriteCurrent(output = Some(Seq(col4String)))
 
           assert(stack.current.output == Seq(col4String))
@@ -725,6 +728,37 @@ class NameScopeSuite extends PlanTest {
     assert(stack.current.output == Seq(col1Integer))
   }
 
+  test(
+    "Name resolution should prefer table columns over aliases with same name when " +
+    "shouldPreferTableColumnsOverAliases is set or throw AMBIGUOUS_REFERENCE otherwise"
+  ) {
+    val stack = new NameScopeStack
+    val output = Seq(col1Integer, col1IntegerOther)
+    val availableAliases = new HashSet[ExprId](1)
+    availableAliases.add(col1IntegerOther.exprId)
+
+    stack.overwriteCurrent(output = Some(output), availableAliases = Some(availableAliases))
+
+    assert(
+      stack.resolveMultipartName(
+        multipartName = Seq("col1"),
+        shouldPreferTableColumnsOverAliases = true
+      ) == NameTarget(
+        candidates = Seq(col1Integer),
+        output = output
+      )
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        val nameTarget = stack.resolveMultipartName(multipartName = Seq("col1"))
+        nameTarget.pickCandidate(UnresolvedAttribute(nameParts = Seq("col1")))
+      },
+      condition = "AMBIGUOUS_REFERENCE",
+      parameters = Map("name" -> "`col1`", "referenceNames" -> "[`col1`, `col1`]")
+    )
+  }
+
   /**
    * Check both [[resolveMultipartName]] and [[findAttributesByName]] for a single part name.
    *
@@ -744,5 +778,15 @@ class NameScopeSuite extends PlanTest {
       )
     )
     assert(nameScope.findAttributesByName(name) == candidates)
+  }
+
+  private def withNewScope[R](stack: NameScopeStack, isSubqueryRoot: Boolean = false)(
+      body: => R): R = {
+    stack.pushScope(isSubqueryRoot = isSubqueryRoot)
+    try {
+      body
+    } finally {
+      stack.popScope()
+    }
   }
 }

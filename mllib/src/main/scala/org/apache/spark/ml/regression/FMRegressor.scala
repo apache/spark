@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.regression
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import scala.util.Random
 
 import breeze.linalg.{axpy => brzAxpy, norm => brzNorm, Vector => BV}
@@ -510,6 +512,25 @@ class FMRegressionModel private[regression] (
 
 @Since("3.0.0")
 object FMRegressionModel extends MLReadable[FMRegressionModel] {
+  private[ml] case class Data(
+     intercept: Double,
+     linear: Vector,
+     factors: Matrix)
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    dos.writeDouble(data.intercept)
+    serializeVector(data.linear, dos)
+    serializeMatrix(data.factors, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val intercept = dis.readDouble()
+    val linear = deserializeVector(dis)
+    val factors = deserializeMatrix(dis)
+    Data(intercept, linear, factors)
+  }
 
   @Since("3.0.0")
   override def read: MLReader[FMRegressionModel] = new FMRegressionModelReader
@@ -521,16 +542,11 @@ object FMRegressionModel extends MLReadable[FMRegressionModel] {
   private[FMRegressionModel] class FMRegressionModelWriter(
       instance: FMRegressionModel) extends MLWriter with Logging {
 
-    private case class Data(
-        intercept: Double,
-        linear: Vector,
-        factors: Matrix)
-
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.intercept, instance.linear, instance.factors)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -541,11 +557,8 @@ object FMRegressionModel extends MLReadable[FMRegressionModel] {
     override def load(path: String): FMRegressionModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.format("parquet").load(dataPath)
-
-      val Row(intercept: Double, linear: Vector, factors: Matrix) = data
-        .select("intercept", "linear", "factors").head()
-      val model = new FMRegressionModel(metadata.uid, intercept, linear, factors)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
+      val model = new FMRegressionModel(metadata.uid, data.intercept, data.linear, data.factors)
       metadata.getAndSetParams(model)
       model
     }

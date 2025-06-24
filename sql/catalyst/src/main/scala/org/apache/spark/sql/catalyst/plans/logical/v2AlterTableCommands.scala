@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ResolvedFieldName, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
-import org.apache.spark.sql.catalyst.expressions.{Expression, TableConstraint, Unevaluable}
-import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, TypeUtils}
-import org.apache.spark.sql.connector.catalog.{TableCatalog, TableChange}
+import org.apache.spark.sql.catalyst.expressions.{CheckConstraint, Expression, TableConstraint, Unevaluable}
+import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.connector.catalog.{DefaultValue, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.ArrayImplicits._
@@ -123,7 +124,7 @@ case class AddColumns(
         col.nullable,
         col.comment.orNull,
         col.position.map(_.position).orNull,
-        col.getV2Default)
+        col.getV2Default("ALTER TABLE"))
     }
   }
 
@@ -159,7 +160,7 @@ case class ReplaceColumns(
         col.nullable,
         col.comment.orNull,
         null,
-        col.getV2Default)
+        col.getV2Default("ALTER TABLE"))
     }
     (deleteChanges ++ addChanges).toImmutableArraySeq
   }
@@ -202,19 +203,46 @@ case class RenameColumn(
     copy(table = newChild)
 }
 
+/**
+ * The spec of the ALTER TABLE ... ALTER COLUMN command.
+ * @param column column to alter
+ * @param newDataType new data type of column if set
+ * @param newNullability new nullability of column if set
+ * @param newComment new comment of column if set
+ * @param newPosition new position of column if set
+ * @param newDefaultExpression new default expression if set
+ * @param dropDefault whether to drop the default expression
+ */
 case class AlterColumnSpec(
     column: FieldName,
     newDataType: Option[DataType],
     newNullability: Option[Boolean],
     newComment: Option[String],
     newPosition: Option[FieldPosition],
-    newDefaultExpression: Option[String]) extends Expression with Unevaluable {
+    newDefaultExpression: Option[DefaultValueExpression],
+    dropDefault: Boolean = false) extends Expression with Unevaluable {
 
-  override def children: Seq[Expression] = Seq(column) ++ newPosition.toSeq
+  override def children: Seq[Expression] = Seq(column) ++ newPosition.toSeq ++
+    newDefaultExpression.toSeq
   override def nullable: Boolean = false
   override def dataType: DataType = throw new UnresolvedException("dataType")
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
-    copy(column = newChildren(0).asInstanceOf[FieldName])
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    val newColumn = newChildren(0).asInstanceOf[FieldName]
+    val newPos = if (newPosition.isDefined) {
+      Some(newChildren(1).asInstanceOf[FieldPosition])
+    } else {
+      None
+    }
+    val newDefault = if (newDefaultExpression.isDefined) {
+      Some(newChildren.last.asInstanceOf[DefaultValueExpression])
+    } else {
+      None
+    }
+    copy(column = newColumn, newPosition = newPos, newDefaultExpression = newDefault)
+  }
+
+
 }
 
 /**
@@ -242,18 +270,18 @@ case class AlterColumns(
           "FieldPosition should be resolved before it's converted to TableChange.")
         TableChange.updateColumnPosition(colName, newPosition.position)
       }
-      val defaultValueChange = spec.newDefaultExpression.map { newDefaultExpression =>
-        if (newDefaultExpression.nonEmpty) {
-          // SPARK-45075: We call 'ResolveDefaultColumns.analyze' here to make sure that the default
-          // value parses successfully, and return an error otherwise
-          val newDataType = spec.newDataType.getOrElse(
-            column.asInstanceOf[ResolvedFieldName].field.dataType)
-          ResolveDefaultColumns.analyze(column.name.last, newDataType, newDefaultExpression,
-            "ALTER TABLE ALTER COLUMN")
-        }
-        TableChange.updateColumnDefaultValue(colName, newDefaultExpression)
+      val defaultValueChange = spec.newDefaultExpression.map { newDefault =>
+        TableChange.updateColumnDefaultValue(colName,
+          newDefault.toV2CurrentDefault("ALTER TABLE", column.name.quoted))
       }
-      typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange ++ defaultValueChange
+      val dropDefaultValue = if (spec.dropDefault) {
+        Some(TableChange.updateColumnDefaultValue(colName, null: DefaultValue))
+      } else {
+        None
+      }
+
+      typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange ++
+        defaultValueChange ++ dropDefaultValue
     }
   }
 
@@ -290,14 +318,34 @@ case class AlterTableCollation(
 }
 
 /**
- * The logical plan of the ALTER TABLE ... ADD CONSTRAINT command.
+ * The logical plan of the ALTER TABLE ... ADD CONSTRAINT command for Primary Key, Foreign Key,
+ * and Unique constraints.
  */
 case class AddConstraint(
     table: LogicalPlan,
     tableConstraint: TableConstraint) extends AlterTableCommand {
-  override def changes: Seq[TableChange] = Seq.empty
 
-  protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
+  override def changes: Seq[TableChange] = {
+    val constraint = tableConstraint.toV2Constraint
+    // The table version is null because the constraint is not enforced.
+    Seq(TableChange.addConstraint(constraint, null))
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... ADD CONSTRAINT command for Check constraints.
+ * It doesn't extend [[AlterTableCommand]] because its child is a filtered table scan rather than
+ * a table reference.
+ */
+case class AddCheckConstraint(
+    child: LogicalPlan,
+    checkConstraint: CheckConstraint) extends UnaryCommand {
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
 }
 
 /**
@@ -308,7 +356,8 @@ case class DropConstraint(
     name: String,
     ifExists: Boolean,
     cascade: Boolean) extends AlterTableCommand {
-  override def changes: Seq[TableChange] = Seq.empty
+  override def changes: Seq[TableChange] =
+    Seq(TableChange.dropConstraint(name, ifExists, cascade))
 
   protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
 }

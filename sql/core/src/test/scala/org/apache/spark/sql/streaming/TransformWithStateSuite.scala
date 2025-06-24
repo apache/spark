@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_OFFSETS
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
@@ -73,6 +74,117 @@ case class EvolvedState(
     score: Double           // Should default to 0.0
 )
 
+class ClassifiedTimerErrorProcessor
+  extends StatefulProcessor[String, String, (String, BasicState)] {
+
+  @transient var state: ValueState[BasicState] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    state = getHandle.getValueState[BasicState](
+      "testState",
+      Encoders.product[BasicState],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, BasicState)] = {
+    getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 1000)
+    Seq.empty.iterator
+  }
+
+  override def handleExpiredTimer(
+      key: String,
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, BasicState)] = {
+    throw StateStoreErrors.multipleColumnFamiliesNotSupported("dummy val")
+  }
+}
+
+class UnclassifiedTimerErrorProcessor
+  extends StatefulProcessor[String, String, (String, BasicState)] {
+
+  @transient var state: ValueState[BasicState] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    state = getHandle.getValueState[BasicState](
+      "testState",
+      Encoders.product[BasicState],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, BasicState)] = {
+    getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 1000)
+    Seq.empty.iterator
+  }
+
+  override def handleExpiredTimer(
+      key: String,
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, BasicState)] = {
+    throw new IllegalStateException("dummy unclassified error")
+    Seq.empty.iterator
+  }
+}
+
+class ClassifiedErrorInitialStateProcessor
+  extends StatefulProcessorWithInitialState[String, String, (String, BasicState), String] {
+
+  @transient var state: ValueState[BasicState] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    state = getHandle.getValueState[BasicState](
+      "testState",
+      Encoders.product[BasicState],
+      TTLConfig.NONE)
+  }
+
+  override def handleInitialState(
+      key: String,
+      initialState: String,
+      timerValues: TimerValues): Unit = {
+    throw StateStoreErrors.multipleColumnFamiliesNotSupported("dummy val")
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, BasicState)] = {
+    Seq.empty.iterator
+  }
+}
+
+class UnclassifiedErrorInitialStateProcessor
+  extends StatefulProcessorWithInitialState[String, String, (String, BasicState), String] {
+
+  @transient var state: ValueState[BasicState] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    state = getHandle.getValueState[BasicState](
+      "testState",
+      Encoders.product[BasicState],
+      TTLConfig.NONE)
+  }
+
+  override def handleInitialState(
+      key: String,
+      initialState: String,
+      timerValues: TimerValues): Unit = {
+    throw new IllegalStateException("dummy unclassified error")
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, BasicState)] = {
+    Seq.empty.iterator
+  }
+}
+
 // Processor with initial schema
 class DefaultValueInitialProcessor
   extends StatefulProcessor[String, String, (String, BasicState)] {
@@ -96,6 +208,47 @@ class DefaultValueInitialProcessor
       state.update(stateValue)
       (key, stateValue)
     }
+  }
+}
+
+class UnclassifiedErrorProcessor
+  extends StatefulProcessor[String, String, (String, BasicState)] {
+
+  @transient var state: ValueState[BasicState] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    state = getHandle.getValueState[BasicState](
+      "testState",
+      Encoders.product[BasicState],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, BasicState)] = {
+    throw new IllegalStateException("dummy unclassified error")
+    Seq.empty.iterator
+  }
+}
+
+class ClassifiedErrorProcessor
+  extends StatefulProcessor[String, String, (String, BasicState)] {
+
+  @transient var state: ValueState[BasicState] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    state = getHandle.getValueState[BasicState](
+      "testState",
+      Encoders.product[BasicState],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, BasicState)] = {
+    throw StateStoreErrors.multipleColumnFamiliesNotSupported("dummy val")
   }
 }
 
@@ -1830,6 +1983,21 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
           CheckNewAnswer(("a", "1")),
           StopStream
         )
+
+        // Here we are writing non-metadata files to the operator metadata directory to ensure that
+        // they are ignored during restart.
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        val fm = CheckpointFileManager.create(new Path(checkpointDir.toString),
+          hadoopConf)
+        fm.mkdirs(new Path(new Path(checkpointDir.toString, DIR_NAME_OFFSETS),
+          "dummy_path_name"))
+        fm.mkdirs(
+          new Path(OperatorStateMetadataV2.metadataDirPath(
+            new Path(new Path(new Path(checkpointDir.toString), "state"), "0")
+          ),
+            "dummy_path_name")
+        )
+
         val result2 = inputData.toDS()
           .groupByKey(x => x)
           .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
@@ -1886,17 +2054,17 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  private def getFiles(path: Path): Array[FileStatus] = {
+  private[sql] def getFiles(path: Path): Array[FileStatus] = {
     val hadoopConf = spark.sessionState.newHadoopConf()
     val fileManager = CheckpointFileManager.create(path, hadoopConf)
     fileManager.list(path)
   }
 
-  private def getStateSchemaPath(stateCheckpointPath: Path): Path = {
+  private[sql] def getStateSchemaPath(stateCheckpointPath: Path): Path = {
     new Path(stateCheckpointPath, "_stateSchema/default/")
   }
 
-  // TODO: [SPARK-50845] Re-enable tests after StateSchemaV3 threshold change
+  // TODO: [SPARK-50845] Re-enable tests after full-rewrite is enabled.
   ignore("transformWithState - verify that metadata and schema logs are purged") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
@@ -2398,6 +2566,170 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
         assert(t.getMessage.contains("not supported"))
       }
     )
+  }
+
+  test("transformWithState - check that error within handleInputRows is classified") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new UnclassifiedErrorProcessor(),
+          TimeMode.None(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        AddData(inputData, "a"),
+        ExpectFailure[TransformWithStateUserFunctionException] { error =>
+          checkError(
+            error.asInstanceOf[SparkException],
+            condition = "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR",
+            parameters = Map(
+              "reason" -> "dummy unclassified error",
+              "function" -> "handleInputRows")
+          )
+        }
+      )
+    }
+  }
+
+  test("transformWithState - check that classified error is thrown from handleInputRows") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new ClassifiedErrorProcessor(),
+          TimeMode.None(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        AddData(inputData, "a"),
+        ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] { error =>
+          assert(error.getMessage.contains("not supported"))
+        }
+      )
+    }
+  }
+
+  test("transformWithState - check that error within handleInitialState is classified") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+
+      val inputData = MemoryStream[String]
+      val initDf = Seq("init_1").toDS().groupByKey(x => x)
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new UnclassifiedErrorInitialStateProcessor(),
+          TimeMode.None(),
+          OutputMode.Update(),
+          initDf)
+
+      testStream(result, OutputMode.Update())(
+        AddData(inputData, "a"),
+        ExpectFailure[TransformWithStateUserFunctionException] { error =>
+          checkError(
+            error.asInstanceOf[SparkException],
+            condition = "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR",
+            parameters = Map(
+              "reason" -> "dummy unclassified error",
+              "function" -> "handleInitialState")
+          )
+        }
+      )
+    }
+  }
+
+  test("transformWithState - check that classified error is thrown from handleInitialState") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+
+      val inputData = MemoryStream[String]
+      val initDf = Seq("init_1").toDS().groupByKey(x => x)
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new ClassifiedErrorInitialStateProcessor(),
+          TimeMode.None(),
+          OutputMode.Update(),
+          initDf)
+
+      testStream(result, OutputMode.Update())(
+        AddData(inputData, "a"),
+        ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] { error =>
+          assert(error.getMessage.contains("not supported"))
+        }
+      )
+    }
+  }
+
+  test("transformWithState - check that error within handleExpiredTimer is classified") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+
+      val clock = new StreamManualClock
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new UnclassifiedTimerErrorProcessor(),
+          TimeMode.ProcessingTime(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, "a"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(),
+        AdvanceManualClock(2 * 1000),
+        ExpectFailure[TransformWithStateUserFunctionException] { error =>
+          checkError(
+            error.asInstanceOf[SparkException],
+            condition = "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR",
+            parameters = Map(
+              "reason" -> "dummy unclassified error",
+              "function" -> "handleExpiredTimer")
+          )
+        }
+      )
+    }
+  }
+
+  test("transformWithState - check that classified error is thrown from handleExpiredTimer") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+
+      val clock = new StreamManualClock
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new ClassifiedTimerErrorProcessor(),
+          TimeMode.ProcessingTime(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, "a"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(),
+        AdvanceManualClock(2 * 1000),
+        ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] { error =>
+          assert(error.getMessage.contains("not supported"))
+        }
+      )
+    }
   }
 
   test("transformWithState - ValueState.exists() should fail in init") {

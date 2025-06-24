@@ -23,7 +23,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression.hasCorrelatedSubquery
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -574,19 +573,6 @@ object EliminateAggregateFilter extends Rule[LogicalPlan] {
 }
 
 /**
- * An optimizer used in test code.
- *
- * To ensure extendability, we leave the standard rules in the abstract optimizer rules, while
- * specific rules go to the subclasses
- */
-object SimpleTestOptimizer extends SimpleTestOptimizer
-
-class SimpleTestOptimizer extends Optimizer(
-  new CatalogManager(
-    FakeV2SessionCatalog,
-    new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, EmptyTableFunctionRegistry)))
-
-/**
  * Remove redundant aliases from a query plan. A redundant alias is an alias that does not change
  * the name or metadata of a column, and does not deduplicate it.
  */
@@ -1041,8 +1027,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
         p
       }
 
-    // TODO: Pruning `UnionLoop`s needs to take into account both the outer `Project` and the inner
-    //  `UnionLoopRef` nodes.
+    // Avoid pruning UnionLoop because of its recursive nature.
     case p @ Project(_, _: UnionLoop) => p
 
     // Prune unnecessary window expressions
@@ -2142,6 +2127,8 @@ object EliminateLimits extends Rule[LogicalPlan] {
       child
     case GlobalLimit(l, child) if canEliminate(l, child) =>
       child
+    case LocalLimit(l, child) if canEliminate(l, child) =>
+      child
 
     case LocalLimit(IntegerLiteral(0), child) =>
       LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
@@ -2279,6 +2266,9 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
     case Limit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming, stream)) =>
       LocalRelation(output, data.take(limit), isStreaming, stream)
 
+    case LocalLimit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming, stream)) =>
+      LocalRelation(output, data.take(limit), isStreaming, stream)
+
     case Filter(condition, LocalRelation(output, data, isStreaming, stream))
         if !hasUnevaluableExpr(condition) =>
       val predicate = Predicate.create(condition, output)
@@ -2286,7 +2276,7 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
       LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming, stream)
   }
 
-  private def hasUnevaluableExpr(expr: Expression): Boolean = {
+  def hasUnevaluableExpr(expr: Expression): Boolean = {
     expr.exists(e => e.isInstanceOf[Unevaluable] && !e.isInstanceOf[AttributeReference])
   }
 }

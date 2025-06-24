@@ -34,6 +34,7 @@ if should_test_connect:
         DefaultPolicy,
     )
     from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
+    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.errors import PySparkRuntimeError, RetriesExceeded
     import pyspark.sql.connect.proto as proto
 
@@ -159,6 +160,11 @@ if should_test_connect:
             resp.session_id = self._session_id
             return resp
 
+    # The _cleanup_ml_cache invocation will hang in this test (no valid spark cluster)
+    # and it blocks the test process exiting because it is registered as the atexit handler
+    # in `SparkConnectClient` constructor. To bypass the issue, patch the method in the test.
+    SparkConnectClient._cleanup_ml_cache = lambda _: None
+
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectClientTestCase(unittest.TestCase):
@@ -255,6 +261,38 @@ class SparkConnectClientTestCase(unittest.TestCase):
         chan = DefaultChannelBuilder(f"sc://foo/;session_id={dummy}")
         client = SparkConnectClient(chan)
         self.assertEqual(client._session_id, chan.session_id)
+
+    def test_session_hook(self):
+        inits = 0
+        calls = 0
+
+        class TestHook(RemoteSparkSession.Hook):
+            def __init__(self, _session):
+                nonlocal inits
+                inits += 1
+
+            def on_execute_plan(self, req):
+                nonlocal calls
+                calls += 1
+                return req
+
+        session = (
+            RemoteSparkSession.builder.remote("sc://foo")._registerHook(TestHook).getOrCreate()
+        )
+        self.assertEqual(inits, 1)
+        self.assertEqual(calls, 0)
+        session.client._stub = MockService(session.client._session_id)
+        session.client.disable_reattachable_execute()
+
+        # Called from _execute_and_fetch_as_iterator
+        session.range(1).collect()
+        self.assertEqual(inits, 1)
+        self.assertEqual(calls, 1)
+
+        # Called from _execute
+        session.udf.register("test_func", lambda x: x + 1)
+        self.assertEqual(inits, 1)
+        self.assertEqual(calls, 2)
 
     def test_custom_operation_id(self):
         client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)

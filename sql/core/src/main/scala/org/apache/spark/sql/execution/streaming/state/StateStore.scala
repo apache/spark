@@ -630,6 +630,7 @@ object StateStoreProvider extends Logging {
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean,
       stateSchemaProvider: Option[StateSchemaProvider]): StateStoreProvider = {
+    hadoopConf.set(StreamExecution.RUN_ID_KEY, providerId.queryRunId.toString)
     val provider = create(storeConf.providerClass)
     provider.init(providerId.storeId, keySchema, valueSchema, keyStateEncoderSpec,
       useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey, stateSchemaProvider)
@@ -644,18 +645,19 @@ object StateStoreProvider extends Logging {
       keySchema: StructType,
       valueRow: UnsafeRow,
       valueSchema: StructType,
+      stateStoreId: StateStoreId,
       conf: StateStoreConf): Unit = {
     if (conf.formatValidationEnabled) {
       val validationError = UnsafeRowUtils.validateStructuralIntegrityWithReason(keyRow, keySchema)
       validationError.foreach { error =>
-        throw StateStoreErrors.keyRowFormatValidationFailure(error)
+        throw StateStoreErrors.keyRowFormatValidationFailure(error, stateStoreId.toString)
       }
 
       if (conf.formatValidationCheckValue) {
         val validationError =
           UnsafeRowUtils.validateStructuralIntegrityWithReason(valueRow, valueSchema)
         validationError.foreach { error =>
-          throw StateStoreErrors.valueRowFormatValidationFailure(error)
+          throw StateStoreErrors.valueRowFormatValidationFailure(error, stateStoreId.toString)
         }
       }
     }
@@ -668,12 +670,8 @@ object StateStoreProvider extends Logging {
    */
   private[state] def getRunId(hadoopConf: Configuration): String = {
     val runId = hadoopConf.get(StreamExecution.RUN_ID_KEY)
-    if (runId != null) {
-      runId
-    } else {
-      assert(Utils.isTesting, "Failed to find query id/batch Id in task context")
-      UUID.randomUUID().toString
-    }
+    assert(runId != null)
+    runId
   }
 
   /**
@@ -967,7 +965,6 @@ object StateStore extends Logging {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
-    hadoopConf.set(StreamExecution.RUN_ID_KEY, storeProviderId.queryRunId.toString)
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
       stateSchemaBroadcast)
@@ -1007,10 +1004,26 @@ object StateStore extends Logging {
           log"queryRunId=${MDC(LogKeys.QUERY_RUN_ID, storeProviderId.queryRunId)}")
       }
 
-      val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
-      val providerIdsToUnload = reportActiveStoreInstance(storeProviderId, otherProviderIds)
-      providerIdsToUnload.foreach(unload(_))
+      // Only tell the state store coordinator we are active if we will remain active
+      // after the task. When we unload after committing, there's no need for the coordinator
+      // to track which executor has which provider
+      if (!storeConf.unloadOnCommit) {
+        val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
+        val providerIdsToUnload = reportActiveStoreInstance(storeProviderId, otherProviderIds)
+        providerIdsToUnload.foreach(unload(_))
+      }
+
       provider
+    }
+  }
+
+  /** Runs maintenance and then unload a state store provider */
+  def doMaintenanceAndUnload(storeProviderId: StateStoreProviderId): Unit = {
+    loadedProviders.synchronized {
+      loadedProviders.remove(storeProviderId)
+    }.foreach { provider =>
+      provider.doMaintenance()
+      provider.close()
     }
   }
 
@@ -1072,7 +1085,7 @@ object StateStore extends Logging {
     val numMaintenanceThreads = storeConf.numStateStoreMaintenanceThreads
     val maintenanceShutdownTimeout = storeConf.stateStoreMaintenanceShutdownTimeout
     loadedProviders.synchronized {
-      if (SparkEnv.get != null && !isMaintenanceRunning) {
+      if (SparkEnv.get != null && !isMaintenanceRunning && !storeConf.unloadOnCommit) {
         maintenanceTask = new MaintenanceTask(
           storeConf.maintenanceInterval,
           task = { doMaintenance() }

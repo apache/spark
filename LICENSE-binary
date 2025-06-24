@@ -365,8 +365,6 @@ org.apache.xbean:xbean-asm9-shaded
 org.apache.yetus:audience-annotations
 org.apache.zookeeper:zookeeper
 org.apache.zookeeper:zookeeper-jute
-org.codehaus.jackson:jackson-core-asl
-org.codehaus.jackson:jackson-mapper-asl
 org.datanucleus:datanucleus-api-jdo
 org.datanucleus:datanucleus-core
 org.datanucleus:datanucleus-rdbms

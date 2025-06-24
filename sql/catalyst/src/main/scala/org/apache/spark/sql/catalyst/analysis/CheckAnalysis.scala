@@ -409,7 +409,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName)
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
-            TypeCoercionValidation.failOnTypeCheckResult(e, operator)
+            TypeCoercionValidation.failOnTypeCheckResult(e, Some(operator))
 
           case c: Cast if !c.resolved =>
             throw SparkException.internalError(
@@ -645,24 +645,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case Sort(orders, _, _, _) =>
             orders.foreach { order =>
-              if (!RowOrdering.isOrderable(order.dataType)) {
-                order.failAnalysis(
-                  errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
-                  messageParameters = Map("exprType" -> toSQLType(order.dataType)))
-              }
+              TypeUtils.tryThrowNotOrderableExpression(order)
             }
 
           case Window(_, partitionSpec, _, _, _) =>
             // Both `partitionSpec` and `orderSpec` must be orderable. We only need an extra check
             // for `partitionSpec` here because `orderSpec` has the type check itself.
             partitionSpec.foreach { p =>
-              if (!RowOrdering.isOrderable(p.dataType)) {
-                p.failAnalysis(
-                  errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
-                  messageParameters = Map(
-                    "expr" -> toSQLExpr(p),
-                    "exprType" -> toSQLType(p.dataType)))
-              }
+              TypeUtils.tryThrowNotOrderableExpression(p)
             }
 
           case GlobalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
@@ -745,6 +735,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
+
+          case a: AddCheckConstraint if !a.checkConstraint.deterministic =>
+            a.checkConstraint.child.failAnalysis(
+              errorClass = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
+              messageParameters = Map("checkCondition" -> a.checkConstraint.condition)
+            )
 
           case alter: AlterTableCommand =>
             checkAlterTableCommand(alter)
@@ -951,30 +947,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     if (expr.plan.isStreaming) {
       plan.failAnalysis("INVALID_SUBQUERY_EXPRESSION.STREAMING_QUERY", Map.empty)
     }
-    assertNoRecursiveCTE(expr.plan)
     checkAnalysis0(expr.plan)
     ValidateSubqueryExpression(plan, expr)
   }
 
-  private def assertNoRecursiveCTE(plan: LogicalPlan): Unit = {
-    plan.foreach {
-      case r: CTERelationRef if r.recursive =>
-        throw new AnalysisException(
-          errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
-          messageParameters = Map.empty)
-      case p => p.expressions.filter(_.containsPattern(PLAN_EXPRESSION)).foreach {
-        expr => expr.foreach {
-          case s: SubqueryExpression => assertNoRecursiveCTE(s.plan)
-          case _ =>
-        }
-      }
-    }
-  }
-
   /**
    * Validate that collected metrics names are unique. The same name cannot be used for metrics
-   * with different results. However multiple instances of metrics with with same result and name
-   * are allowed (e.g. self-joins).
+   * with different results. However, multiple instances of metrics with same result and name are
+   * allowed (e.g. self-joins).
    */
   private def checkCollectedMetrics(plan: LogicalPlan): Unit = {
     val metricsMap = mutable.Map.empty[String, CollectMetrics]
@@ -1067,7 +1047,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           }
         }
         specs.foreach {
-          case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _) =>
+          case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _, _) =>
             val fieldName = col.name.quoted
             if (dataType.isDefined) {
               val field = CharVarcharUtils.getRawType(col.field.metadata)

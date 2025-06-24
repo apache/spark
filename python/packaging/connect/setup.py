@@ -91,6 +91,7 @@ try:
     _minimum_pyarrow_version = "11.0.0"
     _minimum_grpc_version = "1.67.0"
     _minimum_googleapis_common_protos_version = "1.65.0"
+    _minimum_pyyaml_version = "3.11"
 
     with open("README.md") as f:
         long_description = f.read()
@@ -121,6 +122,7 @@ try:
             "grpcio-status>=%s" % _minimum_grpc_version,
             "googleapis-common-protos>=%s" % _minimum_googleapis_common_protos_version,
             "numpy>=%s" % _minimum_numpy_version,
+            "pyyaml>=%s" % _minimum_pyyaml_version,
         ],
         python_requires=">=3.9",
         classifiers=[

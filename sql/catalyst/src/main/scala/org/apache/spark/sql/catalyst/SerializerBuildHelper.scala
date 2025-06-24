@@ -103,7 +103,7 @@ object SerializerBuildHelper {
     StaticInvoke(
       DateTimeUtils.getClass,
       TimeType(),
-      "localTimeToMicros",
+      "localTimeToNanos",
       inputObject :: Nil,
       returnNullable = false)
   }

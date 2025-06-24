@@ -25,12 +25,13 @@ import org.apache.spark.ml.stat._
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.types.StructType
 
-private[spark] class ConnectHelper(override val uid: String) extends Model[ConnectHelper] {
-  def this() = this(Identifiable.randomUID("ConnectHelper"))
+private[spark] class ConnectHelper(
+    override val uid: String,
+    @transient session: SparkSession) extends Model[ConnectHelper] {
+  def this(session: SparkSession) = this(Identifiable.randomUID("ConnectHelper"), session)
 
   def handleOverwrite(path: String, shouldOverwrite: Boolean): Boolean = {
-    val spark = SparkSession.builder().getOrCreate()
-    new FileSystemOverwrite().handleOverwrite(path, shouldOverwrite, spark)
+    new FileSystemOverwrite().handleOverwrite(path, shouldOverwrite, session)
     true
   }
 

@@ -635,7 +635,7 @@ class PandasGroupedOpsMixin:
         from pyspark.sql import GroupedData
         from pyspark.sql.functions import pandas_udf
         from pyspark.sql.streaming.stateful_processor_util import (
-            TransformWithStateInPySparkUdfUtils,
+            TransformWithStateInPandasUdfUtils,
         )
 
         assert isinstance(self, GroupedData)
@@ -645,7 +645,7 @@ class PandasGroupedOpsMixin:
             outputStructType = cast(StructType, self._df._session._parse_ddl(outputStructType))
 
         df = self._df
-        udf_util = TransformWithStateInPySparkUdfUtils(statefulProcessor, timeMode)
+        udf_util = TransformWithStateInPandasUdfUtils(statefulProcessor, timeMode)
 
         # explicitly set the type to Any since it could match to various types (literals)
         functionType: Any = None
@@ -654,10 +654,10 @@ class PandasGroupedOpsMixin:
         elif usePandas and initialState is not None:
             functionType = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF
         elif not usePandas and initialState is None:
-            functionType = PythonEvalType.SQL_TRANSFORM_WITH_STATE_UDF
+            functionType = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF
         else:
             # not usePandas and initialState is not None
-            functionType = PythonEvalType.SQL_TRANSFORM_WITH_STATE_INIT_STATE_UDF
+            functionType = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF
 
         if initialState is None:
             initial_state_java_obj = None

@@ -22,7 +22,7 @@ import java.util.Locale
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
-import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
@@ -39,7 +39,7 @@ case class TestData(key: Int, value: String)
 case class ThreeColumnTable(key: Int, value: String, key1: String)
 
 class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
-    with SQLTestUtils with PrivateMethodTester {
+    with SQLTestUtils {
   import spark.implicits._
 
   override lazy val testData = spark.sparkContext.parallelize(

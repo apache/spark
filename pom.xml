@@ -95,6 +95,7 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
+    <module>sql/pipelines</module>
     <module>sql/connect/server</module>
     <module>sql/connect/common</module>
     <module>sql/connect/client/jvm</module>
@@ -116,7 +117,7 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <java.version>17</java.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
-    <maven.version>3.9.9</maven.version>
+    <maven.version>3.9.10</maven.version>
     <exec-maven-plugin.version>3.5.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.8</asm.version>
@@ -134,11 +135,11 @@
     <!-- Version used in Maven Hive dependency -->
     <hive.version>2.3.10</hive.version>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>3.9.0</kafka.version>
+    <kafka.version>3.9.1</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
-    <parquet.version>1.15.1</parquet.version>
-    <orc.version>2.1.1</orc.version>
+    <parquet.version>1.15.2</parquet.version>
+    <orc.version>2.1.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.25</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
@@ -152,37 +153,36 @@
     If you change codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.30</codahale.metrics.version>
+    <codahale.metrics.version>4.2.32</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <avro.version>1.12.0</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
-    <aws.java.sdk.v2.version>2.25.53</aws.java.sdk.v2.version>
+    <aws.java.sdk.v2.version>2.29.52</aws.java.sdk.v2.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
     <!-- Do not use 3.0.0: https://github.com/GoogleCloudDataproc/hadoop-connectors/issues/1114 -->
-    <gcs-connector.version>hadoop3-2.2.26</gcs-connector.version>
+    <gcs-connector.version>hadoop3-2.2.28</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
     <commons.math3.version>3.6.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
-    <commons.collections4.version>4.4</commons.collections4.version>
+    <commons.collections4.version>4.5.0</commons.collections4.version>
     <scala.version>2.13.16</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
-    <scala-maven-plugin.version>4.9.2</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.9.5</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
     <versions-maven-plugin.version>2.18.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
-    <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.18.2</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.18.2</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.19.0</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.19.0</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.7</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
@@ -214,29 +214,29 @@
     <commons-cli.version>1.9.0</commons-cli.version>
     <bouncycastle.version>1.80</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
-    <datasketches.version>6.1.1</datasketches.version>
-    <netty.version>4.1.119.Final</netty.version>
-    <netty-tcnative.version>2.0.70.Final</netty-tcnative.version>
-    <icu4j.version>76.1</icu4j.version>
-    <junit-jupiter.version>5.11.4</junit-jupiter.version>
-    <junit-platform.version>1.11.4</junit-platform.version>
+    <datasketches.version>6.2.0</datasketches.version>
+    <netty.version>4.1.122.Final</netty.version>
+    <netty-tcnative.version>2.0.72.Final</netty-tcnative.version>
+    <icu4j.version>77.1</icu4j.version>
+    <junit-jupiter.version>5.13.1</junit-jupiter.version>
+    <junit-platform.version>1.13.1</junit-platform.version>
     <!--
       SPARK-50299: When updating `sbt-jupiter-interface.version`,
       also need to update the version in `SparkBuild.scala` and `plugins.sbt`.
     -->
-    <sbt-jupiter-interface.version>0.13.3</sbt-jupiter-interface.version>
+    <sbt-jupiter-interface.version>0.15.0</sbt-jupiter-interface.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py,
     ./python/packaging/client/setup.py, and ./python/packaging/connect/setup.py too.
     -->
-    <arrow.version>18.2.0</arrow.version>
+    <arrow.version>18.3.0</arrow.version>
     <ammonite.version>3.0.1</ammonite.version>
     <jjwt.version>0.12.6</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>7.1.0</kubernetes-client.version>
+    <kubernetes-client.version>7.3.1</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -280,7 +280,6 @@
     <hive.deps.scope>compile</hive.deps.scope>
     <hive.storage.version>2.8.1</hive.storage.version>
     <hive.storage.scope>compile</hive.storage.scope>
-    <hive.jackson.scope>compile</hive.jackson.scope>
     <hive.common.scope>compile</hive.common.scope>
     <hive.llap.scope>test</hive.llap.scope>
     <hive.serde.scope>compile</hive.serde.scope>
@@ -676,7 +675,7 @@
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-text</artifactId>
-        <version>1.13.0</version>
+        <version>1.13.1</version>
       </dependency>
       <dependency>
         <groupId>commons-lang</groupId>
@@ -884,7 +883,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.6-10</version>
+        <version>1.5.7-3</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -1632,19 +1631,6 @@
             <artifactId>logback-core</artifactId>
           </exclusion>
         </exclusions>
-      </dependency>
-      <!-- Hive 2.3 need this to init Hive's FunctionRegistry -->
-      <dependency>
-        <groupId>org.codehaus.jackson</groupId>
-        <artifactId>jackson-core-asl</artifactId>
-        <version>${codehaus.jackson.version}</version>
-        <scope>${hive.jackson.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.codehaus.jackson</groupId>
-        <artifactId>jackson-mapper-asl</artifactId>
-        <version>${codehaus.jackson.version}</version>
-        <scope>${hive.jackson.scope}</scope>
       </dependency>
       <dependency>
         <groupId>${hive.group}</groupId>
@@ -2818,6 +2804,7 @@
               <javacArg>--release</javacArg>
               <javacArg>${java.version}</javacArg>
               <javacArg>-Xlint:all,-serial,-path,-try</javacArg>
+              <javacArg>-proc:full</javacArg>
             </javacArgs>
           </configuration>
         </plugin>

@@ -109,6 +109,7 @@ from pyspark.sql.connect.shell.progress import Progress, ProgressHandler, from_p
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
     from pyspark.sql.connect._typing import DataTypeOrString
+    from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.datasource import DataSource
 
 
@@ -606,6 +607,7 @@ class SparkConnectClient(object):
         channel_options: Optional[List[Tuple[str, Any]]] = None,
         retry_policy: Optional[Dict[str, Any]] = None,
         use_reattachable_execute: bool = True,
+        session_hooks: Optional[list["SparkSession.Hook"]] = None,
     ):
         """
         Creates a new SparkSession for the Spark Connect interface.
@@ -636,6 +638,8 @@ class SparkConnectClient(object):
                     a failed request. Default: 60000(ms).
         use_reattachable_execute: bool
             Enable reattachable execution.
+        session_hooks: list[SparkSession.Hook], optional
+            List of session hooks to call.
         """
         self.thread_local = threading.local()
 
@@ -675,6 +679,7 @@ class SparkConnectClient(object):
             self._user_id, self._session_id, self._channel, self._builder.metadata()
         )
         self._use_reattachable_execute = use_reattachable_execute
+        self._session_hooks = session_hooks or []
         # Configure logging for the SparkConnect client.
 
         # Capture the server-side session ID and set it to None initially. It will
@@ -1365,6 +1370,9 @@ class SparkConnectClient(object):
         """
         logger.debug("Execute")
 
+        for hook in self._session_hooks:
+            req = hook.on_execute_plan(req)
+
         def handle_response(b: pb2.ExecutePlanResponse) -> None:
             self._verify_response_integrity(b)
 
@@ -1374,8 +1382,11 @@ class SparkConnectClient(object):
                 generator = ExecutePlanResponseReattachableIterator(
                     req, self._stub, self._retrying, self._builder.metadata()
                 )
-                for b in generator:
-                    handle_response(b)
+                try:
+                    for b in generator:
+                        handle_response(b)
+                finally:
+                    generator.close()
             else:
                 for attempt in self._retrying():
                     with attempt:
@@ -1402,6 +1413,9 @@ class SparkConnectClient(object):
             # inside an if statement to not incur a performance cost converting proto to string
             # when not at debug log level.
             logger.debug(f"ExecuteAndFetchAsIterator. Request: {self._proto_to_string(req)}")
+
+        for hook in self._session_hooks:
+            req = hook.on_execute_plan(req)
 
         num_records = 0
 
@@ -1471,6 +1485,10 @@ class SparkConnectClient(object):
             if b.HasField("streaming_query_listener_events_result"):
                 event_result = b.streaming_query_listener_events_result
                 yield {"streaming_query_listener_events_result": event_result}
+            if b.HasField("pipeline_command_result"):
+                yield {"pipeline_command_result": b.pipeline_command_result}
+            if b.HasField("pipeline_event_result"):
+                yield {"pipeline_event_result": b.pipeline_event_result}
             if b.HasField("get_resources_command_result"):
                 resources = {}
                 for key, resource in b.get_resources_command_result.resources.items():
@@ -1531,8 +1549,11 @@ class SparkConnectClient(object):
                 generator = ExecutePlanResponseReattachableIterator(
                     req, self._stub, self._retrying, self._builder.metadata()
                 )
-                for b in generator:
-                    yield from handle_response(b)
+                try:
+                    for b in generator:
+                        yield from handle_response(b)
+                finally:
+                    generator.close()
             else:
                 for attempt in self._retrying():
                     with attempt:
@@ -1975,19 +1996,7 @@ class SparkConnectClient(object):
         profile_id = properties["create_resource_profile_command_result"]
         return profile_id
 
-    def add_ml_cache(self, cache_id: str) -> None:
-        if not hasattr(self.thread_local, "ml_caches"):
-            self.thread_local.ml_caches = set()
-        self.thread_local.ml_caches.add(cache_id)
-
-    def remove_ml_cache(self, cache_id: str) -> None:
-        if hasattr(self.thread_local, "ml_caches"):
-            if cache_id in self.thread_local.ml_caches:
-                deleted = self._delete_ml_cache([cache_id])
-                for obj_id in deleted:
-                    self.thread_local.ml_caches.remove(obj_id)
-
-    def _delete_ml_cache(self, cache_ids: List[str]) -> List[str]:
+    def _delete_ml_cache(self, cache_ids: List[str], evict_only: bool = False) -> List[str]:
         # try best to delete the cache
         try:
             if len(cache_ids) > 0:
@@ -1995,6 +2004,7 @@ class SparkConnectClient(object):
                 command.ml_command.delete.obj_refs.extend(
                     [pb2.ObjectRef(id=cache_id) for cache_id in cache_ids]
                 )
+                command.ml_command.delete.evict_only = evict_only
                 (_, properties, _) = self.execute_command(command)
 
                 assert properties is not None
@@ -2008,24 +2018,22 @@ class SparkConnectClient(object):
             return []
 
     def _cleanup_ml_cache(self) -> None:
-        if hasattr(self.thread_local, "ml_caches"):
-            try:
-                command = pb2.Command()
-                command.ml_command.clean_cache.SetInParent()
-                self.execute_command(command)
-                self.thread_local.ml_caches.clear()
-            except Exception:
-                pass
+        try:
+            command = pb2.Command()
+            command.ml_command.clean_cache.SetInParent()
+            self.execute_command(command)
+        except Exception:
+            pass
 
     def _get_ml_cache_info(self) -> List[str]:
-        if hasattr(self.thread_local, "ml_caches"):
-            command = pb2.Command()
-            command.ml_command.get_cache_info.SetInParent()
-            (_, properties, _) = self.execute_command(command)
+        command = pb2.Command()
+        command.ml_command.get_cache_info.SetInParent()
+        (_, properties, _) = self.execute_command(command)
 
-            assert properties is not None
+        assert properties is not None
 
-            if properties is not None and "ml_command_result" in properties:
-                ml_command_result = properties["ml_command_result"]
-                return [item.string for item in ml_command_result.param.array.elements]
+        if properties is not None and "ml_command_result" in properties:
+            ml_command_result = properties["ml_command_result"]
+            return [item.string for item in ml_command_result.param.array.elements]
+
         return []

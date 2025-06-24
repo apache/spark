@@ -47,6 +47,10 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getErrorCode == -204
+  }
+
   class DB2SQLBuilder extends JDBCSQLBuilder {
 
     override def visitAggregateFunction(
@@ -117,6 +121,11 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  // See https://www.ibm.com/docs/en/db2-for-zos/12.0.0?topic=codes-sqlstate-values-common-error
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    Option(exception.getSQLState).exists(_.startsWith("42"))
+  }
 
   // scalastyle:off line.size.limit
   // See https://www.ibm.com/support/knowledgecenter/en/SSEPGG_11.5.0/com.ibm.db2.luw.sql.ref.doc/doc/r0053474.html

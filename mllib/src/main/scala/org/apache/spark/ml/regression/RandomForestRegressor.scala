@@ -215,6 +215,8 @@ class RandomForestRegressionModel private[ml] (
   // For ml connect only
   private[ml] def this() = this("", Array(new DecisionTreeRegressionModel), -1)
 
+  override def estimatedSize: Long = getEstimatedSize()
+
   @Since("1.4.0")
   override def trees: Array[DecisionTreeRegressionModel] = _trees
 

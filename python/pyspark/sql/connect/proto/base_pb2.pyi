@@ -44,6 +44,7 @@ import pyspark.sql.connect.proto.commands_pb2
 import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.expressions_pb2
 import pyspark.sql.connect.proto.ml_pb2
+import pyspark.sql.connect.proto.pipelines_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
@@ -1583,6 +1584,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     EXECUTION_PROGRESS_FIELD_NUMBER: builtins.int
     CHECKPOINT_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     ML_COMMAND_RESULT_FIELD_NUMBER: builtins.int
+    PIPELINE_EVENT_RESULT_FIELD_NUMBER: builtins.int
+    PIPELINE_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
@@ -1650,6 +1653,14 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     def ml_command_result(self) -> pyspark.sql.connect.proto.ml_pb2.MlCommandResult:
         """ML command response"""
     @property
+    def pipeline_event_result(self) -> pyspark.sql.connect.proto.pipelines_pb2.PipelineEventResult:
+        """Response containing pipeline event that is streamed back to the client during a pipeline run"""
+    @property
+    def pipeline_command_result(
+        self,
+    ) -> pyspark.sql.connect.proto.pipelines_pb2.PipelineCommandResult:
+        """Pipeline command response"""
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
     @property
@@ -1692,6 +1703,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         execution_progress: global___ExecutePlanResponse.ExecutionProgress | None = ...,
         checkpoint_command_result: global___CheckpointCommandResult | None = ...,
         ml_command_result: pyspark.sql.connect.proto.ml_pb2.MlCommandResult | None = ...,
+        pipeline_event_result: pyspark.sql.connect.proto.pipelines_pb2.PipelineEventResult
+        | None = ...,
+        pipeline_command_result: pyspark.sql.connect.proto.pipelines_pb2.PipelineCommandResult
+        | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
@@ -1717,6 +1732,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"metrics",
             "ml_command_result",
             b"ml_command_result",
+            "pipeline_command_result",
+            b"pipeline_command_result",
+            "pipeline_event_result",
+            b"pipeline_event_result",
             "response_type",
             b"response_type",
             "result_complete",
@@ -1758,6 +1777,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"observed_metrics",
             "operation_id",
             b"operation_id",
+            "pipeline_command_result",
+            b"pipeline_command_result",
+            "pipeline_event_result",
+            b"pipeline_event_result",
             "response_id",
             b"response_id",
             "response_type",
@@ -1798,6 +1821,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             "execution_progress",
             "checkpoint_command_result",
             "ml_command_result",
+            "pipeline_event_result",
+            "pipeline_command_result",
             "extension",
         ]
         | None

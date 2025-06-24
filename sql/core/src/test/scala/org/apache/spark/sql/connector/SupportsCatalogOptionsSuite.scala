@@ -30,14 +30,14 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, SupportsCatalogOptions, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, InMemoryTableCatalog, SupportsCatalogOptions, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.types.LongType
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, QueryExecutionListener}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -100,7 +100,8 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     }
     assert(table.partitioning().map(_.references().head.fieldNames().head) === partitionBy,
       "Partitioning was incorrect")
-    assert(table.schema() === df.schema.asNullable, "Schema did not match")
+    assert(table.columns() === CatalogV2Util.structTypeToV2Columns(df.schema.asNullable),
+      "Column did not match")
 
     checkAnswer(load("t1", withCatalogOption), df.toDF())
   }
@@ -147,7 +148,8 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 
     val table = catalog(SESSION_CATALOG_NAME).loadTable(Identifier.of(Array("default"), "t1"))
     assert(table.partitioning().isEmpty, "Partitioning should be empty")
-    assert(table.schema() === new StructType().add("id", LongType), "Schema did not match")
+    assert(table.columns() sameElements
+      Array(Column.create("id", LongType)), "Schema did not match")
     assert(load("t1", None).count() === 0)
   }
 
@@ -159,7 +161,8 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 
     val table = catalog(catalogName).loadTable("t1")
     assert(table.partitioning().isEmpty, "Partitioning should be empty")
-    assert(table.schema() === new StructType().add("id", LongType), "Schema did not match")
+    assert(table.columns() sameElements
+      Array(Column.create("id", LongType)), "Schema did not match")
     assert(load("t1", Some(catalogName)).count() === 0)
   }
 

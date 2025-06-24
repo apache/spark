@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, GlobalTempView, LocalTempView, SchemaEvolution, SchemaUnsupported, ViewSchemaMode, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, CreateTempView, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
@@ -76,7 +76,10 @@ case class CreateViewCommand(
     viewSchemaMode: ViewSchemaMode = SchemaUnsupported,
     isAnalyzed: Boolean = false,
     referredTempFunctions: Seq[String] = Seq.empty)
-  extends RunnableCommand with AnalysisOnlyCommand with CTEInChildren {
+  extends RunnableCommand
+  with AnalysisOnlyCommand
+  with CTEInChildren
+  with CreateTempView {
 
   import ViewHelper._
 
@@ -583,13 +586,21 @@ object ViewHelper extends SQLConfHelper with Logging {
     // names.
     SchemaUtils.checkColumnNameDuplication(fieldNames.toImmutableArraySeq, conf.resolver)
 
+    val queryColumnNameProps = if (viewSchemaMode == SchemaEvolution) {
+      // If the view schema mode is SCHEMA EVOLUTION, we can avoid generating the query output
+      // column names as table properties, and always use view schema as they are always same
+      Seq()
+    } else {
+      generateQueryColumnNames(queryOutput.toImmutableArraySeq)
+    }
+
     // Generate the view default catalog and namespace, as well as captured SQL configs.
     val manager = session.sessionState.catalogManager
     removeReferredTempNames(removeSQLConfigs(removeQueryColumnNames(properties))) ++
       catalogAndNamespaceToProps(
         manager.currentCatalog.name, manager.currentNamespace.toImmutableArraySeq) ++
       sqlConfigsToProps(conf) ++
-      generateQueryColumnNames(queryOutput.toImmutableArraySeq) ++
+      queryColumnNameProps ++
       referredTempNamesToProps(tempViewNames, tempFunctionNames, tempVariableNames) ++
       viewSchemaModeToProps(viewSchemaMode)
   }

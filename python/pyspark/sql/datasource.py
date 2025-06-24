@@ -53,6 +53,18 @@ __all__ = [
     "WriterCommitMessage",
     "Filter",
     "EqualTo",
+    "EqualNullSafe",
+    "GreaterThan",
+    "GreaterThanOrEqual",
+    "LessThan",
+    "LessThanOrEqual",
+    "In",
+    "IsNull",
+    "IsNotNull",
+    "Not",
+    "StringStartsWith",
+    "StringEndsWith",
+    "StringContains",
 ]
 
 
@@ -655,6 +667,18 @@ class DataSourceReader(ABC):
         >>> def read(self, partition: InputPartition):
         ...     yield Row(partition=partition.value, value=0)
         ...     yield Row(partition=partition.value, value=1)
+
+        Yields PyArrow RecordBatches:
+
+        >>> def read(self, partition: InputPartition):
+        ...     import pyarrow as pa
+        ...     data = {
+        ...         "partition": [partition.value] * 2,
+        ...         "value": [0, 1]
+        ...     }
+        ...     table = pa.Table.from_pydict(data)
+        ...     for batch in table.to_batches():
+        ...         yield batch
         """
         ...
 
@@ -954,7 +978,7 @@ class DataSourceWriter(ABC):
 
 class DataSourceArrowWriter(DataSourceWriter):
     """
-    A base class for data source writers that process data using PyArrow’s `RecordBatch`.
+    A base class for data source writers that process data using PyArrow's `RecordBatch`.
 
     Unlike :class:`DataSourceWriter`, which works with an iterator of Spark Rows, this class
     is optimized for using the Arrow format when writing data. It can offer better performance
@@ -986,6 +1010,19 @@ class DataSourceArrowWriter(DataSourceWriter):
         -------
         :class:`WriterCommitMessage`
             a serializable commit message
+
+        Examples
+        --------
+        >>> from dataclasses import dataclass
+        >>> @dataclass
+        ... class MyCommitMessage(WriterCommitMessage):
+        ...     num_rows: int
+        ...
+        >>> def write(self, iterator: Iterator["RecordBatch"]) -> "WriterCommitMessage":
+        ...     total_rows = 0
+        ...     for batch in iterator:
+        ...         total_rows += len(batch)
+        ...     return MyCommitMessage(num_rows=total_rows)
         """
         ...
 

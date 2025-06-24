@@ -329,18 +329,6 @@ protobuf = Module(
     ],
 )
 
-connect = Module(
-    name="connect",
-    dependencies=[hive, avro, protobuf],
-    source_file_regexes=[
-        "sql/connect",
-    ],
-    sbt_test_goals=[
-        "connect/test",
-        "connect-client-jvm/test",
-    ],
-)
-
 graphx = Module(
     name="graphx",
     dependencies=[tags, core],
@@ -420,6 +408,26 @@ mllib = Module(
     ],
 )
 
+pipelines = Module(
+    name="pipelines",
+    dependencies=[],
+    source_file_regexes=["sql/pipelines"],
+    sbt_test_goals=[
+        "pipelines/test",
+    ],
+)
+
+connect = Module(
+    name="connect",
+    dependencies=[hive, avro, protobuf, mllib],
+    source_file_regexes=[
+        "sql/connect",
+    ],
+    sbt_test_goals=[
+        "connect/test",
+        "connect-client-jvm/test",
+    ],
+)
 
 examples = Module(
     name="examples",
@@ -527,11 +535,14 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_functions",
         "pyspark.sql.tests.test_group",
         "pyspark.sql.tests.test_sql",
+        "pyspark.sql.tests.test_job_cancellation",
         "pyspark.sql.tests.arrow.test_arrow",
         "pyspark.sql.tests.arrow.test_arrow_map",
         "pyspark.sql.tests.arrow.test_arrow_cogrouped_map",
         "pyspark.sql.tests.arrow.test_arrow_grouped_map",
         "pyspark.sql.tests.arrow.test_arrow_python_udf",
+        "pyspark.sql.tests.arrow.test_arrow_udf",
+        "pyspark.sql.tests.arrow.test_arrow_udf_scalar",
         "pyspark.sql.tests.pandas.test_pandas_cogrouped_map",
         "pyspark.sql.tests.pandas.test_pandas_grouped_map",
         "pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state",
@@ -1054,6 +1065,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_functions",
         "pyspark.sql.tests.connect.test_parity_group",
         "pyspark.sql.tests.connect.test_parity_sql",
+        "pyspark.sql.tests.connect.test_parity_job_cancellation",
         "pyspark.sql.tests.connect.test_parity_dataframe",
         "pyspark.sql.tests.connect.test_parity_collection",
         "pyspark.sql.tests.connect.test_parity_creation",
@@ -1090,6 +1102,8 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_grouped_map",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_cogrouped_map",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_python_udf",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf_scalar",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_map",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_grouped_map",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_grouped_map_with_state",
@@ -1487,6 +1501,18 @@ pyspark_logger = Module(
     ],
 )
 
+pyspark_pipelines = Module(
+    name="pyspark-pipelines",
+    dependencies=[pyspark_core, pyspark_sql, pyspark_connect],
+    source_file_regexes=["python/pyspark/pipelines"],
+    python_test_goals=[
+        "pyspark.pipelines.tests.test_block_connect_access",
+        "pyspark.pipelines.tests.test_cli",
+        "pyspark.pipelines.tests.test_decorators",
+        "pyspark.pipelines.tests.test_graph_element_registry",
+        "pyspark.pipelines.tests.test_init_cli",
+    ],
+)
 
 sparkr = Module(
     name="sparkr",

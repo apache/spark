@@ -20,6 +20,7 @@ Commonly used utils in pandas-on-Spark.
 
 import functools
 from contextlib import contextmanager
+import json
 import os
 from typing import (
     Any,
@@ -43,7 +44,7 @@ from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 from pyspark.sql import functions as F, Column, DataFrame as PySparkDataFrame, SparkSession
 from pyspark.sql.types import DoubleType
 from pyspark.sql.utils import is_remote
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, UnsupportedOperationException
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import (
     Axis,
@@ -476,22 +477,28 @@ def is_testing() -> bool:
     return "SPARK_TESTING" in os.environ
 
 
-def default_session() -> SparkSession:
+def default_session(*, check_ansi_mode: bool = True) -> SparkSession:
     spark = SparkSession.getActiveSession()
     if spark is None:
         spark = SparkSession.builder.appName("pandas-on-Spark").getOrCreate()
 
-    # Turn ANSI off when testing the pandas API on Spark since
-    # the behavior of pandas API on Spark follows pandas, not SQL.
-    if is_testing():
-        spark.conf.set("spark.sql.ansi.enabled", False)
-    if spark.conf.get("spark.sql.ansi.enabled") == "true":
-        log_advice(
-            "The config 'spark.sql.ansi.enabled' is set to True. "
-            "This can cause unexpected behavior "
-            "from pandas API on Spark since pandas API on Spark follows "
-            "the behavior of pandas, not SQL."
-        )
+    if check_ansi_mode:
+        if (
+            not ps.get_option("compute.ansi_mode_support", spark_session=spark)
+            and spark.conf.get("spark.sql.ansi.enabled") == "true"
+        ):
+            if ps.get_option("compute.fail_on_ansi_mode", spark_session=spark):
+                raise UnsupportedOperationException(
+                    errorClass="PANDAS_API_ON_SPARK_FAIL_ON_ANSI_MODE",
+                    messageParameters={},
+                )
+            else:
+                log_advice(
+                    "The config 'spark.sql.ansi.enabled' is set to True. "
+                    "This can cause unexpected behavior "
+                    "from pandas API on Spark since pandas API on Spark follows "
+                    "the behavior of pandas, not SQL."
+                )
 
     return spark
 
@@ -1062,6 +1069,31 @@ def xor(df1: PySparkDataFrame, df2: PySparkDataFrame) -> PySparkDataFrame:
         .where(F.col(tmp_min_col) == F.col(tmp_max_col))
         .select(*colNames)
     )
+
+
+def is_ansi_mode_enabled(spark: SparkSession) -> bool:
+    if is_remote():
+        from pyspark.sql.connect.session import SparkSession as ConnectSession
+        from pyspark.pandas.config import _key_format, _options_dict
+
+        client = cast(ConnectSession, spark).client
+        (ansi_mode_support, ansi_enabled) = client.get_config_with_defaults(
+            (
+                _key_format("compute.ansi_mode_support"),
+                json.dumps(_options_dict["compute.ansi_mode_support"].default),
+            ),
+            ("spark.sql.ansi.enabled", None),
+        )
+        if ansi_enabled is None:
+            ansi_enabled = spark.conf.get("spark.sql.ansi.enabled")
+            # Explicitly set the default value to reduce the roundtrip for the next time.
+            spark.conf.set("spark.sql.ansi.enabled", ansi_enabled)
+        return json.loads(ansi_mode_support) and ansi_enabled.lower() == "true"
+    else:
+        return (
+            ps.get_option("compute.ansi_mode_support", spark_session=spark)
+            and spark.conf.get("spark.sql.ansi.enabled").lower() == "true"
+        )
 
 
 def _test() -> None:

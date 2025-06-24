@@ -790,6 +790,7 @@ abstract class BaseSubqueryExec extends SparkPlan {
       addSuffix: Boolean = false,
       maxFields: Int,
       printNodeId: Boolean,
+      printOutputColumns: Boolean,
       indent: Int = 0): Unit = {
     /**
      * In the new explain mode `EXPLAIN FORMATTED`, the subqueries are not shown in the
@@ -807,6 +808,7 @@ abstract class BaseSubqueryExec extends SparkPlan {
         false,
         maxFields,
         printNodeId,
+        printOutputColumns,
         indent)
     }
   }
