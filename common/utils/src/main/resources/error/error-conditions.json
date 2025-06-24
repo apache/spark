@@ -92,13 +92,13 @@
   },
   "APPROX_TOP_K_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT": {
     "message": [
-      "The max items tracked `maxItemsTracked` = <maxItemsTracked> of `approx_top_k` should be less than or equal to <limit>."
+      "The max items tracked `maxItemsTracked`(<maxItemsTracked>) of `approx_top_k` should be less than or equal to <limit>."
     ],
     "sqlState" : "22023"
   },
   "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K": {
     "message": [
-      "The max items tracked `maxItemsTracked` = <maxItemsTracked> of `approx_top_k` should be greater than or equal to `k` = <k>."
+      "The max items tracked `maxItemsTracked`(<maxItemsTracked>) of `approx_top_k` should be greater than or equal to `k`(<k>)."
     ],
     "sqlState" : "22023"
   },
