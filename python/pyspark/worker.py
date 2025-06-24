@@ -1986,7 +1986,7 @@ def read_udfs(pickleSer, infile, eval_type):
             ser = ArrowStreamGroupUDFSerializer(_assign_cols_by_name)
         elif eval_type in (
             PythonEvalType.SQL_SCALAR_ARROW_UDF,
-            PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
+            PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
         ):
             # Arrow cast for type coercion is disabled by default
             ser = ArrowStreamArrowUDFSerializer(timezone, safecheck, _assign_cols_by_name, False)
@@ -2043,7 +2043,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
     is_scalar_iter = eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
     )
     is_map_pandas_iter = eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
     is_map_arrow_iter = eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF
