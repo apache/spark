@@ -202,13 +202,15 @@ object ApproxTopK {
     ArrayType(resultEntryType, containsNull = false)
   }
 
-  private def isDataTypeSupported(itemType: DataType): Boolean =
+  private def isDataTypeSupported(itemType: DataType): Boolean = {
     itemType match {
       case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType |
            _: LongType | _: FloatType | _: DoubleType | _: DateType |
            _: TimestampType | _: TimestampNTZType | _: StringType | _: DecimalType => true
+      // BinaryType is not supported now, as ItemsSketch seems cannot count the frequency correctly
       case _ => false
     }
+  }
 
   private def calMaxMapSize(maxItemsTracked: Int): Int = {
     // The maximum capacity of this internal hash map has maxMapCap = 0.75 * maxMapSize
