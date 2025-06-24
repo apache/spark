@@ -479,11 +479,22 @@ class LinearRegressionModel(
         return self._call_java("scale")
 
     @property
-    def _summaryCls(self) -> type:
-        return LinearRegressionTrainingSummary
-
-    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
-        return train_dataset
+    @since("2.0.0")
+    def summary(self) -> "LinearRegressionTrainingSummary":
+        """
+        Gets summary (residuals, MSE, r-squared ) of model on
+        training set. An exception is thrown if
+        `trainingSummary is None`.
+        """
+        if self.hasSummary:
+            s = LinearRegressionTrainingSummary(super(LinearRegressionModel, self).summary)
+            if is_remote():
+                s.__source_transformer__ = self  # type: ignore[attr-defined]
+            return s
+        else:
+            raise RuntimeError(
+                "No training summary available for this %s" % self.__class__.__name__
+            )
 
     def evaluate(self, dataset: DataFrame) -> "LinearRegressionSummary":
         """
@@ -2763,11 +2774,24 @@ class GeneralizedLinearRegressionModel(
         return self._call_java("intercept")
 
     @property
-    def _summaryCls(self) -> type:
-        return GeneralizedLinearRegressionTrainingSummary
-
-    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
-        return train_dataset
+    @since("2.0.0")
+    def summary(self) -> "GeneralizedLinearRegressionTrainingSummary":
+        """
+        Gets summary (residuals, deviance, p-values) of model on
+        training set. An exception is thrown if
+        `trainingSummary is None`.
+        """
+        if self.hasSummary:
+            s = GeneralizedLinearRegressionTrainingSummary(
+                super(GeneralizedLinearRegressionModel, self).summary
+            )
+            if is_remote():
+                s.__source_transformer__ = self  # type: ignore[attr-defined]
+            return s
+        else:
+            raise RuntimeError(
+                "No training summary available for this %s" % self.__class__.__name__
+            )
 
     def evaluate(self, dataset: DataFrame) -> "GeneralizedLinearRegressionSummary":
         """

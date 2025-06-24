@@ -38,7 +38,6 @@ message MlCommand {
     Evaluate evaluate = 6;
     CleanCache clean_cache = 7;
     GetCacheInfo get_cache_info = 8;
-    CreateSummary create_summary = 9;
   }
 
   // Command for estimator.fit(dataset)
@@ -55,9 +54,6 @@ message MlCommand {
   // or summary evaluated by a model
   message Delete {
     repeated ObjectRef obj_refs = 1;
-    // if set `evict_only` to true, only evict the cached model from memory,
-    // but keep the offloaded model in Spark driver local disk.
-    optional bool evict_only = 2;
   }
 
   // Force to clean up all the ML cached objects
@@ -101,13 +97,6 @@ message MlCommand {
     optional MlParams params = 2;
     // (Required) the evaluating dataset
     Relation dataset = 3;
-  }
-
-  // This is for re-creating the model summary when the model summary is lost
-  // (model summary is lost when the model is offloaded and then loaded back)
-  message CreateSummary {
-    ObjectRef model_ref = 1;
-    Relation dataset = 2;
   }
 }
 
