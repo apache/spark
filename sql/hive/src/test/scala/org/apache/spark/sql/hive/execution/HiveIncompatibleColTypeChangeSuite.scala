@@ -31,7 +31,7 @@ class HiveIncompatibleColTypeChangeSuite extends SparkFunSuite with TestHiveSing
   private val catalog = spark.sessionState.catalog.externalCatalog
 
   override def beforeAll(): Unit = {
-    super.afterAll()
+    super.beforeAll()
     hiveClient.runSqlHive(
       "SET hive.metastore.disallow.incompatible.col.type.changes=true")
   }
