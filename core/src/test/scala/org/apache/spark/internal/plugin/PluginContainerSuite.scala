@@ -294,7 +294,7 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
     // then the event will be dropped and won't be delivered to the listener.
   }
 
-  test("override shuffle manager in plugin") {
+  test("SPARK-52548: override shuffle manager in plugin") {
     val conf = new SparkConf()
       .setAppName(getClass().getName())
       .set(SparkLauncher.SPARK_MASTER, "local[1]")
