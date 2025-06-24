@@ -24,11 +24,12 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySerializer}
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.kafka010.KafkaConfigUpdater
-import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric}
@@ -632,10 +633,10 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private val deserClassName = classOf[ByteArrayDeserializer].getName
 
   def checkStartOffsetNotGreaterThanEndOffset(
-  startOffset: Long,
-  endOffset: Long,
-  topicPartition: TopicPartition,
-  exception: (Long, Long, TopicPartition) => Exception): Unit = {
+    startOffset: Long,
+    endOffset: Long,
+    topicPartition: TopicPartition,
+    exception: (Long, Long, TopicPartition) => Exception): Unit = {
     // earliest or latest offsets are negative and should not be compared
     if (startOffset > endOffset && startOffset >= 0 && endOffset >= 0) {
       throw exception(startOffset, endOffset, topicPartition)
@@ -643,8 +644,8 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   }
 
   def checkOffsetLimitValidity(
-                                startOffset: KafkaOffsetRangeLimit,
-                                endOffset: KafkaOffsetRangeLimit): Unit = {
+      startOffset: KafkaOffsetRangeLimit,
+      endOffset: KafkaOffsetRangeLimit): Unit = {
     startOffset match {
       case start: SpecificOffsetRangeLimit if endOffset.isInstanceOf[SpecificOffsetRangeLimit] =>
         val end = endOffset.asInstanceOf[SpecificOffsetRangeLimit]
