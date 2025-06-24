@@ -697,7 +697,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
           ShuffleBlockId(0, 0, 0).toString, blocks(ShuffleBlockId(0, 0, 0)))
         listener.onBlockFetchFailure(
           ShuffleBlockId(0, 1, 0).toString, new BlockNotFoundException("blah"))
-          listener.onBlockFetchFailure(
+        listener.onBlockFetchFailure(
             ShuffleBlockId(0, 2, 0).toString, new BlockNotFoundException("blah"))
         sem.release()
       }
@@ -710,8 +710,9 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     // Continue only after the mock calls onBlockFetchFailure
     sem.acquire()
 
-    // The first two blocks should throw FetchFailedExceptions (due to failure), and the last
-    // one should be returned without an exception
+    // There are one success fetch and 2 failures. Since failures are consumed firstly so
+    // the first 2 should throw FetchFailedExceptions (due to failure) and the last block
+    // should be returned without an exception.
     intercept[FetchFailedException] { iterator.next() }
     intercept[FetchFailedException] { iterator.next() }
     iterator.next()
@@ -2075,46 +2076,5 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     assert(iterator.next()._1 === ShuffleBlockId(0, 0, 0))
     assert(iterator.next()._1 === ShuffleBlockId(0, 1, 0))
     assert(!iterator.hasNext)
-  }
-
-  test("SPARK-52395: Fail fast when fetch failure happens for remote blocks") {
-    // Make sure remote blocks would return
-    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
-    val blocks = Map[BlockId, ManagedBuffer](
-      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer(),
-      ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer(),
-      ShuffleBlockId(0, 2, 0) -> createMockManagedBuffer()
-    )
-
-    // Semaphore to coordinate event sequence in two different threads.
-    val sem = new Semaphore(0)
-
-    answerFetchBlocks { invocation =>
-      val listener = invocation.getArgument[BlockFetchingListener](4)
-      Future {
-        // Return the first block, and then fail.
-        listener.onBlockFetchSuccess(
-          ShuffleBlockId(0, 0, 0).toString, blocks(ShuffleBlockId(0, 0, 0)))
-        listener.onBlockFetchFailure(
-          ShuffleBlockId(0, 1, 0).toString, new BlockNotFoundException("blah"))
-        listener.onBlockFetchFailure(
-          ShuffleBlockId(0, 2, 0).toString, new BlockNotFoundException("blah"))
-        sem.release()
-      }
-    }
-
-    val iterator = createShuffleBlockIteratorWithDefaults(
-      Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0))
-    )
-
-    // Continue only after the mock calls onBlockFetchFailure
-    sem.acquire()
-
-    // There are one success fetch and 2 failures. Since failures are consumed firstly so
-    // the first 2 should throw FetchFailedExceptions (due to failure) and the last block
-    // should be returned without an exception.
-    intercept[FetchFailedException] { iterator.next() }
-    intercept[FetchFailedException] { iterator.next() }
-    iterator.next()
   }
 }
