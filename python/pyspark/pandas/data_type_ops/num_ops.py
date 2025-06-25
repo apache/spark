@@ -166,9 +166,10 @@ class NumericOps(DataTypeOps):
 
         def safe_rmod(left_col: PySparkColumn, right_val: Any) -> PySparkColumn:
             if is_ansi_mode_enabled(spark_session):
-                result = F.when(left_col != 0, F.pmod(F.lit(right_val), left_col)).otherwise(
-                    F.lit(None)
-                )
+                # Java-style modulo -> Python-style modulo
+                result = F.when(
+                    left_col != 0, ((F.lit(right_val) % left_col) + left_col) % left_col
+                ).otherwise(F.lit(None))
                 return result
             else:
                 return ((right % left) + left) % left
