@@ -49,7 +49,7 @@ case class PlanAdaptiveSubqueries(context: AdaptiveExecutionContext,
           subquery = SubqueryExec(s"subquery#${exprId.id}", subqueryMap(exprId.id))
         } else {
           val sparkPlan = QueryExecution.prepareExecutedPlan(
-            context.session, query, context)
+            query, context)
           assert(sparkPlan.isInstanceOf[AdaptiveSparkPlanExec])
           val newAdaptivePlan = sparkPlan.asInstanceOf[AdaptiveSparkPlanExec]
           subquery = SubqueryExec(s"subquery#${exprId.id}", newAdaptivePlan)
