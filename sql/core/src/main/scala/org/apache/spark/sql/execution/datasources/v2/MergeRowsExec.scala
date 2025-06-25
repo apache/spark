@@ -237,8 +237,7 @@ case class MergeRowsExec(
         if (instruction.condition.eval(row)) {
           instruction match {
             case copy: CopyExec =>
-              // For GroupBased Merge, Spark inserts a Copy predicate
-              // to retain the row if it does not match any case
+              // group-based operations copy over target rows that didn't match any actions
               longMetric("numTargetRowsCopied") += 1
               return copy.apply(row)
 
