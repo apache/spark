@@ -559,4 +559,72 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(lit.sql === s"TIME '$str'")
     }
   }
+
+  test("context independent foldable literals") {
+    val array = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+    val map = Literal.create(
+      Map("a" -> "123", "b" -> "true", "c" -> "f"),
+      MapType(StringType, StringType, valueContainsNull = true))
+    val struct = Literal.create(
+      Row(1, "2", true, null),
+      StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", StringType),
+        StructField("c", BooleanType),
+        StructField("d", NullType))))
+
+    Seq(
+      Literal(1),
+      Literal(1L),
+      Literal(1.0),
+      Literal(1.0f),
+      Literal("string"),
+      Literal(true),
+      Literal(false),
+      Literal(null, NullType),
+      Literal(Decimal(10.5)),
+      Literal(LocalDate.now()),
+      Literal(LocalTime.of(12, 30, 0)),
+      Literal(Period.ofMonths(1)),
+      Literal(Duration.ofDays(1)),
+      array,
+      map,
+      struct
+    ).foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(expr.contextIndependentFoldable,
+        s"Expression $expr should be context independent foldable")
+    }
+  }
+
+  test("context dependent foldable literals") {
+    // Create an array containing timestamps
+    val array = Literal.create(
+      Seq(java.sql.Timestamp.valueOf("2021-01-01 12:00:00")),
+      ArrayType(TimestampType))
+
+    // Create a map with timestamp values
+    val map = Literal.create(
+      Map("a" -> java.sql.Timestamp.valueOf("2021-01-01 12:00:00")),
+      MapType(StringType, TimestampType, valueContainsNull = true))
+
+    // Create a struct with a timestamp field
+    val struct = Literal.create(
+      Row(1, java.sql.Timestamp.valueOf("2021-01-01 12:00:00")),
+      StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", TimestampType))))
+
+    Seq(
+      Literal.create(java.sql.Timestamp.valueOf("2021-01-01 12:00:00"), TimestampType),
+      Literal.create(1L, TimestampType),
+      array,
+      map,
+      struct
+    ).foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(!expr.contextIndependentFoldable,
+        s"Expression $expr should not be context independent foldable")
+    }
+  }
 }
