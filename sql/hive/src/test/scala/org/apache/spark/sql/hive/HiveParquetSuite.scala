@@ -185,7 +185,7 @@ class HiveParquetSuite extends QueryTest
     }
   }
 
-  test("SPARK-52574: Compression codec should correctly applied in Hive tables and directories") {
+  test("SPARK-52574: Ensure compression codec is correctly applied in Hive tables and dirs") {
     withSQLConf(
       HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false",
       HiveUtils.CONVERT_METASTORE_INSERT_DIR.key -> "false",
