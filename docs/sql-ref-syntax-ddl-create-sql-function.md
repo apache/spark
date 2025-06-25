@@ -127,7 +127,6 @@ characteristic
   - Row producing functions such as `explode`
 
   Within the body of the function you can refer to parameter by its unqualified name or by qualifying the parameter with the function name.
-  ```
 
 - **characteristic**
 
