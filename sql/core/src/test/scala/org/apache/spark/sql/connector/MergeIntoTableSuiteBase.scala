@@ -1796,11 +1796,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
            |""".stripMargin
       }
 
-      // group based merge does a outer join on target to retain the original rows
-      // so pulls in more rows than delta based merge
       assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 2)
-      assertMetric(mergeExec, "numTargetRowsUnused", if (deltaMerge) 1 else 0)
-      assertMetric(mergeExec, "numSourceRowsUnused", 1)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -1838,8 +1834,6 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       }
 
       assertMetric(mergeExec, "numTargetRowsCopied", 0)
-      assertMetric(mergeExec, "numTargetRowsUnused", 0)
-      assertMetric(mergeExec, "numSourceRowsUnused", 2)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -1877,8 +1871,6 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
 
       assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
-      assertMetric(mergeExec, "numTargetRowsUnused", if (deltaMerge) 3 else 0)
-      assertMetric(mergeExec, "numSourceRowsUnused", 1)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -1918,8 +1910,6 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       }
 
       assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
-      assertMetric(mergeExec, "numTargetRowsUnused", if (deltaMerge) 3 else 0)
-      assertMetric(mergeExec, "numSourceRowsUnused", 2)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),

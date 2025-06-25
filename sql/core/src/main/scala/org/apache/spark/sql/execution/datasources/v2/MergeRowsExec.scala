@@ -244,12 +244,8 @@ case class MergeRowsExec(
           instruction match {
             case copy: CopyExec =>
               // For GroupBased Merge, Spark inserts a Copy predicate
-              // for source + target present rows
-              // to retain the row if no other case matches
+              // to retain the row if it does not match any case
               longMetric("numTargetRowsCopied") += 1
-              if (sourcePresent) {
-                longMetric("numSourceRowsUnused") += 1
-              }
               return copy.apply(row)
 
             case keep: KeepExec =>
@@ -263,15 +259,6 @@ case class MergeRowsExec(
               return split.projectRow(row)
           }
         }
-      }
-
-      // no instructions matched, drop the row
-      if (targetPresent) {
-        longMetric("numTargetRowsUnused") += 1
-      }
-
-      if (sourcePresent) {
-        longMetric("numSourceRowsUnused") += 1
       }
 
       null
