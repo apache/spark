@@ -49,7 +49,7 @@ case class MergeRowsExec(
 
   override lazy val metrics: Map[String, SQLMetric] = Map(
     "numTargetRowsCopied" -> SQLMetrics.createMetric(sparkContext,
-      "Number of target rows rewritten unmodified because they did not meet any condition."))
+      "Number of target rows copied unmodified because they did not match any action."))
 
   @transient override lazy val producedAttributes: AttributeSet = {
     AttributeSet(output.filterNot(attr => inputSet.contains(attr)))
