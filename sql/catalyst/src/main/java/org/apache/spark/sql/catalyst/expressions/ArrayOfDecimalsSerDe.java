@@ -90,21 +90,24 @@ public class ArrayOfDecimalsSerDe extends ArrayOfItemsSerDe<Decimal> {
     public Decimal[] deserializeFromMemory(Memory mem, long offsetBytes, int numItems) {
         Objects.requireNonNull(mem, "Memory must not be null");
         if (DecimalType.is32BitDecimalType(decimalType)) {
-            Number[] intArray = ((ArrayOfNumbersSerDe) delegate).deserializeFromMemory(mem, offsetBytes, numItems);
+            Number[] intArray = ((ArrayOfNumbersSerDe) delegate)
+                    .deserializeFromMemory(mem, offsetBytes, numItems);
             Decimal[] result = new Decimal[intArray.length];
             for (int i = 0; i < intArray.length; i++) {
                 result[i] = Decimal.createUnsafe((int) intArray[i], precision, scale);
             }
             return result;
         } else if (DecimalType.is64BitDecimalType(decimalType)) {
-            Long[] longArray = ((ArrayOfLongsSerDe) delegate).deserializeFromMemory(mem, offsetBytes, numItems);
+            Long[] longArray = ((ArrayOfLongsSerDe) delegate)
+                    .deserializeFromMemory(mem, offsetBytes, numItems);
             Decimal[] result = new Decimal[longArray.length];
             for (int i = 0; i < longArray.length; i++) {
                 result[i] = Decimal.createUnsafe(longArray[i], precision, scale);
             }
             return result;
         } else {
-            return ((ArrayOfDecimalByteArrSerDe) delegate).deserializeFromMemory(mem, offsetBytes, numItems);
+            return ((ArrayOfDecimalByteArrSerDe) delegate)
+                    .deserializeFromMemory(mem, offsetBytes, numItems);
         }
     }
 
@@ -151,7 +154,7 @@ public class ArrayOfDecimalsSerDe extends ArrayOfItemsSerDe<Decimal> {
         private final int precision;
         private final int scale;
 
-        public ArrayOfDecimalByteArrSerDe(DecimalType decimalType) {
+        ArrayOfDecimalByteArrSerDe(DecimalType decimalType) {
             assert DecimalType.isByteArrayDecimalType(decimalType);
             this.precision = decimalType.precision();
             this.scale = decimalType.scale();
