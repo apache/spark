@@ -219,11 +219,11 @@ case class MergeRowsExec(
 
       if (isTargetRowPresent && isSourceRowPresent) {
         cardinalityValidator.validate(row)
-        applyInstructions(row, matchedInstructions, sourcePresent = true, targetPresent = true)
+        applyInstructions(row, matchedInstructions)
       } else if (isSourceRowPresent) {
-        applyInstructions(row, notMatchedInstructions, sourcePresent = true)
+        applyInstructions(row, notMatchedInstructions)
       } else if (isTargetRowPresent) {
-        applyInstructions(row, notMatchedBySourceInstructions, targetPresent = true)
+        applyInstructions(row, notMatchedBySourceInstructions)
       } else {
         null
       }
@@ -231,9 +231,7 @@ case class MergeRowsExec(
 
     private def applyInstructions(
         row: InternalRow,
-        instructions: Seq[InstructionExec],
-        sourcePresent: Boolean = false,
-        targetPresent: Boolean = false): InternalRow = {
+        instructions: Seq[InstructionExec]): InternalRow = {
 
       for (instruction <- instructions) {
         if (instruction.condition.eval(row)) {
