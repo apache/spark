@@ -280,83 +280,92 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
 @unittest.skipIf(
     not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
 )
-class ArrowPythonUDFLegacyTestsMixin(BaseUDFTestsMixin):
+class ArrowPythonUDFLegacyTestsMixin(ArrowPythonUDFTestsMixin):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.spark.conf.set("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "true")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled")
+        finally:
+            super().tearDownClass()
+
     def test_complex_input_types(self):
-        for pandas_conversion in [True, False]:
-            with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
-            ):
-                self._check_complex_input_types()
+        self._check_complex_input_types()
 
     def test_use_arrow(self):
-        for pandas_conversion in [True, False]:
-            with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
-            ):
-                self._check_use_arrow()
+        self._check_use_arrow()
 
     def test_eval_type(self):
-        for pandas_conversion in [True, False]:
-            with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
-            ):
-                self._check_eval_type()
+        self._check_eval_type()
 
     def test_register(self):
-        for pandas_conversion in [True, False]:
-            with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
-            ):
-                self._check_register()
+        self._check_register()
 
     def test_nested_array_input(self):
-        for pandas_conversion in [True, False]:
-            with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
-            ):
-                self._check_nested_array_input()
+        self._check_nested_array_input()
 
     def test_type_coercion_string_to_numeric(self):
-        for pandas_conversion in [True, False]:
-            with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
-            ):
-                self._check_type_coercion_string_to_numeric()
+        self._check_type_coercion_string_to_numeric()
 
     def test_err_return_type(self):
-        for pandas_conversion in [True, False]:
-            with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
-            ):
-                self._check_err_return_type()
+        self._check_err_return_type()
 
     def test_named_arguments_negative(self):
-        for pandas_conversion in [True, False]:
-            with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
-            ):
-                self._check_named_arguments_negative()
+        self._check_named_arguments_negative()
 
     def test_udf_with_udt(self):
-        for pandas_conversion in [True, False]:
-            with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
-            ):
-                self._check_udf_with_udt()
+        self._check_udf_with_udt()
 
     def test_udf_use_arrow_and_session_conf(self):
-        for pandas_conversion in [True, False]:
-            with self.subTest(pandas_conversion=pandas_conversion), self.sql_conf(
-                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(pandas_conversion).lower()}
-            ):
-                self._check_udf_use_arrow_and_session_conf()
+        self._check_udf_use_arrow_and_session_conf()
 
 
-@unittest.skipIf(
-    not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
-)
-class ArrowPythonUDFCombinedTestsMixin(ArrowPythonUDFTestsMixin, ArrowPythonUDFLegacyTestsMixin):
-    pass
+class ArrowPythonUDFNonLegacyTestsMixin(ArrowPythonUDFTestsMixin):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.spark.conf.set("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "false")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled")
+        finally:
+            super().tearDownClass()
+
+    def test_complex_input_types(self):
+        self._check_complex_input_types()
+
+    def test_use_arrow(self):
+        self._check_use_arrow()
+
+    def test_eval_type(self):
+        self._check_eval_type()
+
+    def test_register(self):
+        self._check_register()
+
+    def test_nested_array_input(self):
+        self._check_nested_array_input()
+
+    def test_type_coercion_string_to_numeric(self):
+        self._check_type_coercion_string_to_numeric()
+
+    def test_err_return_type(self):
+        self._check_err_return_type()
+
+    def test_named_arguments_negative(self):
+        self._check_named_arguments_negative()
+
+    def test_udf_with_udt(self):
+        self._check_udf_with_udt()
+
+    def test_udf_use_arrow_and_session_conf(self):
+        self._check_udf_use_arrow_and_session_conf()
 
 
 class ArrowPythonUDFTests(ArrowPythonUDFTestsMixin, ReusedSQLTestCase):
@@ -374,67 +383,11 @@ class ArrowPythonUDFTests(ArrowPythonUDFTestsMixin, ReusedSQLTestCase):
 
 
 class ArrowPythonUDFLegacyTests(ArrowPythonUDFLegacyTestsMixin, ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        super(ArrowPythonUDFLegacyTests, cls).setUpClass()
-        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
-
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
-        finally:
-            super(ArrowPythonUDFLegacyTests, cls).tearDownClass()
+    pass
 
 
-class ArrowPythonUDFCombinedTests(ArrowPythonUDFCombinedTestsMixin, ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        super(ArrowPythonUDFCombinedTests, cls).setUpClass()
-        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
-
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
-        finally:
-            super(ArrowPythonUDFCombinedTests, cls).tearDownClass()
-
-    def test_udf_with_complex_variant_output(self):
-        self.skipTest("Skip VariantType for Arrow batched eval")
-        
-    def test_udf_input_serialization_valuecompare_disabled(self):
-        self.skipTest("Skip for Arrow batched eval")
-
-    def test_nonparam_udf_with_aggregate(self):
-        with self.assertRaisesRegex(Exception, r"ARROW_TYPE_MISMATCH"):
-            super().test_nonparam_udf_with_aggregate()
-            
-    def test_num_arguments(self):
-        with self.assertRaisesRegex(Exception, r"ARROW_TYPE_MISMATCH"):
-            super().test_num_arguments()
-            
-    def test_type_coercion_string_to_numeric(self):
-        with self.assertRaisesRegex(Exception, r"UDF_ARROW_TYPE_CONVERSION_ERROR"):
-            super().test_type_coercion_string_to_numeric()
-            
-    def test_udf_globals_not_overwritten(self):
-        with self.assertRaisesRegex(Exception, r"ARROW_TYPE_MISMATCH"):
-            super().test_udf_globals_not_overwritten()
-
-
-class AsyncArrowPythonUDFTests(ArrowPythonUDFTests):
-    @classmethod
-    def setUpClass(cls):
-        super(AsyncArrowPythonUDFTests, cls).setUpClass()
-        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.concurrency.level", "4")
-
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.concurrency.level")
-        finally:
-            super(AsyncArrowPythonUDFTests, cls).tearDownClass()
+class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":
