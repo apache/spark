@@ -50,18 +50,22 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    """
+  usage = """
     _FUNC_(expr, k, maxItemsTracked) - Returns top k items with their frequency.
       `k` An optional INTEGER literal greater than 0. If k is not specified, it defaults to 5.
       `maxItemsTracked` An optional INTEGER literal greater than or equal to k. If maxItemsTracked is not specified, it defaults to 10000.
     """,
-  examples =
-    """
+  examples = """
     Examples:
-      > SELECT approx_top_k(expr, 10, 100) FROM VALUES (0), (1), (1), (2), (2), (2) AS tab(expr);
-        [{'item':2,'count':3},{'item':1,'count':2},{'item':0,'count':1}]
-    """,
+      > SELECT _FUNC_(expr) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);
+       [{"item":0,"count":2},{"item":4,"count":2},{"item":1,"count":2},{"item":2,"count":1},{"item":3,"count":1}]
+
+      > SELECT _FUNC_(expr, 2) FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);
+       [{"item":"c","count":4},{"item":"d","count":2}]
+
+      > SELECT _FUNC_(expr, 10, 100) FROM VALUES (0), (1), (1), (2), (2), (2) AS tab(expr);
+       [{"item":2,"count":3},{"item":1,"count":2},{"item":0,"count":1}]
+  """,
   group = "agg_funcs",
   since = "4.1.0")
 // scalastyle:on line.size.limit
@@ -197,8 +201,8 @@ object ApproxTopK {
 
   private def getResultDataType(itemDataType: DataType): DataType = {
     val resultEntryType = StructType(
-      StructField("Item", itemDataType, nullable = false) ::
-        StructField("Estimate", LongType, nullable = false) :: Nil)
+      StructField("item", itemDataType, nullable = false) ::
+        StructField("count", LongType, nullable = false) :: Nil)
     ArrayType(resultEntryType, containsNull = false)
   }
 
