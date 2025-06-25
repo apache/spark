@@ -178,12 +178,14 @@ object DatasetManager extends Logging {
     }
 
     // Wipe the data if we need to
-    if ((isFullRefresh || !table.isStreamingTable) && existingTableOpt.isDefined) {
-      context.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
+    val dropTable = (isFullRefresh || !table.isStreamingTable) && existingTableOpt.isDefined
+    if (dropTable) {
+      catalog.dropTable(identifier)
+//      context.spark.sql(s"DROP TABLE ${table.identifier.quotedString}")
     }
 
     // Alter the table if we need to
-    if (existingTableOpt.isDefined) {
+    if (existingTableOpt.isDefined && !dropTable) {
       val existingSchema = existingTableOpt.get.schema()
 
       val targetSchema = if (table.isStreamingTable && !isFullRefresh) {
@@ -198,7 +200,7 @@ object DatasetManager extends Logging {
     }
 
     // Create the table if we need to
-    if (existingTableOpt.isEmpty) {
+    if (dropTable || existingTableOpt.isEmpty) {
       catalog.createTable(
         identifier,
         new TableInfo.Builder()

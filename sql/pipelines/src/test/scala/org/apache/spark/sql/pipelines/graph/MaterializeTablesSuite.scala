@@ -434,8 +434,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     val table2 = catalog.loadTable(identifier)
     assert(
-      table2.columns() sameElements CatalogV2Util
-        .structTypeToV2Columns(new StructType().add("y", IntegerType).add("x", BooleanType))
+      table2.columns().toSet == CatalogV2Util
+        .structTypeToV2Columns(new StructType().add("x", BooleanType).add("y", IntegerType))
+        .toSet
     )
     assert(table2.partitioning().toSeq == Seq(Expressions.identity("x")))
 
@@ -456,8 +457,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     val table3 = catalog.loadTable(identifier)
     assert(
-      table3.columns() sameElements CatalogV2Util
-        .structTypeToV2Columns(new StructType().add("y", IntegerType).add("x", BooleanType))
+      table3.columns().toSet == CatalogV2Util
+        .structTypeToV2Columns(new StructType().add("x", BooleanType).add("y", IntegerType))
+        .toSet
     )
     assert(table3.partitioning().toSeq == Seq(Expressions.identity("x")))
   }
