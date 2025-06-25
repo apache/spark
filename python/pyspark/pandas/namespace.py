@@ -76,6 +76,7 @@ from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.utils import (
     align_diff_frames,
     default_session,
+    is_ansi_mode_enabled,
     is_name_like_tuple,
     is_name_like_value,
     name_like_string,
