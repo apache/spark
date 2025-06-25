@@ -20,14 +20,16 @@ package org.apache.spark.sql.catalyst.expressions
 import java.time.DateTimeException
 import java.util.Locale
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType, toSQLValue}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimeFormatter
-import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber}
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, DataType, DecimalType, IntegerType, ObjectType, TimeType, TypeCollection}
@@ -315,9 +317,11 @@ object HourExpressionBuilder extends ExpressionBuilder {
 case class SecondsOfTimeWithFraction(child: Expression)
   extends RuntimeReplaceable
   with ExpectsInputTypes {
-
   override def replacement: Expression = {
-
+    val precision = child.dataType match {
+      case TimeType(p) => p
+      case _ => TimeType.MIN_PRECISION
+    }
     StaticInvoke(
       classOf[DateTimeUtils.type],
       DecimalType(8, 6),
@@ -325,10 +329,9 @@ case class SecondsOfTimeWithFraction(child: Expression)
       Seq(child, Literal(precision)),
       Seq(child.dataType, IntegerType))
   }
-  private val precision: Int = child.dataType.asInstanceOf[TimeType].precision
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TimeType(precision))
+    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*))
 
   override def children: Seq[Expression] = Seq(child)
 
@@ -429,16 +432,24 @@ object SecondExpressionBuilder extends ExpressionBuilder {
   group = "datetime_funcs",
   since = "4.1.0"
 )
-case class CurrentTime(child: Expression = Literal(TimeType.MICROS_PRECISION))
-  extends UnaryExpression with FoldableUnevaluable with ImplicitCastInputTypes {
+case class CurrentTime(
+    child: Expression = Literal(TimeType.MICROS_PRECISION),
+    timeZoneId: Option[String] = None) extends UnaryExpression
+  with TimeZoneAwareExpression with ImplicitCastInputTypes with CodegenFallback {
 
   def this() = {
-    this(Literal(TimeType.MICROS_PRECISION))
+    this(Literal(TimeType.MICROS_PRECISION), None)
   }
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
+  def this(child: Expression) = {
+    this(child, None)
+  }
+
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
 
   override def nullable: Boolean = false
+
+  override def foldable: Boolean = true
 
   override def checkInputDataTypes(): TypeCheckResult = {
     // Check foldability
@@ -496,11 +507,19 @@ case class CurrentTime(child: Expression = Literal(TimeType.MICROS_PRECISION))
 
   override def prettyName: String = "current_time"
 
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(child = newChild)
   }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType)
+
+  override def eval(input: InternalRow): Any = {
+    val currentTimeOfDayMicros = DateTimeUtils.instantToMicrosOfDay(java.time.Instant.now(), zoneId)
+    DateTimeUtils.truncateTimeMicrosToPrecision(currentTimeOfDayMicros, precision)
+  }
 }
 
 // scalastyle:off line.size.limit

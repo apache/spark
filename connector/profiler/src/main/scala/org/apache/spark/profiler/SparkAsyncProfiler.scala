@@ -66,9 +66,15 @@ private[spark] class SparkAsyncProfiler(conf: SparkConf, executorId: String) ext
   private var threadpool: ScheduledExecutorService = _
   @volatile private var writing: Boolean = false
 
+  lazy private val extractionDir =
+    Utils.createTempDir(Utils.getLocalDir(conf), "asyncProfiler").toPath
+
   val profiler: Option[AsyncProfiler] = {
     Option(
-      if (enableProfiler && AsyncProfilerLoader.isSupported) AsyncProfilerLoader.load() else null
+      if (enableProfiler && AsyncProfilerLoader.isSupported) {
+        AsyncProfilerLoader.setExtractionDirectory(extractionDir)
+        AsyncProfilerLoader.load()
+      } else null
     )
   }
 

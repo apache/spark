@@ -302,7 +302,7 @@ class CteRegistry {
   def currentScope: CteScope = stack.peek()
 
   /**
-   * This is a [[withNewScope]] variant specifically designed to be called above multi-child
+   * This is a [[pushScope]] variant specifically designed to be called above multi-child
    * operator children resolution (e.g. for children of a [[Join]] or [[Union]]).
    *
    * The `isRoot` flag has to be propagated from the parent scope if all of the following
@@ -311,32 +311,31 @@ class CteRegistry {
    *  - The multi-child `unresolvedOperator` IS NOT suitable to place a [[WithCTE]]
    *  - Some operator in `unresolvedChild` subtree IS suitable to place a [[WithCTE]].
    */
-  def withNewScopeUnderMultiChildOperator[R](
+  def pushScopeForMultiChildOperator[R](
       unresolvedOperator: LogicalPlan,
       unresolvedChild: LogicalPlan
-  )(body: => R): R = {
-    withNewScope(
+  ): Unit = {
+    pushScope(
       isRoot = currentScope.isRoot &&
         !CteRegistry.isSuitableMultiChildOperatorForWithCTE(unresolvedOperator) &&
         CteRegistry.hasSuitableOperatorForWithCTEInSubtree(unresolvedChild)
-    ) {
-      body
-    }
+    )
   }
 
   /**
-   * A RAII-wrapper for pushing/popping scopes. This is used by the [[Resolver]] to create a new
-   * scope for each WITH clause.
+   * Push new scope to the stack. This is used by the [[Resolver]] to create a new scope for
+   * each WITH clause.
    */
-  def withNewScope[R](isRoot: Boolean = false, isOpaque: Boolean = false)(body: => R): R = {
+  def pushScope(isRoot: Boolean = false, isOpaque: Boolean = false): Unit = {
     stack.push(new CteScope(isRoot = isRoot, isOpaque = isOpaque))
+  }
 
-    try {
-      body
-    } finally {
-      val childScope = stack.pop()
-      currentScope.mergeChildScope(childScope)
-    }
+  /**
+   * Pop current scope from the stack.
+   */
+  def popScope(): Unit = {
+    val childScope = stack.pop()
+    currentScope.mergeChildScope(childScope)
   }
 
   /**

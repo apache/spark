@@ -24,15 +24,14 @@ import java.nio.charset.StandardCharsets.UTF_8
 import com.google.common.io.ByteStreams
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.analysis.TempResolvedColumn
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.connector.catalog.MetadataColumn
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{MetadataBuilder, NumericType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SparkErrorUtils, Utils}
 
-package object util extends Logging with SQLConfHelper {
+package object util extends Logging {
 
   /** Silences output to stderr or stdout for the duration of f */
   def quietly[A](f: => A): A = {
@@ -94,66 +93,45 @@ package object util extends Logging with SQLConfHelper {
   def stackTraceToString(t: Throwable): String = SparkErrorUtils.stackTraceToString(t)
 
   /**
-   * Replaces attributes, string literals, complex type extractors, casts and python functions with
-   * their pretty form so that generated column names don't contain back-ticks or double-quotes.
-   *
-   * In case provided expression is [[AggregateExpression]] that contains a [[OuterReference]],
-   * pull out the outer reference and compute the name to maintain compatibility with single-pass
-   * analyzer.
+   * Replaces attributes, string literals, complex type extractors with their pretty form so that
+   * generated column names don't contain back-ticks or double-quotes.
+   * In case value of `shouldTrimTempResolvedColumn` is true, trim [[TempResolvedColumn]]s from the
+   * expression tree to avoid having it in an [[Alias]] name.
    */
-  private def usePrettyExpression(e: Expression, stripOuterReference: Boolean = true): Expression =
-    e transform {
-      case aggregateExpression: AggregateExpression
-        if stripOuterReference && conf.getConf(
-          SQLConf.PRETTY_ALIAS_NAME_FOR_CORRELATED_AGGREGATE_FUNCTION
-        ) && SubExprUtils.containsOuter(aggregateExpression) =>
-        val strippedAggregateExpression = SubExprUtils.stripOuterReference(aggregateExpression)
-        OuterReference(
-          new PrettyAttribute(
-            Alias(
-              strippedAggregateExpression,
-              toPrettySQL(strippedAggregateExpression, stripOuterReference)
-            )().toAttribute
-          )
-        )
-      case _ @ OuterReference(aggregateExpression: AggregateExpression)
-        if conf.getConf(
-          SQLConf.PRETTY_ALIAS_NAME_FOR_CORRELATED_AGGREGATE_FUNCTION
-        ) =>
-        OuterReference(
-          new PrettyAttribute(
-            Alias(
-              aggregateExpression,
-              toPrettySQL(aggregateExpression, stripOuterReference)
-            )().toAttribute
-          )
-        )
-      case a: Attribute => new PrettyAttribute(a)
-      case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
-      case Literal(v, t: NumericType) if v != null => PrettyAttribute(v.toString, t)
-      case Literal(null, dataType) => PrettyAttribute("NULL", dataType)
-      case e: GetStructField =>
-        val name = e.name.getOrElse(e.childSchema(e.ordinal).name)
-        PrettyAttribute(
-          usePrettyExpression(e.child, stripOuterReference).sql + "." + name,
-          e.dataType
-        )
-      case e: GetArrayStructFields =>
-        PrettyAttribute(
-          s"${usePrettyExpression(e.child, stripOuterReference)}.${e.field.name}",
-          e.dataType
-        )
-      case r: InheritAnalysisRules =>
-        PrettyAttribute(
-          r.makeSQLString(
-            r.parameters.map(parameter => toPrettySQL(parameter, stripOuterReference))
-          ),
-          r.dataType
-        )
-      case c: Cast if c.getTagValue(Cast.USER_SPECIFIED_CAST).isEmpty =>
-        PrettyAttribute(usePrettyExpression(c.child, stripOuterReference).sql, c.dataType)
-      case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
-    }
+  private def usePrettyExpression(
+      e: Expression,
+      shouldTrimTempResolvedColumn: Boolean = false): Expression = e transform {
+    case a: Attribute => new PrettyAttribute(a)
+    case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
+    case Literal(v, t: NumericType) if v != null => PrettyAttribute(v.toString, t)
+    case Literal(null, dataType) => PrettyAttribute("NULL", dataType)
+    case e: GetStructField =>
+      val name = e.name.getOrElse(e.childSchema(e.ordinal).name)
+      PrettyAttribute(
+        usePrettyExpression(e.child, shouldTrimTempResolvedColumn).sql + "." + name,
+        e.dataType
+      )
+    case e: GetArrayStructFields =>
+      PrettyAttribute(
+        s"${usePrettyExpression(e.child, shouldTrimTempResolvedColumn)}.${e.field.name}",
+        e.dataType
+      )
+    case r: InheritAnalysisRules =>
+      val proposedParameters = if (shouldTrimTempResolvedColumn) {
+        r.parameters.map(trimTempResolvedColumn)
+      } else {
+        r.parameters
+      }
+      PrettyAttribute(
+        name = r.makeSQLString(
+          proposedParameters.map(parameter => toPrettySQL(parameter, shouldTrimTempResolvedColumn))
+        ),
+        dataType = r.dataType
+      )
+    case c: Cast if c.getTagValue(Cast.USER_SPECIFIED_CAST).isEmpty =>
+      PrettyAttribute(usePrettyExpression(c.child, shouldTrimTempResolvedColumn).sql, c.dataType)
+    case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
+  }
 
   def quoteIdentifier(name: String): String = {
     QuotingUtils.quoteIdentifier(name)
@@ -167,8 +145,8 @@ package object util extends Logging with SQLConfHelper {
     QuotingUtils.quoteIfNeeded(part)
   }
 
-  def toPrettySQL(e: Expression, stripOuterReference: Boolean = true): String =
-    usePrettyExpression(e, stripOuterReference).sql
+  def toPrettySQL(e: Expression, shouldTrimTempResolvedColumn: Boolean = false): String =
+    usePrettyExpression(e, shouldTrimTempResolvedColumn).sql
 
   def escapeSingleQuotedString(str: String): String = {
     QuotingUtils.escapeSingleQuotedString(str)
@@ -192,6 +170,14 @@ package object util extends Logging with SQLConfHelper {
   /** Shorthand for calling truncatedString() without start or end strings. */
   def truncatedString[T](seq: Seq[T], sep: String, maxFields: Int): String = {
     SparkStringUtils.truncatedString(seq, "", sep, "", maxFields)
+  }
+
+  /**
+   * Helper method used to remove all the [[TempResolvedColumn]]s from the provided expression
+   * tree.
+   */
+  def trimTempResolvedColumn(input: Expression): Expression = input.transform {
+    case t: TempResolvedColumn => t.child
   }
 
   val METADATA_COL_ATTR_KEY = "__metadata_col"

@@ -250,6 +250,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val BLOCK_CREATE_TEMP_TABLE_USING_PROVIDER =
+    buildConf("spark.sql.legacy.blockCreateTempTableUsingProvider")
+      .doc("If enabled, we fail legacy CREATE TEMPORARY TABLE ... USING provider during parsing.")
+      .internal()
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
     .internal()
     .doc("The max number of iterations the analyzer runs.")
@@ -369,6 +377,26 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ANALYZER_SINGLE_PASS_RESOLVER_RUN_EXTENDED_RESOLUTION_CHECKS =
+    buildConf("spark.sql.analyzer.singlePassResolver.runExtendedResolutionChecks")
+      .internal()
+      .doc("When true, run `extendedResolutionChecks` after the main analysis.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_RUN_HEAVY_EXTENDED_RESOLUTION_CHECKS =
+    buildConf("spark.sql.analyzer.singlePassResolver.runHeavyExtendedResolutionChecks")
+      .internal()
+      .doc(
+        "When true, run heavy `extendedResolutionChecks` after the main analysis. Otherwise skip " +
+        "them. Heavy check either involves a network call changing external persistent storage, " +
+        "or changes a global state. For example, `ViewSyncSchemaToMetaStore` calls alter table."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
     buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
       .internal()
@@ -454,6 +482,14 @@ object SQLConf {
       "the resolved expression tree in the single-pass bottom-up Resolver. The value can be " +
       s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("4.0.0")
+    .enumConf(classOf[Level])
+    .createWithDefault(Level.TRACE)
+
+  val NAME_RESOLUTION_LOG_LEVEL = buildConf("spark.sql.nameResolutionLog.level")
+    .internal()
+    .doc("Configures the log level for logging the name resolution in the single-pass bottom-up " +
+      s"Resolver. The value can be ${VALID_LOG_LEVELS.mkString(", ")}.")
+    .version("4.1.0")
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
 
@@ -913,6 +949,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  lazy val SCHEMA_LEVEL_COLLATIONS_ENABLED =
+    buildConf("spark.sql.collation.schemaLevel.enabled")
+      .internal()
+      .doc(
+        "Schema level collations feature is under development and its use should be done " +
+          "under this feature flag. The feature allows setting default collation for all " +
+          "underlying objects within that schema, except the ones that were previously created." +
+          "An object with an explicitly set collation will not inherit the collation from the " +
+          "schema."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   lazy val TRIM_COLLATION_ENABLED =
     buildConf("spark.sql.collation.trim.enabled")
       .internal()
@@ -1058,6 +1108,14 @@ object SQLConf {
       .version("3.2.0")
       .stringConf
       .createOptional
+
+  val MAP_ZIP_WITH_USES_JAVA_COLLECTIONS =
+    buildConf("spark.sql.mapZipWithUsesJavaCollections")
+      .doc("When true, the `map_zip_with` function uses Java collections instead of Scala " +
+        "collections. This is useful for avoiding NaN equality issues.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
@@ -1974,6 +2032,15 @@ object SQLConf {
       .doc("When true, fail the Dataset query if it contains ambiguous self-join.")
       .version("3.0.0")
       .internal()
+      .booleanConf
+      .createWithDefault(true)
+
+  val APPLY_SESSION_CONF_OVERRIDES_TO_FUNCTION_RESOLUTION =
+    buildConf("spark.sql.analyzer.sqlFunctionResolution.applyConfOverrides")
+      .internal()
+      .version("4.0.1")
+      .doc("When true, applies the conf overrides for certain feature flags during the " +
+        "resolution of user-defined sql table valued functions, consistent with view resolution.")
       .booleanConf
       .createWithDefault(true)
 
@@ -3581,7 +3648,7 @@ object SQLConf {
         errorMsg = "The value of " +
           "spark.sql.execution.arrow.maxBytesPerBatch should be greater " +
           "than zero and less than INT_MAX.")
-      .createWithDefaultString("256MB")
+      .createWithDefaultString("64MB")
 
   val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.transformWithStateInPySpark.maxStateRecordsPerBatch")
@@ -5818,10 +5885,88 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val PRETTY_ALIAS_NAME_FOR_CORRELATED_AGGREGATE_FUNCTION =
-    buildConf("spark.sql.prettyAliasNameForCorrelatedAggFunc.enabled")
+  val PIPELINES_STREAM_STATE_POLLING_INTERVAL = {
+    buildConf("spark.sql.pipelines.execution.streamstate.pollingInterval")
+      .doc(
+        "Interval in seconds at which the stream state is polled for changes. This is used to " +
+          "check if the stream has failed and needs to be restarted."
+      )
+      .version("4.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(1)
+  }
+
+  val PIPELINES_WATCHDOG_MIN_RETRY_TIME_IN_SECONDS = {
+    buildConf("spark.sql.pipelines.execution.watchdog.minRetryTime")
+      .doc(
+        "Initial duration in seconds between the time when we notice a flow has failed and " +
+          "when we try to restart the flow. The interval between flow restarts doubles with " +
+          "every stream failure up to the maximum value set in " +
+          "`pipelines.execution.watchdog.maxRetryTime`."
+      )
+      .version("4.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(v => v > 0, "Watchdog minimum retry time must be at least 1 second.")
+      .createWithDefault(5)
+  }
+
+  val PIPELINES_WATCHDOG_MAX_RETRY_TIME_IN_SECONDS = {
+    buildConf("spark.sql.pipelines.execution.watchdog.maxRetryTime")
+      .doc(
+        "Maximum time interval in seconds at which flows will be restarted."
+      )
+      .version("4.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(3600)
+  }
+
+  val PIPELINES_MAX_CONCURRENT_FLOWS = {
+    buildConf("spark.sql.pipelines.execution.maxConcurrentFlows")
+      .doc(
+        "Max number of flows to execute at once. Used to tune performance for triggered " +
+          "pipelines. Has no effect on continuous pipelines."
+      )
+      .version("4.1.0")
+      .intConf
+      .createWithDefault(16)
+  }
+
+
+  val PIPELINES_TIMEOUT_MS_FOR_TERMINATION_JOIN_AND_LOCK = {
+    buildConf("spark.sql.pipelines.timeoutMsForTerminationJoinAndLock")
+      .doc("Timeout in milliseconds to grab a lock for stopping update - default is 1hr.")
+      .version("4.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(v => v > 0L, "Timeout for lock must be at least 1 millisecond.")
+      .createWithDefault(60 * 60 * 1000)
+  }
+
+  val PIPELINES_MAX_FLOW_RETRY_ATTEMPTS = {
+    buildConf("spark.sql.pipelines.maxFlowRetryAttempts")
+      .doc("Maximum number of times a flow can be retried")
+      .version("4.1.0")
+      .intConf
+      .createWithDefault(2)
+  }
+
+  val HADOOP_LINE_RECORD_READER_ENABLED =
+    buildConf("spark.sql.execution.datasources.hadoopLineRecordReader.enabled")
       .internal()
-      .doc("When true, use prettified name for correlated aggregate functions.")
+      .doc("Enable the imported Hadoop's LineRecordReader. This was imported and renamed to " +
+        "HadoopLineRecordReader to add support for compression option and other " +
+        "future codecs like ZSTD, etc. Setting the conf to false will use the LineRecordReader " +
+        "class from the hadoop jar instead of the imported one.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENFORCE_TYPE_COERCION_BEFORE_UNION_DEDUPLICATION =
+    buildConf("spark.sql.enforceTypeCoercionBeforeUnionDeduplication.enabled")
+      .internal()
+      .doc(
+        "When set to true, we enforce type coercion to run before deduplication of UNION " +
+        "children outputs. Otherwise, order is relative to rule ordering."
+      )
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
@@ -5996,6 +6141,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def expressionTreeChangeLogLevel: Level = getConf(EXPRESSION_TREE_CHANGE_LOG_LEVEL)
 
+  def nameResolutionLogLevel: Level = getConf(NAME_RESOLUTION_LOG_LEVEL)
+
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
 
   def dynamicPartitionPruningUseStats: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_USE_STATS)
@@ -6146,6 +6293,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def allowCollationsInMapKeys: Boolean = getConf(ALLOW_COLLATIONS_IN_MAP_KEYS)
 
   def objectLevelCollationsEnabled: Boolean = getConf(OBJECT_LEVEL_COLLATIONS_ENABLED)
+
+  def schemaLevelCollationsEnabled: Boolean = getConf(SCHEMA_LEVEL_COLLATIONS_ENABLED)
 
   def trimCollationEnabled: Boolean = getConf(TRIM_COLLATION_ENABLED)
 
@@ -6336,6 +6485,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
    * Returns the error handler for handling hint errors.
    */
   def hintErrorHandler: HintErrorHandler = HintErrorLogger
+
+  def mapZipWithUsesJavaCollections: Boolean =
+    getConf(MAP_ZIP_WITH_USES_JAVA_COLLECTIONS)
 
   def subexpressionEliminationEnabled: Boolean =
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
@@ -6865,6 +7017,33 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
 
   def legacyOutputSchema: Boolean = getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)
+
+  def streamStatePollingInterval: Long = getConf(SQLConf.PIPELINES_STREAM_STATE_POLLING_INTERVAL)
+
+  def watchdogMinRetryTimeInSeconds: Long = {
+    getConf(SQLConf.PIPELINES_WATCHDOG_MIN_RETRY_TIME_IN_SECONDS)
+  }
+
+  def watchdogMaxRetryTimeInSeconds: Long = {
+    val value = getConf(SQLConf.PIPELINES_WATCHDOG_MAX_RETRY_TIME_IN_SECONDS)
+    if (value < watchdogMinRetryTimeInSeconds) {
+      throw new IllegalArgumentException(
+        "Watchdog maximum retry time must be greater than or equal to the watchdog minimum " +
+          "retry time."
+      )
+    }
+    value
+  }
+
+  def maxConcurrentFlows: Int = getConf(SQLConf.PIPELINES_MAX_CONCURRENT_FLOWS)
+
+  def timeoutMsForTerminationJoinAndLock: Long = {
+    getConf(SQLConf.PIPELINES_TIMEOUT_MS_FOR_TERMINATION_JOIN_AND_LOCK)
+  }
+
+  def maxFlowRetryAttempts: Int = getConf(SQLConf.PIPELINES_MAX_FLOW_RETRY_ATTEMPTS)
+
+  def hadoopLineRecordReaderEnabled: Boolean = getConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.{HashMap, Iterator}
+import java.util.{Collection, HashMap, Iterator}
 import java.util.Map.Entry
 import java.util.function.Function
 
@@ -38,6 +38,8 @@ private abstract class KeyTransformingMap[K, V] {
     impl.computeIfAbsent(mapKey(key), compute)
 
   def iterator: Iterator[Entry[K, V]] = impl.entrySet().iterator()
+
+  def values: Collection[V] = impl.values()
 
   def +=(kv: (K, V)): this.type = {
     impl.put(mapKey(kv._1), kv._2)

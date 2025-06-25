@@ -27,9 +27,10 @@ import scala.collection.mutable
 import com.google.common.cache.{CacheBuilder, RemovalNotification}
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.Model
-import org.apache.spark.ml.util.{ConnectHelper, MLWritable, Summary}
+import org.apache.spark.ml.util.{ConnectHelper, HasTrainingSummary, MLWritable, Summary}
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.SessionHolder
 
@@ -37,7 +38,7 @@ import org.apache.spark.sql.connect.service.SessionHolder
  * MLCache is for caching ML objects, typically for models and summaries evaluated by a model.
  */
 private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
-  private val helper = new ConnectHelper()
+  private val helper = new ConnectHelper(sessionHolder.session)
   private val helperID = "______ML_CONNECT_HELPER______"
   private val modelClassNameFile = "__model_class_name__"
 
@@ -60,7 +61,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE) / 1024
   }
 
-  private def getOffloadingTimeoutMinute: Long = {
+  private[ml] def getOffloadingTimeoutMinute: Long = {
     sessionHolder.session.conf.get(
       Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_OFFLOADING_TIMEOUT)
   }
@@ -114,6 +115,12 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     }
   }
 
+  private[spark] def getModelOffloadingPath(refId: String): Path = {
+    val path = offloadedModelsDir.resolve(refId)
+    require(path.startsWith(offloadedModelsDir))
+    path
+  }
+
   /**
    * Cache an object into a map of MLCache, and return its key
    * @param obj
@@ -121,7 +128,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
    * @return
    *   the key
    */
-  def register(obj: Object): String = {
+  def register(obj: Object): String = this.synchronized {
     val objectId = UUID.randomUUID().toString
 
     if (obj.isInstanceOf[Summary]) {
@@ -136,8 +143,14 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       }
       cachedModel.put(objectId, CacheItem(obj, sizeBytes))
       if (getMemoryControlEnabled) {
-        val savePath = offloadedModelsDir.resolve(objectId)
+        val savePath = getModelOffloadingPath(objectId)
         obj.asInstanceOf[MLWritable].write.saveToLocal(savePath.toString)
+        if (obj.isInstanceOf[HasTrainingSummary[_]]
+          && obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
+          obj
+            .asInstanceOf[HasTrainingSummary[_]]
+            .saveSummary(savePath.resolve("summary").toString)
+        }
         Files.writeString(savePath.resolve(modelClassNameFile), obj.getClass.getName)
         totalMLCacheInMemorySizeBytes.addAndGet(sizeBytes)
         totalMLCacheSizeBytes.addAndGet(sizeBytes)
@@ -148,6 +161,18 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     objectId
   }
 
+  private[spark] def verifyObjectId(refId: String): Unit = {
+    // Verify the `refId` is a valid UUID.
+    // This is for preventing client to send a malicious `refId` which might
+    // cause Spark Server security issue.
+    try {
+      UUID.fromString(refId)
+    } catch {
+      case _: IllegalArgumentException =>
+        throw SparkException.internalError(s"The MLCache key $refId is invalid.")
+    }
+  }
+
   /**
    * Get the object by the key
    * @param refId
@@ -155,13 +180,14 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
    * @return
    *   the cached object
    */
-  def get(refId: String): Object = {
+  def get(refId: String): Object = this.synchronized {
     if (refId == helperID) {
       helper
     } else {
+      verifyObjectId(refId)
       var obj: Object = Option(cachedModel.get(refId)).map(_.obj).getOrElse(null)
       if (obj == null && getMemoryControlEnabled) {
-        val loadPath = offloadedModelsDir.resolve(refId)
+        val loadPath = getModelOffloadingPath(refId)
         if (Files.isDirectory(loadPath)) {
           val className = Files.readString(loadPath.resolve(modelClassNameFile))
           obj = MLUtils.loadTransformer(
@@ -178,12 +204,14 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     }
   }
 
-  def _removeModel(refId: String): Boolean = {
+  def _removeModel(refId: String, evictOnly: Boolean): Boolean = {
+    verifyObjectId(refId)
     val removedModel = cachedModel.remove(refId)
     val removedFromMem = removedModel != null
-    val removedFromDisk = if (getMemoryControlEnabled) {
+    val removedFromDisk = if (!evictOnly && removedModel != null && getMemoryControlEnabled) {
       totalMLCacheSizeBytes.addAndGet(-removedModel.sizeBytes)
-      val offloadingPath = new File(offloadedModelsDir.resolve(refId).toString)
+      val removePath = getModelOffloadingPath(refId)
+      val offloadingPath = new File(removePath.toString)
       if (offloadingPath.exists()) {
         FileUtils.deleteDirectory(offloadingPath)
         true
@@ -201,8 +229,8 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
    * @param refId
    *   the key used to look up the corresponding object
    */
-  def remove(refId: String): Boolean = {
-    val modelIsRemoved = _removeModel(refId)
+  def remove(refId: String, evictOnly: Boolean = false): Boolean = this.synchronized {
+    val modelIsRemoved = _removeModel(refId, evictOnly)
 
     modelIsRemoved
   }
@@ -210,7 +238,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   /**
    * Clear all the caches
    */
-  def clear(): Int = {
+  def clear(): Int = this.synchronized {
     val size = cachedModel.size()
     cachedModel.clear()
     if (getMemoryControlEnabled) {
@@ -219,7 +247,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     size
   }
 
-  def getInfo(): Array[String] = {
+  def getInfo(): Array[String] = this.synchronized {
     val info = mutable.ArrayBuilder.make[String]
     cachedModel.forEach { case (key, value) =>
       info += s"id: $key, obj: ${value.obj.getClass}, size: ${value.sizeBytes}"

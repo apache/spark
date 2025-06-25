@@ -630,6 +630,7 @@ object StateStoreProvider extends Logging {
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean,
       stateSchemaProvider: Option[StateSchemaProvider]): StateStoreProvider = {
+    hadoopConf.set(StreamExecution.RUN_ID_KEY, providerId.queryRunId.toString)
     val provider = create(storeConf.providerClass)
     provider.init(providerId.storeId, keySchema, valueSchema, keyStateEncoderSpec,
       useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey, stateSchemaProvider)
@@ -669,12 +670,8 @@ object StateStoreProvider extends Logging {
    */
   private[state] def getRunId(hadoopConf: Configuration): String = {
     val runId = hadoopConf.get(StreamExecution.RUN_ID_KEY)
-    if (runId != null) {
-      runId
-    } else {
-      assert(Utils.isTesting, "Failed to find query id/batch Id in task context")
-      UUID.randomUUID().toString
-    }
+    assert(runId != null)
+    runId
   }
 
   /**
@@ -968,7 +965,6 @@ object StateStore extends Logging {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
-    hadoopConf.set(StreamExecution.RUN_ID_KEY, storeProviderId.queryRunId.toString)
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
       stateSchemaBroadcast)

@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / Python-only Classic-only (master, Python 3.11)"
+name: "Build / Python-only, Classic-only (master, Python 3.11)"
 
 on:
   schedule:

@@ -409,7 +409,11 @@ object SparkConnectService extends Logging {
     }
 
     val maxRetries: Int = SparkEnv.get.conf.get(CONNECT_GRPC_PORT_MAX_RETRIES)
-    Utils.startServiceOnPort[Server](startPort, startServiceFn, maxRetries, getClass.getName)
+    Utils.startServiceOnPort[Server](
+      startPort,
+      startServiceFn,
+      maxRetries,
+      getClass.getName.stripSuffix("$"))
   }
 
   // Starts the service
