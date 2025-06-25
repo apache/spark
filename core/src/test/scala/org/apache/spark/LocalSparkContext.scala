@@ -32,6 +32,7 @@ trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self
   override def beforeAll(): Unit = {
     super.beforeAll()
     InternalLoggerFactory.setDefaultFactory(Slf4JLoggerFactory.INSTANCE)
+    SparkContext.clearActiveContext()
   }
 
   override def afterEach(): Unit = {
