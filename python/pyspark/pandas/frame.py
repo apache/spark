@@ -8460,7 +8460,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 if is_ansi_mode_enabled(self._internal.spark_frame.sparkSession):
                     col_type = self._internal.spark_type_for(label)
                     scol = self._internal.spark_column_for(label).isin(
-                        [F.lit(v).try_cast(col_type.simpleString()) for v in values]
+                        [F.lit(v).try_cast(col_type) for v in values]
                     )
                 else:
                     scol = self._internal.spark_column_for(label).isin([F.lit(v) for v in values])
