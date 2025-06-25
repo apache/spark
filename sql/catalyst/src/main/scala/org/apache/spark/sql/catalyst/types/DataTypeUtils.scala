@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, Decimal, DecimalType, MapType, NullType, StringType, StructField, StructType, UserDefinedType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, Decimal, DecimalType, MapType, NullType, StringType, StructField, StructType, TimestampType, UserDefinedType}
 import org.apache.spark.sql.types.DecimalType.{forType, fromDecimal}
 
 object DataTypeUtils {
@@ -251,9 +251,27 @@ object DataTypeUtils {
   }
 
   /**
+   * Checks if a data type depends on external context for its interpretation or behavior.
+   *
+   * A data type has a context dependency if it contains:
+   * - TimestampType (which depends on timezone for interpretation)
+   * - UserDefinedType (which may have custom logic depending on runtime context)
+   *
+   * This information is useful when determining if operations on this type might behave
+   * differently based on the execution environment.
+   *
+   * @param dataType The data type to check
+   * @return true if the data type has context dependency
+   */
+  def hasContextDependency(dataType: DataType): Boolean = {
+    matchesPattern(dataType,
+      dt => dt.isInstanceOf[TimestampType] || dt.isInstanceOf[UserDefinedType[_]])
+  }
+
+  /**
    * Check if a given data type matches a given pattern.
    */
-  def matchesPattern(dataType: DataType, pattern: DataType => Boolean): Boolean = {
+  private def matchesPattern(dataType: DataType, pattern: DataType => Boolean): Boolean = {
     dataType match {
       case a: ArrayType =>
         pattern(a) || matchesPattern(a.elementType, pattern)
