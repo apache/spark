@@ -180,6 +180,7 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
                     )
                 batch = pa.RecordBatch.from_arrays([struct], ["_0"])
 
+                # Write the first record batch with initialization.
                 if should_write_start_length:
                     write_int(SpecialLengths.START_ARROW_STREAM, stream)
                     should_write_start_length = False
