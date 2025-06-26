@@ -2744,7 +2744,8 @@
           "Streaming tables may only be defined by streaming relations, but the flow <flowIdentifier> attempts to write a batch relation to the streaming table <tableIdentifier>. Consider using the STREAM operator in Spark-SQL to convert the batch relation into a streaming relation, or populating the streaming table with an append once-flow instead."
         ]
       }
-    }
+    },
+    "sqlState" : "42000"
   },
   "INVALID_FORMAT" : {
     "message" : [
