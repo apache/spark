@@ -20,6 +20,7 @@ package org.apache.spark.deploy
 import java.io.File
 import java.net.URI
 import java.nio.file.Files
+import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -52,9 +53,12 @@ object PythonRunner {
     // Format python file paths before adding them to the PYTHONPATH
     val formattedPythonFile = formatPath(pythonFile)
     val formattedPyFiles = resolvePyFiles(formatPaths(pyFiles))
+    val apiMode = sparkConf.get(SPARK_API_MODE).toLowerCase(Locale.ROOT)
+    val isAPIModeClassic = apiMode == "classic"
+    val isAPIModeConnect = apiMode == "connect"
 
     var gatewayServer: Option[Py4JServer] = None
-    if (sparkConf.getOption("spark.remote").isEmpty) {
+    if (sparkConf.getOption("spark.remote").isEmpty || isAPIModeClassic) {
       gatewayServer = Some(new Py4JServer(sparkConf))
 
       val thread = new Thread(() => Utils.logUncaughtExceptions { gatewayServer.get.start() })
@@ -80,7 +84,7 @@ object PythonRunner {
     // Launch Python process
     val builder = new ProcessBuilder((Seq(pythonExec, formattedPythonFile) ++ otherArgs).asJava)
     val env = builder.environment()
-    if (sparkConf.getOption("spark.remote").nonEmpty) {
+    if (sparkConf.getOption("spark.remote").nonEmpty || isAPIModeConnect) {
       // For non-local remote, pass configurations to environment variables so
       // Spark Connect client sets them. For local remotes, they will be set
       // via Py4J.
@@ -90,7 +94,11 @@ object PythonRunner {
         env.put(s"PYSPARK_REMOTE_INIT_CONF_$idx", compact(render(group)))
       }
     }
-    sparkConf.getOption("spark.remote").foreach(url => env.put("SPARK_REMOTE", url))
+    if (isAPIModeClassic) {
+      sparkConf.getOption("spark.master").foreach(url => env.put("MASTER", url))
+    } else {
+      sparkConf.getOption("spark.remote").foreach(url => env.put("SPARK_REMOTE", url))
+    }
     env.put("PYTHONPATH", pythonPath)
     // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
     env.put("PYTHONUNBUFFERED", "YES") // value is needed to be set to a non-empty string

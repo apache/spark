@@ -34,6 +34,11 @@ class StateStoreConf(
   val numStateStoreMaintenanceThreads: Int = sqlConf.numStateStoreMaintenanceThreads
 
   /**
+   * Timeout for state store maintenance operations to complete on shutdown
+   */
+  val stateStoreMaintenanceShutdownTimeout: Long = sqlConf.stateStoreMaintenanceShutdownTimeout
+
+  /**
    * Minimum number of delta files in a chain after which HDFSBackedStateStore will
    * consider generating a snapshot.
    */
@@ -91,6 +96,15 @@ class StateStoreConf(
    */
   val enableStateStoreCheckpointIds =
     StatefulOperatorStateInfo.enableStateStoreCheckpointIds(sqlConf)
+
+  /**
+   * Whether the coordinator is reporting state stores trailing behind in snapshot uploads.
+   */
+  val reportSnapshotUploadLag: Boolean =
+    sqlConf.stateStoreCoordinatorReportSnapshotUploadLag
+
+  /** Whether to unload the store on task completion. */
+  val unloadOnCommit = sqlConf.stateStoreUnloadOnCommit
 
   /**
    * Additional configurations related to state store. This will capture all configs in

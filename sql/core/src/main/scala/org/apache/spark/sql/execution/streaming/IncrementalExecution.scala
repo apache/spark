@@ -26,20 +26,20 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
-import org.apache.spark.sql.{SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.{LocalLimitExec, QueryExecution, SerializeFromObjectExec, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.execution.{CommandExecutionMode, LocalLimitExec, QueryExecution, SerializeFromObjectExec, SparkPlan, SparkPlanner, SparkStrategy => Strategy, UnaryExecNode}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec, SortAggregateExec, UpdatingSessionsExec}
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
-import org.apache.spark.sql.execution.python.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPandasExec}
+import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter, StateSchemaBroadcast, StateSchemaMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -50,6 +50,10 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  * @param currentStateStoreCkptId checkpoint ID for the latest committed version. It is
  *                                  operatorID -> array of checkpointIDs. Array index n
  *                                  represents checkpoint ID for the nth shuffle partition.
+ * @param stateSchemaMetadatas map that keeps track of the StateSchemaBroadcasts per operator.
+ *                             It is passed in by reference from MicrobatchExecution, so it is
+ *                             populated during planning in the first batch, and passed in to the
+ *                             StatefulOperatorStateInfo on every subsequent batch
  */
 class IncrementalExecution(
     sparkSession: SparkSession,
@@ -64,8 +68,12 @@ class IncrementalExecution(
     val watermarkPropagator: WatermarkPropagator,
     val isFirstBatch: Boolean,
     val currentStateStoreCkptId:
-      MutableMap[Long, Array[Array[String]]] = MutableMap[Long, Array[Array[String]]]())
-  extends QueryExecution(sparkSession, logicalPlan) with Logging {
+      MutableMap[Long, Array[Array[String]]] = MutableMap[Long, Array[Array[String]]](),
+    val stateSchemaMetadatas: MutableMap[Long, StateSchemaBroadcast] =
+      MutableMap[Long, StateSchemaBroadcast](),
+    mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
+    val isTerminatingTrigger: Boolean = false)
+  extends QueryExecution(sparkSession, logicalPlan, mode = mode) with Logging {
 
   // Modified planner with stateful operations.
   override val planner: SparkPlanner = new SparkPlanner(
@@ -84,7 +92,7 @@ class IncrementalExecution(
       StreamingDeduplicationStrategy ::
       StreamingGlobalLimitStrategy(outputMode) ::
       StreamingTransformWithStateStrategy ::
-      TransformWithStateInPandasStrategy :: Nil
+      TransformWithStateInPySparkStrategy :: Nil
   }
 
   private lazy val hadoopConf = sparkSession.sessionState.newHadoopConf()
@@ -142,6 +150,7 @@ class IncrementalExecution(
       operatorId,
       currentBatchId,
       numStateStores,
+      stateSchemaMetadatas.get(operatorId),
       currentStateStoreCkptId.get(operatorId))
     ret
   }
@@ -214,24 +223,24 @@ class IncrementalExecution(
       // filepath, and write this path out in the OperatorStateMetadata file
       case statefulOp: StatefulOperator if isFirstBatch =>
         val stateSchemaVersion = statefulOp match {
-          case _: TransformWithStateExec | _: TransformWithStateInPandasExec =>
+          case _: TransformWithStateExec | _: TransformWithStateInPySparkExec =>
             sparkSession.sessionState.conf.
               getConf(SQLConf.STREAMING_TRANSFORM_WITH_STATE_OP_STATE_SCHEMA_VERSION)
+          case _: StreamingSymmetricHashJoinExec =>
+            sparkSession.sessionState.conf.
+              getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
           case _ => STATE_SCHEMA_DEFAULT_VERSION
         }
         val schemaValidationResult = statefulOp.
           validateAndMaybeEvolveStateSchema(hadoopConf, currentBatchId, stateSchemaVersion)
-        val stateSchemaPaths = schemaValidationResult.map(_.schemaPath)
-        // write out the state schema paths to the metadata file
         statefulOp match {
           case ssw: StateStoreWriter =>
-            val metadata = ssw.operatorStateMetadata(stateSchemaPaths)
             // validate metadata
-            if (isFirstBatch && currentBatchId != 0) {
+            val oldMetadata = if (isFirstBatch && currentBatchId != 0) {
               // If we are restarting from a different checkpoint directory
               // there may be a mismatch between the stateful operators in the
               // physical plan and the metadata.
-              val oldMetadata = try {
+              try {
                 OperatorStateMetadataReader.createReader(
                   new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
                   hadoopConf, ssw.operatorStateMetadataVersion, currentBatchId - 1).read()
@@ -242,20 +251,48 @@ class IncrementalExecution(
                     log"versions: ${MDC(ERROR, e.getMessage)}")
                 None
               }
-              oldMetadata match {
-                case Some(oldMetadata) => ssw.validateNewMetadata(oldMetadata, metadata)
-                case None =>
-              }
+            } else {
+              None
+            }
+            val stateSchemaList = ssw.stateSchemaList(schemaValidationResult,
+              oldMetadata)
+            val metadata = ssw.operatorStateMetadata(stateSchemaList)
+            oldMetadata match {
+              case Some(oldMetadata) =>
+                ssw.validateNewMetadata(oldMetadata, metadata)
+              case None =>
             }
             val metadataWriter = OperatorStateMetadataWriter.createWriter(
-                new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
-                hadoopConf,
-                ssw.operatorStateMetadataVersion,
-                Some(currentBatchId))
+              new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
+              hadoopConf,
+              ssw.operatorStateMetadataVersion,
+              Some(currentBatchId))
             metadataWriter.write(metadata)
-          case _ =>
+            if (ssw.supportsSchemaEvolution) {
+              val stateSchemaMetadata = StateSchemaMetadata
+                .createStateSchemaMetadata(checkpointLocation, hadoopConf, stateSchemaList.head)
+
+              // The Broadcast is created only on the first batch of every query run
+              // and is kept in-memory and passed in to planning for every subsequent batch
+              val stateSchemaBroadcast =
+                StateSchemaBroadcast(sparkSession.sparkContext.broadcast(stateSchemaMetadata))
+              stateSchemaMetadatas.put(ssw.getStateInfo.operatorId, stateSchemaBroadcast)
+              // Create new instance with copied fields but updated stateInfo
+              ssw match {
+                case exec: TransformWithStateExec =>
+                  exec.copy(stateInfo = Some(exec.getStateInfo.copy(
+                    stateSchemaMetadata = Some(stateSchemaBroadcast))))
+                case exec: TransformWithStateInPySparkExec =>
+                  exec.copy(stateInfo = Some(exec.getStateInfo.copy(
+                    stateSchemaMetadata = Some(stateSchemaBroadcast))))
+                // Add other cases if needed for different StateStoreWriter implementations
+                case _ => ssw
+              }
+            } else {
+              ssw
+            }
+          case _ => statefulOp
         }
-        statefulOp
     }
   }
 
@@ -339,7 +376,7 @@ class IncrementalExecution(
           hasInitialState = hasInitialState
         )
 
-      case t: TransformWithStateInPandasExec =>
+      case t: TransformWithStateInPySparkExec =>
         val hasInitialState = (currentBatchId == 0L && t.hasInitialState)
         t.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
@@ -441,11 +478,11 @@ class IncrementalExecution(
 
       // UpdateEventTimeColumnExec is used to tag the eventTime column, and validate
       // emitted rows adhere to watermark in the output of transformWithStateInp.
-      // Hence, this node shares the same watermark value as TransformWithStateInPandasExec.
+      // Hence, this node shares the same watermark value as TransformWithStateInPySparkExec.
       // This is the same as above in TransformWithStateExec.
-      // The only difference is TransformWithStateInPandasExec is analysed slightly different
+      // The only difference is TransformWithStateInPySparkExec is analysed slightly different
       // with no SerializeFromObjectExec wrapper.
-      case UpdateEventTimeColumnExec(eventTime, delay, None, t: TransformWithStateInPandasExec)
+      case UpdateEventTimeColumnExec(eventTime, delay, None, t: TransformWithStateInPySparkExec)
         if t.stateInfo.isDefined =>
         val stateInfo = t.stateInfo.get
         val iwLateEvents = inputWatermarkForLateEvents(stateInfo)
@@ -463,7 +500,7 @@ class IncrementalExecution(
           eventTimeWatermarkForEviction = inputWatermarkForEviction(t.stateInfo.get)
         )
 
-      case t: TransformWithStateInPandasExec if t.stateInfo.isDefined =>
+      case t: TransformWithStateInPySparkExec if t.stateInfo.isDefined =>
         t.copy(
           eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(t.stateInfo.get),
           eventTimeWatermarkForEviction = inputWatermarkForEviction(t.stateInfo.get)
@@ -568,12 +605,10 @@ class IncrementalExecution(
         checkOperatorValidWithMetadata(planWithStateOpId, currentBatchId - 1)
       }
 
-      // The rule below doesn't change the plan but can cause the side effect that
-      // metadata/schema is written in the checkpoint directory of stateful operator.
-      planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
+      val planWithSchemas = planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
 
-      simulateWatermarkPropagation(planWithStateOpId)
-      planWithStateOpId transform WatermarkPropagationRule.rule
+      simulateWatermarkPropagation(planWithSchemas)
+      planWithSchemas transform WatermarkPropagationRule.rule
     }
   }
 

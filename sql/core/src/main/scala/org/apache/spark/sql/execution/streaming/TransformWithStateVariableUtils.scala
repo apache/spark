@@ -16,10 +16,6 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import java.util.UUID
-
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
@@ -27,9 +23,8 @@ import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.StateVariableType.StateVariableType
-import org.apache.spark.sql.execution.streaming.state.{OperatorInfoV1, OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV2, StateSchemaCompatibilityChecker, StateSchemaValidationResult, StateStoreColFamilySchema, StateStoreErrors, StateStoreId, StateStoreMetadataV2}
+import org.apache.spark.sql.execution.streaming.state.{OperatorInfoV1, OperatorStateMetadata, OperatorStateMetadataV2, StateStoreErrors, StateStoreId, StateStoreMetadataV2}
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 
 /**
@@ -59,6 +54,8 @@ object TransformWithStateVariableUtils {
       throw StateStoreErrors.missingTimeValues(timeMode.toString)
     }
   }
+
+  def getRowCounterCFName(stateName: String): String = "$rowCounter_" + stateName
 }
 
 // Enum of possible State Variable types
@@ -170,13 +167,15 @@ object TransformWithStateOperatorProperties extends Logging {
  * `init()` with DriverStatefulProcessorHandleImpl, and get the state schema and state metadata
  * on driver during physical planning phase.
  */
-trait TransformWithStateMetadataUtils extends Logging {
-  def getColFamilySchemas(): Map[String, StateStoreColFamilySchema]
+trait TransformWithStateMetadataUtils extends SchemaValidationUtils with Logging {
+
+  // TransformWithState operators are allowed to evolve their schemas
+  override val schemaEvolutionEnabledForOperator: Boolean = true
 
   def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo]
 
   def getOperatorStateMetadata(
-      stateSchemaPaths: List[String],
+      stateSchemaPaths: List[List[String]],
       info: StatefulOperatorStateInfo,
       shortName: String,
       timeMode: TimeMode,
@@ -195,48 +194,6 @@ trait TransformWithStateMetadataUtils extends Logging {
     OperatorStateMetadataV2(operatorInfo, stateStoreInfo, operatorProperties.json)
   }
 
-  def validateAndWriteStateSchema(
-      hadoopConf: Configuration,
-      batchId: Long,
-      stateSchemaVersion: Int,
-      info: StatefulOperatorStateInfo,
-      session: SparkSession,
-      operatorStateMetadataVersion: Int = 2): List[StateSchemaValidationResult] = {
-    assert(stateSchemaVersion >= 3)
-    val newSchemas = getColFamilySchemas()
-    val stateSchemaDir = stateSchemaDirPath(info)
-    val newStateSchemaFilePath =
-      new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
-    val metadataPath = new Path(info.checkpointLocation, s"${info.operatorId}")
-    val metadataReader = OperatorStateMetadataReader.createReader(
-      metadataPath, hadoopConf, operatorStateMetadataVersion, batchId)
-    val operatorStateMetadata = try {
-      metadataReader.read()
-    } catch {
-      // If this is the first time we are running the query, there will be no metadata
-      // and this error is expected. In this case, we return None.
-      case _: Exception if batchId == 0 =>
-        None
-    }
-
-    val oldStateSchemaFilePath: Option[Path] = operatorStateMetadata match {
-      case Some(metadata) =>
-        metadata match {
-          case v2: OperatorStateMetadataV2 =>
-            Some(new Path(v2.stateStoreInfo.head.stateSchemaFilePath))
-          case _ => None
-        }
-      case None => None
-    }
-    // state schema file written here, writing the new schema list we passed here
-    List(StateSchemaCompatibilityChecker.
-      validateAndMaybeEvolveStateSchema(info, hadoopConf,
-        newSchemas.values.toList, session.sessionState, stateSchemaVersion,
-        storeName = StateStoreId.DEFAULT_STORE_NAME,
-        oldSchemaFilePath = oldStateSchemaFilePath,
-        newSchemaFilePath = Some(newStateSchemaFilePath)))
-  }
-
   def validateNewMetadataForTWS(
       oldOperatorMetadata: OperatorStateMetadata,
       newOperatorMetadata: OperatorStateMetadata): Unit = {
@@ -252,15 +209,5 @@ trait TransformWithStateMetadataUtils extends Logging {
           oldOperatorProps, newOperatorProps)
       case (_, _) =>
     }
-  }
-
-  private def stateSchemaDirPath(info: StatefulOperatorStateInfo): Path = {
-    val storeName = StateStoreId.DEFAULT_STORE_NAME
-    val stateCheckpointPath =
-      new Path(info.checkpointLocation, s"${info.operatorId.toString}")
-
-    val stateSchemaPath = new Path(stateCheckpointPath, "_stateSchema")
-    val storeNamePath = new Path(stateSchemaPath, storeName)
-    storeNamePath
   }
 }

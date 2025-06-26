@@ -18,6 +18,7 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -190,4 +191,33 @@ object PowerIterationClustering extends DefaultParamsReadable[PowerIterationClus
 
   @Since("2.4.0")
   override def load(path: String): PowerIterationClustering = super.load(path)
+}
+
+private[spark] class PowerIterationClusteringWrapper(override val uid: String)
+  extends Transformer with PowerIterationClusteringParams with DefaultParamsWritable {
+
+  def this() = this(Identifiable.randomUID("PowerIterationClusteringWrapper"))
+
+  override def transform(dataset: Dataset[_]): DataFrame =
+    throw new UnsupportedOperationException("transform not supported")
+
+  override def transformSchema(schema: StructType): StructType =
+    throw new UnsupportedOperationException("transformSchema not supported")
+
+  override def copy(extra: ParamMap): PowerIterationClusteringWrapper = defaultCopy(extra)
+
+  override def write: MLWriter = new MLWriter {
+    override protected def saveImpl(path: String): Unit = {
+      new PowerIterationClustering(uid).copy(paramMap).save(path)
+    }
+  }
+}
+
+private[spark] object PowerIterationClusteringWrapper
+  extends DefaultParamsReadable[PowerIterationClusteringWrapper] {
+
+  override def load(path: String): PowerIterationClusteringWrapper = {
+    val pic = PowerIterationClustering.load(path)
+    new PowerIterationClusteringWrapper(pic.uid).copy(pic.paramMap)
+  }
 }

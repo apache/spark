@@ -17,8 +17,9 @@
 package org.apache.spark.sql.execution.datasources.v2.python
 
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.PythonSQLMetrics
+import org.apache.spark.util.MetricUtils
 
 
 class PythonCustomMetric(
@@ -28,7 +29,7 @@ class PythonCustomMetric(
   def this() = this(null, null)
 
   override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
-    SQLMetrics.stringValue("size", taskMetrics, Array.empty[Long])
+    MetricUtils.stringValue("size", taskMetrics, Array.empty[Long])
   }
 }
 

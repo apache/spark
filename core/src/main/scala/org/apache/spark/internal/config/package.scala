@@ -162,7 +162,7 @@ package object config {
         "PySpark shell.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   private[spark] val LEGACY_TASK_NAME_MDC_ENABLED =
     ConfigBuilder("spark.log.legacyTaskNameMdc.enabled")
@@ -224,6 +224,14 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val EVENT_LOG_EXCLUDED_PATTERNS =
+    ConfigBuilder("spark.eventLog.excludedPatterns")
+      .doc("Specifies comma-separated event names to be excluded from the event logs.")
+      .version("4.1.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   private[spark] val EVENT_LOG_ALLOW_EC =
     ConfigBuilder("spark.eventLog.erasureCoding.enabled")
       .version("3.0.0")
@@ -283,6 +291,14 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val EVENT_LOG_READER_MAX_STRING_LENGTH =
+    ConfigBuilder("spark.eventLog.readerMaxStringLength")
+      .doc("Limit the maximum string size an eventlog item can have when deserializing it.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(_ > 0, "Maximum string size of an eventLog item should be positive.")
+      .createWithDefault(Int.MaxValue)
+
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite")
       .version("1.0.0")
@@ -309,8 +325,8 @@ package object config {
         " to be rolled over.")
       .version("3.0.0")
       .bytesConf(ByteUnit.BYTE)
-      .checkValue(_ >= ByteUnit.MiB.toBytes(10), "Max file size of event log should be " +
-        "configured to be at least 10 MiB.")
+      .checkValue(_ >= ByteUnit.MiB.toBytes(2), "Max file size of event log should be " +
+        "configured to be at least 2 MiB.")
       .createWithDefaultString("128m")
 
   private[spark] val EXECUTOR_ID =
@@ -807,10 +823,8 @@ package object config {
       .doc("Specifies a disk-based store used in shuffle service local db. " +
         "ROCKSDB or LEVELDB (deprecated).")
       .version("3.4.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(DBBackend.values.map(_.toString).toSet)
-      .createWithDefault(DBBackend.ROCKSDB.name)
+      .enumConf(classOf[DBBackend])
+      .createWithDefault(DBBackend.ROCKSDB)
 
   private[spark] val SHUFFLE_SERVICE_PORT =
     ConfigBuilder("spark.shuffle.service.port").version("1.2.0").intConf.createWithDefault(7337)
@@ -1023,8 +1037,7 @@ package object config {
   private[spark] val MAX_EXECUTOR_FAILURES =
     ConfigBuilder("spark.executor.maxNumFailures")
       .doc("The maximum number of executor failures before failing the application. " +
-        "This configuration only takes effect on YARN, or Kubernetes when " +
-        "`spark.kubernetes.allocation.pods.allocator` is set to 'direct'.")
+        "This configuration only takes effect on YARN and Kubernetes.")
       .version("3.5.0")
       .intConf
       .createOptional
@@ -1032,8 +1045,8 @@ package object config {
   private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
     ConfigBuilder("spark.executor.failuresValidityInterval")
       .doc("Interval after which executor failures will be considered independent and not " +
-        "accumulate towards the attempt count. This configuration only takes effect on YARN, " +
-        "or Kubernetes when `spark.kubernetes.allocation.pods.allocator` is set to 'direct'.")
+        "accumulate towards the attempt count. This configuration only takes effect on YARN " +
+        "and Kubernetes.")
       .version("3.5.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
@@ -1361,7 +1374,7 @@ package object config {
         "spark.io.compression.codec.")
       .version("2.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME =
     ConfigBuilder("spark.rdd.checkpoint.cachePreferredLocsExpireTime")
@@ -1974,7 +1987,7 @@ package object config {
   private[spark] val MASTER_REST_SERVER_ENABLED = ConfigBuilder("spark.master.rest.enabled")
     .version("1.3.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   private[spark] val MASTER_REST_SERVER_HOST = ConfigBuilder("spark.master.rest.host")
     .doc("Specifies the host of the Master REST API endpoint")
@@ -2296,9 +2309,8 @@ package object config {
   private[spark] val SCHEDULER_MODE =
     ConfigBuilder("spark.scheduler.mode")
       .version("0.8.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .createWithDefault(SchedulingMode.FIFO.toString)
+      .enumConf(SchedulingMode)
+      .createWithDefault(SchedulingMode.FIFO)
 
   private[spark] val SCHEDULER_REVIVE_INTERVAL =
     ConfigBuilder("spark.scheduler.revive.interval")
@@ -2822,4 +2834,42 @@ package object config {
       .version("4.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
+
+  private[spark] val SPARK_API_MODE =
+    ConfigBuilder("spark.api.mode")
+      .doc("For Spark Classic applications, specify whether to automatically use Spark Connect " +
+        "by running a local Spark Connect server dedicated to the application. The server is " +
+        "terminated when the application is terminated. The value can be `classic` or `connect`.")
+      .version("4.0.0")
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .checkValues(Set("connect", "classic"))
+      .createWithDefault(
+        if (sys.env.get("SPARK_CONNECT_MODE").contains("1")) "connect" else "classic")
+
+  private[spark] val DRIVER_REDIRECT_CONSOLE_OUTPUTS =
+    ConfigBuilder("spark.driver.log.redirectConsoleOutputs")
+      .doc("Comma-separated list of the console output kind for driver that needs to redirect " +
+        "to logging system. Supported values are `stdout`, `stderr`. It only takes affect when " +
+        s"`${PLUGINS.key}` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.")
+      .version("4.1.0")
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .toSequence
+      .checkValue(v => v.forall(Set("stdout", "stderr").contains),
+        "The value only can be one or more of 'stdout, stderr'.")
+      .createWithDefault(Seq("stdout", "stderr"))
+
+  private[spark] val EXEC_REDIRECT_CONSOLE_OUTPUTS =
+    ConfigBuilder("spark.executor.log.redirectConsoleOutputs")
+      .doc("Comma-separated list of the console output kind for executor that needs to redirect " +
+        "to logging system. Supported values are `stdout`, `stderr`. It only takes affect when " +
+        s"`${PLUGINS.key}` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.")
+      .version("4.1.0")
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .toSequence
+      .checkValue(v => v.forall(Set("stdout", "stderr").contains),
+        "The value only can be one or more of 'stdout, stderr'.")
+      .createWithDefault(Seq("stdout", "stderr"))
 }

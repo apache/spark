@@ -22,6 +22,7 @@ from pyspark.errors.exceptions.base import (
     PySparkAttributeError,
 )
 from pyspark.resource import ResourceProfile
+from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -54,7 +55,7 @@ import functools
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.util import is_remote_only
-from pyspark.sql.types import Row, StructType, _create_row, _parse_datatype_string
+from pyspark.sql.types import Row, StructType, _create_row
 from pyspark.sql.dataframe import (
     DataFrame as ParentDataFrame,
     DataFrameNaFunctions as ParentDataFrameNaFunctions,
@@ -69,9 +70,10 @@ from pyspark.errors import (
     PySparkRuntimeError,
 )
 from pyspark.util import PythonEvalType
+from pyspark.serializers import CPickleSerializer
 from pyspark.storagelevel import StorageLevel
 import pyspark.sql.connect.plan as plan
-from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
+from pyspark.sql.conversion import ArrowTableToRowsConversion
 from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.merge import MergeIntoWriter
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
@@ -85,7 +87,8 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
-from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
+from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
+from pyspark.sql.table_arg import TableArg
 
 
 if TYPE_CHECKING:
@@ -140,6 +143,7 @@ class DataFrame(ParentDataFrame):
         # by __repr__ and _repr_html_ while eager evaluation opens.
         self._support_repr_html = False
         self._cached_schema: Optional[StructType] = None
+        self._cached_schema_serialized: Optional[bytes] = None
         self._execution_info: Optional["ExecutionInfo"] = None
 
     def __reduce__(self) -> Tuple:
@@ -273,6 +277,14 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._cached_schema
         return res
 
+    def metadataColumn(self, colName: str) -> Column:
+        if not isinstance(colName, str):
+            raise PySparkTypeError(
+                errorClass="NOT_STR",
+                messageParameters={"arg_name": "colName", "arg_type": type(colName).__name__},
+            )
+        return self._col(colName, is_metadata_column=True)
+
     def colRegex(self, colName: str) -> Column:
         from pyspark.sql.connect.column import Column as ConnectColumn
 
@@ -285,11 +297,11 @@ class DataFrame(ParentDataFrame):
 
     @property
     def dtypes(self) -> List[Tuple[str, str]]:
-        return [(str(f.name), f.dataType.simpleString()) for f in self.schema.fields]
+        return [(str(f.name), f.dataType.simpleString()) for f in self._schema.fields]
 
     @property
     def columns(self) -> List[str]:
-        return self.schema.names
+        return [field.name for field in self._schema.fields]
 
     @property
     def sparkSession(self) -> "SparkSession":
@@ -1733,7 +1745,7 @@ class DataFrame(ParentDataFrame):
 
                     # Try best to verify the column name with cached schema
                     # If fails, fall back to the server side validation
-                    if not verify_col_name(item, self.schema):
+                    if not verify_col_name(item, self._schema):
                         self.select(item).isLocal()
 
                 return self._col(item)
@@ -1749,13 +1761,14 @@ class DataFrame(ParentDataFrame):
                 messageParameters={"arg_name": "item", "arg_type": type(item).__name__},
             )
 
-    def _col(self, name: str) -> Column:
+    def _col(self, name: str, is_metadata_column: bool = False) -> Column:
         from pyspark.sql.connect.column import Column as ConnectColumn
 
         return ConnectColumn(
             ColumnReference(
                 unparsed_identifier=name,
                 plan_id=self._plan._plan_id,
+                is_metadata_column=is_metadata_column,
             )
         )
 
@@ -1801,6 +1814,11 @@ class DataFrame(ParentDataFrame):
             self._session,
         )
 
+    def asTable(self) -> TableArg:
+        from pyspark.sql.connect.table_arg import TableArg as ConnectTableArg
+
+        return ConnectTableArg(SubqueryExpression(self._plan, subquery_type="table_arg"))
+
     def scalar(self) -> Column:
         from pyspark.sql.connect.column import Column as ConnectColumn
 
@@ -1812,7 +1830,7 @@ class DataFrame(ParentDataFrame):
         return ConnectColumn(SubqueryExpression(self._plan, subquery_type="exists"))
 
     @property
-    def schema(self) -> StructType:
+    def _schema(self) -> StructType:
         # Schema caching is correct in most cases. Connect is lazy by nature. This means that
         # we only resolve the plan when it is submitted for execution or analysis. We do not
         # cache intermediate resolved plan. If the input (changes table, view redefinition,
@@ -1821,7 +1839,24 @@ class DataFrame(ParentDataFrame):
         if self._cached_schema is None:
             query = self._plan.to_proto(self._session.client)
             self._cached_schema = self._session.client.schema(query)
-        return copy.deepcopy(self._cached_schema)
+            try:
+                self._cached_schema_serialized = CPickleSerializer().dumps(self._schema)
+            except Exception as e:
+                logger.warn(f"DataFrame schema pickle dumps failed with exception: {e}.")
+                self._cached_schema_serialized = None
+        return self._cached_schema
+
+    @property
+    def schema(self) -> StructType:
+        # self._schema call will cache the schema and serialize it if it is not cached yet.
+        _schema = self._schema
+        if self._cached_schema_serialized is not None:
+            try:
+                return CPickleSerializer().loads(self._cached_schema_serialized)
+            except Exception as e:
+                logger.warn(f"DataFrame schema pickle loads failed with exception: {e}.")
+        # In case of pickle ser/de failure, fallback to deepcopy approach.
+        return copy.deepcopy(_schema)
 
     @functools.cache
     def isLocal(self) -> bool:
@@ -2035,9 +2070,9 @@ class DataFrame(ParentDataFrame):
     ) -> ParentDataFrame:
         from pyspark.sql.connect.udf import UserDefinedFunction
 
-        _validate_pandas_udf(func, evalType)
+        _validate_vectorized_udf(func, evalType)
         if isinstance(schema, str):
-            schema = cast(StructType, _parse_datatype_string(schema))
+            schema = cast(StructType, self._session._parse_ddl(schema))
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
@@ -2084,12 +2119,12 @@ class DataFrame(ParentDataFrame):
         def foreach_func(row: Any) -> None:
             f(row)
 
-        self.select(F.struct(*self.schema.fieldNames()).alias("row")).select(
+        self.select(F.struct(*self._schema.fieldNames()).alias("row")).select(
             F.udf(foreach_func, StructType())("row")  # type: ignore[arg-type]
         ).collect()
 
     def foreachPartition(self, f: Callable[[Iterator[Row]], None]) -> None:
-        schema = self.schema
+        schema = self._schema
         field_converters = [
             ArrowTableToRowsConversion._create_converter(f.dataType) for f in schema.fields
         ]

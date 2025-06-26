@@ -15,24 +15,20 @@
 # limitations under the License.
 #
 
-import unittest
 import os
+import unittest
 
-from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 if should_test_connect:
     from pyspark.ml.tests.connect.test_legacy_mode_summarizer import SummarizerTestsMixin
 
     @unittest.skipIf(not should_test_connect, connect_requirement_message)
-    class SummarizerTestsOnConnect(SummarizerTestsMixin, unittest.TestCase):
-        def setUp(self) -> None:
-            self.spark = SparkSession.builder.remote(
-                os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
-            ).getOrCreate()
-
-        def tearDown(self) -> None:
-            self.spark.stop()
+    class SummarizerTestsOnConnect(SummarizerTestsMixin, ReusedConnectTestCase):
+        @classmethod
+        def master(cls):
+            return os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
 
 
 if __name__ == "__main__":

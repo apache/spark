@@ -51,7 +51,7 @@ public class ExpressionInfo {
             "window_funcs", "xml_funcs", "table_funcs", "url_funcs", "variant_funcs"));
 
     private static final Set<String> validSources =
-            new HashSet<>(Arrays.asList("built-in", "hive", "python_udf", "scala_udf",
+            new HashSet<>(Arrays.asList("built-in", "hive", "python_udf", "scala_udf", "sql_udf",
                     "java_udf", "python_udtf", "internal"));
 
     public String getClassName() {

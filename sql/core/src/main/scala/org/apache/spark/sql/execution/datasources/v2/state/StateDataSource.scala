@@ -33,10 +33,10 @@ import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.{J
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.{StateMetadataPartitionReader, StateMetadataTableEntry}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.{CommitLog, OffsetSeqLog, OffsetSeqMetadata, TimerStateUtils, TransformWithStateOperatorProperties, TransformWithStateVariableInfo}
-import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
+import org.apache.spark.sql.execution.streaming.{OffsetSeqMetadata, StreamingQueryCheckpointMetadata, TimerStateUtils, TransformWithStateOperatorProperties, TransformWithStateVariableInfo}
+import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_STATE
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
-import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateSchemaCompatibilityChecker, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.{InMemoryStateSchemaProvider, KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateSchemaCompatibilityChecker, StateSchemaMetadata, StateSchemaProvider, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.types.StructType
@@ -55,7 +55,11 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
   // Seq of operator names who uses state schema v3 and TWS related options.
   // This Seq was used in checks before reading state schema files.
-  private val twsShortNameSeq = Seq("transformWithStateExec", "transformWithStateInPandasExec")
+  private val twsShortNameSeq = Seq(
+    "transformWithStateExec",
+    "transformWithStateInPandasExec",
+    "transformWithStateInPySparkExec"
+  )
 
   override def shortName(): String = "statestore"
 
@@ -77,7 +81,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
     new StateTable(session, schema, sourceOptions, stateConf, keyStateEncoderSpec,
       stateStoreReaderInfo.transformWithStateVariableInfoOpt,
-      stateStoreReaderInfo.stateStoreColFamilySchemaOpt)
+      stateStoreReaderInfo.stateStoreColFamilySchemaOpt,
+      stateStoreReaderInfo.stateSchemaProviderOpt)
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
@@ -87,6 +92,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
     val stateCheckpointLocation = sourceOptions.stateCheckpointLocation
     try {
+      // SPARK-51779 TODO: Support stream-stream joins with virtual column families
       val (keySchema, valueSchema) = sourceOptions.joinSide match {
         case JoinSideValues.left =>
           StreamStreamJoinStateHelper.readKeyValueSchema(session, stateCheckpointLocation.toString,
@@ -116,8 +122,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
   override def supportsExternalMetadata(): Boolean = false
 
   private def buildStateStoreConf(checkpointLocation: String, batchId: Long): StateStoreConf = {
-    val offsetLog = new OffsetSeqLog(session,
-      new Path(checkpointLocation, DIR_NAME_OFFSETS).toString)
+    val offsetLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).offsetLog
     offsetLog.get(batchId) match {
       case Some(value) =>
         val metadata = value.metadata.getOrElse(
@@ -167,7 +172,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       // if the state variable is not one of the defined/available state variables, then we
       // fail the query
       val stateVarName = if (sourceOptions.readRegisteredTimers) {
-        TimerStateUtils.getTimerStateVarName(timeMode)
+        TimerStateUtils.getTimerStateVarNames(timeMode)._1
       } else {
         sourceOptions.stateVarName.get
       }
@@ -206,6 +211,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     var keyStateEncoderSpecOpt: Option[KeyStateEncoderSpec] = None
     var stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema] = None
     var transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo] = None
+    var stateSchemaProvider: Option[StateSchemaProvider] = None
     var timeMode: String = TimeMode.None.toString
 
     if (sourceOptions.joinSide == JoinSideValues.none) {
@@ -214,7 +220,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
       // Read the schema file path from operator metadata version v2 onwards
       // for the transformWithState operator
-      val oldSchemaFilePath = if (storeMetadata.length > 0 && storeMetadata.head.version == 2
+      val oldSchemaFilePaths = if (storeMetadata.length > 0 && storeMetadata.head.version == 2
         && twsShortNameSeq.exists(storeMetadata.head.operatorName.contains)) {
         val storeMetadataEntry = storeMetadata.head
         val operatorProperties = TransformWithStateOperatorProperties.fromJson(
@@ -222,7 +228,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         timeMode = operatorProperties.timeMode
 
         if (sourceOptions.readRegisteredTimers) {
-          stateVarName = TimerStateUtils.getTimerStateVarName(timeMode)
+          stateVarName = TimerStateUtils.getTimerStateVarNames(timeMode)._1
         }
 
         val stateVarInfoList = operatorProperties.stateVariables
@@ -231,11 +237,17 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           s"for state variable $stateVarName in operator ${sourceOptions.operatorId}")
         val stateVarInfo = stateVarInfoList.head
         transformWithStateVariableInfoOpt = Some(stateVarInfo)
-        val schemaFilePath = new Path(storeMetadataEntry.stateSchemaFilePath.get)
-        Some(schemaFilePath)
+        val schemaFilePaths = storeMetadataEntry.stateSchemaFilePaths
+        val stateSchemaMetadata = StateSchemaMetadata.createStateSchemaMetadata(
+          sourceOptions.stateCheckpointLocation.toString,
+          hadoopConf,
+          schemaFilePaths
+        )
+        stateSchemaProvider = Some(new InMemoryStateSchemaProvider(stateSchemaMetadata))
+        schemaFilePaths.map(new Path(_))
       } else {
         None
-      }
+      }.toList
 
       try {
         // Read the actual state schema from the provided path for v2 or from the dedicated path
@@ -246,7 +258,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           partitionId, sourceOptions.storeName)
         val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
         val manager = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
-          oldSchemaFilePath = oldSchemaFilePath)
+          oldSchemaFilePaths = oldSchemaFilePaths)
         val stateSchema = manager.readSchemaFile()
 
         // Based on the version and read schema, populate the keyStateEncoderSpec used for
@@ -263,7 +275,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     StateStoreReaderInfo(
       keyStateEncoderSpecOpt,
       stateStoreColFamilySchemaOpt,
-      transformWithStateVariableInfoOpt
+      transformWithStateVariableInfoOpt,
+      stateSchemaProvider
     )
   }
 
@@ -534,8 +547,7 @@ object StateSourceOptions extends DataSourceOptions {
   }
 
   private def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Long = {
-    val commitLog = new CommitLog(session,
-      new Path(checkpointLocation, DIR_NAME_COMMITS).toString)
+    val commitLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).commitLog
     commitLog.getLatest() match {
       case Some((lastId, _)) => lastId
       case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
@@ -548,5 +560,6 @@ object StateSourceOptions extends DataSourceOptions {
 case class StateStoreReaderInfo(
     keyStateEncoderSpecOpt: Option[KeyStateEncoderSpec],
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
-    transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo]
+    transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo],
+    stateSchemaProviderOpt: Option[StateSchemaProvider]
 )

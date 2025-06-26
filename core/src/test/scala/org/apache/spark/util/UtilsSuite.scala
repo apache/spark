@@ -22,6 +22,7 @@ import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.{Files => JFiles}
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -36,6 +37,7 @@ import org.apache.commons.lang3.SystemUtils
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.logging.log4j.Level
 
@@ -529,6 +531,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       .toPath, scenario1.toPath).toFile
     if (Utils.isJavaVersionAtLeast21) {
       assert(Utils.createDirectory(scenario6))
+    } else if (Runtime.version().feature() == 17 && Runtime.version().update() >= 14) {
+      // SPARK-50946: Java 17.0.14 includes JDK-8294193, so scenario6 can succeed.
+      assert(Utils.createDirectory(scenario6))
     } else {
       assert(!Utils.createDirectory(scenario6))
     }
@@ -729,6 +734,43 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(!tempDir2.exists())
     assert(!tempDir3.exists())
     assert(!sourceFile2.exists())
+  }
+
+  test("SPARK-50716: deleteRecursively - SymbolicLink To File") {
+    val tempDir = Utils.createTempDir()
+    val sourceFile = new File(tempDir, "foo.txt")
+    JFiles.write(sourceFile.toPath, "Some content".getBytes)
+    assert(sourceFile.exists())
+
+    val symlinkFile = new File(tempDir, "bar.txt")
+    JFiles.createSymbolicLink(symlinkFile.toPath, sourceFile.toPath)
+
+    // Check that the symlink was created successfully
+    assert(JFiles.isSymbolicLink(symlinkFile.toPath))
+    Utils.deleteRecursively(tempDir)
+
+    // Verify that everything is deleted
+    assert(!tempDir.exists)
+  }
+
+  test("SPARK-50716: deleteRecursively - SymbolicLink To Dir") {
+    val tempDir = Utils.createTempDir()
+    val sourceDir = new File(tempDir, "sourceDir")
+    assert(sourceDir.mkdir())
+    val sourceFile = new File(sourceDir, "file.txt")
+    JFiles.write(sourceFile.toPath, "Some content".getBytes)
+
+    val symlinkDir = new File(tempDir, "targetDir")
+    JFiles.createSymbolicLink(symlinkDir.toPath, sourceDir.toPath)
+
+    // Check that the symlink was created successfully
+    assert(JFiles.isSymbolicLink(symlinkDir.toPath))
+
+    // Now delete recursively
+    Utils.deleteRecursively(tempDir)
+
+    // Verify that everything is deleted
+    assert(!tempDir.exists)
   }
 
   test("loading properties from file") {
@@ -960,11 +1002,19 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   }
 
   test("Set Spark CallerContext") {
-    val context = "test"
-    new CallerContext(context).setCurrentContext()
-    if (CallerContext.callerContextEnabled) {
-      assert(s"SPARK_$context" === HadoopCallerContext.getCurrent.toString)
-    }
+    currentAuditContext.reset
+    new CallerContext("test",
+      Some("upstream"),
+      Some("app"),
+      Some("attempt"),
+      Some(1),
+      Some(2),
+      Some(3),
+      Some(4),
+      Some(5)).setCurrentContext()
+    val expected = s"SPARK_test_app_attempt_JId_1_SId_2_3_TId_4_5_upstream"
+    assert(expected === HadoopCallerContext.getCurrent.toString)
+    assert(expected === currentAuditContext.get("spark"))
   }
 
   test("encodeFileNameToURIRawPath") {

@@ -71,53 +71,64 @@ case class InlineCTE(
    * @param plan The plan to collect the CTEs from
    * @param cteMap A mutable map that accumulates the CTEs and their reference information by CTE
    *               ids.
-   * @param collectCTERefs A function to collect CTE references so that the caller side can do some
-   *                       bookkeeping work.
+   * @param outerCTEId While collecting the map we use this optional CTE id to identify the
+   *                   current outer CTE.
    */
   private def buildCTEMap(
       plan: LogicalPlan,
       cteMap: mutable.Map[Long, CTEReferenceInfo],
-      collectCTERefs: CTERelationRef => Unit = _ => ()): Unit = {
+      outerCTEId: Option[Long] = None): Unit = {
     plan match {
       case WithCTE(child, cteDefs) =>
-        cteDefs.foreach { cteDef =>
-          cteMap(cteDef.id) = CTEReferenceInfo(
-            cteDef = cteDef,
-            refCount = 0,
-            outgoingRefs = mutable.Map.empty.withDefaultValue(0),
-            shouldInline = true
-          )
+        val isDuplicated = cteDefs.forall(cteDef => cteMap.contains(cteDef.id))
+        if (isDuplicated) {
+          // If we have seen this `WithCTE` node then it must be self-contained so we can clear
+          // the references from containers to the definitions, and we don't need to process it
+          // again
+
+          cteDefs.foreach { cteDef =>
+            cteMap(cteDef.id).container.foreach(c => cteMap(c).outgoingRefs -= cteDef.id)
+          }
+        } else {
+          cteDefs.foreach { cteDef =>
+            cteMap(cteDef.id) = CTEReferenceInfo(
+              cteDef = cteDef,
+              refCount = 0,
+              outgoingRefs = mutable.Map.empty.withDefaultValue(0),
+              shouldInline = true,
+              container = outerCTEId
+            )
+          }
+
+          cteDefs.foreach { cteDef =>
+            buildCTEMap(cteDef, cteMap, Some(cteDef.id))
+          }
+          buildCTEMap(child, cteMap, outerCTEId)
         }
-        cteDefs.foreach { cteDef =>
-          buildCTEMap(cteDef, cteMap, ref => {
-            // A CTE relation can references CTE relations defined before it in the same `WithCTE`.
-            // Here we update the out-going-ref-count for it, in case this CTE relation is not
-            // referenced at all and can be optimized out, and we need to decrease the ref counts
-            // for CTE relations that are referenced by it.
-            if (cteDefs.exists(_.id == ref.cteId)) {
-              cteMap(cteDef.id).increaseOutgoingRefCount(ref.cteId, 1)
-            }
-            // Similarly, a CTE relation can reference CTE relations defined in the outer `WithCTE`.
-            // Here we call the `collectCTERefs` function so that the outer CTE can also update the
-            // out-going-ref-count if needed.
-            collectCTERefs(ref)
-          })
-        }
-        buildCTEMap(child, cteMap, collectCTERefs)
 
       case ref: CTERelationRef =>
         cteMap(ref.cteId) = cteMap(ref.cteId).withRefCountIncreased(1)
-        collectCTERefs(ref)
+
+        // The `outerCTEId` CTE definition can either reference `cteId` definition if `cteId` is in
+        // the same or in an outer `WithCTE` node, or `outerCTEId` can contain `cteId` definition if
+        // `cteId` is an inner `WithCTE` node inside `outerCTEId`.
+        // In both cases we can track the relations in `outgoingRefs` when we see a definition the
+        // first time. But if we encounter a conflicting duplicated contains relation later, then we
+        // will remove the references of the first contains relation.
+        outerCTEId.foreach { cteId =>
+          cteMap(cteId).increaseOutgoingRefCount(ref.cteId, 1)
+        }
+
       case _ =>
         if (plan.containsPattern(CTE)) {
           plan.children.foreach { child =>
-            buildCTEMap(child, cteMap, collectCTERefs)
+            buildCTEMap(child, cteMap, outerCTEId)
           }
 
           plan.expressions.foreach { expr =>
             if (expr.containsAllPatterns(PLAN_EXPRESSION, CTE)) {
               expr.foreach {
-                case e: SubqueryExpression => buildCTEMap(e.plan, cteMap, collectCTERefs)
+                case e: SubqueryExpression => buildCTEMap(e.plan, cteMap, outerCTEId)
                 case _ =>
               }
             }
@@ -225,12 +236,15 @@ case class InlineCTE(
  *                 from other CTE relations and regular places.
  * @param outgoingRefs A mutable map that tracks outgoing reference counts to other CTE relations.
  * @param shouldInline If true, this CTE relation should be inlined in the places that reference it.
+ * @param container The container of a CTE definition is another CTE definition in which the
+ *                  `WithCTE` node of the definition resides.
  */
 case class CTEReferenceInfo(
     cteDef: CTERelationDef,
     refCount: Int,
     outgoingRefs: mutable.Map[Long, Int],
-    shouldInline: Boolean) {
+    shouldInline: Boolean,
+    container: Option[Long]) {
 
   def withRefCountIncreased(count: Int): CTEReferenceInfo = {
     copy(refCount = refCount + count)

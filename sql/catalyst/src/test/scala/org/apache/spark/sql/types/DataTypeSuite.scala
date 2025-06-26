@@ -22,7 +22,7 @@ import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CollationFactory, StringConcat}
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
@@ -380,6 +380,8 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(VarcharType(10), 10)
   yearMonthIntervalTypes.foreach(checkDefaultSize(_, 4))
   dayTimeIntervalTypes.foreach(checkDefaultSize(_, 8))
+  checkDefaultSize(TimeType(TimeType.MIN_PRECISION), 8)
+  checkDefaultSize(TimeType(TimeType.MAX_PRECISION), 8)
 
   def checkEqualsIgnoreCompatibleNullability(
       from: DataType,
@@ -1370,5 +1372,46 @@ class DataTypeSuite extends SparkFunSuite {
       DataTypes.createVarcharType(-1)
     }
     assert(exception.getMessage.contains("The length of varchar type cannot be negative."))
+  }
+
+  test("precisions of the TIME data type") {
+    TimeType.MIN_PRECISION to TimeType.MAX_PRECISION foreach { p =>
+      assert(TimeType(p).sql == s"TIME($p)")
+    }
+
+    Seq(
+      Int.MinValue,
+      TimeType.MIN_PRECISION - 1,
+      TimeType.MAX_PRECISION + 1,
+      Int.MaxValue).foreach { p =>
+      checkError(
+        exception = intercept[SparkException] {
+          TimeType(p)
+        },
+        condition = "UNSUPPORTED_TIME_PRECISION",
+        parameters = Map("precision" -> p.toString)
+      )
+    }
+  }
+
+  test("Parse time(n) as TimeType(n)") {
+    0 to 6 foreach { n =>
+      assert(DataType.fromJson(s"\"time($n)\"") == TimeType(n))
+      val expectedStructType = StructType(Seq(StructField("t", TimeType(n))))
+      assert(DataType.fromDDL(s"t time($n)") == expectedStructType)
+    }
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        DataType.fromJson("\"time(9)\"")
+      },
+      condition = "INVALID_JSON_DATA_TYPE",
+      parameters = Map("invalidType" -> "time(9)"))
+    checkError(
+      exception = intercept[ParseException] {
+        DataType.fromDDL("t time(-1)")
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'time'", "hint" -> ""))
   }
 }

@@ -23,13 +23,13 @@ import os
 from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
-from pyspark.testing.utils import SPARK_HOME
+from pyspark.testing.sqlutils import SPARK_HOME
 from pyspark.sql.functions import udf, assert_true, lit
 
 if should_test_connect:
     from pyspark.sql.connect.client.artifact import ArtifactManager
     from pyspark.sql.connect.client import DefaultChannelBuilder
-    from pyspark.errors.exceptions.connect import SparkConnectGrpcException
+    from pyspark.errors import SparkRuntimeException
 
 
 class ArtifactTestsMixin:
@@ -73,10 +73,14 @@ class ArtifactTestsMixin:
             with open(pyfile_path, "w+") as f:
                 f.write("my_func = lambda: 11")
 
-            with self.assertRaisesRegex(
-                SparkConnectGrpcException, "\\(java.lang.RuntimeException\\) Duplicate Artifact"
-            ):
+            with self.assertRaises(SparkRuntimeException) as pe:
                 self.spark.addArtifacts(pyfile_path, pyfile=True)
+
+            self.check_error(
+                exception=pe.exception,
+                errorClass="ARTIFACT_ALREADY_EXISTS",
+                messageParameters={"normalizedRemoteRelativePath": "pyfiles/my_pyfile.py"},
+            )
 
     def check_add_zipped_package(self, spark_session):
         with tempfile.TemporaryDirectory(prefix="check_add_zipped_package") as d:
@@ -220,6 +224,8 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
     def test_basic_requests(self):
         file_name = "smallJar"
         small_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
+        if not os.path.isfile(small_jar_path):
+            raise unittest.SkipTest(f"Skipped as {small_jar_path} does not exist.")
         response = self.artifact_manager._retrieve_responses(
             self.artifact_manager._create_requests(
                 small_jar_path, pyfile=False, archive=False, file=False
@@ -231,6 +237,8 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
         file_name = "smallJar"
         small_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
         small_jar_crc_path = os.path.join(self.artifact_crc_path, f"{file_name}.txt")
+        if not os.path.isfile(small_jar_path):
+            raise unittest.SkipTest(f"Skipped as {small_jar_path} does not exist.")
 
         requests = list(
             self.artifact_manager._create_requests(
@@ -257,6 +265,8 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
         file_name = "junitLargeJar"
         large_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
         large_jar_crc_path = os.path.join(self.artifact_crc_path, f"{file_name}.txt")
+        if not os.path.isfile(large_jar_path):
+            raise unittest.SkipTest(f"Skipped as {large_jar_path} does not exist.")
 
         requests = list(
             self.artifact_manager._create_requests(
@@ -292,6 +302,8 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
         file_name = "smallJar"
         small_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
         small_jar_crc_path = os.path.join(self.artifact_crc_path, f"{file_name}.txt")
+        if not os.path.isfile(small_jar_path):
+            raise unittest.SkipTest(f"Skipped as {small_jar_path} does not exist.")
 
         requests = list(
             self.artifact_manager._create_requests(
@@ -329,6 +341,10 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
         large_jar_path = os.path.join(self.artifact_file_path, f"{file_name2}.jar")
         large_jar_crc_path = os.path.join(self.artifact_crc_path, f"{file_name2}.txt")
         large_jar_size = os.path.getsize(large_jar_path)
+        if not os.path.isfile(small_jar_path):
+            raise unittest.SkipTest(f"Skipped as {small_jar_path} does not exist.")
+        if not os.path.isfile(large_jar_path):
+            raise unittest.SkipTest(f"Skipped as {large_jar_path} does not exist.")
 
         requests = list(
             self.artifact_manager._create_requests(

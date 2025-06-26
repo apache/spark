@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{And, GreaterThan, LessThan, Literal, Or}
+import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, GreaterThan, LessThan, Literal, Or, Rand}
+import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
@@ -168,7 +170,7 @@ abstract class CTEInlineSuiteBase
         }.head.length == 2,
         "With-CTE should contain 2 CTE defs after analysis.")
       assert(
-        df.queryExecution.optimizedPlan.collect {
+        df.queryExecution.optimizedPlan.collectFirst {
           case r: RepartitionOperation => r
         }.isEmpty,
         "CTEs with one reference should all be inlined after optimization.")
@@ -253,7 +255,7 @@ abstract class CTEInlineSuiteBase
         }.head.length == 2,
         "With-CTE should contain 2 CTE defs after analysis.")
       assert(
-        df.queryExecution.optimizedPlan.collect {
+        df.queryExecution.optimizedPlan.collectFirst {
           case r: RepartitionOperation => r
         }.isEmpty,
         "Deterministic CTEs should all be inlined after optimization.")
@@ -332,14 +334,14 @@ abstract class CTEInlineSuiteBase
 
   test("CTE Predicate push-down and column pruning - combined predicate") {
     withTempView("t") {
-      Seq((0, 1, 2), (1, 2, 3)).toDF("c1", "c2", "c3").createOrReplaceTempView("t")
+      Seq((0, 1, 2, 3), (1, 2, 3, 4)).toDF("c1", "c2", "c3", "c4").createOrReplaceTempView("t")
       val df = sql(
         s"""with
            |v as (
-           |  select c1, c2, c3, rand() c4 from t
+           |  select c1, c2, c3, c4, rand() c5 from t
            |),
            |vv as (
-           |  select v1.c1, v1.c2, rand() c5 from v v1, v v2
+           |  select v1.c1, v1.c2, rand() c6 from v v1, v v2
            |  where v1.c1 > 0 and v2.c3 < 5 and v1.c2 = v2.c2
            |)
            |select vv1.c1, vv1.c2, vv2.c1, vv2.c2 from vv vv1, vv vv2
@@ -715,7 +717,7 @@ abstract class CTEInlineSuiteBase
     checkAnswer(df, Row(1))
   }
 
-  test("SPARK-49816: should only update out-going-ref-count for referenced outer CTE relation") {
+  test("SPARK-49816: detect self-contained WithCTE nodes") {
     withView("v") {
       sql(
         """
@@ -734,6 +736,116 @@ abstract class CTEInlineSuiteBase
           |""".stripMargin)
       checkAnswer(df, Row(1))
     }
+  }
+
+  test("SPARK-49816: complicated reference count") {
+    // Manually build the logical plan for
+    // WITH
+    //  r1 AS (SELECT random()),
+    //  r2 AS (
+    //    WITH
+    //      t1 AS (SELECT * FROM r1),
+    //      t2 AS (SELECT * FROM r1)
+    //    SELECT * FROM t2
+    //  )
+    // SELECT * FROM r2
+    // r1 should be inlined as it's only referenced once: main query -> r2 -> t2 -> r1
+    val r1 = CTERelationDef(Project(Seq(Alias(Rand(Literal(0)), "r")()), OneRowRelation()))
+    val r1Ref = CTERelationRef(r1.id, r1.resolved, r1.output, r1.isStreaming)
+    val t1 = CTERelationDef(Project(r1.output, r1Ref))
+    val t2 = CTERelationDef(Project(r1.output, r1Ref))
+    val t2Ref = CTERelationRef(t2.id, t2.resolved, t2.output, t2.isStreaming)
+    val r2 = CTERelationDef(WithCTE(Project(t2.output, t2Ref), Seq(t1, t2)))
+    val r2Ref = CTERelationRef(r2.id, r2.resolved, r2.output, r2.isStreaming)
+    val query = WithCTE(Project(r2.output, r2Ref), Seq(r1, r2))
+    val inlined = InlineCTE().apply(query)
+    assert(!inlined.exists(_.isInstanceOf[WithCTE]))
+  }
+
+  test("SPARK-49816: complicated reference count 2") {
+    // Manually build the logical plan for
+    // WITH
+    //  r1 AS (SELECT random()),
+    //  r2 AS (
+    //    WITH
+    //      t1 AS (SELECT * FROM r1),
+    //      t2 AS (SELECT * FROM t1)
+    //    SELECT * FROM t2
+    //  )
+    // SELECT * FROM r1
+    // This is similar to the previous test case, but t2 reference t1 instead of r1, and the main
+    // query references r1. r1 should be inlined as r2 is not referenced at all.
+    val r1 = CTERelationDef(Project(Seq(Alias(Rand(Literal(0)), "r")()), OneRowRelation()))
+    val r1Ref = CTERelationRef(r1.id, r1.resolved, r1.output, r1.isStreaming)
+    val t1 = CTERelationDef(Project(r1.output, r1Ref))
+    val t1Ref = CTERelationRef(t1.id, t1.resolved, t1.output, t1.isStreaming)
+    val t2 = CTERelationDef(Project(t1.output, t1Ref))
+    val t2Ref = CTERelationRef(t2.id, t2.resolved, t2.output, t2.isStreaming)
+    val r2 = CTERelationDef(WithCTE(Project(t2.output, t2Ref), Seq(t1, t2)))
+    val query = WithCTE(Project(r1.output, r1Ref), Seq(r1, r2))
+    val inlined = InlineCTE().apply(query)
+    assert(!inlined.exists(_.isInstanceOf[WithCTE]))
+  }
+
+  test("SPARK-49816: complicated reference count 3") {
+    // Manually build the logical plan for
+    // WITH
+    //  r1 AS (
+    //    WITH
+    //      t1 AS (SELECT random()),
+    //      t2 AS (SELECT * FROM t1)
+    //    SELECT * FROM t2
+    //  ),
+    //  r2 AS (
+    //    WITH
+    //      t1 AS (SELECT random()),
+    //      t2 AS (SELECT * FROM r1)
+    //    SELECT * FROM t2
+    //  )
+    // SELECT * FROM r1 UNION ALL SELECT * FROM r2
+    // The inner WITH in r1 and r2 should become `SELECT random()` and r1/r2 should be inlined.
+    val t1 = CTERelationDef(Project(Seq(Alias(Rand(Literal(0)), "r")()), OneRowRelation()))
+    val t1Ref = CTERelationRef(t1.id, t1.resolved, t1.output, t1.isStreaming)
+    val t2 = CTERelationDef(Project(t1.output, t1Ref))
+    val t2Ref = CTERelationRef(t2.id, t2.resolved, t2.output, t2.isStreaming)
+    val cte = WithCTE(Project(t2.output, t2Ref), Seq(t1, t2))
+    val r1 = CTERelationDef(cte)
+    val r1Ref = CTERelationRef(r1.id, r1.resolved, r1.output, r1.isStreaming)
+    val r2 = CTERelationDef(cte)
+    val r2Ref = CTERelationRef(r2.id, r2.resolved, r2.output, r2.isStreaming)
+    val query = WithCTE(Union(r1Ref, r2Ref), Seq(r1, r2))
+    val inlined = InlineCTE().apply(query)
+    assert(!inlined.exists(_.isInstanceOf[WithCTE]))
+  }
+
+  test("SPARK-51109: CTE in subquery expression as grouping column") {
+    withTable("t") {
+      Seq(1 -> 1).toDF("c1", "c2").write.saveAsTable("t")
+      withView("v") {
+        sql(
+          """
+            |CREATE VIEW v AS
+            |WITH r AS (SELECT c1 + c2 AS c FROM t)
+            |SELECT * FROM r
+            |""".stripMargin)
+        checkAnswer(
+          sql("SELECT (SELECT max(c) FROM v WHERE c > id) FROM range(1) GROUP BY 1"),
+          Row(2)
+        )
+      }
+    }
+  }
+
+  test("SPARK-51625: command in CTE relations should trigger inline") {
+    val plan = UnresolvedWith(
+      child = UnresolvedRelation(Seq("t")),
+      cteRelations = Seq(("t", SubqueryAlias("t", ShowTables(CurrentNamespace, pattern = None)),
+        None))
+    )
+    assert(!spark.sessionState.analyzer.execute(plan).exists {
+      case _: WithCTE => true
+      case _ => false
+    })
   }
 }
 

@@ -357,6 +357,9 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
 
   private[sql] def validateVersion(text: String, maxSupportedVersion: Int): Int =
     MetadataVersionUtil.validateVersion(text, maxSupportedVersion)
+
+  private[sql] def validateVersionExactMatch(text: String, matchVersion: Int): Int =
+    MetadataVersionUtil.validateVersionExactMatch(text, matchVersion)
 }
 
 object HDFSMetadataLog {

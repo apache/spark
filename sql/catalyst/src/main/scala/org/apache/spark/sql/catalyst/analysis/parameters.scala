@@ -105,18 +105,6 @@ case class PosParameterizedQuery(child: LogicalPlan, args: Seq[Expression])
 }
 
 /**
- * Base class for rules that process parameterized queries.
- */
-abstract class ParameterizedQueryProcessor extends Rule[LogicalPlan] {
-  def assertUnresolvedPlanHasSingleParameterizedQuery(plan: LogicalPlan): Unit = {
-    if (plan.containsPattern(PARAMETERIZED_QUERY)) {
-      val parameterizedQueries = plan.collect { case p: ParameterizedQuery => p }
-      assert(parameterizedQueries.length == 1)
-    }
-  }
-}
-
-/**
  * Moves `ParameterizedQuery` inside `SupervisingCommand` for their supervised plans to be
  * resolved later by the analyzer.
  *
@@ -127,10 +115,8 @@ abstract class ParameterizedQueryProcessor extends Rule[LogicalPlan] {
  * `PosParameterizedQuery(ExplainCommand(ExplainCommand(SomeQuery(...))))` =>
  * `ExplainCommand(ExplainCommand(PosParameterizedQuery(SomeQuery(...))))`
  */
-object MoveParameterizedQueriesDown extends ParameterizedQueryProcessor {
+object MoveParameterizedQueriesDown extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    assertUnresolvedPlanHasSingleParameterizedQuery(plan)
-
     plan.resolveOperatorsWithPruning(_.containsPattern(PARAMETERIZED_QUERY)) {
       case pq: ParameterizedQuery if pq.exists(isSupervisingCommand) =>
         moveParameterizedQueryIntoSupervisingCommand(pq)
@@ -161,7 +147,7 @@ object MoveParameterizedQueriesDown extends ParameterizedQueryProcessor {
  * by collection constructor functions such as `map()`, `array()`, `struct()`
  * from the user-specified arguments.
  */
-object BindParameters extends ParameterizedQueryProcessor with QueryErrorsBase {
+object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
   private def checkArgs(args: Iterable[(String, Expression)]): Unit = {
     def isNotAllowed(expr: Expression): Boolean = expr.exists {
       case _: Literal | _: CreateArray | _: CreateNamedStruct |
@@ -176,15 +162,18 @@ object BindParameters extends ParameterizedQueryProcessor with QueryErrorsBase {
     }
   }
 
-  private def bind(p: LogicalPlan)(f: PartialFunction[Expression, Expression]): LogicalPlan = {
-    p.resolveExpressionsWithPruning(_.containsPattern(PARAMETER)) (f orElse {
-      case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan)(f))
-    })
+  private def bind(p0: LogicalPlan)(f: PartialFunction[Expression, Expression]): LogicalPlan = {
+    var stop = false
+    p0.resolveOperatorsDownWithPruning(_.containsPattern(PARAMETER) && !stop) {
+      case p1 =>
+        stop = p1.isInstanceOf[ParameterizedQuery]
+        p1.transformExpressionsWithPruning(_.containsPattern(PARAMETER)) (f orElse {
+          case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan)(f))
+        })
+    }
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    assertUnresolvedPlanHasSingleParameterizedQuery(plan)
-
     plan.resolveOperatorsWithPruning(_.containsPattern(PARAMETERIZED_QUERY)) {
       // We should wait for `CTESubstitution` to resolve CTE before binding parameters, as CTE
       // relations are not children of `UnresolvedWith`.

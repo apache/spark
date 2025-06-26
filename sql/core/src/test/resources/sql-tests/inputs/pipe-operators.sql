@@ -225,6 +225,15 @@ table t
 table t
 |> select y, length(y) + sum(x) as result;
 
+from t
+|> select sum(x);
+
+from t as t_alias
+|> select y, sum(x);
+
+from t as t_alias
+|> select y, sum(x) group by y;
+
 -- EXTEND operators: positive tests.
 ------------------------------------
 
@@ -358,6 +367,18 @@ table t
 table t
 |> extend 1 as z
 |> set z = first_value(x) over (partition by y);
+
+-- Any prior table aliases remain visible after a SET operator.
+values (0), (1) lhs(a)
+|> inner join values (1), (2) rhs(a) using (a)
+|> extend lhs.a + rhs.a as z1
+|> extend lhs.a - rhs.a as z2
+|> drop z1
+|> where z2 = 0
+|> order by lhs.a, rhs.a, z2
+|> set z2 = 4
+|> limit 2
+|> select lhs.a, rhs.a, z2;
 
 -- SET operators: negative tests.
 ---------------------------------

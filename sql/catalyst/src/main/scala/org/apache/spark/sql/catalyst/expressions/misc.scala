@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
-import org.apache.spark.sql.catalyst.util.{MapData, RandomUUIDGenerator}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, MapData, RandomUUIDGenerator}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.raiseError
 import org.apache.spark.sql.internal.SQLConf
@@ -179,7 +179,7 @@ case class AssertTrue(left: Expression, right: Expression, replacement: Expressi
   }
 
   def this(left: Expression) = {
-    this(left, Literal(s"'${left.simpleString(SQLConf.get.maxToStringFields)}' is not true!"))
+    this(left, Literal(s"'${toPrettySQL(left)}' is not true!"))
   }
 
   override def parameters: Seq[Expression] = Seq(left, right)
@@ -204,8 +204,10 @@ object AssertTrue {
   """,
   since = "1.6.0",
   group = "misc_funcs")
-case class CurrentDatabase() extends LeafExpression with Unevaluable {
-  override def dataType: DataType = SQLConf.get.defaultStringType
+case class CurrentDatabase()
+  extends LeafExpression
+  with DefaultStringProducingExpression
+  with Unevaluable {
   override def nullable: Boolean = false
   override def prettyName: String = "current_schema"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
@@ -223,8 +225,10 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
   """,
   since = "3.1.0",
   group = "misc_funcs")
-case class CurrentCatalog() extends LeafExpression with Unevaluable {
-  override def dataType: DataType = SQLConf.get.defaultStringType
+case class CurrentCatalog()
+  extends LeafExpression
+  with DefaultStringProducingExpression
+  with Unevaluable {
   override def nullable: Boolean = false
   override def prettyName: String = "current_catalog"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
@@ -245,7 +249,8 @@ case class CurrentCatalog() extends LeafExpression with Unevaluable {
   group = "misc_funcs")
 // scalastyle:on line.size.limit
 case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Nondeterministic
-    with ExpressionWithRandomSeed {
+  with DefaultStringProducingExpression
+  with ExpressionWithRandomSeed {
 
   def this() = this(None)
 
@@ -255,11 +260,11 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Non
 
   override def withNewSeed(seed: Long): Uuid = Uuid(Some(seed))
 
+  override def withShiftedSeed(shift: Long): Uuid = Uuid(randomSeed.map(_ + shift))
+
   override lazy val resolved: Boolean = randomSeed.isDefined
 
   override def nullable: Boolean = false
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def stateful: Boolean = true
 
@@ -295,12 +300,15 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Non
   since = "3.0.0",
   group = "misc_funcs")
 // scalastyle:on line.size.limit
-case class SparkVersion() extends LeafExpression with RuntimeReplaceable {
+case class SparkVersion()
+  extends LeafExpression
+  with RuntimeReplaceable
+  with DefaultStringProducingExpression {
   override def prettyName: String = "version"
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[ExpressionImplUtils],
-    SQLConf.get.defaultStringType,
+    dataType,
     "getSparkVersion",
     returnNullable = false)
 }
@@ -316,10 +324,9 @@ case class SparkVersion() extends LeafExpression with RuntimeReplaceable {
   """,
   since = "3.0.0",
   group = "misc_funcs")
-case class TypeOf(child: Expression) extends UnaryExpression {
+case class TypeOf(child: Expression) extends UnaryExpression with DefaultStringProducingExpression {
   override def nullable: Boolean = false
   override def foldable: Boolean = true
-  override def dataType: DataType = SQLConf.get.defaultStringType
   override def eval(input: InternalRow): Any = UTF8String.fromString(child.dataType.catalogString)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -340,9 +347,11 @@ case class TypeOf(child: Expression) extends UnaryExpression {
   since = "3.2.0",
   group = "misc_funcs")
 // scalastyle:on line.size.limit
-case class CurrentUser() extends LeafExpression with Unevaluable {
+case class CurrentUser()
+  extends LeafExpression
+  with DefaultStringProducingExpression
+  with Unevaluable {
   override def nullable: Boolean = false
-  override def dataType: DataType = SQLConf.get.defaultStringType
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("current_user")
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)

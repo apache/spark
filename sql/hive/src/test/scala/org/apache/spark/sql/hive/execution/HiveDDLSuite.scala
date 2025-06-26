@@ -19,10 +19,15 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
+import java.time.LocalDateTime
 import java.util.Locale
+
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{spy, times, verify}
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
@@ -31,12 +36,13 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, TableChange, TableInfo}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetFooterReader}
+import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
@@ -166,23 +172,17 @@ class HiveDDLSuite
   }
 
   test("SPARK-46934: quote element name before parsing struct") {
-    val e = intercept[AnalysisException](
-      sql("CREATE TABLE t USING hive AS SELECT STRUCT('a' AS `$a`, 1 AS b) q"))
-    checkError(
-      exception = e,
-      condition = "_LEGACY_ERROR_TEMP_3065",
-      parameters = Map(
-        "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
-        "msg" -> e.getCause.getMessage))
+    withTable("t") {
+      sql("CREATE TABLE t USING hive AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
+      assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(
+        "q STRUCT<`$a`: STRING, b: INT>"))
+    }
 
-    val e1 = intercept[AnalysisException](
-      sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive"))
-    checkError(
-      exception = e1,
-      condition = "_LEGACY_ERROR_TEMP_3065",
-      parameters = Map(
-        "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
-        "msg" -> e1.getCause.getMessage))
+    withTable("t") {
+      sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive")
+      assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(
+        "q STRUCT<`$a`:INT, col2:STRING>, i1 INT"))
+    }
 
     withView("v") {
       spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
@@ -238,26 +238,12 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-46934: alter datasource table tests with nested types") {
+  test("SPARK-46934: alter table tests with nested types") {
     withTable("t1") {
-      sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT) USING parquet")
+      sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT) USING hive")
       sql("ALTER TABLE t1 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)")
       assert(spark.table("t1").schema == CatalystSqlParser.parseTableSchema(
         "q STRUCT<col1:INT, col2:STRING>, i1 INT,newcol1 STRUCT<`$col1`:STRING, col2:Int>"))
-    }
-  }
-
-  test("SPARK-46934: alter hive table tests with nested types") {
-    withTable("t1") {
-      sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT) USING hive")
-      val e = intercept[AnalysisException](
-        sql("ALTER TABLE t1 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)"))
-      checkError(
-        exception = e,
-        condition = "_LEGACY_ERROR_TEMP_3065",
-        parameters = Map(
-          "clazz" -> "java.lang.IllegalArgumentException",
-          "msg" -> e.getCause.getMessage))
     }
   }
 
@@ -630,6 +616,19 @@ class HiveDDLSuite
     )
   }
 
+  test("SPARK-51840: Restore Partition columns in HiveExternalCatalog#alterTable") {
+    withTable("t") {
+      sql(
+        """
+          |CREATE TABLE t USING json
+          |  PARTITIONED BY (A) AS
+          |    SELECT 'APACHE' A, TIMESTAMP_NTZ '2018-11-17 13:33:33' B
+          |""".stripMargin)
+      sql("MSCK REPAIR TABLE t")
+      checkAnswer(spark.table("t"), Row(LocalDateTime.of(2018, 11, 17, 13, 33, 33), "APACHE"))
+    }
+  }
+
   test("add/drop partitions - external table") {
     val catalog = spark.sessionState.catalog
     withTempDir { tmpDir =>
@@ -676,10 +675,10 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-09', unknownCol='12')")
           },
-          condition = "_LEGACY_ERROR_TEMP_1231",
+          condition = "PARTITIONS_NOT_FOUND",
           parameters = Map(
-            "key" -> "unknownCol",
-            "tblName" -> s"`$SESSION_CATALOG_NAME`.`default`.`exttable_with_partitions`")
+            "partitionList" -> "`unknownCol`",
+            "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`exttable_with_partitions`")
         )
 
         sql(
@@ -2870,10 +2869,10 @@ class HiveDDLSuite
   test("SPARK-47101 checks if nested column names do not include invalid characters") {
     Seq(",", ":", ";", "^", "\\", "/", "%").foreach { c =>
       val typ = s"array<struct<`abc${c}xyz`:int>>"
+      val e = intercept[AnalysisException] {
+        sql(s"CREATE TABLE t (a $typ) USING hive")
+      }
       withTable("t") {
-        val e = intercept[AnalysisException] {
-            sql(s"CREATE TABLE t (a $typ) USING hive")
-          }
         checkError(
           exception = e,
           condition = "_LEGACY_ERROR_TEMP_3065",
@@ -3261,6 +3260,7 @@ class HiveDDLSuite
   }
 
   test("SPARK-34261: Avoid side effect if create exists temporary function") {
+    assume(Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar") != null)
     withUserDefinedFunction("f1" -> true) {
       sql("CREATE TEMPORARY FUNCTION f1 AS 'org.apache.hadoop.hive.ql.udf.UDFUUID'")
 
@@ -3380,6 +3380,56 @@ class HiveDDLSuite
     withTable(tbl) {
       sql("CREATE TABLE t1 STORED AS parquet SELECT id as `a,b` FROM range(1)")
       checkAnswer(sql("SELECT * FROM t1"), Row(0))
+    }
+  }
+
+  test("create table - partition column duplicates EMPTY_DATA_SCHEMA") {
+    withTable("t") {
+      val e = intercept[AnalysisException] {
+        sql("CREATE TABLE t (col int, b TIMESTAMP_NTZ) USING PARQUET PARTITIONED BY (col)")
+      }
+      checkError(
+        exception = e,
+        condition = "CONFLICTING_PARTITION_COLUMN_NAME_WITH_RESERVED",
+        parameters = Map(
+          "tableName" -> "spark_catalog.default.t",
+          "partitionColumnName" -> "col")
+      )
+    }
+  }
+
+  test("SPARK-52272: V2SessionCatalog does not alter schema on Hive Catalog") {
+    val spyCatalog = spy(spark.sessionState.catalog.externalCatalog)
+    val v1SessionCatalog = new SessionCatalog(spyCatalog)
+    val v2SessionCatalog = new V2SessionCatalog(v1SessionCatalog)
+    withTable("t1") {
+      val identifier = Identifier.of(Array("default"), "t1")
+      val outputSchema = new StructType().add("a", IntegerType, true, "comment1")
+      v2SessionCatalog.createTable(
+        identifier,
+        new TableInfo.Builder()
+          .withProperties(Map.empty.asJava)
+          .withColumns(CatalogV2Util.structTypeToV2Columns(outputSchema))
+          .withPartitions(Array.empty)
+          .build()
+      )
+      v2SessionCatalog.alterTable(identifier, TableChange.setProperty("foo", "bar"))
+      val loaded = v2SessionCatalog.loadTable(identifier)
+      assert(loaded.properties().get("foo") == "bar")
+
+      verify(spyCatalog, times(1)).alterTable(any[CatalogTable])
+      verify(spyCatalog, times(0)).alterTableDataSchema(
+        any[String], any[String], any[StructType])
+
+      v2SessionCatalog.alterTable(identifier,
+        TableChange.updateColumnComment(Array("a"), "comment2"))
+      val loaded2 = v2SessionCatalog.loadTable(identifier)
+      assert(loaded2.columns().length == 1)
+      assert(loaded2.columns.head.comment() == "comment2")
+
+      verify(spyCatalog, times(1)).alterTable(any[CatalogTable])
+      verify(spyCatalog, times(1)).alterTableDataSchema(
+        any[String], any[String], any[StructType])
     }
   }
 }

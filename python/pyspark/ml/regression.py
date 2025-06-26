@@ -18,6 +18,7 @@
 import sys
 from typing import Any, Dict, Generic, List, Optional, TypeVar, TYPE_CHECKING
 from abc import ABCMeta
+from functools import cached_property
 
 from pyspark import keyword_only, since
 from pyspark.ml import Predictor, PredictionModel
@@ -44,6 +45,7 @@ from pyspark.ml.param.shared import (
     HasLoss,
     HasVarianceCol,
 )
+from pyspark.ml.util import try_remote_attribute_relation
 from pyspark.ml.tree import (
     _DecisionTreeModel,
     _DecisionTreeParams,
@@ -70,6 +72,7 @@ from pyspark.ml.wrapper import (
 )
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import DataFrame
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -476,19 +479,11 @@ class LinearRegressionModel(
         return self._call_java("scale")
 
     @property
-    @since("2.0.0")
-    def summary(self) -> "LinearRegressionTrainingSummary":
-        """
-        Gets summary (residuals, MSE, r-squared ) of model on
-        training set. An exception is thrown if
-        `trainingSummary is None`.
-        """
-        if self.hasSummary:
-            return LinearRegressionTrainingSummary(super(LinearRegressionModel, self).summary)
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
+    def _summaryCls(self) -> type:
+        return LinearRegressionTrainingSummary
+
+    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
+        return train_dataset
 
     def evaluate(self, dataset: DataFrame) -> "LinearRegressionSummary":
         """
@@ -505,7 +500,10 @@ class LinearRegressionModel(
         if not isinstance(dataset, DataFrame):
             raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_lr_summary = self._call_java("evaluate", dataset)
-        return LinearRegressionSummary(java_lr_summary)
+        s = LinearRegressionSummary(java_lr_summary)
+        if is_remote():
+            s.__source_transformer__ = self  # type: ignore[attr-defined]
+        return s
 
 
 class LinearRegressionSummary(JavaWrapper):
@@ -517,6 +515,7 @@ class LinearRegressionSummary(JavaWrapper):
 
     @property
     @since("2.0.0")
+    @try_remote_attribute_relation
     def predictions(self) -> DataFrame:
         """
         Dataframe outputted by the model's `transform` method.
@@ -651,6 +650,7 @@ class LinearRegressionSummary(JavaWrapper):
 
     @property
     @since("2.0.0")
+    @try_remote_attribute_relation
     def residuals(self) -> DataFrame:
         """
         Residuals (label - predicted value)
@@ -1598,10 +1598,17 @@ class RandomForestRegressionModel(
     .. versionadded:: 1.4.0
     """
 
-    @property
+    @cached_property
     @since("2.0.0")
     def trees(self) -> List[DecisionTreeRegressionModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
+        if is_remote():
+            from pyspark.ml.util import RemoteModelRef
+
+            return [
+                DecisionTreeRegressionModel(RemoteModelRef(m))
+                for m in self._call_java("trees").split(",")
+            ]
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
     @property
@@ -1987,10 +1994,17 @@ class GBTRegressionModel(
         """
         return self._call_java("featureImportances")
 
-    @property
+    @cached_property
     @since("2.0.0")
     def trees(self) -> List[DecisionTreeRegressionModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
+        if is_remote():
+            from pyspark.ml.util import RemoteModelRef
+
+            return [
+                DecisionTreeRegressionModel(RemoteModelRef(m))
+                for m in self._call_java("trees").split(",")
+            ]
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
     def evaluateEachIteration(self, dataset: DataFrame, loss: str) -> List[float]:
@@ -2749,21 +2763,11 @@ class GeneralizedLinearRegressionModel(
         return self._call_java("intercept")
 
     @property
-    @since("2.0.0")
-    def summary(self) -> "GeneralizedLinearRegressionTrainingSummary":
-        """
-        Gets summary (residuals, deviance, p-values) of model on
-        training set. An exception is thrown if
-        `trainingSummary is None`.
-        """
-        if self.hasSummary:
-            return GeneralizedLinearRegressionTrainingSummary(
-                super(GeneralizedLinearRegressionModel, self).summary
-            )
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
+    def _summaryCls(self) -> type:
+        return GeneralizedLinearRegressionTrainingSummary
+
+    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
+        return train_dataset
 
     def evaluate(self, dataset: DataFrame) -> "GeneralizedLinearRegressionSummary":
         """
@@ -2780,7 +2784,10 @@ class GeneralizedLinearRegressionModel(
         if not isinstance(dataset, DataFrame):
             raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_glr_summary = self._call_java("evaluate", dataset)
-        return GeneralizedLinearRegressionSummary(java_glr_summary)
+        s = GeneralizedLinearRegressionSummary(java_glr_summary)
+        if is_remote():
+            s.__source_transformer__ = self  # type: ignore[attr-defined]
+        return s
 
 
 class GeneralizedLinearRegressionSummary(JavaWrapper):
@@ -2792,6 +2799,7 @@ class GeneralizedLinearRegressionSummary(JavaWrapper):
 
     @property
     @since("2.0.0")
+    @try_remote_attribute_relation
     def predictions(self) -> DataFrame:
         """
         Predictions output by the model's `transform` method.
@@ -2847,6 +2855,7 @@ class GeneralizedLinearRegressionSummary(JavaWrapper):
         """
         return self._call_java("residualDegreeOfFreedomNull")
 
+    @try_remote_attribute_relation
     def residuals(self, residualsType: str = "deviance") -> DataFrame:
         """
         Get the residuals of the fitted model by type.

@@ -33,6 +33,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Locale;
+import java.util.UUID;
 
 import static org.apache.spark.types.variant.VariantUtil.*;
 
@@ -121,6 +122,11 @@ public final class Variant {
   // Get the value type of the variant.
   public Type getType() {
     return VariantUtil.getType(value, pos);
+  }
+
+  // Get a UUID value from the variant.
+  public UUID getUuid() {
+    return VariantUtil.getUuid(value, pos);
   }
 
   // Get the number of object fields in the variant.
@@ -310,9 +316,15 @@ public final class Variant {
       case STRING:
         sb.append(escapeJson(VariantUtil.getString(value, pos)));
         break;
-      case DOUBLE:
-        sb.append(VariantUtil.getDouble(value, pos));
+      case DOUBLE: {
+        double d = VariantUtil.getDouble(value, pos);
+        if (Double.isFinite(d)) {
+          sb.append(d);
+        } else {
+          appendQuoted(sb, Double.toString(d));
+        }
         break;
+      }
       case DECIMAL:
         sb.append(VariantUtil.getDecimal(value, pos).toPlainString());
         break;
@@ -327,11 +339,20 @@ public final class Variant {
         appendQuoted(sb, TIMESTAMP_NTZ_FORMATTER.format(
             microsToInstant(VariantUtil.getLong(value, pos)).atZone(ZoneOffset.UTC)));
         break;
-      case FLOAT:
-        sb.append(VariantUtil.getFloat(value, pos));
+      case FLOAT: {
+        float f = VariantUtil.getFloat(value, pos);
+        if (Float.isFinite(f)) {
+          sb.append(f);
+        } else {
+          appendQuoted(sb, Float.toString(f));
+        }
         break;
+      }
       case BINARY:
         appendQuoted(sb, Base64.getEncoder().encodeToString(VariantUtil.getBinary(value, pos)));
+        break;
+      case UUID:
+        appendQuoted(sb, VariantUtil.getUuid(value, pos).toString());
         break;
     }
   }

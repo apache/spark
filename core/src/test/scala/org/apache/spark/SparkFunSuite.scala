@@ -236,6 +236,13 @@ abstract class SparkFunSuite
     }
   }
 
+  protected def gridTest[A](testNamePrefix: String, testTags: Tag*)(params: Seq[A])(
+    testFun: A => Unit): Unit = {
+    for (param <- params) {
+      test(testNamePrefix + s" ($param)", testTags: _*)(testFun(param))
+    }
+  }
+
   /**
    * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
    * returns.
@@ -371,10 +378,17 @@ abstract class SparkFunSuite
           "Invalid objectType of a query context Actual:" + actual.toString)
         assert(actual.objectName() === expected.objectName,
           "Invalid objectName of a query context. Actual:" + actual.toString)
-        assert(actual.startIndex() === expected.startIndex,
-          "Invalid startIndex of a query context. Actual:" + actual.toString)
-        assert(actual.stopIndex() === expected.stopIndex,
-          "Invalid stopIndex of a query context. Actual:" + actual.toString)
+        // If startIndex and stopIndex are -1, it means we simply want to check the
+        // fragment of the query context. This should be the case when the fragment is
+        // distinguished within the query text.
+        if (expected.startIndex != -1) {
+          assert(actual.startIndex() === expected.startIndex,
+            "Invalid startIndex of a query context. Actual:" + actual.toString)
+        }
+        if (expected.stopIndex != -1) {
+          assert(actual.stopIndex() === expected.stopIndex,
+            "Invalid stopIndex of a query context. Actual:" + actual.toString)
+        }
         assert(actual.fragment() === expected.fragment,
           "Invalid fragment of a query context. Actual:" + actual.toString)
       } else if (actual.contextType() == QueryContextType.DataFrame) {
@@ -476,6 +490,12 @@ abstract class SparkFunSuite
   object ExpectedContext {
     def apply(fragment: String, start: Int, stop: Int): ExpectedContext = {
       ExpectedContext("", "", start, stop, fragment)
+    }
+
+    // Check the fragment only. This is only used when the fragment is distinguished within
+    // the query text
+    def apply(fragment: String): ExpectedContext = {
+      ExpectedContext("", "", -1, -1, fragment)
     }
 
     def apply(

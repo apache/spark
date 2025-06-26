@@ -417,8 +417,11 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       try {
         val partitionSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
           catalogTable.partitionSchema)
+        val lowerCasePredicates = predicates.map(_.transform {
+          case a: AttributeReference => a.withName(a.name.toLowerCase(Locale.ROOT))
+        })
         val boundPredicate = ExternalCatalogUtils.generatePartitionPredicateByFilter(
-          catalogTable, partitionSchema, predicates)
+          catalogTable, partitionSchema, lowerCasePredicates)
 
         def toRow(spec: TablePartitionSpec): InternalRow = {
           InternalRow.fromSeq(partitionSchema.map { field =>
@@ -746,12 +749,12 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       }
     }
 
-    def convertInToOr(name: String, values: Seq[String]): String = {
-      values.map(value => s"$name = $value").mkString("(", " or ", ")")
+    def convertIn(name: String, values: Seq[String]): String = {
+      s"($name) in (${values.mkString(", ")})"
     }
 
-    def convertNotInToAnd(name: String, values: Seq[String]): String = {
-      values.map(value => s"$name != $value").mkString("(", " and ", ")")
+    def convertNotIn(name: String, values: Seq[String]): String = {
+      s"($name) not in (${values.mkString(", ")})"
     }
 
     def hasNullLiteral(list: Seq[Expression]): Boolean = list.exists {
@@ -783,11 +786,11 @@ private[client] class Shim_v2_0 extends Shim with Logging {
 
       case In(ExtractAttribute(SupportedAttribute(name)), ExtractableLiterals(values))
           if useAdvanced =>
-        Some(convertInToOr(name, values))
+        Some(convertIn(name, values))
 
       case Not(In(ExtractAttribute(SupportedAttribute(name)), ExtractableLiterals(values)))
           if useAdvanced =>
-        Some(convertNotInToAnd(name, values))
+        Some(convertNotIn(name, values))
 
       case InSet(child, values) if useAdvanced && values.size > inSetThreshold =>
         val dataType = child.dataType
@@ -799,19 +802,19 @@ private[client] class Shim_v2_0 extends Shim with Logging {
 
       case InSet(child @ ExtractAttribute(SupportedAttribute(name)), ExtractableDateValues(values))
           if useAdvanced && child.dataType == DateType =>
-        Some(convertInToOr(name, values))
+        Some(convertIn(name, values))
 
       case Not(InSet(child @ ExtractAttribute(SupportedAttribute(name)),
         ExtractableDateValues(values))) if useAdvanced && child.dataType == DateType =>
-        Some(convertNotInToAnd(name, values))
+        Some(convertNotIn(name, values))
 
       case InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values))
           if useAdvanced =>
-        Some(convertInToOr(name, values))
+        Some(convertIn(name, values))
 
       case Not(InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values)))
           if useAdvanced =>
-        Some(convertNotInToAnd(name, values))
+        Some(convertNotIn(name, values))
 
       case op @ SpecialBinaryComparison(
           ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>

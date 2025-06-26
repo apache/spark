@@ -295,14 +295,14 @@ Throw with error class and message parameters:
 Access fields
 ~~~~~~~~~~~~~
 
-To access error fields, catch exceptions that extend :class:`PySparkException`  and access to error class with :func:`PySparkException.getErrorClass`.
+To access error fields, catch exceptions that extend :class:`PySparkException` and access to error class with :func:`PySparkException.getCondition`.
 
 .. code-block:: python
 
   try:
       ...
   except PySparkException as pe:
-      if pe.getErrorClass() == "PROBLEM_BECAUSE":
+      if pe.getCondition() == "PROBLEM_BECAUSE":
           ...
 
 

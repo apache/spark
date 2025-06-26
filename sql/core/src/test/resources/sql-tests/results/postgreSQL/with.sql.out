@@ -22,6 +22,204 @@ struct<count(1):bigint>
 
 
 -- !query
+WITH RECURSIVE t(n) AS (
+    VALUES (1)
+UNION ALL
+    SELECT n+1 FROM t WHERE n < 100
+)
+SELECT sum(n) FROM t
+-- !query schema
+struct<sum(n):bigint>
+-- !query output
+5050
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+    SELECT (VALUES(1))
+UNION ALL
+    SELECT n+1 FROM t WHERE n < 5
+)
+SELECT * FROM t
+-- !query schema
+struct<n:int>
+-- !query output
+1
+2
+3
+4
+5
+
+
+-- !query
+CREATE TEMPORARY VIEW nums AS
+WITH RECURSIVE nums (n) AS (
+    VALUES (1)
+UNION ALL
+    SELECT n+1 FROM nums WHERE n < 5
+)
+SELECT * FROM nums
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM nums
+-- !query schema
+struct<n:int>
+-- !query output
+1
+2
+3
+4
+5
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW nums AS
+WITH RECURSIVE nums (n) AS (
+    VALUES (1)
+UNION ALL
+    SELECT n+1 FROM nums WHERE n < 6
+)
+SELECT * FROM nums
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM nums
+-- !query schema
+struct<n:int>
+-- !query output
+1
+2
+3
+4
+5
+6
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+    SELECT 1
+UNION
+    SELECT 10-n FROM t)
+SELECT * FROM t
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+  "sqlState" : "42836",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 83,
+    "fragment" : "WITH RECURSIVE t(n) AS (\n    SELECT 1\nUNION\n    SELECT 10-n FROM t)\nSELECT * FROM t"
+  } ]
+}
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+    VALUES (1)
+UNION ALL
+    SELECT n+1 FROM t)
+SELECT * FROM t LIMIT 10
+-- !query schema
+struct<n:int>
+-- !query output
+1
+10
+2
+3
+4
+5
+6
+7
+8
+9
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+    SELECT 1
+UNION
+    SELECT n+1 FROM t)
+SELECT * FROM t LIMIT 10
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+  "sqlState" : "42836",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 91,
+    "fragment" : "WITH RECURSIVE t(n) AS (\n    SELECT 1\nUNION\n    SELECT n+1 FROM t)\nSELECT * FROM t LIMIT 10"
+  } ]
+}
+
+
+-- !query
+WITH q AS (SELECT 'foo' AS x)
+SELECT x FROM q
+-- !query schema
+struct<x:string>
+-- !query output
+foo
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+    SELECT 'foo'
+UNION ALL
+    SELECT n || ' bar' FROM t WHERE length(n) < 20
+)
+SELECT n AS is_text FROM t
+-- !query schema
+struct<is_text:string>
+-- !query output
+foo
+foo bar
+foo bar bar
+foo bar bar bar
+foo bar bar bar bar
+foo bar bar bar bar bar
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+    SELECT '7'
+UNION ALL
+    SELECT n+1 FROM t WHERE n < 10
+)
+SELECT n FROM t
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "left" : "\"STRING\"",
+    "right" : "\"BIGINT\""
+  }
+}
+
+
+-- !query
 CREATE TABLE department (
 	id INTEGER,  -- department ID
 	parent_department INTEGER, -- upper department ID
@@ -98,6 +296,192 @@ struct<>
 
 
 -- !query
+WITH RECURSIVE subdepartment AS
+(
+	SELECT name as root_name, * FROM department WHERE name = 'A'
+
+	UNION ALL
+
+	SELECT sd.root_name, d.* FROM department AS d, subdepartment AS sd
+		WHERE d.parent_department = sd.id
+)
+SELECT * FROM subdepartment ORDER BY name
+-- !query schema
+struct<root_name:string,id:int,parent_department:int,name:string>
+-- !query output
+A	1	0	A
+A	2	1	B
+A	3	2	C
+A	4	2	D
+A	6	4	F
+
+
+-- !query
+WITH RECURSIVE subdepartment(level, id, parent_department, name) AS
+(
+	SELECT 1, * FROM department WHERE name = 'A'
+
+	UNION ALL
+
+	SELECT sd.level + 1, d.* FROM department AS d, subdepartment AS sd
+		WHERE d.parent_department = sd.id
+)
+SELECT * FROM subdepartment ORDER BY name
+-- !query schema
+struct<level:int,id:int,parent_department:int,name:string>
+-- !query output
+1	1	0	A
+2	2	1	B
+3	3	2	C
+3	4	2	D
+4	6	4	F
+
+
+-- !query
+WITH RECURSIVE subdepartment(level, id, parent_department, name) AS
+(
+	SELECT 1, * FROM department WHERE name = 'A'
+
+	UNION ALL
+
+	SELECT sd.level + 1, d.* FROM department AS d, subdepartment AS sd
+		WHERE d.parent_department = sd.id
+)
+SELECT * FROM subdepartment WHERE level >= 2 ORDER BY name
+-- !query schema
+struct<level:int,id:int,parent_department:int,name:string>
+-- !query output
+2	2	1	B
+3	3	2	C
+3	4	2	D
+4	6	4	F
+
+
+-- !query
+WITH RECURSIVE subdepartment AS
+(
+	SELECT * FROM department WHERE name = 'A'
+)
+SELECT * FROM subdepartment ORDER BY name
+-- !query schema
+struct<id:int,parent_department:int,name:string>
+-- !query output
+1	0	A
+
+
+-- !query
+SET spark.sql.cteRecursionLevelLimit=200
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.cteRecursionLevelLimit	200
+
+
+-- !query
+SELECT count(*) FROM (
+    WITH RECURSIVE t(n) AS (
+        SELECT 1 UNION ALL SELECT n + 1 FROM t WHERE n < 200
+    )
+    SELECT * FROM t) AS t WHERE n < (
+        SELECT count(*) FROM (
+            WITH RECURSIVE t(n) AS (
+                   SELECT 1 UNION ALL SELECT n + 1 FROM t WHERE n < 100
+                )
+            SELECT * FROM t WHERE n < 50000
+         ) AS t WHERE n < 100)
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+98
+
+
+-- !query
+SET spark.sql.cteRecursionLevelLimit=100
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.cteRecursionLevelLimit	100
+
+
+-- !query
+WITH q1(x,y) AS (
+    SELECT hundred, sum(ten) FROM tenk1 GROUP BY hundred
+  )
+SELECT count(*) FROM q1 WHERE y > (SELECT sum(y)/100 FROM q1 qsub)
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+50
+
+
+-- !query
+CREATE TEMPORARY VIEW vsubdepartment AS
+	WITH RECURSIVE subdepartment AS
+	(
+		SELECT * FROM department WHERE name = 'A'
+		UNION ALL
+		SELECT d.* FROM department AS d, subdepartment AS sd
+			WHERE d.parent_department = sd.id
+	)
+	SELECT * FROM subdepartment
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM vsubdepartment ORDER BY name
+-- !query schema
+struct<id:int,parent_department:int,name:string>
+-- !query output
+1	0	A
+2	1	B
+3	2	C
+4	2	D
+6	4	F
+
+
+-- !query
+CREATE VIEW sums_1_100 AS
+WITH RECURSIVE t(n) AS (
+    VALUES (1)
+UNION ALL
+    SELECT n+1 FROM t WHERE n < 100
+)
+SELECT sum(n) AS sum FROM t
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM sums_1_100
+-- !query schema
+struct<sum:bigint>
+-- !query output
+5050
+
+
+-- !query
+WITH RECURSIVE t(i,j) AS (
+	VALUES (1,2)
+	UNION ALL
+	SELECT t2.i, t.j+1 FROM
+		(SELECT 2 AS i UNION ALL SELECT 3 AS i) AS t2
+		JOIN t ON (t2.i = t.i+1))
+
+	SELECT * FROM t
+-- !query schema
+struct<i:int,j:int>
+-- !query output
+1	2
+2	3
+3	4
+
+
+-- !query
 CREATE TABLE tree(
     id INTEGER,
     parent_id INTEGER
@@ -116,6 +500,86 @@ VALUES (1, NULL), (2, 1), (3,1), (4,2), (5,2), (6,2), (7,3), (8,3),
 struct<>
 -- !query output
 
+
+
+-- !query
+WITH RECURSIVE t(id, path) AS (
+    VALUES(1,cast(array() as array<Int>))
+UNION ALL
+    SELECT tree.id, t.path || array(tree.id)
+    FROM tree JOIN t ON (tree.parent_id = t.id)
+)
+SELECT t1.*, t2.* FROM t AS t1 JOIN t AS t2 ON
+	(t1.path[0] = t2.path[0] AND
+	size(t1.path) = 1 AND
+	size(t2.path) > 1)
+	ORDER BY t1.id, t2.id
+-- !query schema
+struct<id:int,path:array<int>,id:int,path:array<int>>
+-- !query output
+2	[2]	4	[2,4]
+2	[2]	5	[2,5]
+2	[2]	6	[2,6]
+2	[2]	9	[2,4,9]
+2	[2]	10	[2,4,10]
+2	[2]	14	[2,4,9,14]
+3	[3]	7	[3,7]
+3	[3]	8	[3,8]
+3	[3]	11	[3,7,11]
+3	[3]	12	[3,7,12]
+3	[3]	13	[3,7,13]
+3	[3]	15	[3,7,11,15]
+3	[3]	16	[3,7,11,16]
+
+
+-- !query
+WITH RECURSIVE t(id, path) AS (
+    VALUES(1,cast(array() as array<Int>))
+UNION ALL
+    SELECT tree.id, t.path || array(tree.id)
+    FROM tree JOIN t ON (tree.parent_id = t.id)
+)
+SELECT t1.id, count(*) FROM t AS t1 JOIN t AS t2 ON
+	(t1.path[0] = t2.path[0] AND
+	size(t1.path) = 1 AND
+	size(t2.path) > 1)
+	GROUP BY t1.id
+	ORDER BY t1.id
+-- !query schema
+struct<id:int,count(1):bigint>
+-- !query output
+2	6
+3	7
+
+
+-- !query
+WITH RECURSIVE t(id, path) AS (
+    VALUES(1,cast(array() as array<Int>))
+UNION ALL
+    SELECT tree.id, t.path || array(tree.id)
+    FROM tree JOIN t ON (tree.parent_id = t.id)
+)
+SELECT t1.id, t2.path, struct(t2.*) FROM t AS t1 JOIN t AS t2 ON
+(t1.id=t2.id)
+-- !query schema
+struct<id:int,path:array<int>,struct(id, path):struct<id:int,path:array<int>>>
+-- !query output
+1	[]	{"id":1,"path":[]}
+10	[2,4,10]	{"id":10,"path":[2,4,10]}
+11	[3,7,11]	{"id":11,"path":[3,7,11]}
+12	[3,7,12]	{"id":12,"path":[3,7,12]}
+13	[3,7,13]	{"id":13,"path":[3,7,13]}
+14	[2,4,9,14]	{"id":14,"path":[2,4,9,14]}
+15	[3,7,11,15]	{"id":15,"path":[3,7,11,15]}
+16	[3,7,11,16]	{"id":16,"path":[3,7,11,16]}
+2	[2]	{"id":2,"path":[2]}
+3	[3]	{"id":3,"path":[3]}
+4	[2,4]	{"id":4,"path":[2,4]}
+5	[2,5]	{"id":5,"path":[2,5]}
+6	[2,6]	{"id":6,"path":[2,6]}
+7	[3,7]	{"id":7,"path":[3,7]}
+8	[3,8]	{"id":8,"path":[3,8]}
+9	[2,4,9]	{"id":9,"path":[2,4,9]}
 
 
 -- !query
@@ -138,6 +602,208 @@ insert into graph values
 struct<>
 -- !query output
 
+
+
+-- !query
+with recursive search_graph(f, t, label, path, cycle) as (
+	select *, array(struct(g.f, g.t)), false from graph g
+	union all
+	select g.*, path || array(struct(g.f, g.t)), array_contains(path, struct(g.f, g.t))
+	from graph g, search_graph sg
+	where g.f = sg.t and not cycle
+)
+select * from search_graph
+-- !query schema
+struct<f:int,t:int,label:string,path:array<struct<f:int,t:int>>,cycle:boolean>
+-- !query output
+1	2	arc 1 -> 2	[{"f":1,"t":2}]	false
+1	2	arc 1 -> 2	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":2}]	false
+1	2	arc 1 -> 2	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":2}]	false
+1	2	arc 1 -> 2	[{"f":5,"t":1},{"f":1,"t":2}]	false
+1	3	arc 1 -> 3	[{"f":1,"t":3}]	false
+1	3	arc 1 -> 3	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":3}]	false
+1	3	arc 1 -> 3	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":3}]	false
+1	3	arc 1 -> 3	[{"f":5,"t":1},{"f":1,"t":3}]	false
+1	4	arc 1 -> 4	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":4}]	true
+1	4	arc 1 -> 4	[{"f":1,"t":4}]	false
+1	4	arc 1 -> 4	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":4}]	false
+1	4	arc 1 -> 4	[{"f":5,"t":1},{"f":1,"t":4}]	false
+2	3	arc 2 -> 3	[{"f":1,"t":2},{"f":2,"t":3}]	false
+2	3	arc 2 -> 3	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":2},{"f":2,"t":3}]	false
+2	3	arc 2 -> 3	[{"f":2,"t":3}]	false
+2	3	arc 2 -> 3	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":2},{"f":2,"t":3}]	false
+2	3	arc 2 -> 3	[{"f":5,"t":1},{"f":1,"t":2},{"f":2,"t":3}]	false
+4	5	arc 4 -> 5	[{"f":1,"t":4},{"f":4,"t":5}]	false
+4	5	arc 4 -> 5	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":4},{"f":4,"t":5}]	true
+4	5	arc 4 -> 5	[{"f":4,"t":5}]	false
+4	5	arc 4 -> 5	[{"f":5,"t":1},{"f":1,"t":4},{"f":4,"t":5}]	false
+5	1	arc 5 -> 1	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1}]	false
+5	1	arc 5 -> 1	[{"f":4,"t":5},{"f":5,"t":1}]	false
+5	1	arc 5 -> 1	[{"f":5,"t":1},{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1}]	true
+5	1	arc 5 -> 1	[{"f":5,"t":1}]	false
+
+
+-- !query
+with recursive search_graph(f, t, label, path, cycle) as (
+	select *, array(struct(g.f, g.t)), false from graph g
+	union all
+	select g.*, path || array(struct(g.f, g.t)), array_contains(path, struct(g.f, g.t))
+	from graph g, search_graph sg
+	where g.f = sg.t and not cycle
+)
+select * from search_graph order by path
+-- !query schema
+struct<f:int,t:int,label:string,path:array<struct<f:int,t:int>>,cycle:boolean>
+-- !query output
+1	2	arc 1 -> 2	[{"f":1,"t":2}]	false
+2	3	arc 2 -> 3	[{"f":1,"t":2},{"f":2,"t":3}]	false
+1	3	arc 1 -> 3	[{"f":1,"t":3}]	false
+1	4	arc 1 -> 4	[{"f":1,"t":4}]	false
+4	5	arc 4 -> 5	[{"f":1,"t":4},{"f":4,"t":5}]	false
+5	1	arc 5 -> 1	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1}]	false
+1	2	arc 1 -> 2	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":2}]	false
+2	3	arc 2 -> 3	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":2},{"f":2,"t":3}]	false
+1	3	arc 1 -> 3	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":3}]	false
+1	4	arc 1 -> 4	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":4}]	true
+2	3	arc 2 -> 3	[{"f":2,"t":3}]	false
+4	5	arc 4 -> 5	[{"f":4,"t":5}]	false
+5	1	arc 5 -> 1	[{"f":4,"t":5},{"f":5,"t":1}]	false
+1	2	arc 1 -> 2	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":2}]	false
+2	3	arc 2 -> 3	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":2},{"f":2,"t":3}]	false
+1	3	arc 1 -> 3	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":3}]	false
+1	4	arc 1 -> 4	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":4}]	false
+4	5	arc 4 -> 5	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":4},{"f":4,"t":5}]	true
+5	1	arc 5 -> 1	[{"f":5,"t":1}]	false
+1	2	arc 1 -> 2	[{"f":5,"t":1},{"f":1,"t":2}]	false
+2	3	arc 2 -> 3	[{"f":5,"t":1},{"f":1,"t":2},{"f":2,"t":3}]	false
+1	3	arc 1 -> 3	[{"f":5,"t":1},{"f":1,"t":3}]	false
+1	4	arc 1 -> 4	[{"f":5,"t":1},{"f":1,"t":4}]	false
+4	5	arc 4 -> 5	[{"f":5,"t":1},{"f":1,"t":4},{"f":4,"t":5}]	false
+5	1	arc 5 -> 1	[{"f":5,"t":1},{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1}]	true
+
+
+-- !query
+WITH RECURSIVE
+  y (id) AS (VALUES (1)),
+  x (id) AS (SELECT * FROM y UNION ALL SELECT id+1 FROM x WHERE id < 5)
+SELECT * FROM x
+-- !query schema
+struct<id:int>
+-- !query output
+1
+2
+3
+4
+5
+
+
+-- !query
+WITH RECURSIVE
+   x(id) AS
+     (SELECT 1 UNION ALL SELECT id+1 FROM x WHERE id < 3 ),
+   y(id) AS
+     (SELECT * FROM x UNION ALL SELECT * FROM x),
+   z(id) AS
+     (SELECT * FROM x UNION ALL SELECT id+1 FROM z WHERE id < 10)
+ SELECT * FROM z
+-- !query schema
+struct<id:int>
+-- !query output
+1
+10
+10
+10
+2
+2
+3
+3
+3
+4
+4
+4
+5
+5
+5
+6
+6
+6
+7
+7
+7
+8
+8
+8
+9
+9
+9
+
+
+-- !query
+WITH RECURSIVE
+   x(id) AS
+     (SELECT 1 UNION ALL SELECT id+1 FROM x WHERE id < 3 ),
+   y(id) AS
+     (SELECT * FROM x UNION ALL SELECT * FROM x),
+   z(id) AS
+     (SELECT * FROM y UNION ALL SELECT id+1 FROM z WHERE id < 10)
+ SELECT * FROM z
+-- !query schema
+struct<id:int>
+-- !query output
+1
+1
+10
+10
+10
+10
+10
+10
+2
+2
+2
+2
+3
+3
+3
+3
+3
+3
+4
+4
+4
+4
+4
+4
+5
+5
+5
+5
+5
+5
+6
+6
+6
+6
+6
+6
+7
+7
+7
+7
+7
+7
+8
+8
+8
+8
+8
+8
+9
+9
+9
+9
+9
+9
 
 
 -- !query
@@ -165,6 +831,94 @@ struct<>
 
 
 -- !query
+WITH RECURSIVE x(n) AS (SELECT 1 INTERSECT SELECT n+1 FROM x)
+	SELECT * FROM x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE x(n) AS (SELECT 1 INTERSECT ALL SELECT n+1 FROM x)
+	SELECT * FROM x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE x(n) AS (SELECT 1 EXCEPT SELECT n+1 FROM x)
+	SELECT * FROM x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE x(n) AS (SELECT 1 EXCEPT ALL SELECT n+1 FROM x)
+	SELECT * FROM x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE x(n) AS (SELECT n FROM x)
+	SELECT * FROM x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE x(n) AS (SELECT n FROM x UNION ALL SELECT 1)
+	SELECT * FROM x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`n`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 32,
+    "fragment" : "n"
+  } ]
+}
+
+
+-- !query
 CREATE TABLE y (a INTEGER) USING parquet
 -- !query schema
 struct<>
@@ -181,11 +935,541 @@ struct<>
 
 
 -- !query
+WITH RECURSIVE x(n) AS (SELECT a FROM y WHERE a = 1
+	UNION ALL
+	SELECT x.n+1 FROM y LEFT JOIN x ON x.n = y.a WHERE n < 10)
+SELECT * FROM x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE x(n) AS (SELECT a FROM y WHERE a = 1
+	UNION ALL
+	SELECT x.n+1 FROM x RIGHT JOIN y ON x.n = y.a WHERE n < 10)
+SELECT * FROM x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE x(n) AS (SELECT a FROM y WHERE a = 1
+	UNION ALL
+	SELECT x.n+1 FROM x FULL JOIN y ON x.n = y.a WHERE n < 10)
+SELECT * FROM x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM x
+                          WHERE n IN (SELECT * FROM x))
+  SELECT * FROM x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "RECURSION_LEVEL_LIMIT_EXCEEDED",
+  "sqlState" : "42836",
+  "messageParameters" : {
+    "levelLimit" : "100"
+  }
+}
+
+
+-- !query
+WITH RECURSIVE x(n) AS (SELECT cast(1 as bigint) UNION ALL SELECT count(*) FROM x)
+  SELECT * FROM x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE x(n) AS (SELECT cast(1 as bigint) UNION ALL SELECT sum(n) FROM x)
+  SELECT * FROM x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM x ORDER BY 1)
+  SELECT * FROM x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM x LIMIT 10 OFFSET 1)
+  SELECT * FROM x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE x(id) AS (values (1)
+    UNION ALL
+    SELECT (SELECT * FROM x) FROM x WHERE id < 5
+) SELECT * FROM x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "RECURSION_LEVEL_LIMIT_EXCEEDED",
+  "sqlState" : "42836",
+  "messageParameters" : {
+    "levelLimit" : "100"
+  }
+}
+
+
+-- !query
+WITH RECURSIVE
+  x (id) AS (SELECT 1 UNION ALL SELECT id+1 FROM y WHERE id < 5),
+  y (id) AS (SELECT 1 UNION ALL SELECT id+1 FROM x WHERE id < 5)
+SELECT * FROM x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 139,
+    "stopIndex" : 140,
+    "fragment" : "id"
+  } ]
+}
+
+
+-- !query
+WITH RECURSIVE foo(i) AS
+    (values (1)
+    UNION ALL
+       (SELECT i+1 FROM foo WHERE i < 10
+          UNION ALL
+       SELECT i+1 FROM foo WHERE i < 5)
+) SELECT * FROM foo
+-- !query schema
+struct<i:int>
+-- !query output
+1
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+2
+2
+3
+3
+3
+3
+4
+4
+4
+4
+4
+4
+4
+4
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+
+
+-- !query
+WITH RECURSIVE foo(i) AS
+    (values (1)
+    UNION ALL
+	   SELECT * FROM
+       (SELECT i+1 FROM foo WHERE i < 10
+          UNION ALL
+       SELECT i+1 FROM foo WHERE i < 5) AS t
+) SELECT * FROM foo
+-- !query schema
+struct<i:int>
+-- !query output
+1
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+2
+2
+3
+3
+3
+3
+4
+4
+4
+4
+4
+4
+4
+4
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+
+
+-- !query
+WITH RECURSIVE foo(i) AS
+    (values (1)
+    UNION ALL
+       (SELECT i+1 FROM foo WHERE i < 10
+          EXCEPT
+       SELECT i+1 FROM foo WHERE i < 5)
+) SELECT * FROM foo
+-- !query schema
+struct<i:int>
+-- !query output
+1
+
+
+-- !query
+WITH RECURSIVE foo(i) AS
+    (values (1)
+    UNION ALL
+       (SELECT i+1 FROM foo WHERE i < 10
+          INTERSECT
+       SELECT i+1 FROM foo WHERE i < 5)
+) SELECT * FROM foo
+-- !query schema
+struct<i:int>
+-- !query output
+1
+2
+3
+4
+5
+
+
+-- !query
+WITH RECURSIVE foo(i) AS
+   (SELECT i FROM (VALUES(1),(2)) t(i)
+   UNION ALL
+   SELECT cast((i+1) AS decimal(10,0)) FROM foo WHERE i < 10)
+SELECT * FROM foo
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "left" : "\"INT\"",
+    "right" : "\"DECIMAL(10,0)\""
+  }
+}
+
+
+-- !query
 with cte(foo) as ( select 42 ) select * from ((select foo from cte)) q
 -- !query schema
 struct<foo:int>
 -- !query output
 42
+
+
+-- !query
+WITH RECURSIVE t(j) AS (
+    WITH RECURSIVE s(i) AS (
+        VALUES (1)
+        UNION ALL
+        SELECT i+1 FROM s WHERE i < 10
+    )
+    SELECT i FROM s
+    UNION ALL
+    SELECT j+1 FROM t WHERE j < 10
+)
+SELECT * FROM t
+-- !query schema
+struct<j:int>
+-- !query output
+1
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+2
+2
+3
+3
+3
+4
+4
+4
+4
+5
+5
+5
+5
+5
+6
+6
+6
+6
+6
+6
+7
+7
+7
+7
+7
+7
+7
+8
+8
+8
+8
+8
+8
+8
+8
+9
+9
+9
+9
+9
+9
+9
+9
+9
 
 
 -- !query
@@ -228,6 +1512,55 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 96,
     "stopIndex" : 104,
     "fragment" : "outermost"
+  } ]
+}
+
+
+-- !query
+WITH RECURSIVE outermost(x) AS (
+  SELECT 1
+  UNION (WITH innermost as (SELECT 2)
+         SELECT * FROM outermost
+         UNION SELECT * FROM innermost)
+)
+SELECT * FROM outermost ORDER BY 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+  "sqlState" : "42836",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 191,
+    "fragment" : "WITH RECURSIVE outermost(x) AS (\n  SELECT 1\n  UNION (WITH innermost as (SELECT 2)\n         SELECT * FROM outermost\n         UNION SELECT * FROM innermost)\n)\nSELECT * FROM outermost ORDER BY 1"
+  } ]
+}
+
+
+-- !query
+WITH RECURSIVE outermost(x) AS (
+  WITH innermost as (SELECT 2 FROM outermost) -- fail
+    SELECT * FROM innermost
+    UNION SELECT * from outermost
+)
+SELECT * FROM outermost ORDER BY 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+  "sqlState" : "42836",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 185,
+    "fragment" : "WITH RECURSIVE outermost(x) AS (\n  WITH innermost as (SELECT 2 FROM outermost) -- fail\n    SELECT * FROM innermost\n    UNION SELECT * from outermost\n)\nSELECT * FROM outermost ORDER BY 1"
   } ]
 }
 
@@ -453,6 +1786,30 @@ struct<i:int>
 
 -- !query
 drop table test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW nums
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW vsubdepartment
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW sums_1_100
 -- !query schema
 struct<>
 -- !query output

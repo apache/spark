@@ -20,6 +20,7 @@ ARRAY	false
 AS	true
 ASC	false
 AT	false
+ATOMIC	false
 AUTHORIZATION	true
 BEGIN	false
 BETWEEN	false
@@ -60,8 +61,10 @@ COMPACTIONS	false
 COMPENSATION	false
 COMPUTE	false
 CONCATENATE	false
+CONDITION	false
 CONSTRAINT	true
 CONTAINS	false
+CONTINUE	false
 COST	false
 CREATE	true
 CROSS	true
@@ -104,7 +107,9 @@ DO	false
 DOUBLE	false
 DROP	false
 ELSE	true
+ELSEIF	false
 END	true
+ENFORCED	false
 ESCAPE	true
 ESCAPED	false
 EVOLUTION	false
@@ -113,6 +118,7 @@ EXCHANGE	false
 EXCLUDE	false
 EXECUTE	true
 EXISTS	false
+EXIT	false
 EXPLAIN	false
 EXPORT	false
 EXTEND	false
@@ -126,11 +132,13 @@ FILEFORMAT	false
 FILTER	true
 FIRST	false
 FLOAT	false
+FLOW	false
 FOLLOWING	false
 FOR	true
 FOREIGN	true
 FORMAT	false
 FORMATTED	false
+FOUND	false
 FROM	true
 FULL	true
 FUNCTION	false
@@ -140,6 +148,7 @@ GLOBAL	false
 GRANT	true
 GROUP	true
 GROUPING	false
+HANDLER	false
 HAVING	true
 HOUR	false
 HOURS	false
@@ -170,6 +179,8 @@ IS	true
 ITEMS	false
 ITERATE	false
 JOIN	true
+JSON	false
+KEY	false
 KEYS	false
 LANGUAGE	false
 LAST	false
@@ -178,6 +189,7 @@ LAZY	false
 LEADING	true
 LEAVE	false
 LEFT	true
+LEVEL	false
 LIKE	false
 LIMIT	false
 LINES	false
@@ -193,6 +205,8 @@ LOOP	false
 MACRO	false
 MAP	false
 MATCHED	false
+MATERIALIZED	false
+MAX	false
 MERGE	false
 MICROSECOND	false
 MICROSECONDS	false
@@ -213,6 +227,7 @@ NANOSECONDS	false
 NATURAL	true
 NO	false
 NONE	false
+NORELY	false
 NOT	true
 NULL	true
 NULLS	false
@@ -242,6 +257,8 @@ POSITION	false
 PRECEDING	false
 PRIMARY	true
 PRINCIPALS	false
+PROCEDURE	false
+PROCEDURES	false
 PROPERTIES	false
 PURGE	false
 QUARTER	false
@@ -252,9 +269,12 @@ REAL	false
 RECORDREADER	false
 RECORDWRITER	false
 RECOVER	false
+RECURSION	false
+RECURSIVE	true
 REDUCE	false
 REFERENCES	true
 REFRESH	false
+RELY	false
 RENAME	false
 REPAIR	false
 REPEAT	false
@@ -297,10 +317,14 @@ SORTED	false
 SOURCE	false
 SPECIFIC	false
 SQL	true
+SQLEXCEPTION	false
+SQLSTATE	false
 START	false
 STATISTICS	false
 STORED	false
 STRATIFY	false
+STREAM	false
+STREAMING	false
 STRING	false
 STRUCT	false
 SUBSTR	false
@@ -348,6 +372,7 @@ UPDATE	false
 USE	false
 USER	true
 USING	true
+VALUE	false
 VALUES	false
 VAR	false
 VARCHAR	false
@@ -365,6 +390,7 @@ WHILE	false
 WINDOW	false
 WITH	true
 WITHIN	true
+WITHOUT	false
 X	false
 YEAR	false
 YEARS	false
@@ -432,6 +458,7 @@ ORDER
 OUTER
 OVERLAPS
 PRIMARY
+RECURSIVE
 REFERENCES
 RIGHT
 SELECT

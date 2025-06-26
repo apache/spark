@@ -73,7 +73,7 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
 
   def failToRecognizePatternError(pattern: String, e: Throwable): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2130",
+      errorClass = "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
       messageParameters =
         Map("pattern" -> toSQLValue(pattern), "docroot" -> SparkBuildInfo.spark_doc_root),
       cause = e)
@@ -109,7 +109,8 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       messageParameters = Map(
         "expression" -> sqlValue,
         "sourceType" -> toSQLType(from),
-        "targetType" -> toSQLType(to)),
+        "targetType" -> toSQLType(to),
+        "ansiConfig" -> toSQLConf("spark.sql.ansi.enabled")),
       context = getQueryContext(context),
       summary = getSummary(context))
   }

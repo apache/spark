@@ -42,7 +42,6 @@ from typing import (
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import _with_origin
 from pyspark.sql.column import Column
-from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 from pyspark.sql.types import (
     ArrayType,
     ByteType,
@@ -65,7 +64,6 @@ from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
 
 from pyspark.sql.utils import (
     to_str as _to_str,
-    has_numpy as _has_numpy,
     try_remote_functions as _try_remote_functions,
     get_active_spark_context as _get_active_spark_context,
     enum_to_value as _enum_to_value,
@@ -73,14 +71,13 @@ from pyspark.sql.utils import (
 
 if TYPE_CHECKING:
     from pyspark import SparkContext
+    from pyspark.sql.dataframe import DataFrame
     from pyspark.sql._typing import (
         ColumnOrName,
         DataTypeOrString,
         UserDefinedFunctionLike,
     )
 
-if _has_numpy:
-    import numpy as np
 
 # Note to developers: all of PySpark functions here take string as column names whenever possible.
 # Namely, if columns are referred as arguments, they can always be both Column or string,
@@ -254,6 +251,8 @@ def lit(col: Any) -> Column:
     |     [true, false]|     []|       [1.5, 0.1]|           [a, b, c]|
     +------------------+-------+-----------------+--------------------+
     """
+    from pyspark.testing.utils import have_numpy
+
     if isinstance(col, Column):
         return col
     elif isinstance(col, list):
@@ -262,7 +261,9 @@ def lit(col: Any) -> Column:
                 errorClass="COLUMN_IN_LIST", messageParameters={"func_name": "lit"}
             )
         return array(*[lit(item) for item in col])
-    elif _has_numpy:
+    elif have_numpy:
+        import numpy as np
+
         if isinstance(col, np.generic):
             dt = _from_numpy_type(col.dtype)
             if dt is None:
@@ -6634,7 +6635,7 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
 
 
 @_try_remote_functions
-def broadcast(df: "ParentDataFrame") -> "ParentDataFrame":
+def broadcast(df: "DataFrame") -> "DataFrame":
     """
     Marks a DataFrame as small enough for use in broadcast joins.
 
@@ -6663,9 +6664,10 @@ def broadcast(df: "ParentDataFrame") -> "ParentDataFrame":
     +-----+---+
     """
     from py4j.java_gateway import JVMView
+    from pyspark.sql.dataframe import DataFrame
 
     sc = _get_active_spark_context()
-    return ParentDataFrame(cast(JVMView, sc._jvm).functions.broadcast(df._jdf), df.sparkSession)
+    return DataFrame(cast(JVMView, sc._jvm).functions.broadcast(df._jdf), df.sparkSession)
 
 
 @_try_remote_functions
@@ -7432,7 +7434,7 @@ def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 @_try_remote_functions
 def percentile(
     col: "ColumnOrName",
-    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     frequency: Union[Column, int] = 1,
 ) -> Column:
     """Returns the exact percentile(s) of numeric column `expr` at the given percentage(s)
@@ -7492,7 +7494,7 @@ def percentile(
 @_try_remote_functions
 def percentile_approx(
     col: "ColumnOrName",
-    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     accuracy: Union[Column, int] = 10000,
 ) -> Column:
     """Returns the approximate `percentile` of the numeric column `col` which is the smallest value
@@ -7563,7 +7565,7 @@ def percentile_approx(
 @_try_remote_functions
 def approx_percentile(
     col: "ColumnOrName",
-    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     accuracy: Union[Column, int] = 10000,
 ) -> Column:
     """Returns the approximate `percentile` of the numeric column `col` which is the smallest value
@@ -7684,6 +7686,9 @@ def rand(seed: Optional[int] = None) -> Column:
         return _invoke_function("rand", _enum_to_value(seed))
     else:
         return _invoke_function("rand")
+
+
+random = rand
 
 
 @_try_remote_functions
@@ -11666,10 +11671,15 @@ def xpath(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame(
     ...     [('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>',)], ['x'])
-    >>> df.select(xpath(df.x, lit('a/b/text()')).alias('r')).collect()
-    [Row(r=['b1', 'b2', 'b3'])]
+    >>> df.select(sf.xpath(df.x, sf.lit('a/b/text()'))).show()
+    +--------------------+
+    |xpath(x, a/b/text())|
+    +--------------------+
+    |        [b1, b2, b3]|
+    +--------------------+
     """
     return _invoke_function_over_columns("xpath", xml, path)
 
@@ -11683,9 +11693,14 @@ def xpath_boolean(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('<a><b>1</b></a>',)], ['x'])
-    >>> df.select(xpath_boolean(df.x, lit('a/b')).alias('r')).collect()
-    [Row(r=True)]
+    >>> df.select(sf.xpath_boolean(df.x, sf.lit('a/b'))).show()
+    +---------------------+
+    |xpath_boolean(x, a/b)|
+    +---------------------+
+    |                 true|
+    +---------------------+
     """
     return _invoke_function_over_columns("xpath_boolean", xml, path)
 
@@ -11700,9 +11715,14 @@ def xpath_double(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
-    >>> df.select(xpath_double(df.x, lit('sum(a/b)')).alias('r')).collect()
-    [Row(r=3.0)]
+    >>> df.select(sf.xpath_double(df.x, sf.lit('sum(a/b)'))).show()
+    +-------------------------+
+    |xpath_double(x, sum(a/b))|
+    +-------------------------+
+    |                      3.0|
+    +-------------------------+
     """
     return _invoke_function_over_columns("xpath_double", xml, path)
 
@@ -11740,9 +11760,14 @@ def xpath_float(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
-    >>> df.select(xpath_float(df.x, lit('sum(a/b)')).alias('r')).collect()
-    [Row(r=3.0)]
+    >>> df.select(sf.xpath_float(df.x, sf.lit('sum(a/b)'))).show()
+    +------------------------+
+    |xpath_float(x, sum(a/b))|
+    +------------------------+
+    |                     3.0|
+    +------------------------+
     """
     return _invoke_function_over_columns("xpath_float", xml, path)
 
@@ -11757,9 +11782,14 @@ def xpath_int(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
-    >>> df.select(xpath_int(df.x, lit('sum(a/b)')).alias('r')).collect()
-    [Row(r=3)]
+    >>> df.select(sf.xpath_int(df.x, sf.lit('sum(a/b)'))).show()
+    +----------------------+
+    |xpath_int(x, sum(a/b))|
+    +----------------------+
+    |                     3|
+    +----------------------+
     """
     return _invoke_function_over_columns("xpath_int", xml, path)
 
@@ -11774,9 +11804,14 @@ def xpath_long(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
-    >>> df.select(xpath_long(df.x, lit('sum(a/b)')).alias('r')).collect()
-    [Row(r=3)]
+    >>> df.select(sf.xpath_long(df.x, sf.lit('sum(a/b)'))).show()
+    +-----------------------+
+    |xpath_long(x, sum(a/b))|
+    +-----------------------+
+    |                      3|
+    +-----------------------+
     """
     return _invoke_function_over_columns("xpath_long", xml, path)
 
@@ -11791,9 +11826,14 @@ def xpath_short(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
-    >>> df.select(xpath_short(df.x, lit('sum(a/b)')).alias('r')).collect()
-    [Row(r=3)]
+    >>> df.select(sf.xpath_short(df.x, sf.lit('sum(a/b)'))).show()
+    +------------------------+
+    |xpath_short(x, sum(a/b))|
+    +------------------------+
+    |                       3|
+    +------------------------+
     """
     return _invoke_function_over_columns("xpath_short", xml, path)
 
@@ -11807,9 +11847,14 @@ def xpath_string(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('<a><b>b</b><c>cc</c></a>',)], ['x'])
-    >>> df.select(xpath_string(df.x, lit('a/c')).alias('r')).collect()
-    [Row(r='cc')]
+    >>> df.select(sf.xpath_string(df.x, sf.lit('a/c'))).show()
+    +--------------------+
+    |xpath_string(x, a/c)|
+    +--------------------+
+    |                  cc|
+    +--------------------+
     """
     return _invoke_function_over_columns("xpath_string", xml, path)
 
@@ -13147,6 +13192,30 @@ def session_user() -> Column:
     +--------------+
     """
     return _invoke_function("session_user")
+
+
+@_try_remote_functions
+def uuid() -> Column:
+    """Returns an universally unique identifier (UUID) string.
+    The value is returned as a canonical UUID 36-character string.
+
+    .. versionadded:: 4.1.0
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(5).select(sf.uuid()).show(truncate=False) # doctest: +SKIP
+    +------------------------------------+
+    |uuid()                              |
+    +------------------------------------+
+    |627ae05e-b319-42b5-b4e4-71c8c9754dd1|
+    |f781cce5-a2e2-464d-bc8b-426ff448e404|
+    |15e2e66e-8416-4ea2-af3c-409363408189|
+    |fb1d6178-7676-4791-baa9-f2ddcc494515|
+    |d48665e8-2657-4c6b-b7c8-8ae0cd646e41|
+    +------------------------------------+
+    """
+    return _invoke_function("uuid")
 
 
 @_try_remote_functions
@@ -15137,9 +15206,9 @@ def rlike(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    str : :class:`~pyspark.sql.Column` or str
+    str : :class:`~pyspark.sql.Column` or column name
         target column to work on.
-    regexp : :class:`~pyspark.sql.Column` or str
+    regexp : :class:`~pyspark.sql.Column` or column name
         regex pattern to apply.
 
     Returns
@@ -15149,13 +15218,35 @@ def rlike(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("1a 2b 14m", r"(\d+)")], ["str", "regexp"])
-    >>> df.select(rlike('str', lit(r'(\d+)')).alias('d')).collect()
-    [Row(d=True)]
-    >>> df.select(rlike('str', lit(r'\d{2}b')).alias('d')).collect()
-    [Row(d=False)]
-    >>> df.select(rlike("str", col("regexp")).alias('d')).collect()
-    [Row(d=True)]
+    >>> df.select('*', sf.rlike('str', sf.lit(r'(\d+)'))).show()
+    +---------+------+-----------------+
+    |      str|regexp|RLIKE(str, (\d+))|
+    +---------+------+-----------------+
+    |1a 2b 14m| (\d+)|             true|
+    +---------+------+-----------------+
+
+    >>> df.select('*', sf.rlike('str', sf.lit(r'\d{2}b'))).show()
+    +---------+------+------------------+
+    |      str|regexp|RLIKE(str, \d{2}b)|
+    +---------+------+------------------+
+    |1a 2b 14m| (\d+)|             false|
+    +---------+------+------------------+
+
+    >>> df.select('*', sf.rlike("str", sf.col("regexp"))).show()
+    +---------+------+------------------+
+    |      str|regexp|RLIKE(str, regexp)|
+    +---------+------+------------------+
+    |1a 2b 14m| (\d+)|              true|
+    +---------+------+------------------+
+
+    >>> df.select('*', sf.rlike("str", "regexp")).show()
+    +---------+------+------------------+
+    |      str|regexp|RLIKE(str, regexp)|
+    +---------+------+------------------+
+    |1a 2b 14m| (\d+)|              true|
+    +---------+------+------------------+
     """
     return _invoke_function_over_columns("rlike", str, regexp)
 
@@ -15329,9 +15420,9 @@ def regexp_count(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    str : :class:`~pyspark.sql.Column` or str
+    str : :class:`~pyspark.sql.Column` or column name
         target column to work on.
-    regexp : :class:`~pyspark.sql.Column` or str
+    regexp : :class:`~pyspark.sql.Column` or column name
         regex pattern to apply.
 
     Returns
@@ -15341,13 +15432,35 @@ def regexp_count(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("1a 2b 14m", r"\d+")], ["str", "regexp"])
-    >>> df.select(regexp_count('str', lit(r'\d+')).alias('d')).collect()
-    [Row(d=3)]
-    >>> df.select(regexp_count('str', lit(r'mmm')).alias('d')).collect()
-    [Row(d=0)]
-    >>> df.select(regexp_count("str", col("regexp")).alias('d')).collect()
-    [Row(d=3)]
+    >>> df.select('*', sf.regexp_count('str', sf.lit(r'\d+'))).show()
+    +---------+------+----------------------+
+    |      str|regexp|regexp_count(str, \d+)|
+    +---------+------+----------------------+
+    |1a 2b 14m|   \d+|                     3|
+    +---------+------+----------------------+
+
+    >>> df.select('*', sf.regexp_count('str', sf.lit(r'mmm'))).show()
+    +---------+------+----------------------+
+    |      str|regexp|regexp_count(str, mmm)|
+    +---------+------+----------------------+
+    |1a 2b 14m|   \d+|                     0|
+    +---------+------+----------------------+
+
+    >>> df.select('*', sf.regexp_count("str", sf.col("regexp"))).show()
+    +---------+------+-------------------------+
+    |      str|regexp|regexp_count(str, regexp)|
+    +---------+------+-------------------------+
+    |1a 2b 14m|   \d+|                        3|
+    +---------+------+-------------------------+
+
+    >>> df.select('*', sf.regexp_count(sf.col('str'), "regexp")).show()
+    +---------+------+-------------------------+
+    |      str|regexp|regexp_count(str, regexp)|
+    +---------+------+-------------------------+
+    |1a 2b 14m|   \d+|                        3|
+    +---------+------+-------------------------+
     """
     return _invoke_function_over_columns("regexp_count", str, regexp)
 
@@ -15364,7 +15477,7 @@ def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
 
     Parameters
     ----------
-    str : :class:`~pyspark.sql.Column` or str
+    str : :class:`~pyspark.sql.Column` or column name
         target column to work on.
     pattern : str
         regex pattern to apply.
@@ -15376,17 +15489,36 @@ def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     :class:`~pyspark.sql.Column`
         matched value specified by `idx` group id.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.regexp_extract_all`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('100-200',)], ['str'])
-    >>> df.select(regexp_extract('str', r'(\d+)-(\d+)', 1).alias('d')).collect()
-    [Row(d='100')]
+    >>> df.select('*', sf.regexp_extract('str', r'(\d+)-(\d+)', 1)).show()
+    +-------+-----------------------------------+
+    |    str|regexp_extract(str, (\d+)-(\d+), 1)|
+    +-------+-----------------------------------+
+    |100-200|                                100|
+    +-------+-----------------------------------+
+
     >>> df = spark.createDataFrame([('foo',)], ['str'])
-    >>> df.select(regexp_extract('str', r'(\d+)', 1).alias('d')).collect()
-    [Row(d='')]
+    >>> df.select('*', sf.regexp_extract('str', r'(\d+)', 1)).show()
+    +---+-----------------------------+
+    |str|regexp_extract(str, (\d+), 1)|
+    +---+-----------------------------+
+    |foo|                             |
+    +---+-----------------------------+
+
     >>> df = spark.createDataFrame([('aaaac',)], ['str'])
-    >>> df.select(regexp_extract('str', '(a+)(b)?(c)', 2).alias('d')).collect()
-    [Row(d='')]
+    >>> df.select('*', sf.regexp_extract(sf.col('str'), '(a+)(b)?(c)', 2)).show()
+    +-----+-----------------------------------+
+    |  str|regexp_extract(str, (a+)(b)?(c), 2)|
+    +-----+-----------------------------------+
+    |aaaac|                                   |
+    +-----+-----------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -15406,11 +15538,11 @@ def regexp_extract_all(
 
     Parameters
     ----------
-    str : :class:`~pyspark.sql.Column` or str
+    str : :class:`~pyspark.sql.Column` or column name
         target column to work on.
-    regexp : :class:`~pyspark.sql.Column` or str
+    regexp : :class:`~pyspark.sql.Column` or column name
         regex pattern to apply.
-    idx : int, optional
+    idx : :class:`~pyspark.sql.Column` or int, optional
         matched group id.
 
     Returns
@@ -15418,17 +15550,48 @@ def regexp_extract_all(
     :class:`~pyspark.sql.Column`
         all strings in the `str` that match a Java regex and corresponding to the regex group index.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.regexp_extract`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("100-200, 300-400", r"(\d+)-(\d+)")], ["str", "regexp"])
-    >>> df.select(regexp_extract_all('str', lit(r'(\d+)-(\d+)')).alias('d')).collect()
-    [Row(d=['100', '300'])]
-    >>> df.select(regexp_extract_all('str', lit(r'(\d+)-(\d+)'), 1).alias('d')).collect()
-    [Row(d=['100', '300'])]
-    >>> df.select(regexp_extract_all('str', lit(r'(\d+)-(\d+)'), 2).alias('d')).collect()
-    [Row(d=['200', '400'])]
-    >>> df.select(regexp_extract_all('str', col("regexp")).alias('d')).collect()
-    [Row(d=['100', '300'])]
+    >>> df.select('*', sf.regexp_extract_all('str', sf.lit(r'(\d+)-(\d+)'))).show()
+    +----------------+-----------+---------------------------------------+
+    |             str|     regexp|regexp_extract_all(str, (\d+)-(\d+), 1)|
+    +----------------+-----------+---------------------------------------+
+    |100-200, 300-400|(\d+)-(\d+)|                             [100, 300]|
+    +----------------+-----------+---------------------------------------+
+
+    >>> df.select('*', sf.regexp_extract_all('str', sf.lit(r'(\d+)-(\d+)'), sf.lit(1))).show()
+    +----------------+-----------+---------------------------------------+
+    |             str|     regexp|regexp_extract_all(str, (\d+)-(\d+), 1)|
+    +----------------+-----------+---------------------------------------+
+    |100-200, 300-400|(\d+)-(\d+)|                             [100, 300]|
+    +----------------+-----------+---------------------------------------+
+
+    >>> df.select('*', sf.regexp_extract_all('str', sf.lit(r'(\d+)-(\d+)'), 2)).show()
+    +----------------+-----------+---------------------------------------+
+    |             str|     regexp|regexp_extract_all(str, (\d+)-(\d+), 2)|
+    +----------------+-----------+---------------------------------------+
+    |100-200, 300-400|(\d+)-(\d+)|                             [200, 400]|
+    +----------------+-----------+---------------------------------------+
+
+    >>> df.select('*', sf.regexp_extract_all('str', sf.col("regexp"))).show()
+    +----------------+-----------+----------------------------------+
+    |             str|     regexp|regexp_extract_all(str, regexp, 1)|
+    +----------------+-----------+----------------------------------+
+    |100-200, 300-400|(\d+)-(\d+)|                        [100, 300]|
+    +----------------+-----------+----------------------------------+
+
+    >>> df.select('*', sf.regexp_extract_all(sf.col('str'), "regexp")).show()
+    +----------------+-----------+----------------------------------+
+    |             str|     regexp|regexp_extract_all(str, regexp, 1)|
+    +----------------+-----------+----------------------------------+
+    |100-200, 300-400|(\d+)-(\d+)|                        [100, 300]|
+    +----------------+-----------+----------------------------------+
     """
     if idx is None:
         return _invoke_function_over_columns("regexp_extract_all", str, regexp)
@@ -15463,43 +15626,102 @@ def regexp_replace(
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("100-200", r"(\d+)", "--")], ["str", "pattern", "replacement"])
-    >>> df.select(regexp_replace('str', r'(\d+)', '--').alias('d')).collect()
-    [Row(d='-----')]
-    >>> df.select(regexp_replace("str", col("pattern"), col("replacement")).alias('d')).collect()
-    [Row(d='-----')]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...      [("100-200", r"(\d+)", "--")],
+    ...      ["str", "pattern", "replacement"]
+    ... )
+
+    Example 1: Replaces all the substrings in the `str` column name that
+    match the regex pattern `(\d+)` (one or more digits) with the replacement
+    string "--".
+
+    >>> df.select('*', sf.regexp_replace('str', r'(\d+)', '--')).show()
+    +-------+-------+-----------+---------------------------------+
+    |    str|pattern|replacement|regexp_replace(str, (\d+), --, 1)|
+    +-------+-------+-----------+---------------------------------+
+    |100-200|  (\d+)|         --|                            -----|
+    +-------+-------+-----------+---------------------------------+
+
+    Example 2: Replaces all the substrings in the `str` Column that match
+    the regex pattern in the `pattern` Column with the string in the `replacement`
+    column.
+
+    >>> df.select('*', \
+    ...     sf.regexp_replace(sf.col("str"), sf.col("pattern"), sf.col("replacement")) \
+    ... ).show()
+    +-------+-------+-----------+--------------------------------------------+
+    |    str|pattern|replacement|regexp_replace(str, pattern, replacement, 1)|
+    +-------+-------+-----------+--------------------------------------------+
+    |100-200|  (\d+)|         --|                                       -----|
+    +-------+-------+-----------+--------------------------------------------+
     """
     return _invoke_function_over_columns("regexp_replace", string, lit(pattern), lit(replacement))
 
 
 @_try_remote_functions
 def regexp_substr(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
-    r"""Returns the substring that matches the Java regex `regexp` within the string `str`.
+    r"""Returns the first substring that matches the Java regex `regexp` within the string `str`.
     If the regular expression is not found, the result is null.
 
     .. versionadded:: 3.5.0
 
     Parameters
     ----------
-    str : :class:`~pyspark.sql.Column` or str
+    str : :class:`~pyspark.sql.Column` or column name
         target column to work on.
-    regexp : :class:`~pyspark.sql.Column` or str
+    regexp : :class:`~pyspark.sql.Column` or column name
         regex pattern to apply.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the substring that matches a Java regex within the string `str`.
+        the first substring that matches a Java regex within the string `str`.
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("1a 2b 14m", r"\d+")], ["str", "regexp"])
-    >>> df.select(regexp_substr('str', lit(r'\d+')).alias('d')).collect()
-    [Row(d='1')]
-    >>> df.select(regexp_substr('str', lit(r'mmm')).alias('d')).collect()
-    [Row(d=None)]
-    >>> df.select(regexp_substr("str", col("regexp")).alias('d')).collect()
-    [Row(d='1')]
+
+    Example 1: Returns the first substring in the `str` column name that
+    matches the regex pattern `(\d+)` (one or more digits).
+
+    >>> df.select('*', sf.regexp_substr('str', sf.lit(r'\d+'))).show()
+    +---------+------+-----------------------+
+    |      str|regexp|regexp_substr(str, \d+)|
+    +---------+------+-----------------------+
+    |1a 2b 14m|   \d+|                      1|
+    +---------+------+-----------------------+
+
+    Example 2: Returns the first substring in the `str` column name that
+    matches the regex pattern `(mmm)` (three consecutive 'm' characters)
+
+    >>> df.select('*', sf.regexp_substr('str', sf.lit(r'mmm'))).show()
+    +---------+------+-----------------------+
+    |      str|regexp|regexp_substr(str, mmm)|
+    +---------+------+-----------------------+
+    |1a 2b 14m|   \d+|                   NULL|
+    +---------+------+-----------------------+
+
+    Example 3: Returns the first substring in the `str` column name that
+    matches the regex pattern in `regexp` Column.
+
+    >>> df.select('*', sf.regexp_substr("str", sf.col("regexp"))).show()
+    +---------+------+--------------------------+
+    |      str|regexp|regexp_substr(str, regexp)|
+    +---------+------+--------------------------+
+    |1a 2b 14m|   \d+|                         1|
+    +---------+------+--------------------------+
+
+    Example 4: Returns the first substring in the `str` Column that
+    matches the regex pattern in `regexp` column name.
+
+    >>> df.select('*', sf.regexp_substr(sf.col("str"), "regexp")).show()
+    +---------+------+--------------------------+
+    |      str|regexp|regexp_substr(str, regexp)|
+    +---------+------+--------------------------+
+    |1a 2b 14m|   \d+|                         1|
+    +---------+------+--------------------------+
     """
     return _invoke_function_over_columns("regexp_substr", str, regexp)
 
@@ -15508,36 +15730,70 @@ def regexp_substr(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 def regexp_instr(
     str: "ColumnOrName", regexp: "ColumnOrName", idx: Optional[Union[int, Column]] = None
 ) -> Column:
-    r"""Extract all strings in the `str` that match the Java regex `regexp`
+    r"""Returns the position of the first substring in the `str` that match the Java regex `regexp`
     and corresponding to the regex group index.
 
     .. versionadded:: 3.5.0
 
     Parameters
     ----------
-    str : :class:`~pyspark.sql.Column` or str
+    str : :class:`~pyspark.sql.Column` or column name
         target column to work on.
-    regexp : :class:`~pyspark.sql.Column` or str
+    regexp : :class:`~pyspark.sql.Column` or column name
         regex pattern to apply.
-    idx : int, optional
+    idx : :class:`~pyspark.sql.Column` or int, optional
         matched group id.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        all strings in the `str` that match a Java regex and corresponding to the regex group index.
+        the position of the first substring in the `str` that match a Java regex and corresponding
+        to the regex group index.
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("1a 2b 14m", r"\d+(a|b|m)")], ["str", "regexp"])
-    >>> df.select(regexp_instr('str', lit(r'\d+(a|b|m)')).alias('d')).collect()
-    [Row(d=1)]
-    >>> df.select(regexp_instr('str', lit(r'\d+(a|b|m)'), 1).alias('d')).collect()
-    [Row(d=1)]
-    >>> df.select(regexp_instr('str', lit(r'\d+(a|b|m)'), 2).alias('d')).collect()
-    [Row(d=1)]
-    >>> df.select(regexp_instr('str', col("regexp")).alias('d')).collect()
-    [Row(d=1)]
+
+    Example 1: Returns the position of the first substring in the `str` column name that
+    match the regex pattern `(\d+(a|b|m))` (one or more digits followed by 'a', 'b', or 'm').
+
+    >>> df.select('*', sf.regexp_instr('str', sf.lit(r'\d+(a|b|m)'))).show()
+    +---------+----------+--------------------------------+
+    |      str|    regexp|regexp_instr(str, \d+(a|b|m), 0)|
+    +---------+----------+--------------------------------+
+    |1a 2b 14m|\d+(a|b|m)|                               1|
+    +---------+----------+--------------------------------+
+
+    Example 2: Returns the position of the first substring in the `str` column name that
+    match the regex pattern `(\d+(a|b|m))` (one or more digits followed by 'a', 'b', or 'm'),
+
+    >>> df.select('*', sf.regexp_instr('str', sf.lit(r'\d+(a|b|m)'), sf.lit(1))).show()
+    +---------+----------+--------------------------------+
+    |      str|    regexp|regexp_instr(str, \d+(a|b|m), 1)|
+    +---------+----------+--------------------------------+
+    |1a 2b 14m|\d+(a|b|m)|                               1|
+    +---------+----------+--------------------------------+
+
+    Example 3: Returns the position of the first substring in the `str` column name that
+    match the regex pattern in `regexp` Column.
+
+    >>> df.select('*', sf.regexp_instr('str', sf.col("regexp"))).show()
+    +---------+----------+----------------------------+
+    |      str|    regexp|regexp_instr(str, regexp, 0)|
+    +---------+----------+----------------------------+
+    |1a 2b 14m|\d+(a|b|m)|                           1|
+    +---------+----------+----------------------------+
+
+    Example 4: Returns the position of the first substring in the `str` Column that
+    match the regex pattern in `regexp` column name.
+
+    >>> df.select('*', sf.regexp_instr(sf.col("str"), "regexp")).show()
+    +---------+----------+----------------------------+
+    |      str|    regexp|regexp_instr(str, regexp, 0)|
+    +---------+----------+----------------------------+
+    |1a 2b 14m|\d+(a|b|m)|                           1|
+    +---------+----------+----------------------------+
     """
     if idx is None:
         return _invoke_function_over_columns("regexp_instr", str, regexp)
@@ -15803,7 +16059,7 @@ def length(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to work on.
 
     Returns
@@ -15813,8 +16069,13 @@ def length(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> spark.createDataFrame([('ABC ',)], ['a']).select(length('a').alias('length')).collect()
-    [Row(length=4)]
+    >>> from pyspark.sql import functions as sf
+    >>> spark.createDataFrame([('ABC ',)], ['a']).select('*', sf.length('a')).show()
+    +----+---------+
+    |   a|length(a)|
+    +----+---------+
+    |ABC |        4|
+    +----+---------+
     """
     return _invoke_function_over_columns("length", col)
 
@@ -15831,7 +16092,7 @@ def octet_length(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         Source column or strings
 
     Returns
@@ -15841,10 +16102,15 @@ def octet_length(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql.functions import octet_length
-    >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']) \\
-    ...      .select(octet_length('cat')).collect()
-        [Row(octet_length(cat)=3), Row(octet_length(cat)=4)]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat'])
+    >>> df.select('*', sf.octet_length('cat')).show()
+    +---+-----------------+
+    |cat|octet_length(cat)|
+    +---+-----------------+
+    |cat|                3|
+    | 🐈|                4|
+    +---+-----------------+
     """
     return _invoke_function_over_columns("octet_length", col)
 
@@ -15861,7 +16127,7 @@ def bit_length(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         Source column or strings
 
     Returns
@@ -15871,10 +16137,15 @@ def bit_length(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql.functions import bit_length
-    >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']) \\
-    ...      .select(bit_length('cat')).collect()
-        [Row(bit_length(cat)=24), Row(bit_length(cat)=32)]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat'])
+    >>> df.select('*', sf.bit_length('cat')).show()
+    +---+---------------+
+    |cat|bit_length(cat)|
+    +---+---------------+
+    |cat|             24|
+    | 🐈|             32|
+    +---+---------------+
     """
     return _invoke_function_over_columns("bit_length", col)
 
@@ -15893,7 +16164,7 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
 
     Parameters
     ----------
-    srcCol : :class:`~pyspark.sql.Column` or str
+    srcCol : :class:`~pyspark.sql.Column` or column name
         Source column or strings
     matching : str
         matching characters.
@@ -15908,9 +16179,14 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
 
     Examples
     --------
-    >>> spark.createDataFrame([('translate',)], ['a']).select(translate('a', "rnlt", "123") \\
-    ...     .alias('r')).collect()
-    [Row(r='1a2s3ae')]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('translate',)], ['a'])
+    >>> df.select('*', sf.translate('a', "rnlt", "123")).show()
+    +---------+-----------------------+
+    |        a|translate(a, rnlt, 123)|
+    +---------+-----------------------+
+    |translate|                1a2s3ae|
+    +---------+-----------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -16911,6 +17187,41 @@ def character_length(str: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def chr(n: "ColumnOrName") -> Column:
+    """
+    Returns the ASCII character having the binary equivalent to `n`.
+    If n is larger than 256 the result is equivalent to chr(n % 256).
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    n : :class:`~pyspark.sql.Column` or column name
+        target column to compute on.
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(60, 70).select("*", sf.chr("id")).show()
+    +---+-------+
+    | id|chr(id)|
+    +---+-------+
+    | 60|      <|
+    | 61|      =|
+    | 62|      >|
+    | 63|      ?|
+    | 64|      @|
+    | 65|      A|
+    | 66|      B|
+    | 67|      C|
+    | 68|      D|
+    | 69|      E|
+    +---+-------+
+    """
+    return _invoke_function_over_columns("chr", n)
+
+
+@_try_remote_functions
 def try_to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
     """
     This is a special version of `to_binary` that performs the same operation, but returns a NULL
@@ -17406,6 +17717,37 @@ def collation(col: "ColumnOrName") -> Column:
     +--------------------------+
     """
     return _invoke_function_over_columns("collation", col)
+
+
+@_try_remote_functions
+def quote(col: "ColumnOrName") -> Column:
+    r"""Returns `str` enclosed by single quotes and each instance of
+    single quote in it is preceded by a backslash.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        target column to be quoted.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        quoted string
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(["Don't"], "STRING")
+    >>> df.select("*", sf.quote("value")).show()
+    +-----+------------+
+    |value|quote(value)|
+    +-----+------------+
+    |Don't|    'Don\'t'|
+    +-----+------------+
+    """
+    return _invoke_function_over_columns("quote", col)
 
 
 # ---------------------- Collection functions ------------------------------
@@ -19867,11 +20209,49 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
 
     Examples
     --------
+    Example 1: Extract a json object from json string
+
     >>> data = [("1", '''{"f1": "value1", "f2": "value2"}'''), ("2", '''{"f1": "value12"}''')]
     >>> df = spark.createDataFrame(data, ("key", "jstring"))
-    >>> df.select(df.key, get_json_object(df.jstring, '$.f1').alias("c0"), \\
-    ...                   get_json_object(df.jstring, '$.f2').alias("c1") ).collect()
-    [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
+    >>> df.select(df.key,
+    ...     get_json_object(df.jstring, '$.f1').alias("c0"),
+    ...     get_json_object(df.jstring, '$.f2').alias("c1")
+    ... ).show()
+    +---+-------+------+
+    |key|     c0|    c1|
+    +---+-------+------+
+    |  1| value1|value2|
+    |  2|value12|  NULL|
+    +---+-------+------+
+
+    Example 2: Extract a json object from json array
+
+    >>> data = [
+    ... ("1", '''[{"f1": "value1"},{"f1": "value2"}]'''),
+    ... ("2", '''[{"f1": "value12"},{"f2": "value13"}]''')
+    ... ]
+    >>> df = spark.createDataFrame(data, ("key", "jarray"))
+    >>> df.select(df.key,
+    ...     get_json_object(df.jarray, '$[0].f1').alias("c0"),
+    ...     get_json_object(df.jarray, '$[1].f2').alias("c1")
+    ... ).show()
+    +---+-------+-------+
+    |key|     c0|     c1|
+    +---+-------+-------+
+    |  1| value1|   NULL|
+    |  2|value12|value13|
+    +---+-------+-------+
+
+    >>> df.select(df.key,
+    ...     get_json_object(df.jarray, '$[*].f1').alias("c0"),
+    ...     get_json_object(df.jarray, '$[*].f2').alias("c1")
+    ... ).show()
+    +---+-------------------+---------+
+    |key|                 c0|       c1|
+    +---+-------------------+---------+
+    |  1|["value1","value2"]|     NULL|
+    |  2|          "value12"|"value13"|
+    +---+-------------------+---------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -20179,7 +20559,7 @@ def is_variant_null(v: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
+def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
     `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
@@ -20190,9 +20570,10 @@ def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
-    path : str
-        the extraction path. A valid path should start with `$` and is followed by zero or more
-        segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+    path : :class:`~pyspark.sql.Column` or str
+        a column containing the extraction path strings or a string representing the extraction
+        path. A valid path should start with `$` and is followed by zero or more segments like
+        `[123]`, `.name`, `['name']`, or `["name"]`.
     targetType : str
         the target data type to cast into, in a DDL-formatted string
 
@@ -20203,21 +20584,29 @@ def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }''', 'path': '$.a'} ])
     >>> df.select(variant_get(parse_json(df.json), "$.a", "int").alias("r")).collect()
     [Row(r=1)]
     >>> df.select(variant_get(parse_json(df.json), "$.b", "int").alias("r")).collect()
     [Row(r=None)]
+    >>> df.select(variant_get(parse_json(df.json), df.path, "int").alias("r")).collect()
+    [Row(r=1)]
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function(
-        "variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
-    )
+    assert isinstance(path, (Column, str))
+    if isinstance(path, str):
+        return _invoke_function(
+            "variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
+        )
+    else:
+        return _invoke_function(
+            "variant_get", _to_java_column(v), _to_java_column(path), _enum_to_value(targetType)
+        )
 
 
 @_try_remote_functions
-def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
+def try_variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
     `targetType`. Returns null if the path does not exist or the cast fails.
@@ -20228,9 +20617,10 @@ def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
-    path : str
-        the extraction path. A valid path should start with `$` and is followed by zero or more
-        segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+    path : :class:`~pyspark.sql.Column` or str
+        a column containing the extraction path strings or a string representing the extraction
+        path. A valid path should start with `$` and is followed by zero or more segments like
+        `[123]`, `.name`, `['name']`, or `["name"]`.
     targetType : str
         the target data type to cast into, in a DDL-formatted string
 
@@ -20241,19 +20631,26 @@ def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }''', 'path': '$.a'} ])
     >>> df.select(try_variant_get(parse_json(df.json), "$.a", "int").alias("r")).collect()
     [Row(r=1)]
     >>> df.select(try_variant_get(parse_json(df.json), "$.b", "int").alias("r")).collect()
     [Row(r=None)]
     >>> df.select(try_variant_get(parse_json(df.json), "$.a", "binary").alias("r")).collect()
     [Row(r=None)]
+    >>> df.select(try_variant_get(parse_json(df.json), df.path, "int").alias("r")).collect()
+    [Row(r=1)]
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function(
-        "try_variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
-    )
+    if isinstance(path, str):
+        return _invoke_function(
+            "try_variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
+        )
+    else:
+        return _invoke_function(
+            "try_variant_get", _to_java_column(v), _to_java_column(path), _enum_to_value(targetType)
+        )
 
 
 @_try_remote_functions
@@ -20315,8 +20712,8 @@ def schema_of_variant_agg(v: "ColumnOrName") -> Column:
 @_try_remote_functions
 def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> Column:
     """
-    Converts a column containing a :class:`StructType`, :class:`ArrayType` or a :class:`MapType`
-    into a JSON string. Throws an exception, in the case of an unsupported type.
+    Converts a column containing a :class:`StructType`, :class:`ArrayType`, :class:`MapType`
+    or a :class:`VariantType` into a JSON string. Throws an exception, in the case of an unsupported type.
 
     .. versionadded:: 2.1.0
 
@@ -20326,7 +20723,7 @@ def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) ->
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column containing a struct, an array or a map.
+        name of column containing a struct, an array, a map, or a variant object.
     options : dict, optional
         options to control converting. accepts the same options as the JSON datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
@@ -20380,7 +20777,18 @@ def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) ->
     |{"name":"Alice"}|
     +----------------+
 
-    Example 4: Converting a nested MapType column to JSON
+    Example 4: Converting a VariantType column to JSON
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1, '{"name": "Alice"}')], ("key", "value"))
+    >>> df.select(sf.to_json(sf.parse_json(df.value)).alias("json")).show(truncate=False)
+    +----------------+
+    |json            |
+    +----------------+
+    |{"name":"Alice"}|
+    +----------------+
+
+    Example 5: Converting a nested MapType column to JSON
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(1, [{"name": "Alice"}, {"name": "Bob"}])], ("key", "value"))
@@ -20391,7 +20799,7 @@ def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) ->
     |[{"name":"Alice"},{"name":"Bob"}]|
     +---------------------------------+
 
-    Example 5: Converting a simple ArrayType column to JSON
+    Example 6: Converting a simple ArrayType column to JSON
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(1, ["Alice", "Bob"])], ("key", "value"))
@@ -20402,7 +20810,7 @@ def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) ->
     |["Alice","Bob"]|
     +---------------+
 
-    Example 6: Converting to JSON with specified options
+    Example 7: Converting to JSON with specified options
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT (DATE('2022-02-22'), 1) AS date")
@@ -24968,13 +25376,27 @@ def isnotnull(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(None,), (1,)], ["e"])
-    >>> df.select(isnotnull(df.e).alias('r')).collect()
-    [Row(r=False), Row(r=True)]
+    >>> df.select('*', sf.isnotnull(df.e)).show()
+    +----+---------------+
+    |   e|(e IS NOT NULL)|
+    +----+---------------+
+    |NULL|          false|
+    |   1|           true|
+    +----+---------------+
+
+    >>> df.select('*', sf.isnotnull('e')).show()
+    +----+---------------+
+    |   e|(e IS NOT NULL)|
+    +----+---------------+
+    |NULL|          false|
+    |   1|           true|
+    +----+---------------+
     """
     return _invoke_function_over_columns("isnotnull", col)
 
@@ -24989,14 +25411,28 @@ def equal_null(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
-    col2 : :class:`~pyspark.sql.Column` or str
+    col1 : :class:`~pyspark.sql.Column` or column name
+    col2 : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(None, None,), (1, 9,)], ["a", "b"])
-    >>> df.select(equal_null(df.a, df.b).alias('r')).collect()
-    [Row(r=True), Row(r=False)]
+    >>> df.select('*', sf.equal_null(df.a, df.b)).show()
+    +----+----+----------------+
+    |   a|   b|equal_null(a, b)|
+    +----+----+----------------+
+    |NULL|NULL|            true|
+    |   1|   9|           false|
+    +----+----+----------------+
+
+    >>> df.select('*', sf.equal_null('a', 'b')).show()
+    +----+----+----------------+
+    |   a|   b|equal_null(a, b)|
+    +----+----+----------------+
+    |NULL|NULL|            true|
+    |   1|   9|           false|
+    +----+----+----------------+
     """
     return _invoke_function_over_columns("equal_null", col1, col2)
 
@@ -25010,14 +25446,28 @@ def nullif(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
-    col2 : :class:`~pyspark.sql.Column` or str
+    col1 : :class:`~pyspark.sql.Column` or column name
+    col2 : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(None, None,), (1, 9,)], ["a", "b"])
-    >>> df.select(nullif(df.a, df.b).alias('r')).collect()
-    [Row(r=None), Row(r=1)]
+    >>> df.select('*', sf.nullif(df.a, df.b)).show()
+    +----+----+------------+
+    |   a|   b|nullif(a, b)|
+    +----+----+------------+
+    |NULL|NULL|        NULL|
+    |   1|   9|           1|
+    +----+----+------------+
+
+    >>> df.select('*', sf.nullif('a', 'b')).show()
+    +----+----+------------+
+    |   a|   b|nullif(a, b)|
+    +----+----+------------+
+    |NULL|NULL|        NULL|
+    |   1|   9|           1|
+    +----+----+------------+
     """
     return _invoke_function_over_columns("nullif", col1, col2)
 
@@ -25031,18 +25481,27 @@ def nullifzero(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(0,), (1,)], ["a"])
-    >>> df.select(nullifzero(df.a).alias("result")).show()
-    +------+
-    |result|
-    +------+
-    |  NULL|
-    |     1|
-    +------+
+    >>> df.select('*', sf.nullifzero(df.a)).show()
+    +---+-------------+
+    |  a|nullifzero(a)|
+    +---+-------------+
+    |  0|         NULL|
+    |  1|            1|
+    +---+-------------+
+
+    >>> df.select('*', sf.nullifzero('a')).show()
+    +---+-------------+
+    |  a|nullifzero(a)|
+    +---+-------------+
+    |  0|         NULL|
+    |  1|            1|
+    +---+-------------+
     """
     return _invoke_function_over_columns("nullifzero", col)
 
@@ -25056,14 +25515,28 @@ def nvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
-    col2 : :class:`~pyspark.sql.Column` or str
+    col1 : :class:`~pyspark.sql.Column` or column name
+    col2 : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(None, 8,), (1, 9,)], ["a", "b"])
-    >>> df.select(nvl(df.a, df.b).alias('r')).collect()
-    [Row(r=8), Row(r=1)]
+    >>> df.select('*', sf.nvl(df.a, df.b)).show()
+    +----+---+---------+
+    |   a|  b|nvl(a, b)|
+    +----+---+---------+
+    |NULL|  8|        8|
+    |   1|  9|        1|
+    +----+---+---------+
+
+    >>> df.select('*', sf.nvl('a', 'b')).show()
+    +----+---+---------+
+    |   a|  b|nvl(a, b)|
+    +----+---+---------+
+    |NULL|  8|        8|
+    |   1|  9|        1|
+    +----+---+---------+
     """
     return _invoke_function_over_columns("nvl", col1, col2)
 
@@ -25077,15 +25550,29 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
-    col2 : :class:`~pyspark.sql.Column` or str
-    col3 : :class:`~pyspark.sql.Column` or str
+    col1 : :class:`~pyspark.sql.Column` or column name
+    col2 : :class:`~pyspark.sql.Column` or column name
+    col3 : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(None, 8, 6,), (1, 9, 9,)], ["a", "b", "c"])
-    >>> df.select(nvl2(df.a, df.b, df.c).alias('r')).collect()
-    [Row(r=6), Row(r=9)]
+    >>> df.select('*', sf.nvl2(df.a, df.b, df.c)).show()
+    +----+---+---+-------------+
+    |   a|  b|  c|nvl2(a, b, c)|
+    +----+---+---+-------------+
+    |NULL|  8|  6|            6|
+    |   1|  9|  9|            9|
+    +----+---+---+-------------+
+
+    >>> df.select('*', sf.nvl2('a', 'b', 'c')).show()
+    +----+---+---+-------------+
+    |   a|  b|  c|nvl2(a, b, c)|
+    +----+---+---+-------------+
+    |NULL|  8|  6|            6|
+    |   1|  9|  9|            9|
+    +----+---+---+-------------+
     """
     return _invoke_function_over_columns("nvl2", col1, col2, col3)
 
@@ -25099,18 +25586,27 @@ def zeroifnull(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(None,), (1,)], ["a"])
-    >>> df.select(zeroifnull(df.a).alias("result")).show()
-    +------+
-    |result|
-    +------+
-    |     0|
-    |     1|
-    +------+
+    >>> df.select('*', sf.zeroifnull(df.a)).show()
+    +----+-------------+
+    |   a|zeroifnull(a)|
+    +----+-------------+
+    |NULL|            0|
+    |   1|            1|
+    +----+-------------+
+
+    >>> df.select('*', sf.zeroifnull('a')).show()
+    +----+-------------+
+    |   a|zeroifnull(a)|
+    +----+-------------+
+    |NULL|            0|
+    |   1|            1|
+    +----+-------------+
     """
     return _invoke_function_over_columns("zeroifnull", col)
 

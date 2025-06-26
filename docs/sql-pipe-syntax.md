@@ -198,11 +198,21 @@ TABLE t;
 
 Evaluates the provided expressions over each of the rows of the input table.                                                                                                                                                    
 
+In general, this operator is not always required with SQL pipe syntax. It is possible to use it at
+or near the end of a query to evaluate expressions or specify a list of output columns.
+
+Since the final query result always comprises the columns returned from the last pipe operator,
+when this `SELECT` operator does not appear, the output includes all columns from the full row.
+This behavior is similar to `SELECT *` in standard SQL syntax.
+
 It is possible to use `DISTINCT` and `*` as needed.<br>
 This works like the outermost `SELECT` in a table subquery in regular Spark SQL.
 
 Window functions are supported in the `SELECT` list as well. To use them, the `OVER` clause must be
 provided. You may provide the window specification in the `WINDOW` clause.
+
+Aggregate functions are not supported in this operator. To perform aggregation, use the `AGGREGATE`
+operator instead.
 
 For example:
 
@@ -226,7 +236,12 @@ FROM t
 |> EXTEND <expr> [[AS] alias], ...
 ```
 
-Appends new columns to the input table by evaluating the specified expressions over each of the input rows.
+Appends new columns to the input table by evaluating the specified expressions over each of the
+input rows.
+
+After an `EXTEND` operation, top-level column names are updated but table aliases still refer to the
+original row values (such as an inner join between two tables `lhs` and `rhs` with a subsequent
+`EXTEND` and then `SELECT lhs.col, rhs.col`).
 
 For example:
 
@@ -248,11 +263,31 @@ VALUES (0), (1) tab(col)
 |> SET <column> = <expression>, ...
 ```
 
-Updates columns of the input table by replacing them with the result of evaluating the provided expressions.
+Updates columns of the input table by replacing them with the result of evaluating the provided
+expressions. Each such column reference must appear in the input table exactly once.
+
+This is similar to `SELECT * EXCEPT (column), <expression> AS column` in regular Spark SQL.
+
+It is possible to perform multiple assignments in a single `SET` clause. Each assignment may refer
+to the result of previous assignments.
+
+After an assignment, top-level column names are updated but table aliases still refer to the
+original row values (such as an inner join between two tables `lhs` and `rhs` with a subsequent
+`SET` and then `SELECT lhs.col, rhs.col`).
 
 For example:
 
 ```sql
+VALUES (0), (1) tab(col)
+|> SET col = col * 2;
+
++---+
+|col|
++---+
+|  0|
+|  2|
++---+
+
 VALUES (0), (1) tab(col)
 |> SET col = col * 2;
 
@@ -270,7 +305,14 @@ VALUES (0), (1) tab(col)
 |> DROP <column>, ...
 ```
 
-Drops columns of the input table by name.
+Drops columns of the input table by name. Each such column reference must appear in the input table
+exactly once.
+
+This is similar to `SELECT * EXCEPT (column)` in regular Spark SQL.
+
+After a `DROP` operation, top-level column names are updated but table aliases still refer to the
+original row values (such as an inner join between two tables `lhs` and `rhs` with a subsequent
+`DROP` and then `SELECT lhs.col, rhs.col`).
 
 For example:
 
@@ -293,18 +335,25 @@ VALUES (0, 1) tab(col1, col2)
 
 Retains the same rows and column names of the input table but with a new table alias.
 
+This operator is useful for introducing a new alias for the input table, which can then be referred
+to in subsequent operators. Any existing alias for the table is replaced by the new alias.
+
+It is useful to use this operator after adding new columns with `SELECT` or `EXTEND` or after
+performing aggregation with `AGGREGATE`. This simplifies the process of referring to the columns
+from subsequent `JOIN` operators and allows for more readable queries.
+
 For example:
 
 ```sql
 VALUES (0, 1) tab(col1, col2)
-|> AS new_tab;
-|> SELECT * FROM new_tab;
+|> AS new_tab
+|> SELECT col1 + col2 FROM new_tab;
 
-+----+----+
-|col1|col2|
-+----+----+
-|   0|   1|
-+----+----+
++-----------+
+|col1 + col2|
++-----------+
+|          1|
++-----------+
 ```
 
 #### WHERE
@@ -357,22 +406,48 @@ VALUES (0), (0) tab(col)
 #### AGGREGATE
 
 ```sql
+-- Full-table aggregation
 |> AGGREGATE <agg_expr> [[AS] alias], ...
-```
 
-Performs full-table aggregation, returning one result row with a column for each aggregate expression.
-
-```sql
+-- Aggregation with grouping
 |> AGGREGATE [<agg_expr> [[AS] alias], ...] GROUP BY <grouping_expr> [AS alias], ...
 ```
 
-Performs aggregation with grouping, returning one row per group. The column list includes the
-grouping columns first and then the aggregate columns afterward. Aliases can be assigned directly
-on grouping expressions.
+Performs aggregation across grouped rows or across the entire input table.
+
+If no `GROUP BY` clause is present, this performs full-table aggregation, returning one result row
+with a column for each aggregate expression. Othwrise, this performs aggregation with grouping,
+returning one row per group. Aliases can be assigned directly on grouping expressions.
+
+The output column list of this operator includes the grouping columns first (if any), and then the
+aggregate columns afterward. 
+
+Each `<agg_expr>` expression can include standard aggregate function(s) like `COUNT`, `SUM`, `AVG`,
+`MIN`, or any other aggregate function(s) that Spark SQL supports. Additional expressions may appear
+below or above the aggregate function(s), such as `MIN(FLOOR(col)) + 1`. Each `<agg_expr>`
+expression must contain at least one aggregate function (or otherwise the query returns an error).
+Each `<agg_expr>` expression may include a column alias with `AS <alias>`, and may also
+include a `DISTINCT` keyword to remove duplicate values before applying the aggregate function (for
+example, `COUNT(DISTINCT col)`).
+
+If present, the `GROUP BY` clause can include any number of grouping expressions, and each
+`<agg_expr>` expression will evaluate over each unique combination of values of the grouping
+expressions. The output table contains the evaluated grouping expressions followed by the evaluated
+aggregate functions. The `GROUP BY` expressions may include one-based ordinals. Unlike regular SQL
+in which such ordinals refer to the expressions in the accompanying `SELECT` clause, in SQL pipe
+syntax, they refer to the columns of the relation produced by the preceding operator instead. For
+example, in `TABLE t |> AGGREGATE COUNT(*) GROUP BY 2`, we refer to the second column of the input
+table `t`.
+
+There is no need to repeat entire expressions between `GROUP BY` and `SELECT`, since the `AGGREGATE` 
+operator automatically includes the evaluated grouping expressions in its output. By the same token,
+after an `AGGREGATE` operator, it is often unnecessary to issue a following `SELECT` operator, since
+`AGGREGATE` returns both the grouping columns and the aggregate columns in a single step.
 
 For example:
 
 ```sql
+-- Full-table aggregation
 VALUES (0), (1) tab(col)
 |> AGGREGATE COUNT(col) AS count;
 
@@ -382,6 +457,7 @@ VALUES (0), (1) tab(col)
 |    2|
 +-----+
 
+-- Aggregation with grouping
 VALUES (0, 1), (0, 2) tab(col1, col2)
 |> AGGREGATE COUNT(col2) AS count GROUP BY col1;
 
@@ -398,19 +474,45 @@ VALUES (0, 1), (0, 2) tab(col1, col2)
 |> [LEFT | RIGHT | FULL | CROSS | SEMI | ANTI | NATURAL | LATERAL] JOIN <table> [ON <condition> | USING(col, ...)]
 ```
 
-Joins rows from both inputs, returning a filtered cross-product of the pipe input table and the table expression following the JOIN keyword.
+Joins rows from both inputs, returning a filtered cross-product of the pipe input table and the
+table expression following the JOIN keyword. This behaves a similar manner as the `JOIN` clause in
+regular SQL where the pipe operator input table becomes the left side of the join and the table
+argument becomes the right side of the join.
+
+Standard join modifiers like `LEFT`, `RIGHT`, and `FULL` are supported before the `JOIN` keyword.
+
+The join predicate may need to refer to columns from both inputs to the join. In this case, it may
+be necessary to use table aliases to differentiate between columns in the event that both inputs
+have columns with the same names. The `AS` operator can be useful here to introduce a new alias for
+the pipe input table that becomes the left side of the join. Use standard syntax to assign an alias
+to the table argument that becomes the right side of the join, if needed.
 
 For example:
 
 ```sql
-VALUES (0, 1) tab(a, b)
-|> JOIN VALUES (0, 2) tab(c, d) ON a = c;
+SELECT 0 AS a, 1 AS b
+|> AS lhs
+|> JOIN VALUES (0, 2) rhs(a, b) ON (lhs.a = rhs.a);
 
 +---+---+---+---+
 |  a|  b|  c|  d|
 +---+---+---+---+
 |  0|  1|  0|  2|
 +---+---+---+---+
+
+VALUES ('apples', 3), ('bananas', 4) t(item, sales)
+|> AS produce_sales
+|> LEFT JOIN
+     (SELECT "apples" AS item, 123 AS id) AS produce_data
+     USING (item)
+|> SELECT produce_sales.item, sales, id;
+
+/*---------+-------+------+
+ | item    | sales | id   |
+ +---------+-------+------+
+ | apples  | 3     | 123  |
+ | bananas | 4     | NULL |
+ +---------+-------+------*/
 ```
 
 #### ORDER BY
@@ -419,7 +521,8 @@ VALUES (0, 1) tab(a, b)
 |> ORDER BY <expr> [ASC | DESC], ...
 ```
 
-Returns the input rows after sorting as indicated. Standard modifiers are supported including NULLS FIRST/LAST.
+Returns the input rows after sorting as indicated. Standard modifiers are supported including NULLS
+FIRST/LAST.
 
 For example:
 
@@ -438,10 +541,10 @@ VALUES (0), (1) tab(col)
 #### UNION, INTERSECT, EXCEPT
 
 ```sql
-|> {UNION | INTERSECT | EXCEPT} {ALL | DISTINCT} (<query>), (<query>), ...
+|> {UNION | INTERSECT | EXCEPT} {ALL | DISTINCT} (<query>)
 ```
 
-Performs the union or other set operation over the combined rows from the input table plus one or more tables provided as input arguments.
+Performs the union or other set operation over the combined rows from the input table or subquery.
 
 For example:
 
@@ -469,11 +572,21 @@ For example:
 
 ```sql
 VALUES (0), (0), (0), (0) tab(col)
-|> TABLESAMPLE BERNOULLI(1 ROWS);
+|> TABLESAMPLE (1 ROWS);
 
 +---+
 |col|
 +---+
+|  0|
++---+
+
+VALUES (0), (0) tab(col)
+|> TABLESAMPLE (100 PERCENT);
+
++---+
+|col|
++---+
+|  0|
 |  0|
 +---+
 ```

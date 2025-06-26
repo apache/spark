@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.time.{Duration, Period}
+import java.time.{Duration, LocalTime, Period}
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
@@ -33,6 +33,8 @@ abstract class ParquetFileFormatSuite
   with ParquetTest
   with SharedSparkSession
   with CommonFileDataSourceSuite {
+
+  import testImplicits._
 
   override protected def dataSourceFormat = "parquet"
 
@@ -125,6 +127,25 @@ abstract class ParquetFileFormatSuite
           MapType(keyType = testUDT, valueType = BinaryType) -> enabled
         ).foreach { case (dt, expected) =>
           assert(ParquetUtils.isBatchReadSupported(conf, dt) == expected)
+        }
+      }
+    }
+  }
+
+  test("Write and read back TIME values") {
+    Seq(false, true).foreach { offHeapEnabled =>
+      withSQLConf(SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapEnabled.toString) {
+        val data = Seq(LocalTime.parse("01:12:30.999999")).toDF("col")
+        withNestedDataFrame(data).foreach { case (newDF, colName, _) =>
+          withTempPath { dir =>
+            newDF.write.parquet(dir.getCanonicalPath)
+            Seq(false, true).foreach { vectorizedReaderEnabled =>
+              readParquetFile(dir.getCanonicalPath, vectorizedReaderEnabled) { df =>
+                checkAnswer(df, newDF)
+                assert(df(colName).expr.dataType == TimeType())
+              }
+            }
+          }
         }
       }
     }

@@ -28,43 +28,42 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, TimeAdd}
 /**
  * Helper resolver for [[TimeAdd]] which is produced by resolving [[BinaryArithmetic]] nodes.
  */
-class TimeAddResolver(
-    expressionResolver: ExpressionResolver,
-    timezoneAwareExpressionResolver: TimezoneAwareExpressionResolver)
-  extends TreeNodeResolver[TimeAdd, Expression]
-  with ResolvesExpressionChildren {
+class TimeAddResolver(expressionResolver: ExpressionResolver)
+    extends TreeNodeResolver[TimeAdd, Expression]
+    with ResolvesExpressionChildren
+    with CoercesExpressionTypes {
 
-  private val typeCoercionRules: Seq[Expression => Expression] =
-    if (conf.ansiEnabled) {
-      TimeAddResolver.ANSI_TYPE_COERCION_RULES
-    } else {
-      TimeAddResolver.TYPE_COERCION_RULES
-    }
-  private val typeCoercionResolver: TypeCoercionResolver =
-    new TypeCoercionResolver(timezoneAwareExpressionResolver, typeCoercionRules)
+  private val traversals = expressionResolver.getExpressionTreeTraversals
+
+  protected override val ansiTransformations: CoercesExpressionTypes.Transformations =
+    TimeAddResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
+  protected override val nonAnsiTransformations: CoercesExpressionTypes.Transformations =
+    TimeAddResolver.TYPE_COERCION_TRANSFORMATIONS
 
   override def resolve(unresolvedTimeAdd: TimeAdd): Expression = {
-    val timeAddWithResolvedChildren: TimeAdd =
-      withResolvedChildren(unresolvedTimeAdd, expressionResolver.resolve)
-    val timeAddWithTypeCoercion: Expression = typeCoercionResolver
-      .resolve(timeAddWithResolvedChildren)
-    timezoneAwareExpressionResolver.withResolvedTimezone(
+    val timeAddWithResolvedChildren =
+      withResolvedChildren(unresolvedTimeAdd, expressionResolver.resolve _)
+    val timeAddWithTypeCoercion: Expression = coerceExpressionTypes(
+      expression = timeAddWithResolvedChildren,
+      expressionTreeTraversal = traversals.current
+    )
+    TimezoneAwareExpressionResolver.resolveTimezone(
       timeAddWithTypeCoercion,
-      conf.sessionLocalTimeZone
+      traversals.current.sessionLocalTimeZone
     )
   }
 }
 
 object TimeAddResolver {
   // Ordering in the list of type coercions should be in sync with the list in [[TypeCoercion]].
-  private val TYPE_COERCION_RULES: Seq[Expression => Expression] = Seq(
+  private val TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
     StringPromotionTypeCoercion.apply,
     TypeCoercion.ImplicitTypeCoercion.apply,
     TypeCoercion.DateTimeOperationsTypeCoercion.apply
   )
 
   // Ordering in the list of type coercions should be in sync with the list in [[AnsiTypeCoercion]].
-  private val ANSI_TYPE_COERCION_RULES: Seq[Expression => Expression] = Seq(
+  private val ANSI_TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
     AnsiStringPromotionTypeCoercion.apply,
     AnsiTypeCoercion.ImplicitTypeCoercion.apply,
     AnsiTypeCoercion.AnsiDateTimeOperationsTypeCoercion.apply

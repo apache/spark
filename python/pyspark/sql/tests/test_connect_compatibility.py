@@ -262,13 +262,8 @@ class ConnectCompatibilityTestsMixin:
         expected_missing_connect_properties = {"sparkContext"}
         expected_missing_classic_properties = {"is_stopped", "session_id"}
         expected_missing_connect_methods = {
-            "addArtifact",
-            "addArtifacts",
             "clearProgressHandlers",
             "copyFromLocalToFs",
-            "interruptAll",
-            "interruptOperation",
-            "interruptTag",
             "newSession",
             "registerProgressHandler",
             "removeProgressHandler",
@@ -400,7 +395,7 @@ class ConnectCompatibilityTestsMixin:
         """Test Grouping compatibility between classic and connect."""
         expected_missing_connect_properties = set()
         expected_missing_classic_properties = set()
-        expected_missing_connect_methods = {"transformWithStateInPandas"}
+        expected_missing_connect_methods = set()
         expected_missing_classic_methods = set()
         self.check_compatibility(
             ClassicGroupedData,

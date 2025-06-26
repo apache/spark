@@ -274,7 +274,8 @@ class LDASuite extends MLTest with DefaultReadWriteTest {
     val lda = new LDA()
     testEstimatorAndModelReadWrite(lda, dataset,
       LDASuite.allParamSettings ++ Map("optimizer" -> "em"),
-      LDASuite.allParamSettings ++ Map("optimizer" -> "em"), checkModelData)
+      LDASuite.allParamSettings ++ Map("optimizer" -> "em"), checkModelData,
+      skipTestSaveLocal = true)
   }
 
   test("EM LDA checkpointing: save last checkpoint") {

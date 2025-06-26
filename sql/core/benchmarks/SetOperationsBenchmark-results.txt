@@ -2,12 +2,12 @@
 Set Operations Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.12+7-Ubuntu-1ubuntu220.04 on Linux 5.4.0-1131-aws-fips
-Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+AMD EPYC 7763 64-Core Processor
 Parsing + Analysis:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-UNION ALL                                           360            423          70          0.0       24019.4       1.0X
-EXCEPT ALL                                          322            328           5          0.0       21463.2       1.1X
-INTERSECT ALL                                       327            360          33          0.0       21777.2       1.1X
+UNION ALL                                           371            502         142          0.0       24706.1       1.0X
+EXCEPT ALL                                          270            281           8          0.1       17967.1       1.4X
+INTERSECT ALL                                       267            276           7          0.1       17797.3       1.4X
 
 

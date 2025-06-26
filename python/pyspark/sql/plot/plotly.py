@@ -43,6 +43,19 @@ def plot_pyspark(data: "DataFrame", kind: str, **kwargs: Any) -> "Figure":
         return plot_kde(data, **kwargs)
     if kind == "hist":
         return plot_histogram(data, **kwargs)
+    if kind not in PySparkPlotAccessor.plot_data_map:
+        raise PySparkValueError(
+            errorClass="UNSUPPORTED_PLOT_KIND",
+            messageParameters={
+                "plot_type": kind,
+                "supported_plot_types": ", ".join(
+                    sorted(
+                        list(PySparkPlotAccessor.plot_data_map.keys())
+                        + ["pie", "box", "kde", "density", "hist"]
+                    )
+                ),
+            },
+        )
 
     return plotly.plot(PySparkPlotAccessor.plot_data_map[kind](data), kind, **kwargs)
 
@@ -151,7 +164,7 @@ def plot_box(data: "DataFrame", **kwargs: Any) -> "Figure":
 
 
 def plot_kde(data: "DataFrame", **kwargs: Any) -> "Figure":
-    from pyspark.sql.utils import has_numpy
+    from pyspark.testing.utils import have_numpy
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
 
     require_minimum_pandas_version()
@@ -166,7 +179,7 @@ def plot_kde(data: "DataFrame", **kwargs: Any) -> "Figure":
     colnames = process_column_param(kwargs.pop("column", None), data)
     ind = PySparkKdePlotBase.get_ind(data.select(*colnames), kwargs.pop("ind", None))
 
-    if has_numpy:
+    if have_numpy:
         import numpy as np
 
         if isinstance(ind, np.ndarray):

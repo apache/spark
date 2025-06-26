@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
@@ -65,6 +66,7 @@ import org.apache.spark.util.ArrayImplicits._
  * {{{
  *   CREATE (DATABASE|SCHEMA) [IF NOT EXISTS] database_name
  *     [COMMENT database_comment]
+ *     [DEFAULT COLLATION collation]
  *     [LOCATION database_directory]
  *     [WITH DBPROPERTIES (property_name=property_value, ...)];
  * }}}

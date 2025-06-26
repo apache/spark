@@ -19,10 +19,12 @@ package org.apache.spark.sql.streaming
 
 import java.util.UUID
 
+import scala.jdk.CollectionConverters._
+
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.databind.node.TreeTraversingParser
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
-import org.json4s.{JObject, JString}
+import org.json4s.{JArray, JObject, JString}
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL.{jobject2assoc, pair2Assoc}
 import org.json4s.jackson.JsonMethods.{compact, render}
@@ -31,8 +33,7 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.scheduler.SparkListenerEvent
 
 /**
- * Interface for listening to events related to
- * [[org.apache.spark.sql.api.StreamingQuery StreamingQueries]].
+ * Interface for listening to events related to [[StreamingQuery StreamingQueries]].
  *
  * @note
  *   The methods are not thread-safe as they may be called from different threads.
@@ -49,8 +50,7 @@ abstract class StreamingQueryListener extends Serializable {
    * @note
    *   This is called synchronously with `DataStreamWriter.start()`, that is, `onQueryStart` will
    *   be called on all listeners before `DataStreamWriter.start()` returns the corresponding
-   *   [[org.apache.spark.sql.api.StreamingQuery]]. Please don't block this method as it will
-   *   block your query.
+   *   [[StreamingQuery]]. Please don't block this method as it will block your query.
    * @since 2.0.0
    */
   def onQueryStarted(event: QueryStartedEvent): Unit
@@ -59,11 +59,10 @@ abstract class StreamingQueryListener extends Serializable {
    * Called when there is some status update (ingestion rate updated, etc.)
    *
    * @note
-   *   This method is asynchronous. The status in [[org.apache.spark.sql.api.StreamingQuery]] will
-   *   always be latest no matter when this method is called. Therefore, the status of
-   *   [[org.apache.spark.sql.api.StreamingQuery]] may be changed before/when you process the
-   *   event. E.g., you may find [[org.apache.spark.sql.api.StreamingQuery]] is terminated when
-   *   you are processing `QueryProgressEvent`.
+   *   This method is asynchronous. The status in [[StreamingQuery]] will always be latest no
+   *   matter when this method is called. Therefore, the status of [[StreamingQuery]] may be
+   *   changed before/when you process the event. E.g., you may find [[StreamingQuery]] is
+   *   terminated when you are processing `QueryProgressEvent`.
    * @since 2.0.0
    */
   def onQueryProgress(event: QueryProgressEvent): Unit
@@ -126,6 +125,14 @@ object StreamingQueryListener extends Serializable {
     private val tree = mapper.readTree(json)
     def getString(name: String): String = tree.get(name).asText()
     def getUUID(name: String): UUID = UUID.fromString(getString(name))
+    def getStringArray(name: String): List[String] = {
+      val node = tree.get(name)
+      if (node.isArray()) {
+        node.elements().asScala.map(_.asText()).toList
+      } else {
+        List()
+      }
+    }
     def getProgress(name: String): StreamingQueryProgress = {
       val parser = new TreeTraversingParser(tree.get(name), mapper)
       parser.readValueAs(classOf[StreamingQueryProgress])
@@ -149,6 +156,8 @@ object StreamingQueryListener extends Serializable {
    *   User-specified name of the query, null if not specified.
    * @param timestamp
    *   The timestamp to start a query.
+   * @param jobTags
+   *   The job tags that have been assigned to all the jobs started by this thread
    * @since 2.1.0
    */
   @Evolving
@@ -156,9 +165,14 @@ object StreamingQueryListener extends Serializable {
       val id: UUID,
       val runId: UUID,
       val name: String,
-      val timestamp: String)
+      val timestamp: String,
+      val jobTags: Set[String])
       extends Event
       with Serializable {
+
+    def this(id: UUID, runId: UUID, name: String, timestamp: String) = {
+      this(id, runId, name, timestamp, Set())
+    }
 
     def json: String = compact(render(jsonValue))
 
@@ -166,7 +180,8 @@ object StreamingQueryListener extends Serializable {
       ("id" -> JString(id.toString)) ~
         ("runId" -> JString(runId.toString)) ~
         ("name" -> JString(name)) ~
-        ("timestamp" -> JString(timestamp))
+        ("timestamp" -> JString(timestamp)) ~
+        ("jobTags" -> JArray(jobTags.toList.map(JString)))
     }
   }
 
@@ -178,7 +193,8 @@ object StreamingQueryListener extends Serializable {
         parser.getUUID("id"),
         parser.getUUID("runId"),
         parser.getString("name"),
-        parser.getString("name"))
+        parser.getString("timestamp"),
+        parser.getStringArray("jobTags").toSet)
     }
   }
 

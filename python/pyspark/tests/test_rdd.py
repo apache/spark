@@ -36,8 +36,8 @@ from pyspark.serializers import (
     NoOpSerializer,
 )
 from pyspark.sql import SparkSession
-from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME, QuietTest, have_numpy
-from pyspark.testing.sqlutils import have_pandas
+from pyspark.testing.utils import ReusedPySparkTestCase, QuietTest, have_numpy
+from pyspark.testing.sqlutils import SPARK_HOME, have_pandas
 
 
 global_func = lambda: "Hi"  # noqa: E731

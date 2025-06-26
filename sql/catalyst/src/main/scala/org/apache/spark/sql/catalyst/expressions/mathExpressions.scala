@@ -1005,10 +1005,12 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
   group = "math_funcs")
 // scalastyle:on line.size.limit
 case class Bin(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with Serializable {
+  extends UnaryExpression
+  with ImplicitCastInputTypes
+  with Serializable
+  with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[DataType] = Seq(LongType)
-  override def dataType: DataType = SQLConf.get.defaultStringType
 
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.toBinaryString(input.asInstanceOf[Long])
@@ -1114,7 +1116,9 @@ object Hex {
   since = "1.5.0",
   group = "math_funcs")
 case class Hex(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+  extends UnaryExpression
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] =
@@ -1122,7 +1126,7 @@ case class Hex(child: Expression)
 
   override def dataType: DataType = child.dataType match {
     case st: StringType => st
-    case _ => SQLConf.get.defaultStringType
+    case _ => super.dataType
   }
 
   protected override def nullSafeEval(num: Any): Any = child.dataType match {
@@ -1379,8 +1383,10 @@ case class ShiftRightUnsigned(left: Expression, right: Expression) extends BitSh
     copy(left = newLeft, right = newRight)
 }
 
+// scalastyle:off nonascii
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns sqrt(`expr1`**2 + `expr2`**2).",
+  usage = "_FUNC_(expr1, expr2) - Returns sqrt(`expr1`\u00B2 + `expr2`\u00B2).",
+  // scalastyle:on nonascii
   examples = """
     Examples:
       > SELECT _FUNC_(3, 4);

@@ -41,8 +41,8 @@ case class OutputEvent(
  * Test suite base for TransformWithState with TTL support.
  */
 abstract class TransformWithStateTTLTest
-  extends StreamTest with AlsoTestWithRocksDBFeatures
-  with AlsoTestWithEncodingTypes {
+  extends StreamTest with AlsoTestWithEncodingTypes
+  with AlsoTestWithRocksDBFeatures {
   import testImplicits._
 
   def getProcessor(ttlConfig: TTLConfig): StatefulProcessor[String, InputEvent, OutputEvent]

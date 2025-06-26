@@ -94,6 +94,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // SPARK-28636
     "decimalArithmeticOperations.sql",
     "literals.sql",
+    "random.sql",
     "subquery/scalar-subquery/scalar-subquery-predicate.sql",
     "subquery/in-subquery/in-limit.sql",
     "subquery/in-subquery/in-group-by.sql",
@@ -103,11 +104,14 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // SPARK-42921
     "timestampNTZ/datetime-special-ansi.sql",
     // SPARK-47264
+    "view-with-default-collation.sql",
     "collations.sql",
     "listagg-collations.sql",
     "pipe-operators.sql",
     // VARIANT type
-    "variant/named-function-arguments.sql"
+    "variant/named-function-arguments.sql",
+    // SPARK-51516: Support the TIME data type by Thrift Server
+    "time.sql"
   )
 
   override def runQueries(

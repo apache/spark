@@ -22,8 +22,7 @@ import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.rules.RuleExecutor.getForceIterationValue
-import org.apache.spark.sql.catalyst.trees.{TreeNode, TreeNodeTag}
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -31,28 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 object RuleExecutor {
-
-  /**
-   * A tag used to explicitly request an additional iteration of the current batch during
-   * rule execution, even if the query plan remains unchanged. Increment the tag's value
-   * to enforce another iteration.
-   */
-  private val FORCE_ADDITIONAL_ITERATION = TreeNodeTag[Int]("forceAdditionalIteration")
-
-  /**
-   * Increments the value of the FORCE_ADDITIONAL_ITERATION tag on the given plan to
-   * explicitly force another iteration of the current batch during rule execution.
-   */
-  def forceAdditionalIteration(plan: TreeNode[_]): Unit = {
-    val oldValue = getForceIterationValue(plan)
-    plan.setTagValue(FORCE_ADDITIONAL_ITERATION, oldValue + 1)
-  }
-
-  private def getForceIterationValue(plan: TreeNode[_]): Int = {
-    plan.getTagValue(FORCE_ADDITIONAL_ITERATION).getOrElse(0)
-  }
-
-  protected val queryExecutionMeter = QueryExecutionMetering()
+  protected val queryExecutionMeter = QueryExecutionMetering.INSTANCE
 
   /** Dump statistics about time spent running specific rules. */
   def dumpTimeSpent(): String = {
@@ -81,13 +59,22 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
     if (!newPlan.fastEquals(oldPlan)) {
       if (logRules.isEmpty || logRules.get.contains(ruleName)) {
         def message(): MessageWithContext = {
+          val oldPlanStringWithOutput = oldPlan.treeString(verbose = false,
+            printOutputColumns = true)
+          val newPlanStringWithOutput = newPlan.treeString(verbose = false,
+            printOutputColumns = true)
+          // scalastyle:off line.size.limit
           log"""
              |=== Applying Rule ${MDC(RULE_NAME, ruleName)} ===
              |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n"))}
+             |
+             |Output Information:
+             |${MDC(QUERY_PLAN, sideBySide(oldPlanStringWithOutput, newPlanStringWithOutput).mkString("\n"))}
            """.stripMargin
+           // scalastyle:on line.size.limit
         }
 
-        logBasedOnLevel(message())
+        logBasedOnLevel(logLevel)(message())
       }
     }
   }
@@ -96,16 +83,25 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
     if (logBatches.isEmpty || logBatches.get.contains(batchName)) {
       def message(): MessageWithContext = {
         if (!oldPlan.fastEquals(newPlan)) {
+          val oldPlanStringWithOutput = oldPlan.treeString(verbose = false,
+            printOutputColumns = true)
+          val newPlanStringWithOutput = newPlan.treeString(verbose = false,
+            printOutputColumns = true)
+          // scalastyle:off line.size.limit
           log"""
              |=== Result of Batch ${MDC(BATCH_NAME, batchName)} ===
              |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n"))}
+             |
+             |Output Information:
+             |${MDC(QUERY_PLAN, sideBySide(oldPlanStringWithOutput, newPlanStringWithOutput).mkString("\n"))}
           """.stripMargin
+          // scalastyle:on line.size.limit
         } else {
           log"Batch ${MDC(BATCH_NAME, batchName)} has no effect."
         }
       }
 
-      logBasedOnLevel(message())
+      logBasedOnLevel(logLevel)(message())
     }
   }
 
@@ -123,18 +119,7 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
       """.stripMargin
     // scalastyle:on line.size.limit
 
-    logBasedOnLevel(message)
-  }
-
-  private def logBasedOnLevel(f: => MessageWithContext): Unit = {
-    logLevel match {
-      case "TRACE" => logTrace(f.message)
-      case "DEBUG" => logDebug(f.message)
-      case "INFO" => logInfo(f)
-      case "WARN" => logWarning(f)
-      case "ERROR" => logError(f)
-      case _ => logTrace(f.message)
-    }
+    logBasedOnLevel(logLevel)(message)
   }
 }
 
@@ -175,7 +160,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     override val maxIterationsSetting: String = null) extends Strategy
 
   /** A batch of rules. */
-  protected case class Batch(name: String, strategy: Strategy, rules: Rule[TreeType]*)
+  protected[catalyst] case class Batch(name: String, strategy: Strategy, rules: Rule[TreeType]*)
 
   /** Defines a sequence of rule batches, to be overridden by the implementation. */
   protected def batches: Seq[Batch]
@@ -325,7 +310,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
           continue = false
         }
 
-        if (isFixedPointReached(lastPlan, curPlan)) {
+        if (curPlan.fastEquals(lastPlan)) {
           logTrace(
             s"Fixed point reached for batch ${batch.name} after ${iteration - 1} iterations.")
           continue = false
@@ -338,10 +323,5 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     planChangeLogger.logMetrics(name, RuleExecutor.getCurrentMetrics() - beforeMetrics)
 
     curPlan
-  }
-
-  private def isFixedPointReached(oldPlan: TreeType, newPlan: TreeType): Boolean = {
-    oldPlan.fastEquals(newPlan) &&
-      getForceIterationValue(newPlan) <= getForceIterationValue(oldPlan)
   }
 }

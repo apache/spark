@@ -530,6 +530,104 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     assert(preds(4)._2 ~= Vectors.dense(0.0, 1.0) relTol 1E-5)
   }
 
+  test("model size estimation: dense data") {
+    val rng = new Random(1)
+
+    Seq(10, 100, 1000, 10000, 100000).foreach { n =>
+      val df = Seq(
+        (Vectors.dense(Array.fill(n)(rng.nextInt(2).toDouble)), 0.0),
+        (Vectors.dense(Array.fill(n)(rng.nextInt(2).toDouble)), 1.0)
+      ).toDF("features", "label")
+
+      Seq("multinomial", "complement", "bernoulli", "gaussian").foreach { m =>
+        val nb = new NaiveBayes().setModelType(m)
+        val size1 = nb.estimateModelSize(df)
+        val model = nb.fit(df)
+        val isDense = model.pi.isInstanceOf[DenseVector] &&
+          model.theta.isInstanceOf[DenseMatrix] &&
+          model.sigma.isInstanceOf[DenseMatrix]
+
+        val size2 = model.estimatedSize
+
+        // non-gaussian nb models are likely dense, due to the smoothing
+        //        (n, m, isDense, size1, size2)
+        //        (10,multinomial,true,3462,3462)
+        //        (10,complement,true,3462,3462)
+        //        (10,bernoulli,true,3462,3462)
+        //        (10,gaussian,false,3622,3618)
+        //        (100,multinomial,true,4902,4902)
+        //        (100,complement,true,4902,4902)
+        //        (100,bernoulli,true,4902,4902)
+        //        (100,gaussian,false,6502,6066)
+        //        (1000,multinomial,true,19302,19302)
+        //        (1000,complement,true,19302,19302)
+        //        (1000,bernoulli,true,19302,19302)
+        //        (1000,gaussian,false,35302,31494)
+        //        (10000,multinomial,true,163302,163302)
+        //        (10000,complement,true,163302,163302)
+        //        (10000,bernoulli,true,163302,163302)
+        //        (10000,gaussian,false,323302,282474)
+        //        (100000,multinomial,true,1603302,1603302)
+        //        (100000,complement,true,1603302,1603302)
+        //        (100000,bernoulli,true,1603302,1603302)
+        //        (100000,gaussian,false,3203302,2803698)
+        if (isDense) {
+          val rel = (size1 - size2).toDouble / size2
+          assert(math.abs(rel) < 0.05, (n, m, isDense, size1, size2))
+        } else {
+          assert(size1 > size2, (n, m, isDense, size1, size2))
+        }
+      }
+    }
+  }
+
+  test("model size estimation: sparse data") {
+    val rng = new Random(1)
+
+    Seq(100, 1000, 10000, 100000).foreach { n =>
+      val df = Seq(
+        (Vectors.sparse(n, Array.range(0, 10), Array.fill(10)(rng.nextInt(2).toDouble)), 0.0),
+        (Vectors.sparse(n, Array.range(0, 10), Array.fill(10)(rng.nextInt(2).toDouble)), 1.0)
+      ).toDF("features", "label")
+
+      Seq("multinomial", "complement", "bernoulli", "gaussian").foreach { m =>
+        val nb = new NaiveBayes().setModelType(m)
+        val size1 = nb.estimateModelSize(df)
+        val model = nb.fit(df)
+        val isDense = model.pi.isInstanceOf[DenseVector] &&
+          model.theta.isInstanceOf[DenseMatrix] &&
+          model.sigma.isInstanceOf[DenseMatrix]
+
+        val size2 = model.estimatedSize
+
+        // non-gaussian nb models are likely dense, due to the smoothing
+        //        (n, m, isDense, size1, size2)
+        //        (100,multinomial,true,4902,4902)
+        //        (100,complement,true,4902,4902)
+        //        (100,bernoulli,true,4902,4902)
+        //        (100,gaussian,false,6502,5058)
+        //        (1000,multinomial,true,19302,19302)
+        //        (1000,complement,true,19302,19302)
+        //        (1000,bernoulli,true,19302,19302)
+        //        (1000,gaussian,false,35302,19458)
+        //        (10000,multinomial,true,163302,163302)
+        //        (10000,complement,true,163302,163302)
+        //        (10000,bernoulli,true,163302,163302)
+        //        (10000,gaussian,false,323302,163458)
+        //        (100000,multinomial,true,1603302,1603302)
+        //        (100000,complement,true,1603302,1603302)
+        //        (100000,bernoulli,true,1603302,1603302)
+        //        (100000,gaussian,false,3203302,1603398)
+        if (isDense) {
+          val rel = (size1 - size2).toDouble / size2
+          assert(math.abs(rel) < 0.05, (n, m, isDense, size1, size2))
+        } else {
+          assert(size1 > size2, (n, m, isDense, size1, size2))
+        }
+      }
+    }
+  }
+
   test("read/write") {
     def checkModelData(model: NaiveBayesModel, model2: NaiveBayesModel): Unit = {
       assert(model.getModelType === model2.getModelType)

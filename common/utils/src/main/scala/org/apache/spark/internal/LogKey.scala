@@ -94,6 +94,7 @@ private[spark] object LogKeys {
   case object BATCH_TIMESTAMP extends LogKey
   case object BATCH_WRITE extends LogKey
   case object BIND_ADDRESS extends LogKey
+  case object BLOCK_GENERATOR_STATUS extends LogKey
   case object BLOCK_ID extends LogKey
   case object BLOCK_IDS extends LogKey
   case object BLOCK_MANAGER_ID extends LogKey
@@ -138,6 +139,7 @@ private[spark] object LogKeys {
   case object CLUSTER_LABEL extends LogKey
   case object CLUSTER_LEVEL extends LogKey
   case object CLUSTER_WEIGHT extends LogKey
+  case object CODE extends LogKey
   case object CODEC_LEVEL extends LogKey
   case object CODEC_NAME extends LogKey
   case object CODEGEN_STAGE_ID extends LogKey
@@ -289,6 +291,7 @@ private[spark] object LogKeys {
   case object FINAL_PATH extends LogKey
   case object FINISH_TIME extends LogKey
   case object FINISH_TRIGGER_DURATION extends LogKey
+  case object FLOW_NAME extends LogKey
   case object FREE_MEMORY_SIZE extends LogKey
   case object FROM_OFFSET extends LogKey
   case object FROM_TIME extends LogKey
@@ -330,6 +333,7 @@ private[spark] object LogKeys {
   case object INPUT extends LogKey
   case object INPUT_SPLIT extends LogKey
   case object INTEGRAL extends LogKey
+  case object INTERRUPT_THREAD extends LogKey
   case object INTERVAL extends LogKey
   case object INVALID_PARAMS extends LogKey
   case object ISOLATION_LEVEL extends LogKey
@@ -508,6 +512,7 @@ private[spark] object LogKeys {
   case object NUM_ITERATIONS extends LogKey
   case object NUM_KAFKA_PULLS extends LogKey
   case object NUM_KAFKA_RECORDS_PULLED extends LogKey
+  case object NUM_LAGGING_STORES extends LogKey
   case object NUM_LEADING_SINGULAR_VALUES extends LogKey
   case object NUM_LEFT_PARTITION_VALUES extends LogKey
   case object NUM_LOADED_ENTRIES extends LogKey
@@ -548,8 +553,9 @@ private[spark] object LogKeys {
   case object NUM_ROWS extends LogKey
   case object NUM_RULE_OF_RUNS extends LogKey
   case object NUM_SEQUENCES extends LogKey
+  case object NUM_SKIPPED extends LogKey
   case object NUM_SLOTS extends LogKey
-  case object NUM_SPILL_INFOS extends LogKey
+  case object NUM_SPILLS extends LogKey
   case object NUM_SPILL_WRITERS extends LogKey
   case object NUM_SUB_DIRS extends LogKey
   case object NUM_SUCCESSFUL_TASKS extends LogKey
@@ -632,8 +638,16 @@ private[spark] object LogKeys {
   case object PYTHON_EXEC extends LogKey
   case object PYTHON_PACKAGES extends LogKey
   case object PYTHON_VERSION extends LogKey
+  case object PYTHON_WORKER_CHANNEL_IS_BLOCKING_MODE extends LogKey
+  case object PYTHON_WORKER_CHANNEL_IS_CONNECTED extends LogKey
+  case object PYTHON_WORKER_HAS_INPUTS extends LogKey
+  case object PYTHON_WORKER_IDLE_TIMEOUT extends LogKey
+  case object PYTHON_WORKER_IS_ALIVE extends LogKey
   case object PYTHON_WORKER_MODULE extends LogKey
   case object PYTHON_WORKER_RESPONSE extends LogKey
+  case object PYTHON_WORKER_SELECTION_KEY_INTERESTS extends LogKey
+  case object PYTHON_WORKER_SELECTION_KEY_IS_VALID extends LogKey
+  case object PYTHON_WORKER_SELECTOR_IS_OPEN extends LogKey
   case object QUANTILES extends LogKey
   case object QUERY_CACHE_VALUE extends LogKey
   case object QUERY_HINT extends LogKey
@@ -693,6 +707,7 @@ private[spark] object LogKeys {
   case object RIGHT_EXPR extends LogKey
   case object RIGHT_LOGICAL_PLAN_STATS_SIZE_IN_BYTES extends LogKey
   case object RMSE extends LogKey
+  case object ROCKS_DB_FILE_MAPPING extends LogKey
   case object ROCKS_DB_LOG_LEVEL extends LogKey
   case object ROCKS_DB_LOG_MESSAGE extends LogKey
   case object RPC_ADDRESS extends LogKey
@@ -725,6 +740,7 @@ private[spark] object LogKeys {
   case object SHUFFLE_DB_BACKEND_KEY extends LogKey
   case object SHUFFLE_DB_BACKEND_NAME extends LogKey
   case object SHUFFLE_ID extends LogKey
+  case object SHUFFLE_IDS extends LogKey
   case object SHUFFLE_MERGE_ID extends LogKey
   case object SHUFFLE_MERGE_RECOVERY_FILE extends LogKey
   case object SHUFFLE_SERVICE_CONF_OVERLAY_URL extends LogKey
@@ -737,6 +753,9 @@ private[spark] object LogKeys {
   case object SLEEP_TIME extends LogKey
   case object SLIDE_DURATION extends LogKey
   case object SMALLEST_CLUSTER_INDEX extends LogKey
+  case object SNAPSHOT_EVENT extends LogKey
+  case object SNAPSHOT_EVENT_TIME_DELTA extends LogKey
+  case object SNAPSHOT_EVENT_VERSION_DELTA extends LogKey
   case object SNAPSHOT_VERSION extends LogKey
   case object SOCKET_ADDRESS extends LogKey
   case object SOURCE extends LogKey
@@ -755,14 +774,18 @@ private[spark] object LogKeys {
   case object STAGE extends LogKey
   case object STAGES extends LogKey
   case object STAGE_ATTEMPT extends LogKey
+  case object STAGE_ATTEMPT_ID extends LogKey
   case object STAGE_ID extends LogKey
   case object STAGE_NAME extends LogKey
   case object START_INDEX extends LogKey
   case object START_TIME extends LogKey
   case object STATEMENT_ID extends LogKey
   case object STATE_NAME extends LogKey
+  case object STATE_STORE_COORDINATOR extends LogKey
   case object STATE_STORE_ID extends LogKey
   case object STATE_STORE_PROVIDER extends LogKey
+  case object STATE_STORE_PROVIDER_ID extends LogKey
+  case object STATE_STORE_PROVIDER_IDS extends LogKey
   case object STATE_STORE_VERSION extends LogKey
   case object STATS extends LogKey
   case object STATUS extends LogKey

@@ -35,7 +35,7 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * Provides access to XML data from pure SQL statements.
  */
-class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
+case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "xml"
 
@@ -102,7 +102,7 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
 
     val xmlOptions = getXmlOptions(sparkSession, options)
 
@@ -132,13 +132,10 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def toString: String = "XML"
 
-  override def hashCode(): Int = getClass.hashCode()
-
-  override def equals(other: Any): Boolean = other.isInstanceOf[XmlFileFormat]
-
   override def supportDataType(dataType: DataType): Boolean = dataType match {
-    case _: VariantType => false
+    case _: VariantType => true
 
+    case _: TimeType => false
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }

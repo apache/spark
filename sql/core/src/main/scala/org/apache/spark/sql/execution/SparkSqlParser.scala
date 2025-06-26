@@ -27,7 +27,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
+import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView, LocalTempView, PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -158,22 +158,6 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitResetQuotedConfiguration(
       ctx: ResetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
     ResetCommand(Some(ctx.configKey().getText))
-  }
-
-  /**
-   * Create a [[SetCommand]] logical plan to set [[SQLConf.DEFAULT_COLLATION]]
-   * Example SQL :
-   * {{{
-   *   SET COLLATION UNICODE;
-   * }}}
-   */
-  override def visitSetCollation(ctx: SetCollationContext): LogicalPlan = withOrigin(ctx) {
-    val collationName = ctx.collationName.getText
-    if (!SQLConf.get.trimCollationEnabled && collationName.toUpperCase().contains("TRIM")) {
-      throw QueryCompilationErrors.trimCollationNotEnabledError()
-    }
-    val key = SQLConf.DEFAULT_COLLATION.key
-    SetCommand(Some(key -> Some(ctx.identifier.getText.toUpperCase(Locale.ROOT))))
   }
 
   /**
@@ -381,10 +365,16 @@ class SparkSqlAstBuilder extends AstBuilder {
         visitCreateTableClauses(ctx.createTableClauses())
       val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(
         throw QueryParsingErrors.createTempTableNotSpecifyProviderError(ctx))
-      val schema = Option(ctx.colDefinitionList()).map(createSchema)
+      val schema = Option(ctx.tableElementList()).map(createSchema)
 
-      logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
+      if (ctx.tableProvider != null
+        && conf.getConf(SQLConf.BLOCK_CREATE_TEMP_TABLE_USING_PROVIDER)) {
+        throw QueryParsingErrors.createTempTableUsingProviderError(ctx)
+      }
+      else {
+        logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
           "CREATE TEMPORARY VIEW ... USING ... instead")
+      }
 
       withIdentClause(identCtx, ident => {
         val table = tableIdentifier(ident, "CREATE TEMPORARY VIEW", ctx)
@@ -705,6 +695,20 @@ class SparkSqlAstBuilder extends AstBuilder {
         throw QueryParsingErrors.createFuncWithBothIfNotExistsAndReplaceError(ctx)
       }
 
+      // Reject invalid options
+      for {
+        parameters <- Option(ctx.parameters)
+        colDefinition <- parameters.colDefinition().asScala
+        option <- colDefinition.colDefinitionOption().asScala
+      } {
+        if (option.generationExpression() != null) {
+          throw QueryParsingErrors.createFuncWithGeneratedColumnsError(ctx.parameters)
+        }
+        if (option.columnConstraintDefinition() != null) {
+          throw QueryParsingErrors.createFuncWithConstraintError(ctx.parameters)
+        }
+      }
+
       val inputParamText = Option(ctx.parameters).map(source)
       val returnTypeText: String =
         if (ctx.RETURNS != null &&
@@ -723,8 +727,19 @@ class SparkSqlAstBuilder extends AstBuilder {
 
       withIdentClause(ctx.identifierReference(), functionIdentifier => {
         if (ctx.TEMPORARY == null) {
-          // TODO: support creating persistent UDFs.
-          operationNotAllowed(s"creating persistent SQL functions is not supported", ctx)
+          CreateUserDefinedFunction(
+            UnresolvedIdentifier(functionIdentifier),
+            inputParamText,
+            returnTypeText,
+            exprText,
+            queryText,
+            comment,
+            deterministic,
+            containsSQL,
+            language,
+            isTableFunc,
+            ctx.EXISTS != null,
+            ctx.REPLACE != null)
         } else {
           // Disallow to define a temporary function with `IF NOT EXISTS`
           if (ctx.EXISTS != null) {
@@ -1141,5 +1156,216 @@ class SparkSqlAstBuilder extends AstBuilder {
     UnsetNamespacePropertiesCommand(
       withIdentClause(ctx.identifierReference(), UnresolvedNamespace(_)),
       cleanedProperties)
+  }
+
+  /**
+   * Create an [[SetNamespaceCollation]] logical plan.
+   *
+   * For example:
+   * {{{
+   *   ALTER (DATABASE|SCHEMA|NAMESPACE) namespace DEFAULT COLLATION collation;
+   * }}}
+   */
+  override def visitSetNamespaceCollation(ctx: SetNamespaceCollationContext): LogicalPlan = {
+    withOrigin(ctx) {
+      if (!SQLConf.get.schemaLevelCollationsEnabled) {
+        throw QueryCompilationErrors.schemaLevelCollationsNotEnabledError()
+      }
+      SetNamespaceCollationCommand(
+        withIdentClause(ctx.identifierReference, UnresolvedNamespace(_)),
+        visitCollationSpec(ctx.collationSpec()))
+    }
+  }
+
+  /**
+   * Create a [[DescribeColumn]] or [[DescribeRelation]] or [[DescribeRelationAsJsonCommand]]
+   * command.
+   */
+  override def visitDescribeRelation(ctx: DescribeRelationContext): LogicalPlan = withOrigin(ctx) {
+    val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
+    val asJson = ctx.JSON != null
+    if (asJson && !isExtended) {
+      val tableName = ctx.identifierReference.getText.split("\\.").lastOption.getOrElse("table")
+      throw QueryCompilationErrors.describeJsonNotExtendedError(tableName)
+    }
+    val relation = createUnresolvedTableOrView(ctx.identifierReference, "DESCRIBE TABLE")
+    if (ctx.describeColName != null) {
+      if (ctx.partitionSpec != null) {
+        throw QueryParsingErrors.descColumnForPartitionUnsupportedError(ctx)
+      } else if (asJson) {
+        throw QueryCompilationErrors.describeColJsonUnsupportedError()
+      } else {
+        DescribeColumn(
+          relation,
+          UnresolvedAttribute(ctx.describeColName.nameParts.asScala.map(_.getText).toSeq),
+          isExtended)
+      }
+    } else {
+      val partitionSpec = if (ctx.partitionSpec != null) {
+        // According to the syntax, visitPartitionSpec returns `Map[String, Option[String]]`.
+        visitPartitionSpec(ctx.partitionSpec).map {
+          case (key, Some(value)) => key -> value
+          case (key, _) =>
+            throw QueryParsingErrors.emptyPartitionKeyError(key, ctx.partitionSpec)
+        }
+      } else {
+        Map.empty[String, String]
+      }
+      if (asJson) {
+        DescribeRelationJsonCommand(relation, partitionSpec, isExtended)
+      } else {
+        DescribeRelation(relation, partitionSpec, isExtended)
+      }
+    }
+  }
+
+  override def visitShowProcedures(ctx: ShowProceduresContext): LogicalPlan = withOrigin(ctx) {
+    val ns = if (ctx.identifierReference != null) {
+      withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
+    } else {
+      CurrentNamespace
+    }
+    ShowProceduresCommand(ns)
+  }
+
+  override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
+    val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
+    ShowNamespacesCommand(
+      UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
+      Option(ctx.pattern).map(x => string(visitStringLit(x))))
+  }
+
+  override def visitDescribeProcedure(
+      ctx: DescribeProcedureContext): LogicalPlan = withOrigin(ctx) {
+    withIdentClause(ctx.identifierReference(), procIdentifier =>
+      DescribeProcedureCommand(UnresolvedIdentifier(procIdentifier)))
+  }
+
+  override def visitCreatePipelineInsertIntoFlow(
+      ctx: CreatePipelineInsertIntoFlowContext): LogicalPlan = withOrigin(ctx) {
+    val createPipelineFlowHeaderCtx = ctx.createPipelineFlowHeader()
+    val ident = withIdentClause(createPipelineFlowHeaderCtx.flowName, UnresolvedIdentifier(_))
+    val commentOpt = Option(createPipelineFlowHeaderCtx.commentSpec()).map(visitCommentSpec)
+    val flowOperation = withInsertInto(ctx.insertInto(), visitQuery(ctx.query()))
+    CreateFlowCommand(
+      name = ident,
+      flowOperation = flowOperation,
+      comment = commentOpt
+    )
+  }
+
+  override def visitCreatePipelineDataset(
+      ctx: CreatePipelineDatasetContext): LogicalPlan = withOrigin(ctx) {
+    val createPipelineDatasetHeaderCtx = ctx.createPipelineDatasetHeader()
+
+    val syntaxTypeErrorStr = if (createPipelineDatasetHeaderCtx.materializedView() != null) {
+      "MATERIALIZED VIEW"
+    } else if (createPipelineDatasetHeaderCtx.streamingTable() != null) {
+      "STREAMING TABLE"
+    } else {
+      // Should never be possible based on grammar definition.
+      throw invalidStatement(ctx.getText, ctx)
+    }
+
+    val ifNotExists = createPipelineDatasetHeaderCtx.EXISTS() != null
+    val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
+    val (colDefs, colConstraints) = Option(ctx.tableElementList()).map(visitTableElementList)
+      .getOrElse((Nil, Nil))
+
+    if (colConstraints.nonEmpty) {
+      throw operationNotAllowed("Pipeline datasets do not currently support column constraints. " +
+        "Please remove and CHECK, UNIQUE, PK, and FK constraints specified on the pipeline " +
+        "dataset.", ctx)
+    }
+
+    val (partTransforms, partCols, bucketSpec,
+    properties, options, location, comment, collation, serdeInfoOpt,
+    clusterBySpec) = visitCreateTableClauses(ctx.createTableClauses())
+
+    val partitioning =
+      partitionExpressions(partTransforms, partCols, ctx) ++
+        clusterBySpec.map(_.asTransform)
+
+    // Because the createTableClauses grammar is reused for createPipelineDataset but pipeline
+    // datasets don't support bucketing, options, storage location, or Hive SerDe, validate they
+    // are not set.
+    if (bucketSpec.isDefined) {
+      throw operationNotAllowed(s"Bucketing is not supported for CREATE $syntaxTypeErrorStr " +
+        "statements. Please remove any bucket spec specified in the statement.", ctx)
+    }
+    if (options.options.nonEmpty) {
+      throw operationNotAllowed(s"Options are not supported for CREATE $syntaxTypeErrorStr " +
+        "statements. Please remove any OPTIONS lists specified in the statement.", ctx)
+    }
+    serdeInfoOpt.map(serdeInfo => if (serdeInfo.storedAs.nonEmpty) {
+      throw operationNotAllowed(s"The STORED AS syntax is not supported for CREATE " +
+        s"$syntaxTypeErrorStr statements. Consider using the Data Source based USING clause "
+        + "instead.", ctx)
+    } else {
+      throw operationNotAllowed(s"Hive SerDe format options are not supported for CREATE " +
+        s"$syntaxTypeErrorStr statements.", ctx)
+    })
+    if (location.nonEmpty) {
+      throw operationNotAllowed(s"Specifying location is not supported for CREATE " +
+        s"$syntaxTypeErrorStr statements. The storage location for a pipeline dataset is " +
+        "managed by the pipeline itself.", ctx)
+    }
+
+    val spec = TableSpec(
+      properties = properties,
+      provider = provider,
+      options = Map.empty,
+      location = location,
+      comment = comment,
+      collation = collation,
+      serde = None,
+      external = false,
+      constraints = Seq.empty
+    )
+
+    val datasetIdentifier = withIdentClause(
+      createPipelineDatasetHeaderCtx.identifierReference,
+      UnresolvedIdentifier(_)
+    )
+
+    if (createPipelineDatasetHeaderCtx.materializedView() != null) {
+      val query: ParserRuleContext = Option(ctx.query).getOrElse(
+        throw operationNotAllowed(
+          s"Unable to find query for CREATE $syntaxTypeErrorStr statement.", ctx)
+      )
+      CreateMaterializedViewAsSelect(
+        name = datasetIdentifier,
+        columns = colDefs,
+        partitioning = partitioning,
+        tableSpec = spec,
+        query = plan(query),
+        originalText = source(query),
+        ifNotExists = ifNotExists
+      )
+    } else if (createPipelineDatasetHeaderCtx.streamingTable() != null) {
+      Option(ctx.query) match {
+        case Some(query) =>
+          CreateStreamingTableAsSelect(
+            name = datasetIdentifier,
+            columns = colDefs,
+            partitioning = partitioning,
+            tableSpec = spec,
+            query = plan(query),
+            originalText = source(query),
+            ifNotExists = ifNotExists
+          )
+        case None =>
+          CreateStreamingTable(
+            name = datasetIdentifier,
+            columns = colDefs,
+            partitioning = partitioning,
+            tableSpec = spec,
+            ifNotExists = ifNotExists
+          )
+      }
+    } else {
+      // Should never be possible based on grammar definition.
+      throw invalidStatement(ctx.getText, ctx)
+    }
   }
 }

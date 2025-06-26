@@ -1267,6 +1267,9 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None) extends U
 
   override def withNewSeed(seed: Long): Shuffle = copy(randomSeed = Some(seed))
 
+  override def withShiftedSeed(shift: Long): Shuffle =
+    copy(randomSeed = randomSeed.map(_ + shift))
+
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && randomSeed.isDefined
 
@@ -2608,9 +2611,6 @@ case class ElementAt(
   def this(left: Expression, right: Expression) = this(left, right, None, SQLConf.get.ansiEnabled)
 
   @transient private lazy val mapKeyType = left.dataType.asInstanceOf[MapType].keyType
-
-  @transient private lazy val mapValueContainsNull =
-    left.dataType.asInstanceOf[MapType].valueContainsNull
 
   @transient private lazy val arrayElementNullable =
     left.dataType.asInstanceOf[ArrayType].containsNull

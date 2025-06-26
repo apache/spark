@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.expressions.{
   Subtract,
   SubtractDates
 }
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DateType, StringType}
 
 /**
@@ -84,36 +83,32 @@ import org.apache.spark.sql.types.{DateType, StringType}
  * resolving it. Finally, after resolving the subtree, we need to resolve the top-most node itself,
  * which in this case means applying a timezone, if necessary.
  */
-class BinaryArithmeticResolver(
-    expressionResolver: ExpressionResolver,
-    timezoneAwareExpressionResolver: TimezoneAwareExpressionResolver)
+class BinaryArithmeticResolver(expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[BinaryArithmetic, Expression]
-    with ProducesUnresolvedSubtree {
+    with ProducesUnresolvedSubtree
+    with CoercesExpressionTypes {
 
-  private val shouldTrackResolvedNodes =
-    conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_TRACK_RESOLVED_NODES_ENABLED)
+  private val traversals = expressionResolver.getExpressionTreeTraversals
 
-  private val typeCoercionRules: Seq[Expression => Expression] =
-    if (conf.ansiEnabled) {
-      BinaryArithmeticResolver.ANSI_TYPE_COERCION_RULES
-    } else {
-      BinaryArithmeticResolver.TYPE_COERCION_RULES
-    }
-  private val typeCoercionResolver: TypeCoercionResolver =
-    new TypeCoercionResolver(timezoneAwareExpressionResolver, typeCoercionRules)
+  protected override val ansiTransformations: CoercesExpressionTypes.Transformations =
+    BinaryArithmeticResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
+  protected override val nonAnsiTransformations: CoercesExpressionTypes.Transformations =
+    BinaryArithmeticResolver.TYPE_COERCION_TRANSFORMATIONS
 
   override def resolve(unresolvedBinaryArithmetic: BinaryArithmetic): Expression = {
     val binaryArithmeticWithResolvedChildren: BinaryArithmetic =
-      withResolvedChildren(unresolvedBinaryArithmetic, expressionResolver.resolve)
+      withResolvedChildren(unresolvedBinaryArithmetic, expressionResolver.resolve _)
+        .asInstanceOf[BinaryArithmetic]
+
     val binaryArithmeticWithResolvedSubtree: Expression =
       withResolvedSubtree(binaryArithmeticWithResolvedChildren, expressionResolver.resolve) {
         transformBinaryArithmeticNode(binaryArithmeticWithResolvedChildren)
       }
-    val binaryArithmeticWithResolvedTimezone = timezoneAwareExpressionResolver.withResolvedTimezone(
+
+    TimezoneAwareExpressionResolver.resolveTimezone(
       binaryArithmeticWithResolvedSubtree,
-      conf.sessionLocalTimeZone
+      traversals.current.sessionLocalTimeZone
     )
-    reallocateKnownNodesForTracking(binaryArithmeticWithResolvedTimezone)
   }
 
   /**
@@ -125,7 +120,10 @@ class BinaryArithmeticResolver(
     val binaryArithmeticWithDateTypeReplaced: Expression =
       replaceDateType(binaryArithmetic)
     val binaryArithmeticWithTypeCoercion: Expression =
-      typeCoercionResolver.resolve(binaryArithmeticWithDateTypeReplaced)
+      coerceExpressionTypes(
+        expression = binaryArithmeticWithDateTypeReplaced,
+        expressionTreeTraversal = traversals.current
+      )
     // In case that original expression's children types are DateType and StringType, fixed-point
     // fails to resolve the expression with a single application of
     // [[BinaryArithmeticWithDatetimeResolver]]. Therefore, single-pass resolver needs to invoke
@@ -156,30 +154,11 @@ class BinaryArithmeticResolver(
       BinaryArithmeticWithDatetimeResolver.resolve(arithmetic)
     case other => other
   }
-
-  /**
-   * Since [[TracksResolvedNodes]] requires all the expressions in the tree to be unique objects,
-   * we reallocate the known nodes in [[ANALYZER_SINGLE_PASS_TRACK_RESOLVED_NODES_ENABLED]] mode,
-   * otherwise we preserve the old object to avoid unnecessary memory allocations.
-   */
-  private def reallocateKnownNodesForTracking(expression: Expression): Expression = {
-    if (shouldTrackResolvedNodes) {
-      expression match {
-        case add: Add => add.copy()
-        case subtract: Subtract => subtract.copy()
-        case multiply: Multiply => multiply.copy()
-        case divide: Divide => divide.copy()
-        case _ => expression
-      }
-    } else {
-      expression
-    }
-  }
 }
 
 object BinaryArithmeticResolver {
   // Ordering in the list of type coercions should be in sync with the list in [[TypeCoercion]].
-  private val TYPE_COERCION_RULES: Seq[Expression => Expression] = Seq(
+  private val TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
     StringPromotionTypeCoercion.apply,
     DecimalPrecisionTypeCoercion.apply,
     DivisionTypeCoercion.apply,
@@ -189,7 +168,7 @@ object BinaryArithmeticResolver {
   )
 
   // Ordering in the list of type coercions should be in sync with the list in [[AnsiTypeCoercion]].
-  private val ANSI_TYPE_COERCION_RULES: Seq[Expression => Expression] = Seq(
+  private val ANSI_TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
     AnsiStringPromotionTypeCoercion.apply,
     DecimalPrecisionTypeCoercion.apply,
     DivisionTypeCoercion.apply,

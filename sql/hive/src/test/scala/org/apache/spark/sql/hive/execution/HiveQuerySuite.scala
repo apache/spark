@@ -27,10 +27,11 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkFiles, TestUtils}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.hive.HiveUtils.{builtinHiveVersion => hiveVersion}
 import org.apache.spark.sql.hive.test.{HiveTestJars, TestHive}
@@ -72,7 +73,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   override def afterEach(): Unit = {
     try {
-      spark.artifactManager.cleanUpResources()
+      spark.artifactManager.cleanUpResourcesForTesting()
     } finally {
       super.afterEach()
     }
@@ -835,6 +836,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("ADD JAR command 2") {
+    assume(Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar") != null)
     // this is a test case from mapjoin_addjar.q
     val testJar = HiveTestJars.getHiveHcatalogCoreJar().toURI
     val testData = TestHive.getHiveFile("data/files/sample.json").toURI
@@ -868,6 +870,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("CREATE TEMPORARY FUNCTION") {
+    assume(Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar") != null)
     val funcJar = TestHive.getHiveFile("TestUDTF.jar")
     val jarURL = funcJar.toURI.toURL
     sql(s"ADD JAR $jarURL")

@@ -213,7 +213,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
         with self._lock:
             if self._release_thread_pool_instance is not None:
-                self._release_thread_pool.submit(target)
+                thread_pool = self._release_thread_pool
+                if not thread_pool._shutdown:
+                    thread_pool.submit(target)
 
     def _release_all(self) -> None:
         """
@@ -238,7 +240,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
         with self._lock:
             if self._release_thread_pool_instance is not None:
-                self._release_thread_pool.submit(target)
+                thread_pool = self._release_thread_pool
+                if not thread_pool._shutdown:
+                    thread_pool.submit(target)
         self._result_complete = True
 
     def _call_iter(self, iter_fun: Callable) -> Any:
@@ -261,14 +265,22 @@ class ExecutePlanResponseReattachableIterator(Generator):
             return iter_fun()
         except grpc.RpcError as e:
             status = rpc_status.from_call(cast(grpc.Call, e))
-            if status is not None and (
-                "INVALID_HANDLE.OPERATION_NOT_FOUND" in status.message
-                or "INVALID_HANDLE.SESSION_NOT_FOUND" in status.message
-            ):
+            unexpected_error = next(
+                (
+                    error
+                    for error in [
+                        "INVALID_HANDLE.OPERATION_NOT_FOUND",
+                        "INVALID_HANDLE.SESSION_NOT_FOUND",
+                    ]
+                    if status is not None and error in status.message
+                ),
+                None,
+            )
+            if unexpected_error is not None:
                 if self._last_returned_response_id is not None:
                     raise PySparkRuntimeError(
                         errorClass="RESPONSE_ALREADY_RECEIVED",
-                        messageParameters={},
+                        messageParameters={"error_type": unexpected_error},
                     )
                 # Try a new ExecutePlan, and throw upstream for retry.
                 self._iterator = iter(
@@ -330,6 +342,3 @@ class ExecutePlanResponseReattachableIterator(Generator):
     def close(self) -> None:
         self._release_all()
         return super().close()
-
-    def __del__(self) -> None:
-        return self.close()

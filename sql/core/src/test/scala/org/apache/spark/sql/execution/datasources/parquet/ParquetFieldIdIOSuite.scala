@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, Metadata, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.types._
 
 class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkSession  {
 
@@ -235,6 +235,33 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
         withAllParquetReaders {
           // ids are there, but we don't use id for matching, so no results would be returned
           checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath), expectedResult)
+        }
+      }
+    }
+  }
+
+  test("SPARK-52267: Field ID mapping when field name doesn't match") {
+    withTempDir { dir =>
+      val readSchema = new StructType().add("id1", LongType, true, withId(1))
+      val writeSchema = new StructType().add("id2", IntegerType, true, withId(1))
+
+      withSQLConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key -> "true") {
+        val writeData = Seq(Row(1), Row(2), Row(3))
+        spark.createDataFrame(writeData.asJava, writeSchema)
+          .write.mode("overwrite").parquet(dir.getCanonicalPath)
+      }
+
+      withAllParquetReaders {
+        withSQLConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "false") {
+          checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath),
+            Seq(Row(null), Row(null), Row(null)))
+        }
+        // Without the fix, the result is unpredictable when PARQUET_FIELD_ID_READ_ENABLED is
+        // enabled. It could cause NPE if OnHeapColumnVector is used in the scan. It could produce
+        // incorrect results if OffHeapColumnVector is used.
+        withSQLConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true") {
+          checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath),
+            Seq(Row(1L), Row(2L), Row(3L)))
         }
       }
     }

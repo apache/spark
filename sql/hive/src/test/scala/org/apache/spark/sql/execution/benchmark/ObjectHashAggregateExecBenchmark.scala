@@ -24,10 +24,10 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFPercentileApprox
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.classic.ExpressionUtils.expression
 import org.apache.spark.sql.functions.{lit, percentile_approx => pa}
 import org.apache.spark.sql.hive.execution.TestingTypedCount
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.internal.ExpressionUtils.expression
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 

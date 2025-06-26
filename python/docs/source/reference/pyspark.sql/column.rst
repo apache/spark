@@ -53,6 +53,7 @@ Column
     Column.like
     Column.name
     Column.otherwise
+    Column.outer
     Column.over
     Column.rlike
     Column.startswith

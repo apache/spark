@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import com.esotericsoftware.kryo.{DefaultSerializer, Kryo, Serializer => KryoSerializer}
+import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SparkException, TaskContext}
@@ -30,11 +32,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Sta
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.columnar.{CachedBatch, CachedBatchSerializer, SimpleMetricsCachedBatch, SimpleMetricsCachedBatchSerializer}
-import org.apache.spark.sql.execution.{ColumnarToRowTransition, InputAdapter, QueryExecution, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.types.{BooleanType, ByteType, DoubleType, FloatType, IntegerType, LongType, ShortType, StructType, UserDefinedType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{LongAccumulator, Utils}
@@ -47,8 +49,55 @@ import org.apache.spark.util.ArrayImplicits._
  * @param buffers The buffers for serialized columns
  * @param stats The stat of columns
  */
-case class DefaultCachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
+@DefaultSerializer(classOf[DefaultCachedBatchKryoSerializer])
+case class DefaultCachedBatch(
+     numRows: Int,
+     buffers: Array[Array[Byte]],
+     stats: InternalRow)
   extends SimpleMetricsCachedBatch
+
+class DefaultCachedBatchKryoSerializer extends KryoSerializer[DefaultCachedBatch] {
+  override def write(kryo: Kryo, output: KryoOutput, batch: DefaultCachedBatch): Unit = {
+    output.writeInt(batch.numRows)
+    SparkException.require(batch.buffers != null, "INVALID_KRYO_SERIALIZER_NO_DATA",
+      Map("obj" -> "DefaultCachedBatch.buffers",
+        "serdeOp" -> "serialize",
+        "serdeClass" -> this.getClass.getName))
+    output.writeInt(batch.buffers.length + 1) // +1 to distinguish Kryo.NULL
+    for (i <- batch.buffers.indices) {
+      val buffer = batch.buffers(i)
+        SparkException.require(buffer != null, "INVALID_KRYO_SERIALIZER_NO_DATA",
+          Map("obj" -> s"DefaultCachedBatch.buffers($i)",
+            "serdeOp" -> "serialize",
+            "serdeClass" -> this.getClass.getName))
+      output.writeInt(buffer.length + 1)  // +1 to distinguish Kryo.NULL
+      output.writeBytes(buffer)
+    }
+    kryo.writeClassAndObject(output, batch.stats)
+  }
+
+  override def read(
+      kryo: Kryo, input: KryoInput, cls: Class[DefaultCachedBatch]): DefaultCachedBatch = {
+    val numRows = input.readInt()
+    val length = input.readInt()
+    SparkException.require(length != Kryo.NULL, "INVALID_KRYO_SERIALIZER_NO_DATA",
+      Map("obj" -> "DefaultCachedBatch.buffers",
+        "serdeOp" -> "deserialize",
+        "serdeClass" -> this.getClass.getName))
+    val buffers = 0.until(length - 1).map { i => // -1 to restore
+      val subLength = input.readInt()
+      SparkException.require(subLength != Kryo.NULL, "INVALID_KRYO_SERIALIZER_NO_DATA",
+          Map("obj" -> s"DefaultCachedBatch.buffers($i)",
+          "serdeOp" -> "deserialize",
+          "serdeClass" -> this.getClass.getName))
+      val innerArray = new Array[Byte](subLength - 1) // -1 to restore
+      input.readBytes(innerArray)
+      innerArray
+    }.toArray
+    val stats = kryo.readClassAndObject(input).asInstanceOf[InternalRow]
+    DefaultCachedBatch(numRows, buffers, stats)
+  }
+}
 
 /**
  * The default implementation of CachedBatchSerializer.
@@ -332,22 +381,8 @@ object InMemoryRelation {
   /* Visible for testing */
   private[columnar] def clearSerializer(): Unit = synchronized { ser = None }
 
-  def convertToColumnarIfPossible(plan: SparkPlan): SparkPlan = plan match {
-    case gen: WholeStageCodegenExec => gen.child match {
-      case c2r: ColumnarToRowTransition => c2r.child match {
-        case ia: InputAdapter => ia.child
-        case _ => plan
-      }
-      case _ => plan
-    }
-    case c2r: ColumnarToRowTransition => // This matches when whole stage code gen is disabled.
-      c2r.child
-    case adaptive: AdaptiveSparkPlanExec =>
-      // If AQE is enabled for cached plan and table cache supports columnar in, we should mark
-      // `AdaptiveSparkPlanExec.supportsColumnar` as true to avoid inserting `ColumnarToRow`, so
-      // that `CachedBatchSerializer` can use `convertColumnarBatchToCachedBatch` to cache data.
-      adaptive.copy(supportsColumnar = true)
-    case _ => plan
+  def convertToColumnarIfPossible(plan: SparkPlan): SparkPlan = {
+    getSerializer(plan.conf).convertToColumnarPlanIfPossible(plan)
   }
 
   def apply(
@@ -357,7 +392,7 @@ object InMemoryRelation {
     val optimizedPlan = qe.optimizedPlan
     val serializer = getSerializer(optimizedPlan.conf)
     val child = if (serializer.supportsColumnarInput(optimizedPlan.output)) {
-      convertToColumnarIfPossible(qe.executedPlan)
+      serializer.convertToColumnarPlanIfPossible(qe.executedPlan)
     } else {
       qe.executedPlan
     }
@@ -384,8 +419,9 @@ object InMemoryRelation {
 
   def apply(cacheBuilder: CachedRDDBuilder, qe: QueryExecution): InMemoryRelation = {
     val optimizedPlan = qe.optimizedPlan
-    val newBuilder = if (cacheBuilder.serializer.supportsColumnarInput(optimizedPlan.output)) {
-      cacheBuilder.copy(cachedPlan = convertToColumnarIfPossible(qe.executedPlan))
+    val serializer = cacheBuilder.serializer
+    val newBuilder = if (serializer.supportsColumnarInput(optimizedPlan.output)) {
+      cacheBuilder.copy(cachedPlan = serializer.convertToColumnarPlanIfPossible(qe.executedPlan))
     } else {
       cacheBuilder.copy(cachedPlan = qe.executedPlan)
     }
@@ -467,4 +503,7 @@ case class InMemoryRelation(
 
   override def simpleString(maxFields: Int): String =
     s"InMemoryRelation [${truncatedString(output, ", ", maxFields)}], ${cacheBuilder.storageLevel}"
+
+  override def stringArgs: Iterator[Any] =
+    Iterator(output, cacheBuilder.storageLevel, outputOrdering)
 }

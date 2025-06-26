@@ -21,8 +21,8 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, In, Not}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue}
-import org.apache.spark.sql.connector.expressions.LiteralValue
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, TableInfo}
+import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -31,6 +31,103 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
 abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
 
   import testImplicits._
+
+  test("merge into table with expression-based default values") {
+    val columns = Array(
+      Column.create("pk", IntegerType),
+      Column.create("salary", IntegerType),
+      Column.create("dep", StringType),
+      Column.create(
+        "value",
+        IntegerType,
+        false, /* not nullable */
+        null, /* no comment */
+        new ColumnDefaultValue(
+          new GeneralScalarExpression(
+            "+",
+            Array(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
+          LiteralValue(123, IntegerType)),
+        "{}"))
+    val tableInfo = new TableInfo.Builder().withColumns(columns).build()
+    catalog.createTable(ident, tableInfo)
+
+    withTempView("source") {
+      val sourceRows = Seq(
+        (1, 500, "eng"),
+        (2, 600, "hr"))
+      sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+      sql(s"INSERT INTO $tableNameAsString (pk, salary, dep, value) VALUES (1, 200, 'eng', 999)")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN
+           | UPDATE SET value = DEFAULT
+           |WHEN NOT MATCHED THEN
+           | INSERT (pk, salary, dep) VALUES (s.pk, s.salary, s.dep)
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 200, "eng", 123), // update
+          Row(2, 600, "hr", 123))) // insert
+    }
+  }
+
+  test("merge into table containing added column with default value") {
+    withTempView("source") {
+      sql(
+        s"""CREATE TABLE $tableNameAsString (
+           | pk INT NOT NULL,
+           | salary INT NOT NULL DEFAULT -1,
+           | dep STRING)
+           |PARTITIONED BY (dep)
+           |""".stripMargin)
+
+      append("pk INT NOT NULL, dep STRING",
+        """{ "pk": 1, "dep": "hr" }
+          |{ "pk": 2, "dep": "hr" }
+          |{ "pk": 3, "dep": "hr" }
+          |""".stripMargin)
+
+      sql(s"ALTER TABLE $tableNameAsString ADD COLUMN txt STRING DEFAULT 'initial-text'")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, -1, "hr", "initial-text"),
+          Row(2, -1, "hr", "initial-text"),
+          Row(3, -1, "hr", "initial-text")))
+
+      val sourceRows = Seq(
+        (1, 100, "hr"),
+        (4, 400, "hr"))
+      sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN
+           | UPDATE SET t.salary = s.salary, t.txt = DEFAULT
+           |WHEN NOT MATCHED THEN
+           | INSERT (pk, salary, dep) VALUES (s.pk, DEFAULT, s.dep)
+           |WHEN NOT MATCHED BY SOURCE THEN
+           | UPDATE SET salary = DEFAULT
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 100, "hr", "initial-text"),
+          Row(2, -1, "hr", "initial-text"),
+          Row(3, -1, "hr", "initial-text"),
+          Row(4, -1, "hr", "initial-text")))
+    }
+  }
 
   test("SPARK-45974: merge into non filter attributes table") {
     val tableName: String = "cat.ns1.non_partitioned_table"
@@ -112,6 +209,35 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(
+          Row(2, 200, "finance"), // insert
+          Row(3, 300, "hr"))) // insert
+    }
+  }
+
+  test("merge into empty table with multiple NOT MATCHED clause") {
+    withTempView("source") {
+      createTable("pk INT NOT NULL, salary INT, dep STRING")
+
+      val sourceRows = Seq(
+        (1, 100, "hr"),
+        (2, 200, "finance"),
+        (3, 300, "hr"))
+      sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN NOT MATCHED AND s.pk >= 2 THEN
+           | INSERT *
+           |WHEN NOT MATCHED THEN
+           | INSERT *
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 100, "hr"), // insert
           Row(2, 200, "finance"), // insert
           Row(3, 300, "hr"))) // insert
     }
@@ -1591,6 +1717,57 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
           Row(2, 201, "hr"), // update
           Row(3, 301, "hr"), // update
           Row(6, 0, "hr"))) // insert
+    }
+  }
+
+  test("merge into table with recursive CTE") {
+    withTempView("source") {
+      sql(
+        s"""CREATE TABLE $tableNameAsString (
+           | val INT)
+           |""".stripMargin)
+
+      append("val INT",
+        """{ "val": 1 }
+          |{ "val": 9 }
+          |{ "val": 8 }
+          |{ "val": 4 }
+          |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1),
+          Row(9),
+          Row(8),
+          Row(4)))
+
+      sql(
+        s"""WITH RECURSIVE s(val) AS (
+           |  SELECT 1
+           |  UNION ALL
+           |  SELECT val + 1 FROM s WHERE val < 5
+           |) MERGE INTO $tableNameAsString t
+           |USING s
+           |ON t.val = s.val
+           |WHEN MATCHED THEN
+           | UPDATE SET t.val = t.val - 1
+           |WHEN NOT MATCHED THEN
+           | INSERT (val) VALUES (-s.val)
+           |WHEN NOT MATCHED BY SOURCE THEN
+           | UPDATE SET t.val = t.val + 1
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(0),
+          Row(10),
+          Row(9),
+          Row(3),
+          Row(-2),
+          Row(-3),
+          Row(-5)))
     }
   }
 

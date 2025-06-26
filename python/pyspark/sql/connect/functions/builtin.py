@@ -37,14 +37,13 @@ from typing import (
     ValuesView,
     cast,
 )
-import random
+import random as py_random
 import sys
 
 import numpy as np
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import _with_origin
-from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 from pyspark.sql import Column
 from pyspark.sql.connect.expressions import (
     CaseWhen,
@@ -83,6 +82,7 @@ if TYPE_CHECKING:
         DataTypeOrString,
         UserDefinedFunctionLike,
     )
+    from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.connect.udtf import UserDefinedTableFunction
 
 
@@ -318,7 +318,7 @@ def getbit(col: "ColumnOrName", pos: "ColumnOrName") -> Column:
 getbit.__doc__ = pysparkfuncs.getbit.__doc__
 
 
-def broadcast(df: "ParentDataFrame") -> "ParentDataFrame":
+def broadcast(df: "DataFrame") -> "DataFrame":
     from pyspark.sql.connect.dataframe import DataFrame
 
     if not isinstance(df, DataFrame):
@@ -411,17 +411,20 @@ def rand(seed: Optional[int] = None) -> Column:
     if seed is not None:
         return _invoke_function("rand", lit(seed))
     else:
-        return _invoke_function("rand", lit(random.randint(0, sys.maxsize)))
+        return _invoke_function("rand", lit(py_random.randint(0, sys.maxsize)))
 
 
 rand.__doc__ = pysparkfuncs.rand.__doc__
+
+
+random = rand
 
 
 def randn(seed: Optional[int] = None) -> Column:
     if seed is not None:
         return _invoke_function("randn", lit(seed))
     else:
-        return _invoke_function("randn", lit(random.randint(0, sys.maxsize)))
+        return _invoke_function("randn", lit(py_random.randint(0, sys.maxsize)))
 
 
 randn.__doc__ = pysparkfuncs.randn.__doc__
@@ -1009,7 +1012,7 @@ def uniform(
 ) -> Column:
     if seed is None:
         return _invoke_function_over_columns(
-            "uniform", lit(min), lit(max), lit(random.randint(0, sys.maxsize))
+            "uniform", lit(min), lit(max), lit(py_random.randint(0, sys.maxsize))
         )
     else:
         return _invoke_function_over_columns("uniform", lit(min), lit(max), lit(seed))
@@ -1198,7 +1201,7 @@ def count_min_sketch(
     confidence: Union[Column, float],
     seed: Optional[Union[Column, int]] = None,
 ) -> Column:
-    _seed = lit(random.randint(0, sys.maxsize)) if seed is None else lit(seed)
+    _seed = lit(py_random.randint(0, sys.maxsize)) if seed is None else lit(seed)
     return _invoke_function_over_columns("count_min_sketch", col, lit(eps), lit(confidence), _seed)
 
 
@@ -1270,7 +1273,7 @@ mode.__doc__ = pysparkfuncs.mode.__doc__
 
 def percentile(
     col: "ColumnOrName",
-    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     frequency: Union[Column, int] = 1,
 ) -> Column:
     if not isinstance(frequency, (int, Column)):
@@ -1291,7 +1294,7 @@ percentile.__doc__ = pysparkfuncs.percentile.__doc__
 
 def percentile_approx(
     col: "ColumnOrName",
-    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     accuracy: Union[Column, int] = 10000,
 ) -> Column:
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
@@ -1303,7 +1306,7 @@ percentile_approx.__doc__ = pysparkfuncs.percentile_approx.__doc__
 
 def approx_percentile(
     col: "ColumnOrName",
-    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     accuracy: Union[Column, int] = 10000,
 ) -> Column:
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
@@ -2161,15 +2164,23 @@ def is_variant_null(v: "ColumnOrName") -> Column:
 is_variant_null.__doc__ = pysparkfuncs.is_variant_null.__doc__
 
 
-def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
-    return _invoke_function("variant_get", _to_col(v), lit(path), lit(targetType))
+def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
+    assert isinstance(path, (Column, str))
+    if isinstance(path, str):
+        return _invoke_function("variant_get", _to_col(v), lit(path), lit(targetType))
+    else:
+        return _invoke_function("variant_get", _to_col(v), path, lit(targetType))
 
 
 variant_get.__doc__ = pysparkfuncs.variant_get.__doc__
 
 
-def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
-    return _invoke_function("try_variant_get", _to_col(v), lit(path), lit(targetType))
+def try_variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
+    assert isinstance(path, (Column, str))
+    if isinstance(path, str):
+        return _invoke_function("try_variant_get", _to_col(v), lit(path), lit(targetType))
+    else:
+        return _invoke_function("try_variant_get", _to_col(v), path, lit(targetType))
 
 
 try_variant_get.__doc__ = pysparkfuncs.try_variant_get.__doc__
@@ -2274,7 +2285,7 @@ schema_of_xml.__doc__ = pysparkfuncs.schema_of_xml.__doc__
 
 
 def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> Column:
-    _seed = lit(random.randint(0, sys.maxsize)) if seed is None else lit(seed)
+    _seed = lit(py_random.randint(0, sys.maxsize)) if seed is None else lit(seed)
     return _invoke_function("shuffle", _to_col(col), _seed)
 
 
@@ -2698,7 +2709,7 @@ regexp_like.__doc__ = pysparkfuncs.regexp_like.__doc__
 def randstr(length: Union[Column, int], seed: Optional[Union[Column, int]] = None) -> Column:
     if seed is None:
         return _invoke_function_over_columns(
-            "randstr", lit(length), lit(random.randint(0, sys.maxsize))
+            "randstr", lit(length), lit(py_random.randint(0, sys.maxsize))
         )
     else:
         return _invoke_function_over_columns("randstr", lit(length), lit(seed))
@@ -2991,6 +3002,13 @@ def character_length(str: "ColumnOrName") -> Column:
 character_length.__doc__ = pysparkfuncs.character_length.__doc__
 
 
+def chr(n: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("chr", n)
+
+
+chr.__doc__ = pysparkfuncs.chr.__doc__
+
+
 def contains(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("contains", left, right)
 
@@ -3096,6 +3114,13 @@ def collation(col: "ColumnOrName") -> Column:
 
 
 collation.__doc__ = pysparkfuncs.collation.__doc__
+
+
+def quote(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("quote", col)
+
+
+quote.__doc__ = pysparkfuncs.quote.__doc__
 
 
 # Date/Timestamp functions
@@ -3996,6 +4021,10 @@ def session_user() -> Column:
 
 
 session_user.__doc__ = pysparkfuncs.session_user.__doc__
+
+
+def uuid() -> Column:
+    return _invoke_function("uuid", lit(py_random.randint(0, sys.maxsize)))
 
 
 def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:

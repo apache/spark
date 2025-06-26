@@ -23,7 +23,7 @@ import scala.collection.mutable.{HashMap, HashSet}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
+import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
@@ -31,10 +31,10 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.TypeUtils._
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.command.ViewHelper.generateViewProperties
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
@@ -80,8 +80,8 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           // We put the resolved relation into the [[AnalyzerBridgeState]] for
           // it to be later reused by the single-pass [[Resolver]] to avoid resolving the
           // relation metadata twice.
-          AnalysisContext.get.getSinglePassResolverBridgeState.map { bridgeState =>
-            bridgeState.relationsWithResolvedMetadata.put(unresolvedRelation, resolvedRelation)
+          AnalysisContext.get.getSinglePassResolverBridgeState.foreach { bridgeState =>
+            bridgeState.addUnresolvedRelation(unresolvedRelation, resolvedRelation)
           }
         case _ =>
       })
@@ -276,6 +276,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         val normalizedTable = normalizeCatalogTable(analyzedQuery.schema, tableDesc)
 
         DDLUtils.checkTableColumns(tableDesc.copy(schema = analyzedQuery.schema))
+        SchemaUtils.checkIndeterminateCollationInSchema(analyzedQuery.schema)
 
         val output = analyzedQuery.output
 
@@ -295,6 +296,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         c.copy(tableDesc = normalizedTable, query = Some(reorderedQuery))
       } else {
         DDLUtils.checkTableColumns(tableDesc)
+
         val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)
 
         val normalizedSchemaByName = HashMap(normalizedTable.schema.map(s => s.name -> s): _*)
@@ -681,7 +683,7 @@ case class QualifyLocationWithWarehouse(catalog: SessionCatalog) extends Rule[Lo
 object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case View(metaData, false, viewQuery)
+      case View(metaData, false, viewQuery, _)
         if (metaData.viewSchemaMode == SchemaTypeEvolution ||
           metaData.viewSchemaMode == SchemaEvolution) =>
         val viewSchemaMode = metaData.viewSchemaMode
@@ -702,16 +704,6 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
         }
 
         if (redo) {
-          val newProperties = if (viewSchemaMode == SchemaEvolution) {
-            generateViewProperties(
-              metaData.properties,
-              session,
-              fieldNames,
-              fieldNames,
-              metaData.viewSchemaMode)
-          } else {
-            metaData.properties
-          }
           val newSchema = if (viewSchemaMode == SchemaTypeEvolution) {
             val newFields = viewQuery.schema.map {
               case StructField(name, dataType, nullable, _) =>
@@ -724,9 +716,7 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
           }
           SchemaUtils.checkColumnNameDuplication(fieldNames.toImmutableArraySeq,
             session.sessionState.conf.resolver)
-          val updatedViewMeta = metaData.copy(
-            properties = newProperties,
-            schema = newSchema)
+          val updatedViewMeta = metaData.copy(schema = newSchema)
           session.sessionState.catalog.alterTable(updatedViewMeta)
         }
       case _ => // OK

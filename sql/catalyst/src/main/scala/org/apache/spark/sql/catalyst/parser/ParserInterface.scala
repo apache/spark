@@ -21,6 +21,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.types.StructType
 
 /**
  * Interface for a parser.
@@ -62,4 +63,10 @@ trait ParserInterface extends DataTypeParserInterface {
    */
   @throws[ParseException]("Text cannot be parsed to a LogicalPlan")
   def parseQuery(sqlText: String): LogicalPlan
+
+  /**
+   * Parse a string to a [[StructType]] as routine parameters, handling default values and comments.
+   */
+  @throws[ParseException]("Text cannot be parsed to routine parameters")
+  def parseRoutineParam(sqlText: String): StructType
 }

@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.13</artifactId>
-    <version>4.0.0-SNAPSHOT</version>
+    <version>4.1.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -136,6 +136,16 @@
       <artifactId>guava</artifactId>
       <scope>${hadoop.deps.scope}</scope>
     </dependency>
+
+    <!--
+      SPARK-51311: HDFS-15098 (3.4.0) adds hard dependency on bcprov-jdk18on, Spark fails to submit
+      to Kerberized cluster without this dependency, until HADOOP-19152 (3.5.0, unreleased)
+      -->
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk18on</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -192,7 +202,7 @@
               <executable>cp</executable>
               <arguments>
                 <argument>-r</argument>
-                <argument>${basedir}/../connector/connect/client/jvm/target/connect-repl</argument>
+                <argument>${basedir}/../sql/connect/client/jvm/target/connect-repl</argument>
                 <argument>${basedir}/target/scala-${scala.binary.version}/jars/</argument>
               </arguments>
             </configuration>
@@ -206,7 +216,7 @@
             <configuration>
               <executable>cp</executable>
               <arguments>
-                <argument>${basedir}/../connector/connect/client/jvm/target/spark-connect-client-jvm_${scala.binary.version}-${project.version}.jar</argument>
+                <argument>${basedir}/../sql/connect/client/jvm/target/spark-connect-client-jvm_${scala.binary.version}-${project.version}.jar</argument>
                 <argument>${basedir}/target/scala-${scala.binary.version}/jars/connect-repl</argument>
               </arguments>
             </configuration>
@@ -277,34 +287,6 @@
         </dependency>
       </dependencies>
     </profile>
-    <profile>
-      <id>bigtop-dist</id>
-      <!-- This profile uses the assembly plugin to create a special "dist" package for BigTop
-           that contains Spark but not the Hadoop JARs it depends on. -->
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-assembly-plugin</artifactId>
-            <version>3.1.0</version>
-            <executions>
-              <execution>
-                <id>dist</id>
-                <phase>package</phase>
-                <goals>
-                  <goal>single</goal>
-                </goals>
-                <configuration>
-                  <descriptors>
-                    <descriptor>src/main/assembly/assembly.xml</descriptor>
-                  </descriptors>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
 
     <!-- Profiles that disable inclusion of certain dependencies. -->
     <profile>
@@ -323,13 +305,7 @@
       <id>hive-provided</id>
       <properties>
         <hive.deps.scope>provided</hive.deps.scope>
-        <hive.jackson.scope>provided</hive.jackson.scope>
-      </properties>
-    </profile>
-    <profile>
-      <id>hive-jackson-provided</id>
-      <properties>
-        <hive.jackson.scope>provided</hive.jackson.scope>
+        <hive.llap.scope>provided</hive.llap.scope>
       </properties>
     </profile>
     <profile>
@@ -345,11 +321,10 @@
       </properties>
     </profile>
 
-    <!-- Pull in jjwt-impl and jjwt-jackson jars -->
     <profile>
-      <id>jjwt</id>
+      <id>jjwt-provided</id>
       <properties>
-        <jjwt.deps.scope>compile</jjwt.deps.scope>
+        <jjwt.deps.scope>provided</jjwt.deps.scope>
       </properties>
     </profile>
 

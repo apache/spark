@@ -104,8 +104,7 @@ class NewHadoopRDD[K, V](
 
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
-  private val confBroadcast = sc.broadcast(new SerializableConfiguration(_conf))
-  // private val serializableConf = new SerializableWritable(_conf)
+  private val confBroadcast = SerializableConfiguration.broadcast(sc, _conf)
 
   private val jobTrackerId: String = {
     val dateTimeFormatter =
@@ -244,11 +243,13 @@ class NewHadoopRDD[K, V](
       private var finished = false
       private var reader =
         try {
-          Utils.tryInitializeResource(
-            format.createRecordReader(split.serializableHadoopSplit.value, hadoopAttemptContext)
-          ) { reader =>
-            reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
-            reader
+          Utils.createResourceUninterruptiblyIfInTaskThread {
+            Utils.tryInitializeResource(
+              format.createRecordReader(split.serializableHadoopSplit.value, hadoopAttemptContext)
+            ) { reader =>
+              reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
+              reader
+            }
           }
         } catch {
           case e: FileNotFoundException if ignoreMissingFiles =>

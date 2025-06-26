@@ -109,4 +109,28 @@ private[sql] object ProtoDataTypes {
       .newBuilder()
       .setVariant(proto.DataType.Variant.getDefaultInstance)
       .build()
+
+  val VectorUDT: proto.DataType =
+    proto.DataType
+      .newBuilder()
+      .setUdt(
+        proto.DataType.UDT
+          .newBuilder()
+          .setType("udt")
+          .setJvmClass("org.apache.spark.ml.linalg.VectorUDT")
+          .setPythonClass("pyspark.ml.linalg.VectorUDT")
+          .build())
+      .build()
+
+  val MatrixUDT: proto.DataType =
+    proto.DataType
+      .newBuilder()
+      .setUdt(
+        proto.DataType.UDT
+          .newBuilder()
+          .setType("udt")
+          .setJvmClass("org.apache.spark.ml.linalg.MatrixUDT")
+          .setPythonClass("pyspark.ml.linalg.MatrixUDT")
+          .build())
+      .build()
 }

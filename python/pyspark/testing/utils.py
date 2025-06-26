@@ -15,16 +15,15 @@
 # limitations under the License.
 #
 
-import glob
 import os
 import struct
 import sys
 import unittest
 import difflib
 import functools
-import math
 from decimal import Decimal
 from time import time, sleep
+import signal
 from typing import (
     Any,
     Optional,
@@ -37,9 +36,7 @@ from itertools import zip_longest
 
 from pyspark import SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException, PySparkTypeError
-from pyspark.errors.exceptions.captured import CapturedException
 from pyspark.errors.exceptions.base import QueryContextType
-from pyspark.find_spark_home import _find_spark_home
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
 from pyspark.sql.types import StructType, StructField, VariantVal
@@ -48,17 +45,11 @@ from pyspark.sql.functions import col, when
 
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
-SPARK_HOME = _find_spark_home()
-
 
 def have_package(name: str) -> bool:
-    try:
-        import importlib
+    import importlib
 
-        importlib.import_module(name)
-        return True
-    except Exception:
-        return False
+    return importlib.util.find_spec(name) is not None
 
 
 have_numpy = have_package("numpy")
@@ -100,6 +91,9 @@ jinja2_requirement_message = None if have_jinja2 else "No module named 'jinja2'"
 have_openpyxl = have_package("openpyxl")
 openpyxl_requirement_message = None if have_openpyxl else "No module named 'openpyxl'"
 
+have_yaml = have_package("yaml")
+yaml_requirement_message = None if have_yaml else "No module named 'yaml'"
+
 pandas_requirement_message = None
 try:
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
@@ -123,6 +117,12 @@ except Exception as e:
 
 have_pyarrow = pyarrow_requirement_message is None
 
+is_ansi_mode_test = True
+if os.environ.get("SPARK_ANSI_SQL_MODE") == "false":
+    is_ansi_mode_test = False
+
+ansi_mode_not_supported_message = "ANSI mode is not supported" if is_ansi_mode_test else None
+
 
 def read_int(b):
     return struct.unpack("!i", b)[0]
@@ -130,6 +130,26 @@ def read_int(b):
 
 def write_int(i):
     return struct.pack("!i", i)
+
+
+def timeout(seconds):
+    def decorator(func):
+        def handler(signum, frame):
+            raise TimeoutError(f"Function {func.__name__} timed out after {seconds} seconds")
+
+        def wrapper(*args, **kwargs):
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, handler)
+            signal.alarm(seconds)
+            try:
+                result = func(*args, **kwargs)
+            finally:
+                signal.alarm(0)
+            return result
+
+        return wrapper
+
+    return decorator
 
 
 def eventually(
@@ -235,7 +255,11 @@ class ReusedPySparkTestCase(unittest.TestCase):
     def setUpClass(cls):
         from pyspark import SparkContext
 
-        cls.sc = SparkContext("local[4]", cls.__name__, conf=cls.conf())
+        cls.sc = SparkContext(cls.master(), cls.__name__, conf=cls.conf())
+
+    @classmethod
+    def master(cls):
+        return "local[4]"
 
     @classmethod
     def tearDownClass(cls):
@@ -261,31 +285,6 @@ class ByteArrayOutput:
 
     def close(self):
         pass
-
-
-def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
-    # Note that 'sbt_jar_name_prefix' and 'mvn_jar_name_prefix' are used since the prefix can
-    # vary for SBT or Maven specifically. See also SPARK-26856
-    project_full_path = os.path.join(SPARK_HOME, project_relative_path)
-
-    # We should ignore the following jars
-    ignored_jar_suffixes = ("javadoc.jar", "sources.jar", "test-sources.jar", "tests.jar")
-
-    # Search jar in the project dir using the jar name_prefix for both sbt build and maven
-    # build because the artifact jars are in different directories.
-    sbt_build = glob.glob(
-        os.path.join(project_full_path, "target/scala-*/%s*.jar" % sbt_jar_name_prefix)
-    )
-    maven_build = glob.glob(os.path.join(project_full_path, "target/%s*.jar" % mvn_jar_name_prefix))
-    jar_paths = sbt_build + maven_build
-    jars = [jar for jar in jar_paths if not jar.endswith(ignored_jar_suffixes)]
-
-    if not jars:
-        return None
-    elif len(jars) > 1:
-        raise RuntimeError("Found multiple JARs: %s; please remove all but one" % (", ".join(jars)))
-    else:
-        return jars[0]
 
 
 def _terminal_color_support():
@@ -360,7 +359,7 @@ class PySparkErrorTestUtils:
 
         # Test error class
         expected = errorClass
-        actual = exception.getErrorClass()
+        actual = exception.getCondition()
         self.assertEqual(
             expected, actual, f"Expected error class was '{expected}', got '{actual}'."
         )
@@ -554,6 +553,9 @@ def assertSchemaEqual(
         if dt1.typeName() == dt2.typeName():
             if dt1.typeName() == "array":
                 return compare_datatypes_ignore_nullable(dt1.elementType, dt2.elementType)
+            elif dt1.typeName() == "decimal":
+                # Fix for SPARK-51062: Compare precision and scale for decimal types
+                return dt1.precision == dt2.precision and dt1.scale == dt2.scale
             elif dt1.typeName() == "struct":
                 return compare_schemas_ignore_nullable(dt1, dt2)
             else:

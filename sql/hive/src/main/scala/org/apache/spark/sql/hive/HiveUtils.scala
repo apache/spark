@@ -38,8 +38,8 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys
-import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.classic.SQLContext
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.hive.client._
@@ -195,7 +195,7 @@ private[spark] object HiveUtils extends Logging {
     .createWithDefault(jdbcPrefixes)
 
   private def jdbcPrefixes = Seq(
-    "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc")
+    "com.mysql.jdbc", "com.mysql.cj", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc")
 
   val HIVE_METASTORE_BARRIER_PREFIXES = buildStaticConf("spark.sql.hive.metastore.barrierPrefixes")
     .doc("A comma separated list of class prefixes that should explicitly be reloaded for each " +
@@ -220,15 +220,6 @@ private[spark] object HiveUtils extends Logging {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
-
-  val QUOTE_HIVE_STRUCT_FIELD_NAME =
-    buildConf("spark.sql.hive.quoteHiveStructFieldName")
-      .doc("When true, for a column defined in struct type, when it contains special characters " +
-        "in the field name, Spark will quote it for verification. E.g. struct<x:int,y.z:int>" +
-        " is read as struct<`x`:int,`y.z`:int> for verification.")
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(false)
 
   /**
    * The version of the hive client that will be used to communicate with the metastore.  Note that
@@ -529,5 +520,20 @@ private[spark] object HiveUtils extends Logging {
     name.split(Path.SEPARATOR).map {
       case PATTERN_FOR_KEY_EQ_VAL(_, v) => FileUtils.unescapePathName(v)
     }
+  }
+
+  /**
+   * Determine if a Hive call exception is caused by thrift error.
+   */
+  def causedByThrift(e: Throwable): Boolean = {
+    var target = e
+    while (target != null) {
+      val msg = target.getMessage()
+      if (msg != null && msg.matches("(?s).*(TApplication|TProtocol|TTransport)Exception.*")) {
+        return true
+      }
+      target = target.getCause()
+    }
+    false
   }
 }

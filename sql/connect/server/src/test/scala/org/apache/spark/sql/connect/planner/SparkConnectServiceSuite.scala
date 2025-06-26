@@ -30,7 +30,6 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{BigIntVector, Float8Vector}
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.mockito.Mockito.when
-import org.scalatest.Tag
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar.convertIntToGrainOfTime
 import org.scalatestplus.mockito.MockitoSugar
@@ -688,6 +687,42 @@ class SparkConnectServiceSuite
     }
   }
 
+  test("SPARK-51818: AnalyzePlanRequest does not execute the command") {
+    withTable("test") {
+      spark.sql("""
+                  | CREATE TABLE test (col1 INT, col2 STRING)
+                  |""".stripMargin)
+      val sqlString = "DROP TABLE test"
+      val plan = proto.Plan
+        .newBuilder()
+        .setRoot(
+          proto.Relation
+            .newBuilder()
+            .setCommon(proto.RelationCommon.newBuilder().setPlanId(1))
+            .setSql(proto.SQL.newBuilder().setQuery(sqlString).build())
+            .build())
+        .build()
+
+      val handler = new SparkConnectAnalyzeHandler(null)
+
+      val request = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setExplain(
+          proto.AnalyzePlanRequest.Explain
+            .newBuilder()
+            .setPlan(plan)
+            .setExplainMode(proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_EXTENDED)
+            .build())
+        .build()
+
+      handler.process(request, sparkSessionHolder)
+
+      // assert that table was not dropped
+      val tableExists = spark.catalog.tableExists("test")
+      assert(tableExists, "Table test should still exist after analyze request of DROP TABLE")
+    }
+  }
+
   test("Test explain mode in analyze response") {
     withTable("test") {
       spark.sql("""
@@ -858,13 +893,6 @@ class SparkConnectServiceSuite
       spark.sparkContext.removeSparkListener(verifyEvents.listener)
       SparkConnectService.sessionManager.invalidateAllSessions()
       SparkConnectPluginRegistry.reset()
-    }
-  }
-
-  protected def gridTest[A](testNamePrefix: String, testTags: Tag*)(params: Seq[A])(
-      testFun: A => Unit): Unit = {
-    for (param <- params) {
-      test(testNamePrefix + s" ($param)", testTags: _*)(testFun(param))
     }
   }
 

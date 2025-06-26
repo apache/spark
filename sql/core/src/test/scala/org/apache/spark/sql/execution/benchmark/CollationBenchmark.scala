@@ -216,7 +216,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
     createBenchmark(
       "execICU",
       (s, collationId) => CollationSupport.InitCap.execICU(s, collationId),
-      collationType => CollationFactory.fetchCollation(collationType).collator != null)
+      collationType => CollationFactory.fetchCollation(collationType).getCollator != null)
     createBenchmark(
       "execBinaryICU",
       (s, _) => CollationSupport.InitCap.execBinaryICU(s), skipCollationTypeFilter)

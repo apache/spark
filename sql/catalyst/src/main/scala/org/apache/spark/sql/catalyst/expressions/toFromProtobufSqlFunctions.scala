@@ -20,8 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{BinaryType, MapType, NullType, StringType}
+import org.apache.spark.sql.types.{BinaryType, MapType, NullType, StringType, StructType}
 import org.apache.spark.sql.util.ProtobufUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -238,6 +239,18 @@ case class ToProtobuf(
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
+    val colTypeCheck = first.dataType match {
+      case _: StructType => None
+      case _ =>
+        Some(
+          TypeCheckResult.DataTypeMismatch(
+            errorSubClass = "NON_STRUCT_TYPE",
+            messageParameters = Map(
+              "inputName" -> "data",
+              "inputType" -> toSQLType(first.dataType)))
+        )
+    }
+
     val messageNameCheck = messageName.dataType match {
       case _: StringType if messageName.foldable => None
       case _ =>
@@ -262,10 +275,11 @@ case class ToProtobuf(
             "strings to strings containing the options to use for converting the value to " +
             "Protobuf format"))
     }
-
-    messageNameCheck.getOrElse(
-      descFilePathCheck.getOrElse(
-        optionsCheck.getOrElse(TypeCheckResult.TypeCheckSuccess)
+    colTypeCheck.getOrElse(
+      messageNameCheck.getOrElse(
+        descFilePathCheck.getOrElse(
+         optionsCheck.getOrElse(TypeCheckResult.TypeCheckSuccess)
+        )
       )
     )
   }

@@ -561,7 +561,9 @@ trait FileSourceScanLike extends DataSourceScanExec {
 
     override def toPartitionArray: Array[PartitionedFile] = {
       partitionDirectories.flatMap { p =>
-        p.files.map { f => PartitionedFileUtil.getPartitionedFile(f, p.values, 0, f.getLen) }
+        p.files.map { f =>
+          PartitionedFileUtil.getPartitionedFile(f, f.getPath, p.values, 0, f.getLen)
+        }
       }
     }
 
@@ -789,11 +791,14 @@ case class FileSourceScanExec(
     val splitFiles = selectedPartitions.filePartitionIterator.flatMap { partition =>
       val ListingPartition(partitionVals, _, fileStatusIterator) = partition
       fileStatusIterator.flatMap { file =>
-        if (shouldProcess(file.getPath)) {
+        // getPath() is very expensive so we only want to call it once in this block:
+        val filePath = file.getPath
+        if (shouldProcess(filePath)) {
           val isSplitable = relation.fileFormat.isSplitable(
-              relation.sparkSession, relation.options, file.getPath)
+              relation.sparkSession, relation.options, filePath)
           PartitionedFileUtil.splitFiles(
             file = file,
+            filePath = filePath,
             isSplitable = isSplitable,
             maxSplitBytes = maxSplitBytes,
             partitionValues = partitionVals

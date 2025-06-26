@@ -31,7 +31,7 @@ import org.junit.jupiter.api.Test;
 
 import org.apache.spark.sql.AnalysisException;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.classic.SparkSession;
 import org.apache.spark.sql.api.java.UDF2;
 import org.apache.spark.sql.types.DataTypes;
 

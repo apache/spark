@@ -76,12 +76,71 @@ class TestMapStateProcessor
   }
 }
 
+// Case classes for schema evolution testing
+case class SimpleMapValue(count: Int)
+case class EvolvedMapValue(count: Int, lastUpdated: Option[Long])
+
+// Initial processor with simple schema
+class InitialMapStateProcessor extends StatefulProcessor[String, String, (String, String, Int)] {
+  @transient protected var mapState: MapState[String, SimpleMapValue] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    mapState = getHandle.getMapState[String, SimpleMapValue](
+      "mapState",
+      Encoders.STRING,
+      Encoders.product[SimpleMapValue],
+      TTLConfig.NONE
+    )
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String, Int)] = {
+
+    rows.map { value =>
+      val current = mapState.getValue(value)
+      val newCount = if (current == null) 1 else current.count + 1
+      mapState.updateValue(value, SimpleMapValue(newCount))
+      (key, value, newCount)
+    }
+  }
+}
+
+// Evolved processor with additional timestamp field
+class EvolvedMapStateProcessor extends StatefulProcessor[String, String, (String, String, Int)] {
+  @transient protected var mapState: MapState[String, EvolvedMapValue] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    mapState = getHandle.getMapState[String, EvolvedMapValue](
+      "mapState",
+      Encoders.STRING,
+      Encoders.product[EvolvedMapValue],
+      TTLConfig.NONE
+    )
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String, Int)] = {
+
+    rows.map { value =>
+      val current = mapState.getValue(value)
+      val newCount = if (current == null) 1 else current.count + 1
+      mapState.updateValue(value, EvolvedMapValue(newCount, Some(System.currentTimeMillis())))
+      (key, value, newCount)
+    }
+  }
+}
+
 /**
  * Class that adds integration tests for MapState types used in arbitrary stateful
  * operators such as transformWithState.
  */
 class TransformWithMapStateSuite extends StreamTest
-  with AlsoTestWithRocksDBFeatures with AlsoTestWithEncodingTypes {
+  with AlsoTestWithEncodingTypes
+  with AlsoTestWithRocksDBFeatures {
   import testImplicits._
 
   private def testMapStateWithNullUserKey(inputMapRow: InputMapRow): Unit = {
@@ -231,5 +290,47 @@ class TransformWithMapStateSuite extends StreamTest
 
     val df = result.toDF()
     checkAnswer(df, Seq(("k1", "v1", "10")).toDF())
+  }
+
+  testWithEncoding("avro")("MapState schema evolution - add field") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
+      withTempDir { dir =>
+        val inputData = MemoryStream[String]
+
+        // First run with initial schema
+        val result1 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new InitialMapStateProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = dir.getCanonicalPath),
+          AddData(inputData, "a", "b"),
+          CheckNewAnswer(("a", "a", 1), ("b", "b", 1)),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "a", 2)),
+          StopStream
+        )
+
+        // Second run with evolved schema
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new EvolvedMapStateProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = dir.getCanonicalPath),
+          AddData(inputData, "c"),
+          CheckNewAnswer(("c", "c", 1)),
+          // Verify we can still read old state format
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "a", 3)), // Count should continue from previous state
+          StopStream
+        )
+      }
+    }
   }
 }

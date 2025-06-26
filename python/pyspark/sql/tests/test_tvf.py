@@ -65,11 +65,13 @@ class TVFTestsMixin:
             assertDataFrameEqual(
                 t1.lateralJoin(
                     self.spark.tvf.explode(sf.array(sf.col("c1").outer(), sf.col("c2").outer()))
-                ).toDF("c1", "c2", "c3"),
+                    .toDF("c3")
+                    .alias("t2")
+                ),
                 self.spark.sql("""SELECT * FROM t1, LATERAL EXPLODE(ARRAY(c1, c2)) t2(c3)"""),
             )
             assertDataFrameEqual(
-                t3.lateralJoin(self.spark.tvf.explode(sf.col("c2").outer())).toDF("c1", "c2", "v"),
+                t3.lateralJoin(self.spark.tvf.explode(sf.col("c2").outer()).toDF("v").alias("t2")),
                 self.spark.sql("""SELECT * FROM t3, LATERAL EXPLODE(c2) t2(v)"""),
             )
             assertDataFrameEqual(
@@ -127,12 +129,14 @@ class TVFTestsMixin:
                     self.spark.tvf.explode_outer(
                         sf.array(sf.col("c1").outer(), sf.col("c2").outer())
                     )
-                ).toDF("c1", "c2", "c3"),
+                    .toDF("c3")
+                    .alias("t2")
+                ),
                 self.spark.sql("""SELECT * FROM t1, LATERAL EXPLODE_OUTER(ARRAY(c1, c2)) t2(c3)"""),
             )
             assertDataFrameEqual(
-                t3.lateralJoin(self.spark.tvf.explode_outer(sf.col("c2").outer())).toDF(
-                    "c1", "c2", "v"
+                t3.lateralJoin(
+                    self.spark.tvf.explode_outer(sf.col("c2").outer()).toDF("v").alias("t2")
                 ),
                 self.spark.sql("""SELECT * FROM t3, LATERAL EXPLODE_OUTER(c2) t2(v)"""),
             )
@@ -193,10 +197,10 @@ class TVFTestsMixin:
             )
             assertDataFrameEqual(
                 array_struct.lateralJoin(
-                    self.spark.tvf.inline(sf.col("arr").outer()),
-                    sf.col("id") == sf.col("col1"),
+                    self.spark.tvf.inline(sf.col("arr").outer()).toDF("k", "v").alias("t"),
+                    sf.col("id") == sf.col("k"),
                     "left",
-                ).toDF("id", "arr", "k", "v"),
+                ),
                 self.spark.sql(
                     """
                     SELECT * FROM array_struct LEFT JOIN LATERAL INLINE(arr) t(k, v) ON id = k
@@ -252,10 +256,10 @@ class TVFTestsMixin:
             )
             assertDataFrameEqual(
                 array_struct.lateralJoin(
-                    self.spark.tvf.inline_outer(sf.col("arr").outer()),
-                    sf.col("id") == sf.col("col1"),
+                    self.spark.tvf.inline_outer(sf.col("arr").outer()).toDF("k", "v").alias("t"),
+                    sf.col("id") == sf.col("k"),
                     "left",
-                ).toDF("id", "arr", "k", "v"),
+                ),
                 self.spark.sql(
                     """
                     SELECT * FROM array_struct LEFT JOIN LATERAL INLINE_OUTER(arr) t(k, v) ON id = k
@@ -302,9 +306,9 @@ class TVFTestsMixin:
                         sf.lit("f3"),
                         sf.lit("f4"),
                         sf.lit("f5"),
-                    )
+                    ).alias("t2")
                 )
-                .select("key", "c0", "c1", "c2", "c3", "c4"),
+                .select("t1.key", "t2.*"),
                 self.spark.sql(
                     """
                     SELECT t1.key, t2.* FROM json_table t1,
@@ -322,10 +326,10 @@ class TVFTestsMixin:
                         sf.lit("f3"),
                         sf.lit("f4"),
                         sf.lit("f5"),
-                    )
+                    ).alias("t2")
                 )
-                .where(sf.col("c0").isNotNull())
-                .select("key", "c0", "c1", "c2", "c3", "c4"),
+                .where(sf.col("t2.c0").isNotNull())
+                .select("t1.key", "t2.*"),
                 self.spark.sql(
                     """
                     SELECT t1.key, t2.* FROM json_table t1,
@@ -485,8 +489,8 @@ class TVFTestsMixin:
                         sf.col("c1").outer(),
                         sf.lit("Value"),
                         sf.col("c2").outer(),
-                    )
-                ).select("col0", "col1"),
+                    ).alias("t")
+                ).select("t.*"),
                 self.spark.sql(
                     """SELECT t.* FROM t1, LATERAL stack(2, 'Key', c1, 'Value', c2) t"""
                 ),
@@ -494,17 +498,19 @@ class TVFTestsMixin:
             assertDataFrameEqual(
                 t1.lateralJoin(
                     self.spark.tvf.stack(sf.lit(1), sf.col("c1").outer(), sf.col("c2").outer())
-                ).select("col0", "col1"),
-                self.spark.sql("""SELECT t.* FROM t1 JOIN LATERAL stack(1, c1, c2) t"""),
+                    .toDF("x", "y")
+                    .alias("t")
+                ).select("t.*"),
+                self.spark.sql("""SELECT t.* FROM t1 JOIN LATERAL stack(1, c1, c2) t(x, y)"""),
             )
             assertDataFrameEqual(
                 t1.join(t3, sf.col("t1.c1") == sf.col("t3.c1"))
                 .lateralJoin(
                     self.spark.tvf.stack(
                         sf.lit(1), sf.col("t1.c2").outer(), sf.col("t3.c2").outer()
-                    )
+                    ).alias("t")
                 )
-                .select("col0", "col1"),
+                .select("t.*"),
                 self.spark.sql(
                     """
                     SELECT t.* FROM t1 JOIN t3 ON t1.c1 = t3.c1
@@ -570,8 +576,8 @@ class TVFTestsMixin:
 
             assertDataFrameEqual(
                 variant_table.alias("t1")
-                .lateralJoin(self.spark.tvf.variant_explode(sf.col("v").outer()))
-                .select("id", "pos", "key", "value"),
+                .lateralJoin(self.spark.tvf.variant_explode(sf.col("v").outer()).alias("t"))
+                .select("t1.id", "t.*"),
                 self.spark.sql(
                     """
                     SELECT t1.id, t.* FROM variant_table AS t1,
@@ -629,8 +635,8 @@ class TVFTestsMixin:
 
             assertDataFrameEqual(
                 variant_table.alias("t1")
-                .lateralJoin(self.spark.tvf.variant_explode_outer(sf.col("v").outer()))
-                .select("id", "pos", "key", "value"),
+                .lateralJoin(self.spark.tvf.variant_explode_outer(sf.col("v").outer()).alias("t"))
+                .select("t1.id", "t.*"),
                 self.spark.sql(
                     """
                     SELECT t1.id, t.* FROM variant_table AS t1,

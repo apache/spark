@@ -23,11 +23,13 @@ import java.util.Locale
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.AnalysisContext
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, InsertIntoDir, InsertIntoStatement, LogicalPlan, ScriptTransformation, Statistics, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils, InsertIntoDataSourceDirCommand}
@@ -244,7 +246,14 @@ case class RelationConversions(
 
       // Read path
       case relation: HiveTableRelation if doConvertHiveTableRelationForRead(relation) =>
-        convertHiveTableRelationForRead(relation)
+        val logicalRelation = convertHiveTableRelationForRead(relation)
+        // We put the resolved relation into the [[AnalyzerBridgeState]] for
+        // it to be later reused by the single-pass [[Resolver]] to avoid resolving the
+        // relation metadata twice.
+        AnalysisContext.get.getSinglePassResolverBridgeState.foreach { bridgeState =>
+          bridgeState.addLogicalRelationForHiveRelation(relation, logicalRelation)
+        }
+        logicalRelation
 
       // CTAS path
       // This `InsertIntoHiveTable` is derived from `CreateHiveTableAsSelectCommand`,

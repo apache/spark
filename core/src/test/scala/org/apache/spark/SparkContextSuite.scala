@@ -29,6 +29,7 @@ import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
+import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.apache.logging.log4j.{Level, LogManager}
@@ -243,10 +244,11 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test("add and list jar files") {
-    val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    val testJar = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    assume(testJar != null)
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-      sc.addJar(jarPath.toString)
+      sc.addJar(testJar.toString)
       assert(sc.listJars().count(_.contains("TestUDTF.jar")) == 1)
     } finally {
       sc.stop()
@@ -395,13 +397,15 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     schedulingMode <- Seq("local-mode", "non-local-mode");
     method <- Seq("addJar", "addFile")
   ) {
-    val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar").toString
     val master = schedulingMode match {
       case "local-mode" => "local"
       case "non-local-mode" => "local-cluster[1,1,1024]"
     }
     test(s"$method can be called twice with same file in $schedulingMode (SPARK-16787)") {
+      val testJar = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+      assume(testJar != null)
       sc = new SparkContext(master, "test")
+      val jarPath = testJar.toString
       method match {
         case "addJar" =>
           sc.addJar(jarPath)
@@ -1271,6 +1275,13 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test("SPARK-35383: Fill missing S3A magic committer configs if needed") {
+    Seq(
+      "org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter",
+      "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol"
+    ).foreach { className =>
+      assert(!Utils.classIsLoadable(className))
+    }
+
     val c1 = new SparkConf().setAppName("s3a-test").setMaster("local")
     sc = new SparkContext(c1)
     assert(!sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
@@ -1283,18 +1294,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     resetSparkContext()
     val c3 = c1.clone.set("spark.hadoop.fs.s3a.bucket.mybucket.committer.magic.enabled", "true")
     sc = new SparkContext(c3)
-    Seq(
-      "spark.hadoop.fs.s3a.committer.magic.enabled" -> "true",
-      "spark.hadoop.fs.s3a.committer.name" -> "magic",
-      "spark.hadoop.mapreduce.outputcommitter.factory.scheme.s3a" ->
-        "org.apache.hadoop.fs.s3a.commit.S3ACommitterFactory",
-      "spark.sql.parquet.output.committer.class" ->
-        "org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter",
-      "spark.sql.sources.commitProtocolClass" ->
-        "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol"
-    ).foreach { case (k, v) =>
-      assert(v == sc.getConf.get(k))
-    }
+    assert(!sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
 
     // Respect a user configuration
     resetSparkContext()
@@ -1460,6 +1460,15 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
     sc.stop()
   }
+
+  test("SPARK-51095: Test caller context initialization") {
+    val conf = new SparkConf().setAppName("test").setMaster("local")
+    sc = new SparkContext(conf)
+    val hadoopCallerContext = HadoopCallerContext.getCurrent()
+    assert(hadoopCallerContext.getContext().startsWith("SPARK_DRIVER"))
+    sc.stop()
+  }
+
 }
 
 object SparkContextSuite {

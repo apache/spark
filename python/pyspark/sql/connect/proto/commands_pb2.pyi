@@ -42,6 +42,8 @@ import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.expressions_pb2
+import pyspark.sql.connect.proto.ml_pb2
+import pyspark.sql.connect.proto.pipelines_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import sys
 import typing
@@ -104,6 +106,9 @@ class Command(google.protobuf.message.Message):
     CHECKPOINT_COMMAND_FIELD_NUMBER: builtins.int
     REMOVE_CACHED_REMOTE_RELATION_COMMAND_FIELD_NUMBER: builtins.int
     MERGE_INTO_TABLE_COMMAND_FIELD_NUMBER: builtins.int
+    ML_COMMAND_FIELD_NUMBER: builtins.int
+    EXECUTE_EXTERNAL_COMMAND_FIELD_NUMBER: builtins.int
+    PIPELINE_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def register_function(
@@ -146,6 +151,12 @@ class Command(google.protobuf.message.Message):
     @property
     def merge_into_table_command(self) -> global___MergeIntoTableCommand: ...
     @property
+    def ml_command(self) -> pyspark.sql.connect.proto.ml_pb2.MlCommand: ...
+    @property
+    def execute_external_command(self) -> global___ExecuteExternalCommand: ...
+    @property
+    def pipeline_command(self) -> pyspark.sql.connect.proto.pipelines_pb2.PipelineCommand: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         Commands they can add them here. During the planning the correct resolution is done.
@@ -174,6 +185,9 @@ class Command(google.protobuf.message.Message):
         remove_cached_remote_relation_command: global___RemoveCachedRemoteRelationCommand
         | None = ...,
         merge_into_table_command: global___MergeIntoTableCommand | None = ...,
+        ml_command: pyspark.sql.connect.proto.ml_pb2.MlCommand | None = ...,
+        execute_external_command: global___ExecuteExternalCommand | None = ...,
+        pipeline_command: pyspark.sql.connect.proto.pipelines_pb2.PipelineCommand | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -187,12 +201,18 @@ class Command(google.protobuf.message.Message):
             b"create_dataframe_view",
             "create_resource_profile_command",
             b"create_resource_profile_command",
+            "execute_external_command",
+            b"execute_external_command",
             "extension",
             b"extension",
             "get_resources_command",
             b"get_resources_command",
             "merge_into_table_command",
             b"merge_into_table_command",
+            "ml_command",
+            b"ml_command",
+            "pipeline_command",
+            b"pipeline_command",
             "register_data_source",
             b"register_data_source",
             "register_function",
@@ -228,12 +248,18 @@ class Command(google.protobuf.message.Message):
             b"create_dataframe_view",
             "create_resource_profile_command",
             b"create_resource_profile_command",
+            "execute_external_command",
+            b"execute_external_command",
             "extension",
             b"extension",
             "get_resources_command",
             b"get_resources_command",
             "merge_into_table_command",
             b"merge_into_table_command",
+            "ml_command",
+            b"ml_command",
+            "pipeline_command",
+            b"pipeline_command",
             "register_data_source",
             b"register_data_source",
             "register_function",
@@ -278,6 +304,9 @@ class Command(google.protobuf.message.Message):
             "checkpoint_command",
             "remove_cached_remote_relation_command",
             "merge_into_table_command",
+            "ml_command",
+            "execute_external_command",
+            "pipeline_command",
             "extension",
         ]
         | None
@@ -2329,3 +2358,51 @@ class MergeIntoTableCommand(google.protobuf.message.Message):
     ) -> None: ...
 
 global___MergeIntoTableCommand = MergeIntoTableCommand
+
+class ExecuteExternalCommand(google.protobuf.message.Message):
+    """Execute an arbitrary string command inside an external execution engine"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class OptionsEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        value: builtins.str
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
+
+    RUNNER_FIELD_NUMBER: builtins.int
+    COMMAND_FIELD_NUMBER: builtins.int
+    OPTIONS_FIELD_NUMBER: builtins.int
+    runner: builtins.str
+    """(Required) The class name of the runner that implements `ExternalCommandRunner`"""
+    command: builtins.str
+    """(Required) The target command to be executed."""
+    @property
+    def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+        """(Optional) The options for the runner."""
+    def __init__(
+        self,
+        *,
+        runner: builtins.str = ...,
+        command: builtins.str = ...,
+        options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "command", b"command", "options", b"options", "runner", b"runner"
+        ],
+    ) -> None: ...
+
+global___ExecuteExternalCommand = ExecuteExternalCommand

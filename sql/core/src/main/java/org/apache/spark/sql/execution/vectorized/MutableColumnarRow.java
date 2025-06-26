@@ -82,6 +82,8 @@ public final class MutableColumnarRow extends InternalRow {
           row.setInt(i, getInt(i));
         } else if (dt instanceof TimestampType) {
           row.setLong(i, getLong(i));
+        } else if (dt instanceof TimestampNTZType) {
+          row.setLong(i, getLong(i));
         } else if (dt instanceof StructType) {
           row.update(i, getStruct(i, ((StructType) dt).fields().length).copy());
         } else if (dt instanceof ArrayType) {
@@ -190,6 +192,8 @@ public final class MutableColumnarRow extends InternalRow {
     } else if (dataType instanceof DateType) {
       return getInt(ordinal);
     } else if (dataType instanceof TimestampType) {
+      return getLong(ordinal);
+    } else if (dataType instanceof TimestampNTZType) {
       return getLong(ordinal);
     } else if (dataType instanceof ArrayType) {
       return getArray(ordinal);

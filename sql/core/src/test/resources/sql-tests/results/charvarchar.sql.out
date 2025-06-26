@@ -195,7 +195,7 @@ View Text           	select * from char_tbl
 View Original Text  	select * from char_tbl	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c, v]
+View Query Output Columns	[`c`, `v`]
 
 
 -- !query
@@ -366,7 +366,7 @@ View Text           	select * from char_tbl2
 View Original Text  	select * from char_tbl2	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c, v]
+View Query Output Columns	[`c`, `v`]
 
 
 -- !query
@@ -427,7 +427,7 @@ View Text           	select * from char_tbl2
 View Original Text  	select * from char_tbl2	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c, v]              	                    
+View Query Output Columns	[`c`, `v`]          	                    
 Table Properties    	[yes=no]
 
 
@@ -488,7 +488,7 @@ View Text           	select * from char_tbl2
 View Original Text  	select * from char_tbl2	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c, v]
+View Query Output Columns	[`c`, `v`]
 
 
 -- !query

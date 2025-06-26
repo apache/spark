@@ -421,7 +421,7 @@ public class CollationAwareUTF8String {
     // Note: In order to achieve the desired behavior, we use the ICU UCharacter class to
     // convert the string to uppercase, which only accepts a Java strings as input.
     ULocale locale = CollationFactory.fetchCollation(collationId)
-      .collator.getLocale(ULocale.ACTUAL_LOCALE);
+      .getCollator().getLocale(ULocale.ACTUAL_LOCALE);
     return UTF8String.fromString(UCharacter.toUpperCase(locale, target.toValidString()));
   }
 
@@ -457,7 +457,7 @@ public class CollationAwareUTF8String {
     // Note: In order to achieve the desired behavior, we use the ICU UCharacter class to
     // convert the string to lowercase, which only accepts a Java strings as input.
     ULocale locale = CollationFactory.fetchCollation(collationId)
-      .collator.getLocale(ULocale.ACTUAL_LOCALE);
+      .getCollator().getLocale(ULocale.ACTUAL_LOCALE);
     return UTF8String.fromString(UCharacter.toLowerCase(locale, target.toValidString()));
   }
 
@@ -544,7 +544,7 @@ public class CollationAwareUTF8String {
    */
   public static UTF8String toTitleCase(final UTF8String target, final int collationId) {
     ULocale locale = CollationFactory.fetchCollation(collationId)
-      .collator.getLocale(ULocale.ACTUAL_LOCALE);
+      .getCollator().getLocale(ULocale.ACTUAL_LOCALE);
     return UTF8String.fromString(UCharacter.toTitleCase(locale, target.toValidString(),
       BreakIterator.getWordInstance(locale)));
   }
@@ -1035,7 +1035,7 @@ public class CollationAwareUTF8String {
     // inside the string using ICU `StringSearch` class. We only need to do it once before the
     // main loop of the translate algorithm.
     CharacterIterator target = new StringCharacterIterator(inputString);
-    Collator collator = CollationFactory.fetchCollation(collationId).collator;
+    Collator collator = CollationFactory.fetchCollation(collationId).getCollator();
     StringBuilder sb = new StringBuilder();
     // Index for the current character in the (validated) input string. This is the character we
     // want to determine if we need to replace or not.
@@ -1233,7 +1233,7 @@ public class CollationAwareUTF8String {
     // Iterate over srcString from the left and find the first character that is not in trimChars.
     String src = srcString.toValidString();
     CharacterIterator target = new StringCharacterIterator(src);
-    Collator collator = CollationFactory.fetchCollation(collationId).collator;
+    Collator collator = CollationFactory.fetchCollation(collationId).getCollator();
     int charIndex = 0, longestMatchLen;
     while (charIndex < src.length()) {
       longestMatchLen = 0;
@@ -1466,7 +1466,7 @@ public class CollationAwareUTF8String {
     // Iterate over srcString from the left and find the first character that is not in trimChars.
     String src = srcString.toValidString();
     CharacterIterator target = new StringCharacterIterator(src);
-    Collator collator = CollationFactory.fetchCollation(collationId).collator;
+    Collator collator = CollationFactory.fetchCollation(collationId).getCollator();
     int charIndex = src.length(), longestMatchLen, lastNonSpacePosition = src.length();
 
     // In cases of trim collation (rtrim for example) trailing spaces should be ignored.

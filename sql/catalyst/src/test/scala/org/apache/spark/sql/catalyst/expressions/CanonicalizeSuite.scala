@@ -479,4 +479,17 @@ class CanonicalizeSuite extends SparkFunSuite {
         }
     }
   }
+
+  test("unit test for gatherCommutative()") {
+    val addExpression = Add(
+      Literal(1),
+      Add(
+        Literal(2),
+        Literal(3)
+      )
+    )
+    val commutativeExpressions = addExpression.gatherCommutative(addExpression,
+      { case Add(l, r, _) => Seq(l, r)})
+    assert(commutativeExpressions == Seq(Literal(1), Literal(2), Literal(3)))
+  }
 }

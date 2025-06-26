@@ -23,37 +23,37 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryMinus}
 /**
  * Resolver for [[UnaryMinus]]. Resolves children and applies type coercion to target node.
  */
-class UnaryMinusResolver(
-    expressionResolver: ExpressionResolver,
-    timezoneAwareExpressionResolver: TimezoneAwareExpressionResolver)
+class UnaryMinusResolver(expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[UnaryMinus, Expression]
-    with ResolvesExpressionChildren {
+    with ResolvesExpressionChildren
+    with CoercesExpressionTypes {
 
-  private val typeCoercionRules: Seq[Expression => Expression] =
-    if (conf.ansiEnabled) {
-      UnaryMinusResolver.ANSI_TYPE_COERCION_RULES
-    } else {
-      UnaryMinusResolver.TYPE_COERCION_RULES
-    }
-  private val typeCoercionResolver: TypeCoercionResolver =
-    new TypeCoercionResolver(timezoneAwareExpressionResolver, typeCoercionRules)
+  private val traversals = expressionResolver.getExpressionTreeTraversals
+
+  protected override val ansiTransformations: CoercesExpressionTypes.Transformations =
+    UnaryMinusResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
+  protected override val nonAnsiTransformations: CoercesExpressionTypes.Transformations =
+    UnaryMinusResolver.TYPE_COERCION_TRANSFORMATIONS
 
   override def resolve(unresolvedUnaryMinus: UnaryMinus): Expression = {
-    val unaryMinusWithResolvedChildren: UnaryMinus =
-      withResolvedChildren(unresolvedUnaryMinus, expressionResolver.resolve)
-    typeCoercionResolver.resolve(unaryMinusWithResolvedChildren)
+    val unaryMinusWithResolvedChildren =
+      withResolvedChildren(unresolvedUnaryMinus, expressionResolver.resolve _)
+    coerceExpressionTypes(
+      expression = unaryMinusWithResolvedChildren,
+      expressionTreeTraversal = traversals.current
+    )
   }
 }
 
 object UnaryMinusResolver {
   // Ordering in the list of type coercions should be in sync with the list in [[TypeCoercion]].
-  private val TYPE_COERCION_RULES: Seq[Expression => Expression] = Seq(
+  private val TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
     TypeCoercion.ImplicitTypeCoercion.apply,
     TypeCoercion.DateTimeOperationsTypeCoercion.apply
   )
 
   // Ordering in the list of type coercions should be in sync with the list in [[AnsiTypeCoercion]].
-  private val ANSI_TYPE_COERCION_RULES: Seq[Expression => Expression] = Seq(
+  private val ANSI_TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
     AnsiTypeCoercion.ImplicitTypeCoercion.apply,
     AnsiTypeCoercion.AnsiDateTimeOperationsTypeCoercion.apply
   )

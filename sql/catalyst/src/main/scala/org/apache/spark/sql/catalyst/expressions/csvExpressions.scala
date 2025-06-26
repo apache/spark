@@ -143,7 +143,10 @@ case class CsvToStructs(
 case class SchemaOfCsv(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with RuntimeReplaceable with QueryErrorsBase {
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with DefaultStringProducingExpression
+  with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -151,27 +154,34 @@ case class SchemaOfCsv(
     child = child,
     options = ExprUtils.convertToMapData(options))
 
-  override def dataType: DataType = SQLConf.get.defaultStringType
-
   override def nullable: Boolean = false
 
   @transient
   private lazy val csv = child.eval().asInstanceOf[UTF8String]
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.foldable && csv != null) {
-      super.checkInputDataTypes()
-    } else if (!child.foldable) {
+    if (!child.foldable) {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("csv"),
           "inputType" -> toSQLType(child.dataType),
           "inputExpr" -> toSQLExpr(child)))
-    } else {
+    } else if (child.eval() == null) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
         messageParameters = Map("exprName" -> "csv"))
+    } else if (child.dataType != StringType) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType),
+          "requiredType" -> toSQLType(StringType))
+      )
+    } else {
+      super.checkInputDataTypes()
     }
   }
 
@@ -212,7 +222,10 @@ case class StructsToCsv(
      options: Map[String, String],
      child: Expression,
      timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with ExpectsInputTypes {
+  extends UnaryExpression
+  with TimeZoneAwareExpression
+  with DefaultStringProducingExpression
+  with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
   override def nullable: Boolean = true
 
@@ -265,8 +278,6 @@ case class StructsToCsv(
   lazy val converter: Any => UTF8String = {
     (row: Any) => UTF8String.fromString(gen.writeToString(row.asInstanceOf[InternalRow]))
   }
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))

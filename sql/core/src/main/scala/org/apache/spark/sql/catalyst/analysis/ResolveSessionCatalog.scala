@@ -54,11 +54,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case _ if ResolveDefaultStringTypes.needsResolution(plan) =>
-      // if there are still unresolved string types in the plan
-      // we should not try to resolve it
-      plan
-
     case AddColumns(ResolvedV1TableIdentifier(ident), cols) =>
       cols.foreach { c =>
         if (c.name.length > 1) {
@@ -74,25 +69,30 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case ReplaceColumns(ResolvedV1TableIdentifier(ident), _) =>
       throw QueryCompilationErrors.unsupportedTableOperationError(ident, "REPLACE COLUMNS")
 
-    case a @ AlterColumn(ResolvedTable(catalog, ident, table: V1Table, _), _, _, _, _, _, _)
+    case AlterColumns(ResolvedTable(catalog, ident, table: V1Table, _), specs)
         if supportsV1Command(catalog) =>
-      if (a.column.name.length > 1) {
+      if (specs.size > 1) {
+        throw QueryCompilationErrors.unsupportedTableOperationError(
+          catalog, ident, "ALTER COLUMN in bulk")
+      }
+      val s = specs.head
+      if (s.column.name.length > 1) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           catalog, ident, "ALTER COLUMN with qualified column")
       }
-      if (a.nullable.isDefined) {
+      if (s.newNullability.isDefined) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           catalog, ident, "ALTER COLUMN ... SET NOT NULL")
       }
-      if (a.position.isDefined) {
+      if (s.newPosition.isDefined) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           catalog, ident, "ALTER COLUMN ... FIRST | AFTER")
       }
       val builder = new MetadataBuilder
       // Add comment to metadata
-      a.comment.map(c => builder.putString("comment", c))
-      val colName = a.column.name(0)
-      val dataType = a.dataType.getOrElse {
+      s.newComment.map(c => builder.putString("comment", c))
+      val colName = s.column.name.head
+      val dataType = s.newDataType.getOrElse {
         table.schema.findNestedField(Seq(colName), resolver = conf.resolver)
           .map {
             case (_, StructField(_, st: StringType, _, metadata)) =>
@@ -101,11 +101,16 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           }
           .getOrElse {
             throw QueryCompilationErrors.unresolvedColumnError(
-              toSQLId(a.column.name), table.schema.fieldNames)
+              toSQLId(s.column.name), table.schema.fieldNames)
           }
       }
       // Add the current default column value string (if any) to the column metadata.
-      a.setDefaultExpression.map { c => builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, c) }
+      s.newDefaultExpression.map { c => builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+        c.originalSQL) }
+      if (s.dropDefault) {
+        // for legacy reasons, "" means clearing default value
+        builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, "")
+      }
       val newColumn = StructField(
         colName,
         dataType,
@@ -154,11 +159,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
     case DescribeRelation(
-         ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, output) =>
+        ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, output) =>
       DescribeTableCommand(ident, partitionSpec, isExtended, output)
 
     case DescribeColumn(
-         ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended, output) =>
+        ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended, output) =>
       // For views, the column will not be resolved by `ResolveReferences` because
       // `ResolvedView` stores only the identifier.
       DescribeColumnCommand(ident, column.nameParts, isExtended, output)
@@ -497,6 +502,27 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case CreateFunction(ResolvedIdentifier(catalog, _), _, _, _, _) =>
       throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "CREATE FUNCTION")
+
+    case c @ CreateUserDefinedFunction(
+        ResolvedIdentifierInSessionCatalog(ident), _, _, _, _, _, _, _, _, _, _, _) =>
+      CreateUserDefinedFunctionCommand(
+        FunctionIdentifier(ident.table, ident.database, ident.catalog),
+        c.inputParamText,
+        c.returnTypeText,
+        c.exprText,
+        c.queryText,
+        c.comment,
+        c.isDeterministic,
+        c.containsSQL,
+        c.language,
+        c.isTableFunc,
+        isTemp = false,
+        c.ignoreIfExists,
+        c.replace)
+
+    case CreateUserDefinedFunction(
+        ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _, _, _, _) =>
+      throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "CREATE FUNCTION")
   }
 
   private def constructV1TableCmd(
@@ -678,7 +704,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     val builder = new MetadataBuilder
     col.comment.foreach(builder.putString("comment", _))
     col.default.map {
-      value: String => builder.putString(DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, value)
+      value: DefaultValueExpression => builder.putString(
+        DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, value.originalSQL)
     }
     StructField(col.name.head, col.dataType, nullable = true, builder.build())
   }
@@ -726,7 +753,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   private def supportsV1Command(catalog: CatalogPlugin): Boolean = {
     isSessionCatalog(catalog) && (
-      SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isEmpty ||
+      SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) == "builtin" ||
         catalog.isInstanceOf[CatalogExtension])
   }
 }

@@ -41,6 +41,11 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
 
+  object JdbcClientTypes {
+    val INTEGER = "int"
+    val STRING = "nvarchar"
+  }
+
   def getExternalEngineQuery(executedPlan: SparkPlan): String = {
     getExternalEngineRdd(executedPlan).asInstanceOf[JDBCRDD].getExternalEngineQuery
   }
@@ -52,25 +57,44 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     queryNode.rdd
   }
 
+  // Following tests are disabled for both single and multiple partition read
   override def excluded: Seq[String] = Seq(
-    "simple scan with OFFSET",
-    "simple scan with LIMIT and OFFSET",
-    "simple scan with paging: top N and OFFSET",
-    "scan with aggregate push-down: VAR_POP with DISTINCT",
-    "scan with aggregate push-down: COVAR_POP with DISTINCT",
-    "scan with aggregate push-down: COVAR_POP without DISTINCT",
-    "scan with aggregate push-down: COVAR_SAMP with DISTINCT",
-    "scan with aggregate push-down: COVAR_SAMP without DISTINCT",
-    "scan with aggregate push-down: CORR with DISTINCT",
-    "scan with aggregate push-down: CORR without DISTINCT",
-    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT",
-    "scan with aggregate push-down: REGR_INTERCEPT without DISTINCT",
-    "scan with aggregate push-down: REGR_SLOPE with DISTINCT",
-    "scan with aggregate push-down: REGR_SLOPE without DISTINCT",
-    "scan with aggregate push-down: REGR_R2 with DISTINCT",
-    "scan with aggregate push-down: REGR_R2 without DISTINCT",
-    "scan with aggregate push-down: REGR_SXY with DISTINCT",
-    "scan with aggregate push-down: REGR_SXY without DISTINCT")
+    "simple scan with OFFSET (false)",
+    "simple scan with OFFSET (true)",
+    "simple scan with LIMIT and OFFSET (false)",
+    "simple scan with LIMIT and OFFSET (true)",
+    "simple scan with paging: top N and OFFSET (false)",
+    "simple scan with paging: top N and OFFSET (true)",
+    "scan with aggregate push-down: VAR_POP with DISTINCT (false)",
+    "scan with aggregate push-down: VAR_POP with DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_POP with DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_POP with DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_POP without DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_POP without DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_SAMP without DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_SAMP without DISTINCT (true)",
+    "scan with aggregate push-down: CORR with DISTINCT (false)",
+    "scan with aggregate push-down: CORR with DISTINCT (true)",
+    "scan with aggregate push-down: CORR without DISTINCT (false)",
+    "scan with aggregate push-down: CORR without DISTINCT (true)",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_INTERCEPT without DISTINCT (false)",
+    "scan with aggregate push-down: REGR_INTERCEPT without DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SLOPE without DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SLOPE without DISTINCT (true)",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_R2 without DISTINCT (false)",
+    "scan with aggregate push-down: REGR_R2 without DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SXY without DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SXY without DISTINCT (true)")
 
   override val catalogName: String = "mssql"
   override val db = new MsSQLServerDatabaseOnDocker
@@ -93,18 +117,28 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     ).executeUpdate()
   }
 
+  override def testRenameColumn(tbl: String): Unit = {
+    sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO RENAMED")
+    val t = spark.table(s"$tbl")
+    val expectedSchema = new StructType()
+      .add("RENAMED", StringType, true, defaultMetadata(StringType, JdbcClientTypes.STRING))
+      .add("ID1", StringType, true, defaultMetadata(StringType, JdbcClientTypes.STRING))
+      .add("ID2", StringType, true, defaultMetadata(StringType, JdbcClientTypes.STRING))
+    assert(t.schema === expectedSchema)
+  }
+
   override def notSupportsTableComment: Boolean = true
 
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, JdbcClientTypes.INTEGER))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
     expectedSchema = new StructType()
-      .add("ID", StringType, true, defaultMetadata())
+      .add("ID", StringType, true, defaultMetadata(StringType, JdbcClientTypes.STRING))
     assert(t.schema === expectedSchema)
     // Update column type from STRING to INTEGER
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
@@ -136,16 +170,19 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
   test("SPARK-47440: SQLServer does not support boolean expression in binary comparison") {
     val df1 = sql("SELECT name FROM " +
       s"$catalogName.employee WHERE ((name LIKE 'am%') = (name LIKE '%y'))")
+    checkFilterPushed(df1)
     assert(df1.collect().length == 4)
 
     val df2 = sql("SELECT name FROM " +
       s"$catalogName.employee " +
       "WHERE ((name NOT LIKE 'am%') = (name NOT LIKE '%y'))")
+    checkFilterPushed(df2)
     assert(df2.collect().length == 4)
 
     val df3 = sql("SELECT name FROM " +
       s"$catalogName.employee " +
       "WHERE (dept > 1 AND ((name LIKE 'am%') = (name LIKE '%y')))")
+    checkFilterPushed(df3)
     assert(df3.collect().length == 3)
   }
 
@@ -159,6 +196,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
         |SELECT * FROM tbl
         |WHERE deptString = 'first'
         |""".stripMargin)
+    checkFilterPushed(df)
     assert(df.collect().length == 2)
   }
 
@@ -169,9 +207,10 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           |""".stripMargin
     )
 
+    checkFilterPushed(df)
     // scalastyle:off
     assert(getExternalEngineQuery(df.queryExecution.executedPlan) ==
-      """SELECT  "dept","name","salary","bonus" FROM "employee"  WHERE (CASE WHEN ("name" = 'Legolas') THEN IIF(("name" = 'Elf'), 1, 0) ELSE IIF(("name" <> 'Wizard'), 1, 0) END = 1)  """
+      """SELECT  "dept","name","salary","bonus" FROM "employee" WHERE (CASE WHEN ("name" = 'Legolas') THEN IIF(("name" = 'Elf'), 1, 0) ELSE IIF(("name" <> 'Wizard'), 1, 0) END = 1)  """
     )
     // scalastyle:on
     df.collect()
@@ -184,9 +223,10 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           |""".stripMargin
     )
 
+    checkFilterPushed(df)
     // scalastyle:off
     assert(getExternalEngineQuery(df.queryExecution.executedPlan) ==
-      """SELECT  "dept","name","salary","bonus" FROM "employee"  WHERE (CASE WHEN ("name" = 'Legolas') THEN IIF(("name" = 'Elf'), 1, 0) ELSE 1 END = 1)  """
+      """SELECT  "dept","name","salary","bonus" FROM "employee" WHERE (CASE WHEN ("name" = 'Legolas') THEN IIF(("name" = 'Elf'), 1, 0) ELSE 1 END = 1)  """
     )
     // scalastyle:on
     df.collect()
@@ -201,9 +241,10 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           |""".stripMargin
     )
 
+    checkFilterPushed(df)
     // scalastyle:off
     assert(getExternalEngineQuery(df.queryExecution.executedPlan) ==
-      """SELECT  "dept","name","salary","bonus" FROM "employee"  WHERE (CASE WHEN ("name" = 'Legolas') THEN IIF((CASE WHEN ("name" = 'Elf') THEN IIF(("name" = 'Elrond'), 1, 0) ELSE IIF(("name" = 'Gandalf'), 1, 0) END = 1), 1, 0) ELSE IIF(("name" = 'Sauron'), 1, 0) END = 1)  """
+      """SELECT  "dept","name","salary","bonus" FROM "employee" WHERE (CASE WHEN ("name" = 'Legolas') THEN IIF((CASE WHEN ("name" = 'Elf') THEN IIF(("name" = 'Elrond'), 1, 0) ELSE IIF(("name" = 'Gandalf'), 1, 0) END = 1), 1, 0) ELSE IIF(("name" = 'Sauron'), 1, 0) END = 1)  """
     )
     // scalastyle:on
     df.collect()
@@ -218,11 +259,36 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           |""".stripMargin
     )
 
+    checkFilterPushed(df)
     // scalastyle:off
     assert(getExternalEngineQuery(df.queryExecution.executedPlan) ==
-      """SELECT  "dept","name","salary","bonus" FROM "employee"  WHERE ("name" IS NOT NULL) AND ((CASE WHEN "name" = 'Legolas' THEN CASE WHEN "name" = 'Elf' THEN 'Elf' ELSE 'Wizard' END ELSE 'Sauron' END) = "name")  """
+      """SELECT  "dept","name","salary","bonus" FROM "employee" WHERE ("name" IS NOT NULL) AND ((CASE WHEN "name" = 'Legolas' THEN CASE WHEN "name" = 'Elf' THEN 'Elf' ELSE 'Wizard' END ELSE 'Sauron' END) = "name")  """
     )
     // scalastyle:on
     df.collect()
+  }
+
+  test("SPARK-51321: SQLServer pushdown for RPAD expression on string column") {
+    val df = sql(
+      s"""|SELECT name FROM $catalogName.employee
+          |WHERE rpad(name, 10, 'x') = 'amyxxxxxxx'
+          |""".stripMargin
+    )
+    checkFilterPushed(df)
+    val rows = df.collect()
+    assert(rows.length == 1)
+    assert(rows(0).getString(0) === "amy")
+  }
+
+  test("SPARK-51321: SQLServer pushdown for LPAD expression on string column") {
+    val df = sql(
+      s"""|SELECT name FROM $catalogName.employee
+          |WHERE lpad(name, 10, 'x') = 'xxxxxxxamy'
+          |""".stripMargin
+    )
+    checkFilterPushed(df)
+    val rows = df.collect()
+    assert(rows.length == 1)
+    assert(rows(0).getString(0) === "amy")
   }
 }

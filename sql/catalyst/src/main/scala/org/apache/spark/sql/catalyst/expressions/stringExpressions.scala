@@ -296,7 +296,7 @@ case class Elt(
   override def nullable: Boolean = true
 
   override def dataType: DataType =
-    inputExprs.map(_.dataType).headOption.getOrElse(SQLConf.get.defaultStringType)
+    inputExprs.map(_.dataType).headOption.getOrElse(StringType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size < 2) {
@@ -1996,7 +1996,7 @@ object RPadExpressionBuilder extends PadExpressionBuilderBase {
 case class StringRPad(
     str: Expression,
     len: Expression,
-    pad: Expression = Literal.create(" ", SQLConf.get.defaultStringType))
+    pad: Expression = Literal.create(" ", StringType))
   extends TernaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
   override def first: Expression = str
@@ -2232,9 +2232,8 @@ case class StringRepeat(str: Expression, times: Expression)
   since = "1.5.0",
   group = "string_funcs")
 case class StringSpace(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+  extends UnaryExpression with ImplicitCastInputTypes with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
-  override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
 
   override def nullSafeEval(s: Any): Any = {
@@ -2355,7 +2354,7 @@ case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
     If(
       LessThanOrEqual(len, Literal(0)),
       Literal(UTF8String.EMPTY_UTF8, str.dataType),
-      new Substring(str, UnaryMinus(len))
+      new Substring(str, UnaryMinus(len, failOnError = false))
     )
   )
 
@@ -2717,10 +2716,8 @@ case class Levenshtein(
   since = "1.5.0",
   group = "string_funcs")
 case class SoundEx(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes {
+  extends UnaryExpression with ExpectsInputTypes with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
@@ -2798,10 +2795,9 @@ case class Ascii(child: Expression)
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Chr(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+  extends UnaryExpression with ImplicitCastInputTypes with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
 
-  override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(LongType)
 
   protected override def nullSafeEval(lon: Any): Any = {
@@ -2848,11 +2844,13 @@ case class Chr(child: Expression)
   since = "1.5.0",
   group = "string_funcs")
 case class Base64(child: Expression, chunkBase64: Boolean)
-  extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
 
   def this(expr: Expression) = this(expr, SQLConf.get.chunkBase64StringEnabled)
 
-  override val dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
   override lazy val replacement: Expression = StaticInvoke(
@@ -3008,7 +3006,7 @@ object Decode {
         val input = params.head
         val other = params.tail
         val itr = other.iterator
-        var default: Expression = Literal.create(null, SQLConf.get.defaultStringType)
+        var default: Expression = Literal.create(null, StringType)
         val branches = ArrayBuffer.empty[(Expression, Expression)]
         while (itr.hasNext) {
           val search = itr.next()
@@ -3075,12 +3073,11 @@ case class StringDecode(
     charset: Expression,
     legacyCharsets: Boolean,
     legacyErrorAction: Boolean)
-  extends RuntimeReplaceable with ImplicitCastInputTypes {
+  extends RuntimeReplaceable with ImplicitCastInputTypes with DefaultStringProducingExpression {
 
   def this(bin: Expression, charset: Expression) =
     this(bin, charset, SQLConf.get.legacyJavaCharsets, SQLConf.get.legacyCodingErrorAction)
 
-  override val dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[AbstractDataType] = Seq(
       BinaryType,
       StringTypeWithCollation(supportsTrimCollation = true)
@@ -3090,7 +3087,7 @@ case class StringDecode(
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[StringDecode],
-    SQLConf.get.defaultStringType,
+    dataType,
     "decode",
     Seq(bin, charset, Literal(legacyCharsets), Literal(legacyErrorAction)),
     Seq(
@@ -3337,11 +3334,10 @@ case class ToBinary(
   since = "1.5.0",
   group = "string_funcs")
 case class FormatNumber(x: Expression, d: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ExpectsInputTypes with DefaultStringProducingExpression {
 
   override def left: Expression = x
   override def right: Expression = d
-  override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = true
   override def nullIntolerant: Boolean = true
 
@@ -3722,4 +3718,47 @@ case class Luhncheck(input: Expression) extends RuntimeReplaceable with Implicit
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = copy(newChildren(0))
+}
+
+/**
+ * A function that prepends a backslash to each instance of single quote
+ * in the given string and encloses the result by single quotes.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns `str` enclosed by single quotes and each instance of single quote in it is preceded by a backslash.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Don\'t');
+       'Don\'t'
+  """,
+  since = "4.1.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class Quote(input: Expression)
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    dataType,
+    "quote",
+    Seq(input),
+    inputTypes)
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+  }
+
+  override def nodeName: String = "quote"
+
+  override def nullable: Boolean = true
+
+  override def child: Expression = input
+
+  override protected def withNewChildInternal(newChild: Expression): Quote = {
+    copy(input = newChild)
+  }
 }

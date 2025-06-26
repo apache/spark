@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, AttributeReference, PythonUDF, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Generate, ScriptInputOutputSchema, ScriptTransformation, Window => WindowPlan}
+import org.apache.spark.sql.classic.{Dataset => DatasetImpl}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, count, explode, sum, year}
 import org.apache.spark.sql.internal.SQLConf
@@ -247,9 +248,9 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       TestData(2, "personnel"),
       TestData(3, "develop"),
       TestData(4, "IT")).toDF()
-    val ds_id1 = df.logicalPlan.getTagValue(Dataset.DATASET_ID_TAG)
+    val ds_id1 = df.logicalPlan.getTagValue(DatasetImpl.DATASET_ID_TAG)
     df.show(0)
-    val ds_id2 = df.logicalPlan.getTagValue(Dataset.DATASET_ID_TAG)
+    val ds_id2 = df.logicalPlan.getTagValue(DatasetImpl.DATASET_ID_TAG)
     assert(ds_id1 === ds_id2)
   }
 
@@ -268,27 +269,27 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       TestData(2, "personnel"),
       TestData(3, "develop"),
       TestData(4, "IT")).toDS()
-    var dsIdSetOpt = ds.logicalPlan.getTagValue(Dataset.DATASET_ID_TAG)
+    var dsIdSetOpt = ds.logicalPlan.getTagValue(DatasetImpl.DATASET_ID_TAG)
     assert(dsIdSetOpt.get.size === 1)
     var col1DsId = -1L
     val col1 = ds.col("key")
     col1.expr.foreach {
       case a: AttributeReference =>
-        col1DsId = a.metadata.getLong(Dataset.DATASET_ID_KEY)
+        col1DsId = a.metadata.getLong(DatasetImpl.DATASET_ID_KEY)
         assert(dsIdSetOpt.get.contains(col1DsId))
-        assert(a.metadata.getLong(Dataset.COL_POS_KEY) === 0)
+        assert(a.metadata.getLong(DatasetImpl.COL_POS_KEY) === 0)
     }
 
     val df = ds.toDF()
-    dsIdSetOpt = df.logicalPlan.getTagValue(Dataset.DATASET_ID_TAG)
+    dsIdSetOpt = df.logicalPlan.getTagValue(DatasetImpl.DATASET_ID_TAG)
     assert(dsIdSetOpt.get.size === 2)
     var col2DsId = -1L
     val col2 = df.col("key")
     col2.expr.foreach {
       case a: AttributeReference =>
-        col2DsId = a.metadata.getLong(Dataset.DATASET_ID_KEY)
-        assert(dsIdSetOpt.get.contains(a.metadata.getLong(Dataset.DATASET_ID_KEY)))
-        assert(a.metadata.getLong(Dataset.COL_POS_KEY) === 0)
+        col2DsId = a.metadata.getLong(DatasetImpl.DATASET_ID_KEY)
+        assert(dsIdSetOpt.get.contains(a.metadata.getLong(DatasetImpl.DATASET_ID_KEY)))
+        assert(a.metadata.getLong(DatasetImpl.COL_POS_KEY) === 0)
     }
     assert(col1DsId !== col2DsId)
   }

@@ -47,10 +47,13 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
     row((null, 5.0)),
     row((6, null))).toDF("c", "d")
 
+  lazy val t = r.filter($"c".isNotNull && $"d".isNotNull)
+
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     l.createOrReplaceTempView("l")
     r.createOrReplaceTempView("r")
+    t.createOrReplaceTempView("t")
   }
 
   test("noop outer()") {
@@ -378,6 +381,127 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("IN predicate subquery") {
+    checkAnswer(
+      spark.table("l").where($"l.a".isin(spark.table("r").select($"c"))),
+      sql("select * from l where l.a in (select c from r)"))
+
+    checkAnswer(
+      spark
+        .table("l")
+        .where($"l.a".isin(spark.table("r").where($"l.b".outer() < $"r.d").select($"c"))),
+      sql("select * from l where l.a in (select c from r where l.b < r.d)"))
+
+    checkAnswer(
+      spark
+        .table("l")
+        .where($"l.a".isin(spark.table("r").select("c")) && $"l.a" > 2 && $"l.b".isNotNull),
+      sql("select * from l where l.a in (select c from r) and l.a > 2 and l.b is not null"))
+  }
+
+  test("IN predicate subquery with struct") {
+    withTempView("ll", "rr") {
+      spark.table("l").select($"*", struct("a", "b").alias("sab")).createOrReplaceTempView("ll")
+      spark
+        .table("r")
+        .select($"*", struct($"c".as("a"), $"d".as("b")).alias("scd"))
+        .createOrReplaceTempView("rr")
+
+      for ((col, values) <- Seq(
+          ($"sab", "sab"),
+          (struct(struct($"a", $"b")), "struct(struct(a, b))"));
+        (df, query) <- Seq(
+          (spark.table("rr").select($"scd"), "select scd from rr"),
+          (
+            spark.table("rr").select(struct($"c".as("a"), $"d".as("b"))),
+            "select struct(c as a, d as b) from rr"),
+          (spark.table("rr").select(struct($"c", $"d")), "select struct(c, d) from rr"))) {
+        checkAnswer(
+          spark.table("ll").where(col.isin(df)).select($"a", $"b"),
+          sql(s"select a, b from ll where $values in ($query)"))
+      }
+    }
+  }
+
+  test("NOT IN predicate subquery") {
+    checkAnswer(
+      spark.table("l").where(!$"a".isin(spark.table("r").select($"c"))),
+      sql("select * from l where a not in (select c from r)"))
+
+    checkAnswer(
+      spark.table("l").where(!$"a".isin(spark.table("r").where($"c".isNotNull).select($"c"))),
+      sql("select * from l where a not in (select c from r where c is not null)"))
+
+    checkAnswer(
+      spark
+        .table("l")
+        .where(!struct($"a", $"b").isin(spark.table("t").select($"c", $"d")) && $"a" < 4),
+      sql("select * from l where (a, b) not in (select c, d from t) and a < 4"))
+
+    // Empty sub-query
+    checkAnswer(
+      spark
+        .table("l")
+        .where(!struct($"a", $"b").isin(spark.table("r").where($"c" > 10).select($"c", $"d"))),
+      sql("select * from l where (a, b) not in (select c, d from r where c > 10)"))
+  }
+
+  test("IN predicate subquery within OR") {
+    checkAnswer(
+      spark
+        .table("l")
+        .where($"l.a".isin(spark.table("r").select("c"))
+          || $"l.a".isin(spark.table("r").where($"l.b".outer() < $"r.d").select($"c"))),
+      sql(
+        "select * from l where l.a in (select c from r)" +
+          " or l.a in (select c from r where l.b < r.d)"))
+
+    checkAnswer(
+      spark
+        .table("l")
+        .where(!$"a".isin(spark.table("r").select("c"))
+          || !$"a".isin(spark.table("r").where($"c".isNotNull).select($"c"))),
+      sql(
+        "select * from l where a not in (select c from r)" +
+          " or a not in (select c from r where c is not null)"))
+  }
+
+  test("complex IN predicate subquery") {
+    checkAnswer(
+      spark.table("l").where(!struct($"a", $"b").isin(spark.table("r").select($"c", $"d"))),
+      sql("select * from l where (a, b) not in (select c, d from r)"))
+
+    checkAnswer(
+      spark
+        .table("l")
+        .where(!struct($"a", $"b").isin(spark.table("t").select($"c", $"d"))
+          && ($"a" + $"b").isNotNull),
+      sql("select * from l where (a, b) not in (select c, d from t) and (a + b) is not null"))
+  }
+
+  test("same column in subquery and outer table") {
+    checkAnswer(
+      spark
+        .table("l")
+        .as("l1")
+        .where(
+          $"a".isin(
+            spark
+              .table("l")
+              .where($"a" < lit(3))
+              .groupBy($"a")
+              .agg(Map.empty[String, String])))
+        .select($"a"),
+      sql("select a from l l1 where a in (select a from l where a < 3 group by a)"))
+  }
+
+  test("col IN (NULL)") {
+    checkAnswer(spark.table("l").where($"a".isin(null)), sql("SELECT * FROM l WHERE a IN (NULL)"))
+    checkAnswer(
+      spark.table("l").where(!$"a".isin(null)),
+      sql("SELECT * FROM l WHERE a NOT IN (NULL)"))
+  }
+
   private def table1() = {
     sql("CREATE VIEW t1(c1, c2) AS VALUES (0, 1), (1, 2)")
     spark.table("t1")
@@ -418,6 +542,30 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("lateral join with star expansion") {
+    withView("t1", "t2") {
+      val t1 = table1()
+      val t2 = table2()
+
+      checkAnswer(
+        t1.lateralJoin(spark.range(1).select().select($"*")),
+        sql("SELECT * FROM t1, LATERAL (SELECT *)")
+      )
+      checkAnswer(
+        t1.lateralJoin(t2.select($"*")),
+        sql("SELECT * FROM t1, LATERAL (SELECT * FROM t2)")
+      )
+      checkAnswer(
+        t1.lateralJoin(t2.select($"t1.*".outer(), $"t2.*")),
+        sql("SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2)")
+      )
+      checkAnswer(
+        t1.lateralJoin(t2.alias("t1").select($"t1.*")),
+        sql("SELECT * FROM t1, LATERAL (SELECT t1.* FROM t2 AS t1)")
+      )
+    }
+  }
+
   test("lateral join with different join types") {
     withView("t1") {
       val t1 = table1()
@@ -440,6 +588,18 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
           spark.range(1).select(($"c1".outer() + $"c2".outer()).as("c3")),
           "cross"),
         sql("SELECT * FROM t1 CROSS JOIN LATERAL (SELECT c1 + c2 AS c3)")
+      )
+    }
+  }
+
+  test("lateral join with subquery alias") {
+    withView("t1") {
+      val t1 = table1()
+
+      checkAnswer(
+        t1.lateralJoin(spark.range(1).select($"c1".outer(), $"c2".outer()).toDF("a", "b").as("s"))
+          .select("a", "b"),
+        sql("SELECT a, b FROM t1, LATERAL (SELECT c1, c2) s(a, b)")
       )
     }
   }
@@ -516,8 +676,8 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
 
       checkAnswer(
         t1.lateralJoin(
-          t2.where($"t1.c1".outer() === $"t2.c1").select($"c2"), "left"
-        ).join(t1.as("t3"), $"t2.c2" === $"t3.c2", "left"),
+          t2.where($"t1.c1".outer() === $"t2.c1").select($"c2").as("s"), "left"
+        ).join(t1.as("t3"), $"s.c2" === $"t3.c2", "left"),
         sql(
           """
             |SELECT * FROM t1
@@ -741,9 +901,51 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
       val t1 = table1()
 
       checkAnswer(
-        t1.withColumn("scalar", spark.range(1).select($"c1".outer() + $"c2".outer()).scalar()),
-        t1.withColumn("scalar", $"c1" + $"c2")
-      )
+        t1.withColumn(
+          "scalar",
+          spark
+            .range(1)
+            .select($"c1".outer() + $"c2".outer())
+            .scalar()),
+        t1.select($"*", ($"c1" + $"c2").as("scalar")))
+
+      checkAnswer(
+        t1.withColumn(
+          "scalar",
+          spark
+            .range(1)
+            .withColumn("c1", $"c1".outer())
+            .select($"c1" + $"c2".outer())
+            .scalar()),
+        t1.select($"*", ($"c1" + $"c2").as("scalar")))
+
+      checkAnswer(
+        t1.withColumn(
+          "scalar",
+          spark
+            .range(1)
+            .select($"c1".outer().as("c1"))
+            .withColumn("c2", $"c2".outer())
+            .select($"c1" + $"c2")
+            .scalar()),
+        t1.select($"*", ($"c1" + $"c2").as("scalar")))
+    }
+  }
+
+  test("subquery in withColumnsRenamed") {
+    withView("t1") {
+      val t1 = table1()
+
+      checkAnswer(
+        t1.withColumn(
+          "scalar",
+          spark
+            .range(1)
+            .select($"c1".outer().as("c1"), $"c2".outer().as("c2"))
+            .withColumnsRenamed(Map("c1" -> "x", "c2" -> "y"))
+            .select($"x" + $"y")
+            .scalar()),
+        t1.select($"*", ($"c1".as("x") + $"c2".as("y")).as("scalar")))
     }
   }
 
@@ -761,5 +963,29 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
 
       checkAnswer(t1.repartition(spark.range(1).select(lit(1)).scalar()), t1)
     }
+  }
+
+  test("SPARK-51322: streaming subquery expression is not allowed") {
+    val rateSource = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", "10")
+      .option("useManualClock", "true")
+      .load()
+    val df1 = rateSource.select($"value").limit(1)
+    checkError(
+      intercept[AnalysisException](spark.range(5).select(df1.scalar()).collect()),
+      condition = "INVALID_SUBQUERY_EXPRESSION.STREAMING_QUERY"
+    )
+    checkError(
+      intercept[AnalysisException](spark.range(5).where(rateSource.exists()).collect()),
+      condition = "INVALID_SUBQUERY_EXPRESSION.STREAMING_QUERY"
+    )
+
+    // Correlated subquery expression
+    val df2 = rateSource.where($"value" === $"id".outer())
+    checkError(
+      intercept[AnalysisException](spark.range(5).where(df2.exists()).collect()),
+      condition = "INVALID_SUBQUERY_EXPRESSION.STREAMING_QUERY"
+    )
   }
 }

@@ -874,7 +874,7 @@ WITH temp AS (
 SELECT t1.b FROM temp t1 JOIN temp t2 ON t1.b = t2.b
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias temp
 :     +- ScriptTransformation cat, [b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
 :        +- Project [a#x]

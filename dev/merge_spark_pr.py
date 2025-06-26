@@ -566,6 +566,7 @@ def get_current_ref():
 
 def initialize_jira():
     global asf_jira
+    asf_jira = None
     jira_server = {"server": JIRA_API_BASE}
 
     if not JIRA_IMPORTED:

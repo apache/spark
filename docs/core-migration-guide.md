@@ -22,6 +22,12 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Core 4.0 to 4.1
+
+- Since Spark 4.1, Spark Master deamon provides REST API by default. To restore the behavior before Spark 4.1, you can set `spark.master.rest.enabled` to `false`.
+- Since Spark 4.1, Spark will compress RDD checkpoints by default. To restore the behavior before Spark 4.1, you can set `spark.checkpoint.compress` to `false`.
+- Since Spark 4.1, Spark uses Apache Hadoop Magic Committer for all S3 buckets by default. To restore the behavior before Spark 4.0, you can set `spark.hadoop.fs.s3a.committer.magic.enabled=false`.
+
 ## Upgrading from Core 3.5 to 4.0
 
 - Since Spark 4.0, Spark migrated all its internal reference of servlet API from `javax` to `jakarta` 
@@ -36,6 +42,8 @@ license: |
 
 - In Spark 4.0, support for Apache Mesos as a resource manager was removed.
 
+- Since Spark 4.0, Spark will allocate executor pods with a batch size of `10`. To restore the legacy behavior, you can set `spark.kubernetes.allocation.batch.size` to `5`.
+
 - Since Spark 4.0, Spark uses `ReadWriteOncePod` instead of `ReadWriteOnce` access mode in persistence volume claims. To restore the legacy behavior, you can set `spark.kubernetes.legacy.useReadWriteOnceAccessMode` to `true`.
 
 - Since Spark 4.0, Spark reports its executor pod status by checking all containers of that pod. To restore the legacy behavior, you can set `spark.kubernetes.executor.checkAllContainers` to `false`.
@@ -43,10 +51,6 @@ license: |
 - Since Spark 4.0, Spark uses `~/.ivy2.5.2` as Ivy user directory by default to isolate the existing systems from Apache Ivy's incompatibility. To restore the legacy behavior, you can set `spark.jars.ivy` to `~/.ivy2`.
 
 - Since Spark 4.0, Spark uses the external shuffle service for deleting shuffle blocks for deallocated executors when the shuffle is no longer needed. To restore the legacy behavior, you can set `spark.shuffle.service.removeShuffle` to `false`.
-
-- Starting with Spark 4.0, the default logging format for `spark-submit` has changed from plain text to JSON lines to improve log analysis. If you prefer plain text logs, you have two options:
-  - Set the Spark configuration `spark.log.structuredLogging.enabled` to `false`. For example, you can use `JDK_JAVA_OPTIONS=-Dspark.log.structuredLogging.enabled=false`.
-  - Use a custom log4j configuration file, such as renaming the template file `conf/log4j2.properties.pattern-layout-template` to `conf/log4j2.properties`.
 
 - Since Spark 4.0, the MDC (Mapped Diagnostic Context) key for Spark task names in Spark logs has been changed from `mdc.taskName` to `task_name`. To use the key `mdc.taskName`, you can set `spark.log.legacyTaskNameMdc.enabled` to `true`.
 

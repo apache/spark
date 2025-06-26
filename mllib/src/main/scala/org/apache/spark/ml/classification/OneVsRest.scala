@@ -32,7 +32,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.functions._
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.param.shared.{HasParallelism, HasWeightCol}
 import org.apache.spark.ml.util._
@@ -41,6 +41,7 @@ import org.apache.spark.sql.{Column, DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.ThreadUtils
 
 private[ml] trait ClassifierTypeTrait {
@@ -105,7 +106,7 @@ private[ml] object OneVsRestParams extends ClassifierTypeTrait {
     DefaultParamsWriter.saveMetadata(instance, path, spark, extraMetadata, Some(jsonParams))
 
     val classifierPath = new Path(path, "classifier").toString
-    instance.getClassifier.asInstanceOf[MLWritable].save(classifierPath)
+    instance.getClassifier.asInstanceOf[MLWritable].write.session(spark).save(classifierPath)
   }
 
   def loadImpl(
@@ -194,7 +195,6 @@ final class OneVsRestModel private[ml] (
     val accColName = "mbc$acc" + UUID.randomUUID().toString
     val newDataset = dataset.withColumn(accColName, lit(Array.emptyDoubleArray))
     val columns = newDataset.schema.fieldNames.map(col)
-    val updateUDF = udf { (preds: Array[Double], pred: Vector) => preds :+ pred(1) }
 
     // persist if underlying dataset is not persistent.
     val handlePersistence = !dataset.isStreaming && dataset.storageLevel == StorageLevel.NONE
@@ -212,10 +212,9 @@ final class OneVsRestModel private[ml] (
       if (isProbModel) {
         tmpModel.asInstanceOf[ProbabilisticClassificationModel[_, _]].setProbabilityCol("")
       }
-
-      import org.apache.spark.util.ArrayImplicits._
       tmpModel.transform(df)
-        .withColumn(accColName, updateUDF(col(accColName), col(tmpRawPredName)))
+        .withColumn(accColName, array_append(
+          col(accColName), vector_get(col(tmpRawPredName), lit(1))))
         .select(columns.toImmutableArraySeq: _*)
     }
 
@@ -228,18 +227,17 @@ final class OneVsRestModel private[ml] (
 
     if (getRawPredictionCol.nonEmpty) {
       // output the RawPrediction as vector
-      val rawPredictionUDF = udf { preds: Array[Double] => Vectors.dense(preds) }
       predictionColNames :+= getRawPredictionCol
-      predictionColumns :+= rawPredictionUDF(col(accColName))
+      predictionColumns :+= array_to_vector(col(accColName))
         .as($(rawPredictionCol), outputSchema($(rawPredictionCol)).metadata)
     }
 
     if (getPredictionCol.nonEmpty) {
       // output the index of the classifier with highest confidence as prediction
-      val labelUDF = udf { (preds: Array[Double]) => preds.indices.maxBy(preds.apply).toDouble }
       predictionColNames :+= getPredictionCol
-      predictionColumns :+= labelUDF(col(accColName))
-        .as(getPredictionCol, labelMetadata)
+
+      predictionColumns :+= array_argmax(col(accColName))
+        .cast(DoubleType).as(getPredictionCol, labelMetadata)
     }
 
     aggregatedDataset
@@ -279,12 +277,17 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
     OneVsRestParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit = {
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "OneVsRestModel does not support saving to local filesystem path."
+        )
+      }
       val extraJson = ("labelMetadata" -> instance.labelMetadata.json) ~
         ("numClasses" -> instance.models.length)
       OneVsRestParams.saveImpl(path, instance, sparkSession, Some(extraJson))
       instance.models.map(_.asInstanceOf[MLWritable]).zipWithIndex.foreach { case (model, idx) =>
         val modelPath = new Path(path, s"model_$idx").toString
-        model.save(modelPath)
+        model.write.session(sparkSession).save(modelPath)
       }
     }
   }
@@ -295,6 +298,11 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
     private val className = classOf[OneVsRestModel].getName
 
     override def load(path: String): OneVsRestModel = {
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "OneVsRestModel does not support loading from local filesystem path."
+        )
+      }
       implicit val format = DefaultFormats
       val (metadata, classifier) = OneVsRestParams.loadImpl(path, sparkSession, className)
       val labelMetadata = Metadata.fromJson((metadata.metadata \ "labelMetadata").extract[String])

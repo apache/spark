@@ -17,8 +17,8 @@
 package org.apache.spark.deploy.k8s.features
 
 import io.fabric8.kubernetes.api.model._
+import io.fabric8.volcano.api.model.scheduling.v1beta1.{PodGroup, PodGroupSpec}
 import io.fabric8.volcano.client.DefaultVolcanoClient
-import io.fabric8.volcano.scheduling.v1beta1.{PodGroup, PodGroupSpec}
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverConf, KubernetesExecutorConf, SparkPod}
 import org.apache.spark.internal.Logging

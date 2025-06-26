@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, TableSummary}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryExecutionErrors}
@@ -68,7 +68,7 @@ class JDBCTableCatalog extends TableCatalog
     JdbcUtils.withConnection(options) { conn =>
       val schemaPattern = if (namespace.length == 1) namespace.head else null
       val rs = JdbcUtils.classifyException(
-        errorClass = "FAILED_JDBC.GET_TABLES",
+        condition = "FAILED_JDBC.GET_TABLES",
         messageParameters = Map(
           "url" -> options.getRedactUrl(),
           "namespace" -> toSQLId(namespace.toSeq)),
@@ -84,19 +84,25 @@ class JDBCTableCatalog extends TableCatalog
     }
   }
 
+  override def listTableSummaries(namespace: Array[String]): Array[TableSummary] = {
+    // Each table from remote database system is treated as foreign table.
+    this.listTables(namespace)
+        .map(identifier => TableSummary.of(identifier, TableSummary.FOREIGN_TABLE_TYPE))
+  }
+
   override def tableExists(ident: Identifier): Boolean = {
     checkNamespace(ident.namespace())
     val writeOptions = new JdbcOptionsInWrite(
       options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
-    JdbcUtils.classifyException(
-      errorClass = "FAILED_JDBC.TABLE_EXISTS",
-      messageParameters = Map(
-        "url" -> options.getRedactUrl(),
-        "tableName" -> toSQLId(ident)),
-      dialect,
-      description = s"Failed table existence check: $ident",
-      isRuntime = false) {
-      JdbcUtils.withConnection(options)(JdbcUtils.tableExists(_, writeOptions))
+    JdbcUtils.withConnection(options) {
+      JdbcUtils.classifyException(
+        condition = "FAILED_JDBC.TABLE_EXISTS",
+        messageParameters = Map(
+          "url" -> options.getRedactUrl(),
+          "tableName" -> toSQLId(ident)),
+        dialect,
+        description = s"Failed table existence check: $ident",
+        isRuntime = false)(JdbcUtils.tableExists(_, writeOptions))
     }
   }
 
@@ -116,7 +122,7 @@ class JDBCTableCatalog extends TableCatalog
     checkNamespace(oldIdent.namespace())
     JdbcUtils.withConnection(options) { conn =>
       JdbcUtils.classifyException(
-        errorClass = "FAILED_JDBC.RENAME_TABLE",
+        condition = "FAILED_JDBC.RENAME_TABLE",
         messageParameters = Map(
           "url" -> options.getRedactUrl(),
           "oldName" -> toSQLId(oldIdent),
@@ -130,11 +136,14 @@ class JDBCTableCatalog extends TableCatalog
   }
 
   override def loadTable(ident: Identifier): Table = {
-    checkNamespace(ident.namespace())
+    if (!tableExists(ident)) {
+      throw QueryCompilationErrors.noSuchTableError(ident)
+    }
+
     val optionsWithTableName = new JDBCOptions(
       options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
     JdbcUtils.classifyException(
-      errorClass = "FAILED_JDBC.LOAD_TABLE",
+      condition = "FAILED_JDBC.LOAD_TABLE",
       messageParameters = Map(
         "url" -> options.getRedactUrl(),
         "tableName" -> toSQLId(ident)),
@@ -191,7 +200,7 @@ class JDBCTableCatalog extends TableCatalog
     val schema = CatalogV2Util.v2ColumnsToStructType(columns)
     JdbcUtils.withConnection(options) { conn =>
       JdbcUtils.classifyException(
-        errorClass = "FAILED_JDBC.CREATE_TABLE",
+        condition = "FAILED_JDBC.CREATE_TABLE",
         messageParameters = Map(
           "url" -> options.getRedactUrl(),
           "tableName" -> toSQLId(ident)),
@@ -209,7 +218,7 @@ class JDBCTableCatalog extends TableCatalog
     checkNamespace(ident.namespace())
     JdbcUtils.withConnection(options) { conn =>
       JdbcUtils.classifyException(
-        errorClass = "FAILED_JDBC.ALTER_TABLE",
+        condition = "FAILED_JDBC.ALTER_TABLE",
         messageParameters = Map(
           "url" -> options.getRedactUrl(),
           "tableName" -> toSQLId(ident)),
@@ -226,7 +235,7 @@ class JDBCTableCatalog extends TableCatalog
     case Array(db) =>
       JdbcUtils.withConnection(options) { conn =>
         JdbcUtils.classifyException(
-          errorClass = "FAILED_JDBC.NAMESPACE_EXISTS",
+          condition = "FAILED_JDBC.NAMESPACE_EXISTS",
           messageParameters = Map(
             "url" -> options.getRedactUrl(),
             "namespace" -> toSQLId(namespace.toSeq)),
@@ -242,7 +251,7 @@ class JDBCTableCatalog extends TableCatalog
   override def listNamespaces(): Array[Array[String]] = {
     JdbcUtils.withConnection(options) { conn =>
       JdbcUtils.classifyException(
-        errorClass = "FAILED_JDBC.LIST_NAMESPACES",
+        condition = "FAILED_JDBC.LIST_NAMESPACES",
         messageParameters = Map("url" -> options.getRedactUrl()),
         dialect,
         description = s"Failed list namespaces",
@@ -295,7 +304,7 @@ class JDBCTableCatalog extends TableCatalog
       }
       JdbcUtils.withConnection(options) { conn =>
         JdbcUtils.classifyException(
-          errorClass = "FAILED_JDBC.CREATE_NAMESPACE",
+          condition = "FAILED_JDBC.CREATE_NAMESPACE",
           messageParameters = Map(
             "url" -> options.getRedactUrl(),
             "namespace" -> toSQLId(db)),
@@ -321,7 +330,7 @@ class JDBCTableCatalog extends TableCatalog
             if (set.property() == SupportsNamespaces.PROP_COMMENT) {
               JdbcUtils.withConnection(options) { conn =>
                 JdbcUtils.classifyException(
-                  errorClass = "FAILED_JDBC.CREATE_NAMESPACE_COMMENT",
+                  condition = "FAILED_JDBC.CREATE_NAMESPACE_COMMENT",
                   messageParameters = Map(
                     "url" -> options.getRedactUrl(),
                     "namespace" -> toSQLId(db)),
@@ -339,7 +348,7 @@ class JDBCTableCatalog extends TableCatalog
             if (unset.property() == SupportsNamespaces.PROP_COMMENT) {
               JdbcUtils.withConnection(options) { conn =>
                 JdbcUtils.classifyException(
-                  errorClass = "FAILED_JDBC.REMOVE_NAMESPACE_COMMENT",
+                  condition = "FAILED_JDBC.REMOVE_NAMESPACE_COMMENT",
                   messageParameters = Map(
                     "url" -> options.getRedactUrl(),
                     "namespace" -> toSQLId(db)),
@@ -368,7 +377,7 @@ class JDBCTableCatalog extends TableCatalog
     case Array(db) if namespaceExists(namespace) =>
       JdbcUtils.withConnection(options) { conn =>
         JdbcUtils.classifyException(
-          errorClass = "FAILED_JDBC.DROP_NAMESPACE",
+          condition = "FAILED_JDBC.DROP_NAMESPACE",
           messageParameters = Map(
             "url" -> options.getRedactUrl(),
             "namespace" -> toSQLId(db)),

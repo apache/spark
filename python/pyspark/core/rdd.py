@@ -3286,7 +3286,9 @@ class RDD(Generic[T_co]):
         assert self.ctx._jvm is not None
 
         if compressionCodecClass:
-            compressionCodec = self.ctx._jvm.java.lang.Class.forName(compressionCodecClass)
+            compressionCodec = getattr(self.ctx._jvm, "java.lang.Class").forName(
+                compressionCodecClass
+            )
             keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path, compressionCodec)
         else:
             keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path)

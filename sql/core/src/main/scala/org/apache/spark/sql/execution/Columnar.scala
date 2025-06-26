@@ -32,7 +32,6 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
-import org.apache.spark.util.Utils
 
 /**
  * Holds a user defined rule that can be used to inject columnar implementations of various
@@ -66,9 +65,6 @@ trait ColumnarToRowTransition extends UnaryExecNode
  * [[MapPartitionsInRWithArrowExec]]. Eventually this should replace those implementations.
  */
 case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition with CodegenSupport {
-  // supportsColumnar requires to be only called on driver side, see also SPARK-37779.
-  assert(Utils.isInRunningSparkTask || child.supportsColumnar)
-
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -533,6 +529,10 @@ case class ApplyColumnarRulesAndInsertTransitions(
         case write: DataWritingCommandExec
             if write.cmd.isInstanceOf[V1WriteCommand] && conf.plannedWriteEnabled =>
           write.child.supportsColumnar
+        // If it is not required to output columnar (`outputsColumnar` is false), and the plan
+        // supports row-based and columnar, we don't need to output row-based data on its children
+        // nodes. So we set `outputsColumnar` to true.
+        case _ if plan.supportsColumnar && plan.supportsRowBased => true
         case _ =>
           false
       }

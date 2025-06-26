@@ -48,7 +48,9 @@ class ResolutionValidatorSuite extends SparkFunSuite with SQLConfHelper {
     // [[LocalRelation]], but produces only [[ResolvedInlineTable]] and [[LocalRelation]], so
     // we omit one of them here.
     // See [[Resolver.resolveInlineTable]] scaladoc for more info.
-    "resolveResolvedInlineTable"
+    "resolveResolvedInlineTable",
+    // [[UnresolvedSubqueryColumnAliases]] turns into a [[Project]]
+    "resolveSubqueryColumnAliases"
   )
 
   private val colInteger = AttributeReference(name = "colInteger", dataType = IntegerType)()

@@ -22,7 +22,6 @@ import java.sql.Connection
 import org.apache.spark.{SparkConf, SparkSQLException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.PostgresDatabaseOnDocker
 import org.apache.spark.sql.types._
@@ -39,6 +38,22 @@ import org.apache.spark.tags.DockerTest
 class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override val catalogName: String = "postgresql"
   override val db = new PostgresDatabaseOnDocker
+
+  object JdbcClientTypes {
+    val INTEGER = "int4"
+    val STRING = "text"
+  }
+
+  override def defaultMetadata(
+      dataType: DataType = StringType,
+      jdbcClientType: String = JdbcClientTypes.STRING): Metadata =
+    new MetadataBuilder()
+      .putLong("scale", 0)
+      .putBoolean("isTimestampNTZ", false)
+      .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
+      .putString("jdbcClientType", jdbcClientType)
+      .build()
+
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.postgresql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.postgresql.url", db.getJdbcUrl(dockerIp, externalPort))
@@ -185,13 +200,16 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       "('amy', '2022-05-19', '2022-05-19 00:00:00')").executeUpdate()
     connection.prepareStatement("INSERT INTO datetime VALUES " +
       "('alex', '2022-05-18', '2022-05-18 00:00:00')").executeUpdate()
+    // '2022-01-01' is Saturday and is in ISO year 2021.
+    connection.prepareStatement("INSERT INTO datetime VALUES " +
+      "('tom', '2022-01-01', '2022-01-01 00:00:00')").executeUpdate()
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, JdbcClientTypes.INTEGER))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
@@ -220,7 +238,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       s" TBLPROPERTIES('TABLESPACE'='pg_default')")
     val t = spark.table(tbl)
     val expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, JdbcClientTypes.INTEGER))
     assert(t.schema === expectedSchema)
   }
 
@@ -247,7 +265,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
   test("SPARK-49695: Postgres fix xor push-down") {
     val df = spark.sql(s"select dept, name from $catalogName.employee where dept ^ 6 = 0")
     val rows = df.collect()
-    assert(!df.queryExecution.sparkPlan.exists(_.isInstanceOf[FilterExec]))
+    checkFilterPushed(df)
     assert(rows.length == 1)
     assert(rows(0).getInt(0) === 6)
     assert(rows(0).getString(1) === "jen")
@@ -279,17 +297,19 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     val df4 = sql(s"SELECT name FROM $tbl WHERE hour(time1) = 0 AND minute(time1) = 0")
     checkFilterPushed(df4)
     val rows4 = df4.collect()
-    assert(rows4.length === 2)
+    assert(rows4.length === 3)
     assert(rows4(0).getString(0) === "amy")
     assert(rows4(1).getString(0) === "alex")
+    assert(rows4(2).getString(0) === "tom")
 
     val df5 = sql(s"SELECT name FROM $tbl WHERE " +
-      "extract(WEEk from date1) > 10 AND extract(YEAROFWEEK from date1) = 2022")
+      "extract(WEEK from date1) > 10 AND extract(YEAR from date1) = 2022")
     checkFilterPushed(df5)
     val rows5 = df5.collect()
-    assert(rows5.length === 2)
+    assert(rows5.length === 3)
     assert(rows5(0).getString(0) === "amy")
     assert(rows5(1).getString(0) === "alex")
+    assert(rows5(2).getString(0) === "tom")
 
     val df6 = sql(s"SELECT name FROM $tbl WHERE date_add(date1, 1) = date'2022-05-20' " +
       "AND datediff(date1, '2022-05-10') > 0")
@@ -304,11 +324,25 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     assert(rows7.length === 1)
     assert(rows7(0).getString(0) === "alex")
 
-    val df8 = sql(s"SELECT name FROM $tbl WHERE dayofweek(date1) = 4")
-    checkFilterPushed(df8)
-    val rows8 = df8.collect()
-    assert(rows8.length === 1)
-    assert(rows8(0).getString(0) === "alex")
+    withClue("dayofweek") {
+      val dow = sql(s"SELECT dayofweek(date1) FROM $tbl WHERE name = 'alex'")
+        .collect().head.getInt(0)
+      val df = sql(s"SELECT name FROM $tbl WHERE dayofweek(date1) = $dow")
+      checkFilterPushed(df)
+      val rows = df.collect()
+      assert(rows.length === 1)
+      assert(rows(0).getString(0) === "alex")
+    }
+
+    withClue("yearofweek") {
+      val yow = sql(s"SELECT extract(YEAROFWEEK from date1) FROM $tbl WHERE name = 'tom'")
+        .collect().head.getInt(0)
+      val df = sql(s"SELECT name FROM $tbl WHERE extract(YEAROFWEEK from date1) = $yow")
+      checkFilterPushed(df)
+      val rows = df.collect()
+      assert(rows.length === 1)
+      assert(rows(0).getString(0) === "tom")
+    }
 
     val df9 = sql(s"SELECT name FROM $tbl WHERE " +
       "dayofyear(date1) > 100 order by dayofyear(date1) limit 1")
@@ -354,5 +388,29 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       condition = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
       parameters = Map("pos" -> "0", "type" -> "\"ARRAY<ARRAY<INT>>\"")
     )
+  }
+
+  test("SPARK-51321: Postgres pushdown for RPAD expression on string column") {
+    val df = sql(
+      s"""|SELECT name FROM $catalogName.employee
+          |WHERE rpad(name, 10, 'x') = 'amyxxxxxxx'
+          |""".stripMargin
+    )
+    checkFilterPushed(df)
+    val rows = df.collect()
+    assert(rows.length === 1)
+    assert(rows(0).getString(0) === "amy")
+  }
+
+  test("SPARK-51321: Postgres pushdown for LPAD expression on string column") {
+    val df = sql(
+      s"""|SELECT name FROM $catalogName.employee
+          |WHERE lpad(name, 10, 'x') = 'xxxxxxxamy'
+          |""".stripMargin
+    )
+    checkFilterPushed(df)
+    val rows = df.collect()
+    assert(rows.length === 1)
+    assert(rows(0).getString(0) === "amy")
   }
 }

@@ -16,6 +16,14 @@ struct<>
 
 
 -- !query
+create temporary view t3 as select * from t
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 WITH s AS (SELECT 1 FROM s) SELECT * FROM s
 -- !query schema
 struct<>
@@ -68,6 +76,16 @@ struct<1:int>
 1
 1
 1
+
+
+-- !query
+WITH t AS (SELECT 1) SELECT * FROM t3
+-- !query schema
+struct<id:int>
+-- !query output
+0
+1
+2
 
 
 -- !query
@@ -567,6 +585,148 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT * FROM (
+  (
+    WITH cte AS (SELECT 1)
+    SELECT * FROM cte
+  ) UNION ALL (
+    WITH cte AS (SELECT 2)
+    SELECT * FROM cte
+  )
+)
+-- !query schema
+struct<1:int>
+-- !query output
+1
+2
+
+
+-- !query
+SELECT * FROM (
+  (
+    WITH cte AS (SELECT 2)
+    SELECT * FROM cte
+  ) UNION ALL (
+    SELECT 1 WHERE EXISTS (
+      SELECT * FROM cte
+    )
+  )
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`cte`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 134,
+    "stopIndex" : 136,
+    "fragment" : "cte"
+  } ]
+}
+
+
+-- !query
+SELECT
+  *
+FROM
+  VALUES (1)
+WHERE EXISTS (
+  WITH cte AS (SELECT 1)
+  SELECT * FROM cte
+)
+UNION ALL (
+  SELECT
+    *
+  FROM
+    VALUES (1)
+  WHERE EXISTS (
+    WITH cte AS (SELECT 1)
+    SELECT * FROM cte
+  )
+)
+-- !query schema
+struct<col1:int>
+-- !query output
+1
+1
+
+
+-- !query
+WITH cte AS (
+  SELECT
+    *
+  FROM
+    VALUES (1)
+  WHERE EXISTS (
+    WITH cte AS (SELECT 1)
+    SELECT * FROM cte
+  )
+  UNION ALL (
+    SELECT
+      *
+    FROM
+      VALUES (1)
+    WHERE EXISTS (
+      WITH cte AS (SELECT 1)
+      SELECT * FROM cte
+    )
+  )
+)
+SELECT * FROM cte
+-- !query schema
+struct<col1:int>
+-- !query output
+1
+1
+
+
+-- !query
+SELECT * FROM (
+  WITH cte AS (SELECT 1)
+  SELECT
+    *
+  FROM VALUES (1)
+  WHERE EXISTS (
+    WITH cte AS (SELECT 1)
+    SELECT * FROM cte
+  )
+  UNION ALL (
+    SELECT
+      *
+    FROM
+      VALUES (1)
+    WHERE EXISTS (
+      WITH cte AS (SELECT 1)
+      SELECT * FROM cte
+    )
+  )
+)
+-- !query schema
+struct<col1:int>
+-- !query output
+1
+1
+
+
+-- !query
+WITH `a.b.c` AS (
+  SELECT 1
+)
+SELECT * FROM `a.b.c`
+-- !query schema
+struct<1:int>
+-- !query output
+1
+
+
+-- !query
 DROP VIEW IF EXISTS t
 -- !query schema
 struct<>
@@ -576,6 +736,14 @@ struct<>
 
 -- !query
 DROP VIEW IF EXISTS t2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW IF EXISTS t3
 -- !query schema
 struct<>
 -- !query output

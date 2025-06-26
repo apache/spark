@@ -2,739 +2,739 @@
 In Expression Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 5 bytes:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        43             61          11        230.8           4.3       1.0X
-InSet expression                                     88             94           7        113.6           8.8       0.5X
+In expression                                        40             56           8        249.7           4.0       1.0X
+InSet expression                                     80             87           4        124.5           8.0       0.5X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 10 bytes:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        36             42           5        279.2           3.6       1.0X
-InSet expression                                     82             86           4        121.3           8.2       0.4X
+In expression                                        38             42           4        264.1           3.8       1.0X
+InSet expression                                     76             80           4        130.9           7.6       0.5X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 25 bytes:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        65             69           3        154.3           6.5       1.0X
-InSet expression                                     83             87           4        121.0           8.3       0.8X
+In expression                                        66             69           3        151.9           6.6       1.0X
+InSet expression                                     85             89           4        117.8           8.5       0.8X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 50 bytes:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       105            107           2         95.4          10.5       1.0X
-InSet expression                                     88             91           3        113.8           8.8       1.2X
+In expression                                       106            108           3         94.2          10.6       1.0X
+InSet expression                                     90             93           3        111.3           9.0       1.2X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 100 bytes:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       193            196           5         51.8          19.3       1.0X
-InSet expression                                     98            100           3        102.2           9.8       2.0X
+In expression                                       194            197           4         51.5          19.4       1.0X
+InSet expression                                    101            103           3         99.3          10.1       1.9X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 200 bytes:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       388            390           2         25.8          38.8       1.0X
-InSet expression                                    178            180           2         56.1          17.8       2.2X
+In expression                                       397            400           3         25.2          39.7       1.0X
+InSet expression                                    197            205           6         50.9          19.7       2.0X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 5 shorts:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        30             34           4        330.9           3.0       1.0X
-InSet expression                                     91             95           3        109.5           9.1       0.3X
+In expression                                        31             34           4        323.9           3.1       1.0X
+InSet expression                                    100            103           4         99.8          10.0       0.3X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 10 shorts:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        38             42           6        259.9           3.8       1.0X
-InSet expression                                    106            109           4         94.7          10.6       0.4X
+In expression                                        37             39           2        272.3           3.7       1.0X
+InSet expression                                    115            118           2         86.6          11.5       0.3X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 25 shorts:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        61             65           6        164.1           6.1       1.0X
-InSet expression                                    106            108           2         94.6          10.6       0.6X
+In expression                                        72             74           4        138.7           7.2       1.0X
+InSet expression                                    115            117           1         87.0          11.5       0.6X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 50 shorts:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       116            118           2         86.3          11.6       1.0X
-InSet expression                                    136            138           2         73.4          13.6       0.9X
+In expression                                       118            121           5         84.8          11.8       1.0X
+InSet expression                                    142            146           4         70.4          14.2       0.8X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 100 shorts:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       197            199           3         50.8          19.7       1.0X
-InSet expression                                    119            121           1         84.0          11.9       1.7X
+In expression                                       186            189           5         53.7          18.6       1.0X
+InSet expression                                    126            131           5         79.2          12.6       1.5X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 200 shorts:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       364            367           3         27.5          36.4       1.0X
-InSet expression                                    126            128           1         79.3          12.6       2.9X
+In expression                                       366            373          14         27.4          36.6       1.0X
+InSet expression                                    134            138           4         74.7          13.4       2.7X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 300 shorts:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       548            551           3         18.2          54.8       1.0X
-InSet expression                                    139            143           3         71.8          13.9       3.9X
+In expression                                       550            552           4         18.2          55.0       1.0X
+InSet expression                                    146            151           4         68.4          14.6       3.8X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 400 shorts:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       666            672           4         15.0          66.6       1.0X
-InSet expression                                    153            155           3         65.3          15.3       4.4X
+In expression                                       668            673           5         15.0          66.8       1.0X
+InSet expression                                    161            164           5         62.3          16.1       4.2X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 500 shorts:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       934            938           5         10.7          93.4       1.0X
-InSet expression                                    165            168           2         60.4          16.5       5.6X
+In expression                                       941            946           6         10.6          94.1       1.0X
+InSet expression                                    174            183          18         57.4          17.4       5.4X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 5 shorts (non-compact):                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        28             30           2        352.5           2.8       1.0X
-InSet expression                                     87             89           4        114.7           8.7       0.3X
+In expression                                        30             31           3        336.9           3.0       1.0X
+InSet expression                                     97             99           2        103.3           9.7       0.3X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 10 shorts (non-compact):                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        34             37           4        291.1           3.4       1.0X
-InSet expression                                    106            108           2         94.2          10.6       0.3X
+In expression                                        37             39           2        270.3           3.7       1.0X
+InSet expression                                    114            116           2         87.9          11.4       0.3X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 25 shorts (non-compact):                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        69             71           1        144.2           6.9       1.0X
-InSet expression                                    128            133           8         78.0          12.8       0.5X
+In expression                                        70             72           2        143.1           7.0       1.0X
+InSet expression                                    133            136           2         75.1          13.3       0.5X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 50 shorts (non-compact):                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       105            107           2         95.0          10.5       1.0X
-InSet expression                                    143            145           2         70.1          14.3       0.7X
+In expression                                       105            107           1         94.8          10.5       1.0X
+InSet expression                                    148            151           1         67.4          14.8       0.7X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 100 shorts (non-compact):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       195            197           2         51.2          19.5       1.0X
-InSet expression                                    123            127           5         81.4          12.3       1.6X
+In expression                                       196            200           5         51.0          19.6       1.0X
+InSet expression                                    129            133           3         77.4          12.9       1.5X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 200 shorts (non-compact):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       353            356           4         28.3          35.3       1.0X
-InSet expression                                    127            129           1         78.7          12.7       2.8X
+In expression                                       354            356           3         28.3          35.4       1.0X
+InSet expression                                    134            137           5         74.9          13.4       2.6X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 300 shorts (non-compact):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       500            502           3         20.0          50.0       1.0X
-InSet expression                                    137            142           7         73.1          13.7       3.7X
+In expression                                       659            662           4         15.2          65.9       1.0X
+InSet expression                                    147            150           5         68.2          14.7       4.5X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 400 shorts (non-compact):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       666            670           4         15.0          66.6       1.0X
-InSet expression                                    151            154           2         66.1          15.1       4.4X
+In expression                                       668            669           2         15.0          66.8       1.0X
+InSet expression                                    157            160           2         63.6          15.7       4.3X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 500 shorts (non-compact):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       854            858           4         11.7          85.4       1.0X
-InSet expression                                    162            164           1         61.9          16.2       5.3X
+In expression                                       854            857           4         11.7          85.4       1.0X
+InSet expression                                    169            173           3         59.2          16.9       5.1X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 5 ints:                                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        27             29           3        372.2           2.7       1.0X
-InSet expression                                     89             92           2        111.7           8.9       0.3X
+In expression                                        28             30           2        354.7           2.8       1.0X
+InSet expression                                     99            100           1        101.3           9.9       0.3X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 10 ints:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        34             39           2        291.3           3.4       1.0X
-InSet expression                                    107            109           1         93.5          10.7       0.3X
+In expression                                        35             36           2        285.9           3.5       1.0X
+InSet expression                                    114            116           1         87.8          11.4       0.3X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 25 ints:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        60             65           9        166.2           6.0       1.0X
-InSet expression                                    109            112           2         91.9          10.9       0.6X
+In expression                                        62             64           3        161.4           6.2       1.0X
+InSet expression                                    117            120           3         85.3          11.7       0.5X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 50 ints:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       103            104           1         97.2          10.3       1.0X
-InSet expression                                    140            144           8         71.5          14.0       0.7X
+In expression                                       114            115           1         87.6          11.4       1.0X
+InSet expression                                    145            147           1         69.2          14.5       0.8X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 100 ints:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       183            184           3         54.8          18.3       1.0X
-InSet expression                                    119            121           1         83.9          11.9       1.5X
+In expression                                       195            197           2         51.4          19.5       1.0X
+InSet expression                                    126            127           1         79.6          12.6       1.5X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 200 ints:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       353            355           2         28.3          35.3       1.0X
-InSet expression                                    122            127           3         81.6          12.2       2.9X
+In expression                                       351            357           3         28.5          35.1       1.0X
+InSet expression                                    131            135           5         76.2          13.1       2.7X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 300 ints:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       508            510           3         19.7          50.8       1.0X
-InSet expression                                    135            140           8         74.0          13.5       3.8X
+In expression                                       511            520           5         19.6          51.1       1.0X
+InSet expression                                    143            147           8         70.0          14.3       3.6X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 400 ints:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       668            692          33         15.0          66.8       1.0X
-InSet expression                                    147            149           2         68.2          14.7       4.6X
+In expression                                       673            689          10         14.9          67.3       1.0X
+InSet expression                                    154            157           3         64.9          15.4       4.4X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 500 ints:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       835            841           8         12.0          83.5       1.0X
-InSet expression                                    160            162           2         62.6          16.0       5.2X
+In expression                                       828            860          42         12.1          82.8       1.0X
+InSet expression                                    167            170           6         60.0          16.7       5.0X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 5 ints (non-compact):                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        22             24           3        456.0           2.2       1.0X
-InSet expression                                     86             89           4        116.4           8.6       0.3X
+In expression                                        22             25           4        461.8           2.2       1.0X
+InSet expression                                     95             98           3        105.3           9.5       0.2X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 10 ints (non-compact):                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        29             31           3        350.9           2.9       1.0X
-InSet expression                                    103            105           3         97.1          10.3       0.3X
+In expression                                        28             30           2        354.7           2.8       1.0X
+InSet expression                                    110            114           3         90.7          11.0       0.3X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 25 ints (non-compact):                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        56             57           2        179.0           5.6       1.0X
-InSet expression                                    118            120           1         84.6          11.8       0.5X
+In expression                                        55             57           1        180.8           5.5       1.0X
+InSet expression                                    125            129           7         79.8          12.5       0.4X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 50 ints (non-compact):                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       100            101           1        100.0          10.0       1.0X
-InSet expression                                    138            140           2         72.6          13.8       0.7X
+In expression                                       100            101           1        100.3          10.0       1.0X
+InSet expression                                    142            145           3         70.3          14.2       0.7X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 100 ints (non-compact):                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       179            181           2         55.8          17.9       1.0X
-InSet expression                                    122            124           1         82.2          12.2       1.5X
+In expression                                       179            180           1         55.9          17.9       1.0X
+InSet expression                                    128            132           8         78.1          12.8       1.4X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 200 ints (non-compact):                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       344            347           3         29.1          34.4       1.0X
-InSet expression                                    126            128           2         79.7          12.6       2.7X
+In expression                                       345            348           3         29.0          34.5       1.0X
+InSet expression                                    132            135           2         75.6          13.2       2.6X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 300 ints (non-compact):                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       505            506           2         19.8          50.5       1.0X
-InSet expression                                    136            139           2         73.5          13.6       3.7X
+In expression                                       507            509           2         19.7          50.7       1.0X
+InSet expression                                    142            145           5         70.6          14.2       3.6X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 400 ints (non-compact):                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       661            665           3         15.1          66.1       1.0X
-InSet expression                                    147            149           1         68.1          14.7       4.5X
+In expression                                       662            667           4         15.1          66.2       1.0X
+InSet expression                                    154            156           1         65.0          15.4       4.3X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 500 ints (non-compact):                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       818            856          78         12.2          81.8       1.0X
-InSet expression                                    159            161           3         63.0          15.9       5.2X
+In expression                                       820            856          78         12.2          82.0       1.0X
+InSet expression                                    165            170           4         60.4          16.5       5.0X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 5 longs:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        22             24           4        459.0           2.2       1.0X
-InSet expression                                     82             86           5        121.2           8.2       0.3X
+In expression                                        21             23           3        481.5           2.1       1.0X
+InSet expression                                     87             89           2        114.5           8.7       0.2X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 10 longs:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        28             29           2        355.6           2.8       1.0X
-InSet expression                                     99            101           1        101.1           9.9       0.3X
+In expression                                        29             31           3        350.3           2.9       1.0X
+InSet expression                                    103            107           3         97.0          10.3       0.3X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 25 longs:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        53             55           2        190.1           5.3       1.0X
-InSet expression                                    102            105           5         98.5          10.2       0.5X
+In expression                                        54             55           2        186.1           5.4       1.0X
+InSet expression                                    105            111          13         95.4          10.5       0.5X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 50 longs:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        91             94           3        109.4           9.1       1.0X
-InSet expression                                    132            134           1         75.7          13.2       0.7X
+In expression                                        92             97           3        108.4           9.2       1.0X
+InSet expression                                    134            137           2         74.5          13.4       0.7X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 100 longs:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       175            183          10         57.2          17.5       1.0X
-InSet expression                                    112            114           2         89.5          11.2       1.6X
+In expression                                       174            183           6         57.6          17.4       1.0X
+InSet expression                                    113            119          14         88.2          11.3       1.5X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 200 longs:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       327            332           4         30.6          32.7       1.0X
-InSet expression                                    119            128          18         84.3          11.9       2.8X
+In expression                                       330            352          13         30.3          33.0       1.0X
+InSet expression                                    118            121           2         84.8          11.8       2.8X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 5 floats:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        35             37           3        286.9           3.5       1.0X
-InSet expression                                    113            115           1         88.8          11.3       0.3X
+In expression                                        35             37           2        284.5           3.5       1.0X
+InSet expression                                    115            118           3         87.3          11.5       0.3X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 10 floats:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        64             65           2        157.2           6.4       1.0X
-InSet expression                                    143            148          10         70.2          14.3       0.4X
+In expression                                        63             65           1        157.8           6.3       1.0X
+InSet expression                                    145            146           1         69.0          14.5       0.4X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 25 floats:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       125            127           2         79.8          12.5       1.0X
-InSet expression                                    143            147           5         70.1          14.3       0.9X
+In expression                                       127            129           1         78.5          12.7       1.0X
+InSet expression                                    144            147           4         69.5          14.4       0.9X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 50 floats:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       208            210           1         48.0          20.8       1.0X
-InSet expression                                    188            190           2         53.3          18.8       1.1X
+In expression                                       209            210           1         47.8          20.9       1.0X
+InSet expression                                    189            191           2         52.8          18.9       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 100 floats:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       365            369           6         27.4          36.5       1.0X
-InSet expression                                    148            154          15         67.6          14.8       2.5X
+In expression                                       366            368           3         27.3          36.6       1.0X
+InSet expression                                    148            151           5         67.7          14.8       2.5X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 200 floats:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1682           1771         104          5.9         168.2       1.0X
-InSet expression                                    148            150           1         67.5          14.8      11.3X
+In expression                                      1693           1819          98          5.9         169.3       1.0X
+InSet expression                                    151            154           3         66.1          15.1      11.2X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 5 doubles:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        35             36           2        286.9           3.5       1.0X
-InSet expression                                     95             97           2        105.0           9.5       0.4X
+In expression                                        41             43           3        243.1           4.1       1.0X
+InSet expression                                    115            117           1         86.6          11.5       0.4X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 10 doubles:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        63             64           2        159.6           6.3       1.0X
-InSet expression                                    116            118           1         85.9          11.6       0.5X
+In expression                                        63             65           1        157.9           6.3       1.0X
+InSet expression                                    145            147           1         69.2          14.5       0.4X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 25 doubles:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       127            129           1         78.6          12.7       1.0X
-InSet expression                                    118            120           1         84.9          11.8       1.1X
+In expression                                       129            131           2         77.4          12.9       1.0X
+InSet expression                                    144            146           2         69.4          14.4       0.9X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 50 doubles:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       207            210           3         48.3          20.7       1.0X
-InSet expression                                    155            158           1         64.3          15.5       1.3X
+In expression                                       210            211           2         47.7          21.0       1.0X
+InSet expression                                    191            195           4         52.4          19.1       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 100 doubles:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       364            370          12         27.4          36.4       1.0X
-InSet expression                                    126            129           3         79.3          12.6       2.9X
+In expression                                       367            368           1         27.3          36.7       1.0X
+InSet expression                                    150            163          36         66.6          15.0       2.4X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 200 doubles:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1920           1928           7          5.2         192.0       1.0X
-InSet expression                                    134            139           5         74.8          13.4      14.4X
+In expression                                      1929           2031          96          5.2         192.9       1.0X
+InSet expression                                    149            152           1         67.1          14.9      12.9X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 5 small decimals:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        20             21           3         51.3          19.5       1.0X
-InSet expression                                     56             57           1         17.9          56.0       0.3X
+In expression                                        20             22           3         49.9          20.0       1.0X
+InSet expression                                     62             65           3         16.0          62.5       0.3X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 10 small decimals:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        25             27           2         40.2          24.9       1.0X
-InSet expression                                     58             60           1         17.3          57.9       0.4X
+In expression                                        25             27           2         39.3          25.5       1.0X
+InSet expression                                     64             66           2         15.6          64.2       0.4X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 25 small decimals:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        40             41           2         25.3          39.5       1.0X
-InSet expression                                     58             61           4         17.3          58.0       0.7X
+In expression                                        41             43           2         24.4          41.0       1.0X
+InSet expression                                     65             67           2         15.3          65.3       0.6X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 50 small decimals:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        76             77           1         13.2          75.8       1.0X
-InSet expression                                     62             64           1         16.1          62.2       1.2X
+In expression                                        79             81           3         12.6          79.1       1.0X
+InSet expression                                     70             72           1         14.4          69.7       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 100 small decimals:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       234            236           4          4.3         234.3       1.0X
-InSet expression                                     60             62           2         16.7          60.0       3.9X
+In expression                                       236            237           2          4.2         235.9       1.0X
+InSet expression                                     69             71           2         14.4          69.3       3.4X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 200 small decimals:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       548            605         125          1.8         547.7       1.0X
-InSet expression                                     63             65           4         15.9          62.7       8.7X
+In expression                                       558            623         139          1.8         557.5       1.0X
+InSet expression                                     70             73           2         14.2          70.4       7.9X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 5 large decimals:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                         5              6           1        202.4           4.9       1.0X
-InSet expression                                      5              6           1        207.4           4.8       1.0X
+In expression                                         5              6           1        201.1           5.0       1.0X
+InSet expression                                      5              6           1        205.5           4.9       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 10 large decimals:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                         5              6           1        201.8           5.0       1.0X
-InSet expression                                      5              5           1        203.6           4.9       1.0X
+In expression                                         5              6           1        202.4           4.9       1.0X
+InSet expression                                      5              6           1        206.3           4.8       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 25 large decimals:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                         5              6           1        187.1           5.3       1.0X
-InSet expression                                      5              6           1        185.3           5.4       1.0X
+In expression                                         5              6           1        191.2           5.2       1.0X
+InSet expression                                      5              6           1        190.9           5.2       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 50 large decimals:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                         6              7           1        163.5           6.1       1.0X
-InSet expression                                      6              7           1        161.6           6.2       1.0X
+In expression                                         6              6           1        168.7           5.9       1.0X
+InSet expression                                      6              6           1        168.2           5.9       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 100 large decimals:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                         8              8           1        127.7           7.8       1.0X
-InSet expression                                      8              9           2        127.7           7.8       1.0X
+In expression                                         8              9           1        130.5           7.7       1.0X
+InSet expression                                      8              8           1        132.0           7.6       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 200 large decimals:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        11             12           1         90.6          11.0       1.0X
+In expression                                        11             12           2         90.9          11.0       1.0X
 InSet expression                                     11             12           1         90.6          11.0       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 5 strings:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        29             32           4         34.6          28.9       1.0X
-InSet expression                                     45             46           2         22.3          44.8       0.6X
+In expression                                        30             31           1         33.5          29.9       1.0X
+InSet expression                                     47             48           1         21.2          47.1       0.6X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 10 strings:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        34             36           2         29.3          34.1       1.0X
-InSet expression                                     48             49           1         21.0          47.6       0.7X
+In expression                                        35             38           3         28.4          35.3       1.0X
+InSet expression                                     49             51           2         20.2          49.4       0.7X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 25 strings:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        43             44           2         23.5          42.5       1.0X
-InSet expression                                     51             52           1         19.6          50.9       0.8X
+In expression                                        44             45           1         22.8          43.9       1.0X
+InSet expression                                     53             55           2         18.7          53.4       0.8X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 50 strings:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        58             59           2         17.4          57.6       1.0X
-InSet expression                                     55             57           1         18.2          54.8       1.1X
+In expression                                        59             60           2         17.0          58.7       1.0X
+InSet expression                                     57             59           1         17.5          57.3       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 100 strings:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        88             90           1         11.3          88.4       1.0X
-InSet expression                                     51             52           1         19.6          51.1       1.7X
+In expression                                        88             90           2         11.3          88.4       1.0X
+InSet expression                                     53             55           1         18.8          53.3       1.7X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 200 strings:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       382            388          12          2.6         381.7       1.0X
-InSet expression                                     52             53           1         19.4          51.5       7.4X
+In expression                                       394            398           9          2.5         393.9       1.0X
+InSet expression                                     54             56           2         18.6          53.7       7.3X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 5 timestamps:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        16             17           1        622.8           1.6       1.0X
-InSet expression                                     89             92           3        112.0           8.9       0.2X
+In expression                                        16             19           2        607.4           1.6       1.0X
+InSet expression                                     89             91           1        111.7           8.9       0.2X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 10 timestamps:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        23             25           4        427.6           2.3       1.0X
-InSet expression                                     99            101           1        101.0           9.9       0.2X
+In expression                                        24             26           1        412.7           2.4       1.0X
+InSet expression                                    100            101           1        100.2          10.0       0.2X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 25 timestamps:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        45             46           2        220.5           4.5       1.0X
-InSet expression                                    125            127           1         80.0          12.5       0.4X
+In expression                                        47             48           2        210.7           4.7       1.0X
+InSet expression                                    127            129           1         79.0          12.7       0.4X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 50 timestamps:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        80             82           1        124.5           8.0       1.0X
-InSet expression                                    151            153           2         66.2          15.1       0.5X
+In expression                                        82             84           2        121.4           8.2       1.0X
+InSet expression                                    154            156           2         65.0          15.4       0.5X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 100 timestamps:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       152            153           2         65.8          15.2       1.0X
-InSet expression                                    130            132           1         76.7          13.0       1.2X
+In expression                                       154            154           1         65.1          15.4       1.0X
+InSet expression                                    132            135           3         75.5          13.2       1.2X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 200 timestamps:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       295            304           9         33.9          29.5       1.0X
-InSet expression                                    127            129           1         78.8          12.7       2.3X
+In expression                                       295            306          12         33.9          29.5       1.0X
+InSet expression                                    128            130           2         78.1          12.8       2.3X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 5 dates:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       441            442           1         22.7          44.1       1.0X
-InSet expression                                    434            440           9         23.1          43.4       1.0X
+In expression                                       371            373           3         27.0          37.1       1.0X
+InSet expression                                    365            371           5         27.4          36.5       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 10 dates:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       445            450           7         22.5          44.5       1.0X
-InSet expression                                    437            438           3         22.9          43.7       1.0X
+In expression                                       380            382           1         26.3          38.0       1.0X
+InSet expression                                    364            365           1         27.5          36.4       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 25 dates:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       485            486           1         20.6          48.5       1.0X
-InSet expression                                    436            438           2         23.0          43.6       1.1X
+In expression                                       404            407           3         24.7          40.4       1.0X
+InSet expression                                    369            371           1         27.1          36.9       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 50 dates:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       547            549           1         18.3          54.7       1.0X
-InSet expression                                    441            445           4         22.7          44.1       1.2X
+In expression                                       460            462           3         21.8          46.0       1.0X
+InSet expression                                    363            365           2         27.5          36.3       1.3X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 100 dates:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       608            610           1         16.4          60.8       1.0X
-InSet expression                                    440            441           1         22.7          44.0       1.4X
+In expression                                       543            552          12         18.4          54.3       1.0X
+InSet expression                                    370            372           3         27.1          37.0       1.5X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 200 dates:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       776            782           7         12.9          77.6       1.0X
-InSet expression                                    436            440           2         22.9          43.6       1.8X
+In expression                                       706            711           6         14.2          70.6       1.0X
+InSet expression                                    371            376           5         26.9          37.1       1.9X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 300 dates:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       939            945           6         10.6          93.9       1.0X
-InSet expression                                    441            443           2         22.7          44.1       2.1X
+In expression                                       868            882          10         11.5          86.8       1.0X
+InSet expression                                    366            376           6         27.4          36.6       2.4X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 400 dates:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1098           1105          10          9.1         109.8       1.0X
-InSet expression                                    447            450           2         22.4          44.7       2.5X
+In expression                                      1026           1041           9          9.7         102.6       1.0X
+InSet expression                                    370            379           7         27.0          37.0       2.8X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 500 dates:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1297           1305           7          7.7         129.7       1.0X
-InSet expression                                    537            539           1         18.6          53.7       2.4X
+In expression                                      1209           1214           6          8.3         120.9       1.0X
+InSet expression                                    463            471           5         21.6          46.3       2.6X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 5 arrays:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        24             25           2         41.2          24.3       1.0X
-InSet expression                                     57             58           1         17.6          56.8       0.4X
+In expression                                        27             29           2         36.8          27.1       1.0X
+InSet expression                                     58             59           1         17.4          57.6       0.5X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 10 arrays:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        41             42           1         24.4          41.0       1.0X
-InSet expression                                     83             86           4         12.0          83.4       0.5X
+In expression                                        42             43           2         24.1          41.6       1.0X
+InSet expression                                     85             87           1         11.8          85.1       0.5X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 25 arrays:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       157            158           2          6.4         156.6       1.0X
-InSet expression                                     98             99           1         10.2          97.6       1.6X
+In expression                                       181            183           2          5.5         181.2       1.0X
+InSet expression                                     99            102           4         10.1          99.4       1.8X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 50 arrays:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       371            374           2          2.7         371.2       1.0X
-InSet expression                                    125            127           1          8.0         125.2       3.0X
+In expression                                       384            389           8          2.6         384.2       1.0X
+InSet expression                                    128            131           2          7.8         128.1       3.0X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 100 arrays:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       757            759           3          1.3         756.8       1.0X
-InSet expression                                    142            144           1          7.0         142.5       5.3X
+In expression                                       769            775           5          1.3         769.0       1.0X
+InSet expression                                    143            146           1          7.0         143.3       5.4X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 200 arrays:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1671           1822         219          0.6        1671.2       1.0X
-InSet expression                                    159            173          37          6.3         159.2      10.5X
+In expression                                      1684           1898         330          0.6        1684.1       1.0X
+InSet expression                                    162            165           4          6.2         162.1      10.4X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 5 structs:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        20             21           1         49.8          20.1       1.0X
-InSet expression                                     76             78           5         13.2          75.6       0.3X
+In expression                                        22             23           1         45.4          22.0       1.0X
+InSet expression                                     80             83           6         12.4          80.4       0.3X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 10 structs:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        29             30           2         34.3          29.1       1.0X
-InSet expression                                    116            117           2          8.7         115.6       0.3X
+In expression                                        32             33           2         31.6          31.7       1.0X
+InSet expression                                    121            123           2          8.2         121.3       0.3X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 25 structs:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        68             70           1         14.6          68.3       1.0X
-InSet expression                                    131            137           4          7.6         131.2       0.5X
+In expression                                        85             86           1         11.7          85.2       1.0X
+InSet expression                                    142            145           3          7.0         142.3       0.6X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 50 structs:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       187            189           3          5.4         186.5       1.0X
-InSet expression                                    176            179           3          5.7         175.5       1.1X
+In expression                                       203            205           4          4.9         202.7       1.0X
+InSet expression                                    182            186           2          5.5         182.4       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 100 structs:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       491            498           8          2.0         491.0       1.0X
-InSet expression                                    199            201           1          5.0         199.0       2.5X
+In expression                                       489            511          13          2.0         489.0       1.0X
+InSet expression                                    205            207           1          4.9         205.0       2.4X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 200 structs:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1139           1377         266          0.9        1139.0       1.0X
-InSet expression                                    227            232           8          4.4         227.2       5.0X
+In expression                                      1256           1403         264          0.8        1256.3       1.0X
+InSet expression                                    237            245          11          4.2         237.1       5.3X
 
 

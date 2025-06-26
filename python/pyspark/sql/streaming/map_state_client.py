@@ -14,15 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Dict, Iterator, Union, Tuple, Optional
+from typing import Any, Dict, Iterator, Union, Tuple, Optional
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
-from pyspark.sql.types import StructType, TYPE_CHECKING
+from pyspark.sql.types import StructType
 from pyspark.errors import PySparkRuntimeError
 import uuid
-
-if TYPE_CHECKING:
-    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
 
 __all__ = ["MapStateClient"]
 
@@ -47,10 +44,10 @@ class MapStateClient:
             )
         else:
             self.value_schema = value_schema
-        # Dictionaries to store the mapping between iterator id and a tuple of pandas DataFrame
+        # Dictionaries to store the mapping between iterator id and a tuple of data fetch
         # and the index of the last row that was read.
-        self.user_key_value_pair_iterator_cursors: Dict[str, Tuple["PandasDataFrameLike", int]] = {}
-        self.user_key_or_value_iterator_cursors: Dict[str, Tuple["PandasDataFrameLike", int]] = {}
+        self.user_key_value_pair_iterator_cursors: Dict[str, Tuple[Any, int, bool]] = {}
+        self.user_key_or_value_iterator_cursors: Dict[str, Tuple[Any, int, bool]] = {}
 
     def exists(self, state_name: str) -> bool:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -150,12 +147,14 @@ class MapStateClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error updating map state value: {response_message[1]}")
 
-    def get_key_value_pair(self, state_name: str, iterator_id: str) -> Tuple[Tuple, Tuple]:
+    def get_key_value_pair(self, state_name: str, iterator_id: str) -> Tuple[Tuple, Tuple, bool]:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if iterator_id in self.user_key_value_pair_iterator_cursors:
             # If the state is already in the dictionary, return the next row.
-            pandas_df, index = self.user_key_value_pair_iterator_cursors[iterator_id]
+            data_batch, index, require_next_fetch = self.user_key_value_pair_iterator_cursors[
+                iterator_id
+            ]
         else:
             # If the state is not in the dictionary, fetch the state from the server.
             iterator_call = stateMessage.Iterator(iteratorId=iterator_id)
@@ -164,46 +163,51 @@ class MapStateClient:
             message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
 
             self._stateful_processor_api_client._send_proto_message(message.SerializeToString())
-            response_message = self._stateful_processor_api_client._receive_proto_message()
+            response_message = (
+                self._stateful_processor_api_client._receive_proto_message_with_map_pairs()
+            )
             status = response_message[0]
             if status == 0:
-                iterator = self._stateful_processor_api_client._read_arrow_state()
-                # We need to exhaust the iterator here to make sure all the arrow batches are read,
-                # even though there is only one batch in the iterator. Otherwise, the stream might
-                # block further reads since it thinks there might still be some arrow batches left.
-                # We only need to read the first batch in the iterator because it's guaranteed that
-                # there would only be one batch sent from the JVM side.
-                data_batch = None
-                for batch in iterator:
-                    if data_batch is None:
-                        data_batch = batch
-                if data_batch is None:
-                    # TODO(SPARK-49233): Classify user facing errors.
-                    raise PySparkRuntimeError("Error getting map state entry.")
-                pandas_df = data_batch.to_pandas()
+                data_batch = list(
+                    map(
+                        lambda x: (
+                            self._stateful_processor_api_client._deserialize_from_bytes(x.key),
+                            self._stateful_processor_api_client._deserialize_from_bytes(x.value),
+                        ),
+                        response_message[2],
+                    )
+                )
+                require_next_fetch = response_message[3]
                 index = 0
             else:
                 raise StopIteration()
 
+        is_last_row = False
         new_index = index + 1
-        if new_index < len(pandas_df):
+        if new_index < len(data_batch):
             # Update the index in the dictionary.
-            self.user_key_value_pair_iterator_cursors[iterator_id] = (pandas_df, new_index)
+            self.user_key_value_pair_iterator_cursors[iterator_id] = (
+                data_batch,
+                new_index,
+                require_next_fetch,
+            )
         else:
             # If the index is at the end of the DataFrame, remove the state from the dictionary.
             self.user_key_value_pair_iterator_cursors.pop(iterator_id, None)
-        key_row_bytes = pandas_df.iloc[index, 0]
-        value_row_bytes = pandas_df.iloc[index, 1]
-        key_row = self._stateful_processor_api_client._deserialize_from_bytes(key_row_bytes)
-        value_row = self._stateful_processor_api_client._deserialize_from_bytes(value_row_bytes)
-        return tuple(key_row), tuple(value_row)
+            is_last_row = True
 
-    def get_row(self, state_name: str, iterator_id: str, is_key: bool) -> Tuple:
+        is_last_row_from_iterator = is_last_row and not require_next_fetch
+        key_row, value_row = data_batch[index]
+        return (tuple(key_row), tuple(value_row), is_last_row_from_iterator)
+
+    def get_row(self, state_name: str, iterator_id: str, is_key: bool) -> Tuple[Tuple, bool]:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if iterator_id in self.user_key_or_value_iterator_cursors:
             # If the state is already in the dictionary, return the next row.
-            pandas_df, index = self.user_key_or_value_iterator_cursors[iterator_id]
+            data_batch, index, require_next_fetch = self.user_key_or_value_iterator_cursors[
+                iterator_id
+            ]
         else:
             # If the state is not in the dictionary, fetch the state from the server.
             if is_key:
@@ -216,39 +220,39 @@ class MapStateClient:
             message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
 
             self._stateful_processor_api_client._send_proto_message(message.SerializeToString())
-            response_message = self._stateful_processor_api_client._receive_proto_message()
+            response_message = (
+                self._stateful_processor_api_client._receive_proto_message_with_map_keys_values()
+            )
             status = response_message[0]
             if status == 0:
-                iterator = self._stateful_processor_api_client._read_arrow_state()
-                # We need to exhaust the iterator here to make sure all the arrow batches are read,
-                # even though there is only one batch in the iterator. Otherwise, the stream might
-                # block further reads since it thinks there might still be some arrow batches left.
-                # We only need to read the first batch in the iterator because it's guaranteed that
-                # there would only be one batch sent from the JVM side.
-                data_batch = None
-                for batch in iterator:
-                    if data_batch is None:
-                        data_batch = batch
-                if data_batch is None:
-                    entry_name = "key"
-                    if not is_key:
-                        entry_name = "value"
-                    # TODO(SPARK-49233): Classify user facing errors.
-                    raise PySparkRuntimeError(f"Error getting map state {entry_name}.")
-                pandas_df = data_batch.to_pandas()
+                data_batch = list(
+                    map(
+                        lambda x: self._stateful_processor_api_client._deserialize_from_bytes(x),
+                        response_message[2],
+                    )
+                )
+                require_next_fetch = response_message[3]
                 index = 0
             else:
                 raise StopIteration()
 
+        is_last_row = False
         new_index = index + 1
-        if new_index < len(pandas_df):
+        if new_index < len(data_batch):
             # Update the index in the dictionary.
-            self.user_key_or_value_iterator_cursors[iterator_id] = (pandas_df, new_index)
+            self.user_key_or_value_iterator_cursors[iterator_id] = (
+                data_batch,
+                new_index,
+                require_next_fetch,
+            )
         else:
             # If the index is at the end of the DataFrame, remove the state from the dictionary.
             self.user_key_or_value_iterator_cursors.pop(iterator_id, None)
-        pandas_row = pandas_df.iloc[index]
-        return tuple(pandas_row)
+            is_last_row = True
+
+        is_last_row_from_iterator = is_last_row and not require_next_fetch
+        row = data_batch[index]
+        return (tuple(row), is_last_row_from_iterator)
 
     def remove_key(self, state_name: str, key: Tuple) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -290,12 +294,23 @@ class MapStateIterator:
         # map state do not interfere with each other.
         self.iterator_id = str(uuid.uuid4())
         self.is_key = is_key
+        self.iterator_fully_consumed = False
 
     def __iter__(self) -> Iterator[Tuple]:
         return self
 
     def __next__(self) -> Tuple:
-        return self.map_state_client.get_row(self.state_name, self.iterator_id, self.is_key)
+        if self.iterator_fully_consumed:
+            raise StopIteration()
+
+        row, is_last_row = self.map_state_client.get_row(
+            self.state_name, self.iterator_id, self.is_key
+        )
+
+        if is_last_row:
+            self.iterator_fully_consumed = True
+
+        return row
 
 
 class MapStateKeyValuePairIterator:
@@ -305,9 +320,19 @@ class MapStateKeyValuePairIterator:
         # Generate a unique identifier for the iterator to make sure iterators from the same
         # map state do not interfere with each other.
         self.iterator_id = str(uuid.uuid4())
+        self.iterator_fully_consumed = False
 
     def __iter__(self) -> Iterator[Tuple[Tuple, Tuple]]:
         return self
 
     def __next__(self) -> Tuple[Tuple, Tuple]:
-        return self.map_state_client.get_key_value_pair(self.state_name, self.iterator_id)
+        if self.iterator_fully_consumed:
+            raise StopIteration()
+        key, value, is_last_row = self.map_state_client.get_key_value_pair(
+            self.state_name, self.iterator_id
+        )
+
+        if is_last_row:
+            self.iterator_fully_consumed = True
+
+        return (key, value)

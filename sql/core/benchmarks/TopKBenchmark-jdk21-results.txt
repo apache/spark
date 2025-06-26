@@ -2,21 +2,21 @@
 Top-K Computation
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Benchmark Top-K:                                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------------------------
-ROW_NUMBER (PARTITION: , WindowGroupLimit: false)                         9148           9493         278          2.3         436.2       1.0X
-ROW_NUMBER (PARTITION: , WindowGroupLimit: true)                          1698           1731          48         12.4          81.0       5.4X
-ROW_NUMBER (PARTITION: PARTITION BY b, WindowGroupLimit: false)          12103          12157          56          1.7         577.1       0.8X
-ROW_NUMBER (PARTITION: PARTITION BY b, WindowGroupLimit: true)            5049           5211          98          4.2         240.8       1.8X
-RANK (PARTITION: , WindowGroupLimit: false)                               9596           9842         149          2.2         457.6       1.0X
-RANK (PARTITION: , WindowGroupLimit: true)                                1896           2059         112         11.1          90.4       4.8X
-RANK (PARTITION: PARTITION BY b, WindowGroupLimit: false)                12338          12642         150          1.7         588.3       0.7X
-RANK (PARTITION: PARTITION BY b, WindowGroupLimit: true)                  4985           5179          95          4.2         237.7       1.8X
-DENSE_RANK (PARTITION: , WindowGroupLimit: false)                         9389           9628         171          2.2         447.7       1.0X
-DENSE_RANK (PARTITION: , WindowGroupLimit: true)                          1849           1900          71         11.3          88.2       4.9X
-DENSE_RANK (PARTITION: PARTITION BY b, WindowGroupLimit: false)          12027          12393         186          1.7         573.5       0.8X
-DENSE_RANK (PARTITION: PARTITION BY b, WindowGroupLimit: true)            5018           5083          47          4.2         239.3       1.8X
+ROW_NUMBER (PARTITION: , WindowGroupLimit: false)                         8967           9181         174          2.3         427.6       1.0X
+ROW_NUMBER (PARTITION: , WindowGroupLimit: true)                          1868           1909          23         11.2          89.1       4.8X
+ROW_NUMBER (PARTITION: PARTITION BY b, WindowGroupLimit: false)          11459          11734         120          1.8         546.4       0.8X
+ROW_NUMBER (PARTITION: PARTITION BY b, WindowGroupLimit: true)            4913           5018          51          4.3         234.3       1.8X
+RANK (PARTITION: , WindowGroupLimit: false)                               9519           9767         113          2.2         453.9       0.9X
+RANK (PARTITION: , WindowGroupLimit: true)                                1785           1855          48         11.8          85.1       5.0X
+RANK (PARTITION: PARTITION BY b, WindowGroupLimit: false)                12177          12421          96          1.7         580.7       0.7X
+RANK (PARTITION: PARTITION BY b, WindowGroupLimit: true)                  4907           5011          56          4.3         234.0       1.8X
+DENSE_RANK (PARTITION: , WindowGroupLimit: false)                         9496           9681         150          2.2         452.8       0.9X
+DENSE_RANK (PARTITION: , WindowGroupLimit: true)                          1756           1788          32         11.9          83.7       5.1X
+DENSE_RANK (PARTITION: PARTITION BY b, WindowGroupLimit: false)          12084          12385         158          1.7         576.2       0.7X
+DENSE_RANK (PARTITION: PARTITION BY b, WindowGroupLimit: true)            4905           5035          69          4.3         233.9       1.8X
 
 

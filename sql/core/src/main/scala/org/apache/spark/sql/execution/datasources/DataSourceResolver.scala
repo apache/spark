@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   ExplicitlyUnsupportedResolverFeature,
+  LogicalPlanResolver,
   ResolverExtension
 }
 import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 
 /**
@@ -38,18 +39,14 @@ class DataSourceResolver(sparkSession: SparkSession) extends ResolverExtension {
   /**
    * Resolve [[UnresolvedCatalogRelation]]:
    * - Reuse [[FindDataSourceTable]] code to resolve [[UnresolvedCatalogRelation]]
-   * - Create a new instance of [[LogicalRelation]] to regenerate the expression IDs
    * - Explicitly disallow [[StreamingRelation]] and [[StreamingRelationV2]] for now
-   * - [[FileResolver]], which is a [[ResolverExtension]], introduces a new [[LogicalPlan]] node
-   *    which resolution has to be handled here (further resolution of it doesn't need any specific
-   *    resolution except adding it's attributes to the scope).
    */
-  override def resolveOperator: PartialFunction[LogicalPlan, LogicalPlan] = {
+  override def resolveOperator(
+      operator: LogicalPlan,
+      resolver: LogicalPlanResolver): Option[LogicalPlan] = operator match {
     case unresolvedCatalogRelation: UnresolvedCatalogRelation =>
       val result = findDataSourceTable.resolveUnresolvedCatalogRelation(unresolvedCatalogRelation)
-      result match {
-        case logicalRelation: LogicalRelation =>
-          logicalRelation.newInstance()
+      Some(result match {
         case streamingRelation: StreamingRelation =>
           throw new ExplicitlyUnsupportedResolverFeature(
             s"unsupported operator: ${streamingRelation.getClass.getName}"
@@ -60,8 +57,8 @@ class DataSourceResolver(sparkSession: SparkSession) extends ResolverExtension {
           )
         case other =>
           other
-      }
-    case logicalRelation: LogicalRelation =>
-      logicalRelation.newInstance()
+      })
+    case _ =>
+      None
   }
 }

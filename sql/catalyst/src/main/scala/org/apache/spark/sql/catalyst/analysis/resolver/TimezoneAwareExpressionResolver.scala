@@ -17,7 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, TimeZoneAwareExpression}
+import org.apache.spark.sql.catalyst.expressions.{
+  Cast,
+  DefaultStringProducingExpression,
+  Expression,
+  TimeZoneAwareExpression
+}
+import org.apache.spark.sql.types.StringType
 
 /**
  * Resolves [[TimeZoneAwareExpressions]] by applying the session's local timezone.
@@ -29,21 +35,90 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, TimeZoneAwareExpre
  * @constructor Creates a new TimezoneAwareExpressionResolver with the given expression resolver.
  * @param expressionResolver The [[ExpressionResolver]] used to resolve child expressions.
  */
-class TimezoneAwareExpressionResolver(expressionResolver: TreeNodeResolver[Expression, Expression])
+class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[TimeZoneAwareExpression, Expression]
-    with ResolvesExpressionChildren {
+    with ResolvesExpressionChildren
+    with CoercesExpressionTypes {
+
+  private val traversals = expressionResolver.getExpressionTreeTraversals
 
   /**
-   * Resolves a [[TimeZoneAwareExpression]] by resolving its children and applying a timezone.
+   * Resolves a [[TimeZoneAwareExpression]] by resolving its children, applying a timezone
+   * and calling [[coerceExpressionTypes]] on the result. If the expression is a [[Cast]], we apply
+   * [[collapseCast]] to the result.
    *
    * @param unresolvedTimezoneExpression The [[TimeZoneAwareExpression]] to resolve.
-   * @return A resolved [[Expression]] with the session's local timezone applied.
+   * @return A resolved [[Expression]] with the session's local timezone applied, and optionally
+   *   type coerced.
    */
   override def resolve(unresolvedTimezoneExpression: TimeZoneAwareExpression): Expression = {
     val expressionWithResolvedChildren =
-      withResolvedChildren(unresolvedTimezoneExpression, expressionResolver.resolve)
-    withResolvedTimezoneCopyTags(expressionWithResolvedChildren, conf.sessionLocalTimeZone)
+      withResolvedChildren(unresolvedTimezoneExpression, expressionResolver.resolve _)
+    val expressionWithResolvedChildrenAndTimeZone = TimezoneAwareExpressionResolver.resolveTimezone(
+      expressionWithResolvedChildren,
+      traversals.current.sessionLocalTimeZone
+    )
+    coerceExpressionTypes(
+      expression = expressionWithResolvedChildrenAndTimeZone,
+      expressionTreeTraversal = traversals.current
+    ) match {
+      case cast: Cast if traversals.current.defaultCollation.isDefined =>
+        tryCollapseCast(cast, traversals.current.defaultCollation.get)
+      case other =>
+        other
+    }
   }
+
+  /**
+   * When a [[View]] has a custom default collation, we update the [[Cast]]'s [[DataType]] by
+   * replacing all occurrences of the companion object [[StringType]] with [[StringType]] with the
+   * default collation.
+   *
+   * Special case:
+   * Before resolution, if the [[Cast]]'s child is a [[DefaultStringProducingExpression]] and the
+   * custom default collation is not `UTF8_BINARY`, then the [[DefaultStringProducingExpression]]
+   * will be wrapped with a [[Cast]] to [[StringType]] with the default collation. Additionally,
+   * if the currently resolving [[Cast]] is also a [[Cast]] to the companion object [[StringType]],
+   * we update it to a [[Cast]] to [[StringType]] with the default collation as well.
+   *
+   * This results in two identical [[Cast]]s, which is redundant-so we can remove one of them.
+   * We are doing this to have the same plan as the one from the fixed-point analyzer.
+   *
+   * Example query for the special case:
+   * {{{
+   * CREATE VIEW v
+   * DEFAULT COLLATION UNICODE
+   * AS SELECT current_database()::STRING AS c1
+   * }}}
+   *
+   * Plan for the `AS query` part:
+   * Project [cast(c1#2 as string collate UNICODE) AS c1#3]
+   * +- Project [cast(current_schema() as string collate UNICODE) AS c1#2]
+   *    +- OneRowRelation
+   */
+  private def tryCollapseCast(cast: Cast, defaultCollation: String): Cast = {
+    cast.child match {
+      case childCast: Cast if shouldCollapseInnerCast(cast, defaultCollation) =>
+        cast.copy(child = childCast.child)
+      case _ =>
+        cast
+    }
+  }
+
+  private def shouldCollapseInnerCast(cast: Cast, defaultCollation: String): Boolean = {
+    StringType(defaultCollation) != StringType && {
+      cast.child match {
+        case _ @Cast(_: DefaultStringProducingExpression, innerDataType, _, _)
+            if cast.dataType == innerDataType =>
+          true
+        case _ =>
+          false
+      }
+    }
+  }
+}
+
+object TimezoneAwareExpressionResolver {
 
   /**
    * Applies a timezone to a [[TimeZoneAwareExpression]] while preserving original tags.
@@ -55,19 +130,13 @@ class TimezoneAwareExpressionResolver(expressionResolver: TreeNodeResolver[Expre
    * @param timeZoneId The timezone ID to apply.
    * @return A new [[TimeZoneAwareExpression]] with the specified timezone and original tags.
    */
-  def withResolvedTimezoneCopyTags(expression: Expression, timeZoneId: String): Expression = {
-    val withTimeZone = withResolvedTimezone(expression, timeZoneId)
-    withTimeZone.copyTagsFrom(expression)
-    withTimeZone
-  }
-
-  /**
-   * Apply timezone to [[TimeZoneAwareExpression]] expressions.
-   */
-  def withResolvedTimezone(expression: Expression, timeZoneId: String): Expression =
+  def resolveTimezone(expression: Expression, timeZoneId: String): Expression = {
     expression match {
       case timezoneExpression: TimeZoneAwareExpression if timezoneExpression.timeZoneId.isEmpty =>
-        timezoneExpression.withTimeZone(timeZoneId)
+        val withTimezone = timezoneExpression.withTimeZone(timeZoneId)
+        withTimezone.copyTagsFrom(timezoneExpression)
+        withTimezone
       case other => other
     }
+  }
 }

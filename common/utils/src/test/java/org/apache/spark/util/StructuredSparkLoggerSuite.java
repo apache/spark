@@ -21,10 +21,26 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.logging.log4j.Level;
 
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+
+import org.apache.spark.internal.Logging$;
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 
 public class StructuredSparkLoggerSuite extends SparkLoggerSuiteBase {
+
+  // Enable Structured Logging before running the tests
+  @BeforeAll
+  public static void setup() {
+    Logging$.MODULE$.enableStructuredLogging();
+  }
+
+  // Disable Structured Logging after running the tests
+  @AfterAll
+  public static void teardown() {
+    Logging$.MODULE$.disableStructuredLogging();
+  }
 
   private static final SparkLogger LOGGER =
     SparkLoggerFactory.getLogger(StructuredSparkLoggerSuite.class);

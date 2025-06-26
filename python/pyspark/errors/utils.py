@@ -255,12 +255,8 @@ def _with_origin(func: FuncT) -> FuncT:
         from pyspark.sql import SparkSession
         from pyspark.sql.utils import is_remote
 
-        spark = SparkSession.getActiveSession()
-
-        if spark is not None and hasattr(func, "__name__") and is_debugging_enabled():
+        if hasattr(func, "__name__") and is_debugging_enabled():
             if is_remote():
-                global current_origin
-
                 # Getting the configuration requires RPC call. Uses the default value for now.
                 depth = 1
                 set_current_origin(func.__name__, _capture_call_site(depth))
@@ -270,6 +266,9 @@ def _with_origin(func: FuncT) -> FuncT:
                 finally:
                     set_current_origin(None, None)
             else:
+                spark = SparkSession.getActiveSession()
+                if spark is None:
+                    return func(*args, **kwargs)
                 assert spark._jvm is not None
                 jvm_pyspark_origin = getattr(
                     spark._jvm, "org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin"

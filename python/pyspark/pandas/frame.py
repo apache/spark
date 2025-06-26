@@ -112,6 +112,7 @@ from pyspark.pandas.utils import (
     column_labels_level,
     combine_frames,
     default_session,
+    is_ansi_mode_enabled,
     is_name_like_tuple,
     is_name_like_value,
     is_testing,
@@ -2976,7 +2977,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         (``axis=1``).
 
         See also `Transform and apply a function
-        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/tutorial/pandas_on_spark/transform_apply.html>`_.
 
         .. note:: when `axis` is 0 or 'index', the `func` is unable to access
             to the whole input series. pandas-on-Spark internally splits the input series into
@@ -3302,7 +3303,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         and that has the same length as its input.
 
         See also `Transform and apply a function
-        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/tutorial/pandas_on_spark/transform_apply.html>`_.
 
         .. note:: this API executes the function once to infer the type which is
              potentially expensive, for instance, when the dataset is created after
@@ -7292,8 +7293,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4  1   True  1.0
         5  2  False  2.0
         """
-        from pyspark.sql.types import _parse_datatype_string
-
         include_list: List[str]
         if not is_list_like(include):
             include_list = [cast(str, include)] if include is not None else []
@@ -7320,14 +7319,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         include_spark_type = []
         for inc in include_list:
             try:
-                include_spark_type.append(_parse_datatype_string(inc))
+                include_spark_type.append(self._internal.spark_frame._session._parse_ddl(inc))
             except BaseException:
                 pass
 
         exclude_spark_type = []
         for exc in exclude_list:
             try:
-                exclude_spark_type.append(_parse_datatype_string(exc))
+                exclude_spark_type.append(self._internal.spark_frame._session._parse_ddl(exc))
             except BaseException:
                 pass
 
@@ -8458,7 +8457,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
 
             for label in self._internal.column_labels:
-                scol = self._internal.spark_column_for(label).isin([F.lit(v) for v in values])
+                if is_ansi_mode_enabled(self._internal.spark_frame.sparkSession):
+                    col_type = self._internal.spark_type_for(label)
+                    scol = self._internal.spark_column_for(label).isin(
+                        [F.lit(v).try_cast(col_type) for v in values]
+                    )
+                else:
+                    scol = self._internal.spark_column_for(label).isin([F.lit(v) for v in values])
                 scol = F.coalesce(scol, F.lit(False))
                 data_spark_columns.append(scol.alias(self._internal.spark_column_name_for(label)))
         else:
@@ -13780,11 +13785,32 @@ def _test() -> None:
     import uuid
     from pyspark.sql import SparkSession
     import pyspark.pandas.frame
+    from pyspark.testing.utils import is_ansi_mode_test
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.frame.__dict__.copy()
     globs["ps"] = pyspark.pandas
+
+    if is_ansi_mode_test:
+        del pyspark.pandas.frame.DataFrame.add.__doc__
+        del pyspark.pandas.frame.DataFrame.div.__doc__
+        del pyspark.pandas.frame.DataFrame.floordiv.__doc__
+        del pyspark.pandas.frame.DataFrame.melt.__doc__
+        del pyspark.pandas.frame.DataFrame.mod.__doc__
+        del pyspark.pandas.frame.DataFrame.mul.__doc__
+        del pyspark.pandas.frame.DataFrame.pow.__doc__
+        del pyspark.pandas.frame.DataFrame.radd.__doc__
+        del pyspark.pandas.frame.DataFrame.rdiv.__doc__
+        del pyspark.pandas.frame.DataFrame.rfloordiv.__doc__
+        del pyspark.pandas.frame.DataFrame.rmod.__doc__
+        del pyspark.pandas.frame.DataFrame.rmul.__doc__
+        del pyspark.pandas.frame.DataFrame.rpow.__doc__
+        del pyspark.pandas.frame.DataFrame.rsub.__doc__
+        del pyspark.pandas.frame.DataFrame.rtruediv.__doc__
+        del pyspark.pandas.frame.DataFrame.sub.__doc__
+        del pyspark.pandas.frame.DataFrame.truediv.__doc__
+
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.frame tests").getOrCreate()
     )

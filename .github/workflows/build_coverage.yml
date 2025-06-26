@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / Coverage (master, Scala 2.13, Hadoop 3, JDK 17)"
+name: "Build / Python Coverage (master, Python 3.11)"
 
 on:
   schedule:
@@ -45,3 +45,5 @@ jobs:
         {
           "pyspark": "true"
         }
+    secrets:
+      codecov_token: ${{ secrets.CODECOV_TOKEN }}

@@ -414,7 +414,7 @@ Similar to Spark, Spark Streaming is available through Maven Central. To write y
 <div class="codetabs">
 <div data-lang="Maven" markdown="1">
 
-	<dependency>
+    <dependency>
         <groupId>org.apache.spark</groupId>
         <artifactId>spark-streaming_{{site.SCALA_BINARY_VERSION}}</artifactId>
         <version>{{site.SPARK_VERSION}}</version>
@@ -423,7 +423,7 @@ Similar to Spark, Spark Streaming is available through Maven Central. To write y
 </div>
 <div data-lang="SBT" markdown="1">
 
-	libraryDependencies += "org.apache.spark" % "spark-streaming_{{site.SCALA_BINARY_VERSION}}" % "{{site.SPARK_VERSION}}" % "provided"
+    libraryDependencies += "org.apache.spark" % "spark-streaming_{{site.SCALA_BINARY_VERSION}}" % "{{site.SPARK_VERSION}}" % "provided"
 </div>
 </div>
 
@@ -2191,7 +2191,7 @@ improve the performance of your application. At a high level, you need to consid
 1. Reducing the processing time of each batch of data by efficiently using cluster resources.
 
 2. Setting the right batch size such that the batches of data can be processed as fast as they
-  	are received (that is, data processing keeps up with the data ingestion).
+   are received (that is, data processing keeps up with the data ingestion).
 
 ## Reducing the Batch Processing Times
 There are a number of optimizations that can be done in Spark to minimize the processing time of

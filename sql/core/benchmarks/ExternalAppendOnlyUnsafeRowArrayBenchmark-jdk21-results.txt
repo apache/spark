@@ -2,44 +2,44 @@
 WITHOUT SPILL
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Array with 100000 rows:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ArrayBuffer                                        2456           2456           0         41.7          24.0       1.0X
-ExternalAppendOnlyUnsafeRowArray                   3572           3595          33         28.7          34.9       0.7X
+ArrayBuffer                                        2676           2677           2         38.3          26.1       1.0X
+ExternalAppendOnlyUnsafeRowArray                   3586           3598          17         28.6          35.0       0.7X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Array with 1000 rows:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ArrayBuffer                                        5511           5519          11         47.6          21.0       1.0X
-ExternalAppendOnlyUnsafeRowArray                  12331          12382          73         21.3          47.0       0.4X
+ArrayBuffer                                        5541           5543           2         47.3          21.1       1.0X
+ExternalAppendOnlyUnsafeRowArray                  12412          12447          50         21.1          47.3       0.4X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Array with 30000 rows:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ArrayBuffer                                       10731          10759          39         45.8          21.8       1.0X
-ExternalAppendOnlyUnsafeRowArray                  18516          18568          72         26.5          37.7       0.6X
+ArrayBuffer                                       11108          11111           4         44.2          22.6       1.0X
+ExternalAppendOnlyUnsafeRowArray                  18620          18663          61         26.4          37.9       0.6X
 
 
 ================================================================================================
 WITH SPILL
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Spilling with 1000 rows:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-UnsafeExternalSorter                               8284           8328          63         31.6          31.6       1.0X
-ExternalAppendOnlyUnsafeRowArray                   6615           6624          14         39.6          25.2       1.3X
+UnsafeExternalSorter                               8438           8501          88         31.1          32.2       1.0X
+ExternalAppendOnlyUnsafeRowArray                   6672           6673           0         39.3          25.5       1.3X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Spilling with 10000 rows:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
 UnsafeExternalSorter                                  5              5           0         32.8          30.5       1.0X
-ExternalAppendOnlyUnsafeRowArray                      4              4           0         38.5          26.0       1.2X
+ExternalAppendOnlyUnsafeRowArray                      4              4           0         38.6          25.9       1.2X
 
 
