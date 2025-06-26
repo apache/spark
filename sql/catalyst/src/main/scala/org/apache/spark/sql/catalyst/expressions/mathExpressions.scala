@@ -69,6 +69,7 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
   override def nullable: Boolean = true
   override def toString: String = s"$prettyName($child)"
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(name)
@@ -87,6 +88,8 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
 
 abstract class UnaryLogExpression(f: Double => Double, name: String)
     extends UnaryMathExpression(f, name) {
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   override def nullable: Boolean = true
 
@@ -1012,6 +1015,7 @@ case class Bin(child: Expression)
   with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[DataType] = Seq(LongType)
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.toBinaryString(input.asInstanceOf[Long])
@@ -1130,6 +1134,8 @@ case class Hex(child: Expression)
     case _ => super.dataType
   }
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   protected override def nullSafeEval(num: Any): Any = child.dataType match {
     case LongType => Hex.hex(num.asInstanceOf[Long])
     case BinaryType => Hex.hex(num.asInstanceOf[Array[Byte]])
@@ -1165,6 +1171,7 @@ case class Hex(child: Expression)
 case class Unhex(child: Expression, failOnError: Boolean = false)
   extends UnaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   def this(expr: Expression) = this(expr, false)
 

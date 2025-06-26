@@ -116,6 +116,7 @@ case class Size(child: Expression, legacySizeOfNull: Boolean)
   def this(child: Expression) = this(child, SQLConf.get.legacySizeOfNull)
 
   override def dataType: DataType = IntegerType
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
   override def nullable: Boolean = if (legacySizeOfNull) false else super.nullable
 

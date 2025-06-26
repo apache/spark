@@ -2225,6 +2225,10 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
     case _ => target.asInstanceOf[DataType]
   }
 
+  override def contextIndependentFoldable: Boolean = {
+    child.contextIndependentFoldable && !DataTypeUtils.hasContextDependency(dataType)
+  }
+
   override protected def withNewChildInternal(newChild: Expression): UpCast = copy(child = newChild)
 }
 

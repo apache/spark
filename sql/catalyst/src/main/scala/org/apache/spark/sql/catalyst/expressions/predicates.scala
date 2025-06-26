@@ -319,6 +319,8 @@ case class Not(child: Expression)
   extends UnaryExpression with Predicate with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   override def toString: String = s"NOT $child"
 
   override def inputTypes: Seq[DataType] = Seq(BooleanType)
@@ -619,6 +621,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with Predicate {
 
   require(hset != null, "hset could not be null")
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   override def simpleString(maxFields: Int): String = {
     if (!child.resolved) {

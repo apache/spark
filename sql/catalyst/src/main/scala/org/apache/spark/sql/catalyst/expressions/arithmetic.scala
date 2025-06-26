@@ -55,6 +55,8 @@ case class UnaryMinus(
 
   override def dataType: DataType = child.dataType
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   override def toString: String = s"-$child"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
@@ -123,6 +125,8 @@ case class UnaryPositive(child: Expression)
 
   override def dataType: DataType = child.dataType
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   override def sql: String = s"(+ ${child.sql})"
 
   override lazy val replacement: Expression = child
@@ -154,6 +158,8 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndAnsiInterval)
 
   override def dataType: DataType = child.dataType
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   private lazy val numeric = (dataType match {
     case _: DayTimeIntervalType => LongExactNumeric

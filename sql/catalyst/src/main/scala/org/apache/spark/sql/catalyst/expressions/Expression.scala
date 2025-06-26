@@ -589,7 +589,6 @@ abstract class LeafExpression extends Expression with LeafLike[Expression]
 abstract class UnaryExpression extends Expression with UnaryLike[Expression] {
 
   override def foldable: Boolean = child.foldable
-  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
   override def nullable: Boolean = child.nullable
 
   /**

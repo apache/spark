@@ -68,6 +68,8 @@ case class Md5(child: Expression)
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(DigestUtils.md5Hex(input.asInstanceOf[Array[Byte]]))
 
@@ -178,6 +180,8 @@ case class Sha1(child: Expression)
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(DigestUtils.sha1Hex(input.asInstanceOf[Array[Byte]]))
 
@@ -210,6 +214,8 @@ case class Crc32(child: Expression)
   override def dataType: DataType = LongType
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(input: Any): Any = {
     val checksum = new CRC32
