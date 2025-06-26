@@ -127,6 +127,8 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   override def toString: String = s"$prettyName($left, $right)"
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(name)
@@ -1271,7 +1273,7 @@ case class Pow(left: Expression, right: Expression)
 sealed trait BitShiftOperation
   extends BinaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
-
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
   def symbol: String
   def shiftInt: (Int, Int) => Int
   def shiftLong: (Long, Int) => Long

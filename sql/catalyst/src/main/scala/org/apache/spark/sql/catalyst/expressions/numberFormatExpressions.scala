@@ -54,6 +54,9 @@ abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Bo
       StringTypeWithCollation(supportsTrimCollation = true),
       StringTypeWithCollation(supportsTrimCollation = true))
 
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
@@ -310,6 +313,7 @@ case class ToCharacter(left: Expression, right: Expression)
       inputTypeCheck
     }
   }
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
   override def prettyName: String = "to_char"
   override def nullSafeEval(decimal: Any, format: Any): Any = {
     val input = decimal.asInstanceOf[Decimal]

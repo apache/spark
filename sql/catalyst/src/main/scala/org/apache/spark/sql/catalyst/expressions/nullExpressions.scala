@@ -336,6 +336,8 @@ case class NaNvl(left: Expression, right: Expression)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(DoubleType, FloatType), TypeCollection(DoubleType, FloatType))
 
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   /**
    * We can only guarantee the left child can be always accessed. If we hit the left child,
    * the right child will not be accessed.

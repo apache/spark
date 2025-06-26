@@ -114,6 +114,8 @@ case class Sha2(left: Expression, right: Expression)
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType, IntegerType)
 
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val bitLength = input2.asInstanceOf[Int]
     val input = input1.asInstanceOf[Array[Byte]]

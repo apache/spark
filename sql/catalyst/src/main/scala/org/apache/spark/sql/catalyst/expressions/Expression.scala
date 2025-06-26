@@ -710,8 +710,6 @@ abstract class BinaryExpression extends Expression with BinaryLike[Expression] {
 
   override def foldable: Boolean = left.foldable && right.foldable
 
-  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
-
   override def nullable: Boolean = left.nullable || right.nullable
 
   /**

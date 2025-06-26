@@ -67,6 +67,8 @@ case class InterpretedPredicate(expression: Expression) extends BasePredicate {
  */
 trait Predicate extends Expression {
   override def dataType: DataType = BooleanType
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 }
 
 /**
