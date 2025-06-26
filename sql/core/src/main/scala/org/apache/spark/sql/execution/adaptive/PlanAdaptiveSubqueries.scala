@@ -22,10 +22,10 @@ import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DynamicPrun
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DYNAMIC_PRUNING_SUBQUERY, IN_SUBQUERY, SCALAR_SUBQUERY}
 import org.apache.spark.sql.execution
-import org.apache.spark.sql.execution.{InSubqueryExec, SparkPlan, SubqueryAdaptiveBroadcastExec, SubqueryExec}
+import org.apache.spark.sql.execution._
 
-case class PlanAdaptiveSubqueries(
-    subqueryMap: Map[Long, SparkPlan]) extends Rule[SparkPlan] {
+case class PlanAdaptiveSubqueries(context: AdaptiveExecutionContext,
+                                  subqueryMap: Map[Long, SparkPlan]) extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressionsWithPruning(
@@ -34,7 +34,7 @@ case class PlanAdaptiveSubqueries(
         val subquery = SubqueryExec.createForScalarSubquery(
           s"subquery#${exprId.id}", subqueryMap(exprId.id))
         execution.ScalarSubquery(subquery, exprId)
-      case expressions.InSubquery(values, ListQuery(_, _, exprId, _, _, _)) =>
+      case expressions.InSubquery(values, ListQuery(query, _, exprId, _, _, _)) =>
         val expr = if (values.length == 1) {
           values.head
         } else {
@@ -44,7 +44,18 @@ case class PlanAdaptiveSubqueries(
             }
           )
         }
-        val subquery = SubqueryExec(s"subquery#${exprId.id}", subqueryMap(exprId.id))
+//        val subquery = SubqueryExec(s"subquery#${exprId.id}", subqueryMap(exprId.id))
+
+        var subquery: SubqueryExec = null
+        if (subqueryMap.contains(exprId.id)) {
+          subquery = SubqueryExec(s"subquery#${exprId.id}", subqueryMap(exprId.id))
+        } else {
+          val sparkPlan = QueryExecution.prepareExecutedPlan(
+            context.session, query, context)
+          assert(sparkPlan.isInstanceOf[AdaptiveSparkPlanExec])
+          val newAdaptivePlan = sparkPlan.asInstanceOf[AdaptiveSparkPlanExec]
+          subquery = SubqueryExec(s"subquery#${exprId.id}", newAdaptivePlan)
+        }
         InSubqueryExec(expr, subquery, exprId, shouldBroadcast = true)
       case expressions.DynamicPruningSubquery(value, buildPlan,
           buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId, _) =>
