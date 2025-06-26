@@ -88,7 +88,9 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             )
             .first()
         )
+
         self.assertEqual(row_true[0], row_none[0])  # "[1, 2, 3]"
+
         # useArrow=False
         row_false = (
             self.spark.range(1)
