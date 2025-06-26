@@ -2462,7 +2462,7 @@ def read_udfs(pickleSer, infile, eval_type):
         for i in range(num_udfs):
             udfs.append(
                 read_single_udf(
-                    pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler, input_types=None
+                    pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler, input_types=input_types
                 )
             )
 
