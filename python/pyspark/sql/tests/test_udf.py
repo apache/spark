@@ -1365,9 +1365,9 @@ class BaseUDFTestsMixin(object):
             ),
         ]
 
-        # for chain, actual, expected in queries:
-        #     with self.subTest(chain=chain):
-        #         assertDataFrameEqual(actual=actual, expected=expected)
+        for chain, actual, expected in queries:
+            with self.subTest(chain=chain):
+                assertDataFrameEqual(actual=actual, expected=expected)
         
         chain, actual, expected = queries[1]
         with self.subTest(chain=chain):
