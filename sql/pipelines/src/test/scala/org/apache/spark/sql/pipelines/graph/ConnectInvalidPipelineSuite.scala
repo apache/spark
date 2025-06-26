@@ -443,7 +443,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
 
     checkError(
       exception = ex,
-      condition = "INVALID_FLOW_RELATION_TYPE.FOR_STREAMING_TABLE",
+      condition = "INVALID_FLOW_QUERY_TYPE.BATCH_RELATION_FOR_STREAMING_TABLE",
       parameters = Map(
         "flowIdentifier" -> fullyQualifiedIdentifier("a").quotedString,
         "tableIdentifier" -> fullyQualifiedIdentifier("a").quotedString
@@ -465,7 +465,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
 
     checkError(
       exception = ex,
-      condition = "INVALID_FLOW_RELATION_TYPE.FOR_MATERIALIZED_VIEW",
+      condition = "INVALID_FLOW_QUERY_TYPE.STREAMING_RELATION_FOR_MATERIALIZED_VIEW",
       parameters = Map(
         "flowIdentifier" -> fullyQualifiedIdentifier("a").quotedString,
         "tableIdentifier" -> fullyQualifiedIdentifier("a").quotedString
@@ -493,7 +493,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
 
     checkError(
       exception = ex,
-      condition = "INVALID_FLOW_RELATION_TYPE.FOR_ONCE_FLOW",
+      condition = "INVALID_FLOW_QUERY_TYPE.STREAMING_RELATION_FOR_ONCE_FLOW",
       parameters = Map(
         "flowIdentifier" -> fullyQualifiedIdentifier("once_flow").quotedString
       )
