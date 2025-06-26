@@ -59,7 +59,7 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             )
             .first()
         )
-        
+
         self.assertIn(row[0], ["[1, 2, 3]", "[np.int32(1), np.int32(2), np.int32(3)]"])
         self.assertEqual(row[1], "{'a': 'b'}")
         self.assertEqual(row[2], "Row(col1=1, col2=2)")
@@ -76,7 +76,7 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             )
             .first()
         )
-        
+
         # useArrow=None
         row_none = (
             self.spark.range(1)
@@ -100,7 +100,6 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             )
             .first()
         )
-        
         self.assertEqual(row_false[0], "[1, 2, 3]")
 
     def test_eval_type(self):
@@ -115,16 +114,15 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
         df = self.spark.range(1).selectExpr(
             "array(1, 2, 3) as array",
         )
-        
         str_repr_func = self.spark.udf.register("str_repr", udf(lambda x: str(x), useArrow=True))
-        
+
         # To verify that Arrow optimization is on
         self.assertIn(
             df.selectExpr("str_repr(array) AS str_id").first()[0],
             ["[1, 2, 3]", "[np.int32(1), np.int32(2), np.int32(3)]"],
             # The input is a NumPy array when the Arrow optimization is on
         )
-        
+
         # To verify that a UserDefinedFunction is returned
         self.assertListEqual(
             df.selectExpr("str_repr(array) AS str_id").collect(),
@@ -183,7 +181,7 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
     def test_err_return_type(self):
         with self.assertRaises(PySparkNotImplementedError) as pe:
             udf(lambda x: x, VarcharType(10), useArrow=True)
-        
+
         self.check_error(
             exception=pe.exception,
             errorClass="NOT_IMPLEMENTED",
@@ -196,21 +194,21 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
         @udf("int")
         def test_udf(a, b):
             return a + b
-        
+
         self.spark.udf.register("test_udf", test_udf)
-        
+
         with self.assertRaisesRegex(
             AnalysisException,
             "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
         ):
             self.spark.sql("SELECT test_udf(a => id, a => id * 10) FROM range(2)").show()
-        
+
         with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
             self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
-        
+
         with self.assertRaises(PythonException):
             self.spark.sql("SELECT test_udf(c => 'x') FROM range(2)").show()
-        
+
         with self.assertRaises(PythonException):
             self.spark.sql("SELECT test_udf(id, a => id * 10) FROM range(2)").show()
 

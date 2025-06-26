@@ -1289,14 +1289,6 @@ class BaseUDFTestsMixin(object):
 
         @udf(returnType=DoubleType())
         def udtInDoubleOut(e):
-            print(f"\n**** Object: {e}")
-            print(f"**** type(): {type(e)}")
-            print(f"**** type().__name__: {type(e).__name__}")
-            print(f"**** isinstance(e, ExamplePoint): {isinstance(e, ExamplePoint)}")
-            print(f"**** isinstance(e, Row): {isinstance(e, Row)}")
-            print(f"**** __class__: {e.__class__}")
-            print(f"**** hasattr(e, 'y'): {hasattr(e, 'y')}")
-            # assert False
             return e.y
 
         @udf(returnType=ArrayType(ExamplePointUDT()))
