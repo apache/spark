@@ -1736,6 +1736,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
       StringTypeNonCSAICollation(supportsTrimCollation = true),
       IntegerType
     )
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
   override def first: Expression = strExpr
   override def second: Expression = delimExpr
   override def third: Expression = countExpr
@@ -2312,6 +2313,8 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
       IntegerType,
       IntegerType
     )
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def first: Expression = str
   override def second: Expression = pos
