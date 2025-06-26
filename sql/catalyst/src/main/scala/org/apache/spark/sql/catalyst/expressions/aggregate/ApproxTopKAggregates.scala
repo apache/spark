@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{ArrayOfDecimalsSerDe, Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
-import org.apache.spark.sql.catalyst.trees.TernaryLike
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike}
 import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
@@ -50,12 +50,14 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """
+  usage =
+    """
     _FUNC_(expr, k, maxItemsTracked) - Returns top k items with their frequency.
       `k` An optional INTEGER literal greater than 0. If k is not specified, it defaults to 5.
       `maxItemsTracked` An optional INTEGER literal greater than or equal to k. If maxItemsTracked is not specified, it defaults to 10000.
     """,
-  examples = """
+  examples =
+    """
     Examples:
       > SELECT _FUNC_(expr) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);
        [{"item":0,"count":2},{"item":4,"count":2},{"item":1,"count":2},{"item":2,"count":1},{"item":3,"count":1}]
@@ -174,10 +176,10 @@ case class ApproxTopK(
 object ApproxTopK {
 
   private val DEFAULT_K: Int = 5
-  private val DEFAULT_MAX_ITEMS_TRACKED: Int = 10000
+  val DEFAULT_MAX_ITEMS_TRACKED: Int = 10000
   private val MAX_ITEMS_TRACKED_LIMIT: Int = 1000000
 
-  private def checkExpressionNotNull(expr: Expression, exprName: String): Unit = {
+  def checkExpressionNotNull(expr: Expression, exprName: String): Unit = {
     if (expr == null || expr.eval() == null) {
       throw QueryExecutionErrors.approxTopKNullArg(exprName)
     }
@@ -189,11 +191,15 @@ object ApproxTopK {
     }
   }
 
-  private def checkMaxItemsTracked(maxItemsTracked: Int, k: Int): Unit = {
+  def checkMaxItemsTracked(maxItemsTracked: Int): Unit = {
     if (maxItemsTracked > MAX_ITEMS_TRACKED_LIMIT) {
       throw QueryExecutionErrors.approxTopKMaxItemsTrackedExceedsLimit(
         maxItemsTracked, MAX_ITEMS_TRACKED_LIMIT)
     }
+  }
+
+  private def checkMaxItemsTracked(maxItemsTracked: Int, k: Int): Unit = {
+    checkMaxItemsTracked(maxItemsTracked)
     if (maxItemsTracked < k) {
       throw QueryExecutionErrors.approxTopKMaxItemsTrackedLessThanK(maxItemsTracked, k)
     }
@@ -206,7 +212,7 @@ object ApproxTopK {
     ArrayType(resultEntryType, containsNull = false)
   }
 
-  private def isDataTypeSupported(itemType: DataType): Boolean = {
+  def isDataTypeSupported(itemType: DataType): Boolean = {
     itemType match {
       case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType |
            _: LongType | _: FloatType | _: DoubleType | _: DateType |
@@ -216,7 +222,7 @@ object ApproxTopK {
     }
   }
 
-  private def calMaxMapSize(maxItemsTracked: Int): Int = {
+  def calMaxMapSize(maxItemsTracked: Int): Int = {
     // The maximum capacity of this internal hash map has maxMapCap = 0.75 * maxMapSize
     // Therefore, the maxMapSize must be at least ceil(maxItemsTracked / 0.75)
     // https://datasketches.apache.org/docs/Frequency/FrequentItemsOverview.html
@@ -242,7 +248,7 @@ object ApproxTopK {
     }
   }
 
-  private def updateSketchBuffer(
+  def updateSketchBuffer(
       itemExpression: Expression,
       buffer: ItemsSketch[Any],
       input: InternalRow): ItemsSketch[Any] = {
@@ -290,7 +296,7 @@ object ApproxTopK {
     new GenericArrayData(result)
   }
 
-  private def genSketchSerDe(dataType: DataType): ArrayOfItemsSerDe[Any] = {
+  def genSketchSerDe(dataType: DataType): ArrayOfItemsSerDe[Any] = {
     dataType match {
       case _: BooleanType => new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
       case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
@@ -305,4 +311,93 @@ object ApproxTopK {
         new ArrayOfDecimalsSerDe(dt).asInstanceOf[ArrayOfItemsSerDe[Any]]
     }
   }
+
+  def getSketchStateDataType(itemDataType: DataType): StructType =
+    StructType(
+      StructField("Sketch", BinaryType, nullable = false) ::
+        StructField("ItemTypeNull", itemDataType) ::
+        StructField("MaxItemsTracked", IntegerType, nullable = false) :: Nil)
+}
+
+case class ApproxTopKAccumulate(
+    expr: Expression,
+    maxItemsTracked: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
+  extends TypedImperativeAggregate[ItemsSketch[Any]]
+  with ImplicitCastInputTypes
+  with BinaryLike[Expression] {
+
+  def this(child: Expression, maxItemsTracked: Expression) = this(child, maxItemsTracked, 0, 0)
+
+  def this(child: Expression, maxItemsTracked: Int) = this(child, Literal(maxItemsTracked), 0, 0)
+
+  def this(child: Expression) = this(child, Literal(ApproxTopK.DEFAULT_MAX_ITEMS_TRACKED), 0, 0)
+
+  private lazy val itemDataType: DataType = expr.dataType
+  private lazy val maxItemsTrackedVal: Int = {
+    ApproxTopK.checkExpressionNotNull(maxItemsTracked, "maxItemsTracked")
+    val maxItemsTrackedVal = maxItemsTracked.eval().asInstanceOf[Int]
+    ApproxTopK.checkMaxItemsTracked(maxItemsTrackedVal)
+    maxItemsTrackedVal
+  }
+
+  override def left: Expression = expr
+
+  override def right: Expression = maxItemsTracked
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegerType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else if (!ApproxTopK.isDataTypeSupported(itemDataType)) {
+      TypeCheckFailure(f"${itemDataType.typeName} columns are not supported")
+    } else if (!maxItemsTracked.foldable) {
+      TypeCheckFailure("Number of items tracked must be a constant literal")
+    } else {
+      TypeCheckSuccess
+    }
+  }
+
+  override def dataType: DataType = ApproxTopK.getSketchStateDataType(itemDataType)
+
+  override def createAggregationBuffer(): ItemsSketch[Any] = {
+    val maxMapSize = ApproxTopK.calMaxMapSize(maxItemsTrackedVal)
+    ApproxTopK.createAggregationBuffer(expr, maxMapSize)
+  }
+
+  override def update(buffer: ItemsSketch[Any], input: InternalRow): ItemsSketch[Any] =
+    ApproxTopK.updateSketchBuffer(expr, buffer, input)
+
+  override def merge(buffer: ItemsSketch[Any], input: ItemsSketch[Any]): ItemsSketch[Any] =
+    buffer.merge(input)
+
+  override def eval(buffer: ItemsSketch[Any]): Any = {
+    val sketchBytes = serialize(buffer)
+    InternalRow.apply(sketchBytes, null, maxItemsTrackedVal)
+  }
+
+  override def serialize(buffer: ItemsSketch[Any]): Array[Byte] =
+    buffer.toByteArray(ApproxTopK.genSketchSerDe(itemDataType))
+
+  override def deserialize(storageFormat: Array[Byte]): ItemsSketch[Any] =
+    ItemsSketch.getInstance(Memory.wrap(storageFormat), ApproxTopK.genSketchSerDe(itemDataType))
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): Expression =
+    copy(expr = newLeft, maxItemsTracked = newRight)
+
+  override def nullable: Boolean = false
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("approx_top_k_accumulate")
 }
