@@ -47,7 +47,6 @@ class WindowEvaluatorFactory(
     private val spillThreshold = conf.windowExecBufferSpillThreshold
     private val spillSizeThreshold = conf.windowExecBufferSpillSizeThreshold
 
-
     override def eval(
         partitionIndex: Int,
         inputs: Iterator[InternalRow]*): Iterator[InternalRow] = {
