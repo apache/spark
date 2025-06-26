@@ -48,6 +48,8 @@ class ArrowUDFType:
 
     SCALAR_ITER = PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
 
+    GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
+
 
 def arrow_udf(f=None, returnType=None, functionType=None):
     return vectorized_udf(f, returnType, functionType, "arrow")
