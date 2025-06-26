@@ -271,7 +271,7 @@ object DataTypeUtils {
   /**
    * Check if a given data type matches a given pattern.
    */
-  private def matchesPattern(dataType: DataType, pattern: DataType => Boolean): Boolean = {
+  def matchesPattern(dataType: DataType, pattern: DataType => Boolean): Boolean = {
     dataType match {
       case a: ArrayType =>
         pattern(a) || matchesPattern(a.elementType, pattern)

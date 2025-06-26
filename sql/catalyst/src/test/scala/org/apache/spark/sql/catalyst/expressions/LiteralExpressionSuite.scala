@@ -572,7 +572,22 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("b", StringType),
         StructField("c", BooleanType),
         StructField("d", NullType))))
+    // Create an array containing timestamps
+    val array2 = Literal.create(
+      Seq(java.sql.Timestamp.valueOf("2021-01-01 12:00:00")),
+      ArrayType(TimestampType))
 
+    // Create a map with timestamp values
+    val map2 = Literal.create(
+      Map("a" -> java.sql.Timestamp.valueOf("2021-01-01 12:00:00")),
+      MapType(StringType, TimestampType, valueContainsNull = true))
+
+    // Create a struct with a timestamp field
+    val struct2 = Literal.create(
+      Row(1, java.sql.Timestamp.valueOf("2021-01-01 12:00:00")),
+      StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", TimestampType))))
     Seq(
       Literal(1),
       Literal(1L),
@@ -587,9 +602,14 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal(LocalTime.of(12, 30, 0)),
       Literal(Period.ofMonths(1)),
       Literal(Duration.ofDays(1)),
+      Literal.create(java.sql.Timestamp.valueOf("2021-01-01 12:00:00"), TimestampType),
+      Literal.create(1L, TimestampType),
       array,
+      array2,
       map,
-      struct
+      map2,
+      struct,
+      struct2
     ).foreach { expr =>
       assert(expr.foldable, s"Expression $expr should be foldable")
       assert(expr.contextIndependentFoldable,
@@ -598,29 +618,37 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("context dependent foldable literals") {
-    // Create an array containing timestamps
-    val array = Literal.create(
-      Seq(java.sql.Timestamp.valueOf("2021-01-01 12:00:00")),
-      ArrayType(TimestampType))
-
-    // Create a map with timestamp values
-    val map = Literal.create(
-      Map("a" -> java.sql.Timestamp.valueOf("2021-01-01 12:00:00")),
-      MapType(StringType, TimestampType, valueContainsNull = true))
-
-    // Create a struct with a timestamp field
-    val struct = Literal.create(
-      Row(1, java.sql.Timestamp.valueOf("2021-01-01 12:00:00")),
-      StructType(Seq(
-        StructField("a", IntegerType),
-        StructField("b", TimestampType))))
+    // Create point instances with ExamplePointUDT
+    val point1 = Array(1.0, 2.0)
+    val point2 = Array(3.0, 4.0)
 
     Seq(
-      Literal.create(java.sql.Timestamp.valueOf("2021-01-01 12:00:00"), TimestampType),
-      Literal.create(1L, TimestampType),
-      array,
-      map,
-      struct
+      // Basic UDT example
+      Literal.create(point1, new ExamplePointUDT),
+
+      // Array containing UDT elements
+      Literal.create(
+        Array(point1, point2),
+        ArrayType(new ExamplePointUDT)),
+
+      // Map with UDT values
+      Literal.create(
+        Map("p1" -> point1, "p2" -> point2),
+        MapType(StringType, new ExamplePointUDT, valueContainsNull = false)),
+
+      // Struct containing UDT fields
+      Literal.create(
+        Row("point", point1, 42),
+        StructType(Seq(
+          StructField("name", StringType),
+          StructField("coordinates", new ExamplePointUDT),
+          StructField("id", IntegerType)
+        ))),
+
+      // Nested structure with UDT
+      Literal.create(
+        Map("points" -> Array(point1, point2)),
+        MapType(StringType, ArrayType(new ExamplePointUDT), valueContainsNull = false))
     ).foreach { expr =>
       assert(expr.foldable, s"Expression $expr should be foldable")
       assert(!expr.contextIndependentFoldable,

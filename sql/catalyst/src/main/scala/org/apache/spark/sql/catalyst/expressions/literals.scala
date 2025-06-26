@@ -417,7 +417,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def foldable: Boolean = true
 
   override def contextIndependentFoldable: Boolean = {
-    !DataTypeUtils.hasContextDependency(dataType)
+    !DataTypeUtils.matchesPattern(dataType, dt => dt.isInstanceOf[UserDefinedType[_]])
   }
 
   override def nullable: Boolean = value == null
