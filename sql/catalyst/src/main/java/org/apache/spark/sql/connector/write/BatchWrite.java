@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.write;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.metric.CustomTaskMetric;
 
 /**
  * An interface that defines how to write the data to data source for batch processing.
@@ -104,4 +105,19 @@ public interface BatchWrite {
    * clean up the data left by data writers.
    */
   void abort(WriterCommitMessage[] messages);
+
+
+  /**
+   * Whether this batch write requests execution metrics. Returns a row level operation command this batch write
+   * is part of, if requested. Return null if not requested.
+   */
+  default RowLevelOperation.Command requestExecMetrics() {
+    return null;
+  }
+
+  /**
+   * Provides an array of query execution metrics to the batch write prior to commit.
+   * @param metrics an array of execution metrics
+   */
+  default void execMetrics(CustomTaskMetric[] metrics) {}
 }

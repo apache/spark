@@ -22,7 +22,7 @@ import java.time.temporal.ChronoUnit
 import java.util
 import java.util.OptionalLong
 
-import scala.collection.mutable
+import scala.collection.mutable._
 import scala.jdk.CollectionConverters._
 
 import com.google.common.base.Objects
@@ -151,6 +151,8 @@ abstract class InMemoryBaseTable(
 
   // The key `Seq[Any]` is the partition values, value is a set of splits, each with a set of rows.
   val dataMap: mutable.Map[Seq[Any], Seq[BufferedRows]] = mutable.Map.empty
+
+  val commits: ListBuffer[Commit] = ListBuffer[Commit]()
 
   def data: Array[BufferedRows] = dataMap.values.flatten.toArray
 
@@ -514,6 +516,24 @@ abstract class InMemoryBaseTable(
       options: CaseInsensitiveStringMap)
     extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
 
+    var setFilters = Array.empty[Filter]
+
+    override def reportDriverMetrics(): Array[CustomTaskMetric] =
+      Array(new CustomTaskMetric{
+        override def name(): String = "numSplits"
+        override def value(): Long = 1L
+      })
+
+    override def supportedCustomMetrics(): Array[CustomMetric] = {
+      Array(new CustomMetric {
+        override def name(): String = "numSplits"
+        override def description(): String = "number of splits in the scan"
+        override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
+          taskMetrics.sum.toString
+        }
+      })
+    }
+
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet
       partitioning.flatMap(_.references)
@@ -521,6 +541,7 @@ abstract class InMemoryBaseTable(
     }
 
     override def filter(filters: Array[Filter]): Unit = {
+      this.setFilters = filters
       if (partitioning.length == 1 && partitioning.head.references().length == 1) {
         val ref = partitioning.head.references().head
         filters.foreach {
@@ -616,6 +637,9 @@ abstract class InMemoryBaseTable(
   }
 
   protected abstract class TestBatchWrite extends BatchWrite {
+
+    var commitProperties: mutable.Map[String, String] = mutable.Map.empty[String, String]
+
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
       BufferedRowsWriterFactory
     }
@@ -624,8 +648,11 @@ abstract class InMemoryBaseTable(
   }
 
   class Append(val info: LogicalWriteInfo) extends TestBatchWrite {
+
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       withData(messages.map(_.asInstanceOf[BufferedRows]))
+      commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
+      commitProperties.clear()
     }
   }
 
@@ -634,6 +661,8 @@ abstract class InMemoryBaseTable(
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       dataMap --= newData.flatMap(_.rows.map(getKey))
       withData(newData)
+      commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
+      commitProperties.clear()
     }
   }
 
@@ -641,6 +670,8 @@ abstract class InMemoryBaseTable(
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       dataMap.clear()
       withData(messages.map(_.asInstanceOf[BufferedRows]))
+      commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
+      commitProperties.clear()
     }
   }
 
@@ -788,6 +819,14 @@ private class BufferedRowsReader(
 
   override def close(): Unit = {}
 
+  override def currentMetricsValues(): Array[CustomTaskMetric] =
+    Array[CustomTaskMetric](
+      new CustomTaskMetric {
+        override def name(): String = "numSplits"
+        override def value(): Long = 1
+      }
+    )
+
   private def extractFieldValue(
       field: StructField,
       schema: StructType,
@@ -881,6 +920,8 @@ class InMemoryCustomDriverTaskMetric(value: Long) extends CustomTaskMetric {
   override def name(): String = "number_of_rows_from_driver"
   override def value(): Long = value
 }
+
+case class Commit(id: Long, properties: Map[String, String])
 
 sealed trait Operation
 case object Write extends Operation
