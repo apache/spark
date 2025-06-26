@@ -26,14 +26,16 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.catalyst.expressions.BasePredicate
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.expressions.Projection
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
-import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Discard, Instruction, Keep, ROW_ID, Split}
+import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Discard, Instruction, Keep, ROW_ID, Split}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.UnaryExecNode
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 
 case class MergeRowsExec(
     isSourceRowPresent: Expression,
@@ -44,6 +46,10 @@ case class MergeRowsExec(
     checkCardinality: Boolean,
     output: Seq[Attribute],
     child: SparkPlan) extends UnaryExecNode {
+
+  override lazy val metrics: Map[String, SQLMetric] = Map(
+    "numTargetRowsCopied" -> SQLMetrics.createMetric(sparkContext,
+      "Number of target rows copied unmodified because they did not match any action."))
 
   @transient override lazy val producedAttributes: AttributeSet = {
     AttributeSet(output.filterNot(attr => inputSet.contains(attr)))
@@ -107,6 +113,9 @@ case class MergeRowsExec(
 
   private def planInstructions(instructions: Seq[Instruction]): Seq[InstructionExec] = {
     instructions.map {
+      case Copy(output) =>
+        CopyExec(createProjection(output))
+
       case Keep(cond, output) =>
         KeepExec(createPredicate(cond), createProjection(output))
 
@@ -127,7 +136,14 @@ case class MergeRowsExec(
     def condition: BasePredicate
   }
 
-  case class KeepExec(condition: BasePredicate, projection: Projection) extends InstructionExec {
+  case class CopyExec(projection: Projection) extends InstructionExec {
+    override lazy val condition: BasePredicate = createPredicate(TrueLiteral)
+    def apply(row: InternalRow): InternalRow = projection.apply(row)
+  }
+
+  case class KeepExec(
+      condition: BasePredicate,
+      projection: Projection) extends InstructionExec {
     def apply(row: InternalRow): InternalRow = projection.apply(row)
   }
 
@@ -220,6 +236,11 @@ case class MergeRowsExec(
       for (instruction <- instructions) {
         if (instruction.condition.eval(row)) {
           instruction match {
+            case copy: CopyExec =>
+              // group-based operations copy over target rows that didn't match any actions
+              longMetric("numTargetRowsCopied") += 1
+              return copy.apply(row)
+
             case keep: KeepExec =>
               return keep.apply(row)
 
