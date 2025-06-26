@@ -245,6 +245,20 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
     checkEvaluation(ret, "(1.0, 3.0, 5.0, 7.0, 9.0)")
   }
 
+  test("SPARK-52583: Cast UserDefinedType to string with custom stringifyValue") {
+    val udt = new TestUDT.MyDenseVectorUDT() {
+      override def stringifyValue(obj: Any): String = {
+        val v = obj.asInstanceOf[TestUDT.MyDenseVector]
+        v.toString.stripPrefix("(").stripSuffix(")")
+      }
+
+    }
+    val vector = new TestUDT.MyDenseVector(Array(1.0, 3.0, 5.0, 7.0, 9.0))
+    val data = udt.serialize(vector)
+    val ret = Cast(Literal(data, udt), StringType, None)
+    checkEvaluation(ret, "1.0, 3.0, 5.0, 7.0, 9.0")
+  }
+
   test("SPARK-28497 Can't up cast UserDefinedType to string") {
     val udt = new TestUDT.MyDenseVectorUDT()
     assert(!Cast.canUpCast(udt, StringType))
