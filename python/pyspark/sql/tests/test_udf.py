@@ -1368,10 +1368,6 @@ class BaseUDFTestsMixin(object):
         for chain, actual, expected in queries:
             with self.subTest(chain=chain):
                 assertDataFrameEqual(actual=actual, expected=expected)
-        
-        chain, actual, expected = queries[1]
-        with self.subTest(chain=chain):
-            assertDataFrameEqual(actual=actual, expected=expected)
 
     def test_udf_empty_frame(self):
         empty_df = self.spark.createDataFrame([], "id long")
