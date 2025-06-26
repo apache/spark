@@ -3549,6 +3549,14 @@ object SQLConf {
       .version("4.1.0")
       .fallbackConf(Python.PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT)
 
+  val PYTHON_UDF_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS =
+    buildConf("spark.sql.execution.pyspark.udf.tracebackDumpIntervalSeconds")
+      .doc(
+        s"Same as ${Python.PYTHON_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS.key} " +
+          "for Python execution with DataFrame and SQL. It can change during runtime.")
+      .version("4.1.0")
+      .fallbackConf(Python.PYTHON_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
+
   val PYSPARK_PLOT_MAX_ROWS =
     buildConf("spark.sql.pyspark.plotting.max_rows")
       .doc("The visual limit on plots. If set to 1000 for top-n-based plots (pie, bar, barh), " +
@@ -6730,6 +6738,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonUDFWorkerIdleTimeoutSeconds: Long = getConf(PYTHON_UDF_WORKER_IDLE_TIMEOUT_SECONDS)
 
   def pythonUDFWorkerKillOnIdleTimeout: Boolean = getConf(PYTHON_UDF_WORKER_KILL_ON_IDLE_TIMEOUT)
+
+  def pythonUDFWorkerTracebackDumpIntervalSeconds: Long =
+    getConf(PYTHON_UDF_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
 
   def pythonUDFArrowConcurrencyLevel: Option[Int] = getConf(PYTHON_UDF_ARROW_CONCURRENCY_LEVEL)
 
