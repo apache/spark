@@ -66,7 +66,7 @@ characteristic
 
 - **function_name**
 
-  A name for the function. For a permanent function, you can optionally qualify the function name with a schema name.
+  A name for the function. For a permanent function, you can optionally qualify the function name, or it will be created under the current catalog and namespace.
   If the name is not qualified the permanent function is created in the current schema.
 
 - **function_parameter**
