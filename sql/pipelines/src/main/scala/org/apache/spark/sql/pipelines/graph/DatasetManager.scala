@@ -181,7 +181,6 @@ object DatasetManager extends Logging {
     val dropTable = (isFullRefresh || !table.isStreamingTable) && existingTableOpt.isDefined
     if (dropTable) {
       catalog.dropTable(identifier)
-//      context.spark.sql(s"DROP TABLE ${table.identifier.quotedString}")
     }
 
     // Alter the table if we need to
