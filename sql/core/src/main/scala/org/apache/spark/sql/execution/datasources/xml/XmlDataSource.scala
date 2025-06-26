@@ -22,6 +22,7 @@ import java.nio.charset.{Charset, StandardCharsets}
 
 import scala.util.control.NonFatal
 
+import com.google.common.io.ByteStreams
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -42,7 +43,9 @@ import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StructField, StructType, VariantType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
@@ -175,9 +178,24 @@ object MultiLineXmlDataSource extends XmlDataSource {
       file: PartitionedFile,
       parser: StaxXmlParser,
       requiredSchema: StructType): Iterator[InternalRow] = {
-    parser.parseStream(
-      CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
-      requiredSchema)
+    if (SQLConf.get.enableOptimizedXmlParser) {
+      parser.parseStreamOptimized(
+        CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
+        requiredSchema,
+        () => {
+          Utils.tryWithResource(
+            CodecStreams.createInputStreamWithCloseResource(conf, file.toPath)
+          ) { is =>
+            UTF8String.fromBytes(ByteStreams.toByteArray(is))
+          }
+        }
+      )
+    } else {
+      parser.parseStream(
+        CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
+        requiredSchema
+      )
+    }
   }
 
   override def infer(

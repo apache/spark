@@ -5971,6 +5971,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_OPTIMIZED_XML_PARSER =
+    buildConf("spark.sql.execution.datasources.xml.enableOptimizedParser")
+      .internal()
+      .doc("When set to true, the optimized XML parser is used for reading XML files. " +
+        "This parser is faster and more memory efficient than the legacy parser.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -7044,6 +7053,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def maxFlowRetryAttempts: Int = getConf(SQLConf.PIPELINES_MAX_FLOW_RETRY_ATTEMPTS)
 
   def hadoopLineRecordReaderEnabled: Boolean = getConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED)
+
+  def enableOptimizedXmlParser: Boolean = getConf(SQLConf.ENABLE_OPTIMIZED_XML_PARSER)
 
   /** ********************** SQLConf functionality methods ************ */
 
