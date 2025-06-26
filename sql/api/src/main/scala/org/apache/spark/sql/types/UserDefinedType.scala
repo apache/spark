@@ -100,8 +100,10 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
    *
    * By default, it simply calls `toString` on the object.
    *
-   * @param obj The object to convert to a string.
-   * @return A string representation of the object.
+   * @param obj
+   *   The object to convert to a string.
+   * @return
+   *   A string representation of the object.
    * @since 4.1.0
    */
   @Since("4.1.0")
