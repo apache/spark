@@ -62,10 +62,9 @@ trait GraphValidations extends Logging {
    */
   protected[graph] def validateFlowStreamingness(): Unit = {
     flowsTo.foreach { case (destTableIdentifier, flowsToDataset) =>
+      // The identifier should correspond to exactly one of a table or view
       val destTableOpt = table.get(destTableIdentifier)
-
-      // If the destination identifier does not correspond to a table, it must be a view.
-      val destViewOpt = destTableOpt.fold(view.get(destTableIdentifier))(_ => None)
+      val destViewOpt = view.get(destTableIdentifier)
 
       val resolvedFlowsToDataset: Seq[ResolvedFlow] = flowsToDataset.collect {
         case rf: ResolvedFlow => rf
