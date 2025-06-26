@@ -251,7 +251,6 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
         val v = obj.asInstanceOf[TestUDT.MyDenseVector]
         v.toString.stripPrefix("(").stripSuffix(")")
       }
-
     }
     val vector = new TestUDT.MyDenseVector(Array(1.0, 3.0, 5.0, 7.0, 9.0))
     val data = udt.serialize(vector)
