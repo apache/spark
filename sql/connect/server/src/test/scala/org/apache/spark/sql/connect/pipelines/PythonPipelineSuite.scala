@@ -90,8 +90,7 @@ class PythonPipelineSuite
   }
 
   test("basic") {
-    val graph = buildGraph(
-      """
+    val graph = buildGraph("""
         |@sdp.table
         |def table1():
         |    return spark.readStream.format("rate").load()
