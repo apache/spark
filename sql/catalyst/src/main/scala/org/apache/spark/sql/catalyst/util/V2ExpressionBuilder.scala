@@ -41,7 +41,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       val translated0 = build()
       val conf = SQLConf.get
       val alwaysCreateV2Predicate = conf.getConf(SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE)
-      val translated = if (alwaysCreateV2Predicate && isPredicate && e.dataType == BooleanType) {
+      val translated = if (alwaysCreateV2Predicate && e.dataType == BooleanType) {
         translated0.map {
           case p: V2Predicate => p
           case other => new V2Predicate("BOOLEAN_EXPRESSION", Array(other))
