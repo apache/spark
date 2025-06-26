@@ -230,9 +230,7 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
     elif hasattr(return_type, "fromInternal"):
         result_func = lambda r: return_type.fromInternal(r) if r is not None else r  # noqa: E731
 
-    # Get input types for UDT conversion
-    # Use the passed input_types parameter instead of trying to get it from func
-    
+    # Get input types for UDT conversion    
     def convert_input_value(value, input_type):
         """Convert Arrow/numpy input values to appropriate Python types for UDTs"""
         if input_type is not None and hasattr(input_type, "fromInternal"):
@@ -271,27 +269,24 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
                     # Single-element numpy array
                     return value.item()
                 elif hasattr(value, 'tolist'):
-                    # Multi-element numpy array (e.g., UDT internal representation)
+                    # Multi-element numpy array (for UDT)
                     return tuple(value.tolist())
                 else:
                     # Other Python object
                     return value
             
-            # Convert UDT inputs if input_types is available
             if input_types is not None:
+                # branch for UDF conversion
                 converted_args = []
                 for i in range(len(arrays[0]) if arrays else 0):
                     row_values = []
                     for j, array in enumerate(arrays):
-                        # Get Python value first
                         py_value = get_python_value(array, i)
-                        # Then apply UDT conversion if needed
                         converted_value = convert_input_value(py_value, input_types[j] if j < len(input_types) else None)
                         row_values.append(converted_value)
                     converted_args.append(tuple(row_values))
                 return converted_args
             else:
-                # Original logic: convert to Python values
                 raw_args = []
                 for i in range(len(arrays[0]) if arrays else 0):
                     row_values = tuple(get_python_value(array, i) for array in arrays)
