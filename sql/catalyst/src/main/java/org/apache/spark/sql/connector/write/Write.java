@@ -86,5 +86,4 @@ public interface Write {
   default CustomTaskMetric[] reportDriverMetrics() {
     return new CustomTaskMetric[]{};
   }
-
 }

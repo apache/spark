@@ -30,10 +30,11 @@ import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUt
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSERT_OPERATION, REINSERT_OPERATION, UPDATE_OPERATION, WRITE_OPERATION, WRITE_WITH_METADATA_OPERATION}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, Write, WriterCommitMessage}
+import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, RowLevelOperation, Write, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryExecNode}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{LongAccumulator, Utils}
@@ -398,7 +399,7 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec {
 /**
  * The base physical plan for writing data into data source v2.
  */
-trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
+trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSparkPlanHelper {
   def query: SparkPlan
   def writingTask: WritingSparkTask[_] = DataWritingSparkTask
 
@@ -422,6 +423,22 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
         tempRdd
       }
     }
+
+    val metricsOpt = batchWrite.requestExecMetrics() match {
+      case RowLevelOperation.Command.MERGE =>
+        collectFirst(query) {
+          case m: MergeRowsExec => m.metrics
+        }
+      case _ => None
+    }
+    metricsOpt.foreach { metrics =>
+      batchWrite.execMetrics(
+        metrics.map {
+          case (k, v) => V2ExecMetric(k, v.value)
+        }.toArray
+      )
+    }
+
     // introduce a local var to avoid serializing the whole class
     val task = writingTask
     val writerFactory = batchWrite.createBatchWriterFactory(
@@ -729,3 +746,4 @@ private[v2] case class DataWritingSparkTaskResult(
  */
 private[sql] case class StreamWriterCommitProgress(numOutputRows: Long)
 
+private [v2] case class V2ExecMetric(name: String, value: Long) extends CustomTaskMetric
