@@ -69,6 +69,8 @@ characteristic
   A name for the function. For a permanent function, you can optionally qualify the function name, or it will be created under the current catalog and namespace.
   If the name is not qualified the permanent function is created in the current schema.
 
+  **Syntax:** `[ database_name. ] function_name`
+
 - **function_parameter**
 
   Specifies a parameter of the function.
@@ -163,9 +165,7 @@ characteristic
 
 ```sql
 > CREATE VIEW t(c1, c2) AS VALUES (0, 1), (1, 2);
-```
 
-```sql
 -- Create a temporary function with no parameter.
 > CREATE TEMPORARY FUNCTION hello() RETURNS STRING
     RETURN 'Hello World!';
