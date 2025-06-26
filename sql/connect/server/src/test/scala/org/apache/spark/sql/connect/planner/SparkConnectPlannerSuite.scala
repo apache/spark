@@ -1014,10 +1014,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .setLiteral(proto.Expression.Literal.newBuilder.setChar(
             proto.Expression.Literal.newBuilder.getCharBuilder.setValue("spark").setLength(4)))
           .build())
-      proto.Expression.newBuilder
-        .setLiteral(proto.Expression.Literal.newBuilder.setVarchar(
-          proto.Expression.Literal.newBuilder.getVarcharBuilder.setValue("spark").setLength(4)))
-        .build()
+      checkExceedLimit(
+        proto.Expression.newBuilder
+          .setLiteral(proto.Expression.Literal.newBuilder.setVarchar(
+            proto.Expression.Literal.newBuilder.getVarcharBuilder.setValue("spark").setLength(4)))
+          .build())
     }
   }
 }
