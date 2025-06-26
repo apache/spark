@@ -3543,3 +3543,13 @@ object XmlSuiteDebugFileSystem {
     maxFilesPerThread.values().asScala.sum
   }
 }
+
+class OptimizedXMLParserSuite extends XmlSuite {
+  override def conf: SQLConf = {
+    val sqlConf = super.conf
+    sqlConf.setConfString(
+      SQLConf.ENABLE_OPTIMIZED_XML_PARSER.key, "true"
+    )
+    sqlConf
+  }
+}
