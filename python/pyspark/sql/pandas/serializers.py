@@ -217,7 +217,7 @@ class ArrowBatchUDFSerializer(ArrowStreamSerializer):
         self._assign_cols_by_name = assign_cols_by_name
         self._arrow_cast = arrow_cast
         self._struct_in_pandas = struct_in_pandas
-        self._ndarray_as_list = ndarray_as_list
+        self._ndarray_as_list = True
 
     def _create_array(self, arr, arrow_type, arrow_cast):
         import pyarrow as pa
@@ -308,11 +308,11 @@ class ArrowBatchUDFSerializer(ArrowStreamSerializer):
                 for i, (column, field) in enumerate(zip(arrow_column.flatten(), arrow_column.type))
             ]
             row_cls = Row(*[field.name for field in arrow_column.type])
-            return series[0].__class__([
+            result = series[0].__class__([
                 row_cls(*vals) for vals in zip(*series)
             ])
         else:
-            return ArrowStreamPandasSerializer.arrow_to_pandas(
+            result = ArrowStreamPandasSerializer.arrow_to_pandas(
                 self,
                 arrow_column,
                 idx,
@@ -320,6 +320,9 @@ class ArrowBatchUDFSerializer(ArrowStreamSerializer):
                 ndarray_as_list=ndarray_as_list,
                 spark_type=spark_type,
             )
+        if spark_type is not None and hasattr(spark_type, "fromInternal"):
+            return result.apply(lambda v: spark_type.fromInternal(v) if v is not None else v)
+        return result
 
 
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):

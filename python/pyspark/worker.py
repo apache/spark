@@ -202,14 +202,14 @@ def wrap_scalar_arrow_udf(f, args_offsets, kwargs_offsets, return_type, runner_c
     )
 
 
-def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
+def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf, input_types=None):
     if use_legacy_pandas_udf_conversion(runner_conf):
         return wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, runner_conf)
     else:
-        return wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf)
+        return wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf, input_types)
 
 
-def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf):
+def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf, input_types=None):
     import pyarrow as pa
 
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
@@ -227,6 +227,22 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
         result_func = lambda r: str(r) if r is not None else r  # noqa: E731
     elif type(return_type) == BinaryType:
         result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
+    elif hasattr(return_type, "fromInternal"):
+        result_func = lambda r: return_type.fromInternal(r) if r is not None else r  # noqa: E731
+
+    # Get input types for UDT conversion
+    # Use the passed input_types parameter instead of trying to get it from func
+    
+    def convert_input_value(value, input_type):
+        """Convert Arrow/numpy input values to appropriate Python types for UDTs"""
+        if input_type is not None and hasattr(input_type, "fromInternal"):
+            if value is not None:
+                # Convert numpy array to tuple for UDT fromInternal
+                if hasattr(value, "tolist"):
+                    return input_type.fromInternal(tuple(value.tolist()))
+                else:
+                    return input_type.fromInternal(value)
+        return value
 
     if zero_arg_exec:
         def get_args(*args: pa.RecordBatch):
@@ -244,7 +260,43 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
                 arg.combine_chunks() if isinstance(arg, pa.ChunkedArray) else arg
                 for arg in args
             ]
-            return zip(*arrays)
+            
+            def get_python_value(array, index):
+                """Get Python value from array at index, handling both PyArrow and numpy arrays"""
+                value = array[index]
+                if hasattr(value, 'as_py'):
+                    # PyArrow scalar
+                    return value.as_py()
+                elif hasattr(value, 'item') and value.size == 1:
+                    # Single-element numpy array
+                    return value.item()
+                elif hasattr(value, 'tolist'):
+                    # Multi-element numpy array (e.g., UDT internal representation)
+                    return tuple(value.tolist())
+                else:
+                    # Other Python object
+                    return value
+            
+            # Convert UDT inputs if input_types is available
+            if input_types is not None:
+                converted_args = []
+                for i in range(len(arrays[0]) if arrays else 0):
+                    row_values = []
+                    for j, array in enumerate(arrays):
+                        # Get Python value first
+                        py_value = get_python_value(array, i)
+                        # Then apply UDT conversion if needed
+                        converted_value = convert_input_value(py_value, input_types[j] if j < len(input_types) else None)
+                        row_values.append(converted_value)
+                    converted_args.append(tuple(row_values))
+                return converted_args
+            else:
+                # Original logic: convert to Python values
+                raw_args = []
+                for i in range(len(arrays[0]) if arrays else 0):
+                    row_values = tuple(get_python_value(array, i) for array in arrays)
+                    raw_args.append(row_values)
+                return raw_args
 
     @fail_on_stopiteration
     def evaluate(*args: pa.RecordBatch):
@@ -1034,7 +1086,7 @@ def wrap_memory_profiler(f, result_id):
     return profiling_func
 
 
-def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profiler):
+def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profiler, input_types=None):
     num_arg = read_int(infile)
 
     if eval_type in (
@@ -1102,7 +1154,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
     elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:
         return wrap_scalar_arrow_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF:
-        return wrap_arrow_batch_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf)
+        return wrap_arrow_batch_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf, input_types)
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
         return args_offsets, wrap_pandas_batch_iter_udf(func, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF:
@@ -1880,6 +1932,8 @@ def read_udfs(pickleSer, infile, eval_type):
 
     state_server_port = None
     key_schema = None
+    input_types = None
+    
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
@@ -2058,7 +2112,7 @@ def read_udfs(pickleSer, infile, eval_type):
             assert num_udfs == 1, "One MAP_ARROW_ITER UDF expected here."
 
         arg_offsets, udf = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=input_types
         )
 
         def func(_, iterator):
@@ -2151,7 +2205,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # See FlatMapGroupsInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
         arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=None
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
@@ -2170,7 +2224,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
         arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=None
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
         ser.key_offsets = parsed_offsets[0][0]
@@ -2201,7 +2255,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
         arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=None
         )
         # parsed offsets:
         # [
@@ -2239,7 +2293,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # See TransformWithStateInPySparkExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
         arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=None
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
         ser.key_offsets = parsed_offsets[0][0]
@@ -2266,7 +2320,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
         arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=None
         )
         # parsed offsets:
         # [
@@ -2301,7 +2355,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # See FlatMapGroupsInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
         arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=None
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
@@ -2327,7 +2381,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # See FlatMapGroupsInPandas(WithState)Exec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
         arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=None
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
@@ -2363,7 +2417,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # support combining multiple UDFs.
         assert num_udfs == 1
         arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=None
         )
 
         parsed_offsets = extract_key_value_indexes(arg_offsets)
@@ -2382,7 +2436,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # support combining multiple UDFs.
         assert num_udfs == 1
         arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=None
         )
 
         parsed_offsets = extract_key_value_indexes(arg_offsets)
@@ -2408,7 +2462,7 @@ def read_udfs(pickleSer, infile, eval_type):
         for i in range(num_udfs):
             udfs.append(
                 read_single_udf(
-                    pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
+                    pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler, input_types=None
                 )
             )
 
