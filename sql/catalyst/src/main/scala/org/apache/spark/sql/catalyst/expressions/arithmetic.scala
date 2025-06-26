@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.math.{max, min}
 
 import org.apache.spark.{QueryContext, SparkException}
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch

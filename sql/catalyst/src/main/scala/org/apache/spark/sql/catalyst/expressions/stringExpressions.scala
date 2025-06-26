@@ -1266,6 +1266,8 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
       StringTypeWithCollation(supportsTrimCollation = true)
     )
 
+  override def contextIndependentFoldable: Boolean = super.contextIndependentFoldable
+
   override protected def nullSafeEval(word: Any, set: Any): Any = {
     CollationSupport.FindInSet.
       exec(word.asInstanceOf[UTF8String], set.asInstanceOf[UTF8String], collationId)
@@ -1680,6 +1682,8 @@ case class StringInstr(str: Expression, substr: Expression)
       StringTypeNonCSAICollation(supportsTrimCollation = true),
       StringTypeNonCSAICollation(supportsTrimCollation = true)
     )
+
+  override def contextIndependentFoldable: Boolean = super.contextIndependentFoldable
 
   override def nullSafeEval(string: Any, sub: Any): Any = {
     CollationSupport.StringInstr.
@@ -2208,6 +2212,8 @@ case class StringRepeat(str: Expression, times: Expression)
       StringTypeWithCollation(supportsTrimCollation = true),
       IntegerType
     )
+
+  override def contextIndependentFoldable: Boolean = super.contextIndependentFoldable
 
   override def nullSafeEval(string: Any, n: Any): Any = {
     string.asInstanceOf[UTF8String].repeat(n.asInstanceOf[Integer])
@@ -3356,6 +3362,7 @@ case class FormatNumber(x: Expression, d: Expression)
   override def right: Expression = d
   override def nullable: Boolean = true
   override def nullIntolerant: Boolean = true
+  override def contextIndependentFoldable: Boolean = super.contextIndependentFoldable
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
@@ -3606,6 +3613,7 @@ case class StringSplitSQL(
   override def left: Expression = str
   override def right: Expression = delimiter
   override def nullIntolerant: Boolean = true
+  override def contextIndependentFoldable: Boolean = super.contextIndependentFoldable
 
   override def nullSafeEval(string: Any, delimiter: Any): Any = {
     val strings = CollationSupport.StringSplitSQL.exec(string.asInstanceOf[UTF8String],
