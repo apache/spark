@@ -120,7 +120,7 @@ case class PythonUDAF(
     dataType: DataType,
     children: Seq[Expression],
     udfDeterministic: Boolean,
-    evalType: Int,
+    evalType: Int = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
     resultId: ExprId = NamedExpression.newExprId)
   extends UnevaluableAggregateFunc with PythonFuncExpression {
 
