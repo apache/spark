@@ -5684,12 +5684,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             column_labels = other_copy._internal.column_labels
 
             self_column_label = verify_temp_column_name(other_copy, "__self_column__")
-
-            # Align index if ANSI mode is enabled
-            if is_ansi_mode_enabled(spark_session) and not self.index.equals(other_copy.index):
-                other_copy = other_copy.copy()
-                other_copy.index = self.index
-
             other_copy[self_column_label] = self
             self_psser = other_copy._psser_for(self_column_label)
 
