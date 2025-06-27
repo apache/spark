@@ -2975,6 +2975,31 @@ class DataFrameAggregateSuite extends QueryTest
       parameters = Map("maxItemsTracked" -> "5", "k" -> "10")
     )
   }
+
+  test("SPARK-52588: invalid accumulate if maxItemsTracked is null") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT approx_top_k_accumulate(expr, NULL) FROM VALUES 0, 1, 2 AS tab(expr);")
+          .collect()
+      },
+      condition = "APPROX_TOP_K_NULL_ARG",
+      parameters = Map("argName" -> "`maxItemsTracked`")
+    )
+  }
+
+  test("SPARK-52588null: invalid estimate if k is null") {
+    sql("SELECT approx_top_k_estimate(approx_top_k_accumulate(expr), NULL) " +
+      "FROM VALUES 0, 1, 2 AS tab(expr);").show(false)
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT approx_top_k_estimate(approx_top_k_accumulate(expr), NULL) " +
+          "FROM VALUES 0, 1, 2 AS tab(expr);").collect()
+      },
+      condition = "APPROX_TOP_K_NULL_ARG",
+      parameters = Map("argName" -> "`k`")
+    )
+  }
 }
 
 case class B(c: Option[Double])
