@@ -262,8 +262,8 @@ class ExpressionResolver(
             subqueryExpressionResolver.resolveScalarSubquery(unresolvedScalarSubquery)
           case unresolvedListQuery: ListQuery =>
             subqueryExpressionResolver.resolveListQuery(unresolvedListQuery)
-          case unresolvedTimeAdd: TimeAdd =>
-            timeAddResolver.resolve(unresolvedTimeAdd)
+          case unresolvedTimestampAdd: TimestampAddInterval =>
+            timeAddResolver.resolve(unresolvedTimestampAdd)
           case unresolvedUnaryMinus: UnaryMinus =>
             unaryMinusResolver.resolve(unresolvedUnaryMinus)
           case createNamedStruct: CreateNamedStruct =>

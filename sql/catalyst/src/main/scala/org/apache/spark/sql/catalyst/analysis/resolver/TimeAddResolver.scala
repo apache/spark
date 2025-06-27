@@ -23,13 +23,14 @@ import org.apache.spark.sql.catalyst.analysis.{
   StringPromotionTypeCoercion,
   TypeCoercion
 }
-import org.apache.spark.sql.catalyst.expressions.{Expression, TimeAdd}
+import org.apache.spark.sql.catalyst.expressions.{Expression, TimestampAddInterval}
 
 /**
- * Helper resolver for [[TimeAdd]] which is produced by resolving [[BinaryArithmetic]] nodes.
+ * Helper resolver for [[TimestampAddInterval]] which is produced by resolving [[BinaryArithmetic]]
+ * nodes.
  */
 class TimeAddResolver(expressionResolver: ExpressionResolver)
-    extends TreeNodeResolver[TimeAdd, Expression]
+    extends TreeNodeResolver[TimestampAddInterval, Expression]
     with ResolvesExpressionChildren
     with CoercesExpressionTypes {
 
@@ -40,7 +41,7 @@ class TimeAddResolver(expressionResolver: ExpressionResolver)
   protected override val nonAnsiTransformations: CoercesExpressionTypes.Transformations =
     TimeAddResolver.TYPE_COERCION_TRANSFORMATIONS
 
-  override def resolve(unresolvedTimeAdd: TimeAdd): Expression = {
+  override def resolve(unresolvedTimeAdd: TimestampAddInterval): Expression = {
     val timeAddWithResolvedChildren =
       withResolvedChildren(unresolvedTimeAdd, expressionResolver.resolve _)
     val timeAddWithTypeCoercion: Expression = coerceExpressionTypes(
