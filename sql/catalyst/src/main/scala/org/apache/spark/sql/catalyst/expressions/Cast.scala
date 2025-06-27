@@ -494,8 +494,8 @@ case class Cast(
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
 
   override def contextIndependentFoldable: Boolean = {
-    child.contextIndependentFoldable && !DataTypeUtils.hasContextDependency(dataType) &&
-      !DataTypeUtils.hasContextDependency(child.dataType)
+    child.contextIndependentFoldable && !DataTypeUtils.containsTimestampOrUDT(dataType) &&
+      !DataTypeUtils.containsTimestampOrUDT(child.dataType)
   }
 
   def ansiEnabled: Boolean = {
@@ -2227,8 +2227,8 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
   }
 
   override def contextIndependentFoldable: Boolean = {
-    child.contextIndependentFoldable && !DataTypeUtils.hasContextDependency(dataType) &&
-      !DataTypeUtils.hasContextDependency(child.dataType)
+    child.contextIndependentFoldable && !DataTypeUtils.containsTimestampOrUDT(dataType) &&
+      !DataTypeUtils.containsTimestampOrUDT(child.dataType)
   }
 
   override protected def withNewChildInternal(newChild: Expression): UpCast = copy(child = newChild)

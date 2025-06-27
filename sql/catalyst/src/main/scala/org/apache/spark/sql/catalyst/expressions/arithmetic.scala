@@ -195,9 +195,9 @@ abstract class BinaryArithmetic extends BinaryOperator with SupportQueryContext 
 
   override def contextIndependentFoldable: Boolean =
     left.contextIndependentFoldable && right.contextIndependentFoldable &&
-      !DataTypeUtils.hasContextDependency(left.dataType) &&
-      !DataTypeUtils.hasContextDependency(right.dataType) &&
-      !DataTypeUtils.hasContextDependency(dataType)
+      !DataTypeUtils.containsTimestampOrUDT(left.dataType) &&
+      !DataTypeUtils.containsTimestampOrUDT(right.dataType) &&
+      !DataTypeUtils.containsTimestampOrUDT(dataType)
 
   protected val evalMode: EvalMode.Value
 

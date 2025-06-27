@@ -251,9 +251,9 @@ object DataTypeUtils {
   }
 
   /**
-   * Checks if a data type depends on external context for its interpretation or behavior.
+   * Checks if a data type contains TimestampType or UserDefinedType.
    *
-   * A data type has a context dependency if it contains:
+   * This method traverses the data type to find:
    * - TimestampType (which depends on timezone for interpretation)
    * - UserDefinedType (which may have custom logic depending on runtime context)
    *
@@ -261,9 +261,9 @@ object DataTypeUtils {
    * differently based on the execution environment.
    *
    * @param dataType The data type to check
-   * @return true if the data type has context dependency
+   * @return true if the data type contains TimestampType or UserDefinedType
    */
-  def hasContextDependency(dataType: DataType): Boolean = {
+  def containsTimestampOrUDT(dataType: DataType): Boolean = {
     matchesPattern(dataType,
       dt => dt.isInstanceOf[TimestampType] || dt.isInstanceOf[UserDefinedType[_]])
   }
