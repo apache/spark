@@ -153,7 +153,7 @@ jobs:
           fi
 
           export ASF_PASSWORD GPG_PRIVATE_KEY GPG_PASSPHRASE ASF_USERNAME
-          export GIT_BRANCH
+          export GIT_BRANCH="${GIT_BRANCH:-master}"
           [ -n "$RELEASE_VERSION" ] && export RELEASE_VERSION
 
           if [ "$DRYRUN_MODE" = "1" ]; then
