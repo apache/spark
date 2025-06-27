@@ -62,7 +62,8 @@ case class IntersectionAggregationBuffer(sketch: Intersection) extends ThetaSket
       > SELECT theta_sketch_estimate(_FUNC_(col, 12)) FROM VALUES (1), (1), (2), (2), (3) tab(col);
        3
   """,
-  group = "agg_funcs")
+  group = "agg_funcs",
+  since = "4.0.0")
 // scalastyle:on line.size.limit
 case class ThetaSketchAgg(
     left: Expression,
@@ -260,7 +261,7 @@ case class ThetaSketchAgg(
 
 /**
  * The ThetaUnionAgg function ingests and merges Datasketches ThetaSketch instances previously
- * produced by the ThetaSketchBinary function, and outputs the merged ThetaSketch.
+ * produced by the ThetaSketchAgg function, and outputs the merged ThetaSketch.
  *
  * See [[https://datasketches.apache.org/docs/Theta/ThetaSketches.html]] for more information.
  *
@@ -272,15 +273,16 @@ case class ThetaSketchAgg(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, allowDifferentLgConfigK) - Returns the estimated number of unique values.
-      `allowDifferentLgConfigK` (optional) Allow sketches with different lgConfigK values
-       to be unioned (defaults to false).""",
+    _FUNC_(expr, lgNomEntries) - Returns the ThetaSketch's compact binary representation.
+      `lgNomEntries` (optional) the log-base-2 of Nominal Entries, with Nominal Entries deciding
+      the number buckets or slots for the ThetaSketch.""",
   examples = """
     Examples:
-      > SELECT theta_sketch_estimate(_FUNC_(sketch, true)) FROM (SELECT theta_sketch_agg(col) as sketch FROM VALUES (1) tab(col) UNION ALL SELECT theta_sketch_agg(col, 20) as sketch FROM VALUES (1) tab(col));
+      > SELECT theta_sketch_estimate(_FUNC_(sketch)) FROM (SELECT theta_sketch_agg(col) as sketch FROM VALUES (1) tab(col) UNION ALL SELECT theta_sketch_agg(col, 20) as sketch FROM VALUES (1) tab(col));
        1
   """,
-  group = "agg_funcs")
+  group = "agg_funcs",
+  since = "4.0.0")
 // scalastyle:on line.size.limit
 case class ThetaUnionAgg(
     left: Expression,
@@ -457,6 +459,31 @@ case class ThetaUnionAgg(
   }
 }
 
+/**
+ * The ThetaIntersectionAgg function ingests and merges Datasketches ThetaSketch instances
+ * previously produced by the ThetaSketchAgg function, and outputs the merged ThetaSketch.
+ *
+ * See [[https://datasketches.apache.org/docs/Theta/ThetaSketches.html]] for more information.
+ *
+ * @param left
+ *   Child expression against which unique counting will occur
+ * @param right
+ *   the log-base-2 of nomEntries decides the number of buckets for the sketch
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr, lgNomEntries) - Returns the ThetaSketch's compact binary representation.
+      `lgNomEntries` (optional) the log-base-2 of Nominal Entries, with Nominal Entries deciding
+      the number buckets or slots for the ThetaSketch.""",
+  examples = """
+    Examples:
+      > SELECT theta_sketch_estimate(_FUNC_(sketch)) FROM (SELECT theta_sketch_agg(col) as sketch FROM VALUES (1) tab(col) UNION ALL SELECT theta_sketch_agg(col, 20) as sketch FROM VALUES (1) tab(col));
+       1
+  """,
+  group = "agg_funcs",
+  since = "4.0.0")
+// scalastyle:on line.size.limit
 case class ThetaIntersectionAgg(
     left: Expression,
     right: Expression,

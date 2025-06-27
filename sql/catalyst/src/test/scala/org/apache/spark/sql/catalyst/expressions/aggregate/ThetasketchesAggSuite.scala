@@ -26,17 +26,20 @@ import org.apache.spark.sql.catalyst.expressions.{BoundReference, ThetaSketchEst
 import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
-
 class ThetasketchesAggSuite extends SparkFunSuite {
 
-  def simulateUpdateMerge(dataType: DataType, input: Seq[Any], numSketches: Integer = 5):
-    (Long, NumericRange[Long]) = {
+  def simulateUpdateMerge(
+      dataType: DataType,
+      input: Seq[Any],
+      numSketches: Integer = 5): (Long, NumericRange[Long]) = {
 
     // create a map of agg function instances
-    val aggFunctionMap = Seq.tabulate(numSketches)(index => {
-      val sketch = new ThetaSketchAgg(BoundReference(0, dataType, nullable = true))
-      index -> (sketch, sketch.createAggregationBuffer())
-    }).toMap
+    val aggFunctionMap = Seq
+      .tabulate(numSketches)(index => {
+        val sketch = new ThetaSketchAgg(BoundReference(0, dataType, nullable = true))
+        index -> (sketch, sketch.createAggregationBuffer())
+      })
+      .toMap
 
     // randomly update agg function instances
     input.map(value => {
@@ -44,8 +47,8 @@ class ThetasketchesAggSuite extends SparkFunSuite {
       aggFunction.update(aggBuffer, InternalRow(value))
     })
 
-    def serializeDeserialize(tuple: (ThetaSketchAgg, ThetaSketchState)):
-      (ThetaSketchAgg, ThetaSketchState) = {
+    def serializeDeserialize(
+        tuple: (ThetaSketchAgg, ThetaSketchState)): (ThetaSketchAgg, ThetaSketchState) = {
       val (agg, buf) = tuple
       val serialized = agg.serialize(buf)
       (agg, agg.deserialize(serialized))
@@ -53,14 +56,13 @@ class ThetasketchesAggSuite extends SparkFunSuite {
 
     // simulate serialization -> deserialization -> merge
     val mapValues = aggFunctionMap.values
-    val (mergedAgg, FinalizedSketch(mergedBuf)) = mapValues.tail.foldLeft(mapValues.head)(
-      (prev, cur) => {
+    val (mergedAgg, FinalizedSketch(mergedBuf)) =
+      mapValues.tail.foldLeft(mapValues.head)((prev, cur) => {
         val (prevAgg, prevBuf) = serializeDeserialize(prev)
         val (_, curBuf) = serializeDeserialize(cur)
 
         (prevAgg, prevAgg.merge(prevBuf, curBuf))
-      }
-    )
+      })
 
     val estimator = ThetaSketchEstimate(BoundReference(0, BinaryType, nullable = true))
     val estimate = estimator.eval(InternalRow(mergedBuf.toByteArray)).asInstanceOf[Long]
@@ -76,15 +78,18 @@ class ThetasketchesAggSuite extends SparkFunSuite {
     val (longEstimate, longEstimateRange) = simulateUpdateMerge(LongType, longRange)
     assert(longEstimate == longRange.size || longEstimateRange.contains(longRange.size.toLong))
 
-    val stringRange = Seq.tabulate(1000)(i => UTF8String.fromString(Random.nextString(i)))
+    val stringRange = Seq.tabulate(1000)(i => UTF8String.fromString(Random.nextString(i + 1)))
     val (stringEstimate, stringEstimateRange) = simulateUpdateMerge(StringType, stringRange)
-    assert(stringEstimate == stringRange.size ||
-      stringEstimateRange.contains(stringRange.size.toLong))
+    assert(
+      stringEstimate == stringRange.size ||
+        stringEstimateRange.contains(stringRange.size.toLong))
 
-    val binaryRange = Seq.tabulate(1000)(i => UTF8String.fromString(Random.nextString(i)).getBytes)
+    val binaryRange =
+      Seq.tabulate(1000)(i => UTF8String.fromString(Random.nextString(i + 1)).getBytes)
     val (binaryEstimate, binaryEstimateRange) = simulateUpdateMerge(BinaryType, binaryRange)
-    assert(binaryEstimate == binaryRange.size ||
-      binaryEstimateRange.contains(binaryRange.size.toLong))
+    assert(
+      binaryEstimate == binaryRange.size ||
+        binaryEstimateRange.contains(binaryRange.size.toLong))
 
     val floatRange = (1 to 1000).map(_.toFloat)
     val (floatEstimate, floatRangeEst) = simulateUpdateMerge(FloatType, floatRange)
@@ -95,18 +100,18 @@ class ThetasketchesAggSuite extends SparkFunSuite {
     assert(doubleEstimate == doubleRange.size || doubleRangeEst.contains(doubleRange.size.toLong))
 
     val arrayIntRange = (1 to 500).map(i => Array(i, i + 1))
-    val (arrayIntEstimate, arrayIntRangeEst) = simulateUpdateMerge(
-      ArrayType(IntegerType),
-      arrayIntRange)
-    assert(arrayIntEstimate == arrayIntRange.size ||
-      arrayIntRangeEst.contains(arrayIntRange.size.toLong))
+    val (arrayIntEstimate, arrayIntRangeEst) =
+      simulateUpdateMerge(ArrayType(IntegerType), arrayIntRange)
+    assert(
+      arrayIntEstimate == arrayIntRange.size ||
+        arrayIntRangeEst.contains(arrayIntRange.size.toLong))
 
     val arrayLongRange = (1 to 500).map(i => Array(i.toLong, (i + 1).toLong))
-    val (arrayLongEstimate, arrayLongRangeEst) = simulateUpdateMerge(
-      ArrayType(LongType),
-      arrayLongRange)
-    assert(arrayLongEstimate == arrayLongRange.size ||
-      arrayLongRangeEst.contains(arrayLongRange.size.toLong))
+    val (arrayLongEstimate, arrayLongRangeEst) =
+      simulateUpdateMerge(ArrayType(LongType), arrayLongRange)
+    assert(
+      arrayLongEstimate == arrayLongRange.size ||
+        arrayLongRangeEst.contains(arrayLongRange.size.toLong))
   }
 
   test("SPARK-52407: Test lgNomEntries results in downsampling sketches during Union") {
@@ -130,8 +135,8 @@ class ThetasketchesAggSuite extends SparkFunSuite {
     val unionResult = unionAgg.eval(union)
 
     // Verify the estimate is still accurate despite different configurations
-    val estimate = ThetaSketchEstimate(
-      BoundReference(0, BinaryType, nullable = true)).eval(InternalRow(unionResult))
+    val estimate = ThetaSketchEstimate(BoundReference(0, BinaryType, nullable = true))
+      .eval(InternalRow(unionResult))
     assert(estimate.asInstanceOf[Long] >= 95 && estimate.asInstanceOf[Long] <= 105)
   }
 
@@ -149,10 +154,8 @@ class ThetasketchesAggSuite extends SparkFunSuite {
     val binary2 = aggFunc2.eval(sketch2)
 
     // Intersect the sketches
-    val intersectionAgg = new ThetaIntersectionAgg(
-      BoundReference(0, BinaryType, nullable = true),
-      12
-    )
+    val intersectionAgg =
+      new ThetaIntersectionAgg(BoundReference(0, BinaryType, nullable = true), 12)
     val intersection = intersectionAgg.createAggregationBuffer()
     intersectionAgg.update(intersection, InternalRow(binary1))
     intersectionAgg.update(intersection, InternalRow(binary2))
@@ -160,8 +163,8 @@ class ThetasketchesAggSuite extends SparkFunSuite {
 
     // Verify the estimate is still accurate despite different configurations
     // Should be around 101 (overlap from 50 to 150)
-    val estimate = ThetaSketchEstimate(
-        BoundReference(0, BinaryType, nullable = true)).eval(InternalRow(intersectionResult))
+    val estimate = ThetaSketchEstimate(BoundReference(0, BinaryType, nullable = true))
+      .eval(InternalRow(intersectionResult))
     assert(estimate.asInstanceOf[Long] >= 95 && estimate.asInstanceOf[Long] <= 105)
   }
 }
