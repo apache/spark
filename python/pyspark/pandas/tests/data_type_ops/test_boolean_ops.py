@@ -240,7 +240,8 @@ class BooleanOpsTestsMixin:
         b_psser = psdf["bool"]
         b_pser = pdf["bool"]
         self.assert_eq(1 % b_pser.astype(float), 1 % b_psser)
-        self.assert_eq(0.1 % b_pser, 0.1 % b_psser)
+        # # Allow float precision diff: pandas:  0.10000000000000009; pandas on spark: 0.1
+        self.assert_eq(0.1 % b_pser, 0.1 % b_psser, almost=True)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) % b_psser)
         self.assertRaises(TypeError, lambda: True % b_psser)
 
