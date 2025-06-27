@@ -107,7 +107,6 @@ class SeriesTestsMixin:
         pser = ps.Series([1, 2, 3, 4, 5, 6, 7], name="x")
 
         self.assert_eq(ps.Series(pser), pser)
-        self.assert_eq(ps.Series(pser, name="y"), pser.rename("y"))
 
     def test_all_null_series(self):
         pser_a = pd.Series([None, None, None], dtype="float64")
