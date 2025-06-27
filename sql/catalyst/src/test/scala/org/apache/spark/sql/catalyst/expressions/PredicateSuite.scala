@@ -691,6 +691,10 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     val strLit = Literal("test")
     val boolLit = Literal(true)
     val nullLit = Literal.create(null, IntegerType)
+    val ts = java.sql.Timestamp.valueOf("2021-01-01 12:00:00")
+    val tsLit = Literal.create(ts, TimestampType)
+    val ts2 = java.sql.Timestamp.valueOf("2021-01-02 12:00:00")
+    val tsLit2 = Literal.create(ts2, TimestampType)
 
     // Create predicate expressions using these literals
     val expressions = Seq(
@@ -721,7 +725,13 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       InSet(intLit, Set(1, 5, 10)),
 
       // Nested predicates
-      And(GreaterThan(intLit, Literal(3)), LessThan(intLit, Literal(10)))
+      And(GreaterThan(intLit, Literal(3)), LessThan(intLit, Literal(10))),
+
+      // Timestamp comparisons
+      EqualTo(tsLit, tsLit2),
+      GreaterThan(tsLit,
+        Literal.create(java.sql.Timestamp.valueOf("2020-12-31 12:00:00"), TimestampType)),
+      LessThan(tsLit, tsLit2)
     )
 
     expressions.foreach { expr =>
@@ -740,12 +750,6 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Create predicate expressions that involve timestamps
     val expressions = Seq(
-      // Timestamp comparisons
-      EqualTo(tsLit, tsLit2),
-      GreaterThan(tsLit,
-        Literal.create(java.sql.Timestamp.valueOf("2020-12-31 12:00:00"), TimestampType)),
-      LessThan(tsLit, tsLit2),
-
       // Predicates with cast operations
       EqualTo(Cast(tsLit, DateType), Cast(tsLit2, DateType)),
 
