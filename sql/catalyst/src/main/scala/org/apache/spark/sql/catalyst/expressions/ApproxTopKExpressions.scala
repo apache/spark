@@ -62,7 +62,7 @@ case class ApproxTopKEstimate(expr: Expression, k: Expression)
   override protected def withNewChildrenInternal(newExpr: Expression, newK: Expression)
   : Expression = copy(expr = newExpr, k = newK)
 
-  override def nullIntolerant: Boolean = true
+  override def nullIntolerant: Boolean = false
 
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("approx_top_k_estimate")
