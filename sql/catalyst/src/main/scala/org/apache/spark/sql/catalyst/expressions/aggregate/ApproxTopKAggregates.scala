@@ -21,7 +21,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.datasketches.common._
 import org.apache.datasketches.frequencies.{ErrorType, ItemsSketch}
 import org.apache.datasketches.memory.Memory
-
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
@@ -178,6 +178,8 @@ object ApproxTopK {
   private val DEFAULT_K: Int = 5
   val DEFAULT_MAX_ITEMS_TRACKED: Int = 10000
   private val MAX_ITEMS_TRACKED_LIMIT: Int = 1000000
+  val VOID_MAX_ITEMS_TRACKED: Int = -1
+  val SKETCH_SIZE_PLACEHOLDER: Int = 8
 
   def checkExpressionNotNull(expr: Expression, exprName: String): Unit = {
     if (expr == null || expr.eval() == null) {
@@ -195,6 +197,9 @@ object ApproxTopK {
     if (maxItemsTracked > MAX_ITEMS_TRACKED_LIMIT) {
       throw QueryExecutionErrors.approxTopKMaxItemsTrackedExceedsLimit(
         maxItemsTracked, MAX_ITEMS_TRACKED_LIMIT)
+    }
+    if (maxItemsTracked <= 0) {
+      throw QueryExecutionErrors.approxTopKNonPositiveValue("maxItemsTracked", maxItemsTracked)
     }
   }
 
@@ -400,4 +405,149 @@ case class ApproxTopKAccumulate(
 
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("approx_top_k_accumulate")
+}
+
+class CombineInternal[T](sketch: ItemsSketch[T], itemDataType: DataType, var maxItemsTracked: Int) {
+  def getSketch: ItemsSketch[T] = sketch
+
+  def getItemDataType: DataType = itemDataType
+
+  def getMaxItemsTracked: Int = maxItemsTracked
+
+  def setMaxItemsTracked(maxItemsTracked: Int): Unit = this.maxItemsTracked = maxItemsTracked
+}
+
+case class ApproxTopKCombine(
+    expr: Expression,
+    maxItemsTracked: Expression,
+    combineSizeSpecified: Boolean, // not open to user, used to determine if the size is specified
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
+  extends TypedImperativeAggregate[CombineInternal[Any]]
+  with ImplicitCastInputTypes
+  with BinaryLike[Expression] {
+
+  def this(child: Expression, maxItemsTracked: Expression) =
+    this(child, maxItemsTracked, true, 0, 0)
+
+  def this(child: Expression, maxItemsTracked: Int) =
+    this(child, Literal(maxItemsTracked), true, 0, 0)
+
+  def this(child: Expression) =
+    this(child, Literal(ApproxTopK.VOID_MAX_ITEMS_TRACKED), false, 0, 0)
+
+  private lazy val itemDataType: DataType =
+    expr.dataType.asInstanceOf[StructType]("ItemTypeNull").dataType
+
+  private lazy val maxItemsTrackedVal: Int = {
+    ApproxTopK.checkExpressionNotNull(maxItemsTracked, "maxItemsTracked")
+    val maxItemsTrackedVal = maxItemsTracked.eval().asInstanceOf[Int]
+    ApproxTopK.checkMaxItemsTracked(maxItemsTrackedVal)
+    maxItemsTrackedVal
+  }
+
+  override def left: Expression = expr
+
+  override def right: Expression = maxItemsTracked
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StructType, IntegerType)
+
+  override def dataType: DataType = ApproxTopK.getSketchStateDataType(itemDataType)
+
+  override def createAggregationBuffer(): CombineInternal[Any] = {
+    if (combineSizeSpecified) {
+      val maxMapSize = ApproxTopK.calMaxMapSize(maxItemsTrackedVal)
+      new CombineInternal[Any](new ItemsSketch[Any](maxMapSize), itemDataType, maxItemsTrackedVal)
+    } else {
+      new CombineInternal[Any](
+        new ItemsSketch[Any](ApproxTopK.SKETCH_SIZE_PLACEHOLDER),
+        itemDataType,
+        ApproxTopK.VOID_MAX_ITEMS_TRACKED)
+    }
+  }
+
+  override def update(buffer: CombineInternal[Any], input: InternalRow): CombineInternal[Any] = {
+    val inputSketchBytes = expr.eval(input).asInstanceOf[InternalRow].getBinary(0)
+    val inputMaxItemsTracked = expr.eval(input).asInstanceOf[InternalRow].getInt(2)
+    val inputSketch = try {
+      ItemsSketch.getInstance(
+        Memory.wrap(inputSketchBytes), ApproxTopK.genSketchSerDe(buffer.getItemDataType))
+    } catch {
+      case _: SketchesArgumentException | _: NumberFormatException =>
+        throw new SparkUnsupportedOperationException(
+          errorClass = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED"
+        )
+    }
+    buffer.getSketch.merge(inputSketch)
+    if (!combineSizeSpecified) {
+      buffer.setMaxItemsTracked(inputMaxItemsTracked)
+    }
+    buffer
+  }
+
+  override def merge(buffer: CombineInternal[Any], input: CombineInternal[Any])
+  : CombineInternal[Any] = {
+    if (!combineSizeSpecified) {
+      // check size
+      if (buffer.getMaxItemsTracked == ApproxTopK.VOID_MAX_ITEMS_TRACKED) {
+        // If buffer is a placeholder sketch, set it to the input sketch's max items tracked
+        buffer.setMaxItemsTracked(input.getMaxItemsTracked)
+      }
+      if (buffer.getMaxItemsTracked != input.getMaxItemsTracked) {
+        throw new SparkUnsupportedOperationException(
+          errorClass = "APPROX_TOP_K_SKETCH_SIZE_UNMATCHED",
+          messageParameters = Map(
+            "size1" -> buffer.getMaxItemsTracked.toString,
+            "size2" -> input.getMaxItemsTracked.toString))
+      }
+    }
+    buffer.getSketch.merge(input.getSketch)
+    buffer
+  }
+
+  override def eval(buffer: CombineInternal[Any]): Any = {
+    val sketchBytes = try {
+      buffer.getSketch.toByteArray(ApproxTopK.genSketchSerDe(buffer.getItemDataType))
+    } catch {
+      case _: ArrayStoreException =>
+        throw new SparkUnsupportedOperationException(
+          errorClass = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED"
+        )
+    }
+    val maxItemsTracked = buffer.getMaxItemsTracked
+    InternalRow.apply(sketchBytes, null, maxItemsTracked)
+  }
+
+  override def serialize(buffer: CombineInternal[Any]): Array[Byte] = {
+    val sketchBytes = buffer.getSketch.toByteArray(
+      ApproxTopK.genSketchSerDe(buffer.getItemDataType))
+    val maxItemsTrackedByte = buffer.getMaxItemsTracked.toByte
+    val byteArray = new Array[Byte](sketchBytes.length + 1)
+    byteArray(0) = maxItemsTrackedByte
+    System.arraycopy(sketchBytes, 0, byteArray, 1, sketchBytes.length)
+    byteArray
+  }
+
+  override def deserialize(buffer: Array[Byte]): CombineInternal[Any] = {
+    val maxItemsTracked = buffer(0).toInt
+    val sketchBytes = buffer.slice(1, buffer.length)
+    val sketch = ItemsSketch.getInstance(
+      Memory.wrap(sketchBytes), ApproxTopK.genSketchSerDe(itemDataType))
+    new CombineInternal[Any](sketch, itemDataType, maxItemsTracked)
+  }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): Expression = copy(expr = newLeft, maxItemsTracked = newRight)
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override def nullable: Boolean = false
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("approx_top_k_combine")
 }
