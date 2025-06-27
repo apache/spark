@@ -1,0 +1,4 @@
+- text: Setting up Spark Connect
+  url: spark-connect-setup.html
+- text: Extending Spark with Spark Server Libraries
+  url: spark-connect-server-libs.html
