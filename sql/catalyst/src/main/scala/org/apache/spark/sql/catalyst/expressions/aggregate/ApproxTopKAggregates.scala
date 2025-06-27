@@ -176,7 +176,7 @@ case class ApproxTopK(
 
 object ApproxTopK {
 
-  private val DEFAULT_K: Int = 5
+  val DEFAULT_K: Int = 5
   val DEFAULT_MAX_ITEMS_TRACKED: Int = 10000
   private val MAX_ITEMS_TRACKED_LIMIT: Int = 1000000
   val VOID_MAX_ITEMS_TRACKED: Int = -1
@@ -211,7 +211,7 @@ object ApproxTopK {
     }
   }
 
-  private def getResultDataType(itemDataType: DataType): DataType = {
+  def getResultDataType(itemDataType: DataType): DataType = {
     val resultEntryType = StructType(
       StructField("item", itemDataType, nullable = false) ::
         StructField("count", LongType, nullable = false) :: Nil)
@@ -280,7 +280,7 @@ object ApproxTopK {
     buffer
   }
 
-  private def genEvalResult(
+  def genEvalResult(
       itemsSketch: ItemsSketch[Any],
       k: Int,
       itemDataType: DataType): GenericArrayData = {
