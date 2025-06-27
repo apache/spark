@@ -97,9 +97,7 @@ characteristic
 
 - **RETURNS [data_type](sql-ref-datatypes.md)**
 
-  The return data type of the scalar function.
-
-  For SQL UDF this clause is optional. The data type will be derived from the function body if it is not provided.
+  The return data type of the scalar function. This clause is optional. The data type will be derived from the SQL function body if it is not provided.
 
 - **RETURNS TABLE [ (column_spec [,…] ) ]**
 
