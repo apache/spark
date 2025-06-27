@@ -1660,6 +1660,226 @@ Project [spark_catalog.default.bar1_10(b#x) AS spark_catalog.default.bar1_10(3)#
 
 
 -- !query
+CREATE OR REPLACE FUNCTION foo1_11a() RETURN 42
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11a, , 42, false, false, false, true
+
+
+-- !query
+SELECT foo1_11a()
+-- !query analysis
+Project [spark_catalog.default.foo1_11a() AS spark_catalog.default.foo1_11a()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11b() RETURN 'hello world'
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11b, , 'hello world', false, false, false, true
+
+
+-- !query
+SELECT foo1_11b()
+-- !query analysis
+Project [spark_catalog.default.foo1_11b() AS spark_catalog.default.foo1_11b()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11c(a INT, b INT) RETURN a + b
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11c, a INT, b INT, , a + b, false, false, false, true
+
+
+-- !query
+SELECT foo1_11c(3, 5)
+-- !query analysis
+Project [spark_catalog.default.foo1_11c(a#x, b#x) AS spark_catalog.default.foo1_11c(3, 5)#x]
++- Project [cast(3 as int) AS a#x, cast(5 as int) AS b#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11d(a DOUBLE, b INT) RETURN a * b + 1.5
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11d, a DOUBLE, b INT, , a * b + 1.5, false, false, false, true
+
+
+-- !query
+SELECT foo1_11d(3.0, 5)
+-- !query analysis
+Project [spark_catalog.default.foo1_11d(a#x, b#x) AS spark_catalog.default.foo1_11d(3.0, 5)#x]
++- Project [cast(3.0 as double) AS a#x, cast(5 as int) AS b#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11e(a INT) RETURN a > 10
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11e, a INT, , a > 10, false, false, false, true
+
+
+-- !query
+SELECT foo1_11e(15), foo1_11e(5)
+-- !query analysis
+Project [spark_catalog.default.foo1_11e(a#x) AS spark_catalog.default.foo1_11e(15)#x, spark_catalog.default.foo1_11e(a#x) AS spark_catalog.default.foo1_11e(5)#x]
++- Project [cast(15 as int) AS a#x, cast(5 as int) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11f(d DATE) RETURN d + INTERVAL '1' DAY
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11f, d DATE, , d + INTERVAL '1' DAY, false, false, false, true
+
+
+-- !query
+SELECT foo1_11f(DATE '2024-01-01')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11g(n INT) RETURN ARRAY(1, 2, n)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11g, n INT, , ARRAY(1, 2, n), false, false, false, true
+
+
+-- !query
+SELECT foo1_11g(5)
+-- !query analysis
+Project [spark_catalog.default.foo1_11g(n#x) AS spark_catalog.default.foo1_11g(5)#x]
++- Project [cast(5 as int) AS n#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11h(a INT, b STRING) RETURN STRUCT(a, b)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11h, a INT, b STRING, , STRUCT(a, b), false, false, false, true
+
+
+-- !query
+SELECT foo1_11h(1, 'test')
+-- !query analysis
+Project [spark_catalog.default.foo1_11h(a#x, b#x) AS spark_catalog.default.foo1_11h(1, test)#x]
++- Project [cast(1 as int) AS a#x, cast(test as string) AS b#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11i(x INT) RETURN (SELECT x * 2)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11i, x INT, , (SELECT x * 2), false, false, false, true
+
+
+-- !query
+SELECT foo1_11i(5)
+-- !query analysis
+Project [spark_catalog.default.foo1_11i(x#x) AS spark_catalog.default.foo1_11i(5)#x]
++- Project [cast(5 as int) AS x#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11j(s STRING) RETURN UPPER(s)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11j, s STRING, , UPPER(s), false, false, false, true
+
+
+-- !query
+SELECT foo1_11j('hello')
+-- !query analysis
+Project [spark_catalog.default.foo1_11j(s#x) AS spark_catalog.default.foo1_11j(hello)#x]
++- Project [cast(hello as string) AS s#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11k(a INT, b STRING) RETURN CONCAT(CAST(a AS STRING), '_', b)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11k, a INT, b STRING, , CONCAT(CAST(a AS STRING), '_', b), false, false, false, true
+
+
+-- !query
+SELECT foo1_11k(123, 'test')
+-- !query analysis
+Project [spark_catalog.default.foo1_11k(a#x, b#x) AS spark_catalog.default.foo1_11k(123, test)#x]
++- Project [cast(123 as int) AS a#x, cast(test as string) AS b#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11l() RETURNS TABLE RETURN SELECT 1 as id, 'hello' as name
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11l, TABLE, SELECT 1 as id, 'hello' as name, true, false, false, true
+
+
+-- !query
+SELECT * FROM foo1_11l()
+-- !query analysis
+Project [id#x, name#x]
++- SQLFunctionNode spark_catalog.default.foo1_11l
+   +- SubqueryAlias foo1_11l
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x]
+         +- Project [1 AS id#x, hello AS name#x]
+            +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11m(a INT, b STRING) RETURNS TABLE RETURN SELECT a * 2 as doubled, UPPER(b) as upper_name
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11m, a INT, b STRING, TABLE, SELECT a * 2 as doubled, UPPER(b) as upper_name, true, false, false, true
+
+
+-- !query
+SELECT * FROM foo1_11m(5, 'world')
+-- !query analysis
+Project [doubled#x, upper_name#x]
++- SQLFunctionNode spark_catalog.default.foo1_11m
+   +- SubqueryAlias foo1_11m
+      +- Project [cast(doubled#x as int) AS doubled#x, cast(upper_name#x as string) AS upper_name#x]
+         +- Project [(cast(5 as int) * 2) AS doubled#x, upper(cast(world as string)) AS upper_name#x]
+            +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11n(arr ARRAY<INT>) RETURNS TABLE RETURN SELECT size(arr) as array_size, arr[0] as first_element
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11n, arr ARRAY<INT>, TABLE, SELECT size(arr) as array_size, arr[0] as first_element, true, false, false, true
+
+
+-- !query
+SELECT * FROM foo1_11n(ARRAY(1, 2, 3))
+-- !query analysis
+Project [array_size#x, first_element#x]
++- SQLFunctionNode spark_catalog.default.foo1_11n
+   +- SubqueryAlias foo1_11n
+      +- Project [cast(array_size#x as int) AS array_size#x, cast(first_element#x as int) AS first_element#x]
+         +- Project [size(cast(array(1, 2, 3) as array<int>), false) AS array_size#x, cast(array(1, 2, 3) as array<int>)[0] AS first_element#x]
+            +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11o(id INT, name STRING) RETURNS TABLE RETURN SELECT STRUCT(id, name) as person_info, id + 100 as modified_id
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11o, id INT, name STRING, TABLE, SELECT STRUCT(id, name) as person_info, id + 100 as modified_id, true, false, false, true
+
+
+-- !query
+SELECT * FROM foo1_11o(1, 'Alice')
+-- !query analysis
+Project [person_info#x, modified_id#x]
++- SQLFunctionNode spark_catalog.default.foo1_11o
+   +- SubqueryAlias foo1_11o
+      +- Project [cast(person_info#x as struct<id:int,name:string>) AS person_info#x, cast(modified_id#x as int) AS modified_id#x]
+         +- Project [struct(id, cast(1 as int), name, cast(Alice as string)) AS person_info#x, (cast(1 as int) + 100) AS modified_id#x]
+            +- OneRowRelation
+
+
+-- !query
 CREATE FUNCTION foo2_1a(a INT) RETURNS INT RETURN a
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException

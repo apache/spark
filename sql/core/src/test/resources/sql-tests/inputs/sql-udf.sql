@@ -343,6 +343,84 @@ CREATE OR REPLACE FUNCTION foo1_10(a INT) RETURNS INT RETURN a + 2;
 CREATE OR REPLACE FUNCTION bar1_10(b INT) RETURNS STRING RETURN foo1_10(TRY_CAST(b AS STRING));
 SELECT bar1_10(3);
 
+-- 1.11 Optional return types (type inference)
+-- 1.11.a Scalar UDF without RETURNS clause - return type inferred from body
+-- Simple literal return
+CREATE OR REPLACE FUNCTION foo1_11a() RETURN 42;
+-- Expect: 42
+SELECT foo1_11a();
+
+-- String literal return
+CREATE OR REPLACE FUNCTION foo1_11b() RETURN 'hello world';
+-- Expect: 'hello world'
+SELECT foo1_11b();
+
+-- Expression return - should infer INT
+CREATE OR REPLACE FUNCTION foo1_11c(a INT, b INT) RETURN a + b;
+-- Expect: 8
+SELECT foo1_11c(3, 5);
+
+-- Expression return - should infer DOUBLE
+CREATE OR REPLACE FUNCTION foo1_11d(a DOUBLE, b INT) RETURN a * b + 1.5;
+-- Expect: 16.5
+SELECT foo1_11d(3.0, 5);
+
+-- Boolean expression return
+CREATE OR REPLACE FUNCTION foo1_11e(a INT) RETURN a > 10;
+-- Expect: true, false
+SELECT foo1_11e(15), foo1_11e(5);
+
+-- Date arithmetic return
+CREATE OR REPLACE FUNCTION foo1_11f(d DATE) RETURN d + INTERVAL '1' DAY;
+-- Expect: 2024-01-02
+SELECT foo1_11f(DATE '2024-01-01');
+
+-- Array return
+CREATE OR REPLACE FUNCTION foo1_11g(n INT) RETURN ARRAY(1, 2, n);
+-- Expect: [1, 2, 5]
+SELECT foo1_11g(5);
+
+-- Struct return
+CREATE OR REPLACE FUNCTION foo1_11h(a INT, b STRING) RETURN STRUCT(a, b);
+-- Expect: {1, 'test'}
+SELECT foo1_11h(1, 'test');
+
+-- Subquery return - scalar
+CREATE OR REPLACE FUNCTION foo1_11i(x INT) RETURN (SELECT x * 2);
+-- Expect: 10
+SELECT foo1_11i(5);
+
+-- Function call return
+CREATE OR REPLACE FUNCTION foo1_11j(s STRING) RETURN UPPER(s);
+-- Expect: 'HELLO'
+SELECT foo1_11j('hello');
+
+-- Complex expression with multiple types
+CREATE OR REPLACE FUNCTION foo1_11k(a INT, b STRING) RETURN CONCAT(CAST(a AS STRING), '_', b);
+-- Expect: '123_test'
+SELECT foo1_11k(123, 'test');
+
+-- 1.11.b Table UDF without TABLE schema - schema inferred from body
+-- Simple SELECT with literals
+CREATE OR REPLACE FUNCTION foo1_11l() RETURNS TABLE RETURN SELECT 1 as id, 'hello' as name;
+-- Expect: (1, 'hello')
+SELECT * FROM foo1_11l();
+
+-- SELECT with expressions
+CREATE OR REPLACE FUNCTION foo1_11m(a INT, b STRING) RETURNS TABLE RETURN SELECT a * 2 as doubled, UPPER(b) as upper_name;
+-- Expect: (10, 'WORLD')
+SELECT * FROM foo1_11m(5, 'world');
+
+-- SELECT with complex data types
+CREATE OR REPLACE FUNCTION foo1_11n(arr ARRAY<INT>) RETURNS TABLE RETURN SELECT size(arr) as array_size, arr[0] as first_element;
+-- Expect: (3, 1)
+SELECT * FROM foo1_11n(ARRAY(1, 2, 3));
+
+-- SELECT with struct columns
+CREATE OR REPLACE FUNCTION foo1_11o(id INT, name STRING) RETURNS TABLE RETURN SELECT STRUCT(id, name) as person_info, id + 100 as modified_id;
+-- Expect: ({1, 'Alice'}, 101)
+SELECT * FROM foo1_11o(1, 'Alice');
+
 -------------------------------
 -- 2. Scalar SQL UDF
 -- 2.1 deterministic simple expressions
