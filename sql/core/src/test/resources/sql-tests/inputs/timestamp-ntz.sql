@@ -21,6 +21,12 @@ SELECT make_timestamp_ntz(DATE'1970-01-01', NULL);
 SELECT make_timestamp_ntz(timestamp_ntz'2018-11-17 13:33:33', TIME'0:0:0');
 SELECT make_timestamp_ntz(DATE'2025-06-20', '0:0:0');
 
+SELECT try_make_timestamp_ntz(make_date(2025, 6, 27), make_time(16, 08, 45.123456));
+SELECT try_make_timestamp_ntz(NULL, TIME'23:59:59.00001');
+SELECT try_make_timestamp_ntz(DATE'0001-01-01', NULL);
+SELECT try_make_timestamp_ntz('2018-11-17 13:33:33', TIME'0:0:0');
+SELECT try_make_timestamp_ntz(DATE'2025-06-20', 10D);
+
 SELECT convert_timezone('Europe/Moscow', 'America/Los_Angeles', timestamp_ntz'2022-01-01 00:00:00');
 SELECT convert_timezone('Europe/Brussels', timestamp_ntz'2022-03-23 00:00:00');
 
