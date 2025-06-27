@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.ApproxTopK
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.types._
 
-case class ApproxTopKEstimate(left: Expression, right: Expression)
+case class ApproxTopKEstimate(expr: Expression, k: Expression)
   extends BinaryExpression
   with CodegenFallback
   with ImplicitCastInputTypes {
@@ -36,8 +36,12 @@ case class ApproxTopKEstimate(left: Expression, right: Expression)
 
   private lazy val itemDataType: DataType = {
     // itemDataType is the type of the "ItemTypeNull" field of the output of ACCUMULATE or COMBINE
-    left.dataType.asInstanceOf[StructType]("ItemTypeNull").dataType
+    expr.dataType.asInstanceOf[StructType]("ItemTypeNull").dataType
   }
+
+  override def left: Expression = expr
+
+  override def right: Expression = k
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StructType, IntegerType)
 
@@ -45,15 +49,18 @@ case class ApproxTopKEstimate(left: Expression, right: Expression)
 
   override def nullSafeEval(input1: Any, input2: Any): Any = {
     val dataSketchBytes = input1.asInstanceOf[InternalRow].getBinary(0)
-    val topK = input2.asInstanceOf[Int]
+    val maxItemsTrackedVal = input1.asInstanceOf[InternalRow].getInt(2)
+    ApproxTopK.checkExpressionNotNull(k, "k")
+    val kVal = input2.asInstanceOf[Int]
+    ApproxTopK.checkK(kVal)
+    ApproxTopK.checkMaxItemsTracked(maxItemsTrackedVal, kVal)
     val itemsSketch = ItemsSketch.getInstance(
       Memory.wrap(dataSketchBytes), ApproxTopK.genSketchSerDe(itemDataType))
-    ApproxTopK.genEvalResult(itemsSketch, topK, itemDataType)
+    ApproxTopK.genEvalResult(itemsSketch, kVal, itemDataType)
   }
 
-  override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): Expression = copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(newExpr: Expression, newK: Expression)
+  : Expression = copy(expr = newExpr, k = newK)
 
   override def nullIntolerant: Boolean = true
 

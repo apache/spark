@@ -188,7 +188,7 @@ object ApproxTopK {
     }
   }
 
-  private def checkK(k: Int): Unit = {
+  def checkK(k: Int): Unit = {
     if (k <= 0) {
       throw QueryExecutionErrors.approxTopKNonPositiveValue("k", k)
     }
@@ -204,7 +204,7 @@ object ApproxTopK {
     }
   }
 
-  private def checkMaxItemsTracked(maxItemsTracked: Int, k: Int): Unit = {
+  def checkMaxItemsTracked(maxItemsTracked: Int, k: Int): Unit = {
     checkMaxItemsTracked(maxItemsTracked)
     if (maxItemsTracked < k) {
       throw QueryExecutionErrors.approxTopKMaxItemsTrackedLessThanK(maxItemsTracked, k)
@@ -234,7 +234,8 @@ object ApproxTopK {
     // https://datasketches.apache.org/docs/Frequency/FrequentItemsOverview.html
     val ceilMaxMapSize = math.ceil(maxItemsTracked / 0.75).toInt
     // The maxMapSize must be a power of 2 and greater than ceilMaxMapSize
-    math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
+    val maxMapSize = math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
+    maxMapSize
   }
 
   def createAggregationBuffer(itemExpression: Expression, maxMapSize: Int): ItemsSketch[Any] = {
@@ -341,6 +342,7 @@ case class ApproxTopKAccumulate(
   def this(child: Expression) = this(child, Literal(ApproxTopK.DEFAULT_MAX_ITEMS_TRACKED), 0, 0)
 
   private lazy val itemDataType: DataType = expr.dataType
+
   private lazy val maxItemsTrackedVal: Int = {
     ApproxTopK.checkExpressionNotNull(maxItemsTracked, "maxItemsTracked")
     val maxItemsTrackedVal = maxItemsTracked.eval().asInstanceOf[Int]
@@ -421,7 +423,6 @@ class CombineInternal[T](sketch: ItemsSketch[T], itemDataType: DataType, var max
 case class ApproxTopKCombine(
     expr: Expression,
     maxItemsTracked: Expression,
-    combineSizeSpecified: Boolean, // not open to user, used to determine if the size is specified
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
   extends TypedImperativeAggregate[CombineInternal[Any]]
@@ -429,13 +430,17 @@ case class ApproxTopKCombine(
   with BinaryLike[Expression] {
 
   def this(child: Expression, maxItemsTracked: Expression) =
-    this(child, maxItemsTracked, true, 0, 0)
+    this(child, maxItemsTracked, 0, 0)
 
   def this(child: Expression, maxItemsTracked: Int) =
-    this(child, Literal(maxItemsTracked), true, 0, 0)
+    this(child, Literal(maxItemsTracked), 0, 0)
 
-  def this(child: Expression) =
-    this(child, Literal(ApproxTopK.VOID_MAX_ITEMS_TRACKED), false, 0, 0)
+  def this(child: Expression) = {
+    this(child, Literal(ApproxTopK.VOID_MAX_ITEMS_TRACKED), 0, 0)
+    combineSizeSpecified = false
+  }
+
+  private var combineSizeSpecified: Boolean = true
 
   private lazy val itemDataType: DataType =
     expr.dataType.asInstanceOf[StructType]("ItemTypeNull").dataType
