@@ -118,7 +118,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"0:0:0\"",
     "inputType" : "\"STRING\"",
     "paramIndex" : "second",
-    "requiredType" : "(\"TIME(0)\" or \"TIME(1)\" or \"TIME(2)\" or \"TIME(3)\" or \"TIME(4)\" or \"TIME(5)\" or \"TIME(6)\")",
+    "requiredType" : "\"TIME\"",
     "sqlExpr" : "\"make_timestamp_ntz(DATE '2025-06-20', 0:0:0)\""
   },
   "queryContext" : [ {
