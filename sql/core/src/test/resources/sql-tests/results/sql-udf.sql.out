@@ -2461,6 +2461,14 @@ spark.sql.ansi.enabled	true
 
 
 -- !query
+DROP FUNCTION IF EXISTS foo3_3at
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 CREATE FUNCTION foo3_3a(x INT) RETURNS DOUBLE RETURN 1 / x
 -- !query schema
 struct<>
