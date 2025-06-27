@@ -23,6 +23,7 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, ThetaSketchEstimate}
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -99,14 +100,14 @@ class ThetasketchesAggSuite extends SparkFunSuite {
     val (doubleEstimate, doubleRangeEst) = simulateUpdateMerge(DoubleType, doubleRange)
     assert(doubleEstimate == doubleRange.size || doubleRangeEst.contains(doubleRange.size.toLong))
 
-    val arrayIntRange = (1 to 500).map(i => Array(i, i + 1))
+    val arrayIntRange = (1 to 500).map(i => ArrayData.toArrayData(Array(i, i + 1)))
     val (arrayIntEstimate, arrayIntRangeEst) =
       simulateUpdateMerge(ArrayType(IntegerType), arrayIntRange)
     assert(
       arrayIntEstimate == arrayIntRange.size ||
         arrayIntRangeEst.contains(arrayIntRange.size.toLong))
 
-    val arrayLongRange = (1 to 500).map(i => Array(i.toLong, (i + 1).toLong))
+    val arrayLongRange = (1 to 500).map(i => ArrayData.toArrayData(Array(i.toLong, (i + 1).toLong)))
     val (arrayLongEstimate, arrayLongRangeEst) =
       simulateUpdateMerge(ArrayType(LongType), arrayLongRange)
     assert(
