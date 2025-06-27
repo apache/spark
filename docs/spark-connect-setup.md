@@ -40,10 +40,14 @@ tar -xvf spark-{{site.SPARK_VERSION_SHORT}}-bin-hadoop3.tgz
 
 In a terminal window, go to the `spark` folder in the location where you extracted
 Spark before and run the `start-connect-server.sh` script to start Spark server with
-Spark Connect, like in this example:
+Spark Connect. If you already have Spark installed and `SPARK_HOME` defined, you can use that too.
 
 ```bash
+cd spark/
 ./sbin/start-connect-server.sh
+
+# alternately
+"$SPARK_HOME/sbin/start-connect-server.sh"
 ```
 
 Make sure to use the same version  of the package as the Spark version you
