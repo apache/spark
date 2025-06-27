@@ -201,13 +201,13 @@ case class ThetaSketchAgg(
    */
   override def merge(
       sketchState: ThetaSketchState,
-      inputResult: ThetaSketchState): ThetaSketchState = {
+      input: ThetaSketchState): ThetaSketchState = {
     val union = SetOperation.builder
       .setLogNominalEntries(lgNomEntries)
       .buildUnion
 
     // match all the possible Theta Sketch states possible in this class
-    (sketchState, inputResult) match {
+    (sketchState, input) match {
       case (UpdatableSketchBuffer(sketch1), UpdatableSketchBuffer(sketch2)) =>
         union.union(sketch1.compact)
         union.union(sketch2.compact)
