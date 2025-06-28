@@ -785,3 +785,19 @@ select -0, -0.0
 struct<0:int,0.0:decimal(1,1)>
 -- !query output
 0	0.0
+
+
+-- !query
+SELECT " ""aa"" ", " \"aa\" ", '""aa""'
+-- !query schema
+struct< "aa" :string, "aa" :string,""aa"":string>
+-- !query output
+ "aa" 	 "aa" 	""aa""
+
+
+-- !query
+SELECT ' ''aa'' ', ' \'aa\' ', "''aa''"
+-- !query schema
+struct< 'aa' :string, 'aa' :string,''aa'':string>
+-- !query output
+ 'aa' 	 'aa' 	''aa''

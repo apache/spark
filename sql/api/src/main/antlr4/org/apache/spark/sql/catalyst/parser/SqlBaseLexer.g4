@@ -548,13 +548,13 @@ HENT_END: '*/';
 QUESTION: '?';
 
 STRING_LITERAL
-    : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
+    : '\'' ( ~('\''|'\\') | ('\\' .) | ('\'' '\'') )* '\''
     | 'R\'' (~'\'')* '\''
     | 'R"'(~'"')* '"'
     ;
 
 DOUBLEQUOTED_STRING
-    :'"' ( ~('"'|'\\') | ('\\' .) )* '"'
+    :'"' ( ~('"'|'\\') | '""' | ('\\' .) )* '"'
     ;
 
 // NOTE: If you move a numeric literal, you should modify `ParserUtils.toExprAlias()`

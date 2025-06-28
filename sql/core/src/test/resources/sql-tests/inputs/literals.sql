@@ -121,3 +121,7 @@ select -x'2379ACFe';
 
 -- normalize -0 and -0.0
 select -0, -0.0;
+
+-- Double-quote escaping ("", '')
+SELECT " ""aa"" ", " \"aa\" ", '""aa""';
+SELECT ' ''aa'' ', ' \'aa\' ', "''aa''";
