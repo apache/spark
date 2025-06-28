@@ -75,6 +75,7 @@
                             <a class="dropdown-item" href="{{ rel_path_to_root }}rdd-programming-guide.html">RDDs, Accumulators, Broadcasts Vars</a>
                             <a class="dropdown-item" href="{{ rel_path_to_root }}sql-programming-guide.html">SQL, DataFrames, and Datasets</a>
                             <a class="dropdown-item" href="{{ rel_path_to_root }}streaming/index.html">Structured Streaming</a>
+                            <a class="dropdown-item" href="{{ rel_path_to_root }}spark-connect-overview.html">Spark Connect</a>
                             <a class="dropdown-item" href="{{ rel_path_to_root }}streaming-programming-guide.html">Spark Streaming (DStreams)</a>
                             <a class="dropdown-item" href="{{ rel_path_to_root }}ml-guide.html">MLlib (Machine Learning)</a>
                             <a class="dropdown-item" href="{{ rel_path_to_root }}graphx-programming-guide.html">GraphX (Graph Processing)</a>
@@ -155,15 +156,17 @@
         {% endif %}
 
         <div class="container">
-            {% if page.url contains "/ml" or page.url contains "/sql" or page.url contains "/streaming/" or page.url contains "migration-guide.html" %}
+            {% if page.url contains "/ml" or page.url contains "/sql" or page.url contains "/streaming/" or page.url contains "migration-guide.html" or page.url contains "/spark-connect" %}
                 {% if page.url contains "migration-guide.html" %}
                     {% include nav-left-wrapper-migration.html nav-migration=site.data.menu-migration %}
                 {% elsif page.url contains "/ml" %}
                     {% include nav-left-wrapper-ml.html nav-mllib=site.data.menu-mllib nav-ml=site.data.menu-ml %}
                 {% elsif page.url contains "/streaming/" %}
                     {% include nav-left-wrapper-streaming.html nav-streaming=site.data.menu-streaming %}
-                {% else %}
+                {% elsif page.url contains "/sql" %}
                     {% include nav-left-wrapper-sql.html nav-sql=site.data.menu-sql %}
+                {% elsif page.url contains "/spark-connect" %}
+                    {% include nav-left-wrapper-spark-connect.html nav-spark-connect=site.data.menu-spark-connect %}
                 {% endif %}
                 <input id="nav-trigger" class="nav-trigger" checked type="checkbox">
                 <label for="nav-trigger"></label>
@@ -173,9 +176,7 @@
                     {% else %}
                         <h1 class="title">{{ page.title }}</h1>
                     {% endif %}
-
                     {{ content }}
-
                 </div>
             {% else %}
                 <div class="content mr-3" id="content">
