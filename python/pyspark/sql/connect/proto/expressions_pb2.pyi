@@ -654,13 +654,45 @@ class Expression(google.protobuf.message.Message):
                 | None
             ): ...
 
+        class Time(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            NANO_FIELD_NUMBER: builtins.int
+            PRECISION_FIELD_NUMBER: builtins.int
+            nano: builtins.int
+            precision: builtins.int
+            """The precision of this time, if omitted, uses the default value of MICROS_PRECISION."""
+            def __init__(
+                self,
+                *,
+                nano: builtins.int = ...,
+                precision: builtins.int | None = ...,
+            ) -> None: ...
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "_precision", b"_precision", "precision", b"precision"
+                ],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "_precision", b"_precision", "nano", b"nano", "precision", b"precision"
+                ],
+            ) -> None: ...
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["_precision", b"_precision"]
+            ) -> typing_extensions.Literal["precision"] | None: ...
+
         class Variant(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
             VALUE_FIELD_NUMBER: builtins.int
             METADATA_FIELD_NUMBER: builtins.int
             value: builtins.bytes
+            """Encodes the value's type and data (without field names)."""
             metadata: builtins.bytes
+            """Metadata contains version identifier and field name information."""
             def __init__(
                 self,
                 *,
@@ -679,6 +711,11 @@ class Expression(google.protobuf.message.Message):
             LENGTH_FIELD_NUMBER: builtins.int
             value: builtins.str
             length: builtins.int
+            """The fixed length for this Char type.
+            - If omitted, uses the actual length of `value`.
+            - If provided but smaller than `value`'s length, an error will be thrown.
+            - If provided and larger than `value`'s length, the `value` will be right-padded with spaces.
+            """
             def __init__(
                 self,
                 *,
@@ -706,6 +743,11 @@ class Expression(google.protobuf.message.Message):
             LENGTH_FIELD_NUMBER: builtins.int
             value: builtins.str
             length: builtins.int
+            """Specifies the maximum length for this Varchar type.
+            - If omitted, uses the actual length of `value`.
+            - If provided but smaller than `value`'s length, an error will be thrown.
+            - If provided and larger than `value`'s length, stores exact value without padding.
+            """
             def __init__(
                 self,
                 *,
@@ -747,6 +789,7 @@ class Expression(google.protobuf.message.Message):
         MAP_FIELD_NUMBER: builtins.int
         STRUCT_FIELD_NUMBER: builtins.int
         SPECIALIZED_ARRAY_FIELD_NUMBER: builtins.int
+        TIME_FIELD_NUMBER: builtins.int
         VARIANT_FIELD_NUMBER: builtins.int
         CHAR_FIELD_NUMBER: builtins.int
         VARCHAR_FIELD_NUMBER: builtins.int
@@ -782,6 +825,8 @@ class Expression(google.protobuf.message.Message):
         @property
         def specialized_array(self) -> global___Expression.Literal.SpecializedArray: ...
         @property
+        def time(self) -> global___Expression.Literal.Time: ...
+        @property
         def variant(self) -> global___Expression.Literal.Variant: ...
         @property
         def char(self) -> global___Expression.Literal.Char: ...
@@ -811,6 +856,7 @@ class Expression(google.protobuf.message.Message):
             map: global___Expression.Literal.Map | None = ...,
             struct: global___Expression.Literal.Struct | None = ...,
             specialized_array: global___Expression.Literal.SpecializedArray | None = ...,
+            time: global___Expression.Literal.Time | None = ...,
             variant: global___Expression.Literal.Variant | None = ...,
             char: global___Expression.Literal.Char | None = ...,
             varchar: global___Expression.Literal.Varchar | None = ...,
@@ -858,6 +904,8 @@ class Expression(google.protobuf.message.Message):
                 b"string",
                 "struct",
                 b"struct",
+                "time",
+                b"time",
                 "timestamp",
                 b"timestamp",
                 "timestamp_ntz",
@@ -913,6 +961,8 @@ class Expression(google.protobuf.message.Message):
                 b"string",
                 "struct",
                 b"struct",
+                "time",
+                b"time",
                 "timestamp",
                 b"timestamp",
                 "timestamp_ntz",
@@ -950,6 +1000,7 @@ class Expression(google.protobuf.message.Message):
                 "map",
                 "struct",
                 "specialized_array",
+                "time",
                 "variant",
                 "char",
                 "varchar",
