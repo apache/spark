@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern}
-import org.apache.spark.sql.catalyst.types.{PhysicalDecimalType, PhysicalFractionalType, PhysicalIntegerType, PhysicalIntegralType, PhysicalLongType}
+import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDecimalType, PhysicalFractionalType, PhysicalIntegerType, PhysicalIntegralType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.util.{IntervalMathUtils, IntervalUtils, MathUtils, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -54,6 +54,8 @@ case class UnaryMinus(
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
   override def dataType: DataType = child.dataType
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   override def toString: String = s"-$child"
 
@@ -123,6 +125,8 @@ case class UnaryPositive(child: Expression)
 
   override def dataType: DataType = child.dataType
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   override def sql: String = s"(+ ${child.sql})"
 
   override lazy val replacement: Expression = child
@@ -155,6 +159,8 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
 
   override def dataType: DataType = child.dataType
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   private lazy val numeric = (dataType match {
     case _: DayTimeIntervalType => LongExactNumeric
     case _: YearMonthIntervalType => IntegerExactNumeric
@@ -186,6 +192,12 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
 
 abstract class BinaryArithmetic extends BinaryOperator with SupportQueryContext {
   override def nullIntolerant: Boolean = true
+
+  override def contextIndependentFoldable: Boolean =
+    left.contextIndependentFoldable && right.contextIndependentFoldable &&
+      !DataTypeUtils.containsTimestampOrUDT(left.dataType) &&
+      !DataTypeUtils.containsTimestampOrUDT(right.dataType) &&
+      !DataTypeUtils.containsTimestampOrUDT(dataType)
 
   protected val evalMode: EvalMode.Value
 
@@ -1193,6 +1205,7 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
 
@@ -1281,6 +1294,7 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
 

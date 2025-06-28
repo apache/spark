@@ -104,6 +104,18 @@ abstract class Expression extends TreeNode[Expression] {
   def foldable: Boolean = false
 
   /**
+   * Returns true if the expression can be folded without relying on external context,
+   * such as current time zone, session configurations, or catalogs.
+   *
+   * When an expression is context-independent foldable, it can be safely evaluated during DDL
+   * operations like creating tables, views, or constraints. This allows systems to store the
+   * computed value rather than the expression itself, improving both simplicity and performance.
+   *
+   * Default is false to ensure explicit marking of context independence.
+   */
+  def contextIndependentFoldable: Boolean = false
+
+  /**
    * Returns true when the current expression always return the same result for fixed inputs from
    * children. The non-deterministic expressions should not change in number and order. They should
    * not be evaluated during the query planning.
@@ -545,6 +557,8 @@ trait Nondeterministic extends Expression {
 trait ConditionalExpression extends Expression {
   final override def foldable: Boolean = children.forall(_.foldable)
 
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   /**
    * Return the children expressions which can always be hit at runtime.
    */
@@ -949,6 +963,8 @@ abstract class QuaternaryExpression extends Expression with QuaternaryLike[Expre
 
   override def foldable: Boolean = children.forall(_.foldable)
 
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   override def nullable: Boolean = children.exists(_.nullable)
 
   /**
@@ -1053,6 +1069,8 @@ abstract class QuaternaryExpression extends Expression with QuaternaryLike[Expre
 abstract class QuinaryExpression extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def nullable: Boolean = children.exists(_.nullable)
 

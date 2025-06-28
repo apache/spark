@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, Decimal, DecimalType, MapType, NullType, StringType, StructField, StructType, UserDefinedType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, Decimal, DecimalType, MapType, NullType, StringType, StructField, StructType, TimestampType, UserDefinedType}
 import org.apache.spark.sql.types.DecimalType.{forType, fromDecimal}
 
 object DataTypeUtils {
@@ -248,6 +248,40 @@ object DataTypeUtils {
     case v: Int => fromDecimal(Decimal(BigDecimal(v)))
     case v: Long => fromDecimal(Decimal(BigDecimal(v)))
     case _ => forType(literal.dataType)
+  }
+
+  /**
+   * Checks if a data type contains TimestampType or UserDefinedType.
+   *
+   * This method traverses the data type to find:
+   * - TimestampType (which depends on timezone for interpretation)
+   * - UserDefinedType (which may have custom logic depending on runtime context)
+   *
+   * This information is useful when determining if operations on this type might behave
+   * differently based on the execution environment.
+   *
+   * @param dataType The data type to check
+   * @return true if the data type contains TimestampType or UserDefinedType
+   */
+  def containsTimestampOrUDT(dataType: DataType): Boolean = {
+    matchesPattern(dataType,
+      dt => dt.isInstanceOf[TimestampType] || dt.isInstanceOf[UserDefinedType[_]])
+  }
+
+  /**
+   * Check if a given data type matches a given pattern.
+   */
+  def matchesPattern(dataType: DataType, pattern: DataType => Boolean): Boolean = {
+    dataType match {
+      case a: ArrayType =>
+        pattern(a) || matchesPattern(a.elementType, pattern)
+      case m: MapType =>
+        pattern(m) || matchesPattern(m.keyType, pattern) || matchesPattern(m.valueType, pattern)
+      case s: StructType =>
+        pattern(s) || s.fields.exists(f => matchesPattern(f.dataType, pattern))
+      case other =>
+        pattern(other)
+    }
   }
 }
 

@@ -1484,4 +1484,87 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(Literal.create("23:59:59.000001     "),
       TimeType(6)), localTime(23, 59, 59, 1))
   }
+
+  test("context independent foldable") {
+    val array = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+    val targetArrayType = ArrayType(StringType, containsNull = true)
+    val map = Literal.create(
+      Map("a" -> "123", "b" -> "true", "c" -> "f"),
+      MapType(StringType, StringType, valueContainsNull = true))
+    val targetMapType = MapType(StringType, StringType, valueContainsNull = false)
+    val struct = Literal.create(
+      Row(1, "2", true, null),
+      StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", StringType),
+        StructField("c", BooleanType),
+        StructField("d", NullType))))
+    val targetStructType = StructType(Seq(
+      StructField("a", StringType),
+      StructField("b", IntegerType),
+      StructField("c", BooleanType),
+      StructField("d", BooleanType)))
+    Seq(
+      cast(Literal(1), StringType),
+      cast(Literal(1), DateType),
+      cast(Literal(1L), TimestampNTZType),
+      cast(Literal("1"), IntegerType),
+      cast(Literal("true"), BooleanType),
+      cast(Literal("false"), BooleanType),
+      cast(Literal(1.5), IntegerType),
+      cast(Literal(1.5), LongType),
+      cast(Literal(100), ByteType),
+      cast(Literal(1000), ShortType),
+      cast(Literal(1), DoubleType),
+      cast(Literal(2.5), FloatType),
+      cast(Literal(123), DecimalType(10, 2)),
+      cast(Literal("1.5"), DoubleType),
+      cast(Literal("2023-01-01"), DateType),
+      cast(Literal(true), StringType),
+      cast(Literal(false), IntegerType),
+      cast(Literal(Duration.ofDays(1)), StringType),
+      cast(Literal(Period.ofMonths(1)), StringType),
+      cast(Literal(Decimal(10.5)), IntegerType),
+      cast(Literal(null, NullType), BooleanType),
+      cast(array, targetArrayType),
+      cast(map, targetMapType),
+      cast(struct, targetStructType)
+    ).foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(expr.contextIndependentFoldable,
+        s"Expression $expr should be context independent foldable")
+    }
+  }
+
+  test("context dependent foldable") {
+    val array = Literal.create(Seq(1L, 2L, 3L), ArrayType(LongType))
+    val targetArrayType = ArrayType(TimestampType, containsNull = true)
+    val map = Literal.create(
+      Map("a" -> "123", "b" -> "true", "c" -> "f"),
+      MapType(StringType, StringType, valueContainsNull = true))
+    val targetMapType = MapType(StringType, TimestampType, valueContainsNull = true)
+    val struct = Literal.create(
+      Row(1, "2", true, null),
+      StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", StringType),
+        StructField("c", BooleanType),
+        StructField("d", NullType))))
+    val targetStructType = StructType(Seq(
+      StructField("a", StringType),
+      StructField("b", TimestampType),
+      StructField("c", BooleanType),
+      StructField("d", BooleanType)))
+    Seq(
+      cast(Literal(1L), TimestampType),
+      cast(Literal("abc"), TimestampType),
+      cast(array, targetArrayType),
+      cast(map, targetMapType),
+      cast(struct, targetStructType)
+    ).foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(!expr.contextIndependentFoldable,
+        s"Expression $expr should not be context independent foldable")
+    }
+  }
 }
