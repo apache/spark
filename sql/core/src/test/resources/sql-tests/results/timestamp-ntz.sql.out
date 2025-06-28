@@ -156,6 +156,82 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT try_make_timestamp_ntz(make_date(2025, 6, 27), make_time(16, 08, 45.123456))
+-- !query schema
+struct<try_make_timestamp_ntz(make_timestamp_ntz(make_date(2025, 6, 27), make_time(16, 8, 45.123456))):timestamp_ntz>
+-- !query output
+2025-06-27 16:08:45.123456
+
+
+-- !query
+SELECT try_make_timestamp_ntz(NULL, TIME'23:59:59.00001')
+-- !query schema
+struct<try_make_timestamp_ntz(make_timestamp_ntz(NULL, TIME '23:59:59.00001')):timestamp_ntz>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_make_timestamp_ntz(DATE'0001-01-01', NULL)
+-- !query schema
+struct<try_make_timestamp_ntz(make_timestamp_ntz(DATE '0001-01-01', NULL)):timestamp_ntz>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_make_timestamp_ntz('2018-11-17 13:33:33', TIME'0:0:0')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"2018-11-17 13:33:33\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"DATE\"",
+    "sqlExpr" : "\"make_timestamp_ntz(2018-11-17 13:33:33, TIME '00:00:00')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 65,
+    "fragment" : "try_make_timestamp_ntz('2018-11-17 13:33:33', TIME'0:0:0')"
+  } ]
+}
+
+
+-- !query
+SELECT try_make_timestamp_ntz(DATE'2025-06-20', 10D)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"10.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"make_timestamp_ntz(DATE '2025-06-20', 10.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "try_make_timestamp_ntz(DATE'2025-06-20', 10D)"
+  } ]
+}
+
+
+-- !query
 SELECT convert_timezone('Europe/Moscow', 'America/Los_Angeles', timestamp_ntz'2022-01-01 00:00:00')
 -- !query schema
 struct<convert_timezone(Europe/Moscow, America/Los_Angeles, TIMESTAMP_NTZ '2022-01-01 00:00:00'):timestamp_ntz>
