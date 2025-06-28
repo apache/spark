@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, DataType, DecimalType, IntegerType, ObjectType, TimeType, TypeCollection}
+import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, DataType, DecimalType, IntegerType, ObjectType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -208,8 +208,7 @@ case class MinutesOfTime(child: Expression)
     Seq(child.dataType)
   )
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*))
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
 
   override def children: Seq[Expression] = Seq(child)
 
@@ -268,8 +267,7 @@ case class HoursOfTime(child: Expression)
     Seq(child.dataType)
   )
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*))
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
 
   override def children: Seq[Expression] = Seq(child)
 
@@ -317,9 +315,11 @@ object HourExpressionBuilder extends ExpressionBuilder {
 case class SecondsOfTimeWithFraction(child: Expression)
   extends RuntimeReplaceable
   with ExpectsInputTypes {
-
   override def replacement: Expression = {
-
+    val precision = child.dataType match {
+      case TimeType(p) => p
+      case _ => TimeType.MIN_PRECISION
+    }
     StaticInvoke(
       classOf[DateTimeUtils.type],
       DecimalType(8, 6),
@@ -327,10 +327,8 @@ case class SecondsOfTimeWithFraction(child: Expression)
       Seq(child, Literal(precision)),
       Seq(child.dataType, IntegerType))
   }
-  private val precision: Int = child.dataType.asInstanceOf[TimeType].precision
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TimeType(precision))
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
 
   override def children: Seq[Expression] = Seq(child)
 
@@ -352,8 +350,7 @@ case class SecondsOfTime(child: Expression)
     Seq(child.dataType)
   )
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*))
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
 
   override def children: Seq[Expression] = Seq(child)
 

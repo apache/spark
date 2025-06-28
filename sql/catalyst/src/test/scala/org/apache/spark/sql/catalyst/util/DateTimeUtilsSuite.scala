@@ -1118,9 +1118,9 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(nanosToLocalTime(24L * 60 * 60 * 1000 * 1000 * 1000 - 1) ===
       LocalTime.of(23, 59, 59, 999999999))
 
-    Seq(-1, 24L * 60 * 60 * 1000 * 1000 * 1000L).foreach { invalidMicros =>
+    Seq(-1, 24L * 60 * 60 * 1000 * 1000 * 1000L).foreach { invalidNanos =>
       val msg = intercept[DateTimeException] {
-        nanosToLocalTime(invalidMicros)
+        nanosToLocalTime(invalidNanos)
       }.getMessage
       assert(msg.contains("Invalid value"))
     }

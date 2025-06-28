@@ -2568,10 +2568,7 @@ case class MakeTimestampNTZ(left: Expression, right: Expression)
     Seq(left.dataType, right.dataType)
   )
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      DateType,
-      TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*))
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, AnyTimeType)
 
   override def prettyName: String = "make_timestamp_ntz"
 

@@ -405,8 +405,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
           newValidAttrMapping.filterNot { case (_, a) => existingAttrMappingSet.contains(a) }
         }
         val resultAttrMapping = if (canGetOutput(plan)) {
-          // We propagate the attributes mapping to the parent plan node to update attributes, so
-          // the `newAttr` must be part of this plan's output.
           (transferAttrMapping ++ newOtherAttrMapping).filter {
             case (_, newAttr) => planAfterRule.outputSet.contains(newAttr)
           }

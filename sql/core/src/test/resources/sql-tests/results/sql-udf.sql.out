@@ -1733,6 +1733,246 @@ struct<spark_catalog.default.bar1_10(3):string>
 
 
 -- !query
+CREATE OR REPLACE FUNCTION foo1_11a() RETURN 42
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1_11a()
+-- !query schema
+struct<spark_catalog.default.foo1_11a():int>
+-- !query output
+42
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11b() RETURN 'hello world'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1_11b()
+-- !query schema
+struct<spark_catalog.default.foo1_11b():string>
+-- !query output
+hello world
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11c(a INT, b INT) RETURN a + b
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1_11c(3, 5)
+-- !query schema
+struct<spark_catalog.default.foo1_11c(3, 5):int>
+-- !query output
+8
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11d(a DOUBLE, b INT) RETURN a * b + 1.5
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1_11d(3.0, 5)
+-- !query schema
+struct<spark_catalog.default.foo1_11d(3.0, 5):double>
+-- !query output
+16.5
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11e(a INT) RETURN a > 10
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1_11e(15), foo1_11e(5)
+-- !query schema
+struct<spark_catalog.default.foo1_11e(15):boolean,spark_catalog.default.foo1_11e(5):boolean>
+-- !query output
+true	false
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11f(d DATE) RETURN d + INTERVAL '1' DAY
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1_11f(DATE '2024-01-01')
+-- !query schema
+struct<spark_catalog.default.foo1_11f(DATE '2024-01-01'):date>
+-- !query output
+2024-01-02
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11g(n INT) RETURN ARRAY(1, 2, n)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1_11g(5)
+-- !query schema
+struct<spark_catalog.default.foo1_11g(5):array<int>>
+-- !query output
+[1,2,5]
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11h(a INT, b STRING) RETURN STRUCT(a, b)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1_11h(1, 'test')
+-- !query schema
+struct<spark_catalog.default.foo1_11h(1, test):struct<a:int,b:string>>
+-- !query output
+{"a":1,"b":"test"}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11i(x INT) RETURN (SELECT x * 2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1_11i(5)
+-- !query schema
+struct<spark_catalog.default.foo1_11i(5):int>
+-- !query output
+10
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11j(s STRING) RETURN UPPER(s)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1_11j('hello')
+-- !query schema
+struct<spark_catalog.default.foo1_11j(hello):string>
+-- !query output
+HELLO
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11k(a INT, b STRING) RETURN CONCAT(CAST(a AS STRING), '_', b)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo1_11k(123, 'test')
+-- !query schema
+struct<spark_catalog.default.foo1_11k(123, test):string>
+-- !query output
+123_test
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11l() RETURNS TABLE RETURN SELECT 1 as id, 'hello' as name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM foo1_11l()
+-- !query schema
+struct<id:int,name:string>
+-- !query output
+1	hello
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11m(a INT, b STRING) RETURNS TABLE RETURN SELECT a * 2 as doubled, UPPER(b) as upper_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM foo1_11m(5, 'world')
+-- !query schema
+struct<doubled:int,upper_name:string>
+-- !query output
+10	WORLD
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11n(arr ARRAY<INT>) RETURNS TABLE RETURN SELECT size(arr) as array_size, arr[0] as first_element
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM foo1_11n(ARRAY(1, 2, 3))
+-- !query schema
+struct<array_size:int,first_element:int>
+-- !query output
+3	1
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11o(id INT, name STRING) RETURNS TABLE RETURN SELECT STRUCT(id, name) as person_info, id + 100 as modified_id
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM foo1_11o(1, 'Alice')
+-- !query schema
+struct<person_info:struct<id:int,name:string>,modified_id:int>
+-- !query output
+{"id":1,"name":"Alice"}	101
+
+
+-- !query
 CREATE FUNCTION foo2_1a(a INT) RETURNS INT RETURN a
 -- !query schema
 struct<>

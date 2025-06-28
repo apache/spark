@@ -170,6 +170,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val faultHandlerEnabled: Boolean = conf.get(PYTHON_WORKER_FAULTHANLDER_ENABLED)
   protected val idleTimeoutSeconds: Long = conf.get(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS)
   protected val killOnIdleTimeout: Boolean = conf.get(PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT)
+  protected val tracebackDumpIntervalSeconds: Long =
+    conf.get(PYTHON_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
   protected val hideTraceback: Boolean = false
   protected val simplifiedTraceback: Boolean = false
 
@@ -266,6 +268,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
     if (faultHandlerEnabled) {
       envVars.put("PYTHON_FAULTHANDLER_DIR", faultHandlerLogDir.toString)
+    }
+    if (tracebackDumpIntervalSeconds > 0L) {
+      envVars.put("PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", tracebackDumpIntervalSeconds.toString)
     }
     // allow the user to set the batch size for the BatchedSerializer on UDFs
     envVars.put("PYTHON_UDF_BATCH_SIZE", batchSizeForPythonUDF.toString)

@@ -36,6 +36,8 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Last}
+import org.apache.spark.sql.catalyst.expressions.json.JsonPathParser
+import org.apache.spark.sql.catalyst.expressions.json.PathInstruction.Named
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -3320,6 +3322,24 @@ class AstBuilder extends DataTypeAstBuilder
       case e =>
         UnresolvedExtractValue(e, Literal(attr))
     }
+  }
+
+  /**
+   * Create a [[SemiStructuredExtract]] expression.
+   */
+  override def visitSemiStructuredExtract(
+      ctx: SemiStructuredExtractContext): Expression = withOrigin(ctx) {
+    val field = ctx.path.getText
+    // When `field` starts with a bracket, do not add a `.` as the bracket already implies nesting
+    // Also the bracket will imply case sensitive field extraction.
+    val path = if (field.startsWith("[")) "$" + field else s"$$.$field"
+    val parsedPath = JsonPathParser.parse(path)
+    if (parsedPath.isEmpty) {
+      throw new ParseException(errorClass = "PARSE_SYNTAX_ERROR", ctx = ctx)
+    }
+    val potentialAlias = parsedPath.get.collect { case Named(name) => name }.lastOption
+    val node = SemiStructuredExtract(expression(ctx.col), path)
+    potentialAlias.map { colName => Alias(node, colName)() }.getOrElse(node)
   }
 
   /**
