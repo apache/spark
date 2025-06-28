@@ -243,6 +243,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case "ENDS_WITH" => convertBinaryExpr(expr, EndsWith)
       case "CONTAINS" => convertBinaryExpr(expr, Contains)
       case "IN" => convertExpr(expr, children => In(children.head, children.tail))
+      case "BOOLEAN_EXPRESSION" => toCatalyst(expr.children().head)
       case _ => None
     }
   }

@@ -1695,8 +1695,18 @@ object SQLConf {
     buildConf("spark.sql.dataSource.skipAssertOnPredicatePushdown")
       .internal()
       .doc("Enable skipping assert when expression in not translated to predicate.")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(!Utils.isTesting)
+
+  val DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE =
+    buildConf("spark.sql.dataSource.alwaysCreateV2Predicate")
+      .internal()
+      .doc("When true, the v2 push-down framework always wraps the expression that returns " +
+        "boolean type with a v2 Predicate so that it can be pushed down.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
 
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")

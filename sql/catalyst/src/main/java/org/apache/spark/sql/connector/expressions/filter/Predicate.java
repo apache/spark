@@ -136,6 +136,12 @@ import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: <code>BOOLEAN_EXPRESSION</code>
+ *   <ul>
+ *    <li>A simple wrapper for any expression that returns boolean type.</li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
  * </ol>
  *
  * @since 3.3.0
@@ -145,5 +151,8 @@ public class Predicate extends GeneralScalarExpression {
 
   public Predicate(String name, Expression[] children) {
     super(name, children);
+    if ("BOOLEAN_EXPRESSION".equals(name)) {
+      assert children.length == 1;
+    }
   }
 }

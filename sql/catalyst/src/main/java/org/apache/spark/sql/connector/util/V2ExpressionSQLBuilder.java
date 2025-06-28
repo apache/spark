@@ -99,6 +99,8 @@ public class V2ExpressionSQLBuilder {
         case "CONTAINS" -> visitContains(build(e.children()[0]), build(e.children()[1]));
         case "=", "<>", "<=>", "<", "<=", ">", ">=" ->
           visitBinaryComparison(name, e.children()[0], e.children()[1]);
+        case "BOOLEAN_EXPRESSION" ->
+          build(expr.children()[0]);
         case "+", "*", "/", "%", "&", "|", "^" ->
           visitBinaryArithmetic(name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
         case "-" -> {

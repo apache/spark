@@ -37,12 +37,21 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
   def build(): Option[V2Expression] = generateExpression(e, isPredicate)
 
   def buildPredicate(): Option[V2Predicate] = {
-
     if (isPredicate) {
-      val translated = build()
+      val translated0 = build()
+      val conf = SQLConf.get
+      val alwaysCreateV2Predicate = conf.getConf(SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE)
+      val translated = if (alwaysCreateV2Predicate && e.dataType == BooleanType) {
+        translated0.map {
+          case p: V2Predicate => p
+          case other => new V2Predicate("BOOLEAN_EXPRESSION", Array(other))
+        }
+      } else {
+        translated0
+      }
 
       val modifiedExprOpt = if (
-        SQLConf.get.getConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE)
+        conf.getConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE)
           && translated.isDefined
           && !translated.get.isInstanceOf[V2Predicate]) {
 
