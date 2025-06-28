@@ -655,12 +655,19 @@ class Expression(google.protobuf.message.Message):
             ): ...
 
         class Variant(google.protobuf.message.Message):
+            """Binary representation of a semi-structured value (Spark VariantVal).
+            The format follows Spark's internal VariantVal encoding:
+             - See org.apache.spark.unsafe.types.VariantVal for details.
+            """
+
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
             VALUE_FIELD_NUMBER: builtins.int
             METADATA_FIELD_NUMBER: builtins.int
             value: builtins.bytes
+            """Encodes the value's type and data (without field names)."""
             metadata: builtins.bytes
+            """Metadata contains version identifier and field name information."""
             def __init__(
                 self,
                 *,
@@ -679,6 +686,11 @@ class Expression(google.protobuf.message.Message):
             LENGTH_FIELD_NUMBER: builtins.int
             value: builtins.str
             length: builtins.int
+            """The fixed length for this Char type.
+            - If omitted, uses the actual length of `value`.
+            - If provided but smaller than `value`'s length, an error will be thrown.
+            - If provided and larger than `value`'s length, the `value` will be right-padded with spaces.
+            """
             def __init__(
                 self,
                 *,
@@ -706,6 +718,11 @@ class Expression(google.protobuf.message.Message):
             LENGTH_FIELD_NUMBER: builtins.int
             value: builtins.str
             length: builtins.int
+            """Specifies the maximum length for this Varchar type.
+            - If omitted, uses the actual length of `value`.
+            - If provided but smaller than `value`'s length, an error will be thrown.
+            - If provided and larger than `value`'s length, stores exact value without padding.
+            """
             def __init__(
                 self,
                 *,
