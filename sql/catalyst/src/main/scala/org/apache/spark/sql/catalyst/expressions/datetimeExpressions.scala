@@ -1647,7 +1647,10 @@ case class NextDay(
 /**
  * Adds an interval to timestamp.
  */
-case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[String] = None)
+case class TimestampAddInterval(
+    start: Expression,
+    interval: Expression,
+    timeZoneId: Option[String] = None)
   extends BinaryExpression with TimeZoneAwareExpression with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
 
@@ -1690,7 +1693,7 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): TimeAdd =
+      newLeft: Expression, newRight: Expression): TimestampAddInterval =
     copy(start = newLeft, interval = newRight)
 }
 
