@@ -27,11 +27,16 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 trait SparkParserUtils {
 
   /**
-   * Unescape backslash-escaped string enclosed by quotes, with support for:
+   * Unescape escaped string enclosed by quotes, with support for:
    *   1. Double-quote escaping (`""`, `''`)
    *   2. Traditional backslash escaping (\n, \t, \", etc.)
+   *
+   * @param b
+   *   The input string
+   * @param ignoreQuoteQuote
+   *   If false, `''` and `""` will be treated as escaping, if false,
    */
-  def unescapeSQLString(b: String): String = {
+  def unescapeSQLString(b: String, ignoreQuoteQuote: Boolean = false): String = {
     def appendEscapedChar(n: Char, sb: JStringBuilder): Unit = {
       n match {
         case '0' => sb.append('\u0000')
@@ -101,11 +106,15 @@ trait SparkParserUtils {
         val c = b.charAt(i)
         // First check for double-quote escaping (`""`, `''`)
         if (isDoubleQuotedString && c == '"' && i + 1 < length && b.charAt(i + 1) == '"') {
-          sb.append('"')
+          if (!ignoreQuoteQuote) {
+            sb.append('"')
+          }
           i += 2
         } else if (isSingleQuotedString && c == '\'' && i + 1 < length && b.charAt(
             i + 1) == '\'') {
-          sb.append('\'')
+          if (!ignoreQuoteQuote) {
+            sb.append('\'')
+          }
           i += 2
         } else if (c != '\\' || i + 1 == length) {
           // Either a regular character or a backslash at the end of the string:
@@ -159,6 +168,9 @@ trait SparkParserUtils {
 
   /** Convert a string token into a string. */
   def string(token: Token): String = unescapeSQLString(token.getText)
+
+  /** Convert a string token into a string. */
+  def stringIgnoreQuoteQuote(token: Token): String = unescapeSQLString(token.getText, true)
 
   /** Convert a string node into a string. */
   def string(node: TerminalNode): String = unescapeSQLString(node.getText)

@@ -4078,6 +4078,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_CONSECUTIVE_STRING_LITERALS =
+    buildConf("spark.sql.legacy.consecutiveStringLiterals.enabled")
+      .internal()
+      .doc("When true, consecutive quotes in string literals (e.g. \"\" or '') are treated as " +
+        "literal characters rather than escape sequences. This preserves pre-Spark 3.0 behavior " +
+        "where \"a\"\"b\" would be parsed as 'a\"b' instead of 'ab'.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ANSI_RELATION_PRECEDENCE = buildConf("spark.sql.ansi.relationPrecedence")
     .doc(s"When true and '${ANSI_ENABLED.key}' is true, JOIN takes precedence over comma when " +
       "combining relation. For example, `t1, t2 JOIN t3` should result to `t1 X (t2 X t3)`. If " +
@@ -6397,6 +6407,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
+
+  def legacyConsecutiveStringLiterals: Boolean = getConf(LEGACY_CONSECUTIVE_STRING_LITERALS)
 
   def fileCompressionFactor: Double = getConf(FILE_COMPRESSION_FACTOR)
 
