@@ -2348,8 +2348,6 @@ def read_udfs(pickleSer, infile, eval_type):
 def main(infile, outfile):
     faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
     tracebackDumpIntervalSeconds = os.environ.get("PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", None)
-    if tracebackDumpIntervalSeconds is not None:
-        tracebackDumpIntervalSeconds = int(tracebackDumpIntervalSeconds)
     try:
         if faulthandler_log_path:
             faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
@@ -2361,8 +2359,8 @@ def main(infile, outfile):
         if split_index == -1:  # for unit tests
             sys.exit(-1)
 
-        if tracebackDumpIntervalSeconds is not None and tracebackDumpIntervalSeconds > 0:
-            faulthandler.dump_traceback_later(tracebackDumpIntervalSeconds, repeat=True)
+        if tracebackDumpIntervalSeconds is not None and int(tracebackDumpIntervalSeconds) > 0:
+            faulthandler.dump_traceback_later(int(tracebackDumpIntervalSeconds), repeat=True)
 
         check_python_version(infile)
 
