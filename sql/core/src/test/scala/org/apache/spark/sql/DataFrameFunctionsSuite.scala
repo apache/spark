@@ -3790,6 +3790,56 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     testArrayOfPrimitiveTypeContainsNull()
   }
 
+  test("transform function - subexpression elimination") {
+    val df = Seq[Seq[Integer]](
+      Seq(1, 2, 3, 4, 5)
+    ).toDF("i")
+
+    var count = spark.sparkContext.longAccumulator
+    val func = udf((x: Integer) => {
+      count.add(1)
+      x
+    })
+
+    val result = df.select(
+      transform(col("i"), x => func(x) + func(x))
+    )
+
+    // Run it once to verify the count of UDF calls
+    result.collect()
+    assert(count.value == 5)
+
+    checkAnswer(result, Seq(Row(Seq(2, 4, 6, 8, 10))))
+   }
+
+  test("transform function - subexpression elimination inside and outside lambda") {
+     val df = spark.read.json(Seq(
+       """
+       {
+         "outer": {
+           "inner": {
+             "a": 1,
+             "b": 2,
+             "c": 3
+           }
+         },
+         "arr": [
+           1,
+           2,
+           3
+         ]
+       }
+       """).toDS())
+
+     val result = df.select(
+       col("outer.inner.b"),
+       col("outer.inner.c"),
+       transform(col("arr"), x => x + col("outer.inner.a") + col("outer.inner.a"))
+     )
+
+     checkAnswer(result, Seq(Row(2, 3, Seq(3, 4, 5))))
+   }
+
   test("transform function - array for non-primitive type") {
     val df = Seq(
       Seq("c", "a", "b"),
