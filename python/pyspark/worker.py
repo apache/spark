@@ -262,17 +262,59 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
             def get_python_value(array, index):
                 """Get Python value from array at index, handling both PyArrow and numpy arrays"""
                 value = array[index]
-                if hasattr(value, 'as_py'):
-                    # PyArrow scalar
-                    return value.as_py()
+
+                if hasattr(value, "as_py"):
+                    python_value = value.as_py()
+
+                    def convert_nested_numpy_arrays(obj):
+                        if hasattr(obj, 'tolist') and hasattr(obj, 'dtype'):
+                            return obj.tolist()
+                        
+                        try:
+                            import numpy as np
+                            if isinstance(obj, np.ndarray):
+                                return obj.tolist()
+                        except ImportError:
+                            pass
+
+                        if isinstance(obj, list):
+                            return [convert_nested_numpy_arrays(item) for item in obj]
+                        elif isinstance(obj, tuple):
+                            return tuple(convert_nested_numpy_arrays(item) for item in obj)
+                        elif isinstance(obj, dict):
+                            return {k: convert_nested_numpy_arrays(v) for k, v in obj.items()}
+                        else:
+                            return obj
+
+                    return convert_nested_numpy_arrays(python_value)
                 elif hasattr(value, 'item') and value.size == 1:
                     # Single-element numpy array
                     return value.item()
                 elif hasattr(value, 'tolist'):
-                    # Multi-element numpy array (for UDT)
-                    return tuple(value.tolist())
+                    result = value.tolist()
+                    
+                    def convert_nested_numpy_arrays(obj):
+                        if hasattr(obj, 'tolist') and hasattr(obj, 'dtype'):
+                            return obj.tolist()
+                        
+                        try:
+                            import numpy as np
+                            if isinstance(obj, np.ndarray):
+                                return obj.tolist()
+                        except ImportError:
+                            pass
+                        
+                        if isinstance(obj, list):
+                            return [convert_nested_numpy_arrays(item) for item in obj]
+                        elif isinstance(obj, tuple):
+                            return tuple(convert_nested_numpy_arrays(item) for item in obj)
+                        elif isinstance(obj, dict):
+                            return {k: convert_nested_numpy_arrays(v) for k, v in obj.items()}
+                        else:
+                            return obj
+                    
+                    return convert_nested_numpy_arrays(result)
                 else:
-                    # Other Python object
                     return value
             
             if input_types is not None:
