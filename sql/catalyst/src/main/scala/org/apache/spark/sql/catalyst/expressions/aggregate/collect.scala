@@ -317,12 +317,29 @@ private[aggregate] object CollectTopK {
 case class ListAgg(
     child: Expression,
     delimiter: Expression = Literal(null),
-    orderExpressions: Seq[SortOrder] = Nil,
+    orderChildExpressions: Seq[Expression] = Nil,
+    orderDirections: Seq[SortDirection] = Nil,
+    orderNullOrderings: Seq[NullOrdering] = Nil,
+    orderSameOrderExpressions: Seq[Seq[Expression]] = Nil,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
   extends Collect[mutable.ArrayBuffer[Any]]
   with SupportsOrderingWithinGroup
   with ImplicitCastInputTypes {
+
+  val orderExpressions: Seq[SortOrder] = orderChildExpressions.zipWithIndex.map {
+    case (orderChild, i) =>
+      SortOrder(
+        child = orderChild,
+        direction = if (i < orderDirections.length) orderDirections(i) else Ascending,
+        nullOrdering = if (i < orderNullOrderings.length) orderNullOrderings(i) else NullsLast,
+        sameOrderExpressions = if (i < orderSameOrderExpressions.length) {
+          orderSameOrderExpressions(i)
+        } else {
+          Seq.empty
+        }
+      )
+  }
 
   override def orderingFilled: Boolean = orderExpressions.nonEmpty
 
@@ -331,7 +348,12 @@ case class ListAgg(
   override def isDistinctSupported: Boolean = true
 
   override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction =
-    copy(orderExpressions = orderingWithinGroup)
+    copy(
+      orderChildExpressions = orderingWithinGroup.map(_.child),
+      orderDirections = orderingWithinGroup.map(_.direction),
+      orderNullOrderings = orderingWithinGroup.map(_.nullOrdering),
+      orderSameOrderExpressions = orderingWithinGroup.map(_.sameOrderExpressions)
+    )
 
   override protected lazy val bufferElementType: DataType = {
     if (!needSaveOrderValue) {
@@ -347,10 +369,10 @@ case class ListAgg(
   lazy val needSaveOrderValue: Boolean = !isOrderCompatible(orderExpressions)
 
   def this(child: Expression) =
-    this(child, Literal(null), Nil, 0, 0)
+    this(child, Literal(null), Nil, Nil, Nil, Nil, 0, 0)
 
   def this(child: Expression, delimiter: Expression) =
-    this(child, delimiter, Nil, 0, 0)
+    this(child, delimiter, Nil, Nil, Nil, Nil, 0, 0)
 
   override def nullable: Boolean = true
 
@@ -534,14 +556,18 @@ case class ListAgg(
     false
   }
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    val sortOrderExpressions: Seq[SortOrder] = newChildren.drop(2).map(_.asInstanceOf[SortOrder])
     copy(
-      child = newChildren.head,
-      delimiter = newChildren(1),
-      orderExpressions = newChildren
-        .drop(2)
-        .map(_.asInstanceOf[SortOrder])
+      newChildren.head,
+      newChildren(1),
+      orderChildExpressions = sortOrderExpressions.map(_.child),
+      orderDirections = sortOrderExpressions.map(_.direction),
+      orderNullOrderings = sortOrderExpressions.map(_.nullOrdering),
+      orderSameOrderExpressions = sortOrderExpressions.map(_.sameOrderExpressions)
     )
+  }
 
   private[this] def orderValuesField: Seq[StructField] = {
     orderExpressions.zipWithIndex.map {
