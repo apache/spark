@@ -40,10 +40,10 @@ import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, JoinColumn, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
+import org.apache.spark.sql.connector.util.{V2ExpressionSQLBuilder}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
@@ -403,6 +403,13 @@ abstract class JdbcDialect extends Serializable with Logging {
           "Filter push down", namedRef.toString)
       }
       quoteIdentifier(namedRef.fieldNames.head)
+    }
+
+    override def visitJoinColumn(column: JoinColumn): String = {
+      // Qualifiers shouldn't be quoted
+      val parts = column.parts
+      val quoted = parts.dropRight(1) :+ quoteIdentifier(parts.last)
+      quoted.mkString(".")
     }
 
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
@@ -852,6 +859,21 @@ abstract class JdbcDialect extends Serializable with Logging {
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3183")
 
   def supportsHint: Boolean = false
+
+  /**
+   * Returns true if dialect supports JOIN operator.
+   */
+  def supportsJoin: Boolean = false
+
+  /**
+   * If true, left/right subquery of JOIN needs to have AS keywords before alias.
+   * For example,
+   * SELECT * FROM (subquery1) AS alias1 JOIN ...
+   *
+   * If false, SQL query wouldn't have AS keyword, so the query would look like
+   * SELECT * FROM (subquery1) alias1 JOIN ...
+   */
+  def needsASKeywordForJoinSubquery: Boolean = true
 
   /**
    * Return the DB-specific quoted and fully qualified table name

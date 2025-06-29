@@ -15,22 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.sql.connector.join;
 
-import org.apache.spark.sql.connector.expressions.SortOrder
-import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.annotation.Evolving;
 
-/**
- * Pushed down operators
- */
-case class PushedDownOperators(
-    aggregation: Option[Aggregation],
-    sample: Option[TableSampleInfo],
-    limit: Option[Int],
-    offset: Option[Int],
-    sortValues: Seq[SortOrder],
-    pushedPredicates: Seq[Predicate],
-    pushedJoins: Seq[String] = Seq()) {
-  assert((limit.isEmpty && sortValues.isEmpty) || limit.isDefined)
-}
+@Evolving
+public final class InnerJoinType implements JoinType { }

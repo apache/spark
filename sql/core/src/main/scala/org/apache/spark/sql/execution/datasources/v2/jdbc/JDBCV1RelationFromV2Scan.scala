@@ -38,7 +38,9 @@ case class JDBCV1RelationFromV2Scan(
     tableSample: Option[TableSampleInfo],
     pushedLimit: Int,
     sortOrders: Array[String],
-    pushedOffset: Int) extends BaseRelation with TableScan {
+    pushedOffset: Int)
+  extends BaseRelation with TableScan {
+
   override def sqlContext: SQLContext = context
   override def schema: StructType = prunedSchema
   override def needConversion: Boolean = relation.needConversion

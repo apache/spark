@@ -394,6 +394,31 @@ case class AttributeReference(
   }
 }
 
+case class JoinColumnReference(child: AttributeReference)
+  extends  NamedExpression with Unevaluable {
+  override def dataType: DataType = child.dataType
+
+  override def name: String = child.name
+
+  // This is intentional. We can't give new exprId to the JoinColumnReference because with new
+  // exprId replacing the alias would fail (for example, in V2 rule, aliasReplacedOrder). The
+  // result of this is that we would lose qualifier information.
+  override def exprId: ExprId = child.exprId
+
+  override def qualifier: Seq[String] = child.qualifier
+
+  override def toAttribute: Attribute = child.toAttribute
+
+  override def newInstance(): NamedExpression = JoinColumnReference(child)
+
+  override def nullable: Boolean = child.nullable
+
+  override def children: Seq[Expression] = Seq(child)
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(child = newChildren.head.asInstanceOf[AttributeReference])
+}
+
 /**
  * A place holder used when printing expressions without debugging information such as the
  * expression id or the unresolved indicator.

@@ -18,12 +18,14 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownAggregates, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.join.{InnerJoinType, JoinType}
+import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -33,7 +35,7 @@ import org.apache.spark.sql.types.StructType
 case class JDBCScanBuilder(
     session: SparkSession,
     schema: StructType,
-    jdbcOptions: JDBCOptions)
+    var jdbcOptions: JDBCOptions)
   extends ScanBuilder
     with SupportsPushDownV2Filters
     with SupportsPushDownRequiredColumns
@@ -42,6 +44,7 @@ case class JDBCScanBuilder(
     with SupportsPushDownOffset
     with SupportsPushDownTableSample
     with SupportsPushDownTopN
+    with SupportsPushDownJoin
     with Logging {
 
   private val dialect = JdbcDialects.get(jdbcOptions.url)
@@ -50,7 +53,7 @@ case class JDBCScanBuilder(
 
   private var pushedPredicate = Array.empty[Predicate]
 
-  private var finalSchema = schema
+  var finalSchema = schema
 
   private var tableSample: Option[TableSampleInfo] = None
 
@@ -60,10 +63,23 @@ case class JDBCScanBuilder(
 
   private var sortOrders: Array[String] = Array.empty[String]
 
+  // In JoinedJDBCScanBuilderInfo we are storing the relation qualifier. This is later on used in
+  // SQL query generations. What we are missing in joinedScanBuilders is the alias of the first
+  // relation that gets joined. For this purpose, we are using firstRelationQualifier.
+  private var firstRelationQualifier: Array[String] = Array.empty[String]
+
+  // When join is pushed down it's tended to change the tableOrQuery. Since join query is built
+  // every time join is being pushed, we need to backup the original table name of the leftmost
+  // scan.
+  private var originalScanTableName: String = ""
+
+  private var joinedScanBuilders: Array[JoinedJDBCScanBuilderInfo] =
+    Array.empty[JoinedJDBCScanBuilderInfo]
+
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     if (jdbcOptions.pushDownPredicate) {
       val (pushed, unSupported) = predicates.partition(dialect.compileExpression(_).isDefined)
-      this.pushedPredicate = pushed
+      this.pushedPredicate ++= pushed
       unSupported
     } else {
       predicates
@@ -119,6 +135,76 @@ case class JDBCScanBuilder(
         logError("Failed to push down aggregation to JDBC", e)
         false
     }
+  }
+
+  override def isRightSideCompatibleForJoin(other: SupportsPushDownJoin): Boolean = {
+    other.isInstanceOf[JDBCScanBuilder] &&
+      jdbcOptions.url == other.asInstanceOf[JDBCScanBuilder].jdbcOptions.url
+  };
+
+  override def pushJoin(
+    other: SupportsPushDownJoin,
+    joinType: JoinType,
+    condition: Predicate,
+    leftSideQualifier: Array[String],
+    rightSideQualifier: Array[String],
+    leftSideRequiredSchema: StructType,
+    rightSideRequiredSchema: StructType
+  ): Boolean = {
+    if (!jdbcOptions.pushDownJoin || !dialect.supportsJoin) return false
+
+    this.pushedPredicate = this.pushedPredicate :+ condition
+
+    // We are getting the qualifier of leftmost relation in tree.
+    if (joinedScanBuilders.isEmpty) {
+      originalScanTableName = jdbcOptions.tableOrQuery
+      firstRelationQualifier = leftSideQualifier
+    }
+
+    val otherJdbcScanBuilder = other.asInstanceOf[JDBCScanBuilder]
+
+    var newSchema = StructType(Seq())
+
+    // 1. If this is the first join in the chain then calculate the new schema for left side that
+    // will have qualified fields.
+    // 2. If this is not the first join in the chain, inherit the previous schema as it is already
+    // qualified.
+    newSchema = if (joinedScanBuilders.isEmpty) leftSideRequiredSchema else finalSchema
+
+    // Struct field names are unique, so we are fine with merging them
+    newSchema = newSchema.merge(rightSideRequiredSchema)
+
+    val joinTypeString = joinType match {
+      case inner: InnerJoinType => "INNER JOIN"
+      case _ =>
+        val params = Map("joinType" -> String.valueOf(joinType))
+        throw new SparkUnsupportedOperationException("UNSUPPORTED_JOIN_TYPES", params)
+    }
+
+    joinedScanBuilders = joinedScanBuilders :+
+      JoinedJDBCScanBuilderInfo(
+        otherJdbcScanBuilder.jdbcOptions,
+        joinTypeString,
+        Some(rightSideQualifier.mkString(".")))
+    finalSchema = newSchema
+
+    var joinClause = originalScanTableName
+    joinClause += " " + firstRelationQualifier.mkString(".")
+    joinedScanBuilders.foreach{jsb =>
+      joinClause +=
+        s" ${jsb.joinType} ${jsb.options.tableOrQuery} ${jsb.relationQualifier.getOrElse("")}"
+    }
+
+    val joinedRelationsQuery =
+      s"""
+         |$joinClause
+         |""".stripMargin
+
+    val newMap = jdbcOptions.parameters.originalMap +
+      (JDBCOptions.JDBC_TABLE_NAME -> joinedRelationsQuery) - (JDBCOptions.JDBC_QUERY_STRING)
+
+    jdbcOptions = new JDBCOptions(newMap)
+    true
   }
 
   override def pushTableSample(
