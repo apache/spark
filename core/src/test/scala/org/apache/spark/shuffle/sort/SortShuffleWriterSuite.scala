@@ -17,6 +17,8 @@
 
 package org.apache.spark.shuffle.sort
 
+import scala.util.Random
+
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.Mockito._
@@ -29,6 +31,7 @@ import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleChecksumTestHelper}
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
+import org.apache.spark.shuffle.checksum.RowBasedChecksum
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents
 import org.apache.spark.storage.BlockManager
 import org.apache.spark.util.Utils
@@ -50,6 +53,7 @@ class SortShuffleWriterSuite
   private val shuffleBlockResolver = new IndexShuffleBlockResolver(conf)
   private val serializer = new JavaSerializer(conf)
   private var shuffleExecutorComponents: ShuffleExecutorComponents = _
+  @Mock(answer = RETURNS_SMART_NULLS) private var dependency: ShuffleDependency[Int, Int, Int] = _
 
   private val partitioner = new Partitioner() {
     def numPartitions = numMaps
@@ -60,13 +64,9 @@ class SortShuffleWriterSuite
     super.beforeEach()
     MockitoAnnotations.openMocks(this).close()
     shuffleHandle = {
-      val dependency = mock(classOf[ShuffleDependency[Int, Int, Int]])
-      when(dependency.partitioner).thenReturn(partitioner)
-      when(dependency.serializer).thenReturn(serializer)
-      when(dependency.aggregator).thenReturn(None)
-      when(dependency.keyOrdering).thenReturn(None)
       new BaseShuffleHandle(shuffleId, dependency)
     }
+    resetDependency()
     shuffleExecutorComponents = new LocalDiskShuffleExecutorComponents(
       conf, blockManager, shuffleBlockResolver)
   }
@@ -77,6 +77,20 @@ class SortShuffleWriterSuite
     } finally {
       super.afterAll()
     }
+  }
+
+  private def resetDependency(): Unit = {
+    reset(dependency);
+    when(dependency.partitioner).thenReturn(partitioner)
+    when(dependency.serializer).thenReturn(serializer)
+    when(dependency.aggregator).thenReturn(None)
+    when(dependency.keyOrdering).thenReturn(None)
+    val checksumSize =
+      if (conf.get(config.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED)) numMaps else 0
+    val checksumAlgorithm = conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
+    val rowBasedChecksums = RowBasedChecksum.createPartitionRowBasedChecksums(
+      checksumSize, checksumAlgorithm)
+    when(dependency.rowBasedChecksums).thenReturn(rowBasedChecksums)
   }
 
   test("write empty iterator") {
@@ -114,6 +128,50 @@ class SortShuffleWriterSuite
     assert(records.size === writeMetrics.recordsWritten)
   }
 
+  test("Row-based checksums are independent of input row order") {
+    conf.set("spark.shuffle.orderIndependentChecksum.enabled", true.toString)
+    // FIXME: this can affect other tests (if any) after this set of tests
+    // since `sc` is global.
+    sc.stop()
+    val localSC = new SparkContext("local[4]", "test", conf)
+    val shuffleBlockResolver = new IndexShuffleBlockResolver(conf)
+    val context = MemoryTestingUtils.fakeTaskContext(localSC.env)
+    val records: List[(Int, Int)] = List(
+      (1, 1), (1, 2), (1, 3), (1, 4), (1, 5),
+      (2, 2), (2, 3), (2, 4), (2, 5), (2, 6),
+      (3, 3), (3, 4), (3, 5), (3, 6), (3, 7),
+      (4, 4), (4, 5), (4, 6), (4, 7), (4, 8),
+      (5, 5), (5, 6), (5, 7), (5, 8), (5, 9))
+
+    var checksumValues : Array[Long] = Array[Long]()
+    var aggregatedChecksumValue = 0L
+    for (i <- 1 to 100) {
+      resetDependency()
+      val writer = new SortShuffleWriter[Int, Int, Int](
+        shuffleHandle,
+        mapId = 2,
+        context,
+        context.taskMetrics().shuffleWriteMetrics,
+        new LocalDiskShuffleExecutorComponents(
+          conf, shuffleBlockResolver._blockManager, shuffleBlockResolver))
+      writer.write(Random.shuffle(records).iterator)
+      if(i == 1) {
+        checksumValues = getRowBasedChecksumValues(writer.getRowBasedChecksums)
+        assert(checksumValues.length > 0)
+        assert(checksumValues.forall(_ > 0))
+
+        aggregatedChecksumValue = writer.getAggregatedChecksumValue
+        assert(aggregatedChecksumValue != 0)
+      } else {
+        assert(checksumValues.sameElements(
+          getRowBasedChecksumValues(writer.getRowBasedChecksums)))
+        assert(aggregatedChecksumValue == writer.getAggregatedChecksumValue)
+      }
+      writer.stop(success = true)
+    }
+    localSC.stop()
+  }
+
   Seq((true, false, false),
     (true, true, false),
     (true, false, true),
@@ -141,6 +199,12 @@ class SortShuffleWriterSuite
         when(dependency.serializer).thenReturn(serializer)
         when(dependency.aggregator).thenReturn(aggregator)
         when(dependency.keyOrdering).thenReturn(order)
+        val checksumSize =
+          if (conf.get(config.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED)) numMaps else 0
+        val checksumAlgorithm = conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
+        val rowBasedChecksums: Array[RowBasedChecksum] =
+          RowBasedChecksum.createPartitionRowBasedChecksums(checksumSize, checksumAlgorithm)
+        when(dependency.rowBasedChecksums).thenReturn(rowBasedChecksums)
         new BaseShuffleHandle[Int, Int, Int](shuffleId, dependency)
       }
 
