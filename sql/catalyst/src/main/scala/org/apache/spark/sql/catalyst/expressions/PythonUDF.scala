@@ -120,10 +120,9 @@ case class PythonUDAF(
     dataType: DataType,
     children: Seq[Expression],
     udfDeterministic: Boolean,
+    evalType: Int = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
     resultId: ExprId = NamedExpression.newExprId)
   extends UnevaluableAggregateFunc with PythonFuncExpression {
-
-  override def evalType: Int = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
   override def sql(isDistinct: Boolean): String = {
     val distinct = if (isDistinct) "DISTINCT " else ""
