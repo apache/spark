@@ -42,7 +42,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CreateAtomicTestManager, FileContextBasedCheckpointFileManager, FileSystemBasedCheckpointFileManager}
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CreateAtomicTestManager, FileContextBasedCheckpointFileManager, FileSystemBasedCheckpointFileManager, StreamExecution}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
@@ -51,7 +51,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{SparkConfWithEnv, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 class NoOverwriteFileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration)
@@ -3575,6 +3575,29 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       threadId == Thread.currentThread().getId,
       s"acquired thread should be curent thread ${Thread.currentThread().getId} " +
         s"after load but was $threadId")
+  }
+
+  test("SPARK-44639: Use Java tmp dir instead of configured local dirs on Yarn") {
+    val conf = new Configuration()
+    conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+
+    val provider = new RocksDBStateStoreProvider()
+    provider.sparkConf = new SparkConfWithEnv(Map("CONTAINER_ID" -> "1"))
+    provider.init(
+      StateStoreId(
+        "/checkpoint",
+        0,
+        0
+      ),
+      new StructType(),
+      new StructType(),
+      NoPrefixKeyStateEncoderSpec(new StructType()),
+      false,
+      new StateStoreConf(sqlConf),
+      conf
+    )
+
+    assert(provider.rocksDB.localRootDir.getParent() == System.getProperty("java.io.tmpdir"))
   }
 
   private def dbConf = RocksDBConf(StateStoreConf(SQLConf.get.clone()))
