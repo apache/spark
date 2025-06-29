@@ -108,6 +108,31 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     rpcEnv.shutdown()
   }
 
+  test("Optimize CompressedMapStatus RowCount") {
+    val rpcEnv = createRpcEnv("test")
+    conf.set(SHUFFLE_MAP_STATUS_ROW_COUNT_OPTIMIZE_SKEWED_JOB.key, "true")
+    val tracker = newTrackerMaster()
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+    tracker.registerShuffle(10, 2, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+    assert(tracker.containsShuffle(10))
+    val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
+    val size10000 = MapStatus.decompressSize(MapStatus.compressSize(10000L))
+    tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
+      Array(1000L, 10000L), 5, Some(Array(1000L, 10000L))))
+    tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
+      Array(10000L, 1000L), 6, Some(Array(1000L, 10000L))))
+    val statuses = tracker.getMapSizesByExecutorId(10, 0)
+    assert(statuses.toSet ===
+      Seq((BlockManagerId("a", "hostA", 1000),
+        ArrayBuffer((ShuffleBlockId(10, 5, 0), size1000, 0))),
+        (BlockManagerId("b", "hostB", 1000),
+          ArrayBuffer((ShuffleBlockId(10, 6, 0), size10000, 1)))).toSet)
+    assert(0 == tracker.getNumCachedSerializedBroadcast)
+    tracker.stop()
+    rpcEnv.shutdown()
+  }
+
   test("master register shuffle and unregister map output and fetch") {
     val rpcEnv = createRpcEnv("test")
     val tracker = newTrackerMaster()
