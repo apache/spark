@@ -6344,7 +6344,7 @@ object functions {
     Column.fn("array_position", column, lit(value))
 
   /**
-   * Locates the position of the first occurrence of the value in the given array after the given 
+   * Locates the position of the first occurrence of the value in the given array after the given
    * start position. Returns null if either of the arguments are null.
    *
    * @note

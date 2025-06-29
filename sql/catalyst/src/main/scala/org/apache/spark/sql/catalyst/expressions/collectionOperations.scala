@@ -2433,18 +2433,18 @@ case class ArrayMax(child: Expression)
 
 
 /**
- * Returns the position of the first occurrence of element in the given array after 
- *       the given start index as long.
+ * Returns the position of the first occurrence of element in the given array after the
+ *       given start index as long.
  * Returns 0 if the given value could not be found in the array after the given start
  *       index. Returns null if either of the arguments are null
  *
- * NOTE: that this is not zero based, but 1-based index. The first element in the array has
- *       index 1.
+ * NOTE: that this is not zero based, but 1-based index. The first element in the array
+ *       has index 1.
  */
 @ExpressionDescription(
   usage = """
     _FUNC_(array, element[, startExpr]) - Returns the (1-based) index of the first matching element of
-      the array after the start index as long, or 0 if no match is found. 
+      the array after the start index as long, or 0 if no match is found.
   """,
   examples = """
     Examples:
