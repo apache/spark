@@ -454,7 +454,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveNaturalAndUsingJoin ::
       ResolveOutputRelation ::
       new ResolveTableConstraints(catalogManager) ::
-      new ResolveDataFrameDropColumns(catalogManager) ::
       new ResolveSetVariable(catalogManager) ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
@@ -1483,6 +1482,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       new ResolveReferencesInUpdate(catalogManager)
     private val resolveReferencesInSort =
       new ResolveReferencesInSort(catalogManager)
+    private val resolveDataFrameDropColumns =
+      new ResolveDataFrameDropColumns(catalogManager)
 
     /**
      * Return true if there're conflicting attributes among children's outputs of a plan
@@ -1792,6 +1793,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       // Pass for Execute Immediate as arguments will be resolved by [[SubstituteExecuteImmediate]].
       case e : ExecuteImmediateQuery => e
+
+      case d: DataFrameDropColumns if !d.resolved =>
+        resolveDataFrameDropColumns(d)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")
