@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import scala.collection.mutable
-
+import scala.collection.{mutable}
 import org.apache.spark.internal.LogKeys.{CONFIG, SUB_QUERY}
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.expressions
@@ -65,11 +64,13 @@ case class InsertAdaptiveSparkPlan(
           val subqueryMap = buildSubqueryMap(plan)
           val planSubqueriesRule = PlanAdaptiveSubqueries(adaptiveExecutionContext, subqueryMap)
 
+          val processingRules = Seq(
+            planSubqueriesRule)
           val preprocessingRules = Seq(
-            PlanDynamicPruningFilters(adaptiveExecutionContext.session),
+            PlanAdaptivePreDynamicPruningFilters(adaptiveExecutionContext),
             planSubqueriesRule)
           // Run pre-processing rules.
-          val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(plan, preprocessingRules)
+          val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(plan, processingRules)
           logDebug(s"Adaptive execution enabled for plan: $plan")
           AdaptiveSparkPlanExec(newPlan, adaptiveExecutionContext, preprocessingRules, isSubquery)
         } catch {
