@@ -19,17 +19,14 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 import java.util.{Locale, UUID}
-
 import scala.jdk.CollectionConverters._
-
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySerializer}
-
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{LogKeys, Logging, MDC}
 import org.apache.spark.kafka010.KafkaConfigUpdater
-import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric}
@@ -43,6 +40,7 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkClassUtils
 
 /**
  * The provider class for all Kafka readers and writers. It is designed such that it throws
@@ -88,8 +86,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     // partial data since Kafka will assign partitions to multiple consumers having the same group
     // id. Hence, we should generate a unique id for each query.
     val uniqueGroupId = streamingUniqueGroupId(caseInsensitiveParameters, metadataPath)
-
-    val specifiedKafkaParams = convertToSpecifiedParams(caseInsensitiveParameters)
+    val translatedKafkaParameters =
+      translateEventStreamProperties(caseInsensitiveParameters, sqlContext.sparkSession.conf.getAll)
+    val specifiedKafkaParams = convertToSpecifiedParams(translatedKafkaParameters)
 
     val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
       caseInsensitiveParameters, STARTING_TIMESTAMP_OPTION_KEY,
@@ -164,7 +163,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       outputMode: OutputMode): Sink = {
     val caseInsensitiveParameters = CaseInsensitiveMap(parameters)
     val defaultTopic = caseInsensitiveParameters.get(TOPIC_OPTION_KEY).map(_.trim)
-    val specifiedKafkaParams = kafkaParamsForProducer(caseInsensitiveParameters)
+    val translatedKafkaParameters =
+      translateEventStreamProperties(caseInsensitiveParameters, sqlContext.sparkSession.conf.getAll)
+    val specifiedKafkaParams = kafkaParamsForProducer(translatedKafkaParameters)
     new KafkaSink(specifiedKafkaParams, defaultTopic)
   }
 
@@ -355,6 +356,26 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       throw new IllegalArgumentException("ending timestamp not valid in streaming queries"))
 
     validateGeneralOptions(params)
+  }
+
+  private def translateEventStreamProperties(params: CaseInsensitiveMap[String],
+                                             sparkConf: Map[String, String])
+  : CaseInsensitiveMap[String] = {
+    if (SparkClassUtils.classIsLoadable("EventStreamUtils")) {
+      val clazz = SparkClassUtils.classForName("EventStreamUtils")
+      val method = clazz.getMethod(
+        "buildKafkaOptionsFromSparkConfig",
+        classOf[scala.collection.immutable.Map[String, String]]
+      )
+
+
+      val convertedParams = method
+        .invoke(null, params, sparkConf)
+        .asInstanceOf[scala.collection.immutable.Map[String, String]]
+      // TODO: Add log line if params have changed
+      return new CaseInsensitiveMap[String](convertedParams)
+    }
+    params;
   }
 
   private def validateBatchOptions(params: CaseInsensitiveMap[String]) = {
