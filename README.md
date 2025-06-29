@@ -106,7 +106,7 @@ And run the following command, which should also return 1,000,000,000:
 >>> spark.range(1000 * 1000 * 1000).count()
 ```
 
-## Example Programs
+## Example of some Programs
 
 Spark also comes with several sample programs in the `examples` directory.
 To run one of them, use `./bin/run-example <class> [params]`. For example:
