@@ -306,6 +306,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case _: Sha2 => generateExpressionWithName("SHA2", expr, isPredicate)
     case _: StringLPad => generateExpressionWithName("LPAD", expr, isPredicate)
     case _: StringRPad => generateExpressionWithName("RPAD", expr, isPredicate)
+    case _: BitwiseCount => generateExpressionWithName("BIT_COUNT", expr, isPredicate)
+    case _: BitwiseGet => generateExpressionWithName("BIT_GET", expr, isPredicate)
     // TODO supports other expressions
     case ApplyFunctionExpression(function, children) =>
       val childrenExpressions = children.flatMap(generateExpression(_))
@@ -387,6 +389,12 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       PushableExpression(left), PushableExpression(right), reverse, _, _, _) =>
       Some(new GeneralAggregateFunc("PERCENTILE_DISC", isDistinct,
         Array(right), Array(generateSortValue(left, reverse))))
+    case aggregate.BitAndAgg(PushableExpression(expr)) =>
+      Some(new GeneralAggregateFunc("BIT_AND", isDistinct, Array(expr)))
+    case aggregate.BitOrAgg(PushableExpression(expr)) =>
+      Some(new GeneralAggregateFunc("BIT_OR", isDistinct, Array(expr)))
+    case aggregate.BitXorAgg(PushableExpression(expr)) =>
+      Some(new GeneralAggregateFunc("BIT_XOR", isDistinct, Array(expr)))
     // TODO supports other aggregate functions
     case aggregate.V2Aggregator(aggrFunc, children, _, _) =>
       val translatedExprs = children.flatMap(PushableExpression.unapply(_))
