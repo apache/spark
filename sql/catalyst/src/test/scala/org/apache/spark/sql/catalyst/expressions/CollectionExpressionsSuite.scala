@@ -1881,7 +1881,8 @@ class CollectionExpressionsSuite
 
     checkEvaluation(new ArrayPosition(a4, Literal(""), Literal(1)), null)
     checkEvaluation(new ArrayPosition(a4, Literal.create(null, StringType), Literal(1)), null)
-    checkEvaluation(new ArrayPosition(a4, Literal.create(1, IntegerType), Literal.create(null, IntegerType)), null)
+    checkEvaluation(new ArrayPosition(a4, Literal.create(1, IntegerType),
+      Literal.create(null, IntegerType)), null)
 
     val aa0 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)),
       ArrayType(ArrayType(IntegerType)))
