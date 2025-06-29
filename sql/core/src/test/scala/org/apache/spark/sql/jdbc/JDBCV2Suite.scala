@@ -267,19 +267,22 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("Test 2-way join") {
+    val sqlQuery =
+      "SELECT * FROM h2.test.employee a, h2.test.employee b"
     val rows = withSQLConf(
       SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
-      sql("SELECT * FROM h2.test.employee a, h2.test.employee b").collect().toSeq
+      sql(sqlQuery).collect().toSeq
     }
 
     withSQLConf(
       SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
-      val df = sql("SELECT * FROM h2.test.employee a, h2.test.employee b")
+      val df = sql(sqlQuery)
       val joinNodes = df.queryExecution.optimizedPlan.collect {
         case j: Join => j
       }
 
-      assert(joinNodes.isEmpty)
+      // Cross joins are not pushed down
+      assert(joinNodes.nonEmpty)
       checkAnswer(df, rows)
     }
   }
@@ -309,9 +312,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         case j: Join => j
       }
 
-      assert(joinNodes.isEmpty)
-      checkPushedInfo(df,
-        "PushedJoins: [h2.test.employee, h2.test.employee, h2.test.employee, h2.test.employee]")
+      // Cross joins are not pushed down
+      assert(joinNodes.nonEmpty)
       checkAnswer(df, rows)
     }
   }

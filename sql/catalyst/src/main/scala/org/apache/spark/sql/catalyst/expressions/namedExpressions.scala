@@ -394,12 +394,29 @@ case class AttributeReference(
   }
 }
 
-case class JoinColumnReference(
-    originalReference: AttributeReference,
-    isReferringColumnFromLeftSubquery: Boolean = true)
-  extends LeafExpression with Unevaluable {
-  override def nullable: Boolean = originalReference.nullable
-  override def dataType: DataType = originalReference.dataType
+case class JoinColumnReference(child: AttributeReference)
+  extends  NamedExpression with Unevaluable {
+  override def dataType: DataType = child.dataType
+
+  override def name: String = child.name
+
+  // This is intentional. We can't give new exprId to the JoinColumnReference because with new
+  // exprId replacing the alias would fail (for example, in V2 rule, aliasReplacedOrder). The
+  // result of this is that we would lose qualifier information.
+  override def exprId: ExprId = child.exprId
+
+  override def qualifier: Seq[String] = child.qualifier
+
+  override def toAttribute: Attribute = child.toAttribute
+
+  override def newInstance(): NamedExpression = JoinColumnReference(child)
+
+  override def nullable: Boolean = child.nullable
+
+  override def children: Seq[Expression] = Seq(child)
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(child = newChildren.head.asInstanceOf[AttributeReference])
 }
 
 /**

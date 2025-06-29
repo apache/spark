@@ -14,10 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-package org.apache.spark.sql.connector.join;
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
-import org.apache.spark.annotation.Evolving;
-
-@Evolving
-public final class Inner implements JoinType { }
+case class JoinedJDBCScanBuilderInfo(
+    options: JDBCOptions,
+    joinType: String,
+    relationQualifier: Option[String] = None)

@@ -46,9 +46,9 @@ import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, Push
 import org.apache.spark.sql.classic.{SparkSession, Strategy}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, JoinColumn, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation}
-import org.apache.spark.sql.connector.join.{Inner => V2Inner, JoinType => V2JoinType}
+import org.apache.spark.sql.connector.join.{InnerJoinType => V2Inner, JoinType => V2JoinType}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
@@ -508,6 +508,17 @@ object DataSourceStrategy
       execution.ProjectExec(
         projects, filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan))
     }
+  }
+
+  def translateJoinColumns(joinColumnReferences: Seq[JoinColumnReference]): Seq[JoinColumn] = {
+    def translate(joinColumnRef: JoinColumnReference): Option[JoinColumn] = {
+      joinColumnRef match {
+        case PushableExpression(expr) => Some(expr.asInstanceOf[JoinColumn])
+        case _ => None
+      }
+    }
+
+    joinColumnReferences.flatMap(translate)
   }
 
   def translateJoinType(joinType: JoinType): Option[V2JoinType] = {

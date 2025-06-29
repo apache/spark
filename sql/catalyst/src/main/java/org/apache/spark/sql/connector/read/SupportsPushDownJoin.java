@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.read;
 import java.util.Optional;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.JoinColumn;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.connector.join.JoinType;
 import org.apache.spark.sql.types.StructType;
@@ -28,7 +29,7 @@ import org.apache.spark.sql.types.StructType;
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
  * push down join operators.
  *
- * @since 4.0.0
+ * @since 4.1.0
  */
 @Evolving
 public interface SupportsPushDownJoin extends ScanBuilder {
@@ -37,11 +38,10 @@ public interface SupportsPushDownJoin extends ScanBuilder {
   boolean pushJoin(
     SupportsPushDownJoin other,
     JoinType joinType,
-    Optional<Predicate> condition,
-    StructType leftRequiredSchema,
-    StructType rightRequiredSchema
-    );
-
-  // When join is pushed down, the output schema can be changed in case of duplicate column names.
-  StructType getOutputSchema();
+    Predicate condition,
+    String[] leftSideQualifier,
+    String[] rightSideQualifier,
+    StructType leftProjections,
+    StructType rightProjections
+  );
 }

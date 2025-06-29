@@ -16,17 +16,15 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-import java.util.Optional
-
-import scala.jdk.OptionConverters._
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.join.{JoinColumn, JoinType}
+import org.apache.spark.sql.connector.join.{InnerJoinType, JoinType}
 import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
@@ -55,7 +53,7 @@ case class JDBCScanBuilder(
 
   private var pushedPredicate = Array.empty[Predicate]
 
-  private var finalSchema = schema
+  var finalSchema = schema
 
   private var tableSample: Option[TableSampleInfo] = None
 
@@ -65,10 +63,23 @@ case class JDBCScanBuilder(
 
   private var sortOrders: Array[String] = Array.empty[String]
 
+  // In JoinedJDBCScanBuilderInfo we are storing the relation qualifier. This is later on used in
+  // SQL query generations. What we are missing in joinedScanBuilders is the alias of the first
+  // relation that gets joined. For this purpose, we are using firstRelationQualifier.
+  private var firstRelationQualifier: Array[String] = Array.empty[String]
+
+  // When join is pushed down it's tended to change the tableOrQuery. Since join query is built
+  // every time join is being pushed, we need to backup the original table name of the leftmost
+  // scan.
+  private var originalScanTableName: String = ""
+
+  private var joinedScanBuilders: Array[JoinedJDBCScanBuilderInfo] =
+    Array.empty[JoinedJDBCScanBuilderInfo]
+
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     if (jdbcOptions.pushDownPredicate) {
       val (pushed, unSupported) = predicates.partition(dialect.compileExpression(_).isDefined)
-      this.pushedPredicate = pushed
+      this.pushedPredicate ++= pushed
       unSupported
     } else {
       predicates
@@ -134,107 +145,67 @@ case class JDBCScanBuilder(
   override def pushJoin(
     other: SupportsPushDownJoin,
     joinType: JoinType,
-    condition: Optional[Predicate],
-    leftRequiredSchema: StructType,
-    rightRequiredSchema: StructType
+    condition: Predicate,
+    leftSideQualifier: Array[String],
+    rightSideQualifier: Array[String],
+    leftSideRequiredSchema: StructType,
+    rightSideRequiredSchema: StructType
   ): Boolean = {
     if (!jdbcOptions.pushDownJoin || !dialect.supportsJoin) return false
 
-    val leftNodeSQLQuery = buildSQLQuery()
-    val rightNodeSQLQuery = other.asInstanceOf[JDBCScanBuilder].buildSQLQuery()
+    this.pushedPredicate = this.pushedPredicate :+ condition
 
-    val leftSideQualifier = JoinOutputAliasIterator.generateSubqueryAlias
-    val rightSideQualifier = JoinOutputAliasIterator.generateSubqueryAlias
-
-    val leftProjections: Seq[JoinColumn] = leftRequiredSchema.fields.map { e =>
-      new JoinColumn(e.name, true)
-    }.toSeq
-    val rightProjections: Seq[JoinColumn] = rightRequiredSchema.fields.map { e =>
-      new JoinColumn(e.name, false)
-    }.toSeq
-
-    var aliasedLeftSchema = StructType(Seq())
-    var aliasedRightSchema = StructType(Seq())
-    val outputAliasPrefix = JoinOutputAliasIterator.generateSubqueryAlias
-
-    val aliasedOutput = (leftProjections ++ rightProjections)
-      .zipWithIndex
-      .map { case (proj, i) =>
-        val name = s"${outputAliasPrefix}_col_$i"
-        val output = FieldReference(name)
-        if (i < leftProjections.length) {
-          val field = leftRequiredSchema.fields(i)
-          aliasedLeftSchema =
-            aliasedLeftSchema.add(name, field.dataType, field.nullable, field.metadata)
-        } else {
-          val field = rightRequiredSchema.fields(i - leftRequiredSchema.fields.length)
-          aliasedRightSchema =
-            aliasedRightSchema.add(name, field.dataType, field.nullable, field.metadata)
-        }
-
-        val compiledJoinColumn = dialect.compileExpressionWithJoinColumnSupported(
-            proj,
-            Some(leftSideQualifier),
-            Some(rightSideQualifier)
-          ).get
-        s"$compiledJoinColumn AS ${dialect.compileExpression(output).get}"
-      }.mkString(",")
-
-    val compiledJoinType = dialect.compileJoinType(joinType)
-    if (!compiledJoinType.isDefined) return false
-
-    val conditionString = condition.toScala match {
-      case Some(cond) =>
-        val compiledCond = dialect.compileExpressionWithJoinColumnSupported(
-          cond,
-          Some(leftSideQualifier),
-          Some(rightSideQualifier)
-        ).get
-        s"ON $compiledCond"
-      case _ => ""
+    // We are getting the qualifier of leftmost relation in tree.
+    if (joinedScanBuilders.isEmpty) {
+      originalScanTableName = jdbcOptions.tableOrQuery
+      firstRelationQualifier = leftSideQualifier
     }
 
-    val compiledLeftSideQualifier =
-      dialect.compileExpression(FieldReference(leftSideQualifier)).get
-    val compiledRightSideQualifier =
-      dialect.compileExpression(FieldReference(rightSideQualifier)).get
+    val otherJdbcScanBuilder = other.asInstanceOf[JDBCScanBuilder]
 
-    val joinQuery =
+    var newSchema = StructType(Seq())
+
+    // 1. If this is the first join in the chain then calculate the new schema for left side that
+    // will have qualified fields.
+    // 2. If this is not the first join in the chain, inherit the previous schema as it is already
+    // qualified.
+    newSchema = if (joinedScanBuilders.isEmpty) leftSideRequiredSchema else finalSchema
+
+    // Struct field names are unique, so we are fine with merging them
+    newSchema = newSchema.merge(rightSideRequiredSchema)
+
+    val joinTypeString = joinType match {
+      case inner: InnerJoinType => "INNER JOIN"
+      case _ =>
+        val params = Map("joinType" -> String.valueOf(joinType))
+        throw new SparkUnsupportedOperationException("UNSUPPORTED_JOIN_TYPES", params)
+    }
+
+    joinedScanBuilders = joinedScanBuilders :+
+      JoinedJDBCScanBuilderInfo(
+        otherJdbcScanBuilder.jdbcOptions,
+        joinTypeString,
+        Some(rightSideQualifier.mkString(".")))
+    finalSchema = newSchema
+
+    var joinClause = originalScanTableName
+    joinClause += " " + firstRelationQualifier.mkString(".")
+    joinedScanBuilders.foreach{jsb =>
+      joinClause +=
+        s" ${jsb.joinType} ${jsb.options.tableOrQuery} ${jsb.relationQualifier.getOrElse("")}"
+    }
+
+    val joinedRelationsQuery =
       s"""
-         |SELECT $aliasedOutput FROM
-         |($leftNodeSQLQuery) $compiledLeftSideQualifier
-         |${compiledJoinType.get}
-         |($rightNodeSQLQuery) $compiledRightSideQualifier
-         |$conditionString
+         |$joinClause
          |""".stripMargin
 
     val newMap = jdbcOptions.parameters.originalMap +
-      (JDBCOptions.JDBC_QUERY_STRING -> joinQuery) - (JDBCOptions.JDBC_TABLE_NAME)
+      (JDBCOptions.JDBC_TABLE_NAME -> joinedRelationsQuery) - (JDBCOptions.JDBC_QUERY_STRING)
 
     jdbcOptions = new JDBCOptions(newMap)
-    jdbcOptions.containsJoinInQuery = true
-
-    // We can merge schemas since there are no fields with duplicate names
-    finalSchema = aliasedLeftSchema.merge(aliasedRightSchema)
-    pushedPredicate = Array.empty[Predicate]
-    pushedAggregateList = Array()
-    pushedGroupBys = None
-    tableSample = None
-    pushedLimit = 0
-    sortOrders = Array.empty[String]
-    pushedOffset = 0
-
     true
   }
-
-  def buildSQLQuery(): String = {
-    build()
-      .toV1TableScan(session.sqlContext).asInstanceOf[JDBCV1RelationFromV2Scan]
-      .buildScan().asInstanceOf[JDBCRDD]
-      .getExternalEngineQuery
-  }
-
-  override def getOutputSchema(): StructType = finalSchema
 
   override def pushTableSample(
       lowerBound: Double,
@@ -308,13 +279,5 @@ case class JDBCScanBuilder(
     // be used in sql string.
     JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedPredicate,
       pushedAggregateList, pushedGroupBys, tableSample, pushedLimit, sortOrders, pushedOffset)
-  }
-}
-
-object JoinOutputAliasIterator {
-  private var curId = new java.util.concurrent.atomic.AtomicLong()
-
-  def generateSubqueryAlias: String = {
-    "subquery_" + curId.getAndIncrement()
   }
 }

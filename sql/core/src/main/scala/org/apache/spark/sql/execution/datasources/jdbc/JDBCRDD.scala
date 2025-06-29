@@ -26,7 +26,7 @@ import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkEx
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.SQL_TEXT
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.execution.datasources.{DataSourceMetricsMixin, ExternalEngineDatasourceRDD}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -42,7 +42,7 @@ case class JDBCPartition(whereClause: String, idx: Int) extends Partition {
   override def index: Int = idx
 }
 
-object JDBCRDD extends Logging {
+object JDBCRDD extends Logging with SQLConfHelper {
 
   /**
    * Takes a (schema, table) specification and returns the table's Catalyst
@@ -134,7 +134,15 @@ object JDBCRDD extends Logging {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = if (groupByColumns.isEmpty) {
-      requiredColumns.map(colName => dialect.quoteIdentifier(colName))
+      if (conf.dataSourceV2JoinPushdown) {
+        requiredColumns.map{colName =>
+          val parts = colName.split('.')
+          val (prefix, last) = (parts.dropRight(1), parts.last)
+          (prefix :+ dialect.quoteIdentifier(last)).mkString(".")
+        }
+      } else {
+        requiredColumns.map(colName => dialect.quoteIdentifier(colName))
+      }
     } else {
       // these are already quoted in JDBCScanBuilder
       requiredColumns

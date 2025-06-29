@@ -18,31 +18,6 @@
 package org.apache.spark.sql.connector.join;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Expression;
-import org.apache.spark.sql.connector.expressions.NamedReference;
 
-/**
- * Represents a column reference used in DSv2 Join pushdown.
- *
- * @since 4.0.0
- */
 @Evolving
-public final class JoinColumn implements NamedReference {
-  public JoinColumn(String name, Boolean leftSideOfJoin) {
-    this.name = name;
-    this.leftSideOfJoin = leftSideOfJoin;
-  }
-
-  private String name;
-  private Boolean leftSideOfJoin;
-
-  public Boolean isInLeftSideOfJoin() { return leftSideOfJoin; }
-
-  @Override
-  public String[] fieldNames() {
-    return new String[] { name };
-  }
-
-  @Override
-  public Expression[] children() { return EMPTY_EXPRESSION; }
-}
+public final class InnerJoinType implements JoinType { }

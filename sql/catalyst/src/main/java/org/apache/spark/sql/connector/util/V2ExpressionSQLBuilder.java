@@ -28,6 +28,7 @@ import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.connector.expressions.Cast;
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.Extract;
+import org.apache.spark.sql.connector.expressions.JoinColumn;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 import org.apache.spark.sql.connector.expressions.Literal;
@@ -43,7 +44,6 @@ import org.apache.spark.sql.connector.expressions.aggregate.CountStar;
 import org.apache.spark.sql.connector.expressions.aggregate.GeneralAggregateFunc;
 import org.apache.spark.sql.connector.expressions.aggregate.Sum;
 import org.apache.spark.sql.connector.expressions.aggregate.UserDefinedAggregateFunc;
-import org.apache.spark.sql.connector.join.JoinColumn;
 import org.apache.spark.sql.types.DataType;
 
 /**
@@ -179,8 +179,7 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitJoinColumn(JoinColumn column) {
-    throw new SparkIllegalArgumentException(
-      "_LEGACY_ERROR_TEMP_3207", Map.of("expr", String.valueOf(column)));
+    return column.toString();
   }
 
   protected String visitIn(String v, List<String> list) {
