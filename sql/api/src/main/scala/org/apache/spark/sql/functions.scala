@@ -6344,6 +6344,20 @@ object functions {
     Column.fn("array_position", column, lit(value))
 
   /**
+   * Locates the position of the first occurrence of the value in the given array after the given 
+   * start position. Returns null if either of the arguments are null.
+   *
+   * @note
+   *   The position is not zero based, but 1 based index. Returns 0 if value could not be found in
+   *   array.
+   *
+   * @group array_funcs
+   * @since 2.4.0
+   */
+  def array_position(column: Column, value: Any, pos: Any): Column =
+    Column.fn("array_position", column, lit(value), lit(pos))
+
+  /**
    * Returns element of array at given index in value if column is array. Returns value for the
    * given key in value if column is map.
    *

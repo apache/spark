@@ -2433,17 +2433,18 @@ case class ArrayMax(child: Expression)
 
 
 /**
- * Returns the position of the first occurrence of element in the given array as long.
- * Returns 0 if the given value could not be found in the array. Returns null if either of
- * the arguments are null
+ * Returns the position of the first occurrence of element in the given array after 
+ *       the given start index as long.
+ * Returns 0 if the given value could not be found in the array after the given start
+ *       index. Returns null if either of the arguments are null
  *
  * NOTE: that this is not zero based, but 1-based index. The first element in the array has
  *       index 1.
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(array, element) - Returns the (1-based) index of the first matching element of
-      the array as long, or 0 if no match is found.
+    _FUNC_(array, element[, startExpr]) - Returns the (1-based) index of the first matching element of
+      the array after the start index as long, or 0 if no match is found. 
   """,
   examples = """
     Examples:
@@ -2454,20 +2455,24 @@ case class ArrayMax(child: Expression)
   """,
   group = "array_funcs",
   since = "2.4.0")
-case class ArrayPosition(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with QueryErrorsBase {
+case class ArrayPosition(array: Expression, element: Expression, startExpr: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes with QueryErrorsBase {
   override def nullIntolerant: Boolean = true
 
+  def this(array: Expression, element: Expression) = {
+    this(array, element, Literal(1))
+  }
+
   @transient private lazy val ordering: Ordering[Any] =
-    TypeUtils.getInterpretedOrdering(right.dataType)
+    TypeUtils.getInterpretedOrdering(element.dataType)
 
   override def dataType: DataType = LongType
 
   override def inputTypes: Seq[AbstractDataType] = {
-    (left.dataType, right.dataType) match {
-      case (ArrayType(e1, hasNull), e2) =>
+    (array.dataType, element.dataType, startExpr.dataType) match {
+      case (ArrayType(e1, hasNull), e2, e3: IntegralType) if (e3 != LongType) =>
         TypeCoercion.findTightestCommonType(e1, e2) match {
-          case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
+          case Some(dt) => Seq(ArrayType(dt, hasNull), dt, IntegerType)
           case _ => Seq.empty
         }
       case _ => Seq.empty
@@ -2475,21 +2480,30 @@ case class ArrayPosition(left: Expression, right: Expression)
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    (left.dataType, right.dataType) match {
-      case (NullType, _) | (_, NullType) =>
+    (array.dataType, element.dataType, startExpr.dataType) match {
+      case (NullType, _, _) | (_, NullType, _) =>
         DataTypeMismatch(
           errorSubClass = "NULL_TYPE",
           Map("functionName" -> toSQLId(prettyName)))
-      case (t, _) if !ArrayType.acceptsType(t) =>
+      case (_, _, t) if t != IntegerType =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(2),
+            "requiredType" -> toSQLType(IntegerType),
+            "inputSql" -> toSQLExpr(startExpr),
+            "inputType" -> toSQLType(startExpr.dataType))
+        )
+      case (t, _, _) if !ArrayType.acceptsType(t) =>
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
             "paramIndex" -> ordinalNumber(0),
             "requiredType" -> toSQLType(ArrayType),
-            "inputSql" -> toSQLExpr(left),
-            "inputType" -> toSQLType(left.dataType))
+            "inputSql" -> toSQLExpr(array),
+            "inputType" -> toSQLType(array.dataType))
         )
-      case (ArrayType(e1, _), e2) if DataTypeUtils.sameType(e1, e2) =>
+      case (ArrayType(e1, _), e2, _) if DataTypeUtils.sameType(e1, e2) =>
         TypeUtils.checkForOrderingExpr(e2, prettyName)
       case _ =>
         DataTypeMismatch(
@@ -2497,16 +2511,20 @@ case class ArrayPosition(left: Expression, right: Expression)
           messageParameters = Map(
             "functionName" -> toSQLId(prettyName),
             "dataType" -> toSQLType(ArrayType),
-            "leftType" -> toSQLType(left.dataType),
-            "rightType" -> toSQLType(right.dataType)
+            "arrayType" -> toSQLType(array.dataType),
+            "elementType" -> toSQLType(element.dataType)
           )
         )
     }
   }
 
-  override def nullSafeEval(arr: Any, value: Any): Any = {
-    arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
-      if (v != null && ordering.equiv(v, value)) {
+  override def first: Expression = array
+  override def second: Expression = element
+  override def third: Expression = startExpr
+
+  override def nullSafeEval(arr: Any, elem: Any, start: Any): Any = {
+    arr.asInstanceOf[ArrayData].foreach(element.dataType, (i, v) =>
+      if (i + 1 >= start.asInstanceOf[Int] && v != null && ordering.equiv(v, elem)) {
         return (i + 1).toLong
       }
     )
@@ -2516,14 +2534,14 @@ case class ArrayPosition(left: Expression, right: Expression)
   override def prettyName: String = "array_position"
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (arr, value) => {
+    nullSafeCodeGen(ctx, ev, (arr, elem, start) => {
       val pos = ctx.freshName("arrayPosition")
       val i = ctx.freshName("i")
-      val getValue = CodeGenerator.getValue(arr, right.dataType, i)
+      val getValue = CodeGenerator.getValue(arr, element.dataType, i)
       s"""
          |int $pos = 0;
-         |for (int $i = 0; $i < $arr.numElements(); $i ++) {
-         |  if (!$arr.isNullAt($i) && ${ctx.genEqual(right.dataType, value, getValue)}) {
+         |for (int $i = $start-1; $i < $arr.numElements(); $i ++) {
+         |  if (!$arr.isNullAt($i) && ${ctx.genEqual(element.dataType, elem, getValue)}) {
          |    $pos = $i + 1;
          |    break;
          |  }
@@ -2534,8 +2552,8 @@ case class ArrayPosition(left: Expression, right: Expression)
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): ArrayPosition =
-    copy(left = newLeft, right = newRight)
+      newFirst: Expression, newSecond: Expression, newThird: Expression): ArrayPosition =
+    copy(array = newFirst, element = newSecond, startExpr = newThird)
 }
 
 /**

@@ -1862,29 +1862,36 @@ class CollectionExpressionsSuite
     val a1 = Literal.create(Seq[String](null, ""), ArrayType(StringType))
     val a2 = Literal.create(Seq(null), ArrayType(LongType))
     val a3 = Literal.create(null, ArrayType(StringType))
+    val a4 = Literal.create(Seq(1, null, 2, 3), ArrayType(IntegerType))
 
-    checkEvaluation(ArrayPosition(a0, Literal(3)), 4L)
-    checkEvaluation(ArrayPosition(a0, Literal(1)), 1L)
-    checkEvaluation(ArrayPosition(a0, Literal(0)), 0L)
-    checkEvaluation(ArrayPosition(a0, Literal.create(null, IntegerType)), null)
+    checkEvaluation(new ArrayPosition(a0, Literal(3)), 4L)
+    checkEvaluation(new ArrayPosition(a0, Literal(1)), 1L)
+    checkEvaluation(new ArrayPosition(a0, Literal(0)), 0L)
+    checkEvaluation(new ArrayPosition(a0, Literal.create(null, IntegerType)), null)
 
-    checkEvaluation(ArrayPosition(a1, Literal("")), 2L)
-    checkEvaluation(ArrayPosition(a1, Literal("a")), 0L)
-    checkEvaluation(ArrayPosition(a1, Literal.create(null, StringType)), null)
+    checkEvaluation(new ArrayPosition(a1, Literal("")), 2L)
+    checkEvaluation(new ArrayPosition(a1, Literal("a")), 0L)
+    checkEvaluation(new ArrayPosition(a1, Literal.create(null, StringType)), null)
 
-    checkEvaluation(ArrayPosition(a2, Literal(1L)), 0L)
-    checkEvaluation(ArrayPosition(a2, Literal.create(null, LongType)), null)
+    checkEvaluation(new ArrayPosition(a2, Literal(1L)), 0L)
+    checkEvaluation(new ArrayPosition(a2, Literal.create(null, LongType)), null)
 
-    checkEvaluation(ArrayPosition(a3, Literal("")), null)
-    checkEvaluation(ArrayPosition(a3, Literal.create(null, StringType)), null)
+    checkEvaluation(new ArrayPosition(a3, Literal("")), null)
+    checkEvaluation(new ArrayPosition(a3, Literal.create(null, StringType)), null)
+
+    checkEvaluation(new ArrayPosition(a4, Literal(""), Literal(1)), null)
+    checkEvaluation(new ArrayPosition(a4, Literal.create(null, StringType), Literal(1)), null)
+    checkEvaluation(new ArrayPosition(a4, Literal.create(1, IntegerType), Literal.create(null, IntegerType)), null)
 
     val aa0 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)),
       ArrayType(ArrayType(IntegerType)))
     val aa1 = Literal.create(Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)),
       ArrayType(ArrayType(IntegerType)))
     val aae = Literal.create(Seq[Int](1, 2), ArrayType(IntegerType))
-    checkEvaluation(ArrayPosition(aa0, aae), 1L)
-    checkEvaluation(ArrayPosition(aa1, aae), 0L)
+    checkEvaluation(new ArrayPosition(aa0, aae), 1L)
+    checkEvaluation(new ArrayPosition(aa1, aae), 0L)
+    checkEvaluation(new ArrayPosition(aa0, aae, Literal(1)), 1L)
+    checkEvaluation(new ArrayPosition(aa0, aae, Literal(2)), 0L)
   }
 
   test("elementAt") {
