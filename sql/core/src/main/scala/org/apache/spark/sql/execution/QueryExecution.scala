@@ -20,8 +20,11 @@ package org.apache.spark.sql.execution
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
+
 import scala.util.control.NonFatal
+
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
@@ -47,8 +50,6 @@ import org.apache.spark.sql.scripting.SqlScriptingExecution
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{LazyTry, Utils}
 import org.apache.spark.util.ArrayImplicits._
-
-import scala.collection.Seq
 
 /**
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
@@ -541,6 +542,8 @@ object QueryExecution {
     Seq(PlanAdaptiveInitDynamicPruningFilters(sparkSession))
     adaptiveExecutionRule.toSeq ++
     Seq(
+      CoalesceBucketsInJoin,
+      PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
       EnsureRequirements(),
