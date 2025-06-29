@@ -750,6 +750,7 @@ SELECT foo3_2e1(
 
 -- 3.3 Create and invoke function with different SQL configurations
 SET spark.sql.ansi.enabled=true;
+DROP FUNCTION IF EXISTS foo3_3at;
 CREATE FUNCTION foo3_3a(x INT) RETURNS DOUBLE RETURN 1 / x;
 CREATE FUNCTION foo3_3at(x INT) RETURNS TABLE (a DOUBLE) RETURN SELECT 1 / x;
 CREATE TEMPORARY FUNCTION foo3_3b(x INT) RETURNS DOUBLE RETURN 1 / x;
