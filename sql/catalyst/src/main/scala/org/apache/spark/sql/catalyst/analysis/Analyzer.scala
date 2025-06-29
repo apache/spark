@@ -140,8 +140,9 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  * @param isExecuteImmediate Whether the current plan is created by EXECUTE IMMEDIATE. Used when
  *                           resolving variables, as SQL Scripting local variables should not be
  *                           visible from EXECUTE IMMEDIATE.
- * @param outerPlan The query plan from the outer query that can be used to resolve star
- *                  expressions in a subquery.
+ * @param outerPlans The query plans from the outer queries that can be used to resolve star
+ *                   expressions in a subquery. The plans are stored in order from the closest to
+ *                   the most outer in relation to the plan that we are resolving currently.
  */
 case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
@@ -156,7 +157,7 @@ case class AnalysisContext(
     //    lookup a temporary function. And export to the view metadata.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
-    outerPlan: Option[LogicalPlan] = None,
+    outerPlans: Seq[LogicalPlan] = Seq.empty,
     isExecuteImmediate: Boolean = false,
     collation: Option[String] = None,
 
@@ -234,9 +235,9 @@ object AnalysisContext {
     try f finally { set(originContext) }
   }
 
-  def withOuterPlan[A](outerPlan: LogicalPlan)(f: => A): A = {
+  def withOuterPlan[A](outerPlans: Seq[LogicalPlan])(f: => A): A = {
     val originContext = value.get()
-    val context = originContext.copy(outerPlan = Some(outerPlan))
+    val context = originContext.copy(outerPlans = outerPlans)
     set(context)
     try f finally { set(originContext) }
   }
@@ -1865,7 +1866,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           s.expand(plan, resolver)
         } catch {
           case e: AnalysisException =>
-            AnalysisContext.get.outerPlan.map {
+            val outerPlan = AnalysisContext.get.outerPlans.headOption
+            outerPlan.map {
               // Only Project, Aggregate, CollectMetrics can host star expressions.
               case u @ (_: Project | _: Aggregate | _: CollectMetrics) =>
                 Try(s.expand(u.children.head, resolver)) match {
@@ -2386,7 +2388,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         e: SubqueryExpression,
         outer: LogicalPlan)(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
-      val newSubqueryPlan = AnalysisContext.withOuterPlan(outer) {
+      val newSubqueryPlan = AnalysisContext.withOuterPlan(Seq(outer)) {
         executeSameContext(e.plan)
       }
 
