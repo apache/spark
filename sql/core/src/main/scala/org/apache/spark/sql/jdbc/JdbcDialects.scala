@@ -866,16 +866,6 @@ abstract class JdbcDialect extends Serializable with Logging {
   def supportsJoin: Boolean = false
 
   /**
-   * If true, left/right subquery of JOIN needs to have AS keywords before alias.
-   * For example,
-   * SELECT * FROM (subquery1) AS alias1 JOIN ...
-   *
-   * If false, SQL query wouldn't have AS keyword, so the query would look like
-   * SELECT * FROM (subquery1) alias1 JOIN ...
-   */
-  def needsASKeywordForJoinSubquery: Boolean = true
-
-  /**
    * Return the DB-specific quoted and fully qualified table name
    */
   @Since("3.5.0")

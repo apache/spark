@@ -145,7 +145,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       rightHolder.pushedSample.isEmpty &&
       // Only left-like star schema joins are supported for now
       rightHolder.joinedRelations.isEmpty &&
-      lBuilder.isRightSideCompatibleForJoin(rBuilder) =>
+      lBuilder.isOtherSideCompatibleForJoin(rBuilder) =>
 
       val normalizedCondition = condition.map { e =>
         DataSourceStrategy.normalizeExprs(
@@ -196,9 +196,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
       val qualifiedRightFilters = rightFilters.map(qualifyFilter(_, rightSideQualifier))
 
+
       val leftSidePlanAfterFilterPushdown =
         pushDownFilters(qualifiedOrOriginalLeftFilters, leftHolder)
-      val rightSidePlanAfterFilterPushdown = pushDownFilters(qualifiedRightFilters, rightHolder)
+      val rightSidePlanAfterFilterPushdown =
+        pushDownFilters(qualifiedRightFilters, rightHolder)
 
       val leftSidePlanHasPostScanFilters =
         leftSidePlanAfterFilterPushdown.collect{case f: Filter => f}.nonEmpty
@@ -221,12 +223,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             .map { a => JoinColumnReference(a) }
         }
 
-      val qualifiedRightProjections: Seq[JoinColumnReference] =
+      val qualifiedRightProjections: Seq[JoinColumnReference] = {
         rightProjections.asInstanceOf[Seq[AttributeReference]]
           .map(_.withQualifier(rightSideQualifier))
           .map { a =>
             JoinColumnReference(a)
           }
+      }
 
       val normalizedLeftProjections = DataSourceStrategy.normalizeExprs(
         qualifiedOrOriginalLeftProjections,
@@ -577,13 +580,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val wrappedScan = getWrappedScan(scan, holder)
       val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
 
-      // When join is pushed down, the output of ScanBuilderHolder is going to be, for example,
-      // subquery_2_col_0#0, subquery_2_col_1#1, subquery_2_col_2#2.
-      // We should revert these names back to original names. For example,
-      // SALARY#0, NAME#1, DEPT#1. This is done by adding projection with appropriate aliases.
       val projectList = realOutput.zip(holder.output).map { case (a1, a2) =>
-        val originalName = a2.name
-        Alias(a1, originalName)(a2.exprId)
+        Alias(a1, a2.name)(a2.exprId)
       }
       Project(projectList, scanRelation)
   }

@@ -24,7 +24,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.join.{InnerJoinType, JoinType}
+import org.apache.spark.sql.connector.join.JoinType
 import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
@@ -137,7 +137,7 @@ case class JDBCScanBuilder(
     }
   }
 
-  override def isRightSideCompatibleForJoin(other: SupportsPushDownJoin): Boolean = {
+  override def isOtherSideCompatibleForJoin(other: SupportsPushDownJoin): Boolean = {
     other.isInstanceOf[JDBCScanBuilder] &&
       jdbcOptions.url == other.asInstanceOf[JDBCScanBuilder].jdbcOptions.url
   };
@@ -175,7 +175,7 @@ case class JDBCScanBuilder(
     newSchema = newSchema.merge(rightSideRequiredSchema)
 
     val joinTypeString = joinType match {
-      case inner: InnerJoinType => "INNER JOIN"
+      case JoinType.INNER_JOIN => "INNER JOIN"
       case _ =>
         val params = Map("joinType" -> String.valueOf(joinType))
         throw new SparkUnsupportedOperationException("UNSUPPORTED_JOIN_TYPES", params)

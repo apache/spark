@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.connector.read;
 
-import java.util.Optional;
-
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.JoinColumn;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.connector.join.JoinType;
 import org.apache.spark.sql.types.StructType;
@@ -33,15 +30,35 @@ import org.apache.spark.sql.types.StructType;
  */
 @Evolving
 public interface SupportsPushDownJoin extends ScanBuilder {
-  boolean isRightSideCompatibleForJoin(SupportsPushDownJoin other);
+  /**
+   * Returns true if the other side of the join is compatible with the
+   * current {@code SupportsPushDownJoin} for a join push-down, meaning both sides can be
+   * processed together within the same underlying data source.
+   *
+   * <p>For example, JDBC connectors are compatible if they use the same
+   * host, port, username, and password.</p>
+   */
+  boolean isOtherSideCompatibleForJoin(SupportsPushDownJoin other);
 
+  /**
+   * Pushes down the join of the current {@code SupportsPushDownJoin} and the other side of join
+   * {@code SupportsPushDownJoin}.
+   *
+   * {@code leftSideQualifier} and {@code rightSideQualifier} are the qualifiers of left and right
+   * side of the join. These are used to fully qualify column names in case of the duplicated ones.
+   *
+   * {@code leftRequiredSchema} and {@code rightRequiredSchema} are the projected schemas
+   * from both left and right side of the join.
+   *
+   * @return True if join has been successfully pushed down.
+   */
   boolean pushJoin(
     SupportsPushDownJoin other,
     JoinType joinType,
     Predicate condition,
     String[] leftSideQualifier,
     String[] rightSideQualifier,
-    StructType leftProjections,
-    StructType rightProjections
+    StructType leftRequiredSchema,
+    StructType rightRequiredSchema
   );
 }

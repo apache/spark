@@ -25,4 +25,7 @@ import org.apache.spark.annotation.Evolving;
  * @since 4.1.0
  */
 @Evolving
-public interface JoinType { }
+//public interface JoinType { }
+public enum JoinType {
+    INNER_JOIN,
+}
