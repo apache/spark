@@ -338,7 +338,6 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
             ]
             
             def get_python_value(array, index):
-                """Get Python value from array at index, handling both PyArrow and numpy arrays"""
                 value = array[index]
 
                 if hasattr(value, 'item') and hasattr(value, 'size') and value.size == 1:
