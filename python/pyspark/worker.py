@@ -263,34 +263,10 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
                 """Get Python value from array at index, handling both PyArrow and numpy arrays"""
                 value = array[index]
 
-                if hasattr(value, "as_py"):
-                    python_value = value.as_py()
-
-                    def convert_nested_numpy_arrays(obj):
-                        if hasattr(obj, 'tolist') and hasattr(obj, 'dtype'):
-                            return obj.tolist()
-                        
-                        try:
-                            import numpy as np
-                            if isinstance(obj, np.ndarray):
-                                return obj.tolist()
-                        except ImportError:
-                            pass
-
-                        if isinstance(obj, list):
-                            return [convert_nested_numpy_arrays(item) for item in obj]
-                        elif isinstance(obj, tuple):
-                            return tuple(convert_nested_numpy_arrays(item) for item in obj)
-                        elif isinstance(obj, dict):
-                            return {k: convert_nested_numpy_arrays(v) for k, v in obj.items()}
-                        else:
-                            return obj
-
-                    return convert_nested_numpy_arrays(python_value)
-                elif hasattr(value, 'item') and value.size == 1:
+                if hasattr(value, 'item') and hasattr(value, 'size') and value.size == 1:
                     # Single-element numpy array
                     return value.item()
-                elif hasattr(value, 'tolist'):
+                elif hasattr(value, 'tolist') and hasattr(value, 'dtype'):
                     result = value.tolist()
                     
                     def convert_nested_numpy_arrays(obj):
@@ -308,17 +284,45 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
                             return [convert_nested_numpy_arrays(item) for item in obj]
                         elif isinstance(obj, tuple):
                             return tuple(convert_nested_numpy_arrays(item) for item in obj)
-                        elif isinstance(obj, dict):
-                            return {k: convert_nested_numpy_arrays(v) for k, v in obj.items()}
                         else:
                             return obj
                     
                     return convert_nested_numpy_arrays(result)
+                elif hasattr(value, "as_py"):
+                    python_value = value.as_py()
+
+                    from pyspark.sql import Row as _RowCls
+
+                    def _convert(obj):
+                        if isinstance(obj, dict):
+                            return _RowCls(**{k: _convert(v) for k, v in obj.items()})
+                        elif isinstance(obj, list):
+                            return [_convert(v) for v in obj]
+                        elif isinstance(obj, tuple):
+                            return tuple(_convert(v) for v in obj)
+                        else:
+                            return obj
+
+                    converted = _convert(python_value)
+                    return converted
                 else:
+                    from pyspark.sql import Row as _RowCls
+                    if isinstance(value, _RowCls):
+                        def _convert_nested(obj):
+                            if isinstance(obj, dict):
+                                return _RowCls(**{k: _convert_nested(v) for k, v in obj.items()})
+                            elif isinstance(obj, list):
+                                return [_convert_nested(v) for v in obj]
+                            elif isinstance(obj, tuple):
+                                return tuple(_convert_nested(v) for v in obj)
+                            else:
+                                return obj
+                        new_vals = [_convert_nested(v) for v in value]
+                        RowCls = _RowCls(*value.__fields__)
+                        return RowCls(*new_vals)
                     return value
             
             if input_types is not None:
-                # branch for UDF conversion
                 converted_args = []
                 for i in range(len(arrays[0]) if arrays else 0):
                     row_values = []
