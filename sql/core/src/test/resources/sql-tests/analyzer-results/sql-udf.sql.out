@@ -4044,6 +4044,12 @@ SetCommand (spark.sql.ansi.enabled,Some(true))
 
 
 -- !query
+DROP FUNCTION IF EXISTS foo3_3at
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_3at, true, false
+
+
+-- !query
 CREATE FUNCTION foo3_3a(x INT) RETURNS DOUBLE RETURN 1 / x
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
@@ -4112,16 +4118,7 @@ CreateSQLFunctionCommand spark_catalog.default.foo3_3a, x INT, DOUBLE, 1 / x, fa
 -- !query
 CREATE OR REPLACE FUNCTION foo3_3at(x INT) RETURNS TABLE (a DOUBLE) RETURN SELECT 1 / x
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_3at`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_3at, x INT, a DOUBLE, SELECT 1 / x, true, false, false, true
 
 
 -- !query
