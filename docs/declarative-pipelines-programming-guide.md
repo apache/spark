@@ -33,6 +33,8 @@ SDP is designed for both batch and streaming data processing, supporting common 
 
 The key advantage of SDP is its declarative approach - you define what tables should exist and what their contents should be, and SDP handles the orchestration, compute management, and error handling automatically.
 
+![Dataflow Graph](../img/declarative-pipelines-dataflow-graph.png)
+
 ## Key Concepts
 
 ### Flows
@@ -52,17 +54,9 @@ SDP creates the table named `target_table` along with a flow that reads new data
 
 A dataset is queryable object that's the output of one of more flows within a pipeline. Flows in the pipeline can also read from datasets produced in the pipeline.
 
-#### Streaming Tables
-
-A streaming table is a definition of a table and one or more streaming flows written into it. Streaming tables support incremental processing of data, allowing you to process only new data as it arrives.
-
-#### Materialized Views
-
-A materialized view is a view that is precomputed into a table. A materialized view always has exactly one batch flow writing to it.
-
-#### Temporary Views
-
-A temporary view is a view that is scoped to an execution of the pipeline. It can be referenced from flows within the pipeline. It's useful for encapsulating transformations and intermediate logical entities that multiple other elements of the pipeline depend on.
+- **Streaming Table** – a definition of a table and one or more streaming flows written into it. Streaming tables support incremental processing of data, allowing you to process only new data as it arrives.
+- **Materialized View** – is a view that is precomputed into a table. A materialized view always has exactly one batch flow writing to it.
+- **Temporary View** – a view that is scoped to an execution of the pipeline. It can be referenced from flows within the pipeline. It's useful for encapsulating transformations and intermediate logical entities that multiple other elements of the pipeline depend on.
 
 ### Pipelines
 
@@ -103,13 +97,13 @@ The `spark-pipelines` command line interface (CLI) is the primary way to execute
 
 `spark-pipelines` is built on top of `spark-submit`, meaning that it supports all cluster managers supported by `spark-submit`. It supports all `spark-submit` arguments except for `--class`.
 
-### `spark-pipelines run`
-
-`spark-pipelines run` launches an execution of a pipeline and monitors its progress until it completes. The `--spec` parameter allows selecting the pipeline spec file. If not provided, the CLI will look in the current directory and parent directories for a file named `pipeline.yml` or `pipeline.yaml`.
-
 ### `spark-pipelines init`
 
 `spark-pipelines init` generates a simple pipeline project, including a spec file and example definitions.
+
+### `spark-pipelines run`
+
+`spark-pipelines run` launches an execution of a pipeline and monitors its progress until it completes. The `--spec` parameter allows selecting the pipeline spec file. If not provided, the CLI will look in the current directory and parent directories for a file named `pipeline.yml` or `pipeline.yaml`.
 
 ## Programming with SDP in Python
 
