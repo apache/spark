@@ -4065,7 +4065,7 @@ abstract class JsonSuite
 
     // Test scan with partitions.
     withTempDir { dir =>
-      new File(dir, "a=1/b=2/").mkdirs()
+      Utils.createDirectory(new File(dir, "a=1/b=2/"))
       Files.write(new File(dir, "a=1/b=2/file.json").toPath, content)
       checkAnswer(
         spark.read.format("json").option("singleVariantColumn", "var")

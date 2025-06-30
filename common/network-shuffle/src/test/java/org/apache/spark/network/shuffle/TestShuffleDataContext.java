@@ -54,7 +54,7 @@ public class TestShuffleDataContext {
       localDirs[i] = JavaUtils.createDirectory(root, "spark").getAbsolutePath();
 
       for (int p = 0; p < subDirsPerLocalDir; p ++) {
-        new File(localDirs[i], String.format("%02x", p)).mkdirs();
+        JavaUtils.createDirectory(new File(localDirs[i], String.format("%02x", p)));
       }
     }
   }
