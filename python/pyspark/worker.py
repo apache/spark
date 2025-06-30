@@ -227,19 +227,97 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
         result_func = lambda r: str(r) if r is not None else r  # noqa: E731
     elif type(return_type) == BinaryType:
         result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
-    elif hasattr(return_type, "fromInternal"):
-        result_func = lambda r: return_type.fromInternal(r) if r is not None else r  # noqa: E731
 
     # Get input types for UDT conversion    
     def convert_input_value(value, input_type):
-        """Convert Arrow/numpy input values to appropriate Python types for UDTs"""
-        if input_type is not None and hasattr(input_type, "fromInternal"):
-            if value is not None:
-                # Convert numpy array to tuple for UDT fromInternal
-                if hasattr(value, "tolist"):
-                    return input_type.fromInternal(tuple(value.tolist()))
-                else:
-                    return input_type.fromInternal(value)
+        if value is None or input_type is None:
+            return value
+
+        if hasattr(input_type, "fromInternal") and not isinstance(input_type, (StructType, ArrayType, MapType)):
+            try:
+                from pyspark.sql.types import VariantVal
+            except ImportError:
+                VariantVal = None  # type: ignore
+
+            if VariantVal is not None and isinstance(value, VariantVal):
+                return value
+
+            if hasattr(value, "tolist"):
+                value_to_pass = tuple(value.tolist())
+            else:
+                value_to_pass = value
+            return input_type.fromInternal(value_to_pass)
+
+        if isinstance(input_type, StructType):
+            if isinstance(value, dict):
+                fields_converted = [
+                    convert_input_value(value.get(field.name), field.dataType) for field in input_type
+                ]
+                RowCls = Row(*[field.name for field in input_type])
+                return RowCls(*fields_converted)
+            elif isinstance(value, Row):
+                converted_values = [
+                    convert_input_value(val, field.dataType) for val, field in zip(value, input_type)
+                ]
+                RowCls = Row(*[field.name for field in input_type])
+                return RowCls(*converted_values)
+            else:
+                return value
+
+        if isinstance(input_type, ArrayType):
+            if not isinstance(value, (list, tuple)):
+                value = [value]
+            return [convert_input_value(elem, input_type.elementType) for elem in value]
+
+        if isinstance(input_type, MapType) and isinstance(value, dict):
+            return {
+                convert_input_value(k, input_type.keyType): convert_input_value(v, input_type.valueType)
+                for k, v in value.items()
+            }
+
+        return value
+
+    # ensure variant and nested elements follow internal representation expected by Arrow serializer.
+    from pyspark.sql.types import VariantType, VariantVal  # type: ignore
+
+    def convert_output_value(value, data_type):
+        if value is None or data_type is None:
+            return value
+
+        if hasattr(data_type, "toInternal") and not isinstance(data_type, (StructType, ArrayType, MapType)):
+            try:
+                return data_type.toInternal(value)
+            except Exception:
+                return value
+
+        if isinstance(data_type, StructType):
+            if isinstance(value, dict):
+                ordered = {
+                    field.name: convert_output_value(value.get(field.name), field.dataType)
+                    for field in data_type
+                }
+                return ordered
+            elif isinstance(value, Row):
+                conv_vals = [convert_output_value(v, f.dataType) for v, f in zip(value, data_type)]
+                return {f.name: v for f, v in zip(data_type, conv_vals)}
+            else:
+                return value
+
+        if isinstance(data_type, ArrayType):
+            if isinstance(value, (list, tuple)):
+                return [convert_output_value(v, data_type.elementType) for v in value]
+            else:
+                return value
+
+        if isinstance(data_type, MapType):
+            if isinstance(value, dict):
+                return {
+                    convert_output_value(k, data_type.keyType): convert_output_value(v, data_type.valueType)
+                    for k, v in value.items()
+                }
+            else:
+                return value
+
         return value
 
     if zero_arg_exec:
@@ -341,7 +419,7 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
 
     @fail_on_stopiteration
     def evaluate(*args: pa.RecordBatch):
-        results = [result_func(func(*row)) for row in get_args(*args)]
+        results = [convert_output_value(result_func(func(*row)), return_type) for row in get_args(*args)]
         try:
             arr = pa.array(results, type=arrow_return_type)
         except (pa.lib.ArrowInvalid, pa.lib.ArrowTypeError) as e:
