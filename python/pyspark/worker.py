@@ -265,15 +265,37 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
                 return value
 
         if isinstance(input_type, ArrayType):
+            if isinstance(value, dict):
+                return value
+            if isinstance(value, Row):
+                return value
             if not isinstance(value, (list, tuple)):
                 value = [value]
             return [convert_input_value(elem, input_type.elementType) for elem in value]
 
-        if isinstance(input_type, MapType) and isinstance(value, dict):
-            return {
+        if isinstance(input_type, MapType):
+            # Convert arrow map into python dict to match legacy path
+            if isinstance(value, dict):
+                items_iter = value.items()
+            elif isinstance(value, list):
+                candidate_items = []
+                for elem in value:
+                    if isinstance(elem, tuple) and len(elem) == 2:
+                        candidate_items.append(elem)
+                    elif isinstance(elem, list) and len(elem) == 2:
+                        candidate_items.append(tuple(elem))
+                    elif isinstance(elem, dict) and len(elem) == 1:
+                        k, v = next(iter(elem.items()))
+                        candidate_items.append((k, v))
+                items_iter = candidate_items
+            else:
+                return value
+
+            result = {
                 convert_input_value(k, input_type.keyType): convert_input_value(v, input_type.valueType)
-                for k, v in value.items()
+                for k, v in items_iter
             }
+            return result
 
         return value
 
