@@ -123,5 +123,9 @@ select -x'2379ACFe';
 select -0, -0.0;
 
 -- Double-quote escaping ("", '')
-SELECT " ""aa"" ", " \"aa\" ", '""aa""';
-SELECT ' ''aa'' ', ' \'aa\' ', "''aa''";
+SELECT "S""par""k", "S\"par\"k", 'S""par""k';
+SELECT 'S''par''k', 'S\'par\'k', "S''par''k";
+
+SET spark.sql.legacy.consecutiveStringLiterals.enabled=true;
+SELECT "S""par""k", "S\"par\"k", 'S""par""k';
+SELECT 'S''par''k', 'S\'par\'k', "S''par''k";

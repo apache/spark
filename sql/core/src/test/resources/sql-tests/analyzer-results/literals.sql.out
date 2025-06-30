@@ -709,14 +709,34 @@ Project [0 AS 0#x, 0.0 AS 0.0#x]
 
 
 -- !query
-SELECT " ""aa"" ", " \"aa\" ", '""aa""'
+SELECT "S""par""k", "S\"par\"k", 'S""par""k'
 -- !query analysis
-Project [ "aa"  AS  "aa" #x,  "aa"  AS  "aa" #x, ""aa"" AS ""aa""#x]
+Project [S"par"k AS S"par"k#x, S"par"k AS S"par"k#x, S""par""k AS S""par""k#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT ' ''aa'' ', ' \'aa\' ', "''aa''"
+SELECT 'S''par''k', 'S\'par\'k', "S''par''k"
 -- !query analysis
-Project [ 'aa'  AS  'aa' #x,  'aa'  AS  'aa' #x, ''aa'' AS ''aa''#x]
+Project [S'par'k AS S'par'k#x, S'par'k AS S'par'k#x, S''par''k AS S''par''k#x]
++- OneRowRelation
+
+
+-- !query
+SET spark.sql.legacy.consecutiveStringLiterals.enabled=true
+-- !query analysis
+SetCommand (spark.sql.legacy.consecutiveStringLiterals.enabled,Some(true))
+
+
+-- !query
+SELECT "S""par""k", "S\"par\"k", 'S""par""k'
+-- !query analysis
+Project [Spark AS Spark#x, S"par"k AS S"par"k#x, S""par""k AS S""par""k#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 'S''par''k', 'S\'par\'k', "S''par''k"
+-- !query analysis
+Project [Spark AS Spark#x, S'par'k AS S'par'k#x, S''par''k AS S''par''k#x]
 +- OneRowRelation
