@@ -31,7 +31,6 @@ import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.{DataWritingCommandExec, ExecutedCommandExec}
 import org.apache.spark.sql.execution.datasources.V1WriteCommand
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
-import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.internal.SQLConf
 
@@ -62,7 +61,7 @@ case class InsertAdaptiveSparkPlan(
           // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse.
           // Fall back to non-AQE mode if AQE is not supported in any of the sub-queries.
           val subqueryMap = buildSubqueryMap(plan)
-          val planSubqueriesRule = PlanAdaptiveSubqueries(adaptiveExecutionContext, subqueryMap)
+          val planSubqueriesRule = PlanAdaptiveSubqueries(subqueryMap)
 
           val processingRules = Seq(
             planSubqueriesRule)
