@@ -1532,6 +1532,8 @@ object CopyDependencies {
             // Don't copy the spark connect common JAR as it is shaded in the spark connect.
           } else if (jar.getName.contains("connect-client-jvm")) {
             // Do not place Spark Connect client jars as it is not built-in.
+          } else if (jar.getName.contains("spark-avro")) {
+            // Do not place Spark Avro jars as it is not built-in.
           } else if (jar.getName.contains("spark-connect") &&
             !SbtPomKeys.profiles.value.contains("noshade-connect")) {
             Files.copy(fid.toPath, destJar.toPath)
