@@ -1797,6 +1797,13 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       }
 
       assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 2)
+      assertMetric(mergeExec, "numTargetRowsInserted", 0)
+      assertMetric(mergeExec, "numTargetRowsUpdated", 1)
+      assertMetric(mergeExec, "numTargetRowsDeleted", 0)
+      assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 1)
+      assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 0)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 0)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -1834,6 +1841,13 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       }
 
       assertMetric(mergeExec, "numTargetRowsCopied", 0)
+      assertMetric(mergeExec, "numTargetRowsInserted", 1)
+      assertMetric(mergeExec, "numTargetRowsUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsDeleted", 0)
+      assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 0)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 0)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -1845,7 +1859,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
-  test("Merge metrics with matched and not matched by source clauses") {
+  test("Merge metrics with matched and not matched by source clauses: update") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
@@ -1871,6 +1885,13 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
 
       assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
+      assertMetric(mergeExec, "numTargetRowsInserted", 0)
+      assertMetric(mergeExec, "numTargetRowsUpdated", 2)
+      assertMetric(mergeExec, "numTargetRowsDeleted", 0)
+      assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 1)
+      assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 0)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 1)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 0)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -1883,7 +1904,53 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
-  test("Merge metrics with matched, not matched, and not matched by source clauses") {
+  test("Merge metrics with matched and not matched by source clauses: delete") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |{ "pk": 4, "salary": 400, "dep": "marketing" }
+          |{ "pk": 5, "salary": 500, "dep": "executive" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 2, 10).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      val mergeExec = findMergeExec {
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED AND salary < 200 THEN
+           | DELETE
+           |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
+           | DELETE
+           |""".stripMargin
+      }
+
+
+      assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
+      assertMetric(mergeExec, "numTargetRowsInserted", 0)
+      assertMetric(mergeExec, "numTargetRowsUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsDeleted", 2)
+      assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 1)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 1)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          // Row(1, 100, "hr") deleted
+          Row(2, 200, "software"),
+          Row(3, 300, "hr"),
+          Row(4, 400, "marketing"))
+          // Row(5, 500, "executive") deleted
+      )
+    }
+  }
+
+  test("Merge metrics with matched, not matched, and not matched by source clauses: update") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
@@ -1910,6 +1977,13 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       }
 
       assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
+      assertMetric(mergeExec, "numTargetRowsInserted", 1)
+      assertMetric(mergeExec, "numTargetRowsUpdated", 2)
+      assertMetric(mergeExec, "numTargetRowsDeleted", 0)
+      assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 1)
+      assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 0)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 1)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 0)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -1919,6 +1993,54 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(3, 300, "hr"),
           Row(4, 400, "marketing"),
           Row(5, -1, "executive"), // updated
+          Row(6, -1, "dummy"))) // inserted
+    }
+  }
+
+  test("Merge metrics with matched, not matched, and not matched by source clauses: delete") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |{ "pk": 4, "salary": 400, "dep": "marketing" }
+          |{ "pk": 5, "salary": 500, "dep": "executive" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 2, 6, 10).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      val mergeExec = findMergeExec {
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED AND salary < 200 THEN
+           | DELETE
+           |WHEN NOT MATCHED AND s.pk < 10 THEN
+           | INSERT (pk, salary, dep) VALUES (s.pk, -1, "dummy")
+           |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
+           | DELETE
+           |""".stripMargin
+      }
+
+      assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
+      assertMetric(mergeExec, "numTargetRowsInserted", 1)
+      assertMetric(mergeExec, "numTargetRowsUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsDeleted", 2)
+      assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 1)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 1)
+
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          // Row(1, 100, "hr") deleted
+          Row(2, 200, "software"),
+          Row(3, 300, "hr"),
+          Row(4, 400, "marketing"),
+          // Row(5, 500, "executive") deleted
           Row(6, -1, "dummy"))) // inserted
     }
   }
