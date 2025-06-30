@@ -3630,6 +3630,14 @@ spark.sql.ansi.enabled	true
 
 
 -- !query
+DROP FUNCTION IF EXISTS foo3_3at
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 CREATE FUNCTION foo3_3a(x INT) RETURNS DOUBLE RETURN 1 / x
 -- !query schema
 struct<>
@@ -3740,16 +3748,7 @@ CREATE OR REPLACE FUNCTION foo3_3at(x INT) RETURNS TABLE (a DOUBLE) RETURN SELEC
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_3at`"
-  }
-}
+
 
 
 -- !query
@@ -3779,23 +3778,9 @@ NULL
 -- !query
 SELECT * FROM foo3_3at(0)
 -- !query schema
-struct<>
+struct<a:double>
 -- !query output
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "DIVIDE_BY_ZERO",
-  "sqlState" : "22012",
-  "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 12,
-    "fragment" : "1 / x"
-  } ]
-}
+NULL
 
 
 -- !query
