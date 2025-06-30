@@ -389,27 +389,6 @@ public class JavaUtils {
   }
 
   /**
-   * Create a directory given the abstract pathname
-   * @return true, if the directory is successfully created; otherwise, return false.
-   */
-  public static boolean createDirectory(File dir) {
-    try {
-      // SPARK-35907: The check was required by File.mkdirs() because it could sporadically
-      // fail silently. After switching to Files.createDirectories(), ideally, there should
-      // no longer be silent fails. But the check is kept for the safety concern. We can
-      // remove the check when we're sure that Files.createDirectories() would never fail silently.
-      Files.createDirectories(dir.toPath());
-      if (!dir.exists() || !dir.isDirectory()) {
-        logger.error("Failed to create directory {}", MDC.of(LogKeys.PATH$.MODULE$, dir));
-      }
-      return dir.isDirectory();
-    } catch (Exception e) {
-      logger.error("Failed to create directory {}", e, MDC.of(LogKeys.PATH$.MODULE$, dir));
-      return false;
-    }
-  }
-
-  /**
    * Create a directory inside the given parent directory with default namePrefix "spark".
    * The directory is guaranteed to be newly created, and is not marked for automatic deletion.
    */

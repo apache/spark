@@ -18,8 +18,9 @@ package org.apache.spark.util
 
 import java.io.File
 import java.net.{URI, URISyntaxException}
+import java.nio.file.Files
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.network.util.JavaUtils
 
 private[spark] trait SparkFileUtils extends Logging {
@@ -69,7 +70,21 @@ private[spark] trait SparkFileUtils extends Logging {
    * @return true, if the directory is successfully created; otherwise, return false.
    */
   def createDirectory(dir: File): Boolean = {
-    JavaUtils.createDirectory(dir)
+    try {
+      // SPARK-35907: The check was required by File.mkdirs() because it could sporadically
+      // fail silently. After switching to Files.createDirectories(), ideally, there should
+      // no longer be silent fails. But the check is kept for the safety concern. We can
+      // remove the check when we're sure that Files.createDirectories() would never fail silently.
+      Files.createDirectories(dir.toPath)
+      if ( !dir.exists() || !dir.isDirectory) {
+        logError(log"Failed to create directory ${MDC(LogKeys.PATH, dir)}")
+      }
+      dir.isDirectory
+    } catch {
+      case e: Exception =>
+        logError(log"Failed to create directory ${MDC(LogKeys.PATH, dir)}", e)
+        false
+    }
   }
 
   /**
