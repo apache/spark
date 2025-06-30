@@ -200,7 +200,7 @@ class StaxXmlParser(
         // XML parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by
         // `columnNameOfCorruptRecord` are set to `null`.
-        throw BadRecordException(() => xmlLiteral, () => Array.empty, e)
+        throw BadRecordException(xmlLiteral, () => Array.empty, e)
       case e: CharConversionException if options.charset.isEmpty =>
         val msg =
           """XML parser cannot handle a character in its input.
@@ -208,16 +208,16 @@ class StaxXmlParser(
             |""".stripMargin + e.getMessage
         val wrappedCharException = new CharConversionException(msg)
         wrappedCharException.initCause(e)
-        throw BadRecordException(() => xmlLiteral, () => Array.empty,
+        throw BadRecordException(xmlLiteral, () => Array.empty,
           wrappedCharException)
       case PartialResultException(row, cause) =>
         throw BadRecordException(
-          record = () => xmlLiteral,
+          record = xmlLiteral,
           partialResults = () => Array(row),
           cause)
       case PartialResultArrayException(rows, cause) =>
         throw BadRecordException(
-          record = () => xmlLiteral,
+          record = xmlLiteral,
           partialResults = () => rows,
           cause)
     }
@@ -992,7 +992,7 @@ class OptimizedXmlTokenizer(inputStream: InputStream, options: XmlOptions) exten
           case _: AccessControlException | _: BlockMissingException =>
             close()
             throw e
-          case _: RuntimeException | _: IOException | XMLStreamException
+          case _: RuntimeException | _: IOException | _: XMLStreamException
               if options.ignoreCorruptFiles =>
             logWarning(s"Skipping corrupted content at record $recordCount", e)
             hasMoreRecords = false
