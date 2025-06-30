@@ -939,7 +939,6 @@ class XmlTokenizer(
  * Optimized XML tokenizer that avoids loading entire XML records into memory.
  * - Uses XMLEventReader to parse XML stream directly
  * - Never buffers complete XML records in memory
- * - Provides record-bounded XMLEventReader for each record
  * - Allows the parser to work directly with XML events
  */
 class OptimizedXmlTokenizer(inputStream: InputStream, options: XmlOptions) extends Logging {
@@ -977,7 +976,7 @@ class OptimizedXmlTokenizer(inputStream: InputStream, options: XmlOptions) exten
       // Skip to the next row start element
       if (skipToNextRowStart()) {
         recordCount += 1
-        Some(createRecordReader())
+        Some(xmlEventReader)
       } else {
         hasMoreRecords = false
         None
@@ -1028,14 +1027,6 @@ class OptimizedXmlTokenizer(inputStream: InputStream, options: XmlOptions) exten
     false
   }
 
-  /**
-   * Creates a record-scoped XMLEventReader that will read exactly one XML record.
-   * This reader automatically handles the boundary detection.
-   */
-  private def createRecordReader(): XMLEventReader = {
-    new RecordBoundedXMLEventReader(xmlEventReader, options.rowTag, options)
-  }
-
   def close(): Unit = {
     if (xmlEventReader != null) {
       try {
@@ -1047,81 +1038,6 @@ class OptimizedXmlTokenizer(inputStream: InputStream, options: XmlOptions) exten
     }
     hasMoreRecords = false
   }
-}
-
-/**
- * An XMLEventReader wrapper that automatically stops reading at the end of a single XML record.
- * This prevents the parser from reading beyond the current record boundary.
- */
-private class RecordBoundedXMLEventReader(
-    underlying: XMLEventReader,
-    rowTagName: String,
-    options: XmlOptions)
-    extends XMLEventReader {
-
-  private var depth = 0
-  private var isExhausted = false
-
-  override def hasNext: Boolean = {
-    !isExhausted && underlying.hasNext
-  }
-
-  override def nextEvent(): XMLEvent = {
-    if (!hasNext) {
-      throw new NoSuchElementException("No more events in this record")
-    }
-
-    val event = underlying.nextEvent()
-
-    // Track depth to know when we've reached the end of this record
-    event match {
-      case _: StartElement =>
-        depth += 1
-      case endElement: EndElement =>
-        depth -= 1
-        if (depth == 0) {
-          // We've reached the end of this record
-          val elementName = StaxXmlParserUtils.getName(endElement.getName, options)
-          if (elementName == rowTagName) {
-            isExhausted = true
-          }
-        }
-      case _: EndDocument if depth == 0 =>
-        isExhausted = true
-      case _ =>
-      // Other events don't affect depth
-    }
-
-    event
-  }
-
-  override def peek(): XMLEvent = {
-    if (!hasNext) {
-      throw new NoSuchElementException("No more events in this record")
-    }
-    underlying.peek()
-  }
-
-  override def next(): Object = nextEvent()
-
-  override def remove(): Unit = underlying.remove()
-
-  override def close(): Unit = {
-    // Don't close the underlying reader - it's shared
-    isExhausted = true
-  }
-
-  override def getElementText: String = underlying.getElementText
-
-  override def nextTag(): XMLEvent = {
-    var event = nextEvent()
-    while (event.isCharacters && event.asCharacters().isWhiteSpace) {
-      event = nextEvent()
-    }
-    event
-  }
-
-  override def getProperty(name: String): Object = underlying.getProperty(name)
 }
 
 object StaxXmlParser {
