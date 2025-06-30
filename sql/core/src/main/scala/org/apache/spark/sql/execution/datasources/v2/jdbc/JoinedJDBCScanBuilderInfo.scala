@@ -14,23 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-package org.apache.spark.sql.execution.datasources.v2
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
-import org.apache.spark.sql.connector.expressions.SortOrder
-import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.expressions.filter.Predicate
-
-/**
- * Pushed down operators
- */
-case class PushedDownOperators(
-    aggregation: Option[Aggregation],
-    sample: Option[TableSampleInfo],
-    limit: Option[Int],
-    offset: Option[Int],
-    sortValues: Seq[SortOrder],
-    pushedPredicates: Seq[Predicate],
-    pushedJoins: Seq[String] = Seq()) {
-  assert((limit.isEmpty && sortValues.isEmpty) || limit.isDefined)
-}
+case class JoinedJDBCScanBuilderInfo(
+    options: JDBCOptions,
+    joinType: String,
+    relationQualifier: Option[String] = None)

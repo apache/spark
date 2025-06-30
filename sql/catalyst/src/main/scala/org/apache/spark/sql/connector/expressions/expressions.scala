@@ -405,6 +405,12 @@ private[sql] final case class FieldReference(parts: Seq[String]) extends NamedRe
   override def toString: String = parts.quoted
 }
 
+private[sql] final case class JoinColumn(parts: Seq[String]) extends NamedReference {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+  override def fieldNames: Array[String] = parts.toArray
+  override def toString: String = parts.quoted
+}
+
 private[sql] object FieldReference {
   def apply(column: String): NamedReference = {
     LogicalExpressions.parseReference(column)

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.util;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
@@ -27,6 +28,7 @@ import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.connector.expressions.Cast;
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.Extract;
+import org.apache.spark.sql.connector.expressions.JoinColumn;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 import org.apache.spark.sql.connector.expressions.Literal;
@@ -75,6 +77,8 @@ public class V2ExpressionSQLBuilder {
   public String build(Expression expr) {
     if (expr instanceof Literal literal) {
       return visitLiteral(literal);
+    } else if (expr instanceof JoinColumn column) {
+      return visitJoinColumn(column);
     } else if (expr instanceof NamedReference namedReference) {
       return visitNamedReference(namedReference);
     } else if (expr instanceof Cast cast) {
@@ -172,6 +176,10 @@ public class V2ExpressionSQLBuilder {
 
   protected String visitNamedReference(NamedReference namedRef) {
     return namedRef.toString();
+  }
+
+  protected String visitJoinColumn(JoinColumn column) {
+    return column.toString();
   }
 
   protected String visitIn(String v, List<String> list) {

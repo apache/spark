@@ -21,17 +21,17 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, GROUP_BY_EXPRS, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
 import org.apache.spark.internal.MDC
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, JoinColumnReference, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.{fromAttributes, toAttributes}
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StructType}
@@ -45,10 +45,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     val pushdownRules = Seq[LogicalPlan => LogicalPlan] (
       createScanBuilder,
       pushDownSample,
+      pushDownJoin,
       pushDownFilters,
       pushDownAggregates,
       pushDownLimitAndOffset,
       buildScanWithPushedAggregate,
+      buildScanWithPushedJoin,
       pruneColumns)
 
     pushdownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
@@ -61,41 +63,232 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       ScanBuilderHolder(r.output, r, r.table.asReadable.newScanBuilder(r.options))
   }
 
-  private def pushDownFilters(plan: LogicalPlan) = plan.transform {
+  private def pushDownFilters(
+      filters: Seq[Expression],
+      sHolder: ScanBuilderHolder): LogicalPlan = {
+    val normalizedFilters =
+      DataSourceStrategy.normalizeExprs(filters, sHolder.relation.output)
+
+    val (normalizedFiltersWithSubquery, normalizedFiltersWithoutSubquery) =
+      normalizedFilters.partition(SubqueryExpression.hasSubquery)
+
+    // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
+    // `postScanFilters` need to be evaluated after the scan.
+    // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
+    val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
+      sHolder.builder, normalizedFiltersWithoutSubquery)
+    val pushedFiltersStr = if (pushedFilters.isLeft) {
+      pushedFilters.swap
+        .getOrElse(throw new NoSuchElementException("The left node doesn't have pushedFilters"))
+        .mkString(", ")
+    } else {
+      sHolder.pushedPredicates = pushedFilters
+        .getOrElse(throw new NoSuchElementException("The right node doesn't have pushedFilters"))
+      sHolder.pushedPredicates.mkString(", ")
+    }
+
+    val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
+
+    logInfo(
+      log"""
+           |Pushing operators to ${MDC(RELATION_NAME, sHolder.relation.name)}
+           |Pushed Filters: ${MDC(PUSHED_FILTERS, pushedFiltersStr)}
+           |Post-Scan Filters: ${MDC(POST_SCAN_FILTERS, postScanFilters.mkString(","))}
+           """.stripMargin)
+
+    val filterCondition = postScanFilters.reduceLeftOption(And)
+    filterCondition.map(Filter(_, sHolder)).getOrElse(sHolder)
+  }
+
+  private def pushDownFilters(plan: LogicalPlan): LogicalPlan = plan.transform {
     // update the scan builder with filter push down and return a new plan with filter pushed
     case Filter(condition, sHolder: ScanBuilderHolder) =>
       val filters = splitConjunctivePredicates(condition)
-      val normalizedFilters =
-        DataSourceStrategy.normalizeExprs(filters, sHolder.relation.output)
-      val (normalizedFiltersWithSubquery, normalizedFiltersWithoutSubquery) =
-        normalizedFilters.partition(SubqueryExpression.hasSubquery)
+      pushDownFilters(filters, sHolder)
+  }
 
-      // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
-      // `postScanFilters` need to be evaluated after the scan.
-      // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
-      val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
-        sHolder.builder, normalizedFiltersWithoutSubquery)
-      val pushedFiltersStr = if (pushedFilters.isLeft) {
-        pushedFilters.swap
-          .getOrElse(throw new NoSuchElementException("The left node doesn't have pushedFilters"))
-          .mkString(", ")
-      } else {
-        sHolder.pushedPredicates = pushedFilters
-          .getOrElse(throw new NoSuchElementException("The right node doesn't have pushedFilters"))
-        sHolder.pushedPredicates.mkString(", ")
+  def pushDownJoin(plan: LogicalPlan): LogicalPlan = plan.transformUp {
+    // Join can be attempted to be pushed down only if left and right side of join are
+    // compatible (same data source, for example). Also, another requirement is that if
+    // there are projections between Join and ScanBuilderHolder, these projections need to be
+    // AttributeReferences. We could probably support Alias as well, but this should be on
+    // TODO list.
+    // Alias can exist between Join and sHolder node because the query below is not valid:
+    // SELECT * FROM
+    // (SELECT * FROM tbl t1 JOIN tbl2 t2) p
+    // JOIN
+    // (SELECT * FROM tbl t3 JOIN tbl3 t4) q
+    // ON p.t1.col = q.t3.col (this is not possible)
+    // It's because there are 2 same tables in both sides of top level join and it's not possible
+    // to use fully qualified the column names in condition. Therefore, query should be rewritten so
+    // that each of the outputs of child joins are aliased, so there would be a projection
+    // with aliases between top level join and scanBuilderHolder (that has pushed child joins).
+    case node @ Join(
+      PhysicalOperation(
+        leftProjections,
+        leftFilters,
+        leftHolder @ ScanBuilderHolder(_, _, lBuilder: SupportsPushDownJoin)
+      ),
+      PhysicalOperation(
+        rightProjections,
+        rightFilters,
+        rightHolder @ ScanBuilderHolder(_, _, rBuilder: SupportsPushDownJoin)
+      ),
+      joinType,
+      condition,
+    _) if conf.dataSourceV2JoinPushdown &&
+      leftProjections.forall(_.isInstanceOf[AttributeReference]) &&
+      rightProjections.forall(_.isInstanceOf[AttributeReference]) &&
+      condition.isDefined && // Cross joins aren't pushed down as they increase the amount of data
+      // We don't support joining the sampled tables
+      leftHolder.pushedSample.isEmpty &&
+      rightHolder.pushedSample.isEmpty &&
+      // Only left-like star schema joins are supported for now
+      rightHolder.joinedRelations.isEmpty &&
+      lBuilder.isOtherSideCompatibleForJoin(rBuilder) =>
+
+      val normalizedCondition = condition.map { e =>
+        DataSourceStrategy.normalizeExprs(
+          Seq(e),
+          leftHolder.output ++ rightHolder.output
+        ).head
       }
 
-      val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
+      // We can get qualifier from the join condition. We can't get it from node.output because
+      // there won't be a qualifier. Qualifier exists in Projection nodes on top of the plan.
+      var leftSideQualifier: Seq[String] = Seq()
+      var rightSideQualifier: Seq[String] = Seq()
 
-      logInfo(
-        log"""
-            |Pushing operators to ${MDC(RELATION_NAME, sHolder.relation.name)}
-            |Pushed Filters: ${MDC(PUSHED_FILTERS, pushedFiltersStr)}
-            |Post-Scan Filters: ${MDC(POST_SCAN_FILTERS, postScanFilters.mkString(","))}
-           """.stripMargin)
+      // There are 2 cases for calculating the qualifiers:
+      // 1. Left and right children are original scan nodes and don't contain pushed join
+      // information. In this case, we need to qualify both left and right side filters.
+      // 2. Left side contains pushed join. In this case, we don't need to qualify the left
+      // side as all of the relations in it are already qualified (or not if there was no need).
+      // The right side still has to be qualified.
+      val leftSideContainsSingleRelation = leftHolder.joinedRelations.isEmpty
 
-      val filterCondition = postScanFilters.reduceLeftOption(And)
-      filterCondition.map(Filter(_, sHolder)).getOrElse(sHolder)
+      val conditionWithJoinColumns = normalizedCondition.map { cond =>
+        cond.transformUp {
+          case a: AttributeReference =>
+            val isInLeftSide = leftProjections.filter(_.exprId == a.exprId).nonEmpty
+            if (leftSideContainsSingleRelation && isInLeftSide && leftSideQualifier.isEmpty) {
+              leftSideQualifier = a.qualifier
+            } else if (!isInLeftSide && rightSideQualifier.isEmpty) {
+              rightSideQualifier = a.qualifier
+            }
+
+            // AttributeReference will already have the qualifier if specified in query
+            JoinColumnReference(a)
+        }
+      }
+
+      def qualifyFilter(filter: Expression, qualifier: Seq[String]): Expression = {
+        filter.transformUp {
+          case a: AttributeReference =>
+            JoinColumnReference(a.withQualifier(qualifier))
+        }
+      }
+
+      val qualifiedOrOriginalLeftFilters = if (leftSideContainsSingleRelation) {
+        leftFilters.map(qualifyFilter(_, leftSideQualifier))
+      } else {
+        leftFilters
+      }
+      val qualifiedRightFilters = rightFilters.map(qualifyFilter(_, rightSideQualifier))
+
+
+      val leftSidePlanAfterFilterPushdown =
+        pushDownFilters(qualifiedOrOriginalLeftFilters, leftHolder)
+      val rightSidePlanAfterFilterPushdown =
+        pushDownFilters(qualifiedRightFilters, rightHolder)
+
+      val leftSidePlanHasPostScanFilters =
+        leftSidePlanAfterFilterPushdown.collect{case f: Filter => f}.nonEmpty
+      val rightSidePlanHasPostScanFilters =
+        rightSidePlanAfterFilterPushdown.collect{case f: Filter => f}.nonEmpty
+
+      val translatedCondition =
+        conditionWithJoinColumns.flatMap(DataSourceV2Strategy.translateFilterV2(_))
+      val translatedJoinType = DataSourceStrategy.translateJoinType(joinType)
+
+      // In case of pushing down the join for the first time, projections should be qualifier.
+      // Otherwise, we can just wrap attributes references into JoinColumnReference
+      val qualifiedOrOriginalLeftProjections: Seq[JoinColumnReference] =
+        if (leftSideContainsSingleRelation) {
+          leftProjections.asInstanceOf[Seq[AttributeReference]]
+            .map(_.withQualifier(leftSideQualifier))
+            .map { a => JoinColumnReference(a) }
+        } else {
+          leftProjections.asInstanceOf[Seq[AttributeReference]]
+            .map { a => JoinColumnReference(a) }
+        }
+
+      val qualifiedRightProjections: Seq[JoinColumnReference] = {
+        rightProjections.asInstanceOf[Seq[AttributeReference]]
+          .map(_.withQualifier(rightSideQualifier))
+          .map { a =>
+            JoinColumnReference(a)
+          }
+      }
+
+      val normalizedLeftProjections = DataSourceStrategy.normalizeExprs(
+        qualifiedOrOriginalLeftProjections,
+        leftHolder.output
+      ).asInstanceOf[Seq[JoinColumnReference]]
+
+      val normalizedRightProjections = DataSourceStrategy.normalizeExprs(
+        qualifiedRightProjections,
+        rightHolder.output
+      ).asInstanceOf[Seq[JoinColumnReference]]
+
+      val translatedLeftProjections =
+        DataSourceStrategy.translateJoinColumns(normalizedLeftProjections)
+      val translatedRightProjections =
+        DataSourceStrategy.translateJoinColumns(normalizedRightProjections)
+
+      val leftSideRequiredSchema = fromAttributes(
+        leftProjections.asInstanceOf[Seq[AttributeReference]]
+          .zip(translatedLeftProjections)
+          .map{ case (proj, translatedProj) =>
+            proj.withName(translatedProj.parts.mkString("."))
+          }
+      )
+
+      val rightSideRequiredSchema = fromAttributes(
+        rightProjections.asInstanceOf[Seq[AttributeReference]]
+          .zip(translatedRightProjections)
+          .map{ case (proj, translatedProj) =>
+            proj.withName(translatedProj.parts.mkString("."))
+          }
+      )
+
+      if (translatedCondition.isDefined == condition.isDefined &&
+        translatedJoinType.isDefined &&
+        !leftSidePlanHasPostScanFilters &&
+        !rightSidePlanHasPostScanFilters &&
+        lBuilder.pushJoin(
+          rBuilder,
+          translatedJoinType.get,
+          translatedCondition.get,
+          leftSideQualifier.toArray,
+          rightSideQualifier.toArray,
+          leftSideRequiredSchema,
+          rightSideRequiredSchema
+        )) {
+        leftHolder.joinedRelations =
+          leftHolder.joinedRelations :+ rightHolder.relation :+ rightHolder.relation
+        leftHolder.pushedPredicates = leftHolder.pushedPredicates ++ rightHolder.pushedPredicates
+
+        leftHolder.output = leftHolder.output.filter(leftProjections.contains(_)) ++
+          rightHolder.output.filter(rightProjections.contains(_))
+        leftHolder
+      } else {
+        // In case there are post scan filters left in the plan, we return new join node with
+        // updated left and right children that have filters pushed down.
+        // We can also return the original node and let filterPushDown handle it, but there is no
+        // reason to do it twice.
+        node.copy(left = leftSidePlanAfterFilterPushdown, right = rightSidePlanAfterFilterPushdown)
+      }
   }
 
   def pushDownAggregates(plan: LogicalPlan): LogicalPlan = plan.transform {
@@ -108,15 +301,37 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         r: SupportsPushDownAggregates)) if CollapseProject.canCollapseExpressions(
         agg.aggregateExpressions, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
-      val actualResultExprs = agg.aggregateExpressions.map(replaceAliasButKeepName(_, aliasMap))
-      val actualGroupExprs = agg.groupingExpressions.map(replaceAlias(_, aliasMap))
+      val actualResultExprs = if (holder.joinedRelations.isEmpty) {
+        agg.aggregateExpressions.map(replaceAliasButKeepName(_, aliasMap))
+      } else {
+        agg.aggregateExpressions
+          .map(replaceAliasButKeepName(_, aliasMap))
+          .map(expr => expr.transformUp{ case a: AttributeReference => JoinColumnReference(a)} )
+          .asInstanceOf[Seq[NamedExpression]]
+      }
+      val actualGroupExprs = if (holder.joinedRelations.isEmpty) {
+        agg.groupingExpressions.map(replaceAlias(_, aliasMap))
+      } else {
+        agg.groupingExpressions
+          .map(replaceAlias(_, aliasMap))
+          .map(expr => expr.transformUp{ case a: AttributeReference => JoinColumnReference(a)} )
+      }
 
       val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
       val aggregates = collectAggregates(actualResultExprs, aggExprToOutputOrdinal)
-      val normalizedAggExprs = DataSourceStrategy.normalizeExprs(
-        aggregates, holder.relation.output).asInstanceOf[Seq[AggregateExpression]]
-      val normalizedGroupingExpr = DataSourceStrategy.normalizeExprs(
-        actualGroupExprs, holder.relation.output)
+      val normalizedAggExprs = if (holder.joinedRelations.isEmpty) {
+        DataSourceStrategy.normalizeExprs(aggregates, holder.relation.output)
+          .asInstanceOf[Seq[AggregateExpression]]
+      } else {
+        DataSourceStrategy.normalizeExprs(aggregates, holder.output)
+          .asInstanceOf[Seq[AggregateExpression]]
+      }
+      val normalizedGroupingExpr =
+        if (holder.joinedRelations.isEmpty) {
+          DataSourceStrategy.normalizeExprs(actualGroupExprs, holder.relation.output)
+        } else {
+          DataSourceStrategy.normalizeExprs(actualGroupExprs, holder.output)
+        }
       val translatedAggOpt = DataSourceStrategy.translateAggregation(
         normalizedAggExprs, normalizedGroupingExpr)
       if (translatedAggOpt.isEmpty) {
@@ -356,6 +571,21 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       Project(projectList, scanRelation)
   }
 
+  def buildScanWithPushedJoin(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case holder: ScanBuilderHolder if holder.joinedRelations.nonEmpty && !holder.isStreaming =>
+      val scan = holder.builder.build()
+      val realOutput = toAttributes(scan.readSchema())
+      assert(realOutput.length == holder.output.length,
+        "The data source returns unexpected number of columns")
+      val wrappedScan = getWrappedScan(scan, holder)
+      val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
+
+      val projectList = realOutput.zip(holder.output).map { case (a1, a2) =>
+        Alias(a1, a2.name)(a2.exprId)
+      }
+      Project(projectList, scanRelation)
+  }
+
   def pruneColumns(plan: LogicalPlan): LogicalPlan = plan.transform {
     case ScanOperation(project, filtersStayUp, filtersPushDown, sHolder: ScanBuilderHolder) =>
       // column pruning
@@ -441,8 +671,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         aliasReplacedOrder.asInstanceOf[Seq[SortOrder]]
       }
-      val normalizedOrders = DataSourceStrategy.normalizeExprs(
-        newOrder, sHolder.relation.output).asInstanceOf[Seq[SortOrder]]
+      val normalizedOrders = if (sHolder.joinedRelations.isEmpty) {
+        DataSourceStrategy.normalizeExprs(
+          newOrder, sHolder.relation.output).asInstanceOf[Seq[SortOrder]]
+      } else {
+        DataSourceStrategy.normalizeExprs(
+          newOrder, sHolder.output).asInstanceOf[Seq[SortOrder]]
+      }
       val orders = DataSourceStrategy.translateSortOrders(normalizedOrders)
       if (orders.length == order.length) {
         val (isPushed, isPartiallyPushed) =
@@ -549,7 +784,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           case _ => Array.empty[sources.Filter]
         }
         val pushedDownOperators = PushedDownOperators(sHolder.pushedAggregate, sHolder.pushedSample,
-          sHolder.pushedLimit, sHolder.pushedOffset, sHolder.sortOrders, sHolder.pushedPredicates)
+          sHolder.pushedLimit, sHolder.pushedOffset, sHolder.sortOrders, sHolder.pushedPredicates,
+          sHolder.joinedRelations.map(_.name))
         V1ScanWrapper(v1, pushedFilters.toImmutableArraySeq, pushedDownOperators)
       case _ => scan
     }
@@ -573,6 +809,8 @@ case class ScanBuilderHolder(
   var pushedAggregate: Option[Aggregation] = None
 
   var pushedAggOutputMap: AttributeMap[Expression] = AttributeMap.empty[Expression]
+
+  var joinedRelations: Seq[DataSourceV2RelationBase] = Seq()
 }
 
 // A wrapper for v1 scan to carry the translated filters and the handled ones, along with

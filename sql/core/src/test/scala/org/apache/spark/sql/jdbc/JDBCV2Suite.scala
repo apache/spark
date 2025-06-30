@@ -29,7 +29,7 @@ import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentExceptio
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LocalLimit, Offset, Sort}
 import org.apache.spark.sql.connector.{IntegralAverage, StrLen}
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
@@ -141,6 +141,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     .set("spark.sql.catalog.h2.pushDownAggregate", "true")
     .set("spark.sql.catalog.h2.pushDownLimit", "true")
     .set("spark.sql.catalog.h2.pushDownOffset", "true")
+    .set("spark.sql.catalog.h2.pushDownJoin", "true")
 
   private def withConnection[T](f: Connection => T): T = {
     val conn = DriverManager.getConnection(url, new Properties())
@@ -263,6 +264,255 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     h2Dialect.clearFunctions()
     Utils.deleteRecursively(tempDir)
     super.afterAll()
+  }
+
+  test("Test 2-way join") {
+    val sqlQuery = "SELECT * FROM h2.test.employee a, h2.test.employee b"
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
+    }
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+      val joinNodes = df.queryExecution.optimizedPlan.collect {
+        case j: Join => j
+      }
+
+      // Cross joins are not pushed down
+      assert(joinNodes.nonEmpty)
+      checkAnswer(df, rows)
+    }
+  }
+
+  test("Test multi way join") {
+    val sqlQuery =
+      """
+        |SELECT * FROM
+        |h2.test.employee a,
+        |h2.test.employee b,
+        |h2.test.employee c
+        |""".stripMargin
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
+    }
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+
+      val joinNodes = df.queryExecution.optimizedPlan.collect {
+        case j: Join => j
+      }
+
+      // Cross joins are not pushed down
+      assert(joinNodes.nonEmpty)
+      checkAnswer(df, rows)
+    }
+  }
+
+  test("Test join with condition") {
+    val sqlQuery = "SELECT * FROM h2.test.employee a JOIN h2.test.employee b ON a.dept = b.dept + 1"
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
+    }
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+
+      val joinNodes = df.queryExecution.optimizedPlan.collect {
+        case j: Join => j
+      }
+
+      assert(joinNodes.isEmpty)
+      checkAnswer(df, rows)
+    }
+  }
+
+  test("Test multi-way-join with conditions") {
+    val sqlQuery =
+      """
+        |SELECT * FROM
+        |h2.test.employee a
+        |JOIN h2.test.employee b ON b.dept = a.dept + 1
+        |""".stripMargin
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
+    }
+
+    assert(!rows.isEmpty)
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+      val joinNodes = df.queryExecution.optimizedPlan.collect {
+        case j: Join => j
+      }
+
+      assert(joinNodes.isEmpty)
+      checkAnswer(df, rows)
+    }
+  }
+
+  test("Test join with column pruning") {
+    val sqlQuery =
+      """
+        |SELECT a.dept + 2, b.dept, b.salary FROM
+        |h2.test.employee a JOIN h2.test.employee b
+        |ON a.dept = b.dept + 1
+        |""".stripMargin
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
+    }
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+
+      val joinNodes = df.queryExecution.optimizedPlan.collect {
+        case j: Join => j
+      }
+
+      assert(joinNodes.isEmpty)
+      checkAnswer(df, rows)
+    }
+  }
+
+  test("Test multi way join with column pruning") {
+    val sqlQuery =
+      """
+        |SELECT a.dept, b.*, c.dept, c.salary + a.salary
+        |FROM h2.test.employee a
+        |JOIN h2.test.employee b ON b.dept = a.dept + 1
+        |JOIN h2.test.employee c ON c.dept = b.dept - 1
+        |""".stripMargin
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
+    }
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+
+      val joinNodes = df.queryExecution.optimizedPlan.collect {
+        case j: Join => j
+      }
+
+      assert(joinNodes.isEmpty)
+      checkAnswer(df, rows)
+    }
+  }
+
+  test("Test right tailed join not supported") {
+    val sqlQuery = """
+        |SELECT a.dept, bc.*
+        |FROM h2.test.employee a
+        |JOIN (
+        |  SELECT b.*, c.dept AS c_dept, c.salary AS c_salary
+        |  FROM h2.test.employee b
+        |  JOIN h2.test.employee c ON c.dept = b.dept - 1
+        |) bc ON bc.dept = a.dept + 1
+        |""".stripMargin
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
+    }
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+      val joinNodes = df.queryExecution.optimizedPlan.collect {
+        case j: Join => j
+      }
+
+      // Not all the joins are pushed down because we are have aliases in projections (AS c_salary).
+      // Only the bottom most join is pushed down
+      assert(joinNodes.length == 1)
+      checkAnswer(df, rows)
+    }
+  }
+
+  test("Test aggregate on top of 2 way join") {
+    val sqlQuery =
+      """
+        |SELECT min(a.dept + b.dept), min(a.dept)
+        |FROM h2.test.employee a
+        |JOIN h2.test.employee b ON a.dept = b.dept + 1
+        |""".stripMargin
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
+    }
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+      val joinNodes = df.queryExecution.optimizedPlan.collect {
+        case j: Join => j
+      }
+
+      val aggNodes = df.queryExecution.optimizedPlan.collect {
+        case a: Aggregate => a
+      }
+
+      assert(joinNodes.isEmpty)
+      assert(aggNodes.isEmpty)
+      checkAnswer(df, rows)
+    }
+  }
+
+  test("Test aggregate on top of multi way join") {
+    val sqlQuery =
+      """
+        |SELECT min(a.dept + b.dept), min(a.dept), min(c.dept - 2)
+        |FROM h2.test.employee a
+        |JOIN h2.test.employee b ON b.dept = a.dept + 1
+        |JOIN h2.test.employee c ON c.dept = b.dept - 1
+        |""".stripMargin
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
+    }
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+      val joinNodes = df.queryExecution.optimizedPlan.collect {
+        case j: Join => j
+      }
+
+      val aggNodes = df.queryExecution.optimizedPlan.collect {
+        case a: Aggregate => a
+      }
+
+      assert(joinNodes.isEmpty)
+      assert(aggNodes.isEmpty)
+      checkAnswer(df, rows)
+    }
+  }
+
+  test("Test sort limit on top of join is pushed down") {
+    val sqlQuery =
+      """
+        |SELECT min(a.dept + b.dept), a.dept, b.dept
+        |FROM h2.test.employee a
+        |JOIN h2.test.employee b ON b.dept = a.dept + 1
+        |GROUP BY a.dept, b.dept
+        |ORDER BY a.dept
+        |LIMIT 1
+        |""".stripMargin
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
+    }
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+      val joinNodes = df.queryExecution.optimizedPlan.collect {
+        case j: Join => j
+      }
+
+      val sortNodes = df.queryExecution.optimizedPlan.collect {
+        case s: Sort => s
+      }
+
+      val limitNodes = df.queryExecution.optimizedPlan.collect {
+        case l: GlobalLimit => l
+      }
+
+      assert(joinNodes.isEmpty)
+      assert(sortNodes.isEmpty)
+      assert(limitNodes.isEmpty)
+      checkAnswer(df, rows)
+    }
   }
 
   test("simple scan") {
