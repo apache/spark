@@ -88,6 +88,9 @@ message PipelineCommand {
     // The output table format of the dataset. Only applies to dataset_type == TABLE and
     // dataset_type == MATERIALIZED_VIEW.
     optional string format = 8;
+
+    // The location in source code that this dataset was defined.
+    optional SourceCodeLocation source_code_location = 9;
   }
 
   // Request to define a flow targeting a dataset.
@@ -109,6 +112,9 @@ message PipelineCommand {
 
     // If true, this flow will only be run once per full refresh.
     optional bool once = 6;
+
+    // The location in source code that this flow was defined.
+    optional SourceCodeLocation source_code_location = 7;
   }
 
   // Resolves all datasets and flows and start a pipeline update. Should be called after all
@@ -165,4 +171,12 @@ message PipelineEvent {
   google.protobuf.Timestamp timestamp = 1;
   // The message that should be displayed to users.
   optional string message = 2;
+}
+
+// Source code location information associated with a particular dataset or flow.
+message SourceCodeLocation {
+  // The file that this pipeline source code was defined in.
+  optional string file_name = 1;
+  // The specific line number that this pipeline source code is located at, if applicable.
+  optional int32 line_number = 2;
 }
