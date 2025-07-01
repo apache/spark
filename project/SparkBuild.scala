@@ -1539,8 +1539,11 @@ object CopyDependencies {
           } else if (jar.getName.contains("spark-connect") &&
             !SbtPomKeys.profiles.value.contains("noshade-connect")) {
             Files.copy(fid.toPath, destJar.toPath)
-          } else if (noProvidedJars && jar.getName.contains("spark-protobuf")) {
-            // Do not place Spark protobuf jars as it is not built-in.
+          } else if (jar.getName.contains("spark-protobuf") &&
+            !SbtPomKeys.profiles.value.contains("noshade-protobuf")) {
+            if (!noProvidedJars) {
+              Files.copy(fidProtobuf.toPath, destJar.toPath)
+            }
           } else {
             Files.copy(jar.toPath(), destJar.toPath())
           }
