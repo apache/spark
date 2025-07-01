@@ -118,6 +118,11 @@ class StaxXmlParser(
     }.flatten
   }
 
+  /**
+   * Parse the given XML string record as an InternalRow
+   * @param xml The single XML record string to parse
+   * @param xsdSchema The xsd schema to validate the XML against, if provided.
+   */
   def doParseColumn(
       xml: String,
       parseMode: ParseMode,
@@ -143,6 +148,10 @@ class StaxXmlParser(
     }
   }
 
+  /**
+   * The optimized version of the XML stream parser that reads XML records from the input file
+   * stream sequentially without loading each individual XML record string into memory.
+   */
   def parseStreamOptimized(
       inputStream: InputStream,
       schema: StructType,
@@ -154,8 +163,9 @@ class StaxXmlParser(
     }
     val safeParser = new FailureSafeParser[XMLEventReader](
       input => {
-        val attributes = input.peek().asStartElement().getAttributes.asScala.toArray
-        input.next()
+        // The first event is guaranteed to be a StartElement, so we can read attributes from it
+        // without using StaxXmlParserUtils.skipUntil.
+        val attributes = input.nextEvent().asStartElement().getAttributes.asScala.toArray
         doParseColumn(input, attributes, streamLiteral)
       },
       options.parseMode,
@@ -178,6 +188,15 @@ class StaxXmlParser(
     }.flatten
   }
 
+  /**
+   * Parse the next XML record from the event stream.
+   * @param parser The XML event reader over the entire XML file stream. The first event has been
+   *               advanced to the next record in the file.
+   * @param rootAttributes The attributes of the record root element.
+   * @param xmlLiteral A function that returns the entire XML file content as a UTF8String. Used
+   *                   to create a BadRecordException in case of parsing errors.
+   *                   TODO: Only include the file content starting with the current record.
+   */
   def doParseColumn(
       parser: XMLEventReader,
       rootAttributes: Array[Attribute],
@@ -185,11 +204,11 @@ class StaxXmlParser(
     tryParseColumn(xmlLiteral) {
       options.singleVariantColumn match {
         case Some(_) =>
-          // If the singleVariantColumn is specified, parse the entire xml string as a Variant
+          // If the singleVariantColumn is specified, parse the entire xml record as a Variant
           val v = StaxXmlParser.parseVariant(parser, rootAttributes, options)
           Some(InternalRow(v))
         case _ =>
-          // Otherwise, parse the xml string as Structs
+          // Otherwise, parse the xml record as Structs
           val result = Some(convertObject(parser, schema, rootAttributes))
           result
       }
@@ -206,8 +225,7 @@ class StaxXmlParser(
         // XML parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by
         // `columnNameOfCorruptRecord` are set to `null`.
-        throw BadRecordException(
-          xmlLiteral, () => Array.empty, e)
+        throw BadRecordException(xmlLiteral, () => Array.empty, e)
       case e: CharConversionException if options.charset.isEmpty =>
         val msg =
           """XML parser cannot handle a character in its input.
@@ -998,9 +1016,15 @@ class OptimizedXmlTokenizer(inputStream: InputStream, options: XmlOptions) exten
           case _: AccessControlException | _: BlockMissingException =>
             close()
             throw e
-          case _: RuntimeException | _: IOException | _: XMLStreamException =>
+          case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
+            logWarning("Skipping the rest of the content in the corrupted file")
+            hasMoreRecords = false
+            xmlEventReader = null
+            None
+          case _: XMLStreamException =>
             logWarning(s"Skipping corrupted content at record $recordCount", e)
             hasMoreRecords = false
+            xmlEventReader = null
             None
           case e: Throwable =>
             close()
@@ -1009,6 +1033,7 @@ class OptimizedXmlTokenizer(inputStream: InputStream, options: XmlOptions) exten
     } finally {
       if (!hasMoreRecords && xmlEventReader != null) {
         close()
+        xmlEventReader = null
       }
     }
   }
