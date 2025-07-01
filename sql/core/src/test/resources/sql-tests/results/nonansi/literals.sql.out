@@ -804,6 +804,14 @@ S'par'k	S'par'k	S''par''k
 
 
 -- !query
+SELECT "S" "par" "k", 'S' 'par' 'k', "S" 'par' "k", 'S' "par" 'k', "S"'par'"k", 'S'"par"'k'
+-- !query schema
+struct<Spark:string,Spark:string,Spark:string,Spark:string,Spark:string,Spark:string>
+-- !query output
+Spark	Spark	Spark	Spark	Spark	Spark
+
+
+-- !query
 SET spark.sql.legacy.consecutiveStringLiterals.enabled=true
 -- !query schema
 struct<key:string,value:string>
@@ -825,3 +833,11 @@ SELECT 'S''par''k', 'S\'par\'k', "S''par''k"
 struct<Spark:string,S'par'k:string,S''par''k:string>
 -- !query output
 Spark	S'par'k	S''par''k
+
+
+-- !query
+SELECT "S" "par" "k", 'S' 'par' 'k', "S" 'par' "k", 'S' "par" 'k', "S"'par'"k", 'S'"par"'k'
+-- !query schema
+struct<Spark:string,Spark:string,Spark:string,Spark:string,Spark:string,Spark:string>
+-- !query output
+Spark	Spark	Spark	Spark	Spark	Spark

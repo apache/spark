@@ -723,6 +723,13 @@ Project [S'par'k AS S'par'k#x, S'par'k AS S'par'k#x, S''par''k AS S''par''k#x]
 
 
 -- !query
+SELECT "S" "par" "k", 'S' 'par' 'k', "S" 'par' "k", 'S' "par" 'k', "S"'par'"k", 'S'"par"'k'
+-- !query analysis
+Project [Spark AS Spark#x, Spark AS Spark#x, Spark AS Spark#x, Spark AS Spark#x, Spark AS Spark#x, Spark AS Spark#x]
++- OneRowRelation
+
+
+-- !query
 SET spark.sql.legacy.consecutiveStringLiterals.enabled=true
 -- !query analysis
 SetCommand (spark.sql.legacy.consecutiveStringLiterals.enabled,Some(true))
@@ -739,4 +746,11 @@ Project [Spark AS Spark#x, S"par"k AS S"par"k#x, S""par""k AS S""par""k#x]
 SELECT 'S''par''k', 'S\'par\'k', "S''par''k"
 -- !query analysis
 Project [Spark AS Spark#x, S'par'k AS S'par'k#x, S''par''k AS S''par''k#x]
++- OneRowRelation
+
+
+-- !query
+SELECT "S" "par" "k", 'S' 'par' 'k', "S" 'par' "k", 'S' "par" 'k', "S"'par'"k", 'S'"par"'k'
+-- !query analysis
+Project [Spark AS Spark#x, Spark AS Spark#x, Spark AS Spark#x, Spark AS Spark#x, Spark AS Spark#x, Spark AS Spark#x]
 +- OneRowRelation

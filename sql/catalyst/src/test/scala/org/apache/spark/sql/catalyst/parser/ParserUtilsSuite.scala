@@ -144,13 +144,13 @@ class ParserUtilsSuite extends SparkFunSuite {
     assert(unescapeSQLString("\"abc\\uAAAXa\"") == "abcuAAAXa")
 
     // Double-quote escaping ("", '')
-    assert(unescapeSQLString(""""a""a"""") == "a\"a")
+    assert(unescapeSQLString(""""a""a"""") == """a"a""")
     assert(unescapeSQLString(""""a""a"""", true) == "aa")
     assert(unescapeSQLString("""'a''a'""") == "a'a")
     assert(unescapeSQLString("""'a''a'""", true) == "aa")
     // Single-quoted double quote string or double-quoted single quote string isn't affected
-    assert(unescapeSQLString("""'a""a'""") == "a\"\"a")
-    assert(unescapeSQLString("""'a""a'""", true) == "a\"\"a")
+    assert(unescapeSQLString("""'a""a'""") == """a""a""")
+    assert(unescapeSQLString("""'a""a'""", true) == """a""a""")
     assert(unescapeSQLString("\"a''a\"") == "a''a")
     assert(unescapeSQLString("\"a''a\"", true) == "a''a")
     // scalastyle:on nonascii
