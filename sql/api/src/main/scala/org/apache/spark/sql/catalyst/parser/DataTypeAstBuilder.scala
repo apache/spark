@@ -130,10 +130,10 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
         case BINARY => BinaryType
         case VOID => NullType
         case INTERVAL =>
-          if (currentCtx.fromYearMonth != null) {
+          if (currentCtx.fromDayTime != null) {
             visitDayTimeIntervalDataType(currentCtx)
           }
-          else if (currentCtx.fromDayTime != null) {
+          else if (currentCtx.fromYearMonth != null) {
             visitYearMonthIntervalDataType(currentCtx)
           }
           else {
