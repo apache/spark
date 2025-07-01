@@ -1347,10 +1347,6 @@ primitiveTypeWithParameters
     | (DECIMAL | DEC | NUMERIC)
         (LEFT_PAREN precision=INTEGER_VALUE (COMMA scale=INTEGER_VALUE)? RIGHT_PAREN)?
     | TIME (LEFT_PAREN precision=INTEGER_VALUE RIGHT_PAREN)? (WITHOUT TIME ZONE)?
-    | INTERVAL (
-                fromYearMonth=(YEAR | MONTH) (TO to=MONTH)? |
-                fromDayTime=(DAY | HOUR | MINUTE | SECOND) (TO to=(HOUR | MINUTE | SECOND))?
-                )?
     ;
 
 primitiveTypeWithoutParameters
@@ -1366,6 +1362,8 @@ primitiveTypeWithoutParameters
     | BINARY
     | VOID
     | INTERVAL
+        (fromYearMonth=(YEAR | MONTH) (TO to=MONTH)? |
+         fromDayTime=(DAY | HOUR | MINUTE | SECOND) (TO to=(HOUR | MINUTE | SECOND))?)?
     | VARIANT
     ;
 
