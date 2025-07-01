@@ -2903,7 +2903,7 @@ class DataFrameAggregateSuite extends QueryTest
     assert(badAgg2.checkInputDataTypes().isFailure)
   }
 
-  test("Support group by Time column") {
+  test("SPARK-52626: Support group by Time column") {
     val ts1 = "15:00:00"
     val ts2 = "22:00:00"
     val localTime = Seq(ts1, ts1, ts2).map(LocalTime.parse)
