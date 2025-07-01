@@ -148,6 +148,7 @@ private[sql] object ColumnAccessor {
       case ShortType => new ShortColumnAccessor(buf)
       case IntegerType | DateType | _: YearMonthIntervalType => new IntColumnAccessor(buf)
       case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+        print("Got here #1\n")
         new LongColumnAccessor(buf)
       case FloatType => new FloatColumnAccessor(buf)
       case DoubleType => new DoubleColumnAccessor(buf)
