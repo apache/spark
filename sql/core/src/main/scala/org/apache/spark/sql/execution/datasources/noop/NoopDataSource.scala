@@ -59,6 +59,7 @@ private[noop] object NoopWriteBuilder extends WriteBuilder
 private[noop] object NoopWrite extends Write {
   override def toBatch: BatchWrite = NoopBatchWrite
   override def toStreaming: StreamingWrite = NoopStreamingWrite
+  override def toString: String = "NoopWrite"
 }
 
 private[noop] object NoopBatchWrite extends BatchWrite {
@@ -67,6 +68,7 @@ private[noop] object NoopBatchWrite extends BatchWrite {
   override def useCommitCoordinator(): Boolean = false
   override def commit(messages: Array[WriterCommitMessage]): Unit = {}
   override def abort(messages: Array[WriterCommitMessage]): Unit = {}
+  override def toString: String = "NoopBatchWrite"
 }
 
 private[noop] object NoopWriterFactory extends DataWriterFactory {
@@ -86,6 +88,7 @@ private[noop] object NoopStreamingWrite extends StreamingWrite {
   override def useCommitCoordinator(): Boolean = false
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+  override def toString: String = "NoopStreamingWrite"
 }
 
 private[noop] object NoopStreamingDataWriterFactory extends StreamingDataWriterFactory {
