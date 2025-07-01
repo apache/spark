@@ -265,11 +265,6 @@ class ArrowBatchUDFSerializer(ArrowStreamSerializer):
                 elif isinstance(packed, list):
                     # multiple array UDFs in a projection
                     arrs = [self._create_array(t[0], t[1], self._arrow_cast) for t in packed]
-                elif isinstance(packed, tuple) and len(packed) == 3:
-                    # single value UDF with type information
-                    value, arrow_type, spark_type = packed
-                    arr = pa.array(value, type=arrow_type)
-                    arrs = [self._create_array(arr, arrow_type, self._arrow_cast)]
                 else:
                     arr = pa.array([packed], type=pa.int32())
                     arrs = [self._create_array(arr, pa.int32(), self._arrow_cast)]
