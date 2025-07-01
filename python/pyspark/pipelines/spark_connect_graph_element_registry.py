@@ -29,9 +29,7 @@ from pyspark.pipelines.dataset import (
 )
 from pyspark.pipelines.flow import Flow
 from pyspark.pipelines.graph_element_registry import GraphElementRegistry
-from pyspark.pipelines.source_code_location import (
-    SourceCodeLocation
-)
+from pyspark.pipelines.source_code_location import SourceCodeLocation
 from typing import Any, cast
 import pyspark.sql.connect.proto as pb2
 
@@ -115,6 +113,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         command = pb2.Command()
         command.pipeline_command.define_sql_graph_elements.CopyFrom(inner_command)
         self._client.execute_command(command)
+
 
 def source_code_location_to_proto(
     source_code_location: SourceCodeLocation,
