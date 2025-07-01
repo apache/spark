@@ -1517,6 +1517,8 @@ object CopyDependencies {
       val fid = (LocalProject("connect") / assembly).value
       val fidClient = (LocalProject("connect-client-jvm") / assembly).value
       val fidProtobuf = (LocalProject("protobuf") / assembly).value
+      val noProvidedJars: Boolean = sys.env.getOrElse("NO_PROVIDED_JARS", "1") == "1" ||
+        sys.env.getOrElse("NO_PROVIDED_JARS", "true").toLowerCase(Locale.getDefault()) == "true"
 
       (Compile / dependencyClasspath).value.map(_.data)
         .filter { jar => jar.isFile() }
@@ -1532,12 +1534,13 @@ object CopyDependencies {
             // Don't copy the spark connect common JAR as it is shaded in the spark connect.
           } else if (jar.getName.contains("connect-client-jvm")) {
             // Do not place Spark Connect client jars as it is not built-in.
+          } else if (noProvidedJars && jar.getName.contains("spark-avro")) {
+            // Do not place Spark Avro jars as it is not built-in.
           } else if (jar.getName.contains("spark-connect") &&
             !SbtPomKeys.profiles.value.contains("noshade-connect")) {
             Files.copy(fid.toPath, destJar.toPath)
-          } else if (jar.getName.contains("spark-protobuf") &&
-            !SbtPomKeys.profiles.value.contains("noshade-protobuf")) {
-            Files.copy(fidProtobuf.toPath, destJar.toPath)
+          } else if (noProvidedJars && jar.getName.contains("spark-protobuf")) {
+            // Do not place Spark protobuf jars as it is not built-in.
           } else {
             Files.copy(jar.toPath(), destJar.toPath())
           }
