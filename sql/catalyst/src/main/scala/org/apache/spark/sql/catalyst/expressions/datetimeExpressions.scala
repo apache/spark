@@ -69,8 +69,6 @@ trait TimeZoneAwareExpression extends Expression {
     case _: TimestampNTZType => java.time.ZoneOffset.UTC
     case _ => zoneId
   }
-
-  override def contextIndependentFoldable: Boolean = false
 }
 
 private[catalyst] object TimeZoneAwareExpression {
