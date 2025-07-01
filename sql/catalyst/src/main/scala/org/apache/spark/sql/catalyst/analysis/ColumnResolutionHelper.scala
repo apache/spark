@@ -510,7 +510,11 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   }
 
   // Try to resolve `UnresolvedAttribute` by the children with Plan Ids.
-  // Returns `None` if fail to resolve.
+  // If the `UnresolvedAttribute` doesn't have a Plan Id, return None.
+  // If the `UnresolvedAttribute` has a Plan Id:
+  //  - If Plan Id not found in the plan, raise CANNOT_RESOLVE_DATAFRAME_COLUMN.
+  //  - If Plan Id found in the plan, but column not found, return None.
+  //  - Otherwise, return the resolved expression.
   private[sql] def tryResolveColumnByPlanChildren(
       u: UnresolvedAttribute,
       q: LogicalPlan,

@@ -37,8 +37,9 @@ class ResolveDataFrameDropColumns(val catalogManager: CatalogManager)
       val dropped = d.dropList.flatMap {
         case u: UnresolvedAttribute =>
           if (u.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty) {
-            // Plan ID comes from Spark Connect,
-            // here we ignore the column if fail to resolve by plan Id.
+            // Plan Id comes from Spark Connect,
+            // Here we ignore the `UnresolvedAttribute` if its Plan Id can be found
+            // but column not found.
             tryResolveColumnByPlanChildren(u, d)
           } else {
             Some(resolveExpressionByPlanChildren(u, d))
