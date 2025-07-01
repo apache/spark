@@ -950,7 +950,6 @@ jobs:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
       NOLINT_ON_COMPILE: false
-      NO_PROVIDED_JARS: false
       PYSPARK_DRIVER_PYTHON: python3.9
       PYSPARK_PYTHON: python3.9
       GITHUB_PREV_SHA: ${{ github.event.before }}

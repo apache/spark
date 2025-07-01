@@ -834,7 +834,7 @@ if [[ "$1" == "docs" ]]; then
     cp -r "$SELF/.bundle" .
   fi
   bundle install
-  PRODUCTION=1 NO_PROVIDED_JARS=0 RELEASE_VERSION="$SPARK_VERSION" bundle exec jekyll build
+  PRODUCTION=1 RELEASE_VERSION="$SPARK_VERSION" bundle exec jekyll build
   cd ..
   cd ..
 
