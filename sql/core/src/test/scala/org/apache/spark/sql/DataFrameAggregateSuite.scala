@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, LocalTime, Period}
 
 import scala.util.Random
 
@@ -2901,6 +2901,17 @@ class DataFrameAggregateSuite extends QueryTest
       maxItemsTracked = Sum(BoundReference(1, LongType, nullable = true))
     )
     assert(badAgg2.checkInputDataTypes().isFailure)
+  }
+
+  test("SPARK-52626: Support group by Time column") {
+    val ts1 = "15:00:00"
+    val ts2 = "22:00:00"
+    val localTime = Seq(ts1, ts1, ts2).map(LocalTime.parse)
+    val df = localTime.toDF("t").groupBy("t").count().orderBy("t")
+    val expectedSchema =
+      new StructType().add(StructField("t", TimeType())).add("count", LongType, false)
+    assert (df.schema == expectedSchema)
+    checkAnswer(df, Seq(Row(LocalTime.parse(ts1), 2), Row(LocalTime.parse(ts2), 1)))
   }
 }
 
