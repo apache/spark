@@ -820,8 +820,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   // from the table properties.
   private def reorderSchema(schema: StructType, partColumnNames: Seq[String]): StructType = {
     if (conf.get(HIVE_PRESERVE_LEGACY_COLUMN_ORDER)) {
-      schema
-    } else {
       val partitionFields = partColumnNames.map { partCol =>
         schema.find(_.name == partCol).getOrElse {
           throw new AnalysisException(
@@ -832,6 +830,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         }
       }
       StructType(schema.filterNot(partitionFields.contains) ++ partitionFields)
+    } else {
+      schema
     }
   }
 
