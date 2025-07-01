@@ -49,7 +49,7 @@ import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LEGACY_BANG_EQUALS_NOT
+import org.apache.spark.sql.internal.SQLConf.{LEGACY_BANG_EQUALS_NOT, LEGACY_CONSECUTIVE_STRING_LITERALS}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -3622,7 +3622,7 @@ class AstBuilder extends DataTypeAstBuilder
   private def createString(ctx: StringLiteralContext): String = {
     if (conf.escapedStringLiterals) {
       ctx.stringLit.asScala.map(x => stringWithoutUnescape(visitStringLit(x))).mkString
-    } else if (conf.legacyConsecutiveStringLiterals) {
+    } else if (conf.getConf(LEGACY_CONSECUTIVE_STRING_LITERALS)) {
       ctx.stringLit.asScala.map(x => stringIgnoreQuoteQuote(visitStringLit(x))).mkString
     } else {
       ctx.stringLit.asScala.map(x => string(visitStringLit(x))).mkString

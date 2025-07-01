@@ -34,7 +34,9 @@ trait SparkParserUtils {
    * @param b
    *   The input string
    * @param ignoreQuoteQuote
-   *   If false, `''` and `""` will be treated as escaping, if false,
+   *   If true, consecutive quotes (`''` or `""`) are treated as string concatenation and will be
+   *   removed directly (e.g., `'a''b'` → `ab`). If false, they are treated as escape sequences
+   *   (e.g., `'a''b'` → `a'b`). Default is false (standard SQL escaping).
    */
   def unescapeSQLString(b: String, ignoreQuoteQuote: Boolean = false): String = {
     def appendEscapedChar(n: Char, sb: JStringBuilder): Unit = {
@@ -169,7 +171,7 @@ trait SparkParserUtils {
   /** Convert a string token into a string. */
   def string(token: Token): String = unescapeSQLString(token.getText)
 
-  /** Convert a string token into a string. */
+  /** Convert a string token into a string and remove `""` and `''`. */
   def stringIgnoreQuoteQuote(token: Token): String = unescapeSQLString(token.getText, true)
 
   /** Convert a string node into a string. */

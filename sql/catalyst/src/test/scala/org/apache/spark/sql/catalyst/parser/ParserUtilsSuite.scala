@@ -143,16 +143,16 @@ class ParserUtilsSuite extends SparkFunSuite {
     // Guard against off-by-one errors in the "all chars are hex" routine:
     assert(unescapeSQLString("\"abc\\uAAAXa\"") == "abcuAAAXa")
 
-    // Double-quote escaping ("")
-    assert(unescapeSQLString("\"\"\"aa\"\"\"") == "\"aa\"")
-    assert(unescapeSQLString("\"\"\"aa\"\"\"", true) == "aa")
-    assert(unescapeSQLString("'''aa'''") == "'aa'")
-    assert(unescapeSQLString("'''aa'''", true) == "aa")
-    // Single-quote string isn't affected
-    assert(unescapeSQLString("'\"\"aa\"\"'") == "\"\"aa\"\"")
-    assert(unescapeSQLString("'\"\"aa\"\"'", true) == "\"\"aa\"\"")
-    assert(unescapeSQLString("\"''aa''\"") == "''aa''")
-    assert(unescapeSQLString("\"''aa''\"", true) == "''aa''")
+    // Double-quote escaping ("", '')
+    assert(unescapeSQLString(""""a""a"""") == "a\"a")
+    assert(unescapeSQLString(""""a""a"""", true) == "aa")
+    assert(unescapeSQLString("""'a''a'""") == "a'a")
+    assert(unescapeSQLString("""'a''a'""", true) == "aa")
+    // Single-quoted double quote string or double-quoted single quote string isn't affected
+    assert(unescapeSQLString("""'a""a'""") == "a\"\"a")
+    assert(unescapeSQLString("""'a""a'""", true) == "a\"\"a")
+    assert(unescapeSQLString("\"a''a\"") == "a''a")
+    assert(unescapeSQLString("\"a''a\"", true) == "a''a")
     // scalastyle:on nonascii
   }
 

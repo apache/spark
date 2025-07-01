@@ -4081,9 +4081,9 @@ object SQLConf {
   val LEGACY_CONSECUTIVE_STRING_LITERALS =
     buildConf("spark.sql.legacy.consecutiveStringLiterals.enabled")
       .internal()
-      .doc("When true, consecutive quotes in string literals (e.g. \"\" or '') are treated as " +
-        "literal characters rather than escape sequences. This preserves pre-Spark 3.0 behavior " +
-        "where \"a\"\"b\" would be parsed as 'a\"b' instead of 'ab'.")
+      .doc("When true, consecutive string literals separated by double quotes (e.g. 'a''b') will " +
+        "be parsed as concatenated strings. This preserves pre-Spark 4.0 behavior where" +
+        "'a''b' would be parsed as 'ab' instead of 'a'b'.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
@@ -6407,8 +6407,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
-
-  def legacyConsecutiveStringLiterals: Boolean = getConf(LEGACY_CONSECUTIVE_STRING_LITERALS)
 
   def fileCompressionFactor: Double = getConf(FILE_COMPRESSION_FACTOR)
 
