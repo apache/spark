@@ -239,43 +239,45 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-33690: showString: escape meta-characters") {
-    val df1 = spark.sql("SELECT 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh'")
-    assert(df1.showString(1, truncate = 0) ===
-      """+--------------------------------------+
-        ||aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh|
-        |+--------------------------------------+
-        ||aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh|
-        |+--------------------------------------+
-        |""".stripMargin)
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      val df1 = spark.sql("SELECT 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh'")
+      assert(df1.showString(1, truncate = 0) ===
+        """+--------------------------------------+
+          ||aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh|
+          |+--------------------------------------+
+          ||aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh|
+          |+--------------------------------------+
+          |""".stripMargin)
 
-    val df2 = spark.sql("SELECT array('aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
-    assert(df2.showString(1, truncate = 0) ===
-      """+---------------------------------------------+
-        ||array(aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
-        |+---------------------------------------------+
-        ||[aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh]     |
-        |+---------------------------------------------+
-        |""".stripMargin)
+      val df2 = spark.sql("SELECT array('aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
+      assert(df2.showString(1, truncate = 0) ===
+        """+---------------------------------------------+
+          ||array(aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
+          |+---------------------------------------------+
+          ||[aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh]     |
+          |+---------------------------------------------+
+          |""".stripMargin)
 
-    val df3 =
-      spark.sql("SELECT map('aaa\nbbb\tccc', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
-    assert(df3.showString(1, truncate = 0) ===
-      """+----------------------------------------------------------+
-        ||map(aaa\nbbb\tccc, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
-        |+----------------------------------------------------------+
-        ||{aaa\nbbb\tccc -> aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh} |
-        |+----------------------------------------------------------+
-        |""".stripMargin)
+      val df3 =
+        spark.sql("SELECT map('aaa\nbbb\tccc', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
+      assert(df3.showString(1, truncate = 0) ===
+        """+----------------------------------------------------------+
+          ||map(aaa\nbbb\tccc, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
+          |+----------------------------------------------------------+
+          ||{aaa\nbbb\tccc -> aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh} |
+          |+----------------------------------------------------------+
+          |""".stripMargin)
 
-    val df4 =
-      spark.sql("SELECT named_struct('v', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
-    assert(df4.showString(1, truncate = 0) ===
-      """+-------------------------------------------------------+
-        ||named_struct(v, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
-        |+-------------------------------------------------------+
-        ||{aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh}               |
-        |+-------------------------------------------------------+
-        |""".stripMargin)
+      val df4 =
+        spark.sql("SELECT named_struct('v', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
+      assert(df4.showString(1, truncate = 0) ===
+        """+-------------------------------------------------------+
+          ||named_struct(v, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
+          |+-------------------------------------------------------+
+          ||{aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh}               |
+          |+-------------------------------------------------------+
+          |""".stripMargin)
+    }
   }
 
   test("SPARK-7319 showString") {
@@ -434,55 +436,57 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-34308: printSchema: escape meta-characters") {
-    val captured = new ByteArrayOutputStream()
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      val captured = new ByteArrayOutputStream()
 
-    val df1 = spark.sql("SELECT 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh'")
-    Console.withOut(captured) {
-      df1.printSchema()
-    }
-    assert(captured.toString ===
-      """root
-        | |-- aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh: string (nullable = false)
-        |
-        |""".stripMargin)
-    captured.reset()
+      val df1 = spark.sql("SELECT 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh'")
+      Console.withOut(captured) {
+        df1.printSchema()
+      }
+      assert(captured.toString ===
+        """root
+          | |-- aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh: string (nullable = false)
+          |
+          |""".stripMargin)
+      captured.reset()
 
-    val df2 = spark.sql("SELECT array('aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
-    Console.withOut(captured) {
-      df2.printSchema()
-    }
-    assert(captured.toString ===
-      """root
-        | |-- array(aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): array (nullable = false)
-        | |    |-- element: string (containsNull = false)
-        |
-        |""".stripMargin)
-    captured.reset()
+      val df2 = spark.sql("SELECT array('aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
+      Console.withOut(captured) {
+        df2.printSchema()
+      }
+      assert(captured.toString ===
+        """root
+          | |-- array(aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): array (nullable = false)
+          | |    |-- element: string (containsNull = false)
+          |
+          |""".stripMargin)
+      captured.reset()
 
-    val df3 =
-      spark.sql("SELECT map('aaa\nbbb\tccc', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
-    Console.withOut(captured) {
-      df3.printSchema()
-    }
-    assert(captured.toString ===
-      """root
-        | |-- map(aaa\nbbb\tccc, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): map (nullable = false)
-        | |    |-- key: string
-        | |    |-- value: string (valueContainsNull = false)
-        |
-        |""".stripMargin)
-    captured.reset()
+      val df3 =
+        spark.sql("SELECT map('aaa\nbbb\tccc', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
+      Console.withOut(captured) {
+        df3.printSchema()
+      }
+      assert(captured.toString ===
+        """root
+          | |-- map(aaa\nbbb\tccc, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): map (nullable = false)
+          | |    |-- key: string
+          | |    |-- value: string (valueContainsNull = false)
+          |
+          |""".stripMargin)
+      captured.reset()
 
-    val df4 =
-      spark.sql("SELECT named_struct('v', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
-    Console.withOut(captured) {
-      df4.printSchema()
+      val df4 =
+        spark.sql("SELECT named_struct('v', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
+      Console.withOut(captured) {
+        df4.printSchema()
+      }
+      assert(captured.toString ===
+        """root
+          | |-- named_struct(v, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): struct (nullable = false)
+          | |    |-- v: string (nullable = false)
+          |
+          |""".stripMargin)
     }
-    assert(captured.toString ===
-      """root
-        | |-- named_struct(v, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): struct (nullable = false)
-        | |    |-- v: string (nullable = false)
-        |
-        |""".stripMargin)
   }
 }

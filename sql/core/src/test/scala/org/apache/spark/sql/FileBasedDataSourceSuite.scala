@@ -511,6 +511,7 @@ class FileBasedDataSourceSuite extends QueryTest
           ""
         }
         withSQLConf(
+          SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false",
           SQLConf.USE_V1_SOURCE_LIST.key -> useV1List,
           SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
           // write path

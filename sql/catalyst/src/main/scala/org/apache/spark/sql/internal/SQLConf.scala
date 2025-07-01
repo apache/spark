@@ -5580,7 +5580,7 @@ object SQLConf {
         "and form them via pretty SQL print.")
       .version("3.5.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val LOCAL_RELATION_CACHE_THRESHOLD =
     buildConf(SqlApiConfHelper.LOCAL_RELATION_CACHE_THRESHOLD_KEY)
