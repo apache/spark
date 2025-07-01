@@ -967,75 +967,44 @@ class XmlTokenizer(
  * - Allows the parser to work directly with XML events
  */
 class OptimizedXmlTokenizer(inputStream: InputStream, options: XmlOptions) extends Logging {
-  private var xmlEventReader: XMLEventReader = _
-  private var isInitialized = false
-  private var hasMoreRecords = true
-
-  // Track current position for error reporting
-  private var recordCount = 0L
-
-  private def initializeReader(): Unit = {
-    if (!isInitialized) {
-      try {
-        xmlEventReader = StaxXmlParserUtils.filteredReader(inputStream, options)
-        isInitialized = true
-      } catch {
-        case e: Exception =>
-          logError("Failed to initialize XML event reader", e)
-          hasMoreRecords = false
-          throw e
-      }
-    }
-  }
+  private var reader = StaxXmlParserUtils.filteredReader(inputStream, options)
 
   /**
    * Returns the next XML record as a positioned XMLEventReader.
    * This avoids creating intermediate string representations.
    */
   def next(): Option[XMLEventReader] = {
-    if (!hasMoreRecords) return None
-
+    var nextRecord: Option[XMLEventReader] = None
     try {
-      initializeReader()
-
       // Skip to the next row start element
       if (skipToNextRowStart()) {
-        recordCount += 1
-        Some(xmlEventReader)
-      } else {
-        hasMoreRecords = false
-        None
+        nextRecord = Some(reader)
       }
     } catch {
       case e: FileNotFoundException if options.ignoreMissingFiles =>
-        logWarning(s"Skipping missing file at record $recordCount", e)
-        hasMoreRecords = false
-        None
+        logWarning("Skipping the rest of the content in the missing file", e)
       case NonFatal(e) =>
         ExceptionUtils.getRootCause(e) match {
           case _: AccessControlException | _: BlockMissingException =>
-            close()
+            reader.close()
+            reader = null
             throw e
           case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
-            logWarning("Skipping the rest of the content in the corrupted file")
-            hasMoreRecords = false
-            xmlEventReader = null
-            None
+            logWarning("Skipping the rest of the content in the corrupted file", e)
           case _: XMLStreamException =>
-            logWarning(s"Skipping corrupted content at record $recordCount", e)
-            hasMoreRecords = false
-            xmlEventReader = null
-            None
+            logWarning("Skipping the rest of the content in the corrupted file", e)
           case e: Throwable =>
-            close()
+            reader.close()
+            reader = null
             throw e
         }
     } finally {
-      if (!hasMoreRecords && xmlEventReader != null) {
-        close()
-        xmlEventReader = null
+      if (nextRecord.isEmpty && reader != null) {
+        reader.close()
+        reader = null
       }
     }
+    nextRecord
   }
 
   /**
@@ -1043,8 +1012,8 @@ class OptimizedXmlTokenizer(inputStream: InputStream, options: XmlOptions) exten
    */
   private def skipToNextRowStart(): Boolean = {
     val rowTagName = options.rowTag
-    while (xmlEventReader.hasNext) {
-      val event = xmlEventReader.peek()
+    while (reader.hasNext) {
+      val event = reader.peek()
       event match {
         case startElement: StartElement =>
           val elementName = StaxXmlParserUtils.getName(startElement.getName, options)
@@ -1057,21 +1026,9 @@ class OptimizedXmlTokenizer(inputStream: InputStream, options: XmlOptions) exten
         // Continue searching
       }
       // if not the event we want, advance the reader
-      xmlEventReader.nextEvent()
+      reader.nextEvent()
     }
     false
-  }
-
-  def close(): Unit = {
-    if (xmlEventReader != null) {
-      try {
-        xmlEventReader.close()
-      } catch {
-        case NonFatal(e) =>
-          logWarning("Error closing XML event reader", e)
-      }
-    }
-    hasMoreRecords = false
   }
 }
 
