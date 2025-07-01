@@ -3552,4 +3552,10 @@ class OptimizedXMLParserSuite extends XmlSuite {
     )
     sqlConf
   }
+
+  override def excluded: Seq[String] = super.excluded ++ Seq(
+    // XSD validation is not supported in optimized XML parser
+    "test XSD validation with validation error",
+    "test XSD validation with addFile() with validation error"
+  )
 }
