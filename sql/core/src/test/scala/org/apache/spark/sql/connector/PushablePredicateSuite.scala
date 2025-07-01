@@ -62,23 +62,25 @@ class PushablePredicateSuite extends QueryTest with SharedSparkSession {
   }
 
   test("non-trivial boolean expression") {
-    Seq(true, false).foreach { createV2Predicate =>
-      Seq(true, false).foreach { noAssert =>
-        withSQLConf(
-          SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE.key -> createV2Predicate.toString,
-          SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE.key -> noAssert.toString) {
-          val catalystExpr = Cast(Literal.create("true"), BooleanType)
-          if (createV2Predicate) {
-            val pushable = PushablePredicate.unapply(catalystExpr)
-            assert(pushable.isDefined)
-            assert(pushable.get.isInstanceOf[V2Predicate])
-          } else {
-            if (noAssert) {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> true.toString) {
+      Seq(true, false).foreach { createV2Predicate =>
+        Seq(true, false).foreach { noAssert =>
+          withSQLConf(
+            SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE.key -> createV2Predicate.toString,
+            SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE.key -> noAssert.toString) {
+            val catalystExpr = Cast(Literal.create("true"), BooleanType)
+            if (createV2Predicate) {
               val pushable = PushablePredicate.unapply(catalystExpr)
-              assert(pushable.isEmpty)
+              assert(pushable.isDefined)
+              assert(pushable.get.isInstanceOf[V2Predicate])
             } else {
-              intercept[java.lang.AssertionError] {
-                PushablePredicate.unapply(catalystExpr)
+              if (noAssert) {
+                val pushable = PushablePredicate.unapply(catalystExpr)
+                assert(pushable.isEmpty)
+              } else {
+                intercept[java.lang.AssertionError] {
+                  PushablePredicate.unapply(catalystExpr)
+                }
               }
             }
           }
