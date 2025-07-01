@@ -494,8 +494,7 @@ case class Cast(
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
 
   override def contextIndependentFoldable: Boolean = {
-    child.contextIndependentFoldable && !DataTypeUtils.containsTimestampOrUDT(dataType) &&
-      !DataTypeUtils.containsTimestampOrUDT(child.dataType)
+    child.contextIndependentFoldable && !Cast.needsTimeZone(child.dataType, dataType)
   }
 
   def ansiEnabled: Boolean = {

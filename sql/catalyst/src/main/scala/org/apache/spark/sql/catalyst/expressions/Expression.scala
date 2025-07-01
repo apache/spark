@@ -557,8 +557,6 @@ trait Nondeterministic extends Expression {
 trait ConditionalExpression extends Expression {
   final override def foldable: Boolean = children.forall(_.foldable)
 
-  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
-
   /**
    * Return the children expressions which can always be hit at runtime.
    */
@@ -963,8 +961,6 @@ abstract class QuaternaryExpression extends Expression with QuaternaryLike[Expre
 
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
-
   override def nullable: Boolean = children.exists(_.nullable)
 
   /**
@@ -1069,8 +1065,6 @@ abstract class QuaternaryExpression extends Expression with QuaternaryLike[Expre
 abstract class QuinaryExpression extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
-
-  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def nullable: Boolean = children.exists(_.nullable)
 
