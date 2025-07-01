@@ -191,7 +191,6 @@ class StaxXmlParser(
         case _ =>
           // Otherwise, parse the xml string as Structs
           val result = Some(convertObject(parser, schema, rootAttributes))
-          parser.close()
           result
       }
     }
@@ -202,8 +201,8 @@ class StaxXmlParser(
       parse
     } catch {
       case e: SparkUpgradeException => throw e
-      case e @ (_: RuntimeException | _: XMLStreamException | _: MalformedInputException
-                | _: SAXException) =>
+      case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
+              | _: SAXException) =>
         // XML parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by
         // `columnNameOfCorruptRecord` are set to `null`.
