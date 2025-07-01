@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.withDefaultTimeZone
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -573,43 +574,49 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   }
 
   test("SPARK-35686: error out for creating view with auto gen alias") {
-    withView("v") {
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("CREATE VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
-        },
-        condition = "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS",
-        parameters = Map("name" -> tableIdentifier("v").quotedString, "attr" -> "\"count(1)\"")
-      )
-      sql("CREATE VIEW v AS SELECT count(*) AS cnt FROM VALUES (1), (2), (3) t(a)")
-      checkAnswer(sql("SELECT * FROM v"), Seq(Row(3)))
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      withView("v") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("CREATE VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
+          },
+          condition = "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS",
+          parameters = Map("name" -> tableIdentifier("v").quotedString, "attr" -> "\"count(1)\"")
+        )
+        sql("CREATE VIEW v AS SELECT count(*) AS cnt FROM VALUES (1), (2), (3) t(a)")
+        checkAnswer(sql("SELECT * FROM v"), Seq(Row(3)))
+      }
     }
   }
 
   test("SPARK-35686: error out for creating view with auto gen alias in subquery") {
-    withView("v") {
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("CREATE VIEW v AS SELECT * FROM (SELECT a + b FROM VALUES (1, 2) t(a, b))")
-        },
-        condition = "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS",
-        parameters = Map("name" -> tableIdentifier("v").quotedString, "attr" -> "\"(a + b)\"")
-      )
-      sql("CREATE VIEW v AS SELECT * FROM (SELECT a + b AS col FROM VALUES (1, 2) t(a, b))")
-      checkAnswer(sql("SELECT * FROM v"), Seq(Row(3)))
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      withView("v") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("CREATE VIEW v AS SELECT * FROM (SELECT a + b FROM VALUES (1, 2) t(a, b))")
+          },
+          condition = "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS",
+          parameters = Map("name" -> tableIdentifier("v").quotedString, "attr" -> "\"(a + b)\"")
+        )
+        sql("CREATE VIEW v AS SELECT * FROM (SELECT a + b AS col FROM VALUES (1, 2) t(a, b))")
+        checkAnswer(sql("SELECT * FROM v"), Seq(Row(3)))
+      }
     }
   }
 
   test("SPARK-35686: error out for alter view with auto gen alias") {
-    withView("v") {
-      sql("CREATE VIEW v AS SELECT 1 AS a")
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("ALTER VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
-        },
-        condition = "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS",
-        parameters = Map("name" -> tableIdentifier("v").quotedString, "attr" -> "\"count(1)\"")
-      )
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      withView("v") {
+        sql("CREATE VIEW v AS SELECT 1 AS a")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("ALTER VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
+          },
+          condition = "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS",
+          parameters = Map("name" -> tableIdentifier("v").quotedString, "attr" -> "\"count(1)\"")
+        )
+      }
     }
   }
 

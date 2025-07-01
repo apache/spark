@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression
 import org.apache.spark.sql.catalyst.plans.{InnerLike, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, LogicalPlan}
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
@@ -175,26 +176,28 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Scalar subquery with non-equality predicates") {
-    val queryDf = sql(
-      s"""SELECT * FROM testData s1 WHERE key =
-         |(SELECT $hintStringified MAX(key) FROM
-         |testData s2 WHERE s1.key > s2.key AND s1.value > s2.value)
-         |""".stripMargin)
-    val condContainsMax = (condition: Expression) => {
-      condition.find {
-        case e: AttributeReference if e.name.contains("max") =>
-          true
-        case _ => false
-      }.isDefined
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      val queryDf = sql(
+        s"""SELECT * FROM testData s1 WHERE key =
+           |(SELECT $hintStringified MAX(key) FROM
+           |testData s2 WHERE s1.key > s2.key AND s1.value > s2.value)
+           |""".stripMargin)
+      val condContainsMax = (condition: Expression) => {
+        condition.find {
+          case e: AttributeReference if e.name.contains("max") =>
+            true
+          case _ => false
+        }.isDefined
+      }
+      val optimizedPlan = queryDf.queryExecution.optimizedPlan
+      val expectedJoinHint = JoinHint(leftHint = None, rightHint = expectedHint)
+      val joinsFound = optimizedPlan.collect {
+        case j: Join if j.condition.nonEmpty && condContainsMax(j.condition.get) =>
+          assert(expectedJoinHint == j.hint)
+      }
+      assert(joinsFound.size == 1)
+      checkAnswer(queryDf, spark.emptyDataFrame)
     }
-    val optimizedPlan = queryDf.queryExecution.optimizedPlan
-    val expectedJoinHint = JoinHint(leftHint = None, rightHint = expectedHint)
-    val joinsFound = optimizedPlan.collect {
-      case j: Join if j.condition.nonEmpty && condContainsMax(j.condition.get) =>
-        assert(expectedJoinHint == j.hint)
-    }
-    assert(joinsFound.size == 1)
-    checkAnswer(queryDf, spark.emptyDataFrame)
   }
 
   test("Scalar subquery nested subquery") {

@@ -1254,7 +1254,9 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   test("Partition spec validation") {
     withTable("dp_test") {
       sql("CREATE TABLE dp_test(key INT, value STRING) USING HIVE PARTITIONED BY (dp INT, sp INT)")
-      withSQLConf("hive.exec.dynamic.partition.mode" -> "strict") {
+      withSQLConf(
+        SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false",
+        "hive.exec.dynamic.partition.mode" -> "strict") {
         // Should throw when using strict dynamic partition mode without any static partition
         checkError(
           exception = intercept[AnalysisException] {
@@ -1268,7 +1270,9 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
             "tableColumns" -> "`key`, `value`, `dp`, `sp`",
             "dataColumns" -> "`key`, `value`, `(key % 5)`"))
       }
-      withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withSQLConf(
+        SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false",
+        "hive.exec.dynamic.partition.mode" -> "nonstrict") {
         // Should throw when a static partition appears after a dynamic partition
         checkError(
           exception = intercept[AnalysisException] {

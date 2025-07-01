@@ -1762,7 +1762,9 @@ abstract class AvroSuite
   }
 
   test("error handling for unsupported Interval data types") {
-    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+    withSQLConf(
+      SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false",
+      SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
       withTempDir { dir =>
         val tempDir = new File(dir, "files").getCanonicalPath
         checkError(

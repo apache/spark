@@ -651,7 +651,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("Throw exception on unsafe cast with strict casting policy") {
     withSQLConf(
       SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
-      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.STRICT.toString) {
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.STRICT.toString,
+      SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
       withTable("t") {
         sql("create table t(i int, d double) using parquet")
         checkError(
