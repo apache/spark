@@ -276,8 +276,6 @@ class SparkSession:
             """
             return request
 
-    """A function that, given a session, returns a hook set up for it."""
-
     _client: SparkConnectClient
 
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
