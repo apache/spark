@@ -195,6 +195,7 @@ class SparkConnectClientRetriesSuite
 
     assert(countAttempted == 3)
   }
+
   test("DefaultPolicy retries exceptions with RetryInfo") {
     // Error contains RetryInfo with retry_delay set to 0
     val dummyFn =
