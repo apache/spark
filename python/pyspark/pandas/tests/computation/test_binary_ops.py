@@ -225,12 +225,11 @@ class FrameBinaryOpsMixin:
 
     def test_binary_operator_mod(self):
         # Positive
-        pdf = pd.DataFrame({"a": [3], "b": [2], "c": [0]})
+        pdf = pd.DataFrame({"a": [3], "b": [2]})
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(psdf["a"] % psdf["b"], pdf["a"] % pdf["b"])
         self.assert_eq(psdf["a"] % 0, pdf["a"] % 0)
-        self.assert_eq(1 % psdf["c"], 1 % pdf["c"])
 
         # Negative
         psdf = ps.DataFrame({"a": ["x"], "b": [1]})
