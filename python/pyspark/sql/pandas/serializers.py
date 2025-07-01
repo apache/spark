@@ -312,8 +312,7 @@ class ArrowBatchUDFSerializer(ArrowStreamSerializer):
                 row_cls(*vals) for vals in zip(*series)
             ])
         else:
-            result = ArrowStreamPandasSerializer.arrow_to_pandas(
-                self,
+            result = super(ArrowBatchUDFSerializer, self).arrow_to_pandas(
                 arrow_column,
                 idx,
                 struct_in_pandas=self._struct_in_pandas,

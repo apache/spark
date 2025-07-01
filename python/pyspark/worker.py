@@ -1294,7 +1294,12 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
     elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:
         return wrap_scalar_arrow_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF:
-        return wrap_arrow_batch_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf, input_types)
+        # below is used to match legacy path behavior
+        # args_offsets contains the column indices accessed by UDF
+        narrowed_input_types = None
+        if input_types is not None:
+            narrowed_input_types = [input_types[o] for o in args_offsets]
+        return wrap_arrow_batch_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf, narrowed_input_types)
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
         return args_offsets, wrap_pandas_batch_iter_udf(func, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF:
