@@ -2760,19 +2760,21 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("SPARK-52515: invalid k value > Int.MaxValue") {
-    val k: Long = Int.MaxValue + 1L
-    checkError(
-      exception = intercept[SparkArithmeticException] {
-        sql(s"SELECT approx_top_k(expr, $k) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
-      },
-      condition = "CAST_OVERFLOW",
-      parameters = Map(
-        "value" -> (k.toString + "L"),
-        "sourceType" -> "\"BIGINT\"",
-        "targetType" -> "\"INT\"",
-        "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+    withSQLConf("spark.sql.ansi.enabled" -> true.toString) {
+      val k: Long = Int.MaxValue + 1L
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql(s"SELECT approx_top_k(expr, $k) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
+        },
+        condition = "CAST_OVERFLOW",
+        parameters = Map(
+          "value" -> (k.toString + "L"),
+          "sourceType" -> "\"BIGINT\"",
+          "targetType" -> "\"INT\"",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+        )
       )
-    )
+    }
   }
 
   test("SPARK-52515: invalid k value null") {
