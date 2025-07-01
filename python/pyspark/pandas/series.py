@@ -5123,6 +5123,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                         if not is_list_like(to_replace) or isinstance(to_replace, str)
                         else to_replace
                     )
+                    to_replace_values = cast(List[Any], to_replace_values)
                     literals = [F.lit(v).try_cast(col_type) for v in to_replace_values]
                     cond = self.spark.column.isin(literals)
                 else:
