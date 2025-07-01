@@ -48,6 +48,7 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.internal.SQLConf.HIVE_PRESERVE_LEGACY_COLUMN_ORDER
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -818,16 +819,20 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   // columns are not put at the end of schema. We need to reorder it when reading the schema
   // from the table properties.
   private def reorderSchema(schema: StructType, partColumnNames: Seq[String]): StructType = {
-    val partitionFields = partColumnNames.map { partCol =>
-      schema.find(_.name == partCol).getOrElse {
-        throw new AnalysisException(
-          errorClass = "_LEGACY_ERROR_TEMP_3088",
-          messageParameters = Map(
-            "schema" -> schema.catalogString,
-            "partColumnNames" -> partColumnNames.mkString("[", ", ", "]")))
+    if (conf.get(HIVE_PRESERVE_LEGACY_COLUMN_ORDER)) {
+      schema
+    } else {
+      val partitionFields = partColumnNames.map { partCol =>
+        schema.find(_.name == partCol).getOrElse {
+          throw new AnalysisException(
+            errorClass = "_LEGACY_ERROR_TEMP_3088",
+            messageParameters = Map(
+              "schema" -> schema.catalogString,
+              "partColumnNames" -> partColumnNames.mkString("[", ", ", "]")))
+        }
       }
+      StructType(schema.filterNot(partitionFields.contains) ++ partitionFields)
     }
-    StructType(schema.filterNot(partitionFields.contains) ++ partitionFields)
   }
 
   private def restoreHiveSerdeTable(table: CatalogTable): CatalogTable = {

@@ -36,9 +36,10 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, TableChange, TableInfo}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, TableCatalog, TableChange, TableInfo}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
+import org.apache.spark.sql.connector.expressions.Expressions
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetFooterReader}
@@ -3430,6 +3431,36 @@ class HiveDDLSuite
       verify(spyCatalog, times(1)).alterTable(any[CatalogTable])
       verify(spyCatalog, times(1)).alterTableDataSchema(
         any[String], any[String], any[StructType])
+    }
+  }
+
+  test("SPARK-52638: Allow preserving Hive-style column order to be configurable") {
+    val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
+    withSQLConf(
+      SQLConf.HIVE_PRESERVE_LEGACY_COLUMN_ORDER.key -> "false"
+    ) {
+      withTable("t1") {
+        val identifier = Identifier.of(Array("default"), "t1")
+        val outputSchema = new StructType()
+          .add("a", IntegerType, true, "comment1")
+          .add("b", IntegerType, true, "comment2")
+          .add("c", IntegerType, true, "comment3")
+          .add("d", IntegerType, true, "comment4")
+        catalog.createTable(
+          identifier,
+          new TableInfo.Builder()
+            .withProperties(Map.empty.asJava)
+            .withColumns(CatalogV2Util.structTypeToV2Columns(outputSchema))
+            .withPartitions(Array(Expressions.identity("a")))
+            .build()
+        )
+        val cols = catalog.loadTable(identifier).columns()
+        assert(cols.length == 4)
+        assert(cols(0).name() == "a")
+        assert(cols(1).name() == "b")
+        assert(cols(2).name() == "c")
+        assert(cols(3).name() == "d")
+      }
     }
   }
 }

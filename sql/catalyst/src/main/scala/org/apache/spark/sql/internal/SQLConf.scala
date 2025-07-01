@@ -5989,6 +5989,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val HIVE_PRESERVE_LEGACY_COLUMN_ORDER =
+    buildConf("spark.sql.hive.preserveLegacyColumnOrder.enabled")
+      .internal()
+      .doc("When true, tables returned from HiveExternalCatalog preserve Hive-style column order " +
+        "where the partition columns are at the end.  Otherwise, the user-specified column order " +
+        "is returned.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
