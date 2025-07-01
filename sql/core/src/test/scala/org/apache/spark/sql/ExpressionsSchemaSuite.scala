@@ -22,6 +22,7 @@ import java.io.File
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
 
@@ -87,6 +88,7 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Check schemas for expression examples") {
+    assume(!spark.conf.get(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED))
     val exampleRe = """^(.+);\n(?s)(.+)$""".r
     val funInfos = spark.sessionState.functionRegistry.listFunction().map { funcId =>
       spark.sessionState.catalog.lookupFunctionInfo(funcId)

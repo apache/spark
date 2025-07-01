@@ -3018,34 +3018,36 @@ abstract class AvroSuite
   }
 
   test("SPARK-33865: CREATE TABLE DDL with avro should check col name") {
-    withTable("test_ddl") {
-      withView("v") {
-        spark.range(1).createTempView("v")
-        withTempDir { dir =>
-          checkError(
-            exception = intercept[AnalysisException] {
-              sql(
-                s"""
-                   |CREATE TABLE test_ddl USING AVRO
-                   |LOCATION '${dir}'
-                   |AS SELECT ID, IF(ID=1,1,0) FROM v""".stripMargin)
-            },
-            condition = "INVALID_COLUMN_NAME_AS_PATH",
-            parameters = Map(
-              "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
-          )
-        }
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      withTable("test_ddl") {
+        withView("v") {
+          spark.range(1).createTempView("v")
+          withTempDir { dir =>
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql(
+                  s"""
+                     |CREATE TABLE test_ddl USING AVRO
+                     |LOCATION '${dir}'
+                     |AS SELECT ID, IF(ID=1,1,0) FROM v""".stripMargin)
+              },
+              condition = "INVALID_COLUMN_NAME_AS_PATH",
+              parameters = Map(
+                "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
+            )
+          }
 
-        withTempDir { dir =>
-          spark.sql(
-            s"""
-               |CREATE TABLE test_ddl USING AVRO
-               |LOCATION '${dir}'
-               |AS SELECT ID, IF(ID=1,ID,0) AS A, ABS(ID) AS B
-               |FROM v""".stripMargin)
-          val expectedSchema = StructType(Seq(StructField("ID", LongType, true),
-            StructField("A", LongType, true), StructField("B", LongType, true)))
-          assert(spark.table("test_ddl").schema == expectedSchema)
+          withTempDir { dir =>
+            spark.sql(
+              s"""
+                 |CREATE TABLE test_ddl USING AVRO
+                 |LOCATION '${dir}'
+                 |AS SELECT ID, IF(ID=1,ID,0) AS A, ABS(ID) AS B
+                 |FROM v""".stripMargin)
+            val expectedSchema = StructType(Seq(StructField("ID", LongType, true),
+              StructField("A", LongType, true), StructField("B", LongType, true)))
+            assert(spark.table("test_ddl").schema == expectedSchema)
+          }
         }
       }
     }
