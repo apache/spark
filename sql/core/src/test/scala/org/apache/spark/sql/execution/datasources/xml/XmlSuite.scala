@@ -56,7 +56,8 @@ class XmlSuite
     extends QueryTest
     with SharedSparkSession
     with CommonFileDataSourceSuite
-    with TestXmlData {
+    with TestXmlData
+    with XmlVariantTests {
   import testImplicits._
 
   private val resDir = "test-data/xml-resources/"
@@ -3546,20 +3547,4 @@ object XmlSuiteDebugFileSystem {
   def totalFiles() : Int = {
     maxFilesPerThread.values().asScala.sum
   }
-}
-
-class OptimizedXMLParserSuite extends XmlSuite {
-  override def conf: SQLConf = {
-    val sqlConf = super.conf
-    sqlConf.setConfString(
-      SQLConf.ENABLE_OPTIMIZED_XML_PARSER.key, "true"
-    )
-    sqlConf
-  }
-
-  override def excluded: Seq[String] = super.excluded ++ Seq(
-    // XSD validation is not supported in optimized XML parser
-    "test XSD validation with validation error",
-    "test XSD validation with addFile() with validation error"
-  )
 }

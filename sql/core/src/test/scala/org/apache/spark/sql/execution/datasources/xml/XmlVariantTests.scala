@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.VariantType
 import org.apache.spark.types.variant.{Variant, VariantBuilder}
 import org.apache.spark.unsafe.types.VariantVal
 
-class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData {
+trait XmlVariantTests extends QueryTest with SharedSparkSession with TestXmlData {
 
   private val baseOptions = Map("rowTag" -> "ROW", "valueTag" -> "_VALUE", "attributePrefix" -> "_")
 
