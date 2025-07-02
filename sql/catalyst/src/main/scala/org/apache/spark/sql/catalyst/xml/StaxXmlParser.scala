@@ -123,12 +123,11 @@ class StaxXmlParser(
    * @param xml The single XML record string to parse
    * @param xsdSchema The xsd schema to validate the XML against, if provided.
    */
-  def doParseColumn(
-      xml: String,
+  def doParseColumn(xml: String,
       parseMode: ParseMode,
       xsdSchema: Option[Schema]): Option[InternalRow] = {
-    val xmlLiteral = () => UTF8String.fromString(xml)
-    tryParseColumn(xmlLiteral) {
+    lazy val xmlRecord = UTF8String.fromString(xml)
+    try {
       xsdSchema.foreach { schema =>
         schema.newValidator().validate(new StreamSource(new StringReader(xml)))
       }
@@ -145,6 +144,33 @@ class StaxXmlParser(
           parser.close()
           result
       }
+    } catch {
+      case e: SparkUpgradeException => throw e
+      case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
+              | _: SAXException) =>
+        // XML parser currently doesn't support partial results for corrupted records.
+        // For such records, all fields other than the field configured by
+        // `columnNameOfCorruptRecord` are set to `null`.
+        throw BadRecordException(() => xmlRecord, () => Array.empty, e)
+      case e: CharConversionException if options.charset.isEmpty =>
+        val msg =
+          """XML parser cannot handle a character in its input.
+            |Specifying encoding as an input option explicitly might help to resolve the issue.
+            |""".stripMargin + e.getMessage
+        val wrappedCharException = new CharConversionException(msg)
+        wrappedCharException.initCause(e)
+        throw BadRecordException(() => xmlRecord, () => Array.empty,
+          wrappedCharException)
+      case PartialResultException(row, cause) =>
+        throw BadRecordException(
+          record = () => xmlRecord,
+          partialResults = () => Array(row),
+          cause)
+      case PartialResultArrayException(rows, cause) =>
+        throw BadRecordException(
+          record = () => xmlRecord,
+          partialResults = () => rows,
+          cause)
     }
   }
 
@@ -201,7 +227,7 @@ class StaxXmlParser(
       parser: XMLEventReader,
       rootAttributes: Array[Attribute],
       xmlLiteral: () => UTF8String): Option[InternalRow] = {
-    tryParseColumn(xmlLiteral) {
+    try {
       options.singleVariantColumn match {
         case Some(_) =>
           // If the singleVariantColumn is specified, parse the entire xml record as a Variant
@@ -212,16 +238,13 @@ class StaxXmlParser(
           val result = Some(convertObject(parser, schema, rootAttributes))
           result
       }
-    }
-  }
-
-  private def tryParseColumn[T](xmlLiteral: () => UTF8String)(parse: => T): T = {
-    try {
-      parse
     } catch {
       case e: SparkUpgradeException => throw e
       case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
               | _: SAXException) =>
+        // Skip rest of the content in the parser and put the whole XML file in the
+        // BadRecordException.
+        parser.close()
         // XML parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by
         // `columnNameOfCorruptRecord` are set to `null`.

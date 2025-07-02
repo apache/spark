@@ -56,11 +56,10 @@ class XmlSuite
     extends QueryTest
     with SharedSparkSession
     with CommonFileDataSourceSuite
-    with TestXmlData
-    with XmlVariantTests {
+    with TestXmlData {
   import testImplicits._
 
-  private val resDir = "test-data/xml-resources/"
+  protected val resDir = "test-data/xml-resources/"
 
   private var tempDir: Path = _
 
