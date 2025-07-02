@@ -176,7 +176,14 @@ class StaxXmlParser(
     val xmlTokenizer = new OptimizedXmlTokenizer(inputStream, options)
     new Iterator[Iterator[InternalRow]] {
       private var nextRecord = xmlTokenizer.next()
-      override def hasNext: Boolean = nextRecord.nonEmpty
+      override def hasNext: Boolean = {
+        if (nextRecord.isEmpty) {
+          inputStream.close()
+          false
+        } else {
+          true
+        }
+      }
       override def next(): Iterator[InternalRow] = {
         if (!hasNext) {
           throw QueryExecutionErrors.endOfStreamError()
