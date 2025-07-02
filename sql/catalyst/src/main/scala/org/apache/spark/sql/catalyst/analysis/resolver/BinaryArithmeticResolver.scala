@@ -63,7 +63,7 @@ import org.apache.spark.sql.types.{DateType, StringType}
  *
  *     Cast(
  *         DatetimeSub(
- *             TimeAdd(
+ *             TimestampAddInterval(
  *                 Literal('4 11:11', StringType),
  *                 UnaryMinus(
  *                     Literal(Interval('4 22:12' DAY TO MINUTE), DayTimeIntervalType(0,2))

@@ -683,6 +683,20 @@ WITH RECURSIVE randoms(val) AS (
 )
 SELECT val FROM randoms LIMIT 5;
 
+-- Type coercion where the anchor is wider
+WITH RECURSIVE t1(n, m) AS (
+    SELECT 1, CAST(1 AS BIGINT)
+    UNION ALL
+    SELECT n+1, n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
+-- Type coercion where the recursion is wider
+WITH RECURSIVE t1(n, m) AS (
+    SELECT 1, 1
+    UNION ALL
+    SELECT n+1, CAST(n+1 AS BIGINT) FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
 -- Recursive CTE with nullable recursion and non-recursive anchor
 WITH RECURSIVE t1(n) AS (
     SELECT 1
@@ -725,4 +739,20 @@ WITH RECURSIVE t1(n) AS (
     UNION ALL
     SELECT n + 1 FROM t1
 )
-    ((SELECT n FROM t1) UNION ALL (SELECT n FROM t1)) LIMIT 20
+    ((SELECT n FROM t1) UNION ALL (SELECT n FROM t1)) LIMIT 20;
+
+-- Recursive CTE with self reference inside Window function
+WITH RECURSIVE win(id, val) AS (
+    SELECT 1, CAST(10 AS BIGINT)
+    UNION ALL
+    SELECT id + 1, SUM(val) OVER (ORDER BY id ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+    FROM win WHERE id < 3
+)
+SELECT * FROM win;
+
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    (SELECT n + 1 FROM t1 WHERE n < 5 ORDER BY n)
+)
+SELECT * FROM t1;

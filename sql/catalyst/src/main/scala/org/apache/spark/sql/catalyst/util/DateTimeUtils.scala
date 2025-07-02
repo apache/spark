@@ -108,8 +108,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Returns the hour value of a given TIME (TimeType) value.
    */
-  def getHoursOfTime(micros: Long): Int = {
-    nanosToLocalTime(micros).getHour
+  def getHoursOfTime(nanos: Long): Int = {
+    nanosToLocalTime(nanos).getHour
   }
 
   /**
@@ -123,8 +123,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Returns the minute value of a given TIME (TimeType) value.
    */
-  def getMinutesOfTime(micros: Long): Int = {
-    nanosToLocalTime(micros).getMinute
+  def getMinutesOfTime(nanos: Long): Int = {
+    nanosToLocalTime(nanos).getMinute
   }
 
   /**
@@ -138,8 +138,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Returns the second value of a given TIME (TimeType) value.
    */
-  def getSecondsOfTime(micros: Long): Int = {
-    nanosToLocalTime(micros).getSecond
+  def getSecondsOfTime(nanos: Long): Int = {
+    nanosToLocalTime(nanos).getSecond
   }
   /**
    * Returns the seconds part and its fractional part with microseconds.
@@ -821,5 +821,17 @@ object DateTimeUtils extends SparkDateTimeUtils {
       case e @ (_: DateTimeException | _: ArithmeticException) =>
         throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
     }
+  }
+
+  /**
+   * Makes a timestamp without time zone from a date and a local time.
+   *
+   * @param days The number of days since the epoch. 1970-01-01.
+   *             Negative numbers represent earlier days.
+   * @param nanos The number of nanoseconds within the day since the midnight.
+   * @return The number of microseconds since the epoch of 1970-01-01 00:00:00Z.
+   */
+  def makeTimestampNTZ(days: Int, nanos: Long): Long = {
+    localDateTimeToMicros(LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos)))
   }
 }
