@@ -210,7 +210,8 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
     spark.udf.register("longProductSum", udaf(LongProductSumAgg))
     spark.udf.register("arraysum", udaf(ArrayDataAgg))
     spark.udf.register("reduceOptionPair", udaf(Reduce[Option[(Int, Int)]](
-      (opt1, opt2) => opt1.zip(opt2).map { case ((a1, b1), (a2, b2)) => (a1 + a2, b1 + b2) })))
+      (opt1, opt2) =>
+        opt1.zip(opt2).map { case ((a1, b1), (a2, b2)) => (a1 + a2, b1 + b2) }.headOption)))
   }
 
   override def afterAll(): Unit = {
