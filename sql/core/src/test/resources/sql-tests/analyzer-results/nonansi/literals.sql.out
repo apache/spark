@@ -709,23 +709,23 @@ Project [0 AS 0#x, 0.0 AS 0.0#x]
 
 
 -- !query
-SELECT "S""par""k", "S\"par\"k", 'S""par""k'
+SELECT "S""par""k" AS c1, "S\"par\"k" AS c2, 'S""par""k' AS c3
 -- !query analysis
-Project [S"par"k AS S"par"k#x, S"par"k AS S"par"k#x, S""par""k AS S""par""k#x]
+Project [S"par"k AS c1#x, S"par"k AS c2#x, S""par""k AS c3#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT 'S''par''k', 'S\'par\'k', "S''par''k"
+SELECT 'S''par''k' AS c1, 'S\'par\'k' AS c2, "S''par''k" AS c3
 -- !query analysis
-Project [S'par'k AS S'par'k#x, S'par'k AS S'par'k#x, S''par''k AS S''par''k#x]
+Project [S'par'k AS c1#x, S'par'k AS c2#x, S''par''k AS c3#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT "S" "par" "k", 'S' 'par' 'k', "S" 'par' "k", 'S' "par" 'k', "S"'par'"k", 'S'"par"'k'
+SELECT "S" "par" "k" AS c1, 'S' 'par' 'k' AS c2, "S" 'par' "k" AS c3, 'S' "par" 'k' AS c4, "S"'par'"k" AS c5, 'S'"par"'k' AS c6
 -- !query analysis
-Project [Spark AS Spark#x, Spark AS Spark#x, Spark AS Spark#x, Spark AS Spark#x, Spark AS Spark#x, Spark AS Spark#x]
+Project [Spark AS c1#x, Spark AS c2#x, Spark AS c3#x, Spark AS c4#x, Spark AS c5#x, Spark AS c6#x]
 +- OneRowRelation
 
 
@@ -736,21 +736,21 @@ SetCommand (spark.sql.legacy.consecutiveStringLiterals.enabled,Some(true))
 
 
 -- !query
-SELECT "S""par""k", "S\"par\"k", 'S""par""k'
+SELECT "S""par""k" AS c1, "S\"par\"k" AS c2, 'S""par""k' AS c3
 -- !query analysis
-Project [Spark AS Spark#x, S"par"k AS S"par"k#x, S""par""k AS S""par""k#x]
+Project [Spark AS c1#x, S"par"k AS c2#x, S""par""k AS c3#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT 'S''par''k', 'S\'par\'k', "S''par''k"
+SELECT 'S''par''k' AS c1, 'S\'par\'k' AS c2, "S''par''k" AS c3
 -- !query analysis
-Project [Spark AS Spark#x, S'par'k AS S'par'k#x, S''par''k AS S''par''k#x]
+Project [Spark AS c1#x, S'par'k AS c2#x, S''par''k AS c3#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT "S" "par" "k", 'S' 'par' 'k', "S" 'par' "k", 'S' "par" 'k', "S"'par'"k", 'S'"par"'k'
+SELECT "S" "par" "k" AS c1, 'S' 'par' 'k' AS c2, "S" 'par' "k" AS c3, 'S' "par" 'k' AS c4, "S"'par'"k" AS c5, 'S'"par"'k' AS c6
 -- !query analysis
-Project [Spark AS Spark#x, Spark AS Spark#x, Spark AS Spark#x, Spark AS Spark#x, Spark AS Spark#x, Spark AS Spark#x]
+Project [Spark AS c1#x, Spark AS c2#x, Spark AS c3#x, Spark AS c4#x, Spark AS c5#x, Spark AS c6#x]
 +- OneRowRelation
