@@ -206,7 +206,7 @@ class DataFrameTestsMixin:
             schema="colA string, colB string, colC string",
         )
         df2 = self.spark.createDataFrame(
-            [("c", "d", "")],
+            [("c", "d", "e")],
             schema="colC string, colD string, colE string",
         )
         df3 = df1.join(df2, df1["colC"] == df2["colC"]).withColumn(

@@ -510,8 +510,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   }
 
   // Try to resolve `UnresolvedAttribute` by the children with Plan Ids.
-  // If the `UnresolvedAttribute` doesn't have a Plan Id, return None.
-  // If the `UnresolvedAttribute` has a Plan Id:
+  // The `UnresolvedAttribute` must have a Plan Id:
   //  - If Plan Id not found in the plan, raise CANNOT_RESOLVE_DATAFRAME_COLUMN.
   //  - If Plan Id found in the plan, but column not found, return None.
   //  - Otherwise, return the resolved expression.
@@ -519,6 +518,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       u: UnresolvedAttribute,
       q: LogicalPlan,
       includeLastResort: Boolean = false): Option[Expression] = {
+    assert(u.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty,
+      s"UnresolvedAttribute $u should have a Plan Id tag")
+
     resolveDataFrameColumn(u, q.children).map { r =>
       resolveExpression(
         r,
