@@ -1573,31 +1573,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         )
 
       case u @ Union(children, _, _)
-        // if there are duplicate output columns, give them unique expr ids
-        if (u.allChildrenCompatible &&
+          // if there are duplicate output columns, give them unique expr ids
+          if (u.allChildrenCompatible &&
           conf.getConf(SQLConf.ENFORCE_TYPE_COERCION_BEFORE_UNION_DEDUPLICATION)) &&
           children.exists(c => c.output.map(_.exprId).distinct.length < c.output.length) =>
-        val newChildren = children.map { c =>
-          if (c.output.map(_.exprId).distinct.length < c.output.length) {
-            val existingExprIds = mutable.HashSet[ExprId]()
-            val projectList = c.output.map { attr =>
-              if (existingExprIds.contains(attr.exprId)) {
-                // replace non-first duplicates with aliases and tag them
-                val newMetadata = new MetadataBuilder().withMetadata(attr.metadata)
-                  .putNull("__is_duplicate").build()
-                Alias(attr, attr.name)(explicitMetadata = Some(newMetadata))
-              } else {
-                // leave first duplicate alone
-                existingExprIds.add(attr.exprId)
-                attr
-              }
-            }
-            Project(projectList, c)
-          } else {
-            c
-          }
-        }
-        u.withNewChildren(newChildren)
+        DeduplicateUnionChildOutput.deduplicateOutputPerChild(u)
 
       // A special case for Generate, because the output of Generate should not be resolved by
       // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.
