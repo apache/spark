@@ -176,14 +176,7 @@ class StaxXmlParser(
     val xmlTokenizer = new OptimizedXmlTokenizer(inputStream, options)
     new Iterator[Iterator[InternalRow]] {
       private var nextRecord = xmlTokenizer.next()
-      override def hasNext: Boolean = {
-        if (nextRecord.isEmpty) {
-          inputStream.close()
-          false
-        } else {
-          true
-        }
-      }
+      override def hasNext: Boolean = nextRecord.nonEmpty
       override def next(): Iterator[InternalRow] = {
         if (!hasNext) {
           throw QueryExecutionErrors.endOfStreamError()
@@ -993,25 +986,30 @@ class OptimizedXmlTokenizer(inputStream: InputStream, options: XmlOptions) exten
       case NonFatal(e) =>
         ExceptionUtils.getRootCause(e) match {
           case _: AccessControlException | _: BlockMissingException =>
-            reader.close()
-            reader = null
+            close()
             throw e
           case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
             logWarning("Skipping the rest of the content in the corrupted file", e)
           case _: XMLStreamException =>
             logWarning("Skipping the rest of the content in the corrupted file", e)
           case e: Throwable =>
-            reader.close()
-            reader = null
+            close()
             throw e
         }
     } finally {
       if (nextRecord.isEmpty && reader != null) {
-        reader.close()
-        reader = null
+        close()
       }
     }
     nextRecord
+  }
+
+  def close(): Unit = {
+    if (reader != null) {
+      reader.close()
+      inputStream.close()
+      reader = null
+    }
   }
 
   /**
