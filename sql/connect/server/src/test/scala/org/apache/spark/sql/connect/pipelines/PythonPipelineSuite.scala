@@ -174,7 +174,7 @@ class PythonPipelineSuite
           QueryOrigin(
             language = Option(Python()),
             filePath = Option("<string>"),
-            line = Option(34),
+            line = Option(33),
             objectName = Option("spark_catalog.default.mv2"),
             objectType = Option(QueryOriginType.Flow.toString)
           )
@@ -190,7 +190,7 @@ class PythonPipelineSuite
           QueryOrigin(
             language = Option(Python()),
             filePath = Option("<string>"),
-            line = Option(38),
+            line = Option(37),
             objectName = Option("spark_catalog.default.mv"),
             objectType = Option(QueryOriginType.Flow.toString)
           )
