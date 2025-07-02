@@ -251,24 +251,6 @@ object DataTypeUtils {
   }
 
   /**
-   * Checks if a data type contains TimestampType or UserDefinedType.
-   *
-   * This method traverses the data type to find:
-   * - TimestampType (which depends on timezone for interpretation)
-   * - UserDefinedType (which may have custom logic depending on runtime context)
-   *
-   * This information is useful when determining if operations on this type might behave
-   * differently based on the execution environment.
-   *
-   * @param dataType The data type to check
-   * @return true if the data type contains TimestampType or UserDefinedType
-   */
-  def containsTimestampOrUDT(dataType: DataType): Boolean = {
-    matchesPattern(dataType,
-      dt => dt.isInstanceOf[TimestampType] || dt.isInstanceOf[UserDefinedType[_]])
-  }
-
-  /**
    * Check if a given data type matches a given pattern.
    */
   def matchesPattern(dataType: DataType, pattern: DataType => Boolean): Boolean = {

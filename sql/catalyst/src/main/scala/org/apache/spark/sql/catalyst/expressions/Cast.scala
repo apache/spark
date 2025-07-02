@@ -2226,8 +2226,7 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
   }
 
   override def contextIndependentFoldable: Boolean = {
-    child.contextIndependentFoldable && !DataTypeUtils.containsTimestampOrUDT(dataType) &&
-      !DataTypeUtils.containsTimestampOrUDT(child.dataType)
+    child.contextIndependentFoldable && !Cast.needsTimeZone(child.dataType, dataType)
   }
 
   override protected def withNewChildInternal(newChild: Expression): UpCast = copy(child = newChild)
