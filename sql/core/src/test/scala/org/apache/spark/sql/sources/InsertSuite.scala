@@ -66,6 +66,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   override def beforeAll(): Unit = {
     super.beforeAll()
     path = Utils.createTempDir()
+    spark.conf.set(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED, false)
     val ds = (1 to 10).map(i => s"""{"a":$i, "b":"str$i"}""").toDS()
     spark.read.json(ds).createOrReplaceTempView("jt")
     sql(
@@ -1942,13 +1943,17 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         // Run the test twice, once using SQL for the INSERT operations and again using DataFrames.
         for (useDataFrames <- Seq(false, true)) {
           config.sqlConf.map { kv: (String, String) =>
-            withSQLConf(kv) {
+            withSQLConf(
+              SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false",
+              kv) {
               // Run the test with the pair of custom SQLConf values.
               runTest(testCase.dataSource, config.copy(useDataFrames = useDataFrames))
             }
           }.getOrElse {
             // Run the test with default settings.
-            runTest(testCase.dataSource, config.copy(useDataFrames = useDataFrames))
+            withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+              runTest(testCase.dataSource, config.copy(useDataFrames = useDataFrames))
+            }
           }
         }
       }

@@ -115,11 +115,11 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
       // write path
       checkError(
         exception = intercept[AnalysisException] {
-          sql("select interval 1 days").write.mode("overwrite").orc(orcDir)
+          sql("select interval 1 days as col").write.mode("overwrite").orc(orcDir)
         },
         condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
-          "columnName" -> "`INTERVAL '1' DAY`",
+          "columnName" -> "`col`",
           "columnType" -> "\"INTERVAL DAY\"",
           "format" -> "ORC")
       )

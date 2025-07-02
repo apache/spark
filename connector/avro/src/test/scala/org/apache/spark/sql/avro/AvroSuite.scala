@@ -3146,31 +3146,33 @@ class AvroV1Suite extends AvroSuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
 
   test("SPARK-36271: V1 insert should check schema field name too") {
-    withView("v") {
-      spark.range(1).createTempView("v")
-      withTempDir { dir =>
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql("SELECT ID, IF(ID=1,1,0) FROM v").write.mode(SaveMode.Overwrite)
-              .format("avro").save(dir.getCanonicalPath)
-          },
-          condition = "INVALID_COLUMN_NAME_AS_PATH",
-          parameters = Map(
-            "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
-        )
-      }
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      withView("v") {
+        spark.range(1).createTempView("v")
+        withTempDir { dir =>
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql("SELECT ID, IF(ID=1,1,0) FROM v").write.mode(SaveMode.Overwrite)
+                .format("avro").save(dir.getCanonicalPath)
+            },
+            condition = "INVALID_COLUMN_NAME_AS_PATH",
+            parameters = Map(
+              "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
+          )
+        }
 
-      withTempDir { dir =>
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql("SELECT NAMED_STRUCT('(IF((ID = 1), 1, 0))', IF(ID=1,ID,0)) AS col1 FROM v")
-              .write.mode(SaveMode.Overwrite)
-              .format("avro").save(dir.getCanonicalPath)
-          },
-          condition = "INVALID_COLUMN_NAME_AS_PATH",
-          parameters = Map(
-            "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
-        )
+        withTempDir { dir =>
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql("SELECT NAMED_STRUCT('(IF((ID = 1), 1, 0))', IF(ID=1,ID,0)) AS col1 FROM v")
+                .write.mode(SaveMode.Overwrite)
+                .format("avro").save(dir.getCanonicalPath)
+            },
+            condition = "INVALID_COLUMN_NAME_AS_PATH",
+            parameters = Map(
+              "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
+          )
+        }
       }
     }
   }
