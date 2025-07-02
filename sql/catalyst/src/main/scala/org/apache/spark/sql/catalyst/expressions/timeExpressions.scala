@@ -513,7 +513,7 @@ case class CurrentTime(
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType)
 
   override def eval(input: InternalRow): Any = {
-    val currentTimeOfDayMicros = DateTimeUtils.instantToMicrosOfDay(java.time.Instant.now(), zoneId)
+    val currentTimeOfDayMicros = DateTimeUtils.instantToNanosOfDay(java.time.Instant.now(), zoneId)
     DateTimeUtils.truncateTimeToPrecision(currentTimeOfDayMicros, precision)
   }
 }

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 import java.lang.invoke.{MethodHandles, MethodType}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZonedDateTime, ZoneId, ZoneOffset}
-import java.time.temporal.ChronoField.{MICRO_OF_DAY, NANO_OF_DAY}
+import java.time.temporal.ChronoField.NANO_OF_DAY
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit.{MICROSECONDS, NANOSECONDS}
 import java.util.regex.Pattern
@@ -145,18 +145,18 @@ trait SparkDateTimeUtils {
   }
 
   /**
-   * Gets the number of microseconds since midnight using the given time zone.
+   * Gets the number of nanoseconds since midnight using the given time zone.
    */
-  def instantToMicrosOfDay(instant: Instant, timezone: String): Long = {
-    instantToMicrosOfDay(instant, getZoneId(timezone))
+  def instantToNanosOfDay(instant: Instant, timezone: String): Long = {
+    instantToNanosOfDay(instant, getZoneId(timezone))
   }
 
   /**
-   * Gets the number of microseconds since midnight using the given time zone.
+   * Gets the number of nanoseconds since midnight using the given time zone.
    */
-  def instantToMicrosOfDay(instant: Instant, zoneId: ZoneId): Long = {
+  def instantToNanosOfDay(instant: Instant, zoneId: ZoneId): Long = {
     val localDateTime = LocalDateTime.ofInstant(instant, zoneId)
-    localDateTime.toLocalTime.getLong(MICRO_OF_DAY)
+    localDateTime.toLocalTime.getLong(NANO_OF_DAY)
   }
 
   /**
