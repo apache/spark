@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, instantToMicros, localDateTimeToMicros}
-import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.{instantToMicrosOfDay, truncateTimeMicrosToPrecision}
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.{instantToMicrosOfDay, truncateTimeToPrecision}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types._
@@ -132,7 +132,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
                 DateTimeUtils.microsToDays(currentTimestampMicros, cd.zoneId), DateType)
             })
           case currentTimeType : CurrentTime =>
-            val truncatedTime = truncateTimeMicrosToPrecision(currentTimeOfDayMicros,
+            val truncatedTime = truncateTimeToPrecision(currentTimeOfDayMicros,
               currentTimeType.precision)
             Literal.create(truncatedTime, TimeType(currentTimeType.precision))
           case CurrentTimestamp() | Now() => currentTime
