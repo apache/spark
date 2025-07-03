@@ -21,11 +21,13 @@ import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproxTopK
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.types._
 
-case class ApproxTopKEstimate(expr: Expression, k: Expression)
+case class ApproxTopKEstimate(state: Expression, k: Expression)
   extends BinaryExpression
   with CodegenFallback
   with ImplicitCastInputTypes {
@@ -36,22 +38,37 @@ case class ApproxTopKEstimate(expr: Expression, k: Expression)
 
   private lazy val itemDataType: DataType = {
     // itemDataType is the type of the "ItemTypeNull" field of the output of ACCUMULATE or COMBINE
-    expr.dataType.asInstanceOf[StructType]("ItemTypeNull").dataType
+    state.dataType.asInstanceOf[StructType]("ItemTypeNull").dataType
   }
 
-  override def left: Expression = expr
+  override def left: Expression = state
 
   override def right: Expression = k
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StructType, IntegerType)
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else if (!k.foldable) {
+      TypeCheckFailure("K must be a constant literal")
+    } else {
+      TypeCheckSuccess
+    }
+  }
+
   override def dataType: DataType = ApproxTopK.getResultDataType(itemDataType)
 
-  override def nullSafeEval(input1: Any, input2: Any): Any = {
-    val dataSketchBytes = input1.asInstanceOf[InternalRow].getBinary(0)
-    val maxItemsTrackedVal = input1.asInstanceOf[InternalRow].getInt(2)
+  override def eval(input: InternalRow): Any = {
+    // null check
     ApproxTopK.checkExpressionNotNull(k, "k")
-    val kVal = input2.asInstanceOf[Int]
+    // eval
+    val stateEval = left.eval(input)
+    val kEval = right.eval(input)
+    val dataSketchBytes = stateEval.asInstanceOf[InternalRow].getBinary(0)
+    val maxItemsTrackedVal = stateEval.asInstanceOf[InternalRow].getInt(2)
+    val kVal = kEval.asInstanceOf[Int]
     ApproxTopK.checkK(kVal)
     ApproxTopK.checkMaxItemsTracked(maxItemsTrackedVal, kVal)
     val itemsSketch = ItemsSketch.getInstance(
@@ -59,10 +76,10 @@ case class ApproxTopKEstimate(expr: Expression, k: Expression)
     ApproxTopK.genEvalResult(itemsSketch, kVal, itemDataType)
   }
 
-  override protected def withNewChildrenInternal(newExpr: Expression, newK: Expression)
-  : Expression = copy(expr = newExpr, k = newK)
+  override protected def withNewChildrenInternal(newState: Expression, newK: Expression)
+  : Expression = copy(state = newState, k = newK)
 
-  override def nullIntolerant: Boolean = false
+  override def nullable: Boolean = false
 
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("approx_top_k_estimate")
