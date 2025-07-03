@@ -498,3 +498,27 @@ select extract(SECOND FROM cast('09:08:01.987654' as time(6)))
 struct<extract(SECOND FROM CAST(09:08:01.987654 AS TIME(6))):decimal(8,6)>
 -- !query output
 1.987654
+
+
+-- !query
+SELECT cast(cast('12:00' as time(0)) as time(2))
+-- !query schema
+struct<CAST(CAST(12:00 AS TIME(0)) AS TIME(2)):time(2)>
+-- !query output
+12:00:00
+
+
+-- !query
+SELECT cast(('23:59:59.001001' :: time(6)) as time(4))
+-- !query schema
+struct<CAST(CAST(23:59:59.001001 AS TIME(6)) AS TIME(4)):time(4)>
+-- !query output
+23:59:59.001
+
+
+-- !query
+SELECT cast(time'11:59:59.999999' as time without time zone)
+-- !query schema
+struct<CAST(TIME '11:59:59.999999' AS TIME(6)):time(6)>
+-- !query output
+11:59:59.999999
