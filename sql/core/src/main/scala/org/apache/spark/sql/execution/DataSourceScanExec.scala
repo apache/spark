@@ -189,8 +189,8 @@ case class RowDataSourceScanExec(
       seqToString(markedFilters.toSeq)
     }
 
-    val pushedJoins = if (pushedDownOperators.pushedJoins.nonEmpty) {
-      Map("PushedJoins" -> seqToString(pushedDownOperators.pushedJoins))
+    val pushedJoins = if (pushedDownOperators.joinedRelations.length > 1) {
+      Map("PushedJoins" -> seqToString(pushedDownOperators.joinedRelations))
     } else {
       Map()
     }

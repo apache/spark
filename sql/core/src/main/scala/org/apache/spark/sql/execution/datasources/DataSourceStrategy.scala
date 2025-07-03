@@ -48,7 +48,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsRead, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation}
-import org.apache.spark.sql.connector.join.{Inner => V2Inner, JoinType => V2JoinType}
+import org.apache.spark.sql.connector.join.{JoinType => V2JoinType}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
@@ -512,7 +512,7 @@ object DataSourceStrategy
 
   def translateJoinType(joinType: JoinType): Option[V2JoinType] = {
     joinType match {
-      case Inner => Some(new V2Inner)
+      case Inner => Some(V2JoinType.INNER_JOIN)
       case _ => None
     }
   }

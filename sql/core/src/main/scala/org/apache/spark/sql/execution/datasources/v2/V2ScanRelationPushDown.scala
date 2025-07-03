@@ -18,11 +18,10 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
-import scala.jdk.OptionConverters._
 
 import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, GROUP_BY_EXPRS, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
 import org.apache.spark.internal.MDC
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, ExprId, IntegerLiteral, JoinColumnReference, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
@@ -62,10 +61,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   private def createScanBuilder(plan: LogicalPlan) = plan.transform {
     case r: DataSourceV2Relation =>
       val sHolder = ScanBuilderHolder(r.output, r, r.table.asReadable.newScanBuilder(r.options))
-      sHolder.output.foreach{ e =>
-        // join column names change when joins are pushed down. At the end, we need to keep
-        // original names of the plan, so we are storing original names for each of the exprIDs.
-        sHolder.exprIdToOriginalName.put(e.exprId, e.name)
+      sHolder.output.foreach { e =>
+        // Join column names can change when joins are pushed down. We need to keep track of the
+        // up-to-date column name in case connector do some duplicate resolving by aliasing the
+        // columns. ScanBuilderHolder.output will be left unchanged.
+        sHolder.pushedJoinOutputMap = sHolder.pushedJoinOutputMap + (e, e)
       }
 
       sHolder
@@ -138,73 +138,81 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       joinType,
       condition,
     _) if conf.dataSourceV2JoinPushdown &&
-      // TODO: I think projections will always be Seq[AttributeReference] because
-      // When
-      // SELECT tbl1.col+2, tbl2.* FROM tbl1 JOIN tlb2
-      // is executed, col is pruned down, but col + 2 will be projected on top of join.
+      // We do not support pushing down anything besides AttributeReference.
       leftProjections.forall(_.isInstanceOf[AttributeReference]) &&
       rightProjections.forall(_.isInstanceOf[AttributeReference]) &&
-      lBuilder.isRightSideCompatibleForJoin(rBuilder) =>
-      val normalizedLeftProjections = DataSourceStrategy.normalizeExprs(
-        leftProjections,
-        leftHolder.output
-      ).asInstanceOf[Seq[AttributeReference]]
-      val leftRequiredSchema = fromAttributes(normalizedLeftProjections)
+      // Cross joins are not supported because they increase the amount of data.
+      condition.isDefined &&
+      // Joins on top of sampled tables are not supported
+      leftHolder.pushedSample.isEmpty &&
+      rightHolder.pushedSample.isEmpty &&
+      lBuilder.isOtherSideCompatibleForJoin(rBuilder) =>
 
-      val normalizedRightProjections = DataSourceStrategy.normalizeExprs(
-        rightProjections,
-        rightHolder.output
-      ).asInstanceOf[Seq[AttributeReference]]
-      val rightRequiredSchema = fromAttributes(normalizedRightProjections)
+      // projections' names are maybe not up to date if the joins has previously been pushed down.
+      // For this reason, we need to use pushedJoinOutputMap to get up to date names.
+      //
+      // Normalized projections are then converted to StructType.
+      def getRequiredSchema(
+          projections: Seq[NamedExpression],
+          sHolder: ScanBuilderHolder): StructType = {
+        val normalizedProjections = DataSourceStrategy.normalizeExprs(
+          projections,
+          sHolder.output.map { a =>
+            sHolder.pushedJoinOutputMap.getOrElse(a, a).asInstanceOf[AttributeReference]
+          }
+        ).asInstanceOf[Seq[AttributeReference]]
 
+        fromAttributes(normalizedProjections)
+      }
+
+      val leftSideRequiredSchema = getRequiredSchema(leftProjections, leftHolder)
+      val rightSideRequiredSchema = getRequiredSchema(rightProjections, rightHolder)
+
+      val joinSchema =
+        lBuilder.getJoinedSchema(rBuilder, leftSideRequiredSchema, rightSideRequiredSchema)
+
+      assert(joinSchema.length == node.output.length,
+        "The data source returns unexpected number of columns")
+      assert(joinSchema.fields.zip(node.output).forall { case (a1, a2) =>
+        a1.dataType.sameType(a2.dataType)
+      }, "The data source returned column with different data type")
+
+      var pushedJoinOutputMap = AttributeMap.empty[Expression]
+      node.output.asInstanceOf[Seq[AttributeReference]]
+        .zip(joinSchema.fields)
+        .map { case (attr, schemaField) =>
+          pushedJoinOutputMap = pushedJoinOutputMap + (attr, attr.withName(schemaField.name))
+        }
+
+      // Reuse the previously calculated map to update the condition with attributes
+      // with up-to-date names
       val normalizedCondition = condition.map { e =>
         DataSourceStrategy.normalizeExprs(
           Seq(e),
-          leftHolder.output ++ rightHolder.output
+          node.output.map { a =>
+            pushedJoinOutputMap.getOrElse(a, a).asInstanceOf[AttributeReference]
+          }
         ).head
       }
 
-      val conditionWithJoinColumns = normalizedCondition.map { cond =>
-        cond.transformUp {
-          case a: AttributeReference =>
-            val isInLeftSide = leftProjections.filter(_.exprId == a.exprId).nonEmpty
-            JoinColumnReference(a, isInLeftSide)
-        }
-      }
-
       val translatedCondition =
-        conditionWithJoinColumns.flatMap(DataSourceV2Strategy.translateFilterV2(_))
+        normalizedCondition.flatMap(DataSourceV2Strategy.translateFilterV2(_))
       val translatedJoinType = DataSourceStrategy.translateJoinType(joinType)
 
-      if (translatedCondition.isDefined == condition.isDefined &&
-        translatedJoinType.isDefined &&
-        lBuilder.pushJoin(
+      if (translatedJoinType.isDefined &&
+        translatedCondition.isDefined &&
+        lBuilder.pushDownJoin(
           rBuilder,
+          joinSchema,
           translatedJoinType.get,
-          translatedCondition.toJava,
-          leftRequiredSchema,
-          rightRequiredSchema
+          translatedCondition.get
         )) {
-        leftHolder.joinedRelations =
-          leftHolder.joinedRelations :+ rightHolder.relation :+ rightHolder.relation
-        leftHolder.pushedPredicates = leftHolder.pushedPredicates :+ rightHolder.pushedPredicates
+        leftHolder.joinedRelations = leftHolder.joinedRelations ++ rightHolder.joinedRelations
+        leftHolder.pushedPredicates = leftHolder.pushedPredicates ++ rightHolder.pushedPredicates
 
-        val joinOutputSchema = lBuilder.getOutputSchema
+        leftHolder.output = node.output.asInstanceOf[Seq[AttributeReference]]
+        leftHolder.pushedJoinOutputMap = pushedJoinOutputMap
 
-        assert(joinOutputSchema.length == node.output.length,
-          "The data source returns unexpected number of columns")
-        assert(joinOutputSchema.fields.zip(node.output).forall { case (a1, a2) =>
-          a1.dataType.sameType(a2.dataType)
-        })
-
-        val newOutput = node.output.asInstanceOf[Seq[AttributeReference]]
-          .zip(joinOutputSchema.fields)
-          .map { case (attr, schemaField) =>
-            attr.withName(schemaField.name)
-          }
-
-        leftHolder.exprIdToOriginalName ++= rightHolder.exprIdToOriginalName
-        leftHolder.output = newOutput
         leftHolder
       } else {
         node
@@ -226,19 +234,28 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
       val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
       val aggregates = collectAggregates(actualResultExprs, aggExprToOutputOrdinal)
-      val normalizedAggExprs = if (holder.joinedRelations.nonEmpty) {
-        DataSourceStrategy.normalizeExprs(aggregates, holder.output)
-          .asInstanceOf[Seq[AggregateExpression]]
-      } else {
+      val normalizedAggExprs = if (holder.joinedRelations.length == 1) {
         DataSourceStrategy.normalizeExprs(aggregates, holder.relation.output)
           .asInstanceOf[Seq[AggregateExpression]]
-      }
-      val normalizedGroupingExpr =
-        if (holder.joinedRelations.nonEmpty) {
-          DataSourceStrategy.normalizeExprs(actualGroupExprs, holder.output)
-        } else {
-          DataSourceStrategy.normalizeExprs(actualGroupExprs, holder.relation.output)
+      } else {
+        // holder.output's names are not up to date if the joins has previously been pushed down.
+        // For this reason, we need to use pushedJoinOutputMap to get up to date names.
+        val outputWithUpToDateNames = holder.output.map { a =>
+          holder.pushedJoinOutputMap.getOrElse(a, a).asInstanceOf[AttributeReference]
         }
+        DataSourceStrategy.normalizeExprs(aggregates, outputWithUpToDateNames)
+          .asInstanceOf[Seq[AggregateExpression]]
+      }
+      val normalizedGroupingExpr = if (holder.joinedRelations.length == 1) {
+        DataSourceStrategy.normalizeExprs(actualGroupExprs, holder.relation.output)
+      } else {
+        // holder.output's names are not up to date if the joins has previously been pushed down.
+        // For this reason, we need to use pushedJoinOutputMap to get up to date names.
+        val outputWithUpToDateNames = holder.output.map { a =>
+          holder.pushedJoinOutputMap.getOrElse(a, a).asInstanceOf[AttributeReference]
+        }
+        DataSourceStrategy.normalizeExprs(actualGroupExprs, outputWithUpToDateNames)
+      }
       val translatedAggOpt = DataSourceStrategy.translateAggregation(
         normalizedAggExprs, normalizedGroupingExpr)
       if (translatedAggOpt.isEmpty) {
@@ -479,7 +496,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def buildScanWithPushedJoin(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case holder: ScanBuilderHolder if holder.joinedRelations.nonEmpty && !holder.isStreaming =>
+    case holder: ScanBuilderHolder if holder.joinedRelations.length > 1 && !holder.isStreaming =>
       val scan = holder.builder.build()
       val realOutput = toAttributes(scan.readSchema())
       assert(realOutput.length == holder.output.length,
@@ -492,8 +509,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // We should revert these names back to original names. For example,
       // SALARY#0, NAME#1, DEPT#1. This is done by adding projection with appropriate aliases.
       val projectList = realOutput.zip(holder.output).map { case (a1, a2) =>
-        val originalName = holder.exprIdToOriginalName(a2.exprId)
-        Alias(a1, originalName)(a2.exprId)
+        Alias(a1, a2.name)(a2.exprId)
       }
       Project(projectList, scanRelation)
   }
@@ -583,12 +599,17 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         aliasReplacedOrder.asInstanceOf[Seq[SortOrder]]
       }
-      val normalizedOrders = if (sHolder.joinedRelations.nonEmpty) {
-        DataSourceStrategy.normalizeExprs(
-          newOrder, sHolder.output).asInstanceOf[Seq[SortOrder]]
-      } else {
+      val normalizedOrders = if (sHolder.joinedRelations.length == 1) {
         DataSourceStrategy.normalizeExprs(
           newOrder, sHolder.relation.output).asInstanceOf[Seq[SortOrder]]
+      } else {
+        // holder.output's names are not up to date if the joins has previously been pushed down.
+        // For this reason, we need to use pushedJoinOutputMap to get up to date names.
+        val outputWithUpToDateNames = sHolder.output.map { a =>
+          sHolder.pushedJoinOutputMap.getOrElse(a, a).asInstanceOf[AttributeReference]
+        }
+        DataSourceStrategy.normalizeExprs(
+          newOrder, outputWithUpToDateNames).asInstanceOf[Seq[SortOrder]]
       }
       val orders = DataSourceStrategy.translateSortOrders(normalizedOrders)
       if (orders.length == order.length) {
@@ -722,10 +743,9 @@ case class ScanBuilderHolder(
 
   var pushedAggOutputMap: AttributeMap[Expression] = AttributeMap.empty[Expression]
 
-  var joinedRelations: Seq[DataSourceV2RelationBase] = Seq()
+  var joinedRelations: Seq[DataSourceV2RelationBase] = Seq(relation)
 
-  var exprIdToOriginalName: scala.collection.mutable.Map[ExprId, String] =
-    scala.collection.mutable.Map.empty[ExprId, String]
+  var pushedJoinOutputMap: AttributeMap[Expression] = AttributeMap.empty[Expression]
 }
 
 // A wrapper for v1 scan to carry the translated filters and the handled ones, along with

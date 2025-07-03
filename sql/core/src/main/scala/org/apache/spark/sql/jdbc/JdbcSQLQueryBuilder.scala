@@ -91,6 +91,14 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
     this
   }
 
+  def withAliasedColumns(columns: Array[String], aliases: Array[String]): JdbcSQLQueryBuilder = {
+    if (columns.nonEmpty) {
+      columnList = columns.zip(aliases).map {
+        case (column, alias) => s"$column AS $alias"}.mkString(",")
+    }
+    this
+  }
+
   /**
    * Constructs the WHERE clause that following dialect's SQL syntax.
    */

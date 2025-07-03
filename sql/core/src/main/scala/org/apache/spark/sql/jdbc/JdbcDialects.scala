@@ -43,8 +43,7 @@ import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.join.{JoinColumn, JoinType}
-import org.apache.spark.sql.connector.util.{JoinTypeSQLBuilder, V2ExpressionSQLBuilder}
+import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
@@ -379,9 +378,7 @@ abstract class JdbcDialect extends Serializable with Logging {
     case _ => value
   }
 
-  private[jdbc] class JDBCSQLBuilder(
-    leftSideQualifier: Option[String] = None,
-    rightSideQualifier: Option[String] = None) extends V2ExpressionSQLBuilder with Serializable {
+  private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
     // Some dialects do not support boolean type and this convenient util function is
     // provided to generate SQL string without boolean values.
     protected def inputToSQLNoBool(input: Expression): String = input match {
@@ -406,15 +403,6 @@ abstract class JdbcDialect extends Serializable with Logging {
           "Filter push down", namedRef.toString)
       }
       quoteIdentifier(namedRef.fieldNames.head)
-    }
-
-    override def visitJoinColumn(column: JoinColumn): String = {
-      val qualifierOpt = if (column.isInLeftSideOfJoin) {
-        leftSideQualifier
-      } else {
-        rightSideQualifier
-      }
-      (qualifierOpt.toSeq ++ column.fieldNames).map(quoteIdentifier(_)).mkString(".")
     }
 
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
@@ -503,8 +491,6 @@ abstract class JdbcDialect extends Serializable with Logging {
     }
   }
 
-  private[jdbc] class JDBCJoinTypeSQLBuilder extends JoinTypeSQLBuilder {}
-
   /**
    * Returns whether the database supports function.
    * @param funcName Upper-cased function name
@@ -526,41 +512,6 @@ abstract class JdbcDialect extends Serializable with Logging {
     } catch {
       case NonFatal(e) =>
         logWarning("Error occurs while compiling V2 expression", e)
-        None
-    }
-  }
-
-  /**
-   * Converts V2 expression to String representing a SQL expression.
-   * Difference between this method and compileExpression is that this method
-   * accepts left and right side qualifiers needed for translating JoinColumn.
-   * @param expr The V2 expression to be converted.
-   * @return Converted value.
-   */
-  @Since("4.0.0")
-  def compileExpressionWithJoinColumnSupported(
-    expr: Expression,
-    leftSideQualifier: Option[String] = None,
-    rightSideQualifier: Option[String] = None)
-  : Option[String] = {
-    val jdbcSQLBuilder = new JDBCSQLBuilder(leftSideQualifier, rightSideQualifier)
-    try {
-      Some(jdbcSQLBuilder.build(expr))
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Error occurs while compiling V2 expression", e)
-        None
-    }
-  }
-
-  @Since("4.0.0")
-  def compileJoinType(joinType: JoinType): Option[String] = {
-    val joinTypeBuilder = new JDBCJoinTypeSQLBuilder()
-    try {
-      Some(joinTypeBuilder.build(joinType))
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Error occurs while compiling join type ", e)
         None
     }
   }
@@ -906,16 +857,6 @@ abstract class JdbcDialect extends Serializable with Logging {
    * Returns true if dialect supports JOIN operator.
    */
   def supportsJoin: Boolean = false
-
-  /**
-   * If true, left/right subquery of JOIN needs to have AS keywords before alias.
-   * For example,
-   * SELECT * FROM (subquery1) AS alias1 JOIN ...
-   *
-   * If false, SQL query wouldn't have AS keyword, so the query would look like
-   * SELECT * FROM (subquery1) alias1 JOIN ...
-   */
-  def needsASKeywordForJoinSubquery: Boolean = true
 
   /**
    * Return the DB-specific quoted and fully qualified table name
