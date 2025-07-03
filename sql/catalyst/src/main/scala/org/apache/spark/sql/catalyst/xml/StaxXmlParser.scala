@@ -1093,7 +1093,9 @@ object StaxXmlParser {
   def parseVariant(xml: String, options: XmlOptions): VariantVal = {
     val parser = StaxXmlParserUtils.filteredReader(xml)
     val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-    parseVariant(parser, rootAttributes, options)
+    val v = parseVariant(parser, rootAttributes, options)
+    parser.close()
+    new VariantVal(v.getValue, v.getMetadata)
   }
 
   def parseVariant(
