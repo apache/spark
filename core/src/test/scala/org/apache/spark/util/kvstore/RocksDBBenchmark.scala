@@ -20,12 +20,14 @@ package org.apache.spark.util.kvstore
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.beans.BeanProperty
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+
 
 /**
  * Benchmark suite for the KVStore implemented based on RocksDB.
@@ -129,9 +131,7 @@ object RocksDBBenchmark extends BenchmarkBase {
       try {
         setupDB()
         val entries = createIndexedType()
-        // First write
         entries.foreach(db.write)
-        // Then delete
         indexDelete(entries, timer)
       } finally {
         cleanupDB()
@@ -142,9 +142,7 @@ object RocksDBBenchmark extends BenchmarkBase {
       try {
         setupDB()
         val entries = createSimpleType()
-        // First write
         entries.foreach(db.write)
-        // Then delete
         noIndexDelete(entries, timer)
       } finally {
         cleanupDB()
@@ -161,9 +159,7 @@ object RocksDBBenchmark extends BenchmarkBase {
       try {
         setupDB()
         val entries = createIndexedType()
-        // First write
         entries.foreach(db.write)
-        // Then update
         indexUpdate(entries, timer)
       } finally {
         cleanupDB()
@@ -174,9 +170,7 @@ object RocksDBBenchmark extends BenchmarkBase {
       try {
         setupDB()
         val entries = createSimpleType()
-        // First write
         entries.foreach(db.write)
-        // Then update
         noIndexUpdate(entries, timer)
       } finally {
         cleanupDB()
@@ -220,9 +214,7 @@ object RocksDBBenchmark extends BenchmarkBase {
       try {
         setupDB()
         val entries = createIndexedType()
-        // First write
         entries.foreach(db.write)
-        // Shuffle and delete
         val shuffled = Random.shuffle(entries)
         indexDelete(shuffled, timer)
       } finally {
@@ -234,9 +226,7 @@ object RocksDBBenchmark extends BenchmarkBase {
       try {
         setupDB()
         val entries = createSimpleType()
-        // First write
         entries.foreach(db.write)
-        // Shuffle and delete
         val shuffled = Random.shuffle(entries)
         noIndexDelete(shuffled, timer)
       } finally {
@@ -254,9 +244,7 @@ object RocksDBBenchmark extends BenchmarkBase {
       try {
         setupDB()
         val entries = createIndexedType()
-        // First write
         entries.foreach(db.write)
-        // Shuffle and update
         val shuffled = Random.shuffle(entries)
         indexUpdate(shuffled, timer)
       } finally {
@@ -268,9 +256,7 @@ object RocksDBBenchmark extends BenchmarkBase {
       try {
         setupDB()
         val entries = createSimpleType()
-        // First write
         entries.foreach(db.write)
-        // Shuffle and update
         val shuffled = Random.shuffle(entries)
         noIndexUpdate(shuffled, timer)
       } finally {
@@ -549,4 +535,14 @@ object RocksDBBenchmark extends BenchmarkBase {
       timer.stopTiming()
     }
   }
+}
+
+private class SimpleType {
+  @KVIndex var key = 0
+  var name: String = _
+}
+
+private class IndexedType {
+  @KVIndex var key = 0
+  @KVIndex("name") @BeanProperty var name: String = _
 }
