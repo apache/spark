@@ -501,8 +501,6 @@ abstract class InMemoryBaseTable(
       options: CaseInsensitiveStringMap)
     extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
 
-    var setFilters = Array.empty[Filter]
-
     override def reportDriverMetrics(): Array[CustomTaskMetric] =
       Array(new CustomTaskMetric{
         override def name(): String = "numSplits"
@@ -526,7 +524,6 @@ abstract class InMemoryBaseTable(
     }
 
     override def filter(filters: Array[Filter]): Unit = {
-      this.setFilters = filters
       if (partitioning.length == 1 && partitioning.head.references().length == 1) {
         val ref = partitioning.head.references().head
         filters.foreach {
@@ -598,7 +595,7 @@ abstract class InMemoryBaseTable(
 
   protected abstract class TestBatchWrite extends BatchWrite {
 
-    var commitProperties: mutable.Map[String, String] = mutable.Map.empty[String, String]
+    val commitProperties: mutable.Map[String, String] = mutable.Map.empty[String, String]
 
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
       BufferedRowsWriterFactory

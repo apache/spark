@@ -30,8 +30,8 @@ import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUt
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSERT_OPERATION, REINSERT_OPERATION, UPDATE_OPERATION, WRITE_OPERATION, WRITE_WITH_METADATA_OPERATION}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, RowLevelOperation, Write, WriterCommitMessage}
+import org.apache.spark.sql.connector.metric.{CustomMetric, V2ExecMetric}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, RowLevelOperation, RowLevelOperationTable, Write, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -255,7 +255,8 @@ case class AtomicReplaceTableAsSelectExec(
 case class AppendDataExec(
     query: SparkPlan,
     refreshCache: () => Unit,
-    write: Write) extends V2ExistingTableWriteExec {
+    write: Write,
+    table: Option[Table]) extends V2ExistingTableWriteExec {
   override protected def withNewChildInternal(newChild: SparkPlan): AppendDataExec =
     copy(query = newChild)
 }
@@ -273,7 +274,8 @@ case class AppendDataExec(
 case class OverwriteByExpressionExec(
     query: SparkPlan,
     refreshCache: () => Unit,
-    write: Write) extends V2ExistingTableWriteExec {
+    write: Write,
+    table: Option[Table]) extends V2ExistingTableWriteExec {
   override protected def withNewChildInternal(newChild: SparkPlan): OverwriteByExpressionExec =
     copy(query = newChild)
 }
@@ -290,7 +292,8 @@ case class OverwriteByExpressionExec(
 case class OverwritePartitionsDynamicExec(
     query: SparkPlan,
     refreshCache: () => Unit,
-    write: Write) extends V2ExistingTableWriteExec {
+    write: Write,
+    table: Option[Table]) extends V2ExistingTableWriteExec {
   override protected def withNewChildInternal(newChild: SparkPlan): OverwritePartitionsDynamicExec =
     copy(query = newChild)
 }
@@ -302,7 +305,8 @@ case class ReplaceDataExec(
     query: SparkPlan,
     refreshCache: () => Unit,
     projections: ReplaceDataProjections,
-    write: Write) extends V2ExistingTableWriteExec {
+    write: Write,
+    table: Option[Table]) extends V2ExistingTableWriteExec {
 
   override val stringArgs: Iterator[Any] = Iterator(query, write)
 
@@ -327,7 +331,8 @@ case class WriteDeltaExec(
     query: SparkPlan,
     refreshCache: () => Unit,
     projections: WriteDeltaProjections,
-    write: DeltaWrite) extends V2ExistingTableWriteExec {
+    write: DeltaWrite,
+    table: Option[Table]) extends V2ExistingTableWriteExec {
 
   override lazy val stringArgs: Iterator[Any] = Iterator(query, write)
 
@@ -348,14 +353,15 @@ case class WriteToDataSourceV2Exec(
     batchWrite: BatchWrite,
     refreshCache: () => Unit,
     query: SparkPlan,
-    writeMetrics: Seq[CustomMetric]) extends V2TableWriteExec {
+    writeMetrics: Seq[CustomMetric],
+    table: Option[Table]) extends V2TableWriteExec {
 
   override val customMetrics: Map[String, SQLMetric] = writeMetrics.map { customMetric =>
     customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
   }.toMap
 
   override protected def run(): Seq[InternalRow] = {
-    val writtenRows = writeWithV2(batchWrite)
+    val writtenRows = writeWithV2(batchWrite, table)
     refreshCache()
     writtenRows
   }
@@ -367,6 +373,7 @@ case class WriteToDataSourceV2Exec(
 trait V2ExistingTableWriteExec extends V2TableWriteExec {
   def refreshCache: () => Unit
   def write: Write
+  def table: Option[Table]
 
   override val customMetrics: Map[String, SQLMetric] =
     write.supportedCustomMetrics().map { customMetric =>
@@ -375,7 +382,7 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec {
 
   override protected def run(): Seq[InternalRow] = {
     val writtenRows = try {
-      writeWithV2(write.toBatch)
+      writeWithV2(write.toBatch, table)
     } finally {
       postDriverMetrics()
     }
@@ -412,7 +419,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
 
   override lazy val metrics = customMetrics
 
-  protected def writeWithV2(batchWrite: BatchWrite): Seq[InternalRow] = {
+  protected def writeWithV2(batchWrite: BatchWrite, table: Option[Table]): Seq[InternalRow] = {
     val rdd: RDD[InternalRow] = {
       val tempRdd = query.execute()
       // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
@@ -422,21 +429,6 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
       } else {
         tempRdd
       }
-    }
-
-    val metricsOpt = batchWrite.requestExecMetrics() match {
-      case RowLevelOperation.Command.MERGE =>
-        collectFirst(query) {
-          case m: MergeRowsExec => m.metrics
-        }
-      case _ => None
-    }
-    metricsOpt.foreach { metrics =>
-      batchWrite.execMetrics(
-        metrics.map {
-          case (k, v) => V2ExecMetric(k, v.value)
-        }.toArray
-      )
     }
 
     // introduce a local var to avoid serializing the whole class
@@ -450,6 +442,8 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
     logInfo(log"Start processing data source write support: " +
       log"${MDC(LogKeys.BATCH_WRITE, batchWrite)}. The input RDD has " +
       log"${MDC(LogKeys.COUNT, messages.length)}} partitions.")
+
+    table.foreach(setWriteMetrics(batchWrite, _))
 
     // Avoid object not serializable issue.
     val writeMetrics: Map[String, SQLMetric] = customMetrics
@@ -490,6 +484,44 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
     }
 
     Nil
+  }
+
+  private def setWriteMetrics(batchWrite: BatchWrite, table: Table): Unit = {
+    val metricsOpt =
+      if (batchWrite.requestExecMetrics()) {
+        table match {
+          case r: RowLevelOperationTable
+            if r.operation.command() == RowLevelOperation.Command.MERGE =>
+            val metrics = collect(query) {
+              case m: MergeRowsExec => m.metrics.map { case (k, v) =>
+                V2ExecMetricImpl("merge", k, v.value.toString)
+              }
+              case scan: BatchScanExec if sameTableScan(r, scan) && scan.runtimeFilters.isEmpty =>
+                scan.scan.reportDriverMetrics().map(m =>
+                  V2ExecMetricImpl("firstScan", m.name, m.value.toString)).toSeq
+              case scan: BatchScanExec if sameTableScan(r, scan) && scan.runtimeFilters.nonEmpty =>
+                scan.scan.reportDriverMetrics().map(m =>
+                  V2ExecMetricImpl("secondScan", m.name, m.value.toString)).toSeq
+              case _ => Nil
+            }.flatten
+            Some(metrics)
+          case _ => None
+        }
+      } else {
+        None
+      }
+    metricsOpt.foreach{metrics => batchWrite.execMetrics(metrics.toArray)}
+  }
+
+  private def sameTableScan(table: Table, scan: BatchScanExec) = {
+    table.name().equalsIgnoreCase(scan.table.name())
+  }
+
+  private case class V2ExecMetricImpl(
+      metricTypeArg: String, nameArg: String, valueArg: String) extends V2ExecMetric {
+    override def metricType(): String = metricTypeArg
+    override def name(): String = nameArg
+    override def value(): String = valueArg
   }
 }
 
@@ -745,5 +777,3 @@ private[v2] case class DataWritingSparkTaskResult(
  * Sink progress information collected after commit.
  */
 private[sql] case class StreamWriterCommitProgress(numOutputRows: Long)
-
-private [v2] case class V2ExecMetric(name: String, value: Long) extends CustomTaskMetric

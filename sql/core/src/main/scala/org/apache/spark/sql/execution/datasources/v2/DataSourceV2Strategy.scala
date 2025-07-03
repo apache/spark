@@ -182,7 +182,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case Some(r) => session.sharedState.cacheManager.uncacheQuery(session, r, cascade = true)
         case None => ()
       }
-      WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics) :: Nil
+      WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics,
+        relationOpt.map(_.table)) :: Nil
 
     case c @ CreateTable(ResolvedIdentifier(catalog, ident), columns, partitioning,
         tableSpec: TableSpec, ifNotExists) =>
@@ -275,7 +276,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case AppendData(r: DataSourceV2Relation, query, _, _, Some(write), _) =>
-      AppendDataExec(planLater(query), refreshCache(r), write) :: Nil
+      AppendDataExec(planLater(query), refreshCache(r), write, Some(r.table)) :: Nil
 
     case OverwriteByExpression(r @ DataSourceV2Relation(v1: SupportsWrite, _, _, _, _), _, _,
         _, _, Some(write), analyzedQuery) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
@@ -290,10 +291,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case OverwriteByExpression(
         r: DataSourceV2Relation, _, query, _, _, Some(write), _) =>
-      OverwriteByExpressionExec(planLater(query), refreshCache(r), write) :: Nil
+      OverwriteByExpressionExec(planLater(query), refreshCache(r), write, Some(r.table)) :: Nil
 
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, _, Some(write)) =>
-      OverwritePartitionsDynamicExec(planLater(query), refreshCache(r), write) :: Nil
+      OverwritePartitionsDynamicExec(planLater(query), refreshCache(r), write, Some(r.table)) :: Nil
 
     case DeleteFromTableWithFilters(r: DataSourceV2Relation, filters) =>
       DeleteFromTableExec(r.table.asDeletable, filters.toArray, refreshCache(r)) :: Nil
@@ -332,15 +333,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           throw SparkException.internalError("Unexpected table relation: " + other)
       }
 
-    case ReplaceData(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections, _,
+    case ReplaceData(o: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections, _,
         Some(write)) =>
       // use the original relation to refresh the cache
-      ReplaceDataExec(planLater(query), refreshCache(r), projections, write) :: Nil
+      ReplaceDataExec(planLater(query), refreshCache(r), projections, write, Some(o.table)) :: Nil
 
-    case WriteDelta(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections,
+    case WriteDelta(o: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections,
         Some(write)) =>
       // use the original relation to refresh the cache
-      WriteDeltaExec(planLater(query), refreshCache(r), projections, write) :: Nil
+      WriteDeltaExec(planLater(query), refreshCache(r), projections, write, Some(o.table)) :: Nil
 
     case MergeRows(isSourceRowPresent, isTargetRowPresent, matchedInstructions,
         notMatchedInstructions, notMatchedBySourceInstructions, checkCardinality, output, child) =>
