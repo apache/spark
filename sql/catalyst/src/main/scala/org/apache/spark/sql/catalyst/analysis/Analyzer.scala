@@ -2937,9 +2937,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         agg: Aggregate,
         aggExprList: ArrayBuffer[NamedExpression]): Expression = {
       // Avoid adding an extra aggregate expression if it's already present in
-      // `agg.aggregateExpressions`.
+      // `agg.aggregateExpressions`. Trim inner aliases from aggregate expressions because of
+      // expressions like `spark_grouping_id` that can have inner aliases.
       val index = agg.aggregateExpressions.indexWhere {
-        case Alias(child, _) => child semanticEquals expr
+        case Alias(child, _) => trimAliases(child) semanticEquals expr
         case other => other semanticEquals expr
       }
       if (index >= 0) {
