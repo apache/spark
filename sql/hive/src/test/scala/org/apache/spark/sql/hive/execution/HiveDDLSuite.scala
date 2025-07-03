@@ -3436,47 +3436,65 @@ class HiveDDLSuite
 
   test("SPARK-52638: Allow preserving Hive-style column order to be configurable") {
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
-    withSQLConf(
-      SQLConf.LEGACY_PRESERVE_HIVE_COLUMN_ORDER.key -> "false"
-    ) {
-      withTable("t1") {
-        val identifier = Identifier.of(Array("default"), "t1")
-        val outputSchema = new StructType()
-          .add("a", IntegerType, true, "comment1")
-          .add("b", IntegerType, true, "comment2")
-          .add("c", IntegerType, true, "comment3")
-          .add("d", IntegerType, true, "comment4")
-        catalog.createTable(
-          identifier,
-          new TableInfo.Builder()
-            .withProperties(Map.empty.asJava)
-            .withColumns(CatalogV2Util.structTypeToV2Columns(outputSchema))
-            .withPartitions(Array(Expressions.identity("a")))
-            .build()
-        )
-        val table1 = catalog.loadTable(identifier)
-        val cols = table1.columns()
-        assert(cols.length == 4)
-        assert(cols(0).name() == "a")
-        assert(cols(1).name() == "b")
-        assert(cols(2).name() == "c")
-        assert(cols(3).name() == "d")
-        assert(table1.properties().get("spark.sql.legacy.preserveHiveColumnOrder") == "false")
+    Seq(true, false).map { preserveOrder => {
+      withSQLConf(SQLConf.LEGACY_PRESERVE_HIVE_COLUMN_ORDER.key -> preserveOrder.toString) {
+        withTable("t1") {
+          val identifier = Identifier.of(Array("default"), "t1")
+          val outputSchema = new StructType()
+            .add("a", IntegerType, true, "comment1")
+            .add("b", IntegerType, true, "comment2")
+            .add("c", IntegerType, true, "comment3")
+            .add("d", IntegerType, true, "comment4")
+          catalog.createTable(
+            identifier,
+            new TableInfo.Builder()
+              .withProperties(Map.empty.asJava)
+              .withColumns(CatalogV2Util.structTypeToV2Columns(outputSchema))
+              .withPartitions(Array(Expressions.identity("a")))
+              .build()
+          )
+          val table1 = catalog.loadTable(identifier)
+          val cols = table1.columns()
 
-        catalog.alterTable(
-          identifier,
-          TableChange.addColumn(Array("e"), IntegerType)
-        )
+          if (preserveOrder) {
+            assert(cols.length == 4)
+            assert(cols(0).name() == "a")
+            assert(cols(1).name() == "b")
+            assert(cols(2).name() == "c")
+            assert(cols(3).name() == "d")
+            assert(table1.properties().get("spark.sql.legacy.preserveHiveColumnOrder") == "false")
+          } else {
+            assert(cols.length == 4)
+            assert(cols(0).name() == "b")
+            assert(cols(1).name() == "c")
+            assert(cols(2).name() == "d")
+            assert(cols(3).name() == "a")
+          }
 
-        val table2 = catalog.loadTable(identifier)
-        val cols2 = table2.columns()
-        assert(cols2.length == 5)
-        assert(cols2(0).name() == "a")
-        assert(cols2(1).name() == "b")
-        assert(cols2(2).name() == "c")
-        assert(cols2(3).name() == "d")
-        assert(cols2(4).name() == "e")
-        assert(table2.properties().get("spark.sql.legacy.preserveHiveColumnOrder") == "false")
+          catalog.alterTable(
+            identifier,
+            TableChange.addColumn(Array("e"), IntegerType)
+          )
+
+          val table2 = catalog.loadTable(identifier)
+          val cols2 = table2.columns()
+          if (preserveOrder) {
+            assert(cols2.length == 5)
+            assert(cols2(0).name() == "a")
+            assert(cols2(1).name() == "b")
+            assert(cols2(2).name() == "c")
+            assert(cols2(3).name() == "d")
+            assert(cols2(4).name() == "e")
+            assert(table2.properties().get("spark.sql.legacy.preserveHiveColumnOrder") == "false")
+          } else {
+            assert(cols2(0).name() == "b")
+            assert(cols2(1).name() == "c")
+            assert(cols2(2).name() == "d")
+            assert(cols2(3).name() == "e")
+            assert(cols2(4).name() == "a")
+          }
+        }
+        }
       }
     }
   }

@@ -847,16 +847,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     if (maybeSchemaFromTableProps.isDefined) {
       val schemaFromTableProps = maybeSchemaFromTableProps.get
       val partColumnNames = getPartitionColumnsFromTableProperties(table)
-      val schema = if (isLegacyColumnOrder(table)) {
-        reorderSchema(schema = schemaFromTableProps, partColumnNames)
-      } else {
-        schemaFromTableProps
-      }
+      val reorderedSchema = reorderSchema(schema = schemaFromTableProps, partColumnNames)
 
-      if (DataTypeUtils.equalsIgnoreCaseNullabilityAndCollation(schema, table.schema) ||
+      if (DataTypeUtils.equalsIgnoreCaseNullabilityAndCollation(reorderedSchema, table.schema) ||
           options.respectSparkSchema) {
         hiveTable.copy(
-          schema = schema,
+          schema = reorderedSchema,
           partitionColumnNames = partColumnNames,
           bucketSpec = getBucketSpecFromTableProperties(table))
       } else {
@@ -1506,12 +1502,12 @@ object HiveExternalCatalog {
   }
 
   // Whether table was created specifying legacy column order
-  // lack of the table property means we prserve legacy column order
+  // lack of the table property means we preserve legacy column order
   private def isLegacyColumnOrder(table: CatalogTable): Boolean = {
     val legacyColumnOrder = table.properties.get(LEGACY_COLUMN_ORDER)
     legacyColumnOrder match {
       case Some(l) if l.equalsIgnoreCase("false") => false
-      case _ => false
+      case _ => true
     }
   }
 }
