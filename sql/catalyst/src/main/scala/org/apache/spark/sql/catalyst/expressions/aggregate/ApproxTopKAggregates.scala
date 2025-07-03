@@ -53,7 +53,7 @@ import org.apache.spark.unsafe.types.UTF8String
   usage = """
     _FUNC_(expr, k, maxItemsTracked) - Returns top k items with their frequency.
       `k` An optional INTEGER literal greater than 0. If k is not specified, it defaults to 5.
-      `maxItemsTracked` An optional INTEGER literal greater than or equal to k. If maxItemsTracked is not specified, it defaults to 10000.
+      `maxItemsTracked` An optional INTEGER literal greater than or equal to k and has upper limit of 1000000. If maxItemsTracked is not specified, it defaults to 10000.
   """,
   examples = """
     Examples:
@@ -337,8 +337,7 @@ object ApproxTopK {
 @ExpressionDescription(
   usage = """
     _FUNC_(expr, maxItemsTracked) - Accumulates items into a sketch.
-      `maxItemsTracked` An optional positive INTEGER literal with upper limit of 1000000.
-      If maxItemsTracked is not specified, it defaults to 10000.
+      `maxItemsTracked` An optional positive INTEGER literal with upper limit of 1000000. If maxItemsTracked is not specified, it defaults to 10000.
   """,
   examples = """
     Examples:
