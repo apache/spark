@@ -50,14 +50,12 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    """
+  usage = """
     _FUNC_(expr, k, maxItemsTracked) - Returns top k items with their frequency.
       `k` An optional INTEGER literal greater than 0. If k is not specified, it defaults to 5.
       `maxItemsTracked` An optional INTEGER literal greater than or equal to k. If maxItemsTracked is not specified, it defaults to 10000.
-    """,
-  examples =
-    """
+  """,
+  examples = """
     Examples:
       > SELECT _FUNC_(expr) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);
        [{"item":0,"count":2},{"item":4,"count":2},{"item":1,"count":2},{"item":2,"count":1},{"item":3,"count":1}]
