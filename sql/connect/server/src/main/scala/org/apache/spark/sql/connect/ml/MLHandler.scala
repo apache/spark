@@ -474,7 +474,7 @@ private[connect] object MLHandler extends Logging {
             s"the current stack trace is:\n$stackTrace\n"
         )
     } finally {
-      handlerExecutionStartTimeMap.remove()
+      handlerExecutionStartTimeMap.remove(threadId)
     }
   }
 
