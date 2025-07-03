@@ -24,7 +24,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark wi
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20250624
+ENV FULL_REFRESH_DATE=20250703
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -62,7 +62,7 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev
 
 
-ARG BASIC_PIP_PKGS="numpy==1.21 pyarrow==11.0.0 pandas==2.0.3 six==1.16.0 scipy scikit-learn coverage unittest-xml-reporting"
+ARG BASIC_PIP_PKGS="numpy==1.21 pyarrow==11.0.0 pandas==2.2.0 six==1.16.0 scipy scikit-learn coverage unittest-xml-reporting"
 # Python deps for Spark Connect
 ARG CONNECT_PIP_PKGS="grpcio==1.67.0 grpcio-status==1.67.0 googleapis-common-protos==1.65.0 graphviz==0.20 protobuf"
 
