@@ -321,6 +321,36 @@ object ApproxTopK {
         StructField("MaxItemsTracked", IntegerType, nullable = false) :: Nil)
 }
 
+/**
+ * An aggregate function that accumulates items into a sketch, which can then be used
+ * to combine with other sketches, via ApproxTopKCombine,
+ * or to estimate the top K items, via ApproxTopKEstimate.
+ *
+ * The output of this function is a struct containing the sketch in binary format,
+ * a null object indicating the type of items in the sketch,
+ * and the maximum number of items tracked by the sketch.
+ *
+ * @param expr            the child expression to accumulate items from
+ * @param maxItemsTracked the maximum number of items to track in the sketch
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr, maxItemsTracked) - Accumulates items into a sketch.
+      `maxItemsTracked` An optional positive INTEGER literal with upper limit of 1000000.
+      If maxItemsTracked is not specified, it defaults to 10000.
+  """,
+  examples = """
+    Examples:
+      > SELECT approx_top_k_accumulate(_FUNC_(expr)) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);
+       [{"item":0,"count":2},{"item":4,"count":2},{"item":1,"count":2},{"item":2,"count":1},{"item":3,"count":1}]
+
+      > SELECT approx_top_k_accumulate(_FUNC_(expr, 100), 2) FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);
+       [{"item":"c","count":4},{"item":"d","count":2}]
+  """,
+  group = "agg_funcs",
+  since = "4.1.0")
+// scalastyle:on line.size.limit
 case class ApproxTopKAccumulate(
     expr: Expression,
     maxItemsTracked: Expression,
