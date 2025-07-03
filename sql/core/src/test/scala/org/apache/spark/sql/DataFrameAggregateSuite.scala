@@ -26,8 +26,8 @@ import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Abs, BoundReference, Literal}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{ApproxTopK, Sum}
+import org.apache.spark.sql.catalyst.expressions.{Abs, ApproxTopKEstimate, BoundReference, Literal}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{ApproxTopK, ApproxTopKAccumulate, Sum}
 import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -2965,15 +2965,44 @@ class DataFrameAggregateSuite extends QueryTest
       Row(new java.math.BigDecimal("1.000"), 2))))
   }
 
-  test("SPARK-52588: invalid estimate if k > maxItemsTracked") {
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        sql("SELECT approx_top_k_estimate(approx_top_k_accumulate(expr, 5), 10) " +
-          "FROM VALUES 0, 1, 2 AS tab(expr);").collect()
-      },
-      condition = "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K",
-      parameters = Map("maxItemsTracked" -> "5", "k" -> "10")
+  test("SPARK-52588type: invalid accumulate if item type is not supported") {
+    Seq(
+      ArrayType(IntegerType),
+      MapType(StringType, IntegerType),
+      StructType(Seq(StructField("a", IntegerType), StructField("b", StringType))),
+      BinaryType
+    ).foreach {
+      unsupportedType =>
+        val badAccumulate = ApproxTopKAccumulate(
+          expr = BoundReference(0, unsupportedType, nullable = true),
+          maxItemsTracked = Literal(10)
+        )
+        assert(badAccumulate.checkInputDataTypes().isFailure)
+    }
+  }
+
+  test("SPARK-52588: invalid accumulate if maxItemsTracked are not foldable") {
+    val badAccumulate = ApproxTopKAccumulate(
+      expr = BoundReference(0, LongType, nullable = true),
+      maxItemsTracked = Sum(BoundReference(1, LongType, nullable = true))
     )
+    assert(badAccumulate.checkInputDataTypes().isFailure)
+  }
+
+  test("SPARK-52588: invalid accumulate if maxItemsTracked less than or equal to 0") {
+    Seq(0, -1).foreach { invalidInput =>
+      val badAccumulate = ApproxTopKAccumulate(
+        expr = BoundReference(0, LongType, nullable = true),
+        maxItemsTracked = Literal(invalidInput)
+      )
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          badAccumulate.createAggregationBuffer()
+        },
+        condition = "APPROX_TOP_K_NON_POSITIVE_ARG",
+        parameters = Map("argName" -> "`maxItemsTracked`", "argValue" -> invalidInput.toString)
+      )
+    }
   }
 
   test("SPARK-52588: invalid accumulate if maxItemsTracked is null") {
@@ -2987,6 +3016,14 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("SPARK-52588: invalid estimate if k are not foldable") {
+    val badEstimate = ApproxTopKEstimate(
+      state = BoundReference(0, LongType, nullable = false),
+      k = Sum(BoundReference(1, LongType, nullable = true))
+    )
+    assert(badEstimate.checkInputDataTypes().isFailure)
+  }
+
   test("SPARK-52588: invalid estimate if k is null") {
     checkError(
       exception = intercept[SparkRuntimeException] {
@@ -2995,6 +3032,17 @@ class DataFrameAggregateSuite extends QueryTest
       },
       condition = "APPROX_TOP_K_NULL_ARG",
       parameters = Map("argName" -> "`k`")
+    )
+  }
+
+  test("SPARK-52588: invalid estimate if k > maxItemsTracked") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT approx_top_k_estimate(approx_top_k_accumulate(expr, 5), 10) " +
+          "FROM VALUES 0, 1, 2 AS tab(expr);").collect()
+      },
+      condition = "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K",
+      parameters = Map("maxItemsTracked" -> "5", "k" -> "10")
     )
   }
 
