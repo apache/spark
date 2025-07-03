@@ -173,6 +173,83 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
   }
 
+  def inferOptimized(xml: RDD[XMLEventReader]): StructType = {
+    val schemaData = if (options.samplingRatio < 1.0) {
+      xml.sample(withReplacement = false, options.samplingRatio, 1)
+    } else {
+      xml
+    }
+    // perform schema inference on each row and merge afterwards
+    val mergedTypesFromPartitions = schemaData.mapPartitions { iter =>
+      iter.flatMap { xml =>
+        infer(xml)
+      }.reduceOption(compatibleType(caseSensitive, options.valueTag)).iterator
+    }
+
+    // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running
+    // the fold functions in the scheduler event loop thread.
+    val existingConf = SQLConf.get
+    var rootType: DataType = StructType(Nil)
+    val foldPartition = (iter: Iterator[DataType]) =>
+      iter.fold(StructType(Nil))(compatibleType(caseSensitive, options.valueTag))
+    val mergeResult = (index: Int, taskResult: DataType) => {
+      rootType = SQLConf.withExistingConf(existingConf) {
+        compatibleType(caseSensitive, options.valueTag)(rootType, taskResult)
+      }
+    }
+    xml.sparkContext.runJob(mergedTypesFromPartitions, foldPartition, mergeResult)
+
+    canonicalizeType(rootType) match {
+      case Some(st: StructType) => st
+      case _ =>
+        // canonicalizeType erases all empty structs, including the only one we want to keep
+        // XML shouldn't run into this line
+        StructType(Seq())
+    }
+  }
+
+  def infer(parser: XMLEventReader): Option[DataType] = {
+    try {
+      if (parser.hasNext) {
+        parser.nextEvent() match {
+          case s: StartElement =>
+            val rootAttributes = s.getAttributes.asScala.toArray
+            val schema = Some(inferObject(parser, rootAttributes))
+            schema
+          case _ =>
+            None
+        }
+      } else {
+        None
+      }
+    } catch {
+      case e @ (_: XMLStreamException | _: MalformedInputException | _: SAXException) =>
+        parser.close()
+        handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
+      case e: CharConversionException if options.charset.isEmpty =>
+        val msg =
+          """XML parser cannot handle a character in its input.
+            |Specifying encoding as an input option explicitly might help to resolve the issue.
+            |""".stripMargin + e.getMessage
+        val wrappedCharException = new CharConversionException(msg)
+        wrappedCharException.initCause(e)
+        handleXmlErrorsByParseMode(
+          options.parseMode,
+          options.columnNameOfCorruptRecord,
+          wrappedCharException)
+      case e: FileNotFoundException if options.ignoreMissingFiles =>
+        logWarning("Skipped missing file", e)
+        Some(StructType(Nil))
+      case e: FileNotFoundException if !options.ignoreMissingFiles => throw e
+      case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
+      case e @ (_: IOException | _: RuntimeException) if options.ignoreCorruptFiles =>
+        logWarning("Skipped the rest of the content in the corrupted file", e)
+        Some(StructType(Nil))
+      case NonFatal(e) =>
+        handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
+    }
+  }
+
   private def inferFrom(datum: String): DataType = {
     val value = if (datum != null && options.ignoreSurroundingSpaces) {
       datum.trim()

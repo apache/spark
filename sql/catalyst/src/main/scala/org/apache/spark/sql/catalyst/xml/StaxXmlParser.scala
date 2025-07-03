@@ -200,17 +200,8 @@ class StaxXmlParser(
     )
 
     val xmlTokenizer = new OptimizedXmlTokenizer(inputStream, options)
-    new Iterator[Iterator[InternalRow]] {
-      private var nextRecord = xmlTokenizer.next()
-      override def hasNext: Boolean = nextRecord.nonEmpty
-      override def next(): Iterator[InternalRow] = {
-        if (!hasNext) {
-          throw QueryExecutionErrors.endOfStreamError()
-        }
-        val curRecord = safeParser.parse(nextRecord.get)
-        nextRecord = xmlTokenizer.next()
-        curRecord
-      }
+    StaxXmlParser.convertStream(xmlTokenizer) { tokens =>
+      safeParser.parse(tokens)
     }.flatten
   }
 
@@ -722,6 +713,14 @@ class StaxXmlParser(
   }
 }
 
+trait XmlTokenizerBase[T] extends Logging {
+  /**
+   * Finds the next XML record in the stream.
+   * @return an Option containing the next XML record as a String, or None if no more records
+   */
+  def next(): Option[T]
+}
+
 /**
  * XMLRecordReader class to read through a given xml document to output xml blocks as records
  * as specified by the start tag and end tag.
@@ -730,7 +729,7 @@ class StaxXmlParser(
  */
 class XmlTokenizer(
   inputStream: InputStream,
-  options: XmlOptions) extends Logging {
+  options: XmlOptions) extends XmlTokenizerBase[String] {
   private var reader = new BufferedReader(
     new InputStreamReader(inputStream, Charset.forName(options.charset)))
   private var currentStartTag: String = _
@@ -750,7 +749,7 @@ class XmlTokenizer(
    * @param value  the object that will be written
    * @return whether it reads successfully
    */
-    def next(): Option[String] = {
+    override def next(): Option[String] = {
       var nextString: Option[String] = None
       try {
         if (readUntilStartElement()) {
@@ -989,14 +988,15 @@ class XmlTokenizer(
  * - Never buffers complete XML records in memory
  * - Allows the parser to work directly with XML events
  */
-class OptimizedXmlTokenizer(inputStream: InputStream, options: XmlOptions) extends Logging {
+class OptimizedXmlTokenizer(inputStream: InputStream, options: XmlOptions)
+    extends XmlTokenizerBase[XMLEventReader] {
   private var reader = StaxXmlParserUtils.filteredReader(inputStream, options)
 
   /**
    * Returns the next XML record as a positioned XMLEventReader.
    * This avoids creating intermediate string representations.
    */
-  def next(): Option[XMLEventReader] = {
+  override def next(): Option[XMLEventReader] = {
     var nextRecord: Option[XMLEventReader] = None
     try {
       // Skip to the next row start element
@@ -1069,15 +1069,22 @@ object StaxXmlParser {
     convertStream(xmlTokenizer)(tokens => tokens)
   }
 
-  private def convertStream[T](
-    xmlTokenizer: XmlTokenizer)(
-    convert: String => T) = new Iterator[T] {
+  def tokenizeStreamOptimized(
+      inputStream: InputStream,
+      options: XmlOptions): Iterator[XMLEventReader] = {
+    val xmlTokenizer = new OptimizedXmlTokenizer(inputStream, options)
+    convertStream(xmlTokenizer)(tokens => tokens)
+  }
+
+  private def convertStream[TokenType, ResultType](
+    xmlTokenizer: XmlTokenizerBase[TokenType])(
+    convert: TokenType => ResultType) = new Iterator[ResultType] {
 
     private var nextRecord = xmlTokenizer.next()
 
     override def hasNext: Boolean = nextRecord.nonEmpty
 
-    override def next(): T = {
+    override def next(): ResultType = {
       if (!hasNext) {
         throw QueryExecutionErrors.endOfStreamError()
       }

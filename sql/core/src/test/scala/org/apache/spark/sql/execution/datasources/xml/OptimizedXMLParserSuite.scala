@@ -17,18 +17,31 @@
 
 package org.apache.spark.sql.execution.datasources.xml
 
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.{DropMalformedMode, PermissiveMode}
 import org.apache.spark.sql.functions.{col, variant_get}
 import org.apache.spark.sql.internal.SQLConf
 
-class OptimizedXMLParserSuite extends XmlSuite with XmlVariantTests {
+//import org.scalactic.source.Position
+//import org.scalatest.Tag
+
+class OptimizedXMLParserSuite extends XmlSuite with XmlVariantTests with XmlInferSchemaTests {
   override protected def sparkConf = {
     val conf = super.sparkConf
     conf.set(SQLConf.ENABLE_OPTIMIZED_XML_PARSER.key, "true")
     conf
   }
+
+//  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(
+//      implicit pos: Position): Unit = {
+//    if (testName == "DSL test for permissive mode for corrupt records - optimized XML parser") {
+//      super.test(testName, testTags: _*)(testFun)
+//    }
+//  }
 
   override def excluded: Seq[String] = super.excluded ++ Seq(
     // XSD validation is not supported in optimized XML parser
@@ -72,17 +85,44 @@ class OptimizedXMLParserSuite extends XmlSuite with XmlVariantTests {
   }
 
   test("DSL test for permissive mode for corrupt records - optimized XML parser") {
-    val carsDf = spark.read
-      .option("rowTag", "ROW")
-      .option("mode", PermissiveMode.name)
-      .option("columnNameOfCorruptRecord", "_malformed_records")
-      .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
-    val cars = carsDf.collect()
+    withTempDir { dir =>
+      val malformedXML =
+        """<?xml version="1.0"?>
+        |<ROWS>
+        |    <ROW>
+        |        <year>2015</year>
+        |        <make>Chevy</make>
+        |        <model>Volt</model>
+        |    </ROW>
+        |    <ROW>
+        |        <year>2012</year>
+        |        <make>Tesla</make>
+        |        <model>>S
+        |        <comment>No comment</comment>
+        |    </ROW>
+        |    <ROW>
+        |        </year>
+        |        <make>Ford</make>
+        |        <model>E350</model>model></model>
+        |        <comment>Go get one now they are going fast</comment>
+        |    </ROW>
+        |</ROWS>
+        |""".stripMargin
+      Files.write(
+        new java.io.File(s"${dir}/data.xml").toPath, malformedXML.getBytes(StandardCharsets.UTF_8)
+      )
 
-    // The full XML file is put into the `_malformed_records` column because the first record is
-    // malformed
-    assert(cars.length === 1)
-    assert(carsDf.cache().select("_malformed_records").first().get(0).toString.nonEmpty)
+      val carsDf = spark.read
+        .option("rowTag", "ROW")
+        .option("mode", PermissiveMode.name)
+        .option("columnNameOfCorruptRecord", "_malformed_records")
+        .xml(s"${dir}/data.xml")
+
+      // The first record is read successfully, but the rest of the xml file is put into the
+      // `_malformed_records` column because the second record starts to be malformed.
+      assert(carsDf.cache().collect().length === 2)
+      assert(carsDf.cache().filter("_malformed_records IS NOT NULL").count() === 1)
+    }
   }
 
   test("DSL: handle malformed record in singleVariantColumn mode - optimized XML parser") {
