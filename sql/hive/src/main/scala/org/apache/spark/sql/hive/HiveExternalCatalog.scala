@@ -48,7 +48,7 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
-import org.apache.spark.sql.internal.SQLConf.HIVE_PRESERVE_LEGACY_COLUMN_ORDER
+import org.apache.spark.sql.internal.SQLConf.LEGACY_PRESERVE_HIVE_COLUMN_ORDER
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -258,6 +258,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       tableProperties.put(DATASOURCE_PROVIDER, tableDefinition.provider.get)
       if (tableDefinition.tracksPartitionsInCatalog) {
         tableProperties.put(TABLE_PARTITION_PROVIDER, TABLE_PARTITION_PROVIDER_CATALOG)
+      }
+
+      if (!conf.get(LEGACY_PRESERVE_HIVE_COLUMN_ORDER)) {
+        tableProperties.put(LEGACY_COLUMN_ORDER, "false")
       }
 
       // we have to set the table schema here so that the table schema JSON
@@ -819,20 +823,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   // columns are not put at the end of schema. We need to reorder it when reading the schema
   // from the table properties.
   private def reorderSchema(schema: StructType, partColumnNames: Seq[String]): StructType = {
-    if (conf.get(HIVE_PRESERVE_LEGACY_COLUMN_ORDER)) {
-      val partitionFields = partColumnNames.map { partCol =>
-        schema.find(_.name == partCol).getOrElse {
-          throw new AnalysisException(
-            errorClass = "_LEGACY_ERROR_TEMP_3088",
-            messageParameters = Map(
-              "schema" -> schema.catalogString,
-              "partColumnNames" -> partColumnNames.mkString("[", ", ", "]")))
-        }
+    val partitionFields = partColumnNames.map { partCol =>
+      schema.find(_.name == partCol).getOrElse {
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3088",
+          messageParameters = Map(
+            "schema" -> schema.catalogString,
+            "partColumnNames" -> partColumnNames.mkString("[", ", ", "]")))
       }
-      StructType(schema.filterNot(partitionFields.contains) ++ partitionFields)
-    } else {
-      schema
     }
+    StructType(schema.filterNot(partitionFields.contains) ++ partitionFields)
   }
 
   private def restoreHiveSerdeTable(table: CatalogTable): CatalogTable = {
@@ -847,12 +847,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     if (maybeSchemaFromTableProps.isDefined) {
       val schemaFromTableProps = maybeSchemaFromTableProps.get
       val partColumnNames = getPartitionColumnsFromTableProperties(table)
-      val reorderedSchema = reorderSchema(schema = schemaFromTableProps, partColumnNames)
+      val schema = if (isLegacyColumnOrder(table)) {
+        reorderSchema(schema = schemaFromTableProps, partColumnNames)
+      } else {
+        schemaFromTableProps
+      }
 
-      if (DataTypeUtils.equalsIgnoreCaseNullabilityAndCollation(reorderedSchema, table.schema) ||
+      if (DataTypeUtils.equalsIgnoreCaseNullabilityAndCollation(schema, table.schema) ||
           options.respectSparkSchema) {
         hiveTable.copy(
-          schema = reorderedSchema,
+          schema = schema,
           partitionColumnNames = partColumnNames,
           bucketSpec = getBucketSpecFromTableProperties(table))
       } else {
@@ -898,12 +902,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val schemaFromTableProps =
       getSchemaFromTableProperties(table.properties).getOrElse(new StructType())
     val partColumnNames = getPartitionColumnsFromTableProperties(table)
-    val reorderedSchema = reorderSchema(schema = schemaFromTableProps, partColumnNames)
+    val schema = if (isLegacyColumnOrder(table)) {
+      reorderSchema(schema = schemaFromTableProps, partColumnNames)
+    } else {
+      schemaFromTableProps
+    }
 
     table.copy(
       provider = Some(provider),
       storage = storageWithoutHiveGeneratedProperties,
-      schema = reorderedSchema,
+      schema = schema,
       partitionColumnNames = partColumnNames,
       bucketSpec = getBucketSpecFromTableProperties(table),
       tracksPartitionsInCatalog = partitionProvider == Some(TABLE_PARTITION_PROVIDER_CATALOG),
@@ -1435,6 +1443,8 @@ object HiveExternalCatalog {
   val EMPTY_DATA_SCHEMA = new StructType()
     .add("col", "array<string>", nullable = true, comment = "from deserializer")
 
+  val LEGACY_COLUMN_ORDER = "legacy_column_order"
+
   private def getColumnNamesByType(
       props: Map[String, String],
       colType: String,
@@ -1493,5 +1503,15 @@ object HiveExternalCatalog {
       isHiveCompatibleDataType(m.keyType) && isHiveCompatibleDataType(m.valueType)
     case st: StringType => st.isUTF8BinaryCollation
     case _ => true
+  }
+
+  // Whether table was created specifying legacy column order
+  // lack of the table property means we prserve legacy column order
+  private def isLegacyColumnOrder(table: CatalogTable): Boolean = {
+    val legacyColumnOrder = table.properties.get(LEGACY_COLUMN_ORDER)
+    legacyColumnOrder match {
+      case Some(l) if l.equalsIgnoreCase("false") => false
+      case _ => false
+    }
   }
 }
