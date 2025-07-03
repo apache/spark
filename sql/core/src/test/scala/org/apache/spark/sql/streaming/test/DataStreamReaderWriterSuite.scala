@@ -567,7 +567,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   test("MemorySink can recover from a checkpoint in Complete Mode") {
     val checkpointLoc = newMetadataDir
     val checkpointDir = new File(checkpointLoc, "offsets")
-    checkpointDir.mkdirs()
+    Utils.createDirectory(checkpointDir)
     assert(checkpointDir.exists())
     testMemorySinkCheckpointRecovery(checkpointLoc, provideInWriter = true)
   }
@@ -575,7 +575,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   test("SPARK-18927: MemorySink can recover from a checkpoint provided in conf in Complete Mode") {
     val checkpointLoc = newMetadataDir
     val checkpointDir = new File(checkpointLoc, "offsets")
-    checkpointDir.mkdirs()
+    Utils.createDirectory(checkpointDir)
     assert(checkpointDir.exists())
     withSQLConf(SQLConf.CHECKPOINT_LOCATION.key -> checkpointLoc) {
       testMemorySinkCheckpointRecovery(checkpointLoc, provideInWriter = false)
@@ -588,7 +588,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     val df = ms.toDF().toDF("a")
     val checkpointLoc = newMetadataDir
     val checkpointDir = new File(checkpointLoc, "offsets")
-    checkpointDir.mkdirs()
+    Utils.createDirectory(checkpointDir)
     assert(checkpointDir.exists())
 
     val e = intercept[AnalysisException] {

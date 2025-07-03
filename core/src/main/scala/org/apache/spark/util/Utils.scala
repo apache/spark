@@ -458,7 +458,7 @@ private[spark] object Utils
    * to work around a security issue, see also SPARK-38631.
    */
   private def unTarUsingJava(source: File, dest: File): Unit = {
-    if (!dest.mkdirs && !dest.isDirectory) {
+    if (!Utils.createDirectory(dest) && !dest.isDirectory) {
       throw new IOException(s"Mkdirs failed to create $dest")
     } else {
       try {
@@ -810,7 +810,7 @@ private[spark] object Utils
     configuredLocalDirs.flatMap { root =>
       try {
         val rootDir = new File(root)
-        if (rootDir.exists || rootDir.mkdirs()) {
+        if (rootDir.exists || Utils.createDirectory(rootDir)) {
           val dir = createTempDir(root)
           chmod700(dir)
           Some(dir.getAbsolutePath)
