@@ -160,12 +160,21 @@ class NumericOps(DataTypeOps):
         _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("Modulo can not be applied to given types.")
-
-        def rmod(left: PySparkColumn, right: Any) -> PySparkColumn:
-            return ((right % left) + left) % left
+        spark_session = left._internal.spark_frame.sparkSession
 
         right = transform_boolean_operand_to_numeric(right)
-        return column_op(rmod)(left, right)
+
+        def safe_rmod(left: PySparkColumn, right: Any) -> PySparkColumn:
+            if is_ansi_mode_enabled(spark_session):
+                # Java-style modulo -> Python-style modulo
+                result = F.when(left != 0, ((F.lit(right) % left) + left) % left).otherwise(
+                    F.lit(None)
+                )
+                return result
+            else:
+                return ((right % left) + left) % left
+
+        return column_op(safe_rmod)(left, right)
 
     def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
         return operand._with_new_scol(-operand.spark.column, field=operand._internal.data_fields[0])

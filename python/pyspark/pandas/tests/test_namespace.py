@@ -561,7 +561,6 @@ class NamespaceTestsMixin:
             lambda: read_delta("fake_path", version="0", timestamp="2021-06-22"),
         )
 
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_to_numeric(self):
         pser = pd.Series(["1", "2", None, "4", "hello"])
         psser = ps.from_pandas(pser)

@@ -530,7 +530,7 @@ case class ScalaAggregator[IN, BUF, OUT](
 
   def eval(buffer: BUF): Any = {
     val row = outputSerializer(agg.finish(buffer))
-    if (outputEncoder.isSerializedAsStruct) row else row.get(0, dataType)
+    if (outputEncoder.isSerializedAsStructForTopLevel) row else row.get(0, dataType)
   }
 
   @transient private[this] lazy val bufferRow = new UnsafeRow(bufferEncoder.namedExpressions.length)

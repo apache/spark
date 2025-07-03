@@ -762,7 +762,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>9.8.4</version>
+        <version>10.2.1</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -2670,7 +2670,7 @@
             <dependency>
               <groupId>org.codehaus.mojo</groupId>
               <artifactId>extra-enforcer-rules</artifactId>
-              <version>1.9.0</version>
+              <version>1.10.0</version>
             </dependency>
           </dependencies>
         </plugin>

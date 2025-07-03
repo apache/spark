@@ -1647,7 +1647,10 @@ case class NextDay(
 /**
  * Adds an interval to timestamp.
  */
-case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[String] = None)
+case class TimestampAddInterval(
+    start: Expression,
+    interval: Expression,
+    timeZoneId: Option[String] = None)
   extends BinaryExpression with TimeZoneAwareExpression with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
 
@@ -1690,7 +1693,7 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): TimeAdd =
+      newLeft: Expression, newRight: Expression): TimestampAddInterval =
     copy(start = newLeft, interval = newRight)
 }
 
@@ -2568,10 +2571,7 @@ case class MakeTimestampNTZ(left: Expression, right: Expression)
     Seq(left.dataType, right.dataType)
   )
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      DateType,
-      TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*))
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, AnyTimeType)
 
   override def prettyName: String = "make_timestamp_ntz"
 
@@ -2637,7 +2637,11 @@ object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(year, month, day, hour, min, sec) - Try to create local date-time from year, month, day, hour, min, sec fields. The function returns NULL on invalid inputs.",
+  usage = """
+    _FUNC_(year, month, day, hour, min, sec) - Try to create local date-time from year, month, day, hour, min, sec fields. The function returns NULL on invalid inputs.
+
+    _FUNC_(date, time) - Create a local date-time from date and time fields.
+    """,
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
@@ -2648,6 +2652,8 @@ object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
       * sec - the second-of-minute and its micro-fraction to represent, from
               0 to 60. If the sec argument equals to 60, the seconds field is set
               to 0 and 1 minute is added to the final timestamp.
+      * date - a date to represent, from 0001-01-01 to 9999-12-31
+      * time - a local time to represent, from 00:00:00 to 23:59:59.999999
   """,
   examples = """
     Examples:
@@ -2659,6 +2665,8 @@ object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
        NULL
       > SELECT _FUNC_(2024, 13, 22, 15, 30, 0);
        NULL
+      > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887');
+       2014-12-28 06:30:45.887
   """,
   group = "datetime_funcs",
   since = "4.0.0")
@@ -2666,7 +2674,9 @@ object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
 object TryMakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
-    if (numArgs == 6) {
+    if (numArgs == 2) {
+      TryEval(MakeTimestampNTZ(expressions(0), expressions(1)))
+    } else if (numArgs == 6) {
       MakeTimestamp(
         expressions(0),
         expressions(1),
