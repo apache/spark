@@ -62,7 +62,7 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev
 
 
-ARG BASIC_PIP_PKGS="numpy==2.0.0 pyarrow==11.0.0 pandas==2.1.0 six==1.16.0 scipy scikit-learn coverage unittest-xml-reporting"
+ARG BASIC_PIP_PKGS="numpy==1.22.4 pyarrow==11.0.0 pandas==2.2.0 six==1.16.0 scipy scikit-learn coverage unittest-xml-reporting"
 # Python deps for Spark Connect
 ARG CONNECT_PIP_PKGS="grpcio==1.67.0 grpcio-status==1.67.0 googleapis-common-protos==1.65.0 graphviz==0.20 protobuf"
 
