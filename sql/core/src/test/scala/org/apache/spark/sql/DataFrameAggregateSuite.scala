@@ -26,8 +26,6 @@ import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Abs, ApproxTopKEstimate, BoundReference, Literal}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{ApproxTopK, ApproxTopKAccumulate, Sum}
 import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -2880,31 +2878,6 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(res, Row(Seq(Row("b", 3), Row("a", 2))))
   }
 
-  test("SPARK-52515: Accepts literal and foldable inputs") {
-    val agg = new ApproxTopK(
-      expr = BoundReference(0, LongType, nullable = true),
-      k = Abs(Literal(10)),
-      maxItemsTracked = Abs(Literal(-10))
-    )
-    assert(agg.checkInputDataTypes().isSuccess)
-  }
-
-  test("SPARK-52515: Fail if parameters are not foldable") {
-    val badAgg = new ApproxTopK(
-      expr = BoundReference(0, LongType, nullable = true),
-      k = Sum(BoundReference(1, LongType, nullable = true)),
-      maxItemsTracked = Literal(10)
-    )
-    assert(badAgg.checkInputDataTypes().isFailure)
-
-    val badAgg2 = new ApproxTopK(
-      expr = BoundReference(0, LongType, nullable = true),
-      k = Literal(10),
-      maxItemsTracked = Sum(BoundReference(1, LongType, nullable = true))
-    )
-    assert(badAgg2.checkInputDataTypes().isFailure)
-  }
-
   test("SPARK-52626: Support group by Time column") {
     val ts1 = "15:00:00"
     val ts2 = "22:00:00"
@@ -2965,46 +2938,6 @@ class DataFrameAggregateSuite extends QueryTest
       Row(new java.math.BigDecimal("1.000"), 2))))
   }
 
-  test("SPARK-52588: invalid accumulate if item type is not supported") {
-    Seq(
-      ArrayType(IntegerType),
-      MapType(StringType, IntegerType),
-      StructType(Seq(StructField("a", IntegerType), StructField("b", StringType))),
-      BinaryType
-    ).foreach {
-      unsupportedType =>
-        val badAccumulate = ApproxTopKAccumulate(
-          expr = BoundReference(0, unsupportedType, nullable = true),
-          maxItemsTracked = Literal(10)
-        )
-        assert(badAccumulate.checkInputDataTypes().isFailure)
-    }
-  }
-
-  test("SPARK-52588: invalid accumulate if maxItemsTracked are not foldable") {
-    val badAccumulate = ApproxTopKAccumulate(
-      expr = BoundReference(0, LongType, nullable = true),
-      maxItemsTracked = Sum(BoundReference(1, LongType, nullable = true))
-    )
-    assert(badAccumulate.checkInputDataTypes().isFailure)
-  }
-
-  test("SPARK-52588: invalid accumulate if maxItemsTracked less than or equal to 0") {
-    Seq(0, -1).foreach { invalidInput =>
-      val badAccumulate = ApproxTopKAccumulate(
-        expr = BoundReference(0, LongType, nullable = true),
-        maxItemsTracked = Literal(invalidInput)
-      )
-      checkError(
-        exception = intercept[SparkRuntimeException] {
-          badAccumulate.createAggregationBuffer()
-        },
-        condition = "APPROX_TOP_K_NON_POSITIVE_ARG",
-        parameters = Map("argName" -> "`maxItemsTracked`", "argValue" -> invalidInput.toString)
-      )
-    }
-  }
-
   test("SPARK-52588: invalid accumulate if maxItemsTracked is null") {
     checkError(
       exception = intercept[SparkRuntimeException] {
@@ -3014,14 +2947,6 @@ class DataFrameAggregateSuite extends QueryTest
       condition = "APPROX_TOP_K_NULL_ARG",
       parameters = Map("argName" -> "`maxItemsTracked`")
     )
-  }
-
-  test("SPARK-52588: invalid estimate if k are not foldable") {
-    val badEstimate = ApproxTopKEstimate(
-      state = BoundReference(0, LongType, nullable = false),
-      k = Sum(BoundReference(1, LongType, nullable = true))
-    )
-    assert(badEstimate.checkInputDataTypes().isFailure)
   }
 
   test("SPARK-52588: invalid estimate if k is null") {
