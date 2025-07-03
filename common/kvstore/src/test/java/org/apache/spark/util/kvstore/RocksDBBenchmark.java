@@ -32,7 +32,6 @@ import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 // checkstyle.off: RegexpSinglelineJava
 import org.slf4j.LoggerFactory;
@@ -50,7 +49,6 @@ import static org.junit.jupiter.api.Assertions.*;
  * - iterate over natural index, ascending and descending
  * - iterate over ref index, ascending and descending
  */
-@Disabled
 public class RocksDBBenchmark {
 
   private static final int COUNT = 1024;

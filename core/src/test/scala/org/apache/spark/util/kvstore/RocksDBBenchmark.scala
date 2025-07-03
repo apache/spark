@@ -33,8 +33,9 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
  * The benchmarks are run over two different types (one with just a natural index, and one
  * with a ref index), over a set of elements, and the following tests are performed:
  *
- * - write (then update) elements in sequential natural key order
- * - write (then update) elements in random natural key order
+ * - create and close rocksdb
+ * - write/update/delete elements in sequential natural key order
+ * - write/update/delete elements in random natural key order
  * - iterate over natural index, ascending and descending
  * - iterate over ref index, ascending and descending
  *
@@ -58,38 +59,53 @@ object RocksDBBenchmark extends BenchmarkBase {
   private var dbpath: File = _
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    runBenchmark("RocksDB Database Lifecycle Benchmark") {
-      databaseLifecycleBenchmark()
+    runBenchmark("RocksDB Lifecycle Benchmark") {
+      databaseLifecycle()
     }
 
-    runBenchmark("RocksDB Sequential Operations Benchmark") {
-      sequentialOperationsBenchmark()
+    runBenchmark("Sequential Operations Benchmark") {
+      sequentialWrites()
+      sequentialUpdates()
+      sequentialDeletes()
     }
 
-    runBenchmark("RocksDB Random Operations Benchmark") {
-      randomOperationsBenchmark()
+    runBenchmark("Random Operations Benchmark") {
+      randomWrites()
+      randomUpdates()
+      randomDeletes()
     }
 
-    runBenchmark("RocksDB Iteration Benchmark") {
-      iterationBenchmark()
+    runBenchmark("Natural Index Benchmark") {
+      naturalIndexCreateIterator()
+      naturalIndexIteration()
+    }
+
+    runBenchmark("Ref Index Benchmark") {
+      refIndexCreateIterator()
+      refIndexIteration()
     }
   }
 
-  private def databaseLifecycleBenchmark(): Unit = {
+  private def databaseLifecycle(): Unit = {
     val benchmark =
-      new Benchmark("Database Lifecycle Operations", 1, ITERATIONS, output = output)
+      new Benchmark("RocksDB Lifecycle Operations", 1, ITERATIONS, output = output)
 
-    benchmark.addTimerCase("Database Creation") { timer =>
+    benchmark.addTimerCase("DB Creation") { timer =>
       try {
+        dbpath = File.createTempFile("test.", ".rdb")
+        dbpath.delete()
         timer.startTiming()
-        setupDB()
+        db = new RocksDB(dbpath)
         timer.stopTiming()
+      } catch {
+        case e: Exception =>
+          throw new RuntimeException("Failed to setup database", e)
       } finally {
         cleanupDB()
       }
     }
 
-    benchmark.addTimerCase("Database Close") { timer =>
+    benchmark.addTimerCase("DB Close") { timer =>
       try {
         setupDB()
         val entries = createSimpleType().take(10)
@@ -106,82 +122,30 @@ object RocksDBBenchmark extends BenchmarkBase {
     benchmark.run()
   }
 
-  private def sequentialOperationsBenchmark(): Unit = {
-    val benchmark = new Benchmark("Sequential Operations", COUNT, ITERATIONS, output = output)
+  private def sequentialDeletes(): Unit = {
+    val benchmark = new Benchmark("Sequential Deletes", COUNT, ITERATIONS, output = output)
 
-    benchmark.addCase("Sequential Writes (No Index)") { _ =>
-      setupDB()
+    benchmark.addTimerCase("Indexed") { timer =>
       try {
-        val entries = createSimpleType()
-        entries.foreach(db.write)
-      } finally {
-        cleanupDB()
-      }
-    }
-
-    benchmark.addCase("Sequential Updates (No Index)") { _ =>
-      setupDB()
-      try {
-        val entries = createSimpleType()
-        // First write
-        entries.foreach(db.write)
-        // Then update
-        entries.foreach { entry =>
-          entry.name = s"updated_${entry.name}"
-          db.write(entry)
-        }
-      } finally {
-        cleanupDB()
-      }
-    }
-
-    benchmark.addCase("Sequential Deletes (No Index)") { _ =>
-      setupDB()
-      try {
-        val entries = createSimpleType()
-        // First write
-        entries.foreach(db.write)
-        // Then delete
-        entries.foreach(entry => db.delete(entry.getClass, entry.key))
-      } finally {
-        cleanupDB()
-      }
-    }
-
-    benchmark.addCase("Sequential Writes (Indexed)") { _ =>
-      setupDB()
-      try {
-        val entries = createIndexedType()
-        entries.foreach(db.write)
-      } finally {
-        cleanupDB()
-      }
-    }
-
-    benchmark.addCase("Sequential Updates (Indexed)") { _ =>
-      setupDB()
-      try {
-        val entries = createIndexedType()
-        // First write
-        entries.foreach(db.write)
-        // Then update
-        entries.foreach { entry =>
-          entry.name = s"updated_${entry.name}"
-          db.write(entry)
-        }
-      } finally {
-        cleanupDB()
-      }
-    }
-
-    benchmark.addCase("Sequential Deletes (Indexed)") { _ =>
-      setupDB()
-      try {
+        setupDB()
         val entries = createIndexedType()
         // First write
         entries.foreach(db.write)
         // Then delete
-        entries.foreach(entry => db.delete(entry.getClass, entry.key))
+        indexDelete(entries, timer)
+      } finally {
+        cleanupDB()
+      }
+    }
+
+    benchmark.addTimerCase("No Index") { timer =>
+      try {
+        setupDB()
+        val entries = createSimpleType()
+        // First write
+        entries.foreach(db.write)
+        // Then delete
+        noIndexDelete(entries, timer)
       } finally {
         cleanupDB()
       }
@@ -190,86 +154,30 @@ object RocksDBBenchmark extends BenchmarkBase {
     benchmark.run()
   }
 
-  private def randomOperationsBenchmark(): Unit = {
-    val benchmark = new Benchmark("Random Operations", COUNT, ITERATIONS, output = output)
+  private def sequentialUpdates(): Unit = {
+    val benchmark = new Benchmark("Sequential Updates", COUNT, ITERATIONS, output = output)
 
-    benchmark.addCase("Random Writes (No Index)") { _ =>
-      setupDB()
+    benchmark.addTimerCase("Indexed") { timer =>
       try {
-        val entries = Random.shuffle(createSimpleType())
-        entries.foreach(db.write)
-      } finally {
-        cleanupDB()
-      }
-    }
-
-    benchmark.addCase("Random Updates (No Index)") { _ =>
-      setupDB()
-      try {
-        val entries = createSimpleType()
-        // First write
-        entries.foreach(db.write)
-        // Shuffle and update
-        val shuffled = Random.shuffle(entries)
-        shuffled.foreach { entry =>
-          entry.name = s"updated_${entry.name}"
-          db.write(entry)
-        }
-      } finally {
-        cleanupDB()
-      }
-    }
-
-    benchmark.addCase("Random Deletes (No Index)") { _ =>
-      setupDB()
-      try {
-        val entries = createSimpleType()
-        // First write
-        entries.foreach(db.write)
-        // Shuffle and delete
-        val shuffled = Random.shuffle(entries)
-        shuffled.foreach(entry => db.delete(entry.getClass, entry.key))
-      } finally {
-        cleanupDB()
-      }
-    }
-
-    benchmark.addCase("Random Writes (Indexed)") { _ =>
-      setupDB()
-      try {
-        val entries = Random.shuffle(createIndexedType())
-        entries.foreach(db.write)
-      } finally {
-        cleanupDB()
-      }
-    }
-
-    benchmark.addCase("Random Updates (Indexed)") { _ =>
-      setupDB()
-      try {
+        setupDB()
         val entries = createIndexedType()
         // First write
         entries.foreach(db.write)
-        // Shuffle and update
-        val shuffled = Random.shuffle(entries)
-        shuffled.foreach { entry =>
-          entry.name = s"updated_${entry.name}"
-          db.write(entry)
-        }
+        // Then update
+        indexUpdate(entries, timer)
       } finally {
         cleanupDB()
       }
     }
 
-    benchmark.addCase("Random Deletes (Indexed)") { _ =>
-      setupDB()
+    benchmark.addTimerCase("No Index") { timer =>
       try {
-        val entries = createIndexedType()
+        setupDB()
+        val entries = createSimpleType()
         // First write
         entries.foreach(db.write)
-        // Shuffle and delete
-        val shuffled = Random.shuffle(entries)
-        shuffled.foreach(entry => db.delete(entry.getClass, entry.key))
+        // Then update
+        noIndexUpdate(entries, timer)
       } finally {
         cleanupDB()
       }
@@ -278,56 +186,261 @@ object RocksDBBenchmark extends BenchmarkBase {
     benchmark.run()
   }
 
-  private def iterationBenchmark(): Unit = {
-    val benchmark = new Benchmark("Iteration Operations", COUNT, ITERATIONS, output = output)
 
-    // Setup data for iteration benchmarks
-    setupDB()
-    val entries = Random.shuffle(createIndexedType())
+  private def sequentialWrites(): Unit = {
+    val benchmark = new Benchmark("Sequential Writes", COUNT, ITERATIONS, output = output)
+
+    benchmark.addTimerCase("Indexed") { timer =>
+      try {
+        setupDB()
+        val entries = createIndexedType()
+        indexWrite(entries, timer)
+      } finally {
+        cleanupDB()
+      }
+    }
+
+    benchmark.addTimerCase("No Index") { timer =>
+      try {
+        setupDB()
+        val entries = createSimpleType()
+        noIndexWrite(entries, timer)
+      } finally {
+        cleanupDB()
+      }
+    }
+
+    benchmark.run()
+  }
+
+  private def randomDeletes(): Unit = {
+    val benchmark = new Benchmark("Random Deletes", COUNT, ITERATIONS, output = output)
+
+    benchmark.addTimerCase("Indexed") { timer =>
+      try {
+        setupDB()
+        val entries = createIndexedType()
+        // First write
+        entries.foreach(db.write)
+        // Shuffle and delete
+        val shuffled = Random.shuffle(entries)
+        indexDelete(shuffled, timer)
+      } finally {
+        cleanupDB()
+      }
+    }
+
+    benchmark.addTimerCase("No Index") { timer =>
+      try {
+        setupDB()
+        val entries = createSimpleType()
+        // First write
+        entries.foreach(db.write)
+        // Shuffle and delete
+        val shuffled = Random.shuffle(entries)
+        noIndexDelete(shuffled, timer)
+      } finally {
+        cleanupDB()
+      }
+    }
+
+    benchmark.run()
+  }
+
+  private def randomUpdates(): Unit = {
+    val benchmark = new Benchmark("Random Updates", COUNT, ITERATIONS, output = output)
+
+    benchmark.addTimerCase("Indexed") { timer =>
+      try {
+        setupDB()
+        val entries = createIndexedType()
+        // First write
+        entries.foreach(db.write)
+        // Shuffle and update
+        val shuffled = Random.shuffle(entries)
+        indexUpdate(shuffled, timer)
+      } finally {
+        cleanupDB()
+      }
+    }
+
+    benchmark.addTimerCase("No Index") { timer =>
+      try {
+        setupDB()
+        val entries = createSimpleType()
+        // First write
+        entries.foreach(db.write)
+        // Shuffle and update
+        val shuffled = Random.shuffle(entries)
+        noIndexUpdate(shuffled, timer)
+      } finally {
+        cleanupDB()
+      }
+    }
+
+    benchmark.run()
+  }
+
+  private def randomWrites(): Unit = {
+    val benchmark = new Benchmark("Random Writes", COUNT, ITERATIONS, output = output)
+
+    benchmark.addTimerCase("Indexed") { timer =>
+      try {
+        setupDB()
+        val shuffled = Random.shuffle(createIndexedType())
+        indexWrite(shuffled, timer)
+      } finally {
+        cleanupDB()
+      }
+    }
+
+    benchmark.addTimerCase("No Index") { timer =>
+      try {
+        setupDB()
+        val shuffled = Random.shuffle(createSimpleType())
+        noIndexWrite(shuffled, timer)
+      } finally {
+        cleanupDB()
+      }
+    }
+
+    benchmark.run()
+  }
+
+  private def naturalIndexCreateIterator(): Unit = {
+    val benchmark =
+      new Benchmark("Natural Index - Create Iterator", COUNT, ITERATIONS, output = output)
+
     try {
+      setupDB()
+      val entries = Random.shuffle(createIndexedType())
       entries.foreach(db.write)
 
       val view = db.view(classOf[IndexedType])
 
-      benchmark.addCase("Natural Index Ascending") { _ =>
+      benchmark.addTimerCase("Ascending") { timer =>
+        timer.startTiming()
+        val it = view.closeableIterator()
+        timer.stopTiming()
+        it.close()
+      }
+
+      benchmark.addTimerCase("Descending") { timer =>
+        timer.startTiming()
+        val it = view.reverse().closeableIterator()
+        timer.stopTiming()
+        it.close()
+      }
+
+      benchmark.run()
+    } finally {
+      cleanupDB()
+    }
+  }
+
+  private def naturalIndexIteration(): Unit = {
+    val benchmark = new Benchmark("Natural Index - Iteration", COUNT, ITERATIONS, output = output)
+
+    try {
+      setupDB()
+      val entries = Random.shuffle(createIndexedType())
+      entries.foreach(db.write)
+
+      val view = db.view(classOf[IndexedType])
+
+      benchmark.addTimerCase("Ascending") { timer =>
         val it = view.closeableIterator()
         try {
+          timer.startTiming()
           while (it.hasNext) {
             it.next()
           }
+          timer.stopTiming()
         } finally {
           it.close()
         }
       }
 
-      benchmark.addCase("Natural Index Descending") { _ =>
+      benchmark.addTimerCase("Descending") { timer =>
         val it = view.reverse().closeableIterator()
         try {
+          timer.startTiming()
           while (it.hasNext) {
             it.next()
           }
+          timer.stopTiming()
         } finally {
           it.close()
         }
       }
 
-      benchmark.addCase("Reference Index Ascending") { _ =>
+      benchmark.run()
+    } finally {
+      cleanupDB()
+    }
+  }
+
+  private def refIndexCreateIterator(): Unit = {
+    val benchmark = new Benchmark("Ref Index - Create Iterator", COUNT, ITERATIONS, output = output)
+
+    try {
+      setupDB()
+      val entries = Random.shuffle(createIndexedType())
+      entries.foreach(db.write)
+
+      val view = db.view(classOf[IndexedType])
+
+      benchmark.addTimerCase("Ascending") { timer =>
+        timer.startTiming()
+        val it = view.index("name").closeableIterator()
+        timer.stopTiming()
+        it.close()
+      }
+
+      benchmark.addTimerCase("Descending") { timer =>
+        timer.startTiming()
+        val it = view.index("name").reverse().closeableIterator()
+        timer.stopTiming()
+        it.close()
+      }
+
+      benchmark.run()
+    } finally {
+      cleanupDB()
+    }
+  }
+
+  private def refIndexIteration(): Unit = {
+    val benchmark = new Benchmark("Ref Index - Iteration", COUNT, ITERATIONS, output = output)
+
+    try {
+      setupDB()
+      val entries = Random.shuffle(createIndexedType())
+      entries.foreach(db.write)
+
+      val view = db.view(classOf[IndexedType])
+
+      benchmark.addTimerCase("Ascending") { timer =>
         val it = view.index("name").closeableIterator()
         try {
+          timer.startTiming()
           while (it.hasNext) {
             it.next()
           }
+          timer.stopTiming()
         } finally {
           it.close()
         }
       }
 
-      benchmark.addCase("Reference Index Descending") { _ =>
+      benchmark.addTimerCase("Descending") { timer =>
         val it = view.index("name").reverse().closeableIterator()
         try {
+          timer.startTiming()
           while (it.hasNext) {
             it.next()
           }
+          timer.stopTiming()
         } finally {
           it.close()
         }
@@ -385,5 +498,55 @@ object RocksDBBenchmark extends BenchmarkBase {
       entries += t
     }
     entries.toSeq
+  }
+
+  private def noIndexWrite(entries: Seq[SimpleType], timer: Benchmark.Timer): Unit = {
+    entries.foreach { e =>
+      timer.startTiming()
+      db.write(e)
+      timer.stopTiming()
+    }
+  }
+
+  private def noIndexUpdate(entries: Seq[SimpleType], timer: Benchmark.Timer): Unit = {
+    entries.foreach { e =>
+      e.name = s"updated_${e.name}"
+      timer.startTiming()
+      db.write(e)
+      timer.stopTiming()
+    }
+  }
+
+  private def noIndexDelete(entries: Seq[SimpleType], timer: Benchmark.Timer): Unit = {
+    entries.foreach { e =>
+      timer.startTiming()
+      db.delete(e.getClass, e.key)
+      timer.stopTiming()
+    }
+  }
+
+  private def indexWrite(entries: Seq[IndexedType], timer: Benchmark.Timer): Unit = {
+    entries.foreach { e =>
+      timer.startTiming()
+      db.write(e)
+      timer.stopTiming()
+    }
+  }
+
+  private def indexUpdate(entries: Seq[IndexedType], timer: Benchmark.Timer): Unit = {
+    entries.foreach { e =>
+      e.name = s"updated_${e.name}"
+      timer.startTiming()
+      db.write(e)
+      timer.stopTiming()
+    }
+  }
+
+  private def indexDelete(entries: Seq[IndexedType], timer: Benchmark.Timer): Unit = {
+    entries.foreach { e =>
+      timer.startTiming()
+      db.delete(e.getClass, e.key)
+      timer.stopTiming()
+    }
   }
 }
