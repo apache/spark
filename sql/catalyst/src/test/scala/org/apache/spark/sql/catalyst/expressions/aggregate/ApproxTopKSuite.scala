@@ -111,4 +111,12 @@ class ApproxTopKSuite extends SparkFunSuite {
     )
     assert(badEstimate.checkInputDataTypes().isFailure)
   }
+
+  test("SPARK-combine: invalid combine if maxItemsTracked are not foldable") {
+    val badCombine = ApproxTopKCombine(
+      expr = BoundReference(0, BinaryType, nullable = false),
+      maxItemsTracked = Sum(BoundReference(1, IntegerType, nullable = true))
+    )
+    assert(badCombine.checkInputDataTypes().isFailure)
+  }
 }

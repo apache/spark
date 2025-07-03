@@ -24,7 +24,7 @@ import scala.util.Random
 
 import org.scalatest.matchers.must.Matchers.the
 
-import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
+import org.apache.spark.{SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
@@ -3008,6 +3008,80 @@ class DataFrameAggregateSuite extends QueryTest
       },
       condition = "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K",
       parameters = Map("maxItemsTracked" -> "5", "k" -> "10")
+    )
+  }
+
+  test("SPARK-combine: same type, same size, unspecified combine size - success") {
+    sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
+      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
+      .createOrReplaceTempView("accumulation1")
+
+    sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
+      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
+      .createOrReplaceTempView("accumulation2")
+
+    sql("SELECT approx_top_k_combine(acc) as com " +
+      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+      .createOrReplaceTempView("combined")
+
+    val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
+    checkAnswer(est, Row(Seq(Row(2, 4), Row(1, 4), Row(0, 3), Row(3, 3), Row(4, 2))))
+  }
+
+  test("SPARK-combine: same type, different size, specified combine size - success") {
+    sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
+      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
+      .createOrReplaceTempView("accumulation1")
+
+    sql("SELECT approx_top_k_accumulate(expr, 20) as acc " +
+      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
+      .createOrReplaceTempView("accumulation2")
+
+    sql("SELECT approx_top_k_combine(acc, 30) as com " +
+      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+      .createOrReplaceTempView("combination")
+
+    val est = sql("SELECT approx_top_k_estimate(com) FROM combination;")
+    checkAnswer(est, Row(Seq(Row(2, 4), Row(1, 4), Row(0, 3), Row(3, 3), Row(4, 2))))
+  }
+
+  test("SPARK-combine: same type, different size, unspecified combine size - fail") {
+    sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
+      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
+      .createOrReplaceTempView("accumulation1")
+
+    sql("SELECT approx_top_k_accumulate(expr, 20) as acc " +
+      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
+      .createOrReplaceTempView("accumulation2")
+
+    val comb = sql("SELECT approx_top_k_combine(acc) as com " +
+      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        comb.collect()
+      },
+      condition = "APPROX_TOP_K_SKETCH_SIZE_UNMATCHED",
+      parameters = Map("size1" -> "10", "size2" -> "20")
+    )
+  }
+
+  test("SPARK-combine: same type, different size, invalid combine size - fail") {
+    sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
+      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
+      .createOrReplaceTempView("accumulation1")
+
+    sql("SELECT approx_top_k_accumulate(expr, 20) as acc " +
+      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
+      .createOrReplaceTempView("accumulation2")
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT approx_top_k_combine(acc, -1) as com " +
+          "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+      },
+      condition = "APPROX_TOP_K_NON_POSITIVE_ARG",
+      parameters = Map("argName" -> "`maxItemsTracked`", "argValue" -> "-1")
     )
   }
 }
