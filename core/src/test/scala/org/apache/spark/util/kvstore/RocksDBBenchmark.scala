@@ -28,7 +28,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 
 /**
- * Benchmark suite for RocksDB implementation.
+ * Benchmark suite for the KVStore implemented based on RocksDB.
  *
  * The benchmarks are run over two different types (one with just a natural index, and one
  * with a ref index), over a set of elements, and the following tests are performed:
