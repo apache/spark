@@ -1230,4 +1230,24 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }.getMessage
     assert(msg.contains("Invalid value"))
   }
+
+  test("instant to nanos of day") {
+    assert(instantToNanosOfDay(Instant.parse("1970-01-01T00:00:01.001002003Z"), "UTC") ==
+      1001002003)
+    assert(instantToNanosOfDay(Instant.parse("0001-01-01T23:59:59.999999Z"), "UTC") ==
+      localTime(23, 59, 59, 999999))
+    assert(instantToNanosOfDay(Instant.parse("2025-07-02T19:24:12Z"),
+      ZoneId.of("America/Los_Angeles")) == localTime(12, 24, 12))
+  }
+
+  test("truncate time to precision") {
+    assert(truncateTimeToPrecision(1234, 0) == 0)
+    assert(truncateTimeToPrecision(1000, 6) == 1000)
+    assert(truncateTimeToPrecision(localTime(0, 0, 0, 999999), 6) == 999999000)
+    assert(truncateTimeToPrecision(localTime(0, 0, 0, 999999), 5) == 999990000)
+    assert(truncateTimeToPrecision(localTime(23, 59, 59, 123000), 2) ==
+      localTime(23, 59, 59, 120000))
+    assert(truncateTimeToPrecision(localTime(23, 59, 59, 987654), 1) ==
+      localTime(23, 59, 59, 900000))
+  }
 }
