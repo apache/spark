@@ -177,3 +177,8 @@ SELECT map(1, '123', 2, '456')[1] :: int;
 SELECT '2147483648' :: BINT;
 SELECT '2147483648' :: SELECT;
 SELECT FALSE IS NOT NULL :: string;
+
+-- cast time to time
+SELECT cast(cast('12:00' as time(0)) as time(2));
+SELECT cast(('23:59:59.001001' :: time(6)) as time(4));
+SELECT cast(time'11:59:59.999999' as time without time zone);
