@@ -60,22 +60,29 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         e.copy(right = dedupRight(left, right))
       // Only after we finish by-name resolution for Union
       case u: Union if !u.byName && !u.duplicateResolved =>
+        val unionWithChildOutputsDeduplicated =
+          DeduplicateUnionChildOutput.deduplicateOutputPerChild(u)
         // Use projection-based de-duplication for Union to avoid breaking the checkpoint sharing
         // feature in streaming.
-        val newChildren = u.children.foldRight(Seq.empty[LogicalPlan]) { (head, tail) =>
-          head +: tail.map {
-            case child if head.outputSet.intersect(child.outputSet).isEmpty =>
-              child
-            case child =>
-              val projectList = child.output.map { attr =>
-                Alias(attr, attr.name)()
+        val newChildren =
+          unionWithChildOutputsDeduplicated.children.foldRight(Seq.empty[LogicalPlan]) {
+            (head, tail) =>
+              head +: tail.map {
+                case child if head.outputSet.intersect(child.outputSet).isEmpty =>
+                  child
+                case child =>
+                  val projectList = child.output.map { attr =>
+                    Alias(attr, attr.name)()
+                  }
+                  val project = Project(projectList, child)
+                  project.setTagValue(
+                    DeduplicateRelations.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION,
+                    ()
+                  )
+                  project
               }
-              val project = Project(projectList, child)
-              project.setTagValue(DeduplicateRelations.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION, ())
-              project
           }
-        }
-        u.copy(children = newChildren)
+        unionWithChildOutputsDeduplicated.copy(children = newChildren)
       case merge: MergeIntoTable
           if !merge.duplicateResolved && noMissingInput(merge.sourceTable) =>
         merge.copy(sourceTable = dedupRight(merge.targetTable, merge.sourceTable))

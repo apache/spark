@@ -161,7 +161,7 @@ private[connect] object PipelinesHandler extends Logging {
               language = Option(Python())),
             format = Option.when(dataset.hasFormat)(dataset.getFormat),
             normalizedPath = None,
-            isStreamingTableOpt = None))
+            isStreamingTable = dataset.getDatasetType == proto.DatasetType.TABLE))
       case proto.DatasetType.TEMPORARY_VIEW =>
         val viewIdentifier =
           GraphIdentifierManager.parseTableIdentifier(dataset.getDatasetName, sparkSession)

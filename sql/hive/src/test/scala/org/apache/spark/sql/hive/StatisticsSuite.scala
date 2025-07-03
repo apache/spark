@@ -1068,14 +1068,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
             val partDir1 = new File(new File(dir1, "ds=2008-04-09"), "hr=11")
             val file1 = new File(partDir1, "data")
-            file1.getParentFile.mkdirs()
+            Utils.createDirectory(file1.getParentFile)
             Utils.tryWithResource(new PrintWriter(file1)) { writer =>
               writer.write("1,a")
             }
 
             val partDir2 = new File(new File(dir2, "ds=2008-04-09"), "hr=12")
             val file2 = new File(partDir2, "data")
-            file2.getParentFile.mkdirs()
+            Utils.createDirectory(file2.getParentFile)
             Utils.tryWithResource(new PrintWriter(file2)) { writer =>
               writer.write("1,a")
             }
@@ -1670,14 +1670,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
           val partDir1 = new File(new File(dir1, "ds=2008-04-09"), "hr=11")
           val file1 = new File(partDir1, "data")
-          file1.getParentFile.mkdirs()
+          Utils.createDirectory(file1.getParentFile)
           Utils.tryWithResource(new PrintWriter(file1)) { writer =>
             writer.write("1,a")
           }
 
           val partDir2 = new File(new File(dir2, "ds=2008-04-09"), "hr=12")
           val file2 = new File(partDir2, "data")
-          file2.getParentFile.mkdirs()
+          Utils.createDirectory(file2.getParentFile)
           Utils.tryWithResource(new PrintWriter(file2)) { writer =>
             writer.write("1,a")
           }

@@ -196,8 +196,7 @@ class ParquetToSparkSchemaConverter(
       field: ColumnIO,
       sparkReadType: Option[DataType] = None): ParquetColumn = {
     val targetType = sparkReadType.map {
-      case udt: UserDefinedType[_] => udt.sqlType
-      case otherType => otherType
+      _.transformRecursively { case t: UserDefinedType[_] => t.sqlType }
     }
     field match {
       case primitiveColumn: PrimitiveColumnIO => convertPrimitiveField(primitiveColumn, targetType)

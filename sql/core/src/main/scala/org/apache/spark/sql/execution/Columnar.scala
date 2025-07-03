@@ -496,33 +496,31 @@ case class ApplyColumnarRulesAndInsertTransitions(
   extends Rule[SparkPlan] {
 
   /**
-   * Inserts an transition to columnar formatted data.
+   * Ensures columnar output on the input query plan. Transitions will be inserted
+   * on demand.
    */
-  private def insertRowToColumnar(plan: SparkPlan): SparkPlan = {
+  private def ensureOutputsColumnar(plan: SparkPlan): SparkPlan = {
     if (!plan.supportsColumnar) {
       // The tree feels kind of backwards
       // Columnar Processing will start here, so transition from row to columnar
-      RowToColumnarExec(insertTransitions(plan, outputsColumnar = false))
+      RowToColumnarExec(ensureOutputsRowBased(plan))
     } else if (!plan.isInstanceOf[RowToColumnarTransition]) {
-      plan.withNewChildren(plan.children.map(insertRowToColumnar))
+      plan.withNewChildren(plan.children.map(ensureOutputsColumnar))
     } else {
       plan
     }
   }
 
   /**
-   * Inserts RowToColumnarExecs and ColumnarToRowExecs where needed.
+   * Ensures row-based output on the input query plan. Transitions will be inserted
+   * on demand.
    */
-  private def insertTransitions(plan: SparkPlan, outputsColumnar: Boolean): SparkPlan = {
-    if (outputsColumnar) {
-      insertRowToColumnar(plan)
-    } else if (plan.supportsColumnar && !plan.supportsRowBased) {
+  private def ensureOutputsRowBased(plan: SparkPlan): SparkPlan = {
+    if (plan.supportsColumnar && !plan.supportsRowBased) {
       // `outputsColumnar` is false but the plan only outputs columnar format, so add a
       // to-row transition here.
-      ColumnarToRowExec(insertRowToColumnar(plan))
-    } else if (plan.isInstanceOf[ColumnarToRowTransition]) {
-      plan
-    } else {
+      ColumnarToRowExec(ensureOutputsColumnar(plan))
+    } else if (!plan.isInstanceOf[ColumnarToRowTransition]) {
       val outputsColumnar = plan match {
         // With planned write, the write command invokes child plan's `executeWrite` which is
         // neither columnar nor row-based.
@@ -537,6 +535,19 @@ case class ApplyColumnarRulesAndInsertTransitions(
           false
       }
       plan.withNewChildren(plan.children.map(insertTransitions(_, outputsColumnar)))
+    } else {
+      plan
+    }
+  }
+
+  /**
+   * Inserts RowToColumnarExecs and ColumnarToRowExecs where needed.
+   */
+  private def insertTransitions(plan: SparkPlan, outputsColumnar: Boolean): SparkPlan = {
+    if (outputsColumnar) {
+      ensureOutputsColumnar(plan)
+    } else {
+      ensureOutputsRowBased(plan)
     }
   }
 

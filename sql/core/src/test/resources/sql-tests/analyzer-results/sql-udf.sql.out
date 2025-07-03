@@ -814,6 +814,1106 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+CREATE FUNCTION foo51() RETURNS INT RETURN (SELECT a FROM VALUES(1), (2) AS T(a))
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo51`"
+  }
+}
+
+
+-- !query
+SELECT foo51()
+-- !query analysis
+Project [spark_catalog.default.foo51() AS spark_catalog.default.foo51()#x]
+:  +- Project [a#x]
+:     +- SubqueryAlias T
+:        +- LocalRelation [a#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo52() RETURNS INT RETURN (SELECT 1 FROM VALUES(1) WHERE 1 = 0)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo52`"
+  }
+}
+
+
+-- !query
+SELECT foo52()
+-- !query analysis
+Project [spark_catalog.default.foo52() AS spark_catalog.default.foo52()#x]
+:  +- Project [1 AS 1#x]
+:     +- Filter (1 = 0)
+:        +- LocalRelation [col1#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo6c(` a` INT, a INT, `a b` INT) RETURNS INT RETURN 1
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo6c`"
+  }
+}
+
+
+-- !query
+SELECT foo6c(1, 2, 3)
+-- !query analysis
+Project [spark_catalog.default.foo6c( a#x, a#x, a b#x) AS spark_catalog.default.foo6c(1, 2, 3)#x]
++- Project [cast(1 as int) AS  a#x, cast(2 as int) AS a#x, cast(3 as int) AS a b#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo6d() RETURNS TABLE(` a` INT, a INT, `a b` INT) RETURN SELECT 1, 2, 3
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo6d`"
+  }
+}
+
+
+-- !query
+SELECT * FROM foo6d()
+-- !query analysis
+Project [ a#x, a#x, a b#x]
++- SQLFunctionNode spark_catalog.default.foo6d
+   +- SubqueryAlias foo6d
+      +- Project [cast(1#x as int) AS  a#x, cast(2#x as int) AS a#x, cast(3#x as int) AS a b#x]
+         +- Project [1 AS 1#x, 2 AS 2#x, 3 AS 3#x]
+            +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo7a(a STRING, b STRING, c STRING) RETURNS STRING RETURN
+SELECT 'Foo.a: ' || a ||  ' Foo.a: ' || foo7a.a
+       || ' T.b: ' ||  b || ' Foo.b: ' || foo7a.b
+       || ' T.c: ' || c || ' T.c: ' || t.c FROM VALUES('t.b', 't.c') AS T(b, c)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo7a`"
+  }
+}
+
+
+-- !query
+SELECT foo7a('Foo.a', 'Foo.b', 'Foo.c')
+-- !query analysis
+Project [spark_catalog.default.foo7a(a#x, b#x, c#x) AS spark_catalog.default.foo7a(Foo.a, Foo.b, Foo.c)#x]
+:  +- Project [concat(concat(concat(concat(concat(concat(concat(concat(concat(concat(concat(Foo.a: , outer(a#x)),  Foo.a: ), outer(a#x)),  T.b: ), b#x),  Foo.b: ), outer(b#x)),  T.c: ), c#x),  T.c: ), c#x) AS concat(concat(concat(concat(concat(concat(concat(concat(concat(concat(concat(Foo.a: , outer(foo7a.a)),  Foo.a: ), outer(foo7a.a)),  T.b: ), b),  Foo.b: ), outer(foo7a.b)),  T.c: ), c),  T.c: ), c)#x]
+:     +- SubqueryAlias T
+:        +- LocalRelation [b#x, c#x]
++- Project [cast(Foo.a as string) AS a#x, cast(Foo.b as string) AS b#x, cast(Foo.c as string) AS c#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo7at(a STRING, b STRING, c STRING) RETURNS TABLE (a STRING, b STRING, c STRING, d STRING, e STRING) RETURN
+SELECT CONCAT('Foo.a: ', a), CONCAT('Foo.b: ', foo7at.b), CONCAT('T.b: ', b),
+       CONCAT('Foo.c: ', foo7at.c), CONCAT('T.c: ', c)
+FROM VALUES ('t.b', 't.c') AS T(b, c)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo7at`"
+  }
+}
+
+
+-- !query
+SELECT * FROM foo7at('Foo.a', 'Foo.b', 'Foo.c')
+-- !query analysis
+Project [a#x, b#x, c#x, d#x, e#x]
++- SQLFunctionNode spark_catalog.default.foo7at
+   +- SubqueryAlias foo7at
+      +- Project [cast(concat(Foo.a: , outer(foo7at.a))#x as string) AS a#x, cast(concat(Foo.b: , outer(foo7at.b))#x as string) AS b#x, cast(concat(T.b: , b)#x as string) AS c#x, cast(concat(Foo.c: , outer(foo7at.c))#x as string) AS d#x, cast(concat(T.c: , c)#x as string) AS e#x]
+         +- Project [concat(Foo.a: , cast(Foo.a as string)) AS concat(Foo.a: , outer(foo7at.a))#x, concat(Foo.b: , cast(Foo.b as string)) AS concat(Foo.b: , outer(foo7at.b))#x, concat(T.b: , b#x) AS concat(T.b: , b)#x, concat(Foo.c: , cast(Foo.c as string)) AS concat(Foo.c: , outer(foo7at.c))#x, concat(T.c: , c#x) AS concat(T.c: , c)#x]
+            +- SubqueryAlias T
+               +- LocalRelation [b#x, c#x]
+
+
+-- !query
+CREATE FUNCTION foo9a(a BOOLEAN) RETURNS BOOLEAN RETURN NOT a
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo9a`"
+  }
+}
+
+
+-- !query
+SELECT foo9a(true)
+-- !query analysis
+Project [spark_catalog.default.foo9a(a#x) AS spark_catalog.default.foo9a(true)#x]
++- Project [cast(true as boolean) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9a(5)
+-- !query analysis
+Project [spark_catalog.default.foo9a(a#x) AS spark_catalog.default.foo9a(5)#x]
++- Project [cast(5 as boolean) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9a('Nonsense')
+-- !query analysis
+Project [spark_catalog.default.foo9a(a#x) AS spark_catalog.default.foo9a(Nonsense)#x]
++- Project [cast(Nonsense as boolean) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo9b(a BYTE) RETURNS BYTE RETURN CAST(a AS SHORT) + 1
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo9b`"
+  }
+}
+
+
+-- !query
+SELECT foo9b(126)
+-- !query analysis
+Project [spark_catalog.default.foo9b(a#x) AS spark_catalog.default.foo9b(126)#x]
++- Project [cast(126 as tinyint) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9b(127)
+-- !query analysis
+Project [spark_catalog.default.foo9b(a#x) AS spark_catalog.default.foo9b(127)#x]
++- Project [cast(127 as tinyint) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9b(128)
+-- !query analysis
+Project [spark_catalog.default.foo9b(a#x) AS spark_catalog.default.foo9b(128)#x]
++- Project [cast(128 as tinyint) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo9c(a SHORT) RETURNS SHORT RETURN CAST(a AS INTEGER) + 1
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo9c`"
+  }
+}
+
+
+-- !query
+SELECT foo9c(32766)
+-- !query analysis
+Project [spark_catalog.default.foo9c(a#x) AS spark_catalog.default.foo9c(32766)#x]
++- Project [cast(32766 as smallint) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9c(32767)
+-- !query analysis
+Project [spark_catalog.default.foo9c(a#x) AS spark_catalog.default.foo9c(32767)#x]
++- Project [cast(32767 as smallint) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9c(32768)
+-- !query analysis
+Project [spark_catalog.default.foo9c(a#x) AS spark_catalog.default.foo9c(32768)#x]
++- Project [cast(32768 as smallint) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo9d(a INTEGER) RETURNS INTEGER RETURN CAST(a AS BIGINT) + 1
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo9d`"
+  }
+}
+
+
+-- !query
+SELECT foo9d(2147483647 - 1)
+-- !query analysis
+Project [spark_catalog.default.foo9d(a#x) AS spark_catalog.default.foo9d((2147483647 - 1))#x]
++- Project [cast((2147483647 - 1) as int) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9d(2147483647)
+-- !query analysis
+Project [spark_catalog.default.foo9d(a#x) AS spark_catalog.default.foo9d(2147483647)#x]
++- Project [cast(2147483647 as int) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9d(2147483647 + 1)
+-- !query analysis
+Project [spark_catalog.default.foo9d(a#x) AS spark_catalog.default.foo9d((2147483647 + 1))#x]
++- Project [cast((2147483647 + 1) as int) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo9e(a BIGINT) RETURNS BIGINT RETURN CAST(a AS DECIMAL(20, 0)) + 1
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo9e`"
+  }
+}
+
+
+-- !query
+SELECT foo9e(9223372036854775807 - 1)
+-- !query analysis
+Project [spark_catalog.default.foo9e(a#xL) AS spark_catalog.default.foo9e((9223372036854775807 - 1))#xL]
++- Project [cast((9223372036854775807 - cast(1 as bigint)) as bigint) AS a#xL]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9e(9223372036854775807)
+-- !query analysis
+Project [spark_catalog.default.foo9e(a#xL) AS spark_catalog.default.foo9e(9223372036854775807)#xL]
++- Project [cast(9223372036854775807 as bigint) AS a#xL]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9e(9223372036854775807.0 + 1)
+-- !query analysis
+Project [spark_catalog.default.foo9e(a#xL) AS spark_catalog.default.foo9e((9223372036854775807.0 + 1))#xL]
++- Project [cast((9223372036854775807.0 + cast(1 as decimal(1,0))) as bigint) AS a#xL]
+   +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo9f(a DECIMAL( 5, 2 )) RETURNS DECIMAL (5, 2) RETURN CAST(a AS DECIMAL(6, 2)) + 1
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo9f`"
+  }
+}
+
+
+-- !query
+SELECT foo9f(999 - 1)
+-- !query analysis
+Project [spark_catalog.default.foo9f(a#x) AS spark_catalog.default.foo9f((999 - 1))#x]
++- Project [cast((999 - 1) as decimal(5,2)) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9f(999)
+-- !query analysis
+Project [spark_catalog.default.foo9f(a#x) AS spark_catalog.default.foo9f(999)#x]
++- Project [cast(999 as decimal(5,2)) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9f(999 + 1)
+-- !query analysis
+Project [spark_catalog.default.foo9f(a#x) AS spark_catalog.default.foo9f((999 + 1))#x]
++- Project [cast((999 + 1) as decimal(5,2)) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo9g(a FLOAT, b String) RETURNS FLOAT RETURN b || CAST(a AS String)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo9g`"
+  }
+}
+
+
+-- !query
+SELECT foo9g(123.23, '7')
+-- !query analysis
+Project [spark_catalog.default.foo9g(a#x, b#x) AS spark_catalog.default.foo9g(123.23, 7)#x]
++- Project [cast(123.23 as float) AS a#x, cast(7 as string) AS b#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9g('hello', '7')
+-- !query analysis
+Project [spark_catalog.default.foo9g(a#x, b#x) AS spark_catalog.default.foo9g(hello, 7)#x]
++- Project [cast(hello as float) AS a#x, cast(7 as string) AS b#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9g(123.23, 'q')
+-- !query analysis
+Project [spark_catalog.default.foo9g(a#x, b#x) AS spark_catalog.default.foo9g(123.23, q)#x]
++- Project [cast(123.23 as float) AS a#x, cast(q as string) AS b#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo9h(a DOUBLE, b String) RETURNS DOUBLE RETURN b || CAST(a AS String)
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo9h`"
+  }
+}
+
+
+-- !query
+SELECT foo9h(123.23, '7')
+-- !query analysis
+Project [spark_catalog.default.foo9h(a#x, b#x) AS spark_catalog.default.foo9h(123.23, 7)#x]
++- Project [cast(123.23 as double) AS a#x, cast(7 as string) AS b#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9h('hello', '7')
+-- !query analysis
+Project [spark_catalog.default.foo9h(a#x, b#x) AS spark_catalog.default.foo9h(hello, 7)#x]
++- Project [cast(hello as double) AS a#x, cast(7 as string) AS b#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9h(123.23, 'q')
+-- !query analysis
+Project [spark_catalog.default.foo9h(a#x, b#x) AS spark_catalog.default.foo9h(123.23, q)#x]
++- Project [cast(123.23 as double) AS a#x, cast(q as string) AS b#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo9i(a VARCHAR(10), b VARCHAR(10)) RETURNS VARCHAR(12) RETURN a || b
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
+  "sqlState" : "0A000"
+}
+
+
+-- !query
+CREATE FUNCTION foo9j(a STRING, b STRING) RETURNS STRING RETURN a || b
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo9j`"
+  }
+}
+
+
+-- !query
+SELECT foo9j('1234567890', '12')
+-- !query analysis
+Project [spark_catalog.default.foo9j(a#x, b#x) AS spark_catalog.default.foo9j(1234567890, 12)#x]
++- Project [cast(1234567890 as string) AS a#x, cast(12 as string) AS b#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9j(12345678901, '12')
+-- !query analysis
+Project [spark_catalog.default.foo9j(a#x, b#x) AS spark_catalog.default.foo9j(12345678901, 12)#x]
++- Project [cast(12345678901 as string) AS a#x, cast(12 as string) AS b#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo9l(a DATE, b INTERVAL) RETURNS DATE RETURN a + b
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo9l`"
+  }
+}
+
+
+-- !query
+SELECT foo9l(DATE '2020-02-02', INTERVAL '1' YEAR)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"INTERVAL '1' YEAR\"",
+    "srcType" : "\"INTERVAL YEAR\"",
+    "targetType" : "\"INTERVAL\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 50,
+    "fragment" : "foo9l(DATE '2020-02-02', INTERVAL '1' YEAR)"
+  } ]
+}
+
+
+-- !query
+SELECT foo9l('2020-02-02', INTERVAL '1' YEAR)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"INTERVAL '1' YEAR\"",
+    "srcType" : "\"INTERVAL YEAR\"",
+    "targetType" : "\"INTERVAL\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "foo9l('2020-02-02', INTERVAL '1' YEAR)"
+  } ]
+}
+
+
+-- !query
+SELECT foo9l(DATE '-7', INTERVAL '1' YEAR)
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
+  "messageParameters" : {
+    "value" : "'-7'",
+    "valueType" : "\"DATE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 14,
+    "stopIndex" : 22,
+    "fragment" : "DATE '-7'"
+  } ]
+}
+
+
+-- !query
+SELECT foo9l(DATE '2020-02-02', INTERVAL '9999999' YEAR)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"INTERVAL '9999999' YEAR\"",
+    "srcType" : "\"INTERVAL YEAR\"",
+    "targetType" : "\"INTERVAL\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 56,
+    "fragment" : "foo9l(DATE '2020-02-02', INTERVAL '9999999' YEAR)"
+  } ]
+}
+
+
+-- !query
+CREATE FUNCTION foo9m(a TIMESTAMP, b INTERVAL) RETURNS TIMESTAMP RETURN a + b
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo9m`"
+  }
+}
+
+
+-- !query
+SELECT foo9m(TIMESTAMP'2020-02-02 12:15:16.123', INTERVAL '1' YEAR)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"INTERVAL '1' YEAR\"",
+    "srcType" : "\"INTERVAL YEAR\"",
+    "targetType" : "\"INTERVAL\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 67,
+    "fragment" : "foo9m(TIMESTAMP'2020-02-02 12:15:16.123', INTERVAL '1' YEAR)"
+  } ]
+}
+
+
+-- !query
+SELECT foo9m('2020-02-02 12:15:16.123', INTERVAL '1' YEAR)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"INTERVAL '1' YEAR\"",
+    "srcType" : "\"INTERVAL YEAR\"",
+    "targetType" : "\"INTERVAL\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 58,
+    "fragment" : "foo9m('2020-02-02 12:15:16.123', INTERVAL '1' YEAR)"
+  } ]
+}
+
+
+-- !query
+SELECT foo9m(TIMESTAMP'2020-02-02 12:15:16.123', INTERVAL '999999' YEAR)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"INTERVAL '999999' YEAR\"",
+    "srcType" : "\"INTERVAL YEAR\"",
+    "targetType" : "\"INTERVAL\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 72,
+    "fragment" : "foo9m(TIMESTAMP'2020-02-02 12:15:16.123', INTERVAL '999999' YEAR)"
+  } ]
+}
+
+
+-- !query
+CREATE FUNCTION foo9n(a ARRAY<INTEGER>) RETURNS ARRAY<INTEGER> RETURN a
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo9n`"
+  }
+}
+
+
+-- !query
+SELECT foo9n(ARRAY(1, 2, 3))
+-- !query analysis
+Project [spark_catalog.default.foo9n(a#x) AS spark_catalog.default.foo9n(array(1, 2, 3))#x]
++- Project [cast(array(1, 2, 3) as array<int>) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9n(from_json('[1, 2, 3]', 'array<int>'))
+-- !query analysis
+Project [spark_catalog.default.foo9n(a#x) AS spark_catalog.default.foo9n(from_json([1, 2, 3]))#x]
++- Project [cast(from_json(ArrayType(IntegerType,true), [1, 2, 3], Some(America/Los_Angeles), false) as array<int>) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo9o(a MAP<STRING, INTEGER>) RETURNS MAP<STRING, INTEGER> RETURN a
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo9o`"
+  }
+}
+
+
+-- !query
+SELECT foo9o(MAP('hello', 1, 'world', 2))
+-- !query analysis
+Project [spark_catalog.default.foo9o(a#x) AS spark_catalog.default.foo9o(map(hello, 1, world, 2))#x]
++- Project [cast(map(hello, 1, world, 2) as map<string,int>) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9o(from_json('{"hello":1, "world":2}', 'map<string,int>'))
+-- !query analysis
+Project [spark_catalog.default.foo9o(a#x) AS spark_catalog.default.foo9o(entries)#x]
++- Project [cast(from_json(MapType(StringType,IntegerType,true), {"hello":1, "world":2}, Some(America/Los_Angeles), false) as map<string,int>) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo9p(a STRUCT<a1: INTEGER, a2: STRING>) RETURNS STRUCT<a1: INTEGER, a2: STRING> RETURN a
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo9p`"
+  }
+}
+
+
+-- !query
+SELECT foo9p(STRUCT(1, 'hello'))
+-- !query analysis
+Project [spark_catalog.default.foo9p(a#x) AS spark_catalog.default.foo9p(struct(1, hello))#x]
++- Project [cast(struct(col1, 1, col2, hello) as struct<a1:int,a2:string>) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9p(from_json('{1:"hello"}', 'struct<a1:int, a2:string>'))
+-- !query analysis
+Project [spark_catalog.default.foo9p(a#x) AS spark_catalog.default.foo9p(from_json({1:"hello"}))#x]
++- Project [cast(from_json(StructField(a1,IntegerType,true), StructField(a2,StringType,true), {1:"hello"}, Some(America/Los_Angeles), false) as struct<a1:int,a2:string>) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo9q(a ARRAY<STRUCT<a1: INT, a2: STRING>>) RETURNS ARRAY<STRUCT<a1: INT, a2: STRING>> RETURN a
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo9q`"
+  }
+}
+
+
+-- !query
+SELECT foo9q(ARRAY(STRUCT(1, 'hello'), STRUCT(2, 'world')))
+-- !query analysis
+Project [spark_catalog.default.foo9q(a#x) AS spark_catalog.default.foo9q(array(struct(1, hello), struct(2, world)))#x]
++- Project [cast(array(struct(col1, 1, col2, hello), struct(col1, 2, col2, world)) as array<struct<a1:int,a2:string>>) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9q(ARRAY(NAMED_STRUCT('x', 1, 'y', 'hello'), NAMED_STRUCT('x', 2, 'y', 'world')))
+-- !query analysis
+Project [spark_catalog.default.foo9q(a#x) AS spark_catalog.default.foo9q(array(named_struct(x, 1, y, hello), named_struct(x, 2, y, world)))#x]
++- Project [cast(array(named_struct(x, 1, y, hello), named_struct(x, 2, y, world)) as array<struct<a1:int,a2:string>>) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9q(from_json('[{1:"hello"}, {2:"world"}]', 'array<struct<a1:int,a2:string>>'))
+-- !query analysis
+Project [spark_catalog.default.foo9q(a#x) AS spark_catalog.default.foo9q(from_json([{1:"hello"}, {2:"world"}]))#x]
++- Project [cast(from_json(ArrayType(StructType(StructField(a1,IntegerType,true),StructField(a2,StringType,true)),true), [{1:"hello"}, {2:"world"}], Some(America/Los_Angeles), false) as array<struct<a1:int,a2:string>>) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE FUNCTION foo9r(a ARRAY<MAP<STRING, INT>>) RETURNS ARRAY<MAP<STRING, INT>> RETURN a
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo9r`"
+  }
+}
+
+
+-- !query
+SELECT foo9r(ARRAY(MAP('hello', 1), MAP('world', 2)))
+-- !query analysis
+Project [spark_catalog.default.foo9r(a#x) AS spark_catalog.default.foo9r(array(map(hello, 1), map(world, 2)))#x]
++- Project [cast(array(map(hello, 1), map(world, 2)) as array<map<string,int>>) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT foo9r(from_json('[{"hello":1}, {"world":2}]', 'array<map<string,int>>'))
+-- !query analysis
+Project [spark_catalog.default.foo9r(a#x) AS spark_catalog.default.foo9r(from_json([{"hello":1}, {"world":2}]))#x]
++- Project [cast(from_json(ArrayType(MapType(StringType,IntegerType,true),true), [{"hello":1}, {"world":2}], Some(America/Los_Angeles), false) as array<map<string,int>>) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_10(a INT) RETURNS INT RETURN a + 2
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_10, a INT, INT, a + 2, false, false, false, true
+
+
+-- !query
+CREATE OR REPLACE FUNCTION bar1_10(b INT) RETURNS STRING RETURN foo1_10(TRY_CAST(b AS STRING))
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.bar1_10, b INT, STRING, foo1_10(TRY_CAST(b AS STRING)), false, false, false, true
+
+
+-- !query
+SELECT bar1_10(3)
+-- !query analysis
+Project [spark_catalog.default.bar1_10(b#x) AS spark_catalog.default.bar1_10(3)#x]
++- Project [b#x, cast(try_cast(b#x as string) as int) AS a#x]
+   +- Project [cast(3 as int) AS b#x]
+      +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11a() RETURN 42
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11a, , 42, false, false, false, true
+
+
+-- !query
+SELECT foo1_11a()
+-- !query analysis
+Project [spark_catalog.default.foo1_11a() AS spark_catalog.default.foo1_11a()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11b() RETURN 'hello world'
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11b, , 'hello world', false, false, false, true
+
+
+-- !query
+SELECT foo1_11b()
+-- !query analysis
+Project [spark_catalog.default.foo1_11b() AS spark_catalog.default.foo1_11b()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11c(a INT, b INT) RETURN a + b
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11c, a INT, b INT, , a + b, false, false, false, true
+
+
+-- !query
+SELECT foo1_11c(3, 5)
+-- !query analysis
+Project [spark_catalog.default.foo1_11c(a#x, b#x) AS spark_catalog.default.foo1_11c(3, 5)#x]
++- Project [cast(3 as int) AS a#x, cast(5 as int) AS b#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11d(a DOUBLE, b INT) RETURN a * b + 1.5
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11d, a DOUBLE, b INT, , a * b + 1.5, false, false, false, true
+
+
+-- !query
+SELECT foo1_11d(3.0, 5)
+-- !query analysis
+Project [spark_catalog.default.foo1_11d(a#x, b#x) AS spark_catalog.default.foo1_11d(3.0, 5)#x]
++- Project [cast(3.0 as double) AS a#x, cast(5 as int) AS b#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11e(a INT) RETURN a > 10
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11e, a INT, , a > 10, false, false, false, true
+
+
+-- !query
+SELECT foo1_11e(15), foo1_11e(5)
+-- !query analysis
+Project [spark_catalog.default.foo1_11e(a#x) AS spark_catalog.default.foo1_11e(15)#x, spark_catalog.default.foo1_11e(a#x) AS spark_catalog.default.foo1_11e(5)#x]
++- Project [cast(15 as int) AS a#x, cast(5 as int) AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11f(d DATE) RETURN d + INTERVAL '1' DAY
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11f, d DATE, , d + INTERVAL '1' DAY, false, false, false, true
+
+
+-- !query
+SELECT foo1_11f(DATE '2024-01-01')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11g(n INT) RETURN ARRAY(1, 2, n)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11g, n INT, , ARRAY(1, 2, n), false, false, false, true
+
+
+-- !query
+SELECT foo1_11g(5)
+-- !query analysis
+Project [spark_catalog.default.foo1_11g(n#x) AS spark_catalog.default.foo1_11g(5)#x]
++- Project [cast(5 as int) AS n#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11h(a INT, b STRING) RETURN STRUCT(a, b)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11h, a INT, b STRING, , STRUCT(a, b), false, false, false, true
+
+
+-- !query
+SELECT foo1_11h(1, 'test')
+-- !query analysis
+Project [spark_catalog.default.foo1_11h(a#x, b#x) AS spark_catalog.default.foo1_11h(1, test)#x]
++- Project [cast(1 as int) AS a#x, cast(test as string) AS b#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11i(x INT) RETURN (SELECT x * 2)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11i, x INT, , (SELECT x * 2), false, false, false, true
+
+
+-- !query
+SELECT foo1_11i(5)
+-- !query analysis
+Project [spark_catalog.default.foo1_11i(x#x) AS spark_catalog.default.foo1_11i(5)#x]
++- Project [cast(5 as int) AS x#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11j(s STRING) RETURN UPPER(s)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11j, s STRING, , UPPER(s), false, false, false, true
+
+
+-- !query
+SELECT foo1_11j('hello')
+-- !query analysis
+Project [spark_catalog.default.foo1_11j(s#x) AS spark_catalog.default.foo1_11j(hello)#x]
++- Project [cast(hello as string) AS s#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11k(a INT, b STRING) RETURN CONCAT(CAST(a AS STRING), '_', b)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11k, a INT, b STRING, , CONCAT(CAST(a AS STRING), '_', b), false, false, false, true
+
+
+-- !query
+SELECT foo1_11k(123, 'test')
+-- !query analysis
+Project [spark_catalog.default.foo1_11k(a#x, b#x) AS spark_catalog.default.foo1_11k(123, test)#x]
++- Project [cast(123 as int) AS a#x, cast(test as string) AS b#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11l() RETURNS TABLE RETURN SELECT 1 as id, 'hello' as name
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11l, TABLE, SELECT 1 as id, 'hello' as name, true, false, false, true
+
+
+-- !query
+SELECT * FROM foo1_11l()
+-- !query analysis
+Project [id#x, name#x]
++- SQLFunctionNode spark_catalog.default.foo1_11l
+   +- SubqueryAlias foo1_11l
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x]
+         +- Project [1 AS id#x, hello AS name#x]
+            +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11m(a INT, b STRING) RETURNS TABLE RETURN SELECT a * 2 as doubled, UPPER(b) as upper_name
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11m, a INT, b STRING, TABLE, SELECT a * 2 as doubled, UPPER(b) as upper_name, true, false, false, true
+
+
+-- !query
+SELECT * FROM foo1_11m(5, 'world')
+-- !query analysis
+Project [doubled#x, upper_name#x]
++- SQLFunctionNode spark_catalog.default.foo1_11m
+   +- SubqueryAlias foo1_11m
+      +- Project [cast(doubled#x as int) AS doubled#x, cast(upper_name#x as string) AS upper_name#x]
+         +- Project [(cast(5 as int) * 2) AS doubled#x, upper(cast(world as string)) AS upper_name#x]
+            +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11n(arr ARRAY<INT>) RETURNS TABLE RETURN SELECT size(arr) as array_size, arr[0] as first_element
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11n, arr ARRAY<INT>, TABLE, SELECT size(arr) as array_size, arr[0] as first_element, true, false, false, true
+
+
+-- !query
+SELECT * FROM foo1_11n(ARRAY(1, 2, 3))
+-- !query analysis
+Project [array_size#x, first_element#x]
++- SQLFunctionNode spark_catalog.default.foo1_11n
+   +- SubqueryAlias foo1_11n
+      +- Project [cast(array_size#x as int) AS array_size#x, cast(first_element#x as int) AS first_element#x]
+         +- Project [size(cast(array(1, 2, 3) as array<int>), false) AS array_size#x, cast(array(1, 2, 3) as array<int>)[0] AS first_element#x]
+            +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo1_11o(id INT, name STRING) RETURNS TABLE RETURN SELECT STRUCT(id, name) as person_info, id + 100 as modified_id
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo1_11o, id INT, name STRING, TABLE, SELECT STRUCT(id, name) as person_info, id + 100 as modified_id, true, false, false, true
+
+
+-- !query
+SELECT * FROM foo1_11o(1, 'Alice')
+-- !query analysis
+Project [person_info#x, modified_id#x]
++- SQLFunctionNode spark_catalog.default.foo1_11o
+   +- SubqueryAlias foo1_11o
+      +- Project [cast(person_info#x as struct<id:int,name:string>) AS person_info#x, cast(modified_id#x as int) AS modified_id#x]
+         +- Project [struct(id, cast(1 as int), name, cast(Alice as string)) AS person_info#x, (cast(1 as int) + 100) AS modified_id#x]
+            +- OneRowRelation
+
+
+-- !query
 CREATE FUNCTION foo2_1a(a INT) RETURNS INT RETURN a
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
@@ -2978,6 +4078,12 @@ SetCommand (spark.sql.ansi.enabled,Some(true))
 
 
 -- !query
+DROP FUNCTION IF EXISTS foo3_3at
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_3at, true, false
+
+
+-- !query
 CREATE FUNCTION foo3_3a(x INT) RETURNS DOUBLE RETURN 1 / x
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
@@ -3046,16 +4152,7 @@ CreateSQLFunctionCommand spark_catalog.default.foo3_3a, x INT, DOUBLE, 1 / x, fa
 -- !query
 CREATE OR REPLACE FUNCTION foo3_3at(x INT) RETURNS TABLE (a DOUBLE) RETURN SELECT 1 / x
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_3at`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_3at, x INT, a DOUBLE, SELECT 1 / x, true, false, false, true
 
 
 -- !query

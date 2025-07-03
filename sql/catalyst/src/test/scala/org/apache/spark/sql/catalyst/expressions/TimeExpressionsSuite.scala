@@ -358,6 +358,8 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       SecondsOfTimeWithFraction(Literal.create(null, TimeType(TimeType.MICROS_PRECISION))),
       null)
+    assert(SecondsOfTimeWithFraction(Literal.create(null)).inputTypes.nonEmpty)
+
     checkConsistencyBetweenInterpretedAndCodegen(
       (child: Expression) => SecondsOfTimeWithFraction(child).replacement,
       TimeType())

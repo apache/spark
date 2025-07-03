@@ -165,7 +165,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       })
     case pudt: PythonUserDefinedType => castToString(pudt.sqlType)
     case udt: UserDefinedType[_] =>
-      o => UTF8String.fromString(udt.deserialize(o).toString)
+      o => UTF8String.fromString(udt.stringifyValue(udt.deserialize(o)))
     case YearMonthIntervalType(startField, endField) =>
       acceptAny[Int](i => UTF8String.fromString(
         IntervalUtils.toYearMonthIntervalString(i, ANSI_STYLE, startField, endField)))
@@ -274,7 +274,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       case udt: UserDefinedType[_] =>
         val udtRef = JavaCode.global(ctx.addReferenceObj("udt", udt), udt.sqlType)
         (c, evPrim) =>
-          code"$evPrim = UTF8String.fromString($udtRef.deserialize($c).toString());"
+          code"$evPrim = UTF8String.fromString($udtRef.stringifyValue($udtRef.deserialize($c)));"
       case i: YearMonthIntervalType =>
         val iu = IntervalUtils.getClass.getName.stripSuffix("$")
         val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")

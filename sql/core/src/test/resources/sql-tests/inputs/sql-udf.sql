@@ -188,6 +188,244 @@ CREATE FUNCTION foo41() RETURNS INT RETURN SELECT 1;
 -- Expect failure
 CREATE FUNCTION foo42() RETURNS TABLE(a INT) RETURN 1;
 
+-- 1.5 Scalar function returns subquery with more than one row or no rows
+
+-- 1.5.a More than one row
+CREATE FUNCTION foo51() RETURNS INT RETURN (SELECT a FROM VALUES(1), (2) AS T(a));
+SELECT foo51();
+
+-- 1.5.b No Rows
+CREATE FUNCTION foo52() RETURNS INT RETURN (SELECT 1 FROM VALUES(1) WHERE 1 = 0);
+-- Expect Success: NULL
+SELECT foo52();
+
+-- 1.6 Difficult identifiers
+-- 1.6.a Space in the schema name
+-- UNSUPPORTED BY CREATE SCHEMA
+-- CREATE SCHEMA `a b`;
+
+-- CREATE FUNCTION `a b`.foo6a() RETURNS INT RETURN 1;
+-- SELECT `a b`.foo6a();
+
+-- DROP FUNCTION `a b`.foo6a;
+-- DROP SCHEMA `a b`;
+
+-- 1.6.b Space in a function name
+-- Default Hive configuration does not allow function name with space
+-- CREATE FUNCTION `foo 6 b`() RETURNS INT RETURN 1;
+-- SELECT `foo 6 b`();
+-- DROP FUNCTION `foo 6 b`;
+
+-- 1.6.c Spaces in parameter names
+CREATE FUNCTION foo6c(` a` INT, a INT, `a b` INT) RETURNS INT RETURN 1;
+SELECT foo6c(1, 2, 3);
+
+-- 1.6.d Spaces in RETURNS column list
+CREATE FUNCTION foo6d() RETURNS TABLE(` a` INT, a INT, `a b` INT) RETURN SELECT 1, 2, 3;
+SELECT * FROM foo6d();
+
+-- 1.7 Parameter resolution
+CREATE FUNCTION foo7a(a STRING, b STRING, c STRING) RETURNS STRING RETURN
+SELECT 'Foo.a: ' || a ||  ' Foo.a: ' || foo7a.a
+       || ' T.b: ' ||  b || ' Foo.b: ' || foo7a.b
+       || ' T.c: ' || c || ' T.c: ' || t.c FROM VALUES('t.b', 't.c') AS T(b, c);
+
+SELECT foo7a('Foo.a', 'Foo.b', 'Foo.c');
+
+CREATE FUNCTION foo7at(a STRING, b STRING, c STRING) RETURNS TABLE (a STRING, b STRING, c STRING, d STRING, e STRING) RETURN
+SELECT CONCAT('Foo.a: ', a), CONCAT('Foo.b: ', foo7at.b), CONCAT('T.b: ', b),
+       CONCAT('Foo.c: ', foo7at.c), CONCAT('T.c: ', c)
+FROM VALUES ('t.b', 't.c') AS T(b, c);
+SELECT * FROM foo7at('Foo.a', 'Foo.b', 'Foo.c');
+
+-- 1.8 Comments
+-- Need to verify comments in non-sql tests
+
+-- 1.9 Test all data types
+-- Boolean
+CREATE FUNCTION foo9a(a BOOLEAN) RETURNS BOOLEAN RETURN NOT a;
+SELECT foo9a(true);
+
+-- Expect error
+SELECT foo9a(5);
+SELECT foo9a('Nonsense');
+
+-- Byte
+CREATE FUNCTION foo9b(a BYTE) RETURNS BYTE RETURN CAST(a AS SHORT) + 1;
+SELECT foo9b(126);
+SELECT foo9b(127);
+SELECT foo9b(128);
+
+-- Short
+CREATE FUNCTION foo9c(a SHORT) RETURNS SHORT RETURN CAST(a AS INTEGER) + 1;
+SELECT foo9c(32766);
+SELECT foo9c(32767);
+SELECT foo9c(32768);
+
+-- Integer
+CREATE FUNCTION foo9d(a INTEGER) RETURNS INTEGER RETURN CAST(a AS BIGINT) + 1;
+SELECT foo9d(2147483647 - 1);
+SELECT foo9d(2147483647);
+SELECT foo9d(2147483647 + 1);
+
+-- Bigint
+CREATE FUNCTION foo9e(a BIGINT) RETURNS BIGINT RETURN CAST(a AS DECIMAL(20, 0)) + 1;
+SELECT foo9e(9223372036854775807 - 1);
+SELECT foo9e(9223372036854775807);
+SELECT foo9e(9223372036854775807.0 + 1);
+
+-- DECIMAL
+CREATE FUNCTION foo9f(a DECIMAL( 5, 2 )) RETURNS DECIMAL (5, 2) RETURN CAST(a AS DECIMAL(6, 2)) + 1;
+SELECT foo9f(999 - 1);
+SELECT foo9f(999);
+SELECT foo9f(999 + 1);
+
+-- FLOAT
+CREATE FUNCTION foo9g(a FLOAT, b String) RETURNS FLOAT RETURN b || CAST(a AS String);
+SELECT foo9g(123.23, '7');
+SELECT foo9g('hello', '7');
+SELECT foo9g(123.23, 'q');
+
+-- DOUBLE
+CREATE FUNCTION foo9h(a DOUBLE, b String) RETURNS DOUBLE RETURN b || CAST(a AS String);
+SELECT foo9h(123.23, '7');
+SELECT foo9h('hello', '7');
+SELECT foo9h(123.23, 'q');
+
+-- VARCHAR
+-- Expect failure: char/varchar type can only be used in the table schema.
+CREATE FUNCTION foo9i(a VARCHAR(10), b VARCHAR(10)) RETURNS VARCHAR(12) RETURN a || b;
+-- SELECT foo9i('1234567890', '');
+-- SELECT foo9i('12345678901', '');
+-- SELECT foo9i('1234567890', '1');
+
+-- STRING
+CREATE FUNCTION foo9j(a STRING, b STRING) RETURNS STRING RETURN a || b;
+SELECT foo9j('1234567890', '12');
+SELECT foo9j(12345678901, '12');
+
+-- DATE
+CREATE FUNCTION foo9l(a DATE, b INTERVAL) RETURNS DATE RETURN a + b;
+SELECT foo9l(DATE '2020-02-02', INTERVAL '1' YEAR);
+SELECT foo9l('2020-02-02', INTERVAL '1' YEAR);
+SELECT foo9l(DATE '-7', INTERVAL '1' YEAR);
+SELECT foo9l(DATE '2020-02-02', INTERVAL '9999999' YEAR);
+
+-- TIMESTAMP
+CREATE FUNCTION foo9m(a TIMESTAMP, b INTERVAL) RETURNS TIMESTAMP RETURN a + b;
+SELECT foo9m(TIMESTAMP'2020-02-02 12:15:16.123', INTERVAL '1' YEAR);
+SELECT foo9m('2020-02-02 12:15:16.123', INTERVAL '1' YEAR);
+SELECT foo9m(TIMESTAMP'2020-02-02 12:15:16.123', INTERVAL '999999' YEAR);
+
+-- ARRAY
+CREATE FUNCTION foo9n(a ARRAY<INTEGER>) RETURNS ARRAY<INTEGER> RETURN a;
+SELECT foo9n(ARRAY(1, 2, 3));
+SELECT foo9n(from_json('[1, 2, 3]', 'array<int>'));
+
+-- MAP
+CREATE FUNCTION foo9o(a MAP<STRING, INTEGER>) RETURNS MAP<STRING, INTEGER> RETURN a;
+SELECT foo9o(MAP('hello', 1, 'world', 2));
+SELECT foo9o(from_json('{"hello":1, "world":2}', 'map<string,int>'));
+
+-- STRUCT
+CREATE FUNCTION foo9p(a STRUCT<a1: INTEGER, a2: STRING>) RETURNS STRUCT<a1: INTEGER, a2: STRING> RETURN a;
+SELECT foo9p(STRUCT(1, 'hello'));
+SELECT foo9p(from_json('{1:"hello"}', 'struct<a1:int, a2:string>'));
+
+-- ARRAY of STRUCT
+CREATE FUNCTION foo9q(a ARRAY<STRUCT<a1: INT, a2: STRING>>) RETURNS ARRAY<STRUCT<a1: INT, a2: STRING>> RETURN a;
+SELECT foo9q(ARRAY(STRUCT(1, 'hello'), STRUCT(2, 'world')));
+SELECT foo9q(ARRAY(NAMED_STRUCT('x', 1, 'y', 'hello'), NAMED_STRUCT('x', 2, 'y', 'world')));
+SELECT foo9q(from_json('[{1:"hello"}, {2:"world"}]', 'array<struct<a1:int,a2:string>>'));
+
+-- ARRAY of MAP
+CREATE FUNCTION foo9r(a ARRAY<MAP<STRING, INT>>) RETURNS ARRAY<MAP<STRING, INT>> RETURN a;
+SELECT foo9r(ARRAY(MAP('hello', 1), MAP('world', 2)));
+SELECT foo9r(from_json('[{"hello":1}, {"world":2}]', 'array<map<string,int>>'));
+
+-- 1.10 Proper name resolution when referencing another function
+CREATE OR REPLACE FUNCTION foo1_10(a INT) RETURNS INT RETURN a + 2;
+CREATE OR REPLACE FUNCTION bar1_10(b INT) RETURNS STRING RETURN foo1_10(TRY_CAST(b AS STRING));
+SELECT bar1_10(3);
+
+-- 1.11 Optional return types (type inference)
+-- 1.11.a Scalar UDF without RETURNS clause - return type inferred from body
+-- Simple literal return
+CREATE OR REPLACE FUNCTION foo1_11a() RETURN 42;
+-- Expect: 42
+SELECT foo1_11a();
+
+-- String literal return
+CREATE OR REPLACE FUNCTION foo1_11b() RETURN 'hello world';
+-- Expect: 'hello world'
+SELECT foo1_11b();
+
+-- Expression return - should infer INT
+CREATE OR REPLACE FUNCTION foo1_11c(a INT, b INT) RETURN a + b;
+-- Expect: 8
+SELECT foo1_11c(3, 5);
+
+-- Expression return - should infer DOUBLE
+CREATE OR REPLACE FUNCTION foo1_11d(a DOUBLE, b INT) RETURN a * b + 1.5;
+-- Expect: 16.5
+SELECT foo1_11d(3.0, 5);
+
+-- Boolean expression return
+CREATE OR REPLACE FUNCTION foo1_11e(a INT) RETURN a > 10;
+-- Expect: true, false
+SELECT foo1_11e(15), foo1_11e(5);
+
+-- Date arithmetic return
+CREATE OR REPLACE FUNCTION foo1_11f(d DATE) RETURN d + INTERVAL '1' DAY;
+-- Expect: 2024-01-02
+SELECT foo1_11f(DATE '2024-01-01');
+
+-- Array return
+CREATE OR REPLACE FUNCTION foo1_11g(n INT) RETURN ARRAY(1, 2, n);
+-- Expect: [1, 2, 5]
+SELECT foo1_11g(5);
+
+-- Struct return
+CREATE OR REPLACE FUNCTION foo1_11h(a INT, b STRING) RETURN STRUCT(a, b);
+-- Expect: {1, 'test'}
+SELECT foo1_11h(1, 'test');
+
+-- Subquery return - scalar
+CREATE OR REPLACE FUNCTION foo1_11i(x INT) RETURN (SELECT x * 2);
+-- Expect: 10
+SELECT foo1_11i(5);
+
+-- Function call return
+CREATE OR REPLACE FUNCTION foo1_11j(s STRING) RETURN UPPER(s);
+-- Expect: 'HELLO'
+SELECT foo1_11j('hello');
+
+-- Complex expression with multiple types
+CREATE OR REPLACE FUNCTION foo1_11k(a INT, b STRING) RETURN CONCAT(CAST(a AS STRING), '_', b);
+-- Expect: '123_test'
+SELECT foo1_11k(123, 'test');
+
+-- 1.11.b Table UDF without TABLE schema - schema inferred from body
+-- Simple SELECT with literals
+CREATE OR REPLACE FUNCTION foo1_11l() RETURNS TABLE RETURN SELECT 1 as id, 'hello' as name;
+-- Expect: (1, 'hello')
+SELECT * FROM foo1_11l();
+
+-- SELECT with expressions
+CREATE OR REPLACE FUNCTION foo1_11m(a INT, b STRING) RETURNS TABLE RETURN SELECT a * 2 as doubled, UPPER(b) as upper_name;
+-- Expect: (10, 'WORLD')
+SELECT * FROM foo1_11m(5, 'world');
+
+-- SELECT with complex data types
+CREATE OR REPLACE FUNCTION foo1_11n(arr ARRAY<INT>) RETURNS TABLE RETURN SELECT size(arr) as array_size, arr[0] as first_element;
+-- Expect: (3, 1)
+SELECT * FROM foo1_11n(ARRAY(1, 2, 3));
+
+-- SELECT with struct columns
+CREATE OR REPLACE FUNCTION foo1_11o(id INT, name STRING) RETURNS TABLE RETURN SELECT STRUCT(id, name) as person_info, id + 100 as modified_id;
+-- Expect: ({1, 'Alice'}, 101)
+SELECT * FROM foo1_11o(1, 'Alice');
+
 -------------------------------
 -- 2. Scalar SQL UDF
 -- 2.1 deterministic simple expressions
@@ -512,6 +750,7 @@ SELECT foo3_2e1(
 
 -- 3.3 Create and invoke function with different SQL configurations
 SET spark.sql.ansi.enabled=true;
+DROP FUNCTION IF EXISTS foo3_3at;
 CREATE FUNCTION foo3_3a(x INT) RETURNS DOUBLE RETURN 1 / x;
 CREATE FUNCTION foo3_3at(x INT) RETURNS TABLE (a DOUBLE) RETURN SELECT 1 / x;
 CREATE TEMPORARY FUNCTION foo3_3b(x INT) RETURNS DOUBLE RETURN 1 / x;

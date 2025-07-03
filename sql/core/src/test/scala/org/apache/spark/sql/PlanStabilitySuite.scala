@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec, ValidateRequirements}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.util.Utils
 
 // scalastyle:off line.size.limit
 /**
@@ -123,7 +124,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
 
     if (!foundMatch) {
       FileUtils.deleteDirectory(dir)
-      assert(dir.mkdirs())
+      assert(Utils.createDirectory(dir))
 
       val file = new File(dir, "simplified.txt")
       FileUtils.writeStringToFile(file, simplified, StandardCharsets.UTF_8)

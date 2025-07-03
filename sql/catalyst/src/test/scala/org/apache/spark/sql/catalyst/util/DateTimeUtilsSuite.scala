@@ -1118,9 +1118,9 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(nanosToLocalTime(24L * 60 * 60 * 1000 * 1000 * 1000 - 1) ===
       LocalTime.of(23, 59, 59, 999999999))
 
-    Seq(-1, 24L * 60 * 60 * 1000 * 1000 * 1000L).foreach { invalidMicros =>
+    Seq(-1, 24L * 60 * 60 * 1000 * 1000 * 1000L).foreach { invalidNanos =>
       val msg = intercept[DateTimeException] {
-        nanosToLocalTime(invalidMicros)
+        nanosToLocalTime(invalidNanos)
       }.getMessage
       assert(msg.contains("Invalid value"))
     }
@@ -1215,5 +1215,39 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         parameters = Map("rangeMessage" ->
           s"Invalid value for SecondOfMinute (valid values 0 - 59): ${invalidSecond.toLong}"))
     }
+  }
+
+  test("makeTimestampNTZ") {
+    assert(makeTimestampNTZ(0, 0) == 0)
+    assert(makeTimestampNTZ(0, localTime(23, 59, 59)) * NANOS_PER_MICROS == localTime(23, 59, 59))
+    assert(makeTimestampNTZ(-1, 0) == -1 * MICROS_PER_DAY)
+    assert(makeTimestampNTZ(-1, localTime(23, 59, 59, 999999)) == -1)
+    assert(makeTimestampNTZ(days(9999, 12, 31), localTime(23, 59, 59, 999999)) ==
+      date(9999, 12, 31, 23, 59, 59, 999999))
+    assert(makeTimestampNTZ(days(1, 1, 1), localTime(0, 0, 0)) == date(1, 1, 1, 0, 0, 0))
+    val msg = intercept[DateTimeException] {
+      makeTimestampNTZ(0, -1)
+    }.getMessage
+    assert(msg.contains("Invalid value"))
+  }
+
+  test("instant to nanos of day") {
+    assert(instantToNanosOfDay(Instant.parse("1970-01-01T00:00:01.001002003Z"), "UTC") ==
+      1001002003)
+    assert(instantToNanosOfDay(Instant.parse("0001-01-01T23:59:59.999999Z"), "UTC") ==
+      localTime(23, 59, 59, 999999))
+    assert(instantToNanosOfDay(Instant.parse("2025-07-02T19:24:12Z"),
+      ZoneId.of("America/Los_Angeles")) == localTime(12, 24, 12))
+  }
+
+  test("truncate time to precision") {
+    assert(truncateTimeToPrecision(1234, 0) == 0)
+    assert(truncateTimeToPrecision(1000, 6) == 1000)
+    assert(truncateTimeToPrecision(localTime(0, 0, 0, 999999), 6) == 999999000)
+    assert(truncateTimeToPrecision(localTime(0, 0, 0, 999999), 5) == 999990000)
+    assert(truncateTimeToPrecision(localTime(23, 59, 59, 123000), 2) ==
+      localTime(23, 59, 59, 120000))
+    assert(truncateTimeToPrecision(localTime(23, 59, 59, 987654), 1) ==
+      localTime(23, 59, 59, 900000))
   }
 }
