@@ -77,7 +77,7 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
   }
 
   override protected def withNewChildrenInternal(newState: Expression, newK: Expression)
-  : Expression = copy(state = newState, k = newK)
+    : Expression = copy(state = newState, k = newK)
 
   override def nullable: Boolean = false
 

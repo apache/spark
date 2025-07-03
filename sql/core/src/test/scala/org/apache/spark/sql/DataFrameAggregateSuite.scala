@@ -24,7 +24,7 @@ import scala.util.Random
 
 import org.scalatest.matchers.must.Matchers.the
 
-import org.apache.spark.{SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Abs, ApproxTopKEstimate, BoundReference, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{ApproxTopK, ApproxTopKAccumulate, Sum}
@@ -2965,7 +2965,7 @@ class DataFrameAggregateSuite extends QueryTest
       Row(new java.math.BigDecimal("1.000"), 2))))
   }
 
-  test("SPARK-52588type: invalid accumulate if item type is not supported") {
+  test("SPARK-52588: invalid accumulate if item type is not supported") {
     Seq(
       ArrayType(IntegerType),
       MapType(StringType, IntegerType),
@@ -3044,209 +3044,6 @@ class DataFrameAggregateSuite extends QueryTest
       condition = "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K",
       parameters = Map("maxItemsTracked" -> "5", "k" -> "10")
     )
-  }
-
-  test("SPARK-52588: same type, same size, specified combine size - success") {
-    val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
-    acc1.createOrReplaceTempView("accumulation1")
-
-    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
-    acc2.createOrReplaceTempView("accumulation2")
-
-    val comb = sql("SELECT approx_top_k_combine(acc, 30) as com " +
-      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-    comb.createOrReplaceTempView("combined")
-
-    val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
-    checkAnswer(est, Row(Seq(Row(2, 4), Row(1, 4), Row(0, 3), Row(3, 3), Row(4, 2))))
-  }
-
-  test("SPARK-combinedebug: same type, same size, unspecified combine size - success") {
-    val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
-    acc1.createOrReplaceTempView("accumulation1")
-
-    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
-    acc2.createOrReplaceTempView("accumulation2")
-
-    val comb = sql("SELECT approx_top_k_combine(acc) as com " +
-      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-    comb.createOrReplaceTempView("combined")
-
-    val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
-    checkAnswer(est, Row(Seq(Row(2, 4), Row(1, 4), Row(0, 3), Row(3, 3), Row(4, 2))))
-  }
-
-  test("SPARK-combine: same type, different size, specified combine size - success") {
-    val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
-    acc1.createOrReplaceTempView("accumulation1")
-
-    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 20) as acc " +
-      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
-    acc2.createOrReplaceTempView("accumulation2")
-
-    val comb = sql("SELECT approx_top_k_combine(acc, 30) as com " +
-      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-    comb.createOrReplaceTempView("combination")
-
-    val est = sql("SELECT approx_top_k_estimate(com) FROM combination;")
-    checkAnswer(est, Row(Seq(Row(2, 4), Row(1, 4), Row(0, 3), Row(3, 3), Row(4, 2))))
-  }
-
-  test("SPARK-combine: same type, different size, unspecified combine size - fail") {
-    val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
-    acc1.createOrReplaceTempView("accumulation1")
-
-    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 20) as acc " +
-      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
-    acc2.createOrReplaceTempView("accumulation2")
-
-    val comb = sql("SELECT approx_top_k_combine(acc) as com " +
-      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-    comb.createOrReplaceTempView("combination")
-
-    val est = sql("SELECT approx_top_k_estimate(com) FROM combination;")
-
-    checkError(
-      exception = intercept[SparkUnsupportedOperationException] {
-        est.collect()
-      },
-      condition = "APPROX_TOP_K_SKETCH_SIZE_UNMATCHED",
-      parameters = Map("size1" -> "10", "size2" -> "20")
-    )
-  }
-
-  test("SPARK-combine: different type (int VS string), same size, specified combine size - fail") {
-    val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
-    acc1.createOrReplaceTempView("accumulation1")
-
-    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
-    acc2.createOrReplaceTempView("accumulation2")
-
-    val comb = sql("SELECT approx_top_k_combine(acc, 30) as com " +
-      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-    comb.createOrReplaceTempView("combined")
-
-    val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
-    checkError(
-      exception = intercept[SparkUnsupportedOperationException] {
-        est.collect()
-      },
-      condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED")
-  }
-
-  test("SPARK-debug1: different type (int VS date), same size, specified combine size - fail") {
-    val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
-    acc1.createOrReplaceTempView("accumulation1")
-
-    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES cast('2023-01-01' AS DATE), cast('2023-01-01' AS DATE), " +
-      "cast('2023-01-02' AS DATE), cast('2023-01-02' AS DATE), " +
-      "cast('2023-01-03' AS DATE), cast('2023-01-04' AS DATE), " +
-      "cast('2023-01-05' AS DATE), cast('2023-01-05' AS DATE) AS tab(expr);")
-    acc2.createOrReplaceTempView("accumulation2")
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2;")
-      },
-      condition = "INCOMPATIBLE_COLUMN_TYPE",
-      parameters = Map(
-        "tableOrdinalNumber" -> "second",
-        "columnOrdinalNumber" -> "first",
-        "dataType2" -> ("\"STRUCT<DataSketch: BINARY NOT NULL, " +
-          "ItemTypeNull: INT, MaxItemsTracked: INT NOT NULL>\""),
-        "operator" -> "UNION",
-        "hint" -> "",
-        "dataType1" -> ("\"STRUCT<DataSketch: BINARY NOT NULL, " +
-          "ItemTypeNull: DATE, MaxItemsTracked: INT NOT NULL>\"")
-      )
-      // TODO: what is the query context for the error?
-    )
-  }
-
-  test("SPARK-combine: different type (int VS float), same size, specified combine size - fail") {
-    val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
-    acc1.createOrReplaceTempView("accumulation1")
-
-    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES cast(0.0 AS FLOAT), cast(0.0 AS FLOAT), " +
-      "cast(1.0 AS FLOAT), cast(1.0 AS FLOAT), " +
-      "cast(2.0 AS FLOAT), cast(3.0 AS FLOAT), " +
-      "cast(4.0 AS FLOAT), cast(4.0 AS FLOAT) AS tab(expr);")
-    acc2.createOrReplaceTempView("accumulation2")
-
-    val comb = sql("SELECT approx_top_k_combine(acc, 30) as com " +
-      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-    comb.createOrReplaceTempView("combined")
-
-    val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
-    checkError(
-      exception = intercept[SparkUnsupportedOperationException] {
-        est.collect()
-      },
-      condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED")
-  }
-
-  test("SPARK-combine: different type (byte VS short), same size, specified combine size - fail") {
-    val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES cast(0 AS BYTE), cast(0 AS BYTE), cast(1 AS BYTE), " +
-      "cast(1 AS BYTE), cast(2 AS BYTE), cast(3 AS BYTE), " +
-      "cast(4 AS BYTE), cast(4 AS BYTE) AS tab(expr);")
-    acc1.createOrReplaceTempView("accumulation1")
-
-    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES cast(0 AS SHORT), cast(0 AS SHORT), cast(1 AS SHORT), " +
-      "cast(1 AS SHORT), cast(2 AS SHORT), cast(3 AS SHORT), " +
-      "cast(4 AS SHORT), cast(4 AS SHORT) AS tab(expr);")
-    acc2.createOrReplaceTempView("accumulation2")
-
-    val comb = sql("SELECT approx_top_k_combine(acc, 30) as com " +
-      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-    comb.createOrReplaceTempView("combined")
-
-    val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
-    checkError(
-      exception = intercept[SparkUnsupportedOperationException] {
-        est.collect()
-      },
-      condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED")
-  }
-
-  test("SPARK-combine: different type (decimal(10, 2) VS decimal(20, 3)), same size - fail") {
-    val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES CAST(0.0 AS DECIMAL(10, 2)), CAST(0.0 AS DECIMAL(10, 2)), " +
-      "CAST(1.0 AS DECIMAL(10, 2)), CAST(1.0 AS DECIMAL(10, 2)), " +
-      "CAST(2.0 AS DECIMAL(10, 2)), CAST(3.0 AS DECIMAL(10, 2)), " +
-      "CAST(4.0 AS DECIMAL(10, 2)), CAST(4.0 AS DECIMAL(10, 2)) AS tab(expr);")
-    acc1.createOrReplaceTempView("accumulation1")
-
-    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES CAST(0.0 AS DECIMAL(20, 3)), CAST(0.0 AS DECIMAL(20, 3)), " +
-      "CAST(1.0 AS DECIMAL(20, 3)), CAST(1.0 AS DECIMAL(20, 3)), " +
-      "CAST(2.0 AS DECIMAL(20, 3)), CAST(3.0 AS DECIMAL(20, 3)), " +
-      "CAST(4.0 AS DECIMAL(20, 3)), CAST(4.0 AS DECIMAL(20, 3)) AS tab(expr);")
-    acc2.createOrReplaceTempView("accumulation2")
-
-    val comb = sql("SELECT approx_top_k_combine(acc, 30) as com " +
-      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-    comb.createOrReplaceTempView("combined")
-
-    val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
-    checkError(
-      exception = intercept[SparkUnsupportedOperationException] {
-        est.collect()
-      },
-      condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED")
   }
 }
 

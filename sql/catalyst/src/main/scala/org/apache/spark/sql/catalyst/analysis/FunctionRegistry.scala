@@ -529,7 +529,6 @@ object FunctionRegistry {
     expression[HllUnionAgg]("hll_union_agg"),
     expression[ApproxTopK]("approx_top_k"),
     expression[ApproxTopKAccumulate]("approx_top_k_accumulate"),
-    expression[ApproxTopKCombine]("approx_top_k_combine"),
 
     // string functions
     expression[Ascii]("ascii"),
