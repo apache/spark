@@ -89,10 +89,10 @@ object RocksDBBenchmark extends BenchmarkBase {
       }
     }
 
-    val entries = createSimpleType().take(10)
     benchmark.addTimerCase("Database Close") { timer =>
       try {
         setupDB()
+        val entries = createSimpleType().take(10)
         // Add some data to make close operation more realistic
         entries.foreach(db.write)
       } finally {
