@@ -463,7 +463,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       }
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
         checkExceptionInExpression[ArithmeticException](
-          Remainder(left, Literal(convert(0))), "Division by zero")
+          Remainder(left, Literal(convert(0))), "Mod by zero")
       }
     }
     checkEvaluation(Remainder(positiveShortLit, positiveShortLit), 0.toShort)
@@ -567,7 +567,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       }
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
         checkExceptionInExpression[ArithmeticException](
-          Pmod(left, Literal(convert(0))), "Division by zero")
+          Pmod(left, Literal(convert(0))), "Mod by zero")
       }
     }
     checkEvaluation(Pmod(Literal(-7), Literal(3)), 2)

@@ -205,6 +205,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = getSummary(context))
   }
 
+  def modByZeroError(context: QueryContext): ArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "MOD_BY_ZERO",
+      messageParameters = Map("config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = Array(context),
+      summary = getSummary(context))
+  }
+
   def intervalDividedByZeroError(context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "INTERVAL_DIVIDED_BY_ZERO",
