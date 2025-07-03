@@ -394,14 +394,6 @@ case class AttributeReference(
   }
 }
 
-case class JoinColumnReference(
-    originalReference: AttributeReference,
-    isReferringColumnFromLeftSubquery: Boolean = true)
-  extends LeafExpression with Unevaluable {
-  override def nullable: Boolean = originalReference.nullable
-  override def dataType: DataType = originalReference.dataType
-}
-
 /**
  * A place holder used when printing expressions without debugging information such as the
  * expression id or the unresolved indicator.

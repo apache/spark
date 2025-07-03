@@ -26,6 +26,7 @@ import org.apache.commons.codec.binary.Hex
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
 
 import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
@@ -35,7 +36,7 @@ import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalo
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.Expression
-import org.apache.spark.sql.execution.{FormattedMode, RowDataSourceScanExec}
+import org.apache.spark.sql.execution.{FormattedMode, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCRDD}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -267,170 +268,204 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     super.afterAll()
   }
 
+  def getExternalEngineQuery(executedPlan: SparkPlan): String = {
+    getExternalEngineRdd(executedPlan).asInstanceOf[JDBCRDD].getExternalEngineQuery
+  }
+
+  def getExternalEngineRdd(executedPlan: SparkPlan): RDD[InternalRow] = {
+    val queryNode = executedPlan.collect { case r: RowDataSourceScanExec =>
+      r
+    }.head
+    queryNode.rdd
+  }
+
   test("Test 2-way join") {
-    val rows = withSQLConf(
-      SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
-      sql("SELECT * FROM h2.test.employee a, h2.test.employee b").collect().toSeq
+    val sqlQuery = "SELECT * FROM h2.test.employee a, h2.test.employee b"
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
     }
 
-    withSQLConf(
-      SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
-      val df = sql("SELECT * FROM h2.test.employee a, h2.test.employee b")
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
       val joinNodes = df.queryExecution.optimizedPlan.collect {
         case j: Join => j
       }
 
-      assert(joinNodes.isEmpty)
+      assert(joinNodes.nonEmpty)
       checkAnswer(df, rows)
     }
   }
 
   test("Test multi way join") {
-    val rows = withSQLConf(
-      SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
-      sql("SELECT * FROM " +
-        "h2.test.employee a, " +
-        "h2.test.employee b, " +
-        "h2.test.employee c, " +
-        "h2.test.employee d, " +
-        "h2.test.employee e")
-        .collect().toSeq
+    val sqlQuery = """
+      |SELECT * FROM
+      |h2.test.employee a,
+      |h2.test.employee b,
+      |h2.test.employee c
+      |""".stripMargin
+
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
     }
 
-    withSQLConf(
-      SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
-      val df = sql("SELECT * FROM " +
-        "h2.test.employee a, " +
-        "h2.test.employee b, " +
-        "h2.test.employee c, " +
-        "h2.test.employee d, " +
-        "h2.test.employee e")
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
 
       val joinNodes = df.queryExecution.optimizedPlan.collect {
         case j: Join => j
       }
 
-      assert(joinNodes.isEmpty)
-      checkPushedInfo(df,
-        "PushedJoins: [h2.test.employee, h2.test.employee, h2.test.employee, h2.test.employee]")
+      assert(joinNodes.nonEmpty)
       checkAnswer(df, rows)
     }
   }
 
   test("Test join with condition") {
-    val rows = withSQLConf(
-      SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
-      sql("SELECT * FROM h2.test.employee a join h2.test.employee b on a.dept = b.dept + 1")
-        .collect().toSeq
+    val sqlQuery = "SELECT * FROM h2.test.employee a JOIN h2.test.employee b ON a.dept = b.dept + 1"
+
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
     }
 
-    withSQLConf(
-      SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
-      val df = sql(
-        "SELECT * FROM h2.test.employee a join h2.test.employee b on a.dept = b.dept + 1"
-      )
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+
       val joinNodes = df.queryExecution.optimizedPlan.collect {
         case j: Join => j
       }
 
       assert(joinNodes.isEmpty)
+      checkPushedInfo(df, "PushedJoins: [h2.test.employee, h2.test.employee]")
       checkAnswer(df, rows)
+      // scalastyle:off line.size.limit
+      assert(getExternalEngineQuery(df.queryExecution.executedPlan).contains(
+        """SELECT "col_0","col_1","col_2","col_3","col_4","col_5","col_6","col_7","col_8","col_9" FROM (
+          |SELECT "col_0","col_1","col_2","col_3","col_4","col_5","col_6","col_7","col_8","col_9" FROM
+          |(SELECT "DEPT" AS "col_0","NAME" AS "col_1","SALARY" AS "col_2","BONUS" AS "col_3","IS_MANAGER" AS "col_4" FROM "test"."employee"  WHERE ("DEPT" IS NOT NULL)    ) join_subquery_0
+          |INNER JOIN
+          |(SELECT "DEPT" AS "col_5","NAME" AS "col_6","SALARY" AS "col_7","BONUS" AS "col_8","IS_MANAGER" AS "col_9" FROM "test"."employee"  WHERE ("DEPT" IS NOT NULL)    ) join_subquery_1
+          |ON "col_0" = ("col_5" + 1)
+          |) SPARK_GEN_SUBQ_0""".stripMargin
+      ),
+        "Generated query is not as expected")
+      // scalastyle:on line.size.limit
     }
   }
 
   test("Test multi-way-join with conditions") {
-    val rows = withSQLConf(
-      SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
-      sql("SELECT * FROM " +
-        "h2.test.employee a " +
-        "join h2.test.employee b on b.dept = a.dept + 1 " +
-        "join h2.test.employee c on c.dept = b.dept - 1 ")
-        .collect().toSeq
+    val sqlQuery = """
+      |SELECT * FROM
+      |h2.test.employee a
+      |JOIN h2.test.employee b ON b.dept = a.dept + 1
+      |JOIN h2.test.employee c ON c.dept = b.dept - 1
+      |""".stripMargin
+
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
     }
 
     assert(!rows.isEmpty)
 
-    withSQLConf(
-      SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
-      val df = sql("SELECT * FROM " +
-        "h2.test.employee a " +
-        "join h2.test.employee b on b.dept = a.dept + 1 " +
-        "join h2.test.employee c on c.dept = b.dept - 1 ")
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
       val joinNodes = df.queryExecution.optimizedPlan.collect {
         case j: Join => j
       }
 
       assert(joinNodes.isEmpty)
+      checkPushedInfo(df, "PushedJoins: [h2.test.employee, h2.test.employee, h2.test.employee]")
       checkAnswer(df, rows)
     }
   }
 
   test("Test join with column pruning") {
-    val rows = withSQLConf(
-      SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
-      sql("SELECT a.dept + 2, b.dept, b.salary FROM " +
-        "h2.test.employee a join h2.test.employee b " +
-        "on a.dept = b.dept + 1")
-        .collect().toSeq
+    val sqlQuery = """
+      |SELECT a.dept + 2, b.dept, b.salary FROM
+      |h2.test.employee a JOIN h2.test.employee b
+      |ON a.dept = b.dept + 1
+      |""".stripMargin
+
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
     }
 
-    withSQLConf(
-      SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
-      val df = sql("" +
-        "SELECT a.dept + 2, b.dept, b.salary FROM " +
-        "h2.test.employee a join h2.test.employee b " +
-        "on a.dept = b.dept + 1")
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
 
       val joinNodes = df.queryExecution.optimizedPlan.collect {
         case j: Join => j
       }
 
       assert(joinNodes.isEmpty)
+      checkPushedInfo(df, "PushedJoins: [h2.test.employee, h2.test.employee]")
       checkAnswer(df, rows)
     }
   }
 
   test("Test multi way join with column pruning") {
-    val rows = withSQLConf(
-      SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
-      sql("SELECT a.dept, b.*, c.dept, c.salary + a.salary FROM " +
-        "h2.test.employee a " +
-        "join h2.test.employee b on b.dept = a.dept + 1 " +
-        "join h2.test.employee c on c.dept = b.dept - 1 ")
-        .collect().toSeq
+    val sqlQuery = """
+      |SELECT a.dept, b.*, c.dept, c.salary + a.salary
+      |FROM h2.test.employee a
+      |JOIN h2.test.employee b ON b.dept = a.dept + 1
+      |JOIN h2.test.employee c ON c.dept = b.dept - 1
+      |""".stripMargin
+
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
     }
 
-    withSQLConf(
-      SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
-      val df = sql("" +
-        "SELECT a.dept, b.*, c.dept, c.salary + a.salary FROM " +
-        "h2.test.employee a " +
-        "join h2.test.employee b on b.dept = a.dept + 1 " +
-        "join h2.test.employee c on c.dept = b.dept - 1 ")
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
 
       val joinNodes = df.queryExecution.optimizedPlan.collect {
         case j: Join => j
       }
 
       assert(joinNodes.isEmpty)
+      checkPushedInfo(df, "PushedJoins: [h2.test.employee, h2.test.employee, h2.test.employee]")
+      checkAnswer(df, rows)
+    }
+  }
+
+  test("Test aliases not supported in join pushdown") {
+    val sqlQuery = """
+      |SELECT a.dept, bc.*
+      |FROM h2.test.employee a
+      |JOIN (
+      |  SELECT b.*, c.dept AS c_dept, c.salary AS c_salary
+      |  FROM h2.test.employee b
+      |  JOIN h2.test.employee c ON c.dept = b.dept - 1
+      |) bc ON bc.dept = a.dept + 1
+      |""".stripMargin
+
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
+    }
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+      val joinNodes = df.queryExecution.optimizedPlan.collect {
+        case j: Join => j
+      }
+
+      assert(joinNodes.nonEmpty)
       checkAnswer(df, rows)
     }
   }
 
   test("Test aggregate on top of 2 way join") {
-    val rows = withSQLConf(
-      SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
-      sql("SELECT min(a.dept + b.dept), min(a.dept) " +
-        "FROM h2.test.employee a " +
-        "join h2.test.employee b on a.dept = b.dept + 1")
-        .collect().toSeq
+    val sqlQuery = """
+      |SELECT min(a.dept + b.dept), min(a.dept)
+      |FROM h2.test.employee a
+      |JOIN h2.test.employee b ON a.dept = b.dept + 1
+      |""".stripMargin
+
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
     }
 
-    withSQLConf(
-      SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
-      val df = sql("SELECT min(a.dept + b.dept), min(a.dept) " +
-        "FROM h2.test.employee a " +
-        "join h2.test.employee b on a.dept = b.dept + 1")
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
       val joinNodes = df.queryExecution.optimizedPlan.collect {
         case j: Join => j
       }
@@ -441,26 +476,25 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
       assert(joinNodes.isEmpty)
       assert(aggNodes.isEmpty)
+      checkPushedInfo(df, "PushedJoins: [h2.test.employee, h2.test.employee]")
       checkAnswer(df, rows)
     }
   }
 
   test("Test aggregate on top of multi way join") {
-    val rows = withSQLConf(
-      SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
-      sql("SELECT min(a.dept + b.dept), min(a.dept), min(c.dept - 2) " +
-        "from h2.test.employee a " +
-        "join h2.test.employee b on b.dept = a.dept + 1 " +
-        "join h2.test.employee c on c.dept = b.dept - 1 ")
-        .collect().toSeq
+    val sqlQuery = """
+      |SELECT min(a.dept + b.dept), min(a.dept), min(c.dept - 2)
+      |FROM h2.test.employee a
+      |JOIN h2.test.employee b ON b.dept = a.dept + 1
+      |JOIN h2.test.employee c ON c.dept = b.dept - 1
+      |""".stripMargin
+
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
     }
 
-    withSQLConf(
-      SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
-      val df = sql("SELECT min(a.dept + b.dept), min(a.dept), min(c.dept - 2) " +
-        "from h2.test.employee a " +
-        "join h2.test.employee b on b.dept = a.dept + 1 " +
-        "join h2.test.employee c on c.dept = b.dept - 1 ")
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
       val joinNodes = df.queryExecution.optimizedPlan.collect {
         case j: Join => j
       }
@@ -471,30 +505,28 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
       assert(joinNodes.isEmpty)
       assert(aggNodes.isEmpty)
+      checkPushedInfo(df, "PushedJoins: [h2.test.employee, h2.test.employee, h2.test.employee]")
       checkAnswer(df, rows)
     }
   }
 
   test("Test sort limit on top of join is pushed down") {
-    val rows = withSQLConf(
-      SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
-      sql("SELECT min(a.dept + b.dept), a.dept, b.dept " +
-        "from h2.test.employee a " +
-        "join h2.test.employee b on b.dept = a.dept + 1 " +
-        "GROUP BY a.dept, b.dept " +
-        "ORDER BY a.dept " +
-        "LIMIT 1")
-        .collect().toSeq
+    val sqlQuery = """
+      |SELECT min(a.dept + b.dept), a.dept, b.dept
+      |FROM h2.test.employee a
+      |JOIN h2.test.employee b ON b.dept = a.dept + 1
+      |GROUP BY a.dept, b.dept
+      |ORDER BY a.dept
+      |LIMIT 1
+      |""".stripMargin
+
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
     }
 
     withSQLConf(
       SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
-      val df = sql("SELECT min(a.dept + b.dept), a.dept, b.dept " +
-        "from h2.test.employee a " +
-        "join h2.test.employee b on b.dept = a.dept + 1 " +
-        "GROUP BY a.dept, b.dept " +
-        "ORDER BY a.dept " +
-        "LIMIT 1")
+      val df = sql(sqlQuery)
       val joinNodes = df.queryExecution.optimizedPlan.collect {
         case j: Join => j
       }
@@ -510,6 +542,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       assert(joinNodes.isEmpty)
       assert(sortNodes.isEmpty)
       assert(limitNodes.isEmpty)
+      checkPushedInfo(df, "PushedJoins: [h2.test.employee, h2.test.employee]")
       checkAnswer(df, rows)
     }
   }

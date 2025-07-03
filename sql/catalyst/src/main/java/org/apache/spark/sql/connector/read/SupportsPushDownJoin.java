@@ -28,20 +28,54 @@ import org.apache.spark.sql.types.StructType;
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
  * push down join operators.
  *
- * @since 4.0.0
+ * @since 4.1.0
  */
 @Evolving
 public interface SupportsPushDownJoin extends ScanBuilder {
-  boolean isRightSideCompatibleForJoin(SupportsPushDownJoin other);
+  /**
+   * Returns true if the other side of the join is compatible with the
+   * current {@code SupportsPushDownJoin} for a join push down, meaning both sides can be
+   * processed together within the same underlying data source.
+   *
+   * <p>For example, JDBC connectors are compatible if they use the same
+   * host, port, username, and password.</p>
+   */
+  boolean isOtherSideCompatibleForJoin(SupportsPushDownJoin other);
 
-  boolean pushJoin(
+  /**
+   * Joining 2 {@code SupportsPushDownJoin} can be problematic if there are columns with duplicate
+   * names. The {@code SupportsPushDownJoin} implementation should deal with this problem.
+   *
+   * This method returns the merged schema that will be preserved to {@code SupportsPushDownJoin}'s
+   * schema after {@code pushDownJoin} call succeeds.
+   *
+   * @param other {@code SupportsPushDownJoin} that this {@code SupportsPushDownJoin}
+   * gets joined with.
+   * @param requiredSchema required columns needed for this {@code SupportsPushDownJoin}.
+   * @param otherSideRequiredSchema required columns needed for other {@code SupportsPushDownJoin}.
+   * @return merged schema. If ambiguous names are forbidden, the merged schema should resolve that.
+   */
+  StructType getJoinedSchema(
     SupportsPushDownJoin other,
-    JoinType joinType,
-    Optional<Predicate> condition,
-    StructType leftRequiredSchema,
-    StructType rightRequiredSchema
-    );
+    StructType requiredSchema,
+    StructType otherSideRequiredSchema
+  );
 
-  // When join is pushed down, the output schema can be changed in case of duplicate column names.
-  StructType getOutputSchema();
+  /**
+   * Pushes down the join of the current {@code SupportsPushDownJoin} and the other side of join
+   * {@code SupportsPushDownJoin}.
+   *
+   * @param other {@code SupportsPushDownJoin} that this {@code SupportsPushDownJoin}
+   * gets joined with.
+   * @param requiredSchema required output schema after join push down.
+   * @param joinType the type of join.
+   * @param condition join condition.
+   * @return True if join has been successfully pushed down.
+   */
+  boolean pushDownJoin(
+    SupportsPushDownJoin other,
+    StructType requiredSchema,
+    JoinType joinType,
+    Predicate condition
+  );
 }

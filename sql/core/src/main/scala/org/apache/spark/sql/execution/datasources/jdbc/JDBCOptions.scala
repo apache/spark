@@ -104,8 +104,6 @@ class JDBCOptions(
       }
   }
 
-  var containsJoinInQuery: Boolean = false
-
   // ------------------------------------------------------------
   // Optional parameters
   // ------------------------------------------------------------

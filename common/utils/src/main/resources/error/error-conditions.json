@@ -6441,9 +6441,9 @@
     },
     "sqlState" : "42809"
   },
-  "UNSUPPORTED_JOIN_TYPE" : {
+  "UNSUPPORTED_JOIN_TYPE_IN_CONNECTOR_EXPRESSION" : {
     "message" : [
-      "Unsupported join type '<typ>'. Supported join types include: <supported>."
+      "Unsupported join type in connector expression: <joinType>"
     ],
     "sqlState" : "0A000"
   },

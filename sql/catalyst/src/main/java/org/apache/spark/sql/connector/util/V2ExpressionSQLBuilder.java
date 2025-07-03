@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.util;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
@@ -43,7 +42,6 @@ import org.apache.spark.sql.connector.expressions.aggregate.CountStar;
 import org.apache.spark.sql.connector.expressions.aggregate.GeneralAggregateFunc;
 import org.apache.spark.sql.connector.expressions.aggregate.Sum;
 import org.apache.spark.sql.connector.expressions.aggregate.UserDefinedAggregateFunc;
-import org.apache.spark.sql.connector.join.JoinColumn;
 import org.apache.spark.sql.types.DataType;
 
 /**
@@ -77,8 +75,6 @@ public class V2ExpressionSQLBuilder {
   public String build(Expression expr) {
     if (expr instanceof Literal literal) {
       return visitLiteral(literal);
-    } else if (expr instanceof JoinColumn column) {
-      return visitJoinColumn(column);
     } else if (expr instanceof NamedReference namedReference) {
       return visitNamedReference(namedReference);
     } else if (expr instanceof Cast cast) {
@@ -178,11 +174,6 @@ public class V2ExpressionSQLBuilder {
 
   protected String visitNamedReference(NamedReference namedRef) {
     return namedRef.toString();
-  }
-
-  protected String visitJoinColumn(JoinColumn column) {
-    throw new SparkIllegalArgumentException(
-      "_LEGACY_ERROR_TEMP_3207", Map.of("expr", String.valueOf(column)));
   }
 
   protected String visitIn(String v, List<String> list) {
