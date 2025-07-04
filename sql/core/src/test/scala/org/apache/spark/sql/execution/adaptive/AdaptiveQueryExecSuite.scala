@@ -938,7 +938,7 @@ class AdaptiveQueryExecSuite
             .filter(e => e != null && e.getMessage != null)
             .map(_.getMessage)
 
-          assert(errMsgList.exists(_.contains("AAAcoalesce test error")),
+          assert(errMsgList.exists(_.contains("coalesce test error")),
             s"""
                |The error message should contain 'coalesce test error', but got:
                |${errMsgList.mkString("======\n", "\n", "\n======")}
