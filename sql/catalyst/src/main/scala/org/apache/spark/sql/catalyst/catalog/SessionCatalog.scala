@@ -484,6 +484,7 @@ class SessionCatalog(
    *
    * @param identifier TableIdentifier
    * @param newDataSchema Updated data schema to be used for the table
+   * @deprecated since 4.1.0 use `alterTableSchema` instead.
    */
   def alterTableDataSchema(
       identifier: TableIdentifier,

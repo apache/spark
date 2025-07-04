@@ -133,9 +133,7 @@ trait ExternalCatalog {
    * @param table Name of table to alter schema for
    * @param newSchema Updated data schema to be used for the table.
    */
-  def alterTableSchema(db: String, table: String, newSchema: StructType): Unit =
-     throw new UnsupportedOperationException(
-      "alterTableSchema is not supported by the current external catalog implementation")
+  def alterTableSchema(db: String, table: String, newSchema: StructType): Unit
 
   /** Alter the statistics of a table. If `stats` is None, then remove all existing statistics. */
   def alterTableStats(db: String, table: String, stats: Option[CatalogStatistics]): Unit
