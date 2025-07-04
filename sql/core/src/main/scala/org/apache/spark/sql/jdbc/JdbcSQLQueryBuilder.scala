@@ -91,10 +91,13 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
     this
   }
 
-  def withAliasedColumns(columns: Array[String], aliases: Array[String]): JdbcSQLQueryBuilder = {
+  def withAliasedColumns(
+      columns: Array[String],
+      aliases: Array[Option[String]]): JdbcSQLQueryBuilder = {
     if (columns.nonEmpty) {
       columnList = columns.zip(aliases).map {
-        case (column, alias) => s"$column AS $alias"}.mkString(",")
+        case (column, alias) => if (alias.isDefined) s"$column AS ${alias.get}" else column
+      }.mkString(",")
     }
     this
   }

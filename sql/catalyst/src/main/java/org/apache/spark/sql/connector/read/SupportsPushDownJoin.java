@@ -56,9 +56,9 @@ public interface SupportsPushDownJoin extends ScanBuilder {
    * @return merged schema. If ambiguous names are forbidden, the merged schema should resolve that.
    */
   StructType getJoinedSchema(
-    SupportsPushDownJoin other,
-    StructType requiredSchema,
-    StructType otherSideRequiredSchema
+      SupportsPushDownJoin other,
+      StructType requiredSchema,
+      StructType otherSideRequiredSchema
   );
 
   /**
@@ -73,9 +73,9 @@ public interface SupportsPushDownJoin extends ScanBuilder {
    * @return True if join has been successfully pushed down.
    */
   boolean pushDownJoin(
-    SupportsPushDownJoin other,
-    StructType requiredSchema,
-    JoinType joinType,
-    Predicate condition
+      SupportsPushDownJoin other,
+      StructType requiredSchema,
+      JoinType joinType,
+      Predicate condition
   );
 }

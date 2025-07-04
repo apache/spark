@@ -140,12 +140,18 @@ case class JDBCScanBuilder(
     aboutToBePrunedSchema = requiredSchema
     other.asInstanceOf[JDBCScanBuilder].aboutToBePrunedSchema = otherSideRequiredSchema
 
+    val duplicatedFieldNames = requiredSchema.names.intersect(otherSideRequiredSchema.names)
     var joinedSchema = StructType(Seq())
 
     (requiredSchema.fields ++ otherSideRequiredSchema.fields)
       .zipWithIndex
       .foreach { case (field, idx) =>
-        val newFieldName = JoinOutputAliasIterator.generateColumnAlias
+        val newFieldName = if (duplicatedFieldNames.contains(field.name)) {
+          JoinOutputAliasIterator.generateColumnAlias
+        } else {
+          field.name
+        }
+
         joinedSchema =
           joinedSchema.add(newFieldName, field.dataType, field.nullable, field.metadata)
       }
@@ -208,7 +214,11 @@ case class JDBCScanBuilder(
   def buildSQLQueryUsedInJoinPushDown(aliases: Array[String]): String = {
     val quotedColumns = aboutToBePrunedSchema.fields
       .map(field => dialect.quoteIdentifier(field.name))
-    val quotedAliases = aliases.map(dialect.quoteIdentifier(_))
+    val quotedAliases = aliases
+      .zip(aboutToBePrunedSchema.fields)
+      .map{ case (alias, field) =>
+        if (alias == field.name) None else Some(dialect.quoteIdentifier(alias))
+      }
 
     // Only filters can be pushed down before join pushdown, so we need to craft SQL query
     // that contains filters as well.
