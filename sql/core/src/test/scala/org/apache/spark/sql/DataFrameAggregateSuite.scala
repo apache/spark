@@ -3011,14 +3011,29 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
-  test("SPARK-combine: same type, same size, unspecified combine size - success") {
-    sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
+  def setupAccumulations(size1: Int, size2: Int): Unit = {
+    sql(s"SELECT approx_top_k_accumulate(expr, $size1) as acc " +
       "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
       .createOrReplaceTempView("accumulation1")
 
-    sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
+    sql(s"SELECT approx_top_k_accumulate(expr, $size2) as acc " +
       "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
       .createOrReplaceTempView("accumulation2")
+  }
+
+  test("SPARK-combine: same type, same size, specified combine size - success") {
+    setupAccumulations(10, 10)
+
+    sql("SELECT approx_top_k_combine(acc, 30) as com " +
+      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+      .createOrReplaceTempView("combined")
+
+    val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
+    checkAnswer(est, Row(Seq(Row(2, 4), Row(1, 4), Row(0, 3), Row(3, 3), Row(4, 2))))
+  }
+
+  test("SPARK-combine: same type, same size, unspecified combine size - success") {
+    setupAccumulations(10, 10)
 
     sql("SELECT approx_top_k_combine(acc) as com " +
       "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
@@ -3029,13 +3044,7 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("SPARK-combine: same type, different size, specified combine size - success") {
-    sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
-      .createOrReplaceTempView("accumulation1")
-
-    sql("SELECT approx_top_k_accumulate(expr, 20) as acc " +
-      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
-      .createOrReplaceTempView("accumulation2")
+    setupAccumulations(10, 20)
 
     sql("SELECT approx_top_k_combine(acc, 30) as com " +
       "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
@@ -3046,13 +3055,7 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("SPARK-combine: same type, different size, unspecified combine size - fail") {
-    sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
-      .createOrReplaceTempView("accumulation1")
-
-    sql("SELECT approx_top_k_accumulate(expr, 20) as acc " +
-      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
-      .createOrReplaceTempView("accumulation2")
+    setupAccumulations(10, 20)
 
     val comb = sql("SELECT approx_top_k_combine(acc) as com " +
       "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
@@ -3067,13 +3070,7 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("SPARK-combine: same type, different size, invalid combine size - fail") {
-    sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
-      .createOrReplaceTempView("accumulation1")
-
-    sql("SELECT approx_top_k_accumulate(expr, 20) as acc " +
-      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
-      .createOrReplaceTempView("accumulation2")
+    setupAccumulations(10, 20)
 
     checkError(
       exception = intercept[SparkRuntimeException] {
