@@ -930,14 +930,19 @@ class AdaptiveQueryExecSuite
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
           SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
           val joined = createJoinedDF()
-          joined.explain(true)
 
           val error = intercept[SparkException] {
             joined.collect()
           }
-          assert((Seq(error) ++ Option(error.getCause) ++ error.getSuppressed()).exists(
-            e => e.getMessage() != null && e.getMessage().contains("coalesce test error")))
+          val errMsgList = (error :: error.getCause :: error.getSuppressed.toList)
+            .filter(e => e != null && e.getMessage != null)
+            .map(_.getMessage)
 
+          assert(errMsgList.exists(_.contains("AAAcoalesce test error")),
+            s"""
+               |The error message should contain 'coalesce test error', but got:
+               |${errMsgList.mkString("======\n", "\n", "\n======")}
+               |""".stripMargin)
           val adaptivePlan = joined.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
 
           // All QueryStages should be based on ShuffleQueryStageExec
