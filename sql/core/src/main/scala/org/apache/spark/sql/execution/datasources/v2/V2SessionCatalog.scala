@@ -288,8 +288,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
     }
 
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
-    val schema = CatalogV2Util.applySchemaChanges(
-      catalogTable.schema, changes, catalogTable.provider, "ALTER TABLE")
     val comment = properties.get(TableCatalog.PROP_COMMENT)
     val collation = properties.get(TableCatalog.PROP_COLLATION)
     val owner = properties.getOrElse(TableCatalog.PROP_OWNER, catalogTable.owner)
@@ -300,16 +298,23 @@ class V2SessionCatalog(catalog: SessionCatalog)
       catalogTable.storage
     }
 
-    val finalProperties = CatalogV2Util.applyClusterByChanges(properties, schema, changes)
+    val finalProperties = CatalogV2Util.applyClusterByChanges(properties,
+      catalogTable.schema, changes)
     try {
       if (changes.exists(!_.isInstanceOf[TableChange.ColumnChange])) {
         catalog.alterTable(
           catalogTable.copy(
-            properties = finalProperties, schema = schema, owner = owner, comment = comment,
-            collation = collation, storage = storage))
+            properties = finalProperties,
+            schema = catalogTable.schema,
+            owner = owner,
+            comment = comment,
+            collation = collation,
+            storage = storage))
       }
       if (changes.exists(_.isInstanceOf[TableChange.ColumnChange])) {
-        catalog.alterTableDataSchema(ident.asTableIdentifier, schema)
+        val newDataSchema = CatalogV2Util.applySchemaChanges(
+          catalogTable.dataSchema, changes, catalogTable.provider, "ALTER TABLE")
+        catalog.alterTableDataSchema(ident.asTableIdentifier, newDataSchema)
       }
     } catch {
       case _: NoSuchTableException =>
