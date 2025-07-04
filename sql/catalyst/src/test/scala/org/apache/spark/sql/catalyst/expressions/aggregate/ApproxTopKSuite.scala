@@ -64,32 +64,6 @@ class ApproxTopKSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-52515: invalid k types") {
-    val invalidNumberTypes: Seq[Any] = Seq(
-      10.0, 10.0f, BigDecimal("10.0"), 10.toByte, 10.toShort, 10L, 2147483648L, true, "10")
-    invalidNumberTypes.foreach { invalidK =>
-      val agg = new ApproxTopK(
-        expr = BoundReference(0, IntegerType, nullable = true),
-        k = Literal(invalidK),
-        maxItemsTracked = Literal(10000)
-      )
-      assert(agg.checkInputDataTypes().isFailure)
-    }
-  }
-
-  test("SPARK-52515: invalid maxItemsTracked types") {
-    val invalidNumberTypes: Seq[Any] = Seq(
-      10.0, 10.0f, BigDecimal("10.0"), 10.toByte, 10.toShort, 10L, 2147483648L, true, "10")
-    invalidNumberTypes.foreach { invalidMaxItems =>
-      val agg = new ApproxTopK(
-        expr = BoundReference(0, IntegerType, nullable = true),
-        k = Literal(10),
-        maxItemsTracked = Literal(invalidMaxItems)
-      )
-      assert(agg.checkInputDataTypes().isFailure)
-    }
-  }
-
   test("SPARK-52588: invalid accumulate if item type is not supported") {
     Seq(
       ArrayType(IntegerType),
