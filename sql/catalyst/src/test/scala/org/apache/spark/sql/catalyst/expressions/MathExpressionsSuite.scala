@@ -30,7 +30,9 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -962,5 +964,89 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(WidthBucket(5.35, 0.024, Double.NaN, 5L), null)
     checkEvaluation(WidthBucket(5.35, 0.024, Double.NegativeInfinity, 5L), null)
     checkEvaluation(WidthBucket(5.35, 0.024, Double.PositiveInfinity, 5L), null)
+  }
+
+  test("context independent foldable math expressions") {
+    // Create some base literals
+    val intLit = Literal(5)
+    val doubleLit = Literal(10.5)
+    val decimalLit = Literal(Decimal(7.5))
+
+    // Create math expressions using these literals
+    val expressions = Seq(
+      // Basic arithmetic
+      Add(intLit, Literal(10)),
+      Subtract(doubleLit, Literal(2.5)),
+      Multiply(intLit, Literal(2)),
+      Divide(decimalLit, Literal(Decimal(2.5))),
+      Remainder(intLit, Literal(2)),
+
+      // Unary operations
+      UnaryMinus(intLit),
+      Abs(Literal(-10)),
+
+      // Math functions
+      Log(doubleLit),
+      Log10(doubleLit),
+      Log2(doubleLit),
+      Exp(doubleLit),
+      Sqrt(doubleLit),
+      Floor(doubleLit),
+      Ceil(doubleLit),
+
+      // Trig functions
+      Sin(doubleLit),
+      Cos(doubleLit),
+      Tan(doubleLit),
+      Asin(Literal(0.5)),
+      Acos(Literal(0.5)),
+      Atan(doubleLit),
+
+      // Nested expressions
+      Add(Multiply(intLit, Literal(2)), Divide(doubleLit, Literal(2.0)))
+    )
+
+    expressions.foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(expr.contextIndependentFoldable,
+        s"Expression $expr should be context independent foldable")
+    }
+  }
+
+  test("context dependent foldable math expressions") {
+    // Create timestamp literals
+    val ts = java.sql.Timestamp.valueOf("2021-01-01 12:00:00")
+    val tsLit = Literal.create(ts, TimestampType)
+    val longTsLit = Literal.create(1L, TimestampType)
+
+    // Create math expressions that involve timestamps
+    val expressions = Seq(
+      // Arithmetic with timestamps
+      Add(tsLit, Literal(IntervalUtils.stringToInterval(UTF8String.fromString("1 day")))),
+      Subtract(tsLit, Literal(IntervalUtils.stringToInterval(UTF8String.fromString("2 hours")))),
+
+      // Extract parts from timestamps
+      Year(tsLit),
+      Month(tsLit),
+      DayOfMonth(tsLit),
+      Hour(tsLit),
+      Minute(tsLit),
+      Second(tsLit),
+
+      // Expressions with cast operations
+      Add(Cast(tsLit, DoubleType), Literal(1.0)),
+      Subtract(Literal(1000.0), Cast(longTsLit, DoubleType)),
+
+      // Date/time diff operations
+      DateDiff(Cast(tsLit, DateType),
+        Cast(Literal.create(java.sql.Timestamp.valueOf("2021-01-05 12:00:00"), TimestampType),
+          DateType))
+    )
+
+    expressions.foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(!expr.contextIndependentFoldable,
+        s"Expression $expr should not be context independent foldable")
+    }
   }
 }

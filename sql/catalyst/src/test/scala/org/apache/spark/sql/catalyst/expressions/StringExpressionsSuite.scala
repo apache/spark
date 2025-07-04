@@ -2098,4 +2098,42 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "parameter" -> toSQLId("charset"),
         "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", ")))
   }
+
+  test("context independent foldable string expressions") {
+    Seq(
+      // Basic string literals
+      Literal("hello"),
+      Literal(""),
+      Literal.create(null, StringType),
+
+      // String functions
+      Concat(Seq(Literal("hello"), Literal("world"))),
+      Upper(Literal("hello")),
+      Lower(Literal("WORLD")),
+      Substring(Literal("hello"), Literal(1), Literal(3)),
+
+      // String with other types
+      Concat(Seq(Literal("count: "), Literal(123))),
+      Concat(Seq(Literal("price: "), Literal(Decimal(10.5)))),
+
+      // Pattern matching
+      Like(Literal("hello"), Literal("hel%"), '\\'),
+      RLike(Literal("hello"), Literal("h.*o")),
+
+      // Nested expressions
+      Concat(Seq(
+        Upper(Literal("hello")),
+        Literal(" "),
+        Lower(Literal("WORLD"))
+      ))
+    ).foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(expr.deterministic, s"Expression $expr should be deterministic")
+      if (!expr.references.exists(_.name.contains("RAND")) &&
+        !expr.toString.contains("current_")) {
+        assert(expr.contextIndependentFoldable,
+          s"Expression $expr should be context independent foldable")
+      }
+    }
+  }
 }

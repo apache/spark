@@ -71,6 +71,8 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
 
   override def foldable: Boolean = children.forall(_.foldable)
 
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   override def stringArgs: Iterator[Any] = super.stringArgs.take(1)
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -203,6 +205,8 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
   }
 
   override def foldable: Boolean = children.forall(_.foldable)
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def stringArgs: Iterator[Any] = super.stringArgs.take(1)
 
@@ -449,6 +453,8 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
   override def nullable: Boolean = false
 
   override def foldable: Boolean = valExprs.forall(_.foldable)
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CREATE_NAMED_STRUCT)
 
