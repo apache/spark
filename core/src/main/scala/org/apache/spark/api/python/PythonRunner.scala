@@ -70,6 +70,7 @@ private[spark] object PythonEvalType {
   // Arrow UDFs
   val SQL_SCALAR_ARROW_UDF = 250
   val SQL_SCALAR_ARROW_ITER_UDF = 251
+  val SQL_GROUPED_AGG_ARROW_UDF = 252
 
   val SQL_TABLE_UDF = 300
   val SQL_ARROW_TABLE_UDF = 301
@@ -101,6 +102,7 @@ private[spark] object PythonEvalType {
     // Arrow UDFs
     case SQL_SCALAR_ARROW_UDF => "SQL_SCALAR_ARROW_UDF"
     case SQL_SCALAR_ARROW_ITER_UDF => "SQL_SCALAR_ARROW_ITER_UDF"
+    case SQL_GROUPED_AGG_ARROW_UDF => "SQL_GROUPED_AGG_ARROW_UDF"
   }
 }
 
