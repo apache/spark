@@ -16,7 +16,6 @@
 #
 
 import unittest
-from typing import cast
 
 from pyspark.sql.pandas.functions import arrow_udf, ArrowUDFType
 from pyspark.util import PythonEvalType
@@ -30,8 +29,7 @@ from pyspark.sql.functions import (
     sum,
     udf,
 )
-from pyspark.sql.types import ArrayType, YearMonthIntervalType
-from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
+from pyspark.errors import AnalysisException, PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pyarrow,
@@ -185,58 +183,6 @@ class GroupedAggArrowUDFTestsMixin:
             .sort("id")
         ).collect()
         self.assertEqual(expected4, result4.collect())
-
-    # def test_unsupported_types(self):
-    #     with self.quiet():
-    #         self.check_unsupported_types()
-    #
-    # def check_unsupported_types(self):
-    #     with self.assertRaises(PySparkNotImplementedError) as pe:
-    #         pandas_udf(
-    #             lambda x: x,
-    #             ArrayType(ArrayType(YearMonthIntervalType())),
-    #             ArrowUDFType.GROUPED_AGG,
-    #         )
-    #
-    #     self.check_error(
-    #         exception=pe.exception,
-    #         errorClass="NOT_IMPLEMENTED",
-    #         messageParameters={
-    #             "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
-    #             "ArrayType(ArrayType(YearMonthIntervalType(0, 1), True), True)"
-    #         },
-    #     )
-    #
-    #     with self.assertRaises(PySparkNotImplementedError) as pe:
-    #
-    #         @arrow_udf("mean double, std double", ArrowUDFType.GROUPED_AGG)
-    #         def mean_and_std_udf(v):
-    #             return v.mean(), v.std()
-    #
-    #     self.check_error(
-    #         exception=pe.exception,
-    #         errorClass="NOT_IMPLEMENTED",
-    #         messageParameters={
-    #             "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
-    #             "StructType([StructField('mean', DoubleType(), True), "
-    #             "StructField('std', DoubleType(), True)])"
-    #         },
-    #     )
-    #
-    #     with self.assertRaises(PySparkNotImplementedError) as pe:
-    #
-    #         @arrow_udf(ArrayType(YearMonthIntervalType()), ArrowUDFType.GROUPED_AGG)
-    #         def mean_and_std_udf(v):  # noqa: F811
-    #             return {v.mean(): v.std()}
-    #
-    #     self.check_error(
-    #         exception=pe.exception,
-    #         errorClass="NOT_IMPLEMENTED",
-    #         messageParameters={
-    #             "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
-    #             "ArrayType(YearMonthIntervalType(0, 1), True)"
-    #         },
-    #     )
 
     def test_alias(self):
         df = self.data
