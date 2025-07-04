@@ -117,8 +117,6 @@ private object ModelAttributeHelper {
   }
 }
 
-
-
 // MLHandler is a utility to group all ML operations
 private[connect] object MLHandler extends Logging {
 
@@ -174,7 +172,7 @@ private[connect] object MLHandler extends Logging {
       val handlerInterruptionTimeoutMillis = handlerInterruptionTimeoutMinutes * 60 * 1000
       val thread = new Thread(() => {
         while (true) {
-          handlerExecutionStartTimeMap.forEach {(threadId, startTime) =>
+          handlerExecutionStartTimeMap.forEach { (threadId, startTime) =>
             val execTime = System.currentTimeMillis() - startTime
             if (execTime > handlerInterruptionTimeoutMillis) {
               for (t <- Thread.getAllStackTraces().keySet().asScala) {
@@ -184,12 +182,15 @@ private[connect] object MLHandler extends Logging {
               }
             }
           }
+          Thread.sleep(60 * 1000)
         }
       })
       thread.setDaemon(true)
       thread.start()
     }
   }
+
+  startHangingHandlerReaper()
 
   def _handleMlCommand(
       sessionHolder: SessionHolder,
@@ -452,8 +453,8 @@ private[connect] object MLHandler extends Logging {
   }
 
   def wrapHandler(
-       originHandler: () => Any,
-       reqProto: com.google.protobuf.GeneratedMessage): Any = {
+      originHandler: () => Any,
+      reqProto: com.google.protobuf.GeneratedMessage): Any = {
     val threadId = Thread.currentThread().getId
     val startTime = System.currentTimeMillis()
     handlerExecutionStartTimeMap.put(threadId, startTime)
@@ -471,8 +472,7 @@ private[connect] object MLHandler extends Logging {
         throw SparkException.internalError(
           s"The Spark Connect ML handler thread is interrupted after executing for " +
             s"$execTime minutes.\nThe request proto message is:\n${reqProto.toString}\n, " +
-            s"the current stack trace is:\n$stackTrace\n"
-        )
+            s"the current stack trace is:\n$stackTrace\n")
     } finally {
       handlerExecutionStartTimeMap.remove(threadId)
     }
@@ -506,7 +506,9 @@ private[connect] object MLHandler extends Logging {
         .build()
     }
 
-  def _transformMLRelation(relation: proto.MlRelation, sessionHolder: SessionHolder): DataFrame = {
+  def _transformMLRelation(
+      relation: proto.MlRelation,
+      sessionHolder: SessionHolder): DataFrame = {
     relation.getMlTypeCase match {
       // Ml transform
       case proto.MlRelation.MlTypeCase.TRANSFORM =>
