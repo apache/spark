@@ -2970,6 +2970,36 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("SPARK-52588: invalid estimate if k is invalid") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT approx_top_k_estimate(approx_top_k_accumulate(expr), 0) " +
+          "FROM VALUES 0, 1, 2 AS tab(expr);").collect()
+      },
+      condition = "APPROX_TOP_K_NON_POSITIVE_ARG",
+      parameters = Map("argName" -> "`k`", "argValue" -> "0")
+    )
+  }
+
+  test("SPARK-52588: invalid estimate if k > Int.MaxValue") {
+    withSQLConf("spark.sql.ansi.enabled" -> true.toString) {
+      val k: Long = Int.MaxValue + 1L
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql(s"SELECT approx_top_k_estimate(approx_top_k_accumulate(expr), $k) " +
+            "FROM VALUES 0, 1, 2 AS tab(expr);").collect()
+        },
+        condition = "CAST_OVERFLOW",
+        parameters = Map(
+          "value" -> (k.toString + "L"),
+          "sourceType" -> "\"BIGINT\"",
+          "targetType" -> "\"INT\"",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+        )
+      )
+    }
+  }
+
   test("SPARK-52588: invalid estimate if k > maxItemsTracked") {
     checkError(
       exception = intercept[SparkRuntimeException] {
