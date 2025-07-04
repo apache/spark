@@ -279,7 +279,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     queryNode.rdd
   }
 
-  test("Test 2-way join") {
+  test("Test 2-way join without condition - no join pushdown") {
     val sqlQuery = "SELECT * FROM h2.test.employee a, h2.test.employee b"
     val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
       sql(sqlQuery).collect().toSeq
@@ -296,7 +296,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
   }
 
-  test("Test multi way join") {
+  test("Test multi-way join without condition - no join pushdown") {
     val sqlQuery = """
       |SELECT * FROM
       |h2.test.employee a,
@@ -320,7 +320,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
   }
 
-  test("Test join with condition") {
+  test("Test self join with condition") {
     val sqlQuery = "SELECT * FROM h2.test.employee a JOIN h2.test.employee b ON a.dept = b.dept + 1"
 
     val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
@@ -336,23 +336,27 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
       assert(joinNodes.isEmpty)
       checkPushedInfo(df, "PushedJoins: [h2.test.employee, h2.test.employee]")
+      checkPushedInfo(df,
+        "PushedFilters: [DEPT IS NOT NULL, DEPT IS NOT NULL, col_0 = (col_5 + 1)],")
       checkAnswer(df, rows)
+
+      val generatedSQLQuery =
+        getExternalEngineQuery(df.queryExecution.executedPlan).split("\\s+SPARK_GEN_SUBQ_\\d+")(0)
       // scalastyle:off line.size.limit
-      assert(getExternalEngineQuery(df.queryExecution.executedPlan).contains(
+      assert(generatedSQLQuery.contains(
         """SELECT "col_0","col_1","col_2","col_3","col_4","col_5","col_6","col_7","col_8","col_9" FROM (
           |SELECT "col_0","col_1","col_2","col_3","col_4","col_5","col_6","col_7","col_8","col_9" FROM
           |(SELECT "DEPT" AS "col_0","NAME" AS "col_1","SALARY" AS "col_2","BONUS" AS "col_3","IS_MANAGER" AS "col_4" FROM "test"."employee"  WHERE ("DEPT" IS NOT NULL)    ) join_subquery_0
           |INNER JOIN
           |(SELECT "DEPT" AS "col_5","NAME" AS "col_6","SALARY" AS "col_7","BONUS" AS "col_8","IS_MANAGER" AS "col_9" FROM "test"."employee"  WHERE ("DEPT" IS NOT NULL)    ) join_subquery_1
           |ON "col_0" = ("col_5" + 1)
-          |) SPARK_GEN_SUBQ_0""".stripMargin
-      ),
-        "Generated query is not as expected")
+          |)""".stripMargin
+      ), "Generated query is not as expected")
       // scalastyle:on line.size.limit
     }
   }
 
-  test("Test multi-way-join with conditions") {
+  test("Test multi-way self join with conditions") {
     val sqlQuery = """
       |SELECT * FROM
       |h2.test.employee a
@@ -374,11 +378,14 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
       assert(joinNodes.isEmpty)
       checkPushedInfo(df, "PushedJoins: [h2.test.employee, h2.test.employee, h2.test.employee]")
+      checkPushedInfo(df,
+        "[DEPT IS NOT NULL, DEPT IS NOT NULL, col_5 = (col_0 + 1), " +
+          "DEPT IS NOT NULL, DEPT = (col_5 - 1)]")
       checkAnswer(df, rows)
     }
   }
 
-  test("Test join with column pruning") {
+  test("Test self join with column pruning") {
     val sqlQuery = """
       |SELECT a.dept + 2, b.dept, b.salary FROM
       |h2.test.employee a JOIN h2.test.employee b
@@ -398,11 +405,53 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
       assert(joinNodes.isEmpty)
       checkPushedInfo(df, "PushedJoins: [h2.test.employee, h2.test.employee]")
+      checkPushedInfo(df,
+        "PushedFilters: [DEPT IS NOT NULL, DEPT IS NOT NULL, col_0 = (col_1 + 1)]")
       checkAnswer(df, rows)
     }
   }
 
-  test("Test multi way join with column pruning") {
+  test("Test 2-way join with column pruning - different tables") {
+    val sqlQuery = """
+      |SELECT * FROM
+      |h2.test.employee a JOIN h2.test.people b
+      |ON a.dept = b.id
+      |""".stripMargin
+
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
+    }
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+
+      val joinNodes = df.queryExecution.optimizedPlan.collect {
+        case j: Join => j
+      }
+
+      assert(joinNodes.isEmpty)
+      checkPushedInfo(df, "PushedJoins: [h2.test.employee, h2.test.people]")
+      checkPushedInfo(df,
+        "PushedFilters: [DEPT IS NOT NULL, ID IS NOT NULL, DEPT = ID]")
+      checkAnswer(df, rows)
+
+      val generatedSQLQuery =
+        getExternalEngineQuery(df.queryExecution.executedPlan).split("\\s+SPARK_GEN_SUBQ_\\d+")(0)
+      // scalastyle:off line.size.limit
+      assert(generatedSQLQuery.contains(
+        """SELECT "DEPT","col_0","SALARY","BONUS","IS_MANAGER","col_1","ID" FROM (
+          |SELECT "DEPT","col_0","SALARY","BONUS","IS_MANAGER","col_1","ID" FROM
+          |(SELECT "DEPT","NAME" AS "col_0","SALARY","BONUS","IS_MANAGER" FROM "test"."employee"  WHERE ("DEPT" IS NOT NULL)    ) join_subquery_0
+          |INNER JOIN
+          |(SELECT "NAME" AS "col_1","ID" FROM "test"."people"  WHERE ("ID" IS NOT NULL)    ) join_subquery_1
+          |ON "DEPT" = "ID"
+          |)""".stripMargin
+      ), "Generated query is not as expected")
+      // scalastyle:on line.size.limit
+    }
+  }
+
+  test("Test multi-way self join with column pruning") {
     val sqlQuery = """
       |SELECT a.dept, b.*, c.dept, c.salary + a.salary
       |FROM h2.test.employee a
@@ -453,7 +502,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
   }
 
-  test("Test aggregate on top of 2 way join") {
+  test("Test aggregate on top of 2-way self join") {
     val sqlQuery = """
       |SELECT min(a.dept + b.dept), min(a.dept)
       |FROM h2.test.employee a
@@ -481,7 +530,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
   }
 
-  test("Test aggregate on top of multi way join") {
+  test("Test aggregate on top of multi-way self join") {
     val sqlQuery = """
       |SELECT min(a.dept + b.dept), min(a.dept), min(c.dept - 2)
       |FROM h2.test.employee a
