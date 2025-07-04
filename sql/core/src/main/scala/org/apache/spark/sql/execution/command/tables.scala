@@ -247,8 +247,8 @@ case class AlterTableAddColumnsCommand(
     }
     DDLUtils.checkTableColumns(catalogTable, StructType(colsWithProcessedDefaults))
 
-    val existingSchema = CharVarcharUtils.getRawSchema(catalogTable.dataSchema)
-    catalog.alterTableDataSchema(table, StructType(existingSchema ++ colsWithProcessedDefaults))
+    val existingSchema = CharVarcharUtils.getRawSchema(catalogTable.schema)
+    catalog.alterTableSchema(table, StructType(existingSchema ++ colsWithProcessedDefaults))
     Seq.empty[Row]
   }
 
