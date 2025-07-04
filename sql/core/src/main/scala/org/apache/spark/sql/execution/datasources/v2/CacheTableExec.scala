@@ -98,9 +98,8 @@ case class CacheTableAsSelectExec(
 
   override def run(): Seq[InternalRow] = {
     // CACHE TABLE AS TABLE creates a temp view and caches the temp view.
-    val viewIdentifier = TableIdentifier(tempViewName)
     CreateViewCommand(
-      name = viewIdentifier,
+      name = TableIdentifier(tempViewName),
       userSpecifiedColumns = Nil,
       comment = None,
       collation = None,
