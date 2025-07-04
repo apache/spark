@@ -139,7 +139,7 @@
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.15.2</parquet.version>
-    <orc.version>2.1.2</orc.version>
+    <orc.version>2.1.3</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.25</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
@@ -378,6 +378,10 @@
       <snapshots>
         <enabled>false</enabled>
       </snapshots>
+    </repository>
+    <repository>
+      <id>orc</id>
+      <url>https://repository.apache.org/content/repositories/orgapacheorc-1101/</url>
     </repository>
   </repositories>
   <pluginRepositories>
