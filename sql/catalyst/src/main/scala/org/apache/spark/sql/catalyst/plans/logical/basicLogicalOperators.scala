@@ -620,7 +620,11 @@ case class Union(
   }
 
   override lazy val resolved: Boolean = {
-    children.length > 1 && !(byName || allowMissingCol) && childrenResolved && allChildrenCompatible
+    children.length > 1 &&
+    !(byName || allowMissingCol) &&
+    childrenResolved &&
+    allChildrenCompatible &&
+    duplicateResolved
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): Union =
