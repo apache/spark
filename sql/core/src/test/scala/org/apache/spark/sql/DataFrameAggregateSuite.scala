@@ -2949,6 +2949,16 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("SPARK-52588: invalid accumulate if maxItemsTracked > 1000000") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT approx_top_k_accumulate(expr, 1000001) FROM VALUES (0) AS tab(expr);").collect()
+      },
+      condition = "APPROX_TOP_K_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT",
+      parameters = Map("maxItemsTracked" -> "1000001", "limit" -> "1000000")
+    )
+  }
+
   test("SPARK-52588: invalid estimate if k is null") {
     checkError(
       exception = intercept[SparkRuntimeException] {
