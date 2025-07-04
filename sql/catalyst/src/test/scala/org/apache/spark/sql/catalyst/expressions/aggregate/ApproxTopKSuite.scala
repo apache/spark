@@ -19,13 +19,13 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.{Abs, ApproxTopKEstimate, BoundReference, Literal}
-import org.apache.spark.sql.types.{ArrayType, BinaryType, IntegerType, LongType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, IntegerType, MapType, StringType, StructField, StructType}
 
 class ApproxTopKSuite extends SparkFunSuite {
 
   test("SPARK-52515: Accepts literal and foldable inputs") {
     val agg = new ApproxTopK(
-      expr = BoundReference(0, LongType, nullable = true),
+      expr = BoundReference(0, IntegerType, nullable = true),
       k = Abs(Literal(10)),
       maxItemsTracked = Abs(Literal(-10))
     )
@@ -34,18 +34,60 @@ class ApproxTopKSuite extends SparkFunSuite {
 
   test("SPARK-52515: Fail if parameters are not foldable") {
     val badAgg = new ApproxTopK(
-      expr = BoundReference(0, LongType, nullable = true),
-      k = Sum(BoundReference(1, LongType, nullable = true)),
+      expr = BoundReference(0, IntegerType, nullable = true),
+      k = Sum(BoundReference(1, IntegerType, nullable = true)),
       maxItemsTracked = Literal(10)
     )
     assert(badAgg.checkInputDataTypes().isFailure)
 
     val badAgg2 = new ApproxTopK(
-      expr = BoundReference(0, LongType, nullable = true),
+      expr = BoundReference(0, IntegerType, nullable = true),
       k = Literal(10),
-      maxItemsTracked = Sum(BoundReference(1, LongType, nullable = true))
+      maxItemsTracked = Sum(BoundReference(1, IntegerType, nullable = true))
     )
     assert(badAgg2.checkInputDataTypes().isFailure)
+  }
+
+  test("SPARK-52515: invalid item types") {
+    Seq(
+      ArrayType(IntegerType),
+      MapType(StringType, IntegerType),
+      StructType(Seq(StructField("a", IntegerType), StructField("b", StringType))),
+      BinaryType
+    ).foreach { unsupportedType =>
+      val agg = new ApproxTopK(
+        expr = BoundReference(0, unsupportedType, nullable = true),
+        k = Literal(10),
+        maxItemsTracked = Literal(10000)
+      )
+      assert(agg.checkInputDataTypes().isFailure)
+    }
+  }
+
+  test("SPARK-52515: invalid k types") {
+    val invalidNumberTypes: Seq[Any] = Seq(
+      10.0, 10.0f, BigDecimal("10.0"), 10.toByte, 10.toShort, 10L, 2147483648L, true, "10")
+    invalidNumberTypes.foreach { invalidK =>
+      val agg = new ApproxTopK(
+        expr = BoundReference(0, IntegerType, nullable = true),
+        k = Literal(invalidK),
+        maxItemsTracked = Literal(10000)
+      )
+      assert(agg.checkInputDataTypes().isFailure)
+    }
+  }
+
+  test("SPARK-52515: invalid maxItemsTracked types") {
+    val invalidNumberTypes: Seq[Any] = Seq(
+      10.0, 10.0f, BigDecimal("10.0"), 10.toByte, 10.toShort, 10L, 2147483648L, true, "10")
+    invalidNumberTypes.foreach { invalidMaxItems =>
+      val agg = new ApproxTopK(
+        expr = BoundReference(0, IntegerType, nullable = true),
+        k = Literal(10),
+        maxItemsTracked = Literal(invalidMaxItems)
+      )
+      assert(agg.checkInputDataTypes().isFailure)
+    }
   }
 
   test("SPARK-52588: invalid accumulate if item type is not supported") {
@@ -66,8 +108,8 @@ class ApproxTopKSuite extends SparkFunSuite {
 
   test("SPARK-52588: invalid accumulate if maxItemsTracked are not foldable") {
     val badAccumulate = ApproxTopKAccumulate(
-      expr = BoundReference(0, LongType, nullable = true),
-      maxItemsTracked = Sum(BoundReference(1, LongType, nullable = true))
+      expr = BoundReference(0, IntegerType, nullable = true),
+      maxItemsTracked = Sum(BoundReference(1, IntegerType, nullable = true))
     )
     assert(badAccumulate.checkInputDataTypes().isFailure)
   }
@@ -75,7 +117,7 @@ class ApproxTopKSuite extends SparkFunSuite {
   test("SPARK-52588: invalid accumulate if maxItemsTracked less than or equal to 0") {
     Seq(0, -1).foreach { invalidInput =>
       val badAccumulate = ApproxTopKAccumulate(
-        expr = BoundReference(0, LongType, nullable = true),
+        expr = BoundReference(0, IntegerType, nullable = true),
         maxItemsTracked = Literal(invalidInput)
       )
       checkError(
@@ -90,8 +132,8 @@ class ApproxTopKSuite extends SparkFunSuite {
 
   test("SPARK-52588: invalid estimate if k are not foldable") {
     val badEstimate = ApproxTopKEstimate(
-      state = BoundReference(0, LongType, nullable = false),
-      k = Sum(BoundReference(1, LongType, nullable = true))
+      state = BoundReference(0, IntegerType, nullable = false),
+      k = Sum(BoundReference(1, IntegerType, nullable = true))
     )
     assert(badEstimate.checkInputDataTypes().isFailure)
   }
