@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, Period, ZoneOffset}
+import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, Period}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
@@ -1515,17 +1515,27 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       val nanosOfDay = ldt.toLocalTime().toNanoOfDay
       val expected = DateTimeUtils.truncateTimeToPrecision(nanosOfDay, TimeType.DEFAULT_PRECISION)
 
-      checkEvaluation(Cast(Literal(micros, TimestampNTZType), TimeType(9)), expected)
+      checkEvaluation(Cast(Literal(micros, TimestampNTZType), TimeType(0)), expected)
     }
   }
 
   test("SPARK-52617: cast time to TimestampNTZType") {
-    // TIME: 15:30:00 → 15 * 3600 + 30 * 60 = 55800s → nanos
-    val timeNanos = 55800L * 1_000_000_000L // 15:30:00 in nanos since midnight
+    val testCases = Seq(
+      ("2023-01-01T15:30:00.123456789", 9),
+      ("2023-01-01T15:30:00.123456", 6),
+      ("2023-01-01T15:30:00", 0)
+    )
 
-    val today = LocalDate.now()
-    val expectedTs = today.atTime(15, 30).toInstant(ZoneOffset.UTC).toEpochMilli * 1000
+    testCases.foreach { case (s, precision) =>
+      val ldt = LocalDateTime.parse(s)
+      val micros = DateTimeUtils.localDateTimeToMicros(ldt)
+      val nanosOfDay = ldt.toLocalTime().toNanoOfDay
+      val expected = DateTimeUtils.truncateTimeToPrecision(nanosOfDay, precision)
 
-    checkEvaluation(Cast(Literal(timeNanos, TimeType(9)), TimestampNTZType), expectedTs)
+      checkEvaluation(
+        Cast(Literal(micros, TimestampNTZType), TimeType(precision)),
+        expected
+      )
+    }
   }
 }
