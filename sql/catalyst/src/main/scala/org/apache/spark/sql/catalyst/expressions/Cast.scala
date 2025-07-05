@@ -122,6 +122,7 @@ object Cast extends QueryErrorsBase {
     case (_: StringType, _: TimeType) => true
     case (TimestampType, DateType) => true
     case (TimestampNTZType, DateType) => true
+    case (TimestampNTZType, _: TimeType) => true
 
     case (_: NumericType, _: NumericType) => true
     case (_: StringType, _: NumericType) => true
@@ -135,6 +136,7 @@ object Cast extends QueryErrorsBase {
     case (_, VariantType) => variant.VariantGet.checkDataType(from, allowStructsAndMaps = false)
 
     case (_: TimeType, _: TimeType) => true
+    case (_: TimeType, TimestampNTZType) => true
 
     // non-null variants can generate nulls even in ANSI mode
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
