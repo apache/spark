@@ -18,6 +18,7 @@
 from pathlib import Path
 
 SPEC = """
+name: {{ name }}
 definitions:
   - glob:
       include: transformations/**/*.py
@@ -49,7 +50,7 @@ def init(name: str) -> None:
     # Write the spec file to the project directory
     spec_file = project_dir / "pipeline.yml"
     with open(spec_file, "w") as f:
-        f.write(SPEC)
+        f.write(SPEC.replace("{{ name }}", name))
 
     # Create the transformations directory
     transformations_dir = project_dir / "transformations"

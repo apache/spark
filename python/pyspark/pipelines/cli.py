@@ -61,12 +61,14 @@ class DefinitionsGlob:
 class PipelineSpec:
     """Spec for a pipeline.
 
+    :param name: The name of the pipeline.
     :param catalog: The default catalog to use for the pipeline.
     :param database: The default database to use for the pipeline.
     :param configuration: A dictionary of Spark configuration properties to set for the pipeline.
     :param definitions: A list of glob patterns for finding pipeline definitions files.
     """
 
+    name: str
     catalog: Optional[str]
     database: Optional[str]
     configuration: Mapping[str, str]
@@ -110,13 +112,23 @@ def load_pipeline_spec(spec_path: Path) -> PipelineSpec:
 
 
 def unpack_pipeline_spec(spec_data: Mapping[str, Any]) -> PipelineSpec:
+    ALLOWED_FIELDS = {"name", "catalog", "database", "schema", "configuration", "definitions"}
+    REQUIRED_FIELDS = ["name"]
     for key in spec_data.keys():
-        if key not in ["catalog", "database", "schema", "configuration", "definitions"]:
+        if key not in ALLOWED_FIELDS:
             raise PySparkException(
                 errorClass="PIPELINE_SPEC_UNEXPECTED_FIELD", messageParameters={"field_name": key}
             )
 
+    for key in REQUIRED_FIELDS:
+        if key not in spec_data:
+            raise PySparkException(
+                errorClass="PIPELINE_SPEC_MISSING_REQUIRED_FIELD",
+                messageParameters={"field_name": key},
+            )
+
     return PipelineSpec(
+        name=spec_data["name"],
         catalog=spec_data.get("catalog"),
         database=spec_data.get("database", spec_data.get("schema")),
         configuration=validate_str_dict(spec_data.get("configuration", {}), "configuration"),

@@ -884,6 +884,11 @@
       "No pipeline.yaml or pipeline.yml file provided in arguments or found in directory `<dir_path>` or readable ancestor directories."
     ]
   },
+  "PIPELINE_SPEC_MISSING_REQUIRED_FIELD": {
+    "message": [
+      "Pipeline spec missing required field `<field_name>`."
+    ]
+  },
   "PIPELINE_SPEC_UNEXPECTED_FIELD": {
     "message": [
       "Pipeline spec field `<field_name>` is unexpected."
