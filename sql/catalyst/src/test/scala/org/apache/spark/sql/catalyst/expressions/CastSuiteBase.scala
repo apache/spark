@@ -1511,10 +1511,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-52617: cast TimestampNTZType to time") {
     specialTs.foreach { s =>
       val ldt = LocalDateTime.parse(s) // parsed as local timestamp
-      val micros = localDateTimeToMicros(ldt)
+      val micros = DateTimeUtils.localDateTimeToMicros(ldt)
 
       val nanosOfDay = ldt.toLocalTime().toNanoOfDay
-      val expected = truncateTimeToPrecision(nanosOfDay, TimeType.DEFAULT_PRECISION)
+      val expected = DateTimeUtils.truncateTimeToPrecision(nanosOfDay, TimeType.DEFAULT_PRECISION)
 
       checkEvaluation(Cast(Literal(micros, TimestampNTZType), TimeType(0)), expected)
     }
@@ -1529,9 +1529,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     testCases.foreach { case (s, precision) =>
       val ldt = LocalDateTime.parse(s)
-      val micros = localDateTimeToMicros(ldt)
+      val micros = DateTimeUtils.localDateTimeToMicros(ldt)
       val nanosOfDay = ldt.toLocalTime().toNanoOfDay
-      val expected = truncateTimeToPrecision(nanosOfDay, precision)
+      val expected = DateTimeUtils.truncateTimeToPrecision(nanosOfDay, precision)
 
       checkEvaluation(
         Cast(Literal(micros, TimestampNTZType), TimeType(precision)),
