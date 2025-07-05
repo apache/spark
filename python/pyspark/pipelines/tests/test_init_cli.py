@@ -50,6 +50,7 @@ class InitCLITests(ReusedConnectTestCase):
             with change_dir(Path(temp_dir) / project_name):
                 spec_path = find_pipeline_spec(Path.cwd())
                 spec = load_pipeline_spec(spec_path)
+                assert spec.name == project_name
                 registry = LocalGraphElementRegistry()
                 register_definitions(spec_path, registry, spec)
                 self.assertEqual(len(registry.datasets), 1)
