@@ -73,7 +73,6 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
         case _ =>
           throw QueryExecutionErrors.overwriteTableByUnsupportedExpressionError(table)
       }
-
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       o.copy(write = Some(write), query = newQuery)
 

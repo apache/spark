@@ -21,7 +21,7 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, In, Not}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, InMemoryTable, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -2042,6 +2042,54 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(4, 400, "marketing"),
           // Row(5, 500, "executive") deleted
           Row(6, -1, "dummy"))) // inserted
+    }
+  }
+
+  test("V2 write metrics for merge") {
+
+    //TODO debug AQE disabled
+    Seq("true").foreach { aqeEnabled: String =>
+      withTempView("source") {
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled) {
+          createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+            """{ "pk": 1, "salary": 100, "dep": "hr" }
+              |{ "pk": 2, "salary": 200, "dep": "software" }
+              |{ "pk": 3, "salary": 300, "dep": "hr" }
+              |{ "pk": 4, "salary": 400, "dep": "marketing" }
+              |{ "pk": 5, "salary": 500, "dep": "executive" }
+              |""".stripMargin)
+
+          val sourceDF = Seq(1, 2, 6, 10).toDF("pk")
+          sourceDF.createOrReplaceTempView("source")
+
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED AND salary < 200 THEN
+               | DELETE
+               |WHEN NOT MATCHED AND s.pk < 10 THEN
+               | INSERT (pk, salary, dep) VALUES (s.pk, -1, "dummy")
+               |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
+               | DELETE
+               |""".stripMargin
+          )
+
+          val table = catalog.loadTable(ident)
+          val lastCommit = table.asInstanceOf[InMemoryTable].commits.last
+          val expectedTargetRowsCopied = if (deltaMerge) "0" else "3"
+          assert(lastCommit.properties("merge.numTargetRowsCopied") == expectedTargetRowsCopied)
+          assert(lastCommit.properties("merge.numTargetRowsInserted") == "1")
+          assert(lastCommit.properties("merge.numTargetRowsUpdated") == "0")
+          assert(lastCommit.properties("merge.numTargetRowsDeleted") == "2")
+          assert(lastCommit.properties("merge.numTargetRowsMatchedUpdated") == "0")
+          assert(lastCommit.properties("merge.numTargetRowsMatchedDeleted") == "1")
+          assert(lastCommit.properties("merge.numTargetRowsNotMatchedBySourceUpdated") == "0")
+          assert(lastCommit.properties("merge.numTargetRowsNotMatchedBySourceDeleted") == "1")
+          assert(lastCommit.properties("firstScan.numSplits") == "1")
+          sql(s"DROP TABLE $tableNameAsString")
+        }
+      }
     }
   }
 

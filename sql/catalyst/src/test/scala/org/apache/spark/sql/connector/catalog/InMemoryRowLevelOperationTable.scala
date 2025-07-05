@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import java.time.Instant
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -24,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
+import org.apache.spark.sql.connector.metric.V2ExecMetric
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
@@ -111,9 +113,26 @@ class InMemoryRowLevelOperationTable(
     override def description(): String = "InMemoryPartitionReplaceOperation"
   }
 
-  private case class PartitionBasedReplaceData(scan: InMemoryBatchScan) extends TestBatchWrite {
+  abstract class RowLevelOperationBatchWrite extends TestBatchWrite {
+    override def requestExecMetrics(): Boolean = true
 
-    override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
+    override def execMetrics(metrics: Array[V2ExecMetric]): Unit = {
+      metrics.foreach(m => commitProperties += s"${m.metricType()}.${m.name()}" -> m.value())
+    }
+
+    override def commit(messages: Array[WriterCommitMessage]): Unit = {
+      doCommit(messages)
+      commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
+      commitProperties.clear()
+    }
+
+    def doCommit(messages: Array[WriterCommitMessage]): Unit
+  }
+
+  private case class PartitionBasedReplaceData(scan: InMemoryBatchScan)
+    extends RowLevelOperationBatchWrite {
+
+    override def doCommit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       val readRows = scan.data.flatMap(_.asInstanceOf[BufferedRows].rows)
       val readPartitions = readRows.map(r => getKey(r, schema)).distinct
@@ -165,12 +184,14 @@ class InMemoryRowLevelOperationTable(
     }
   }
 
-  private object TestDeltaBatchWrite extends DeltaBatchWrite {
+  private object TestDeltaBatchWrite extends RowLevelOperationBatchWrite
+    with DeltaBatchWrite{
+
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DeltaWriterFactory = {
       DeltaBufferedRowsWriterFactory
     }
 
-    override def commit(messages: Array[WriterCommitMessage]): Unit = {
+    override def doCommit(messages: Array[WriterCommitMessage]): Unit = {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       withDeletes(newData)
       withData(newData)
