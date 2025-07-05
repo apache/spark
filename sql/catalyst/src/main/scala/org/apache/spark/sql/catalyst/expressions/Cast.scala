@@ -706,10 +706,10 @@ case class Cast(
     case TimestampType =>
       buildCast[Long](_, ts => convertTz(ts, ZoneOffset.UTC, zoneId))
     case _: TimeType =>
+      val currentDay = DateTimeUtils.currentDate(zoneId)
       buildCast[Long](
         _,
         nanos => {
-          val currentDay = DateTimeUtils.currentDate(zoneId)
           val NANOS_PER_DAY = 86_400_000_000_000L  // 24 * 60 * 60 * 1_000_000_000
           val nanosOfDay = ((nanos % NANOS_PER_DAY) + NANOS_PER_DAY) % NANOS_PER_DAY
           DateTimeUtils.makeTimestampNTZ(currentDay, nanosOfDay)
