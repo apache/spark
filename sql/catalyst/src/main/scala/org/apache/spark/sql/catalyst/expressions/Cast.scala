@@ -122,6 +122,7 @@ object Cast extends QueryErrorsBase {
     case (_: StringType, _: TimeType) => true
     case (TimestampType, DateType) => true
     case (TimestampNTZType, DateType) => true
+    case (TimestampNTZType, _: TimeType) => true
 
     case (_: NumericType, _: NumericType) => true
     case (_: StringType, _: NumericType) => true
@@ -135,6 +136,7 @@ object Cast extends QueryErrorsBase {
     case (_, VariantType) => variant.VariantGet.checkDataType(from, allowStructsAndMaps = false)
 
     case (_: TimeType, _: TimeType) => true
+    case (_: TimeType, TimestampNTZType) => true
 
     // non-null variants can generate nulls even in ANSI mode
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
@@ -229,6 +231,7 @@ object Cast extends QueryErrorsBase {
     case (_: StringType, _: TimeType) => true
     case (TimestampType, DateType) => true
     case (TimestampNTZType, DateType) => true
+    case (TimestampNTZType, _: TimeType) => true
 
     case (_: StringType, CalendarIntervalType) => true
     case (_: StringType, _: DayTimeIntervalType) => true
@@ -254,6 +257,7 @@ object Cast extends QueryErrorsBase {
     case (_, VariantType) => variant.VariantGet.checkDataType(from, allowStructsAndMaps = false)
 
     case (_: TimeType, _: TimeType) => true
+    case (_: TimeType, TimestampNTZType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canCast(fromType, toType) &&
@@ -701,6 +705,16 @@ case class Cast(
       buildCast[Int](_, d => daysToMicros(d, ZoneOffset.UTC))
     case TimestampType =>
       buildCast[Long](_, ts => convertTz(ts, ZoneOffset.UTC, zoneId))
+    case _: TimeType =>
+      val currentDay = DateTimeUtils.currentDate(zoneId)
+      buildCast[Long](
+        _,
+        nanos => {
+          val NANOS_PER_DAY = 86_400_000_000_000L  // 24 * 60 * 60 * 1_000_000_000
+          val nanosOfDay = ((nanos % NANOS_PER_DAY) + NANOS_PER_DAY) % NANOS_PER_DAY
+          DateTimeUtils.makeTimestampNTZ(currentDay, nanosOfDay)
+        }
+      )
   }
 
   private[this] def decimalToTimestamp(d: Decimal): Long = {
@@ -746,6 +760,13 @@ case class Cast(
       }
     case _: TimeType =>
       buildCast[Long](_, nanos => DateTimeUtils.truncateTimeToPrecision(nanos, to.precision))
+    case _: TimestampNTZType =>
+      buildCast[Long](
+        _,
+        micros => {
+          val nanosInDay = DateTimeUtils.toJulianDay(micros)._2
+          DateTimeUtils.truncateTimeToPrecision(nanosInDay, to.precision)
+        })
   }
 
   // IntervalConverter

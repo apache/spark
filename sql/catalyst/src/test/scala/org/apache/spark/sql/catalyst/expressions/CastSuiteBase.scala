@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
 import org.apache.spark.sql.internal.SQLConf
@@ -305,11 +305,11 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(ts, DoubleType), 15.003)
 
     checkEvaluation(cast(cast(tss, ShortType), TimestampType),
-      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
-      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(cast(cast(tss, LongType), TimestampType),
-      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(
       cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimestampType), FloatType),
       millis.toFloat / MILLIS_PER_SECOND)
@@ -334,18 +334,18 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     for (tz <- ALL_TIMEZONES) {
       val timeZoneId = Option(tz.getId)
-      var c = Calendar.getInstance(TimeZoneUTC)
+      var c = Calendar.getInstance(DateTimeUtils.TimeZoneUTC)
       c.set(2015, 2, 8, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
-        millisToMicros(c.getTimeInMillis))
-      c = Calendar.getInstance(TimeZoneUTC)
+        DateTimeUtils.millisToMicros(c.getTimeInMillis))
+      c = Calendar.getInstance(DateTimeUtils.TimeZoneUTC)
       c.set(2015, 10, 1, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
-        millisToMicros(c.getTimeInMillis))
+        DateTimeUtils.millisToMicros(c.getTimeInMillis))
     }
 
     checkEvaluation(cast("abdef", StringType), "abdef")
@@ -356,7 +356,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(nts, TimestampType, UTC_OPT), StringType, UTC_OPT), nts)
     checkEvaluation(
       cast(cast(ts, StringType, UTC_OPT), TimestampType, UTC_OPT),
-      fromJavaTimestamp(ts))
+      DateTimeUtils.fromJavaTimestamp(ts))
 
     // all convert to string type to check
     checkEvaluation(
@@ -1505,6 +1505,38 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkConsistencyBetweenInterpretedAndCodegen(
           (child: Expression) => Cast(child, TimeType(sp)), TimeType(tp))
       }
+    }
+  }
+
+  test("SPARK-52617: cast TimestampNTZType to time") {
+    specialTs.foreach { s =>
+      val ldt = LocalDateTime.parse(s) // parsed as local timestamp
+      val micros = DateTimeUtils.localDateTimeToMicros(ldt)
+
+      val nanosOfDay = ldt.toLocalTime().toNanoOfDay
+      val expected = DateTimeUtils.truncateTimeToPrecision(nanosOfDay, TimeType.DEFAULT_PRECISION)
+
+      checkEvaluation(Cast(Literal(micros, TimestampNTZType), TimeType(0)), expected)
+    }
+  }
+
+  test("SPARK-52617: cast time to TimestampNTZType") {
+    val testCases = Seq(
+      ("2023-01-01T15:30:00.123456789", 9),
+      ("2023-01-01T15:30:00.123456", 6),
+      ("2023-01-01T15:30:00", 0)
+    )
+
+    testCases.foreach { case (s, precision) =>
+      val ldt = LocalDateTime.parse(s)
+      val micros = DateTimeUtils.localDateTimeToMicros(ldt)
+      val nanosOfDay = ldt.toLocalTime().toNanoOfDay
+      val expected = DateTimeUtils.truncateTimeToPrecision(nanosOfDay, precision)
+
+      checkEvaluation(
+        Cast(Literal(micros, TimestampNTZType), TimeType(precision)),
+        expected
+      )
     }
   }
 }
