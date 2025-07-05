@@ -746,6 +746,13 @@ case class Cast(
       }
     case _: TimeType =>
       buildCast[Long](_, nanos => DateTimeUtils.truncateTimeToPrecision(nanos, to.precision))
+    case _: TimestampNTZType =>
+      buildCast[Long](
+        _,
+        micros => {
+          val nanosInDay = DateTimeUtils.toJulianDay(micros)._2
+          DateTimeUtils.truncateTimeToPrecision(nanosInDay, to.precision)
+        })
   }
 
   // IntervalConverter
