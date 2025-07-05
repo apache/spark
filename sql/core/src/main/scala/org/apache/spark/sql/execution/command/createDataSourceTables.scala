@@ -23,7 +23,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, Statistics, WithCTE}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -148,6 +148,9 @@ case class CreateDataSourceTableAsSelectCommand(
   extends LeafRunnableCommand with CTEInChildren {
   assert(query.resolved)
   override def innerChildren: Seq[LogicalPlan] = query :: Nil
+
+  // Override stats to return stats from the inner query
+  override def stats: Statistics = query.stats
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)
