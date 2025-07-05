@@ -1792,7 +1792,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
-  test("Support cache/uncache table with Time type") {
+  test("SPARK-52692: Support cache/uncache table with Time type") {
     val tableName = "timeCache"
     withTable(tableName) {
       sql(s"CACHE TABLE $tableName AS SELECT TIME'22:00:00'")
