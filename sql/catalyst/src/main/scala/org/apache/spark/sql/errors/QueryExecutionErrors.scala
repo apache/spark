@@ -3071,4 +3071,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       )
     )
   }
+
+  def variantDataSchemaConflictWithPartitionSchema(
+      dataSchema: StructType,
+      partitionSchema: StructType): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "VARIANT_DATA_SCHEMA_CONFLICT_WITH_PARTITION_SCHEMA",
+      messageParameters = Map(
+        "dataSchema" -> toSQLType(dataSchema),
+        "partitionSchema" -> toSQLType(partitionSchema)
+      )
+    )
+  }
 }

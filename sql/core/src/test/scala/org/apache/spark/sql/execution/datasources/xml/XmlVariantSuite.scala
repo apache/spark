@@ -933,4 +933,80 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       .map(_.getString(0).replaceAll("\\s+", ""))
     assert(xmlResult.head === xmlStr)
   }
+
+  // ==========================================================
+  // ====== SingleVariantColumn with partition schema =========
+  // ==========================================================
+
+  test("XML with hive-style partition columns in singleVariantColumn mode") {
+    withTempDir { dir =>
+      // Create partitioned directory structure and copy file to each partition
+      val path = s"${dir.getCanonicalPath}/year=2021/month=01"
+      val partitionDir = new java.io.File(path)
+      partitionDir.mkdirs()
+
+      // Copy cars.xml to each partition
+      val srcPath = getTestResourcePath(resDir + "cars.xml")
+      val destPath = s"${path}/data.xml"
+
+      // Use Spark's file utilities to copy file
+      val fs = org.apache.hadoop.fs.FileSystem.get(spark.sessionState.newHadoopConf())
+      fs.copyFromLocalFile(
+        new org.apache.hadoop.fs.Path(srcPath),
+        new org.apache.hadoop.fs.Path(destPath)
+      )
+
+      def getSingleVariantColDf: DataFrame = {
+        spark.read
+          .format("xml")
+          .option("singleVariantColumn", "var")
+          .options(baseOptions)
+          .load(dir.getCanonicalPath)
+      }
+
+      withSQLConf("spark.sql.includePartitionColumnsInSingleVariantColumn" -> "false") {
+        val df = getSingleVariantColDf
+        // Check that the DataFrame contains both the variant column and the partition columns
+        assert(df.columns.length == 3) // var, year, month
+        // Verify that the partition columns are present in the DataFrame
+        checkAnswer(
+          df.select(
+              col("year").cast("int"),
+              col("month").cast("int"),
+              variant_get(col("var"), "$.make", "string").as("make")
+            )
+            .orderBy("make"),
+          Seq(
+            Row(2021, 1, "Chevy"),
+            Row(2021, 1, "Ford"),
+            Row(2021, 1, "Tesla")
+          )
+        )
+      }
+
+      withSQLConf("spark.sql.includePartitionColumnsInSingleVariantColumn" -> "true") {
+        val df = getSingleVariantColDf
+        // Check that the DataFrame only contains the variant column
+        assert(df.columns.length == 1)
+        // Verify that the partition columns are present in the variant column
+        checkAnswer(
+          df.select(
+              // The year partition column overlaps with the data columns in the source XML file.
+              // In this case, we should use the value of the partition column.
+              variant_get(col("var"), "$.year", "int"),
+              // The month partition column does not overlap with any data columns, it should be
+              // added to the single variant column
+              variant_get(col("var"), "$.month", "int"),
+              variant_get(col("var"), "$.make", "string").as("make")
+            )
+            .orderBy("make"),
+          Seq(
+            Row(2021, 1, "Chevy"),
+            Row(2021, 1, "Ford"),
+            Row(2021, 1, "Tesla")
+          )
+        )
+      }
+    }
+  }
 }
