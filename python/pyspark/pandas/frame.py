@@ -85,6 +85,7 @@ from pyspark.sql.types import (
     TimestampType,
     TimestampNTZType,
     NullType,
+    LongType,
 )
 from pyspark.sql.window import Window
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
@@ -126,6 +127,7 @@ from pyspark.pandas.utils import (
     validate_mode,
     verify_temp_column_name,
     log_advice,
+    infer_common_type,
 )
 from pyspark.pandas.generic import Frame
 from pyspark.pandas.internal import (
@@ -10617,12 +10619,27 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             var_name = [var_name]  # type: ignore[list-item]
 
+        value_col_names = [
+            name_like_string(label) for label in column_labels if label in value_vars
+        ]
+        value_col_types = [
+            self._internal.spark_frame.schema[col].dataType for col in value_col_names
+        ]
+        common_type = infer_common_type(value_col_types)
+        use_cast = is_ansi_mode_enabled(self._internal.spark_frame.sql_ctx.sparkSession)
+
         pairs = F.explode(
             F.array(
                 *[
                     F.struct(
                         *[F.lit(c).alias(name) for c, name in zip(label, var_name)],
-                        *[self._internal.spark_column_for(label).alias(value_name)],
+                        *[
+                            (
+                                self._internal.spark_column_for(label).cast(common_type)
+                                if use_cast
+                                else self._internal.spark_column_for(label)
+                            ).alias(value_name)
+                        ],
                     )
                     for label in column_labels
                     if label in value_vars

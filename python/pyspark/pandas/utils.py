@@ -42,7 +42,7 @@ import pandas as pd
 from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 
 from pyspark.sql import functions as F, Column, DataFrame as PySparkDataFrame, SparkSession
-from pyspark.sql.types import DoubleType
+from pyspark.sql.types import *
 from pyspark.sql.utils import is_remote
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException
 from pyspark import pandas as ps  # noqa: F401
@@ -1094,6 +1094,30 @@ def is_ansi_mode_enabled(spark: SparkSession) -> bool:
             ps.get_option("compute.ansi_mode_support", spark_session=spark)
             and spark.conf.get("spark.sql.ansi.enabled").lower() == "true"
         )
+
+
+def infer_common_type(types: list[DataType]) -> DataType:
+    # Define promotion order
+    type_priority = [
+        BooleanType,
+        ByteType,
+        ShortType,
+        IntegerType,
+        LongType,
+        FloatType,
+        DoubleType,
+        StringType,
+    ]
+
+    for t in type_priority:
+        if all(isinstance(typ, t) or isinstance(typ, NullType) for typ in types):
+            return t()
+
+    # Promote mixed numeric types
+    if all(isinstance(t, (IntegerType, LongType, FloatType, DoubleType, NullType)) for t in types):
+        return DoubleType()
+
+    return StringType()  # fallback
 
 
 def _test() -> None:
