@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, Period}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
+
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -30,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1510,10 +1511,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-52617: cast TimestampNTZType to time") {
     specialTs.foreach { s =>
       val ldt = LocalDateTime.parse(s) // parsed as local timestamp
-      val micros = DateTimeUtils.localDateTimeToMicros(ldt)
+      val micros = localDateTimeToMicros(ldt)
 
       val nanosOfDay = ldt.toLocalTime().toNanoOfDay
-      val expected = DateTimeUtils.truncateTimeToPrecision(nanosOfDay, TimeType.DEFAULT_PRECISION)
+      val expected = truncateTimeToPrecision(nanosOfDay, TimeType.DEFAULT_PRECISION)
 
       checkEvaluation(Cast(Literal(micros, TimestampNTZType), TimeType(0)), expected)
     }
@@ -1528,9 +1529,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     testCases.foreach { case (s, precision) =>
       val ldt = LocalDateTime.parse(s)
-      val micros = DateTimeUtils.localDateTimeToMicros(ldt)
+      val micros = localDateTimeToMicros(ldt)
       val nanosOfDay = ldt.toLocalTime().toNanoOfDay
-      val expected = DateTimeUtils.truncateTimeToPrecision(nanosOfDay, precision)
+      val expected = truncateTimeToPrecision(nanosOfDay, precision)
 
       checkEvaluation(
         Cast(Literal(micros, TimestampNTZType), TimeType(precision)),

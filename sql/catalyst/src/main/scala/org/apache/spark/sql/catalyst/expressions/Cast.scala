@@ -122,6 +122,7 @@ object Cast extends QueryErrorsBase {
     case (_: StringType, _: TimeType) => true
     case (TimestampType, DateType) => true
     case (TimestampNTZType, DateType) => true
+
     case (_: NumericType, _: NumericType) => true
     case (_: StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
