@@ -2474,12 +2474,14 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("alter view: AS Query") {
-    val parsed = parsePlan("ALTER VIEW a.b.c AS SELECT 1")
-    val expected = AlterViewAs(
-      UnresolvedView(Seq("a", "b", "c"), "ALTER VIEW ... AS", true, false),
-      "SELECT 1",
-      parsePlan("SELECT 1"))
-    comparePlans(parsed, expected)
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      val parsed = parsePlan("ALTER VIEW a.b.c AS SELECT 1")
+      val expected = AlterViewAs(
+        UnresolvedView(Seq("a", "b", "c"), "ALTER VIEW ... AS", true, false),
+        "SELECT 1",
+        parsePlan("SELECT 1"))
+      comparePlans(parsed, expected)
+    }
   }
 
   test("DESCRIBE FUNCTION") {

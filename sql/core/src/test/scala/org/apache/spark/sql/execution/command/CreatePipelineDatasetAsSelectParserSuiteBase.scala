@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreatePipe
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.command.v1.CommandSuiteBase
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructField, StructType}
 
 trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
@@ -225,28 +226,30 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
   }
 
   test("CTAS subquery is parsed into plan correctly") {
-    Seq(
-      "SELECT 1",
-      "SELECT * FROM input",
-      "SELECT a, b, c FROM input2",
-      """
-        |SELECT o.id, o.amount, c.region
-        |FROM orders o
-        |JOIN (
-        |  SELECT id, region
-        |  FROM customers
-        |  WHERE region IS NOT NULL
-        |) AS c
-        |ON o.customer_id = c.id
-        |""".stripMargin
-    ).foreach { subquery =>
-      val plan = parser.parsePlan(
-        s"""
-           |CREATE $datasetSqlSyntax table1 AS
-           |$subquery""".stripMargin)
-      val cmd = plan.asInstanceOf[CreatePipelineDatasetAsSelect]
-      assert(cmd.originalText.replaceAll("\\s", "") == subquery.replaceAll("\\s", ""))
-      assert(cmd.query == parser.parsePlan(subquery))
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      Seq(
+        "SELECT 1",
+        "SELECT * FROM input",
+        "SELECT a, b, c FROM input2",
+        """
+          |SELECT o.id, o.amount, c.region
+          |FROM orders o
+          |JOIN (
+          |  SELECT id, region
+          |  FROM customers
+          |  WHERE region IS NOT NULL
+          |) AS c
+          |ON o.customer_id = c.id
+          |""".stripMargin
+      ).foreach { subquery =>
+        val plan = parser.parsePlan(
+          s"""
+             |CREATE $datasetSqlSyntax table1 AS
+             |$subquery""".stripMargin)
+        val cmd = plan.asInstanceOf[CreatePipelineDatasetAsSelect]
+        assert(cmd.originalText.replaceAll("\\s", "") == subquery.replaceAll("\\s", ""))
+        assert(cmd.query == parser.parsePlan(subquery))
+      }
     }
   }
 
