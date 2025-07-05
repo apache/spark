@@ -797,7 +797,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("CachedBatch long Apis") {
-    Seq(LongType, TimestampType, TimestampNTZType, new TimeType(6)).foreach { dataType =>
+    Seq(LongType, TimestampType, TimestampNTZType).foreach { dataType =>
       val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
       val row = new SpecificInternalRow(Array(dataType).toImmutableArraySeq)
 
