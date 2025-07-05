@@ -62,7 +62,8 @@ private[scheduler] case class StageCancelled(
 
 private[scheduler] case class JobCancelled(
     jobId: Int,
-    reason: Option[String])
+    reason: Option[String],
+    quiet: Boolean = false)
   extends DAGSchedulerEvent
 
 private[scheduler] case class JobGroupCancelled(
