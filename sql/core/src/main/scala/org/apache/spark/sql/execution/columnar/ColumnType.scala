@@ -869,9 +869,7 @@ private[columnar] object ColumnType {
       case ByteType => BYTE
       case ShortType => SHORT
       case IntegerType | DateType | _: YearMonthIntervalType => INT
-      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
-        print("Got here #3\n")
-        LONG
+      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => LONG
       case FloatType => FLOAT
       case DoubleType => DOUBLE
       case s: StringType => STRING(s)
