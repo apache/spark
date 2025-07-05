@@ -194,15 +194,17 @@ private[sql] object GrpcRetryHandler extends Logging {
         return
       }
 
-      for (policy <- policies if policy.canRetry(lastException)) {
-        val time = policy.nextAttempt()
-
+      // find a policy to wait with
+      val matchedPolicyOpt = policies.find(_.canRetry(lastException))
+      if (matchedPolicyOpt.isDefined) {
+        val matchedPolicy = matchedPolicyOpt.get
+        val time = matchedPolicy.nextAttempt(lastException)
         if (time.isDefined) {
           logWarning(
             log"Non-Fatal error during RPC execution: ${MDC(ERROR, lastException)}, " +
               log"retrying (wait=${MDC(RETRY_WAIT_TIME, time.get.toMillis)} ms, " +
               log"currentRetryNum=${MDC(NUM_RETRY, currentRetryNum)}, " +
-              log"policy=${MDC(POLICY, policy.getName)}).")
+              log"policy=${MDC(POLICY, matchedPolicy.getName)}).")
           sleep(time.get.toMillis)
           return
         }
