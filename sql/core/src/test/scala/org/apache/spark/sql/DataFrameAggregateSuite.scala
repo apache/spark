@@ -2915,6 +2915,22 @@ class DataFrameAggregateSuite extends QueryTest
     assert (df.schema == expectedSchema)
     checkAnswer(df, Seq(Row(LocalTime.parse(ts1), 2), Row(LocalTime.parse(ts2), 1)))
   }
+
+  test("SPARK-52660: Support aggregation of Time column when codegen is split") {
+    val res = sql(
+      "SELECT max(expr), MIN(expr) " +
+        "FROM VALUES TIME'22:01:00', " +
+        "TIME'22:00:00', " +
+        "TIME'15:00:00', " +
+        "TIME'22:01:00', " +
+        "TIME'13:22:01', " +
+        "TIME'03:00:00', " +
+        "TIME'22:00:00', " +
+        "TIME'17:45:00' AS tab(expr);")
+    checkAnswer(
+      res,
+      Row(LocalTime.of(22, 1, 0), LocalTime.of(3, 0, 0)))
+  }
 }
 
 case class B(c: Option[Double])
