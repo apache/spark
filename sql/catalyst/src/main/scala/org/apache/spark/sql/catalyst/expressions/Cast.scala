@@ -122,7 +122,6 @@ object Cast extends QueryErrorsBase {
     case (_: StringType, _: TimeType) => true
     case (TimestampType, DateType) => true
     case (TimestampNTZType, DateType) => true
-
     case (_: NumericType, _: NumericType) => true
     case (_: StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
@@ -229,6 +228,7 @@ object Cast extends QueryErrorsBase {
     case (_: StringType, _: TimeType) => true
     case (TimestampType, DateType) => true
     case (TimestampNTZType, DateType) => true
+    case (TimestampNTZType, _: TimeType) => true
 
     case (_: StringType, CalendarIntervalType) => true
     case (_: StringType, _: DayTimeIntervalType) => true
@@ -254,6 +254,7 @@ object Cast extends QueryErrorsBase {
     case (_, VariantType) => variant.VariantGet.checkDataType(from, allowStructsAndMaps = false)
 
     case (_: TimeType, _: TimeType) => true
+    case (_: TimeType, TimestampNTZType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canCast(fromType, toType) &&
