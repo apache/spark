@@ -288,4 +288,31 @@ class MapStatusSuite extends SparkFunSuite {
         "Only tracked skewed block size is accurate")
     }
   }
+
+  test("MapStatus RowCount") {
+    val loc = BlockManagerId("a", "b", 10)
+    val mapTaskAttemptId = 5
+    val allBlocks = Array[Long](10, 10)
+    val status = MapStatus(loc, allBlocks, mapTaskAttemptId, Some(Array[Long](10, 10)))
+    val status1 = compressAndDecompressMapStatus(status)
+    assert(status1.isInstanceOf[CompressedMapStatus])
+    assert(status1.location == loc)
+    assert(status1.mapId == mapTaskAttemptId)
+    assert(status1.getSizeForBlock(0) == 10)
+    assert(status1.getRecordForBlock(0) == 10)
+    status1.updateRecordsArray(null)
+    assert(status1.getRecordForBlock(0) == -1)
+
+    val sizes = Array.fill[Long](2001)(150L)
+    val records = Array.fill[Long](2001)(150L)
+    val mapStatus = MapStatus(loc, sizes, mapTaskAttemptId, Some(records))
+    val status2 = compressAndDecompressMapStatus(mapStatus)
+    assert(status2.isInstanceOf[HighlyCompressedMapStatus])
+    assert(status2.location == loc)
+    assert(status2.mapId == mapTaskAttemptId)
+    assert(status2.getSizeForBlock(0) == 150)
+    assert(status2.getRecordForBlock(0) == 150)
+    status2.updateRecordsArray(null)
+    assert(status2.getRecordForBlock(0) == -1)
+  }
 }

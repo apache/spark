@@ -23,6 +23,8 @@ import org.apache.spark.sql.execution.adaptive.ShufflePartitionsUtil
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.ArrayImplicits._
 
+import scala.collection.Seq
+
 class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
 
   private def checkEstimation(
@@ -696,6 +698,40 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
           targetSize, 1, 0)
       }
     }
+  }
+
+  test("splitSizeListByTargetRowCount") {
+    val targetSize = 100
+    val targetRowCount = 50
+    val smallPartitionFactor1 = ShufflePartitionsUtil.SMALL_PARTITION_FACTOR
+    // merge the small partitions at the beginning/end
+    val sizeList1 = Array[Long](15, 90, 15, 15, 15, 90, 15)
+    val rowCountList1 = Array[Long](15, 90, 15, 15, 15, 90, 15)
+    assert(ShufflePartitionsUtil.splitSizeListByTargetSizeAndRowCount(
+      sizeList1, rowCountList1, targetSize, targetRowCount, smallPartitionFactor1).toSeq ==
+      Seq(0, 1, 2, 5, 6))
+
+    val rowCountList2 = Array[Long](15, 35, 15, 15, 15, 90, 15)
+    assert(ShufflePartitionsUtil.splitSizeListByTargetSizeAndRowCount(
+      sizeList1, rowCountList2, targetSize, targetRowCount, smallPartitionFactor1).toSeq ==
+      Seq(0, 2, 5, 6))
+
+    val rowCountList3 = Array[Long](15, 65, 15, 35, 15, 20, 15)
+    assert(ShufflePartitionsUtil.splitSizeListByTargetSizeAndRowCount(
+      sizeList1, rowCountList3, targetSize, targetRowCount, smallPartitionFactor1).toSeq ==
+      Seq(0, 1, 2, 4))
+
+    val rowCountList4 = Array[Long](15, 90, 15, 15, 15, 90, 15)
+    val targetRowCount1 = 70
+    assert(ShufflePartitionsUtil.splitSizeListByTargetSizeAndRowCount(
+      sizeList1, rowCountList4, targetSize, targetRowCount1, smallPartitionFactor1).toSeq ==
+      Seq(0, 1, 2, 5, 6))
+
+    val rowCountList5 = Array[Long](15, 90, 15, 15, 15, 90, 15)
+    val targetSize1 = 70
+    assert(ShufflePartitionsUtil.splitSizeListByTargetSizeAndRowCount(
+      sizeList1, rowCountList5, targetSize1, targetRowCount1, smallPartitionFactor1).toSeq ==
+      Seq(0, 1, 2, 5, 6))
   }
 
   test("splitSizeListByTargetSize") {
