@@ -226,7 +226,7 @@ private[connect] object PipelinesHandler extends Logging {
     val dataflowGraphId = cmd.getDataflowGraphId
     val graphElementRegistry = DataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
     // We will use this variable to store the run failure event if it occurs. This will be set
-    // by the event callback that is executed when an event is added to the PipelineRunEventBuffer.
+    // by the event callback.
     @volatile var runFailureEvent = Option.empty[PipelineEvent]
     // Define a callback which will stream logs back to the SparkConnect client when an internal
     // pipeline event is emitted during pipeline execution. We choose to pass a callback rather the

@@ -50,7 +50,7 @@ class PipelineExecution(context: PipelineUpdateContext) {
     // Execute the graph.
     graphExecution = Option(
       new TriggeredGraphExecution(initializedGraph, context, onCompletion = terminationReason => {
-        context.eventBuffer.addEvent(
+        context.eventCallback(
           ConstructPipelineEvent(
             origin = PipelineEventOrigin(
               flowName = None,
@@ -75,7 +75,7 @@ class PipelineExecution(context: PipelineUpdateContext) {
       context.pipelineExecution.awaitCompletion()
     } catch {
       case e: Throwable =>
-        context.eventBuffer.addEvent(
+        context.eventCallback(
           ConstructPipelineEvent(
             origin = PipelineEventOrigin(
               flowName = None,
