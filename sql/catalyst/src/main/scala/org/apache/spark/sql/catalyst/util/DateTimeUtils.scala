@@ -788,14 +788,14 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Converts separate time fields in a long that represents microseconds since the start of
+   * Converts separate time fields in a long that represents nanoseconds since the start of
    * the day
    * @param hours the hour, from 0 to 23
    * @param minutes the minute, from 0 to 59
    * @param secsAndMicros the second, from 0 to 59.999999
-   * @return A time value represented as microseconds since the start of the day
+   * @return A time value represented as nanoseconds since the start of the day
    */
-  def timeToMicros(hours: Int, minutes: Int, secsAndMicros: Decimal): Long = {
+  def makeTime(hours: Int, minutes: Int, secsAndMicros: Decimal): Long = {
     try {
       val unscaledSecFrac = secsAndMicros.toUnscaledLong
       val fullSecs = Math.floorDiv(unscaledSecFrac, MICROS_PER_SECOND)
