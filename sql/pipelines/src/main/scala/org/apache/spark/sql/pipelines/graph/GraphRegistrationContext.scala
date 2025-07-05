@@ -49,35 +49,54 @@ class GraphRegistrationContext(
     flows += flowDef.copy(sqlConf = defaultSqlConf ++ flowDef.sqlConf)
   }
 
+  /**
+   *  Collects all graph registered entities (tables, views, flows) into a DataflowGraph object,
+   *  for graph analysis/resolution/execution. Also responsible for fully qualifying any partially
+   *  qualified user-specified identifiers using the pipeline-level catalog and database. If
+   *  identifiers have already been qualified during graph element registration, that qualification
+   *  is respected.
+   */
   def toDataflowGraph: DataflowGraph = {
     val qualifiedTables = tables.toSeq.map { t =>
+      val fullyQualifiedTableIdentifier = GraphIdentifierManager
+        .parseAndQualifyTableIdentifier(
+          rawTableIdentifier = t.identifier,
+          currentCatalog = Some(defaultCatalog),
+          currentDatabase = Some(defaultDatabase)
+        )
+        .identifier
       t.copy(
-        identifier = GraphIdentifierManager
-          .parseAndQualifyTableIdentifier(
-            rawTableIdentifier = t.identifier,
-            currentCatalog = Some(defaultCatalog),
-            currentDatabase = Some(defaultDatabase)
-          )
-          .identifier
+        identifier = fullyQualifiedTableIdentifier,
+        baseOrigin = t.baseOrigin.copy(
+          objectName = Option(fullyQualifiedTableIdentifier.unquotedString)
+        )
       )
     }
 
     val validatedViews = views.toSeq.collect {
       case v: TemporaryView =>
+        val parsedAndValidatedTemporaryViewIdentifier = GraphIdentifierManager
+          .parseAndValidateTemporaryViewIdentifier(
+            rawViewIdentifier = v.identifier
+          )
         v.copy(
-          identifier = GraphIdentifierManager
-            .parseAndValidateTemporaryViewIdentifier(
-              rawViewIdentifier = v.identifier
-            )
+          identifier = parsedAndValidatedTemporaryViewIdentifier,
+          origin = v.origin.copy(
+            objectName = Option(parsedAndValidatedTemporaryViewIdentifier.unquotedString)
+          )
         )
       case v: PersistedView =>
+        val fullyQualifiedPersistedViewIdentifier = GraphIdentifierManager
+          .parseAndValidatePersistedViewIdentifier(
+            rawViewIdentifier = v.identifier,
+            currentCatalog = Some(defaultCatalog),
+            currentDatabase = Some(defaultDatabase)
+          )
         v.copy(
-          identifier = GraphIdentifierManager
-            .parseAndValidatePersistedViewIdentifier(
-              rawViewIdentifier = v.identifier,
-              currentCatalog = Some(defaultCatalog),
-              currentDatabase = Some(defaultDatabase)
-            )
+          identifier = fullyQualifiedPersistedViewIdentifier,
+          origin = v.origin.copy(
+            objectName = Option(fullyQualifiedPersistedViewIdentifier.unquotedString)
+          )
         )
     }
 
@@ -94,21 +113,25 @@ class GraphRegistrationContext(
       if (isImplicitFlow && flowWritesToView) {
         f
       } else {
+        val fullyQualifiedFlowIdentifier = GraphIdentifierManager
+          .parseAndQualifyFlowIdentifier(
+            rawFlowIdentifier = f.identifier,
+            currentCatalog = Some(defaultCatalog),
+            currentDatabase = Some(defaultDatabase)
+          )
+          .identifier
         f.copy(
-          identifier = GraphIdentifierManager
-            .parseAndQualifyFlowIdentifier(
-              rawFlowIdentifier = f.identifier,
-              currentCatalog = Some(defaultCatalog),
-              currentDatabase = Some(defaultDatabase)
-            )
-            .identifier,
+          identifier = fullyQualifiedFlowIdentifier,
           destinationIdentifier = GraphIdentifierManager
             .parseAndQualifyFlowIdentifier(
               rawFlowIdentifier = f.destinationIdentifier,
               currentCatalog = Some(defaultCatalog),
               currentDatabase = Some(defaultDatabase)
             )
-            .identifier
+            .identifier,
+          origin = f.origin.copy(
+            objectName = Option(fullyQualifiedFlowIdentifier.unquotedString)
+          )
         )
       }
     }
