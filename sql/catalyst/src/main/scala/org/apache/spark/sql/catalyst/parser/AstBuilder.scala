@@ -4102,9 +4102,6 @@ class AstBuilder extends DataTypeAstBuilder
       place: String): DefaultValueExpression = {
     // Make sure it can be converted to Catalyst expressions.
     val expr = expression(exprCtx)
-    if (expr.containsPattern(PARAMETER)) {
-      throw QueryParsingErrors.parameterMarkerNotAllowed(place, expr.origin)
-    }
     DefaultValueExpression(expr, getOriginalText(exprCtx))
   }
 
