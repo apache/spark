@@ -701,6 +701,16 @@ case class Cast(
       buildCast[Int](_, d => daysToMicros(d, ZoneOffset.UTC))
     case TimestampType =>
       buildCast[Long](_, ts => convertTz(ts, ZoneOffset.UTC, zoneId))
+    case _: TimeType =>
+      buildCast[Long](
+        _,
+        nanos => {
+          val currentDay = DateTimeUtils.currentDate(zoneId)
+          val NANOS_PER_DAY = 86_400_000_000_000L  // 24 * 60 * 60 * 1_000_000_000
+          val nanosOfDay = ((nanos % NANOS_PER_DAY) + NANOS_PER_DAY) % NANOS_PER_DAY
+          DateTimeUtils.makeTimestampNTZ(currentDay, nanosOfDay)
+        }
+      )
   }
 
   private[this] def decimalToTimestamp(d: Decimal): Long = {
