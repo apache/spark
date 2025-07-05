@@ -28,7 +28,8 @@ import scala.util.control.NonFatal
 import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType, TimeType}
+import org.apache.spark.sql.types.DayTimeIntervalType.SECOND
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
@@ -833,5 +834,36 @@ object DateTimeUtils extends SparkDateTimeUtils {
    */
   def makeTimestampNTZ(days: Int, nanos: Long): Long = {
     localDateTimeToMicros(LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos)))
+  }
+
+  /**
+   * Adds a day-time interval to a time.
+   *
+   * @param time A time in nanoseconds.
+   * @param timePrecision The number of digits of the fraction part of time.
+   * @param interval A day-time interval in microseconds.
+   * @param intervalEndField The rightmost field which the interval comprises of.
+   *                         Valid values: 0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND).
+   * @return A time value in nanoseconds or throw an arithmetic overflow
+   *         if the result out of valid time range [00:00, 24:00).
+   */
+  def timeAddInterval(
+      time: Long,
+      timePrecision: Int,
+      interval: Long,
+      intervalEndField: Byte): Long = {
+    val result = time + interval * NANOS_PER_MICROS
+    if (0 <= result && result < NANOS_PER_DAY) {
+      val intervalPrecision = if (intervalEndField >= SECOND) {
+        TimeType.MICROS_PRECISION
+      } else {
+        TimeType.MIN_PRECISION
+      }
+      val resultPrecision = Math.max(intervalPrecision, timePrecision)
+      truncateTimeToPrecision(result, resultPrecision)
+    } else {
+      throw QueryExecutionErrors.timeAddIntervalOverflowError(
+        time, timePrecision, interval, intervalEndField)
+    }
   }
 }
