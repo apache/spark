@@ -207,7 +207,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def modByZeroError(context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "MOD_BY_ZERO",
+      errorClass = "REMAINDER_BY_ZERO",
       messageParameters = Map("config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = Array(context),
       summary = getSummary(context))
