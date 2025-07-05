@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
 import org.apache.spark.sql.internal.SQLConf
@@ -305,11 +305,11 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(ts, DoubleType), 15.003)
 
     checkEvaluation(cast(cast(tss, ShortType), TimestampType),
-      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
-      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(cast(cast(tss, LongType), TimestampType),
-      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(
       cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimestampType), FloatType),
       millis.toFloat / MILLIS_PER_SECOND)
@@ -334,18 +334,18 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     for (tz <- ALL_TIMEZONES) {
       val timeZoneId = Option(tz.getId)
-      var c = Calendar.getInstance(TimeZoneUTC)
+      var c = Calendar.getInstance(DateTimeUtils.TimeZoneUTC)
       c.set(2015, 2, 8, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
-        millisToMicros(c.getTimeInMillis))
-      c = Calendar.getInstance(TimeZoneUTC)
+        DateTimeUtils.millisToMicros(c.getTimeInMillis))
+      c = Calendar.getInstance(DateTimeUtils.TimeZoneUTC)
       c.set(2015, 10, 1, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
-        millisToMicros(c.getTimeInMillis))
+        DateTimeUtils.millisToMicros(c.getTimeInMillis))
     }
 
     checkEvaluation(cast("abdef", StringType), "abdef")
@@ -356,7 +356,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(nts, TimestampType, UTC_OPT), StringType, UTC_OPT), nts)
     checkEvaluation(
       cast(cast(ts, StringType, UTC_OPT), TimestampType, UTC_OPT),
-      fromJavaTimestamp(ts))
+      DateTimeUtils.fromJavaTimestamp(ts))
 
     // all convert to string type to check
     checkEvaluation(
