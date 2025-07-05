@@ -26,8 +26,6 @@ import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Abs, BoundReference, Literal}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{ApproxTopK, Sum}
 import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -2880,31 +2878,6 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(res, Row(Seq(Row("b", 3), Row("a", 2))))
   }
 
-  test("SPARK-52515: Accepts literal and foldable inputs") {
-    val agg = new ApproxTopK(
-      expr = BoundReference(0, LongType, nullable = true),
-      k = Abs(Literal(10)),
-      maxItemsTracked = Abs(Literal(-10))
-    )
-    assert(agg.checkInputDataTypes().isSuccess)
-  }
-
-  test("SPARK-52515: Fail if parameters are not foldable") {
-    val badAgg = new ApproxTopK(
-      expr = BoundReference(0, LongType, nullable = true),
-      k = Sum(BoundReference(1, LongType, nullable = true)),
-      maxItemsTracked = Literal(10)
-    )
-    assert(badAgg.checkInputDataTypes().isFailure)
-
-    val badAgg2 = new ApproxTopK(
-      expr = BoundReference(0, LongType, nullable = true),
-      k = Literal(10),
-      maxItemsTracked = Sum(BoundReference(1, LongType, nullable = true))
-    )
-    assert(badAgg2.checkInputDataTypes().isFailure)
-  }
-
   test("SPARK-52626: Support group by Time column") {
     val ts1 = "15:00:00"
     val ts2 = "22:00:00"
@@ -2930,6 +2903,112 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(
       res,
       Row(LocalTime.of(22, 1, 0), LocalTime.of(3, 0, 0)))
+  }
+
+  test("SPARK-52588: accumulate and estimate of Integer with default parameters") {
+    val res = sql("SELECT approx_top_k_estimate(approx_top_k_accumulate(expr)) " +
+      "FROM VALUES (0), (0), (0), (1), (1), (2), (3), (4) AS tab(expr);")
+    checkAnswer(res, Row(Seq(Row(0, 3), Row(1, 2), Row(4, 1), Row(2, 1), Row(3, 1))))
+  }
+
+  test("SPARK-52588: accumulate and estimate of String") {
+    val res = sql("SELECT approx_top_k_estimate(approx_top_k_accumulate(expr), 2) " +
+      "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
+    checkAnswer(res, Row(Seq(Row("c", 4), Row("d", 2))))
+  }
+
+  test("SPARK-52588: accumulate and estimate of Decimal(4, 1)") {
+    val res = sql("SELECT approx_top_k_estimate(approx_top_k_accumulate(expr, 10)) " +
+      "FROM VALUES CAST(0.0 AS DECIMAL(4, 1)), CAST(0.0 AS DECIMAL(4, 1)), " +
+      "CAST(0.0 AS DECIMAL(4, 1)), CAST(1.0 AS DECIMAL(4, 1)), " +
+      "CAST(1.0 AS DECIMAL(4, 1)), CAST(2.0 AS DECIMAL(4, 1)) AS tab(expr);")
+    checkAnswer(res, Row(Seq(
+      Row(new java.math.BigDecimal("0.0"), 3),
+      Row(new java.math.BigDecimal("1.0"), 2),
+      Row(new java.math.BigDecimal("2.0"), 1))))
+  }
+
+  test("SPARK-52588: accumulate and estimate of Decimal(20, 3)") {
+    val res = sql("SELECT approx_top_k_estimate(approx_top_k_accumulate(expr, 10), 2) " +
+      "FROM VALUES CAST(0.0 AS DECIMAL(20, 3)), CAST(0.0 AS DECIMAL(20, 3)), " +
+      "CAST(0.0 AS DECIMAL(20, 3)), CAST(1.0 AS DECIMAL(20, 3)), " +
+      "CAST(1.0 AS DECIMAL(20, 3)), CAST(2.0 AS DECIMAL(20, 3)) AS tab(expr);")
+    checkAnswer(res, Row(Seq(
+      Row(new java.math.BigDecimal("0.000"), 3),
+      Row(new java.math.BigDecimal("1.000"), 2))))
+  }
+
+  test("SPARK-52588: invalid accumulate if maxItemsTracked is null") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT approx_top_k_accumulate(expr, NULL) FROM VALUES 0, 1, 2 AS tab(expr);")
+          .collect()
+      },
+      condition = "APPROX_TOP_K_NULL_ARG",
+      parameters = Map("argName" -> "`maxItemsTracked`")
+    )
+  }
+
+  test("SPARK-52588: invalid accumulate if maxItemsTracked > 1000000") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT approx_top_k_accumulate(expr, 1000001) FROM VALUES (0) AS tab(expr);").collect()
+      },
+      condition = "APPROX_TOP_K_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT",
+      parameters = Map("maxItemsTracked" -> "1000001", "limit" -> "1000000")
+    )
+  }
+
+  test("SPARK-52588: invalid estimate if k is null") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT approx_top_k_estimate(approx_top_k_accumulate(expr), NULL) " +
+          "FROM VALUES 0, 1, 2 AS tab(expr);").collect()
+      },
+      condition = "APPROX_TOP_K_NULL_ARG",
+      parameters = Map("argName" -> "`k`")
+    )
+  }
+
+  test("SPARK-52588: invalid estimate if k is invalid") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT approx_top_k_estimate(approx_top_k_accumulate(expr), 0) " +
+          "FROM VALUES 0, 1, 2 AS tab(expr);").collect()
+      },
+      condition = "APPROX_TOP_K_NON_POSITIVE_ARG",
+      parameters = Map("argName" -> "`k`", "argValue" -> "0")
+    )
+  }
+
+  test("SPARK-52588: invalid estimate if k > Int.MaxValue") {
+    withSQLConf("spark.sql.ansi.enabled" -> true.toString) {
+      val k: Long = Int.MaxValue + 1L
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql(s"SELECT approx_top_k_estimate(approx_top_k_accumulate(expr), $k) " +
+            "FROM VALUES 0, 1, 2 AS tab(expr);").collect()
+        },
+        condition = "CAST_OVERFLOW",
+        parameters = Map(
+          "value" -> (k.toString + "L"),
+          "sourceType" -> "\"BIGINT\"",
+          "targetType" -> "\"INT\"",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+        )
+      )
+    }
+  }
+
+  test("SPARK-52588: invalid estimate if k > maxItemsTracked") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT approx_top_k_estimate(approx_top_k_accumulate(expr, 5), 10) " +
+          "FROM VALUES 0, 1, 2 AS tab(expr);").collect()
+      },
+      condition = "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K",
+      parameters = Map("maxItemsTracked" -> "5", "k" -> "10")
+    )
   }
 }
 
