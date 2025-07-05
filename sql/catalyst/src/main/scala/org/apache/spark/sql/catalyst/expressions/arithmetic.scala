@@ -647,8 +647,8 @@ trait DivModLike extends BinaryArithmetic {
           // when we reach here, failOnError must be true.
           val context = getContextOrNull()
           val ex = this match {
-            case _: Remainder => QueryExecutionErrors.modByZeroError(context)
-            case _: Pmod => QueryExecutionErrors.modByZeroError(context)
+            case _: Remainder => QueryExecutionErrors.remainderByZeroError(context)
+            case _: Pmod => QueryExecutionErrors.remainderByZeroError(context)
             case _ => QueryExecutionErrors.divideByZeroError(context)
           }
           throw ex
@@ -669,8 +669,8 @@ trait DivModLike extends BinaryArithmetic {
   protected def divideByZeroErrorCode(ctx: CodegenContext): String = {
     val errorContextCode = getContextOrNullCode(ctx, failOnError)
     this match {
-      case _: Remainder => s"QueryExecutionErrors.modByZeroError($errorContextCode)"
-      case _: Pmod => s"QueryExecutionErrors.modByZeroError($errorContextCode)"
+      case _: Remainder => s"QueryExecutionErrors.remainderByZeroError($errorContextCode)"
+      case _: Pmod => s"QueryExecutionErrors.remainderByZeroError($errorContextCode)"
       case _ => s"QueryExecutionErrors.divideByZeroError($errorContextCode)"
     }
   }
@@ -1053,7 +1053,7 @@ case class Pmod(
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must bet true.
-          throw QueryExecutionErrors.modByZeroError(getContextOrNull())
+          throw QueryExecutionErrors.remainderByZeroError(getContextOrNull())
         }
         pmodFunc(input1, input2)
       }
@@ -1110,7 +1110,7 @@ case class Pmod(
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
-        s"throw QueryExecutionErrors.modByZeroError($errorContext);"
+        s"throw QueryExecutionErrors.remainderByZeroError($errorContext);"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -1127,7 +1127,7 @@ case class Pmod(
     } else {
       val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError) {
-        s"if ($isZero) throw QueryExecutionErrors.modByZeroError($errorContext);"
+        s"if ($isZero) throw QueryExecutionErrors.remainderByZeroError($errorContext);"
       } else {
         ""
       }
