@@ -29,7 +29,9 @@ import org.apache.spark.sql.types.VariantType
 import org.apache.spark.types.variant.{Variant, VariantBuilder}
 import org.apache.spark.unsafe.types.VariantVal
 
-class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData {
+class XmlVariantSuite extends XmlVariantTests
+
+trait XmlVariantTests extends QueryTest with SharedSparkSession with TestXmlData {
 
   private val baseOptions = Map("rowTag" -> "ROW", "valueTag" -> "_VALUE", "attributePrefix" -> "_")
 
@@ -387,15 +389,11 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
   // ====== DSL reader tests ======
   // ==============================
 
-  private def createDSLDataFrame(
+  protected def createDSLDataFrame(
       fileName: String,
       singleVariantColumn: Option[String] = None,
       schemaDDL: Option[String] = None,
       extraOptions: Map[String, String] = Map.empty): DataFrame = {
-    assert(
-      singleVariantColumn.isDefined || schemaDDL.isDefined,
-      "Either singleVariantColumn or schema must be defined to ingest XML files as variants via DSL"
-    )
     var reader = spark.read.format("xml").options(baseOptions ++ extraOptions)
     singleVariantColumn.foreach(
       singleVariantColumnName =>

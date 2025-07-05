@@ -41,7 +41,7 @@ import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, DateFormatter, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, DateFormatter, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -118,23 +118,11 @@ class StaxXmlParser(
     }.flatten
   }
 
-  def parseColumn(xml: String, schema: StructType): InternalRow = {
-    // The user=specified schema from from_xml, etc will typically not include a
-    // "corrupted record" column. In PERMISSIVE mode, which puts bad records in
-    // such a column, this would cause an error. In this mode, if such a column
-    // is not manually specified, then fall back to DROPMALFORMED, which will return
-    // null column values where parsing fails.
-    val parseMode =
-    if (options.parseMode == PermissiveMode &&
-      !schema.fields.exists(_.name == options.columnNameOfCorruptRecord)) {
-      DropMalformedMode
-    } else {
-      options.parseMode
-    }
-    val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
-    doParseColumn(xml, parseMode, xsdSchema).orNull
-  }
-
+  /**
+   * Parse the given XML string record as an InternalRow
+   * @param xml The single XML record string to parse
+   * @param xsdSchema The xsd schema to validate the XML against, if provided.
+   */
   def doParseColumn(xml: String,
       parseMode: ParseMode,
       xsdSchema: Option[Schema]): Option[InternalRow] = {
@@ -181,6 +169,94 @@ class StaxXmlParser(
       case PartialResultArrayException(rows, cause) =>
         throw BadRecordException(
           record = () => xmlRecord,
+          partialResults = () => rows,
+          cause)
+    }
+  }
+
+  /**
+   * The optimized version of the XML stream parser that reads XML records from the input file
+   * stream sequentially without loading each individual XML record string into memory.
+   */
+  def parseStreamOptimized(
+      inputStream: InputStream,
+      schema: StructType,
+      streamLiteral: () => UTF8String): Iterator[InternalRow] = {
+    // XSD validation would require converting to string first, which defeats the purpose
+    // For now, skip XSD validation in the optimized parsing mode to maintain memory efficiency
+    if (Option(options.rowValidationXSDPath).isDefined) {
+      logWarning("XSD validation is not supported in streaming mode and will be skipped")
+    }
+    val safeParser = new FailureSafeParser[XMLEventReader](
+      input => {
+        // The first event is guaranteed to be a StartElement, so we can read attributes from it
+        // without using StaxXmlParserUtils.skipUntil.
+        val attributes = input.nextEvent().asStartElement().getAttributes.asScala.toArray
+        doParseColumn(input, attributes, streamLiteral)
+      },
+      options.parseMode,
+      schema,
+      options.columnNameOfCorruptRecord
+    )
+
+    val xmlTokenizer = new OptimizedXmlTokenizer(inputStream, options)
+    StaxXmlParser.convertStream(xmlTokenizer) { tokens =>
+      safeParser.parse(tokens)
+    }.flatten
+  }
+
+  /**
+   * Parse the next XML record from the event stream.
+   * @param parser The XML event reader over the entire XML file stream. The first event has been
+   *               advanced to the next record in the file.
+   * @param rootAttributes The attributes of the record root element.
+   * @param xmlLiteral A function that returns the entire XML file content as a UTF8String. Used
+   *                   to create a BadRecordException in case of parsing errors.
+   *                   TODO: Only include the file content starting with the current record.
+   */
+  def doParseColumn(
+      parser: XMLEventReader,
+      rootAttributes: Array[Attribute],
+      xmlLiteral: () => UTF8String): Option[InternalRow] = {
+    try {
+      options.singleVariantColumn match {
+        case Some(_) =>
+          // If the singleVariantColumn is specified, parse the entire xml record as a Variant
+          val v = StaxXmlParser.parseVariant(parser, rootAttributes, options)
+          Some(InternalRow(v))
+        case _ =>
+          // Otherwise, parse the xml record as Structs
+          val result = Some(convertObject(parser, schema, rootAttributes))
+          result
+      }
+    } catch {
+      case e: SparkUpgradeException => throw e
+      case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
+              | _: SAXException) =>
+        // Skip rest of the content in the parser and put the whole XML file in the
+        // BadRecordException.
+        parser.close()
+        // XML parser currently doesn't support partial results for corrupted records.
+        // For such records, all fields other than the field configured by
+        // `columnNameOfCorruptRecord` are set to `null`.
+        throw BadRecordException(xmlLiteral, () => Array.empty, e)
+      case e: CharConversionException if options.charset.isEmpty =>
+        val msg =
+          """XML parser cannot handle a character in its input.
+            |Specifying encoding as an input option explicitly might help to resolve the issue.
+            |""".stripMargin + e.getMessage
+        val wrappedCharException = new CharConversionException(msg)
+        wrappedCharException.initCause(e)
+        throw BadRecordException(xmlLiteral, () => Array.empty,
+          wrappedCharException)
+      case PartialResultException(row, cause) =>
+        throw BadRecordException(
+          record = xmlLiteral,
+          partialResults = () => Array(row),
+          cause)
+      case PartialResultArrayException(rows, cause) =>
+        throw BadRecordException(
+          record = xmlLiteral,
           partialResults = () => rows,
           cause)
     }
@@ -637,6 +713,14 @@ class StaxXmlParser(
   }
 }
 
+trait XmlTokenizerBase[T] extends Logging {
+  /**
+   * Finds the next XML record in the stream.
+   * @return an Option containing the next XML record as a String, or None if no more records
+   */
+  def next(): Option[T]
+}
+
 /**
  * XMLRecordReader class to read through a given xml document to output xml blocks as records
  * as specified by the start tag and end tag.
@@ -645,7 +729,7 @@ class StaxXmlParser(
  */
 class XmlTokenizer(
   inputStream: InputStream,
-  options: XmlOptions) extends Logging {
+  options: XmlOptions) extends XmlTokenizerBase[String] {
   private var reader = new BufferedReader(
     new InputStreamReader(inputStream, Charset.forName(options.charset)))
   private var currentStartTag: String = _
@@ -665,7 +749,7 @@ class XmlTokenizer(
    * @param value  the object that will be written
    * @return whether it reads successfully
    */
-    def next(): Option[String] = {
+    override def next(): Option[String] = {
       var nextString: Option[String] = None
       try {
         if (readUntilStartElement()) {
@@ -898,6 +982,84 @@ class XmlTokenizer(
   }
 }
 
+/**
+ * Optimized XML tokenizer that avoids loading entire XML records into memory.
+ * - Uses XMLEventReader to parse XML stream directly
+ * - Never buffers complete XML records in memory
+ * - Allows the parser to work directly with XML events
+ */
+class OptimizedXmlTokenizer(inputStream: InputStream, options: XmlOptions)
+    extends XmlTokenizerBase[XMLEventReader] {
+  private var reader = StaxXmlParserUtils.filteredReader(inputStream, options)
+
+  /**
+   * Returns the next XML record as a positioned XMLEventReader.
+   * This avoids creating intermediate string representations.
+   */
+  override def next(): Option[XMLEventReader] = {
+    var nextRecord: Option[XMLEventReader] = None
+    try {
+      // Skip to the next row start element
+      if (skipToNextRowStart()) {
+        nextRecord = Some(reader)
+      }
+    } catch {
+      case e: FileNotFoundException if options.ignoreMissingFiles =>
+        logWarning("Skipping the rest of the content in the missing file", e)
+      case NonFatal(e) =>
+        ExceptionUtils.getRootCause(e) match {
+          case _: AccessControlException | _: BlockMissingException =>
+            close()
+            throw e
+          case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
+            logWarning("Skipping the rest of the content in the corrupted file", e)
+          case _: XMLStreamException =>
+            logWarning("Skipping the rest of the content in the corrupted file", e)
+          case e: Throwable =>
+            close()
+            throw e
+        }
+    } finally {
+      if (nextRecord.isEmpty && reader != null) {
+        close()
+      }
+    }
+    nextRecord
+  }
+
+  def close(): Unit = {
+    if (reader != null) {
+      reader.close()
+      inputStream.close()
+      reader = null
+    }
+  }
+
+  /**
+   * Skip through the XML stream until we find the next row start element.
+   */
+  private def skipToNextRowStart(): Boolean = {
+    val rowTagName = options.rowTag
+    while (reader.hasNext) {
+      val event = reader.peek()
+      event match {
+        case startElement: StartElement =>
+          val elementName = StaxXmlParserUtils.getName(startElement.getName, options)
+          if (elementName == rowTagName) {
+            return true
+          }
+        case _: EndDocument =>
+          return false
+        case _ =>
+        // Continue searching
+      }
+      // if not the event we want, advance the reader
+      reader.nextEvent()
+    }
+    false
+  }
+}
+
 object StaxXmlParser {
   /**
    * Parses a stream that contains CSV strings and turns it into an iterator of tokens.
@@ -907,15 +1069,22 @@ object StaxXmlParser {
     convertStream(xmlTokenizer)(tokens => tokens)
   }
 
-  private def convertStream[T](
-    xmlTokenizer: XmlTokenizer)(
-    convert: String => T) = new Iterator[T] {
+  def tokenizeStreamOptimized(
+      inputStream: InputStream,
+      options: XmlOptions): Iterator[XMLEventReader] = {
+    val xmlTokenizer = new OptimizedXmlTokenizer(inputStream, options)
+    convertStream(xmlTokenizer)(tokens => tokens)
+  }
+
+  private def convertStream[TokenType, ResultType](
+    xmlTokenizer: XmlTokenizerBase[TokenType])(
+    convert: TokenType => ResultType) = new Iterator[ResultType] {
 
     private var nextRecord = xmlTokenizer.next()
 
     override def hasNext: Boolean = nextRecord.nonEmpty
 
-    override def next(): T = {
+    override def next(): ResultType = {
       if (!hasNext) {
         throw QueryExecutionErrors.endOfStreamError()
       }
@@ -931,9 +1100,17 @@ object StaxXmlParser {
   def parseVariant(xml: String, options: XmlOptions): VariantVal = {
     val parser = StaxXmlParserUtils.filteredReader(xml)
     val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-    val v = convertVariant(parser, rootAttributes, options)
+    val v = parseVariant(parser, rootAttributes, options)
     parser.close()
-    v
+    new VariantVal(v.getValue, v.getMetadata)
+  }
+
+  def parseVariant(
+      parser: XMLEventReader,
+      rootAttributes: Array[Attribute],
+      options: XmlOptions): VariantVal = {
+    val v = convertVariant(parser, rootAttributes, options)
+    new VariantVal(v.getValue, v.getMetadata)
   }
 
   /**

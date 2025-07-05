@@ -59,7 +59,7 @@ class XmlSuite
     with TestXmlData {
   import testImplicits._
 
-  private val resDir = "test-data/xml-resources/"
+  protected val resDir = "test-data/xml-resources/"
 
   private var tempDir: Path = _
 
@@ -2445,10 +2445,12 @@ class XmlSuite
   test("Timestamp type inference for a mix of TIMESTAMP_NTZ and TIMESTAMP_LTZ") {
     withTempPath { path =>
       Seq(
+        "<ROWS>",
         "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
         "<ROW><col0>2020-12-12T17:12:12.000Z</col0></ROW>",
         "<ROW><col0>2020-12-12T17:12:12.000+05:00</col0></ROW>",
-        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>"
+        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
+        "</ROWS>"
       ).toDF("data")
         .coalesce(1)
         .write.text(path.getAbsolutePath)
@@ -2480,10 +2482,12 @@ class XmlSuite
   test("Malformed records when reading TIMESTAMP_LTZ as TIMESTAMP_NTZ") {
     withTempPath { path =>
       Seq(
+        "<ROWS>",
         "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
         "<ROW><col0>2020-12-12T12:12:12.000Z</col0></ROW>",
         "<ROW><col0>2020-12-12T12:12:12.000+05:00</col0></ROW>",
-        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>"
+        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
+        "</ROWS>"
       ).toDF("data")
         .coalesce(1)
         .write.text(path.getAbsolutePath)

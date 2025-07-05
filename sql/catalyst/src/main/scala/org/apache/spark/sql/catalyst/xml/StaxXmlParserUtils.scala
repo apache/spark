@@ -16,7 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.StringReader
+import java.io.{InputStreamReader, StringReader}
+import java.nio.charset.Charset
 import javax.xml.namespace.QName
 import javax.xml.stream.{EventFilter, XMLEventReader, XMLInputFactory, XMLStreamConstants}
 import javax.xml.stream.events._
@@ -35,23 +36,30 @@ object StaxXmlParserUtils {
     factory
   }
 
+  val filter = new EventFilter {
+    override def accept(event: XMLEvent): Boolean =
+      event.getEventType match {
+        // Ignore comments and processing instructions
+        case XMLStreamConstants.COMMENT | XMLStreamConstants.PROCESSING_INSTRUCTION => false
+        // unsupported events
+        case XMLStreamConstants.DTD |
+             XMLStreamConstants.ENTITY_DECLARATION |
+             XMLStreamConstants.ENTITY_REFERENCE |
+             XMLStreamConstants.NOTATION_DECLARATION => false
+        case _ => true
+      }
+  }
+
   def filteredReader(xml: String): XMLEventReader = {
-    val filter = new EventFilter {
-      override def accept(event: XMLEvent): Boolean =
-        event.getEventType match {
-          // Ignore comments and processing instructions
-          case XMLStreamConstants.COMMENT | XMLStreamConstants.PROCESSING_INSTRUCTION => false
-          // unsupported events
-          case XMLStreamConstants.DTD |
-               XMLStreamConstants.ENTITY_DECLARATION |
-               XMLStreamConstants.ENTITY_REFERENCE |
-               XMLStreamConstants.NOTATION_DECLARATION => false
-          case _ => true
-        }
-    }
     // It does not have to skip for white space, since `XmlInputFormat`
     // always finds the root tag without a heading space.
     val eventReader = factory.createXMLEventReader(new StringReader(xml))
+    factory.createFilteredReader(eventReader, filter)
+  }
+
+  def filteredReader(inputStream: java.io.InputStream, options: XmlOptions): XMLEventReader = {
+    val inputStreamReader = new InputStreamReader(inputStream, Charset.forName(options.charset))
+    val eventReader = factory.createXMLEventReader(inputStreamReader)
     factory.createFilteredReader(eventReader, filter)
   }
 

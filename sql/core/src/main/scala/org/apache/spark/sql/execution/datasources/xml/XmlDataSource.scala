@@ -19,9 +19,11 @@ package org.apache.spark.sql.execution.datasources.xml
 
 import java.io.{FileNotFoundException, IOException}
 import java.nio.charset.{Charset, StandardCharsets}
+import javax.xml.stream.XMLEventReader
 
 import scala.util.control.NonFatal
 
+import com.google.common.io.ByteStreams
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -42,7 +44,9 @@ import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StructField, StructType, VariantType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
@@ -175,15 +179,34 @@ object MultiLineXmlDataSource extends XmlDataSource {
       file: PartitionedFile,
       parser: StaxXmlParser,
       requiredSchema: StructType): Iterator[InternalRow] = {
-    parser.parseStream(
-      CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
-      requiredSchema)
+    if (SQLConf.get.enableOptimizedXmlParser) {
+      parser.parseStreamOptimized(
+        CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
+        requiredSchema,
+        () => {
+          Utils.tryWithResource(
+            CodecStreams.createInputStreamWithCloseResource(conf, file.toPath)
+          ) { is =>
+            UTF8String.fromBytes(ByteStreams.toByteArray(is))
+          }
+        }
+      )
+    } else {
+      parser.parseStream(
+        CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
+        requiredSchema
+      )
+    }
   }
 
   override def infer(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: XmlOptions): StructType = {
+    if (SQLConf.get.enableOptimizedXmlParser) {
+      return inferOptimized(sparkSession, inputPaths, parsedOptions)
+    }
+
     val xml = createBaseRdd(sparkSession, inputPaths, parsedOptions)
 
     val tokenRDD: RDD[String] =
@@ -212,6 +235,44 @@ object MultiLineXmlDataSource extends XmlDataSource {
       val schema =
         new XmlInferSchema(parsedOptions, sparkSession.sessionState.conf.caseSensitiveAnalysis)
           .infer(tokenRDD)
+      schema
+    }
+  }
+
+  private def inferOptimized(
+      sparkSession: SparkSession,
+      inputPaths: Seq[FileStatus],
+      parsedOptions: XmlOptions): StructType = {
+    val xml = createBaseRdd(sparkSession, inputPaths, parsedOptions)
+
+    val tokenRDD: RDD[XMLEventReader] =
+      xml.flatMap { portableDataStream =>
+        try {
+          StaxXmlParser.tokenizeStreamOptimized(
+            CodecStreams.createInputStreamWithCloseResource(
+              portableDataStream.getConfiguration,
+              new Path(portableDataStream.getPath())
+            ),
+            parsedOptions
+          )
+        } catch {
+          case e: FileNotFoundException if parsedOptions.ignoreMissingFiles =>
+            logWarning("Skipped missing file", e)
+            Iterator.empty[XMLEventReader]
+          case NonFatal(e) =>
+            ExceptionUtils.getRootCause(e) match {
+              case e @ (_: AccessControlException | _: BlockMissingException) => throw e
+              case _: RuntimeException | _: IOException if parsedOptions.ignoreCorruptFiles =>
+                logWarning("Skipped the rest of the content in the corrupted file", e)
+                Iterator.empty[XMLEventReader]
+              case o => throw o
+            }
+        }
+      }
+    SQLExecution.withSQLConfPropagated(sparkSession) {
+      val schema =
+        new XmlInferSchema(parsedOptions, sparkSession.sessionState.conf.caseSensitiveAnalysis)
+          .inferOptimized(tokenRDD)
       schema
     }
   }
