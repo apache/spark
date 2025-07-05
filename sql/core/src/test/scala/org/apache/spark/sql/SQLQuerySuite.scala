@@ -4963,6 +4963,23 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     )
   }
 
+  test("SPARK-52686: Union should be resolved only if there are no duplicates") {
+    withTable("t1") {
+      withView("v1") {
+        sql("CREATE TABLE t1(col1 STRING)")
+        sql("CREATE VIEW v1 AS SELECT * FROM t1")
+        val analyzedPlan = sql(
+          "SELECT * FROM (SELECT col1, col1 FROM v1 UNION SELECT col1, col1 FROM v1)"
+        ).queryExecution.analyzed
+
+        // Resolving * should wait for Union output to be deduplicated, otherwise we are
+        // left with duplicate ExprIds in the result.
+        val exprIds = analyzedPlan.asInstanceOf[Project].projectList.map(_.exprId)
+        assert(exprIds.size == exprIds.distinct.size)
+      }
+    }
+  }
+
   Seq(true, false).foreach { codegenEnabled =>
     test(s"SPARK-52060: one row relation with codegen enabled - $codegenEnabled") {
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString) {
