@@ -309,7 +309,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
             collation = collation, storage = storage))
       }
       if (changes.exists(_.isInstanceOf[TableChange.ColumnChange])) {
-        catalog.alterTableDataSchema(ident.asTableIdentifier, schema)
+        catalog.alterTableSchema(ident.asTableIdentifier, schema)
       }
     } catch {
       case _: NoSuchTableException =>

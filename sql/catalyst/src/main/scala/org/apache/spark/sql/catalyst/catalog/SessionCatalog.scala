@@ -484,6 +484,7 @@ class SessionCatalog(
    *
    * @param identifier TableIdentifier
    * @param newDataSchema Updated data schema to be used for the table
+   * @deprecated since 4.1.0 use `alterTableSchema` instead.
    */
   def alterTableDataSchema(
       identifier: TableIdentifier,
@@ -505,6 +506,25 @@ class SessionCatalog(
     }
 
     externalCatalog.alterTableDataSchema(db, table, newDataSchema)
+  }
+
+  /**
+   * Alter the schema of a table identified by the provided table identifier. All partition columns
+   * must be preserved.
+   *
+   * @param identifier TableIdentifier
+   * @param newSchema Updated schema to be used for the table
+   */
+  def alterTableSchema(
+      identifier: TableIdentifier,
+      newSchema: StructType): Unit = {
+    val qualifiedIdent = qualifyIdentifier(identifier)
+    val db = qualifiedIdent.database.get
+    val table = qualifiedIdent.table
+    requireDbExists(db)
+    requireTableExists(qualifiedIdent)
+
+    externalCatalog.alterTableSchema(db, table, newSchema)
   }
 
   private def columnNameResolved(
