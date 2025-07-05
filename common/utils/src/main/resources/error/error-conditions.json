@@ -8345,11 +8345,6 @@
       "Failed to get outer pointer for <innerCls>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2155" : {
-    "message" : [
-      "<userClass> is not annotated with SQLUserDefinedType nor registered with UDTRegistration.}"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2163" : {
     "message" : [
       "Initial type <dataType> must be a <target>."
