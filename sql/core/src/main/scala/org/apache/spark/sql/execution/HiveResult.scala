@@ -149,6 +149,6 @@ object HiveResult extends SQLConfHelper {
         startField,
         endField)
     case (v: VariantVal, VariantType) => v.toString
-    case (other, _: UserDefinedType[_]) => other.toString
+    case (other, u: UserDefinedType[_]) => u.stringifyValue(other)
   }
 }

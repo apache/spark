@@ -1179,13 +1179,13 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     val secAndMicros = Decimal(sec + (micros / MICROS_PER_SECOND.toFloat), 16, 6)
 
     // Valid case
-    val microSecsTime = timeToMicros(hour, min, secAndMicros)
-    assert(microSecsTime === localTime(hour.toByte, min.toByte, sec.toByte, micros))
+    val nanoSecsTime = makeTime(hour, min, secAndMicros)
+    assert(nanoSecsTime === localTime(hour.toByte, min.toByte, sec.toByte, micros))
 
     // Invalid hour
     checkError(
       exception = intercept[SparkDateTimeException] {
-        timeToMicros(-1, min, secAndMicros)
+        makeTime(-1, min, secAndMicros)
       },
       condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
       parameters = Map("rangeMessage" -> "Invalid value for HourOfDay (valid values 0 - 23): -1"))
@@ -1193,7 +1193,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     // Invalid minute
     checkError(
       exception = intercept[SparkDateTimeException] {
-        timeToMicros(hour, -1, secAndMicros)
+        makeTime(hour, -1, secAndMicros)
       },
       condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
       parameters = Map("rangeMessage" ->
@@ -1209,7 +1209,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     ).foreach { invalidSecond =>
       checkError(
         exception = intercept[SparkDateTimeException] {
-          timeToMicros(hour, min, Decimal(invalidSecond, 16, 6))
+          makeTime(hour, min, Decimal(invalidSecond, 16, 6))
         },
         condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
         parameters = Map("rangeMessage" ->
@@ -1229,5 +1229,25 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       makeTimestampNTZ(0, -1)
     }.getMessage
     assert(msg.contains("Invalid value"))
+  }
+
+  test("instant to nanos of day") {
+    assert(instantToNanosOfDay(Instant.parse("1970-01-01T00:00:01.001002003Z"), "UTC") ==
+      1001002003)
+    assert(instantToNanosOfDay(Instant.parse("0001-01-01T23:59:59.999999Z"), "UTC") ==
+      localTime(23, 59, 59, 999999))
+    assert(instantToNanosOfDay(Instant.parse("2025-07-02T19:24:12Z"),
+      ZoneId.of("America/Los_Angeles")) == localTime(12, 24, 12))
+  }
+
+  test("truncate time to precision") {
+    assert(truncateTimeToPrecision(1234, 0) == 0)
+    assert(truncateTimeToPrecision(1000, 6) == 1000)
+    assert(truncateTimeToPrecision(localTime(0, 0, 0, 999999), 6) == 999999000)
+    assert(truncateTimeToPrecision(localTime(0, 0, 0, 999999), 5) == 999990000)
+    assert(truncateTimeToPrecision(localTime(23, 59, 59, 123000), 2) ==
+      localTime(23, 59, 59, 120000))
+    assert(truncateTimeToPrecision(localTime(23, 59, 59, 987654), 1) ==
+      localTime(23, 59, 59, 900000))
   }
 }

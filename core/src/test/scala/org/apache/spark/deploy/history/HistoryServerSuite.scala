@@ -220,7 +220,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
   if (regenerateGoldenFiles) {
     FileUtils.deleteDirectory(expRoot)
-    expRoot.mkdirs()
+    Utils.createDirectory(expRoot)
   }
 
   // run a bunch of characterization tests -- just verify the behavior is the same as what is saved

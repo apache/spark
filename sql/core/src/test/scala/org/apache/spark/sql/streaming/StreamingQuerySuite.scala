@@ -104,12 +104,14 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       var cpDir: String = null
 
       def startQuery(restart: Boolean): StreamingQuery = {
-        if (cpDir == null || !restart) cpDir = s"$dir/${RandomStringUtils.randomAlphabetic(10)}"
+        if (cpDir == null || !restart) {
+          cpDir = s"$dir/${RandomStringUtils.secure.nextAlphabetic(10)}"
+        }
         MemoryStream[Int].toDS().groupBy().count()
           .writeStream
           .format("memory")
           .outputMode("complete")
-          .queryName(s"name${RandomStringUtils.randomAlphabetic(10)}")
+          .queryName(s"name${RandomStringUtils.secure.nextAlphabetic(10)}")
           .option("checkpointLocation", cpDir)
           .start()
       }
