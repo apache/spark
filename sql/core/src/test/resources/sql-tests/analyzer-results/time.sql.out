@@ -420,3 +420,10 @@ SELECT cast(time'11:59:59.999999' as time without time zone)
 -- !query analysis
 Project [cast(11:59:59.999999 as time(6)) AS CAST(TIME '11:59:59.999999' AS TIME(6))#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT '12:43:33.1234' :: TIME(4) + INTERVAL '01:04:05.56' HOUR TO SECOND
+-- !query analysis
+Project [cast(12:43:33.1234 as time(4)) + INTERVAL '01:04:05.56' HOUR TO SECOND AS CAST(12:43:33.1234 AS TIME(4)) + INTERVAL '01:04:05.56' HOUR TO SECOND#x]
++- OneRowRelation

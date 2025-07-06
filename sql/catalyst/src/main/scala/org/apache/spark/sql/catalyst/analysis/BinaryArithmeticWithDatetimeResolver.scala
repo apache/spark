@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Subtract,
   SubtractDates,
   SubtractTimestamps,
+  TimeAddInterval,
   TimestampAddInterval,
   TimestampAddYMInterval,
   UnaryMinus
@@ -53,6 +54,7 @@ import org.apache.spark.sql.types.{
   StringType,
   TimestampNTZType,
   TimestampType,
+  TimeType,
   YearMonthIntervalType
 }
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
@@ -80,6 +82,8 @@ object BinaryArithmeticWithDatetimeResolver {
           a.copy(right = Cast(a.right, a.left.dataType))
         case (DateType, CalendarIntervalType) =>
           DateAddInterval(l, r, ansiEnabled = mode == EvalMode.ANSI)
+        case (_: TimeType, _: DayTimeIntervalType) => TimeAddInterval(l, r)
+        case (_: DayTimeIntervalType, _: TimeType) => TimeAddInterval(r, l)
         case (_, CalendarIntervalType | _: DayTimeIntervalType) =>
           Cast(TimestampAddInterval(l, r), l.dataType)
         case (CalendarIntervalType, DateType) =>

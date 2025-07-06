@@ -72,3 +72,6 @@ select extract(SECOND FROM cast('09:08:01.987654' as time(6)));
 SELECT cast(cast('12:00' as time(0)) as time(2));
 SELECT cast(('23:59:59.001001' :: time(6)) as time(4));
 SELECT cast(time'11:59:59.999999' as time without time zone);
+
+-- +/- ANSI day-time intervals
+SELECT '12:43:33.1234' :: TIME(4) + INTERVAL '01:04:05.56' HOUR TO SECOND;
