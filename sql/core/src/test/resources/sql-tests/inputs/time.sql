@@ -75,3 +75,5 @@ SELECT cast(time'11:59:59.999999' as time without time zone);
 
 -- +/- ANSI day-time intervals
 SELECT '12:43:33.1234' :: TIME(4) + INTERVAL '01:04:05.56' HOUR TO SECOND;
+SELECT TIME'08:30' + NULL;
+SELECT TIME'00:00:00.0101' + 1 hour;

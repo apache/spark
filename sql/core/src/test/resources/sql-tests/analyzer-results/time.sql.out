@@ -427,3 +427,47 @@ SELECT '12:43:33.1234' :: TIME(4) + INTERVAL '01:04:05.56' HOUR TO SECOND
 -- !query analysis
 Project [cast(12:43:33.1234 as time(4)) + INTERVAL '01:04:05.56' HOUR TO SECOND AS CAST(12:43:33.1234 AS TIME(4)) + INTERVAL '01:04:05.56' HOUR TO SECOND#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT TIME'08:30' + NULL
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"TIME(6)\"",
+    "right" : "\"VOID\"",
+    "sqlExpr" : "\"(TIME '08:30:00' + NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "TIME'08:30' + NULL"
+  } ]
+}
+
+
+-- !query
+SELECT TIME'00:00:00.0101' + 1 hour
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"TIME(6)\"",
+    "right" : "\"INT\"",
+    "sqlExpr" : "\"(TIME '00:00:00.0101' + 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "TIME'00:00:00.0101' + 1"
+  } ]
+}
