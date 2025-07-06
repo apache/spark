@@ -27,7 +27,6 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 
@@ -237,7 +236,7 @@ public class SparkBloomFilterSuite {
      *                          initialized with the constant seed of 0xCAFEBABE)
      */
     @CartesianTest(name = "testAccuracyRandom_{index}.n{0}_fpp{1}_seed{2}")
-    public void testAccuracyRandom(
+    public void testAccuracyRandomDistribution(
         // temporary workaround:
         //   to reduce running time to acceptable levels, we test only one case,
         //   with the default FPP and the default seed only.
@@ -288,17 +287,13 @@ public class SparkBloomFilterSuite {
                 bloomFilterPrimary.bitSize() / Byte.SIZE / 1024 / 1024
         );
 
-
-        Random pseudoRandom = new Random();
         long iterationCount = 2 * numItems;
-
-        pseudoRandom.setSeed(deterministicSeed);
         for (long i = 0; i < iterationCount; i++) {
             if (verbose && i % 10_000_000 == 0) {
                 System.err.printf("i: %d\n", i);
             }
 
-            long candidate = pseudoRandom.nextLong();
+            long candidate = scramble(i);
             if (i % 2 == 0) {
                 bloomFilterPrimary.putLong(candidate);
                 bloomFilterSecondary.putLong(candidate);
@@ -312,14 +307,12 @@ public class SparkBloomFilterSuite {
         long mightContainEvenIndexed = 0;
         long mightContainOddIndexed = 0;
         long confirmedAsNotInserted = 0;
-
-        pseudoRandom.setSeed(deterministicSeed);
         for (long i = 0; i < iterationCount; i++) {
             if (verbose && i % (iterationCount / 100) == 0) {
                 System.err.printf("%s: %2d %%\n", testName, 100 * i / iterationCount);
             }
 
-            long candidate = pseudoRandom.nextLong();
+            long candidate = scramble(i);
 
             if (i % 2 == 0) { // EVEN
                 mightContainEvenIndexed++;
@@ -378,5 +371,15 @@ public class SparkBloomFilterSuite {
                 )
             );
         }
+    }
+
+    // quick scrambling logic hacked out from java.util.Random
+    //   its range is only 48bits (out of the 64bits of a Long value),
+    //   but it should be enough for the purposes of this test.
+    private static final long multiplier = 0x5DEECE66DL;
+    private static final long addend = 0xBL;
+    private static final long mask = (1L << 48) - 1;
+    private static long scramble(long value) {
+        return (value * multiplier + addend) & mask;
     }
 }
