@@ -28,6 +28,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.LongAdder;
+import java.util.stream.LongStream;
 
 
 public class SparkBloomFilterSuite {
@@ -164,31 +166,30 @@ public class SparkBloomFilterSuite {
                 (double) bloomFilter.cardinality() / bloomFilter.bitSize()
         );
 
-        long mightContainEven = 0;
-        long mightContainOdd = 0;
+        LongAdder mightContainEven = new LongAdder();
+        LongAdder mightContainOdd = new LongAdder();
 
-        for (long i = 0; i < numItems; i++) {
-            if (verbose && i % (numItems / 100) == 0) {
-                System.err.printf("%s: %2d %%\n", testName, 100 * i / numItems);
-            }
+        LongStream inputStream = LongStream.range(0, numItems).parallel();
+        inputStream.forEach(
+            i -> {
+                long even = 2 * i;
+                if (bloomFilter.mightContainLong(even)) {
+                    mightContainEven.increment();
+                }
 
-            long even = 2 * i;
-            if (bloomFilter.mightContainLong(even)) {
-                mightContainEven++;
+                long odd = 2 * i + 1;
+                if (bloomFilter.mightContainLong(odd)) {
+                    mightContainOdd.increment();
+                }
             }
-
-            long odd = 2 * i + 1;
-            if (bloomFilter.mightContainLong(odd)) {
-                mightContainOdd++;
-            }
-        }
+        );
 
         Assertions.assertEquals(
-                numItems, mightContainEven,
+                numItems, mightContainEven.longValue(),
                 "mightContainLong must return true for all inserted numbers"
         );
 
-        double actualFpp = (double) mightContainOdd / numItems;
+        double actualFpp = mightContainOdd.doubleValue() / numItems;
         double acceptableFpp = expectedFpp * (1 + FPP_EVEN_ODD_ERROR_FACTOR);
 
         testOut.printf("expectedFpp:   %f %%\n", 100 * expectedFpp);
@@ -288,6 +289,7 @@ public class SparkBloomFilterSuite {
         );
 
         long iterationCount = 2 * numItems;
+
         for (long i = 0; i < iterationCount; i++) {
             if (verbose && i % 10_000_000 == 0) {
                 System.err.printf("i: %d\n", i);
@@ -304,49 +306,52 @@ public class SparkBloomFilterSuite {
                 (double) bloomFilterPrimary.cardinality() / bloomFilterPrimary.bitSize()
         );
 
-        long mightContainEvenIndexed = 0;
-        long mightContainOddIndexed = 0;
-        long confirmedAsNotInserted = 0;
-        for (long i = 0; i < iterationCount; i++) {
-            if (verbose && i % (iterationCount / 100) == 0) {
-                System.err.printf("%s: %2d %%\n", testName, 100 * i / iterationCount);
-            }
+        LongAdder mightContainEvenIndexed = new LongAdder();
+        LongAdder mightContainOddIndexed = new LongAdder();
+        LongAdder confirmedAsNotInserted = new LongAdder();
+        LongStream inputStream = LongStream.range(0, iterationCount).parallel();
+        inputStream.forEach(
+            i -> {
+                if (verbose && i % (iterationCount / 100) == 0) {
+                    System.err.printf("%s: %2d %%\n", testName, 100 * i / iterationCount);
+                }
 
-            long candidate = scramble(i);
+                long candidate = scramble(i);
 
-            if (i % 2 == 0) { // EVEN
-                mightContainEvenIndexed++;
-            } else { // ODD
-                // for fpp estimation, only consider the odd indexes
-                // (to avoid querying the secondary with elements known to be inserted)
+                if (i % 2 == 0) { // EVEN
+                    mightContainEvenIndexed.increment();
+                } else { // ODD
+                    // for fpp estimation, only consider the odd indexes
+                    // (to avoid querying the secondary with elements known to be inserted)
 
-                // since here we avoided all the even indexes,
-                // most of these secondary queries will return false
-                if (!bloomFilterSecondary.mightContainLong(candidate)) {
-                    // from the odd indexes, we consider only those items
-                    // where the secondary confirms the non-insertion
+                    // since here we avoided all the even indexes,
+                    // most of these secondary queries will return false
+                    if (!bloomFilterSecondary.mightContainLong(candidate)) {
+                        // from the odd indexes, we consider only those items
+                        // where the secondary confirms the non-insertion
 
-                    // anything on which the primary and the secondary
-                    // disagrees here is a false positive
-                    if (bloomFilterPrimary.mightContainLong(candidate)) {
-                        mightContainOddIndexed++;
+                        // anything on which the primary and the secondary
+                        // disagrees here is a false positive
+                        if (bloomFilterPrimary.mightContainLong(candidate)) {
+                            mightContainOddIndexed.increment();
+                        }
+                        // count the total number of considered items for a baseline
+                        confirmedAsNotInserted.increment();
                     }
-                    // count the total number of considered items for a baseline
-                    confirmedAsNotInserted++;
                 }
             }
-        }
+        );
 
         Assertions.assertEquals(
-                numItems, mightContainEvenIndexed,
+                numItems, mightContainEvenIndexed.longValue(),
                 "mightContainLong must return true for all inserted numbers"
         );
 
-        double actualFpp = (double) mightContainOddIndexed / confirmedAsNotInserted;
+        double actualFpp = mightContainOddIndexed.doubleValue() / confirmedAsNotInserted.doubleValue();
         double acceptableFpp = expectedFpp * (1 + FPP_RANDOM_ERROR_FACTOR);
 
-        testOut.printf("mightContainOddIndexed: %10d\n", mightContainOddIndexed);
-        testOut.printf("confirmedAsNotInserted: %10d\n", confirmedAsNotInserted);
+        testOut.printf("mightContainOddIndexed: %10d\n", mightContainOddIndexed.longValue());
+        testOut.printf("confirmedAsNotInserted: %10d\n", confirmedAsNotInserted.longValue());
         testOut.printf("numItems:               %10d\n", numItems);
         testOut.printf("expectedFpp:   %f %%\n", 100 * expectedFpp);
         testOut.printf("acceptableFpp: %f %%\n", 100 * acceptableFpp);
