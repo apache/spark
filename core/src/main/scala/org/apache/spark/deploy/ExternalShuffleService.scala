@@ -19,6 +19,7 @@ package org.apache.spark.deploy
 
 import java.io.File
 import java.util.concurrent.CountDownLatch
+import java.util.function.Function
 
 import scala.jdk.CollectionConverters._
 
@@ -59,8 +60,9 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
       numUsableCores = 0,
       sslOptions = Some(securityManager.getRpcSSLOptions()))
   private val blockHandler = newShuffleBlockHandler(transportConf)
+  @volatile
   private var transportContext: TransportContext = _
-
+  @volatile
   private var server: TransportServer = _
 
   private val shuffleServiceSource = new ExternalShuffleServiceSource
@@ -103,7 +105,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   }
 
   /** Start the external shuffle service */
-  def start(): Unit = {
+  def start(essServerStopFunc: Function[Throwable, Void] = null): Unit = {
     require(server == null, "Shuffle server already started")
     val authEnabled = securityManager.isAuthenticationEnabled()
     logInfo(log"Starting shuffle service on port ${MDC(PORT, port)}" +
@@ -115,7 +117,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
         Nil
       }
     transportContext = new TransportContext(transportConf, blockHandler, true)
-    server = transportContext.createServer(port, bootstraps.asJava)
+    server = transportContext.createServer(port, bootstraps.asJava, essServerStopFunc)
 
     shuffleServiceSource.registerMetricSet(server.getAllMetrics)
     blockHandler.getAllMetrics.getMetrics.put("numRegisteredConnections",
@@ -177,7 +179,16 @@ object ExternalShuffleService extends Logging {
     // and we assume the user really wants it to be running
     sparkConf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
     server = newShuffleService(sparkConf, securityManager)
-    server.start()
+    val essServerStopFunc: Function[Throwable, Void] = (t: Throwable) => {
+      logError("Boss thread exited with uncaught exception, shutting down shuffle service.", t)
+      server.stop()
+      barrier.countDown()
+      // Exit with a non-zero code to indicate boss thread failure.
+      System.exit(1)
+      null
+    }
+
+    server.start(essServerStopFunc)
 
     logDebug("Adding shutdown hook") // force eager creation of logger
     ShutdownHookManager.addShutdownHook { () =>

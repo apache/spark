@@ -19,6 +19,7 @@ package org.apache.spark.network.server;
 
 import java.io.Closeable;
 import java.net.InetSocketAddress;
+import java.util.function.Function;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -67,6 +68,16 @@ public class TransportServer implements Closeable {
       int portToBind,
       RpcHandler appRpcHandler,
       List<TransportServerBootstrap> bootstraps) {
+    this(context, hostToBind, portToBind, appRpcHandler, bootstraps, null);
+  }
+
+  public TransportServer(
+          TransportContext context,
+          String hostToBind,
+          int portToBind,
+          RpcHandler appRpcHandler,
+          List<TransportServerBootstrap> bootstraps,
+          Function<Throwable, Void> onUncaughtException) {
     this.context = context;
     this.conf = context.getConf();
     this.appRpcHandler = appRpcHandler;
@@ -81,7 +92,7 @@ public class TransportServer implements Closeable {
 
     boolean shouldClose = true;
     try {
-      init(hostToBind, portToBind);
+      init(hostToBind, portToBind, onUncaughtException);
       shouldClose = false;
     } finally {
       if (shouldClose) {
@@ -97,11 +108,11 @@ public class TransportServer implements Closeable {
     return port;
   }
 
-  private void init(String hostToBind, int portToBind) {
+  private void init(String hostToBind, int portToBind, Function<Throwable, Void> onUncaughtException) {
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
-    EventLoopGroup bossGroup = NettyUtils.createEventLoop(ioMode, 1,
-      conf.getModuleName() + "-boss");
+    EventLoopGroup bossGroup = NettyUtils.createBossEventLoop(ioMode, 1,
+            conf.getModuleName() + "-boss", onUncaughtException);
     EventLoopGroup workerGroup =  NettyUtils.createEventLoop(ioMode, conf.serverThreads(),
       conf.getModuleName() + "-server");
 

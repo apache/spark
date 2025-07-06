@@ -18,6 +18,7 @@
 package org.apache.spark.network.util;
 
 import java.util.concurrent.ThreadFactory;
+import java.util.function.Function;
 
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -59,6 +60,20 @@ public class NettyUtils {
   /** Creates a new ThreadFactory which prefixes each thread with the given name. */
   public static ThreadFactory createThreadFactory(String threadPoolPrefix) {
     return new DefaultThreadFactory(threadPoolPrefix, true);
+  }
+
+  public static EventLoopGroup createBossEventLoop(IOMode mode, int numThreads, String threadPrefix, Function<Throwable, Void> onUncaughtException) {
+    ThreadFactory threadFactory;
+    if (onUncaughtException == null) {
+      threadFactory = createThreadFactory(threadPrefix);
+    } else {
+      threadFactory = new BossThreadFactory(threadPrefix, true, onUncaughtException);
+    }
+
+    return switch (mode) {
+      case NIO -> new NioEventLoopGroup(numThreads, threadFactory);
+      case EPOLL -> new EpollEventLoopGroup(numThreads, threadFactory);
+    };
   }
 
   /** Creates a Netty EventLoopGroup based on the IOMode. */
