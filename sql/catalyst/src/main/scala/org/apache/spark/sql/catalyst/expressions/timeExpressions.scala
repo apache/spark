@@ -589,13 +589,14 @@ case class TimeAddInterval(time: Expression, interval: Expression)
     } else {
       TimeType.MICROS_PRECISION
     }
-    val resultPrecision = Math.max(timePrecision, intervalPrecision)
+    val targetPrecision = Math.max(timePrecision, intervalPrecision)
     StaticInvoke(
       classOf[DateTimeUtils.type],
-      TimeType(resultPrecision),
+      TimeType(targetPrecision),
       "timeAddInterval",
-      Seq(time, Literal(timePrecision), interval, Literal(intervalEndField)),
-      Seq(AnyTimeType, IntegerType, DayTimeIntervalType, ByteType)
+      Seq(time, Literal(timePrecision), interval, Literal(intervalEndField),
+        Literal(targetPrecision)),
+      Seq(AnyTimeType, IntegerType, DayTimeIntervalType, ByteType, IntegerType)
     )
   }
 

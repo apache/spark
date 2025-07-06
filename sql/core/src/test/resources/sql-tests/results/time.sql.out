@@ -557,7 +557,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT TIME'00:00:00.0101' + 1 hour
+SELECT TIME'00:00:00.0101' + 1
 -- !query schema
 struct<>
 -- !query output
@@ -576,5 +576,61 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 8,
     "stopIndex" : 30,
     "fragment" : "TIME'00:00:00.0101' + 1"
+  } ]
+}
+
+
+-- !query
+SELECT TIME'12:30' - INTERVAL '12:29:59.000001' HOUR TO SECOND
+-- !query schema
+struct<TIME '12:30:00' + (- INTERVAL '12:29:59.000001' HOUR TO SECOND):time(6)>
+-- !query output
+00:00:00.999999
+
+
+-- !query
+SELECT '23:59:59.999999' :: TIME - INTERVAL '23:59:59.999999' HOUR TO SECOND
+-- !query schema
+struct<CAST(23:59:59.999999 AS TIME(6)) + (- INTERVAL '23:59:59.999999' HOUR TO SECOND):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT '00:00:00.0001' :: TIME(4) - INTERVAL '0 00:00:00.0001' DAY TO SECOND
+-- !query schema
+struct<CAST(00:00:00.0001 AS TIME(4)) + (- INTERVAL '0 00:00:00.0001' DAY TO SECOND):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT '08:30' :: TIME(0) - INTERVAL '6' HOUR
+-- !query schema
+struct<CAST(08:30 AS TIME(0)) + (- INTERVAL '06' HOUR):time(0)>
+-- !query output
+02:30:00
+
+
+-- !query
+SELECT '10:00:01' :: TIME(1) - INTERVAL '1' MONTH
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"TIME(1)\"",
+    "right" : "\"INTERVAL MONTH\"",
+    "sqlExpr" : "\"(CAST(10:00:01 AS TIME(1)) - INTERVAL '1' MONTH)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 49,
+    "fragment" : "'10:00:01' :: TIME(1) - INTERVAL '1' MONTH"
   } ]
 }

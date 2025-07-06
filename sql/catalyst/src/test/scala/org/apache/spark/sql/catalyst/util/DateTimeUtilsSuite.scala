@@ -1253,21 +1253,21 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("add day-time interval to time") {
-    assert(timeAddInterval(0, 0, 0, SECOND) == localTime())
-    assert(timeAddInterval(0, 6, MICROS_PER_DAY - 1, SECOND) ==
+    assert(timeAddInterval(0, 0, 0, SECOND, 6) == localTime())
+    assert(timeAddInterval(0, 6, MICROS_PER_DAY - 1, SECOND, 6) ==
       localTime(23, 59, 59, 999999))
-    assert(timeAddInterval(localTime(23, 59, 59, 999999), 0, -MICROS_PER_DAY + 1, SECOND) ==
+    assert(timeAddInterval(localTime(23, 59, 59, 999999), 0, -MICROS_PER_DAY + 1, SECOND, 6) ==
       localTime(0, 0))
-    assert(timeAddInterval(localTime(12, 30, 43, 123400), 4, 10 * MICROS_PER_MINUTE, SECOND) ==
+    assert(timeAddInterval(localTime(12, 30, 43, 123400), 4, 10 * MICROS_PER_MINUTE, SECOND, 6) ==
       localTime(12, 40, 43, 123400))
-    assert(timeAddInterval(localTime(19, 31, 45, 123450), 5, 6, SECOND) ==
+    assert(timeAddInterval(localTime(19, 31, 45, 123450), 5, 6, SECOND, 6) ==
       localTime(19, 31, 45, 123456))
-    assert(timeAddInterval(localTime(1, 2, 3, 1), 6, MICROS_PER_HOUR, HOUR) ==
+    assert(timeAddInterval(localTime(1, 2, 3, 1), 6, MICROS_PER_HOUR, HOUR, 6) ==
       localTime(2, 2, 3, 1))
 
     checkError(
       exception = intercept[SparkArithmeticException] {
-        timeAddInterval(1, 6, MICROS_PER_DAY, SECOND)
+        timeAddInterval(1, 6, MICROS_PER_DAY, SECOND, 6)
       },
       condition = "DATETIME_OVERFLOW",
       parameters = Map("operation" ->
@@ -1275,7 +1275,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     )
     checkError(
       exception = intercept[SparkArithmeticException] {
-        timeAddInterval(0, 0, -1, SECOND)
+        timeAddInterval(0, 0, -1, SECOND, 6)
       },
       condition = "DATETIME_OVERFLOW",
       parameters = Map("operation" ->
