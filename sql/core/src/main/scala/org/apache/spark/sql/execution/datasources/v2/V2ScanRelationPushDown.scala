@@ -147,7 +147,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       rightHolder.pushedSample.isEmpty &&
       lBuilder.isOtherSideCompatibleForJoin(rBuilder) =>
 
-      // projections' names are maybe not up to date if the joins has previously been pushed down.
+      // projections' names are maybe not up to date if the joins have been previously pushed down.
       // For this reason, we need to use pushedJoinOutputMap to get up to date names.
       //
       // Normalized projections are then converted to StructType.
@@ -164,22 +164,41 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         fromAttributes(normalizedProjections)
       }
 
+      def generateJoinOutputAlias(name: String): String =
+        s"${name}_${java.util.UUID.randomUUID().toString.take(5)}"
+
       val leftSideRequiredSchema = getRequiredSchema(leftProjections, leftHolder)
       val rightSideRequiredSchema = getRequiredSchema(rightProjections, rightHolder)
 
-      val joinSchema =
-        lBuilder.getJoinedSchema(rBuilder, leftSideRequiredSchema, rightSideRequiredSchema)
+      // Alias the duplicated columns from left side of the join.
+      val leftSideRequiredSchemaWithAliases = leftSideRequiredSchema.fields.map { field =>
+        val aliasName = if (rightSideRequiredSchema.fieldNames.contains(field.name)) {
+          generateJoinOutputAlias(field.name)
+        } else {
+          null
+        }
 
-      assert(joinSchema.length == node.output.length,
-        "The data source returns unexpected number of columns")
-      assert(joinSchema.fields.zip(node.output).forall { case (a1, a2) =>
-        a1.dataType.sameType(a2.dataType)
-      }, "The data source returned column with different data type")
+        new SupportsPushDownJoin.ColumnWithAlias(field.name, aliasName)
+      }
 
+      // Aliasing of duplicated columns in right side of the join is not needed because the
+      // the conflicts are resolved by aliasing the left side.
+      val rightSideRequiredSchemaWithAliases = rightSideRequiredSchema.fields.map { field =>
+        new SupportsPushDownJoin.ColumnWithAlias(field.name, null)
+      }
+
+      // Create the AttributeMap that holds (Attribute -> Attribute with up to date name) mapping.
       val pushedJoinOutputMap = AttributeMap[Expression](
         node.output.asInstanceOf[Seq[AttributeReference]]
-          .zip(joinSchema.fields)
-          .map{ case (attr, schemaField) => (attr, attr.withName(schemaField.name))}
+          .zip(leftSideRequiredSchemaWithAliases ++ rightSideRequiredSchemaWithAliases)
+          .map{ case (attr, columnWithAlias) =>
+            if (columnWithAlias.getAlias == null) {
+              (attr, attr)
+            }
+            else {
+              (attr, attr.withName(columnWithAlias.getAlias))
+            }
+          }
           .toMap
       )
 
@@ -202,8 +221,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         translatedCondition.isDefined &&
         lBuilder.pushDownJoin(
           rBuilder,
-          joinSchema,
           translatedJoinType.get,
+          leftSideRequiredSchemaWithAliases,
+          rightSideRequiredSchemaWithAliases,
           translatedCondition.get
         )) {
         leftHolder.joinedRelations = leftHolder.joinedRelations ++ rightHolder.joinedRelations
@@ -485,8 +505,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val wrappedScan = getWrappedScan(scan, holder)
       val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
 
-      // When join is pushed down, the output of ScanBuilderHolder is going to be, for example,
-      // subquery_2_col_0#0, subquery_2_col_1#1, subquery_2_col_2#2.
+      // When join is pushed down, the real output is going to be, for example,
+      // SALARY_01234#0, NAME_ab123#1, DEPT_cd123#2.
       // We should revert these names back to original names. For example,
       // SALARY#0, NAME#1, DEPT#1. This is done by adding projection with appropriate aliases.
       val projectList = realOutput.zip(holder.output).map { case (a1, a2) =>
@@ -681,17 +701,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   private def normalizeExpressions(
       expressions: Seq[Expression],
       sHolder: ScanBuilderHolder): Seq[Expression] = {
-    if (sHolder.joinedRelations.length == 1) {
+    val output = if (sHolder.joinedRelations.length == 1) {
       // Join is not pushed down
-      DataSourceStrategy.normalizeExprs(expressions, sHolder.relation.output)
+      sHolder.relation.output
     } else {
       // sHolder.output's names can be out of date if the joins has previously been pushed down.
       // For this reason, we need to use pushedJoinOutputMap to get up to date names.
-      val outputWithUpToDateNames = sHolder.output.map { a =>
+      sHolder.output.map { a =>
         sHolder.pushedJoinOutputMap.getOrElse(a, a).asInstanceOf[AttributeReference]
       }
-      DataSourceStrategy.normalizeExprs(expressions, outputWithUpToDateNames)
     }
+
+    DataSourceStrategy.normalizeExprs(expressions, output)
   }
 
   private def getWrappedScan(scan: Scan, sHolder: ScanBuilderHolder): Scan = {

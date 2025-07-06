@@ -17,12 +17,9 @@
 
 package org.apache.spark.sql.connector.read;
 
-import java.util.Optional;
-
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.connector.join.JoinType;
-import org.apache.spark.sql.types.StructType;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
@@ -36,30 +33,12 @@ public interface SupportsPushDownJoin extends ScanBuilder {
    * Returns true if the other side of the join is compatible with the
    * current {@code SupportsPushDownJoin} for a join push down, meaning both sides can be
    * processed together within the same underlying data source.
-   *
-   * <p>For example, JDBC connectors are compatible if they use the same
-   * host, port, username, and password.</p>
+   * <br>
+   * <br>
+   * For example, JDBC connectors are compatible if they use the same
+   * host, port, username, and password.
    */
   boolean isOtherSideCompatibleForJoin(SupportsPushDownJoin other);
-
-  /**
-   * Joining 2 {@code SupportsPushDownJoin} can be problematic if there are columns with duplicate
-   * names. The {@code SupportsPushDownJoin} implementation should deal with this problem.
-   *
-   * This method returns the merged schema that will be preserved to {@code SupportsPushDownJoin}'s
-   * schema after {@code pushDownJoin} call succeeds.
-   *
-   * @param other {@code SupportsPushDownJoin} that this {@code SupportsPushDownJoin}
-   * gets joined with.
-   * @param requiredSchema required columns needed for this {@code SupportsPushDownJoin}.
-   * @param otherSideRequiredSchema required columns needed for other {@code SupportsPushDownJoin}.
-   * @return merged schema. If ambiguous names are forbidden, the merged schema should resolve that.
-   */
-  StructType getJoinedSchema(
-      SupportsPushDownJoin other,
-      StructType requiredSchema,
-      StructType otherSideRequiredSchema
-  );
 
   /**
    * Pushes down the join of the current {@code SupportsPushDownJoin} and the other side of join
@@ -67,15 +46,37 @@ public interface SupportsPushDownJoin extends ScanBuilder {
    *
    * @param other {@code SupportsPushDownJoin} that this {@code SupportsPushDownJoin}
    * gets joined with.
-   * @param requiredSchema required output schema after join push down.
    * @param joinType the type of join.
+   * @param leftSideRequiredOutputWithAliases required schema of the left side {@code SupportsPushDownJoin}
+   * @param rightSideRequiredOutputWithAliases required schema of the right side {@code SupportsPushDownJoin}
    * @param condition join condition.
    * @return True if join has been successfully pushed down.
    */
   boolean pushDownJoin(
       SupportsPushDownJoin other,
-      StructType requiredSchema,
       JoinType joinType,
+      ColumnWithAlias[] leftSideRequiredOutputWithAliases,
+      ColumnWithAlias[] rightSideRequiredOutputWithAliases,
       Predicate condition
   );
+
+  /**
+   *  A helper class used when there are duplicated names coming from 2 sides of the join
+   *  operator.
+   *  <br>
+   *  Holds information of original output name and the alias of the new output.
+   */
+  class ColumnWithAlias {
+    private final String colName;
+    private final String alias;
+
+    public ColumnWithAlias(String col, String alias) {
+      this.colName = col;
+      this.alias = alias;
+    }
+
+    public String getAlias() { return alias; }
+
+    public String getColName() { return colName; }
+  }
 }

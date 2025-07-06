@@ -26,7 +26,6 @@ import org.apache.commons.codec.binary.Hex
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
 
 import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
@@ -36,7 +35,7 @@ import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalo
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.Expression
-import org.apache.spark.sql.execution.{FormattedMode, RowDataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{FormattedMode, RowDataSourceScanExec}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCRDD}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -268,17 +267,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     super.afterAll()
   }
 
-  def getExternalEngineQuery(executedPlan: SparkPlan): String = {
-    getExternalEngineRdd(executedPlan).asInstanceOf[JDBCRDD].getExternalEngineQuery
-  }
-
-  def getExternalEngineRdd(executedPlan: SparkPlan): RDD[InternalRow] = {
-    val queryNode = executedPlan.collect { case r: RowDataSourceScanExec =>
-      r
-    }.head
-    queryNode.rdd
-  }
-
   test("Test 2-way join without condition - no join pushdown") {
     val sqlQuery = "SELECT * FROM h2.test.employee a, h2.test.employee b"
     val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
@@ -336,23 +324,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
       assert(joinNodes.isEmpty)
       checkPushedInfo(df, "PushedJoins: [h2.test.employee, h2.test.employee]")
-      checkPushedInfo(df,
-        "PushedFilters: [DEPT IS NOT NULL, DEPT IS NOT NULL, col_0 = (col_5 + 1)],")
       checkAnswer(df, rows)
-
-      val generatedSQLQuery =
-        getExternalEngineQuery(df.queryExecution.executedPlan).split("\\s+SPARK_GEN_SUBQ_\\d+")(0)
-      // scalastyle:off line.size.limit
-      assert(generatedSQLQuery.contains(
-        """SELECT "col_0","col_1","col_2","col_3","col_4","col_5","col_6","col_7","col_8","col_9" FROM (
-          |SELECT "col_0","col_1","col_2","col_3","col_4","col_5","col_6","col_7","col_8","col_9" FROM
-          |(SELECT "DEPT" AS "col_0","NAME" AS "col_1","SALARY" AS "col_2","BONUS" AS "col_3","IS_MANAGER" AS "col_4" FROM "test"."employee"  WHERE ("DEPT" IS NOT NULL)    ) join_subquery_0
-          |INNER JOIN
-          |(SELECT "DEPT" AS "col_5","NAME" AS "col_6","SALARY" AS "col_7","BONUS" AS "col_8","IS_MANAGER" AS "col_9" FROM "test"."employee"  WHERE ("DEPT" IS NOT NULL)    ) join_subquery_1
-          |ON "col_0" = ("col_5" + 1)
-          |)""".stripMargin
-      ), "Generated query is not as expected")
-      // scalastyle:on line.size.limit
     }
   }
 
@@ -378,9 +350,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
       assert(joinNodes.isEmpty)
       checkPushedInfo(df, "PushedJoins: [h2.test.employee, h2.test.employee, h2.test.employee]")
-      checkPushedInfo(df,
-        "[DEPT IS NOT NULL, DEPT IS NOT NULL, col_5 = (col_0 + 1), " +
-          "DEPT IS NOT NULL, DEPT = (col_5 - 1)]")
       checkAnswer(df, rows)
     }
   }
@@ -405,8 +374,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
       assert(joinNodes.isEmpty)
       checkPushedInfo(df, "PushedJoins: [h2.test.employee, h2.test.employee]")
-      checkPushedInfo(df,
-        "PushedFilters: [DEPT IS NOT NULL, DEPT IS NOT NULL, col_0 = (col_1 + 1)]")
       checkAnswer(df, rows)
     }
   }
@@ -434,20 +401,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       checkPushedInfo(df,
         "PushedFilters: [DEPT IS NOT NULL, ID IS NOT NULL, DEPT = ID]")
       checkAnswer(df, rows)
-
-      val generatedSQLQuery =
-        getExternalEngineQuery(df.queryExecution.executedPlan).split("\\s+SPARK_GEN_SUBQ_\\d+")(0)
-      // scalastyle:off line.size.limit
-      assert(generatedSQLQuery.contains(
-        """SELECT "DEPT","col_0","SALARY","BONUS","IS_MANAGER","col_1","ID" FROM (
-          |SELECT "DEPT","col_0","SALARY","BONUS","IS_MANAGER","col_1","ID" FROM
-          |(SELECT "DEPT","NAME" AS "col_0","SALARY","BONUS","IS_MANAGER" FROM "test"."employee"  WHERE ("DEPT" IS NOT NULL)    ) join_subquery_0
-          |INNER JOIN
-          |(SELECT "NAME" AS "col_1","ID" FROM "test"."people"  WHERE ("ID" IS NOT NULL)    ) join_subquery_1
-          |ON "DEPT" = "ID"
-          |)""".stripMargin
-      ), "Generated query is not as expected")
-      // scalastyle:on line.size.limit
     }
   }
 
