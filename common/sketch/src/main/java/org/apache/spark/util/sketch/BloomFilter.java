@@ -17,9 +17,12 @@
 
 package org.apache.spark.util.sketch;
 
+import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
 
 /**
  * A Bloom filter is a space-efficient probabilistic data structure that offers an approximate
@@ -51,7 +54,8 @@ public abstract class BloomFilter {
      *   <li>The words/longs (numWords * 64 bit)</li>
      * </ul>
      */
-    V1(1);
+    V1(1),
+    V2(2);
 
     private final int versionNumber;
 
@@ -175,14 +179,34 @@ public abstract class BloomFilter {
    * the stream.
    */
   public static BloomFilter readFrom(InputStream in) throws IOException {
-    return BloomFilterImpl.readFrom(in);
+      // peek into the inputstream so we can determine the version
+      BufferedInputStream bin = new BufferedInputStream(in);
+      bin.mark(4);
+      int version = ByteBuffer.wrap(bin.readNBytes(4)).getInt();
+      bin.reset();
+
+      BloomFilter result;
+      switch (version) {
+        case 1:
+          result = BloomFilterImpl.readFrom(bin);
+          break;
+        case 2:
+          result = BloomFilterImplV2.readFrom(bin);
+          break;
+        default:
+          throw new IllegalArgumentException("Unknown BloomFilter version: " + version);
+      }
+
+      return result;
   }
 
   /**
    * Reads in a {@link BloomFilter} from a byte array.
    */
   public static BloomFilter readFrom(byte[] bytes) throws IOException {
-    return BloomFilterImpl.readFrom(bytes);
+    try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes)) {
+      return readFrom(bis);
+    }
   }
 
   /**
@@ -247,7 +271,6 @@ public abstract class BloomFilter {
         "False positive probability must be within range (0.0, 1.0)"
       );
     }
-
     return create(expectedNumItems, optimalNumOfBits(expectedNumItems, fpp));
   }
 
@@ -256,9 +279,19 @@ public abstract class BloomFilter {
    * pick an optimal {@code numHashFunctions} which can minimize {@code fpp} for the bloom filter.
    */
   public static BloomFilter create(long expectedNumItems, long numBits) {
-    return create(expectedNumItems, numBits, BloomFilterImpl.DEFAULT_SEED);
+    return create(Version.V2, expectedNumItems, numBits, BloomFilterImplV2.DEFAULT_SEED);
   }
+
   public static BloomFilter create(long expectedNumItems, long numBits, int seed) {
+    return create(Version.V2, expectedNumItems, numBits, seed);
+  }
+
+  public static BloomFilter create(
+      Version version,
+      long expectedNumItems,
+      long numBits,
+      int seed
+  ) {
     if (expectedNumItems <= 0) {
       throw new IllegalArgumentException("Expected insertions must be positive");
     }
@@ -267,6 +300,19 @@ public abstract class BloomFilter {
       throw new IllegalArgumentException("Number of bits must be positive");
     }
 
-    return new BloomFilterImpl(optimalNumOfHashFunctions(expectedNumItems, numBits), numBits, seed);
+    int numHashFunctions = optimalNumOfHashFunctions(expectedNumItems, numBits);
+
+    BloomFilter result;
+    switch (version) {
+      case V1:
+        result = new BloomFilterImpl(numHashFunctions, numBits);
+        break;
+      case V2:
+        result = new BloomFilterImplV2(numHashFunctions, numBits, seed);
+        break;
+      default:
+        throw new IllegalArgumentException("Unknown BloomFilter version: " + version);
+    }
+    return result;
   }
 }

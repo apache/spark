@@ -115,7 +115,7 @@ public class SparkBloomFilterSuite {
         //   with the default FPP and the default seed only.
         @Values(longs = {1_000_000_000L}) long numItems,
         @Values(doubles = {0.03}) double expectedFpp,
-        @Values(ints = {BloomFilterImpl.DEFAULT_SEED}) int deterministicSeed,
+        @Values(ints = {BloomFilterImplV2.DEFAULT_SEED}) int deterministicSeed,
         // preferable minimum parameter space for tests:
         //   @Values(longs = {1_000_000L, 1_000_000_000L}) long numItems,
         //   @Values(doubles = {0.05, 0.03, 0.01, 0.001}) double expectedFpp,
@@ -138,7 +138,14 @@ public class SparkBloomFilterSuite {
             + " bits)"
         );
 
-        BloomFilter bloomFilter = BloomFilter.create(numItems, optimalNumOfBits, deterministicSeed);
+        BloomFilter bloomFilter =
+                BloomFilter.create(
+                        BloomFilter.Version.V2,
+                        numItems,
+                        optimalNumOfBits,
+                        deterministicSeed
+                );
+
         testOut.printf(
                 "allocated bitArray: %d (%d MB)\n",
                 bloomFilter.bitSize(),
@@ -236,7 +243,7 @@ public class SparkBloomFilterSuite {
         //   with the default FPP and the default seed only.
         @Values(longs = {1_000_000_000L}) long numItems,
         @Values(doubles = {0.03}) double expectedFpp,
-        @Values(ints = {BloomFilterImpl.DEFAULT_SEED}) int deterministicSeed,
+        @Values(ints = {BloomFilterImplV2.DEFAULT_SEED}) int deterministicSeed,
         // preferable minimum parameter space for tests:
         //   @Values(longs = {1_000_000L, 1_000_000_000L}) long numItems,
         //   @Values(doubles = {0.05, 0.03, 0.01, 0.001}) double expectedFpp,
@@ -260,9 +267,20 @@ public class SparkBloomFilterSuite {
         );
 
         BloomFilter bloomFilterPrimary =
-                BloomFilter.create(numItems, optimalNumOfBits, deterministicSeed);
+                BloomFilter.create(
+                        BloomFilter.Version.V2,
+                        numItems,
+                        optimalNumOfBits,
+                        deterministicSeed
+                );
+
         BloomFilter bloomFilterSecondary =
-                BloomFilter.create(numItems, optimalNumOfBits, 0xCAFEBABE);
+                BloomFilter.create(
+                        BloomFilter.Version.V2,
+                        numItems,
+                        optimalNumOfBits,
+                        0xCAFEBABE
+                );
 
         testOut.printf(
                 "allocated bitArray: %d (%d MB)\n",

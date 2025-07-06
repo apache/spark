@@ -360,7 +360,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
   test("Test that might_contain can take a constant value input (seeded version)") {
     checkAnswer(spark.sql(
       """SELECT might_contain(
-        |X'00000001000000050000000343A2EC6EA8C117E2D3CDB767296B144FC5BFBCED9737F26700000000',
+        |X'0000000200000005000000000000000343A2EC6EA8C117E2D3CDB767296B144FC5BFBCED9737F267',
         |cast(201 as long))""".stripMargin),
       Row(false))
   }

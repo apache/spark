@@ -160,5 +160,11 @@ class BloomFilterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
       val filter2 = BloomFilter.create(2000, 6400)
       filter1.mergeInPlace(filter2)
     }
+
+    intercept[IncompatibleMergeException] {
+      val filter1 = BloomFilter.create(BloomFilter.Version.V1, 1000L, 6400L, 0)
+      val filter2 = BloomFilter.create(BloomFilter.Version.V2, 1000L, 6400L, 0)
+      filter1.mergeInPlace(filter2)
+    }
   }
 }
