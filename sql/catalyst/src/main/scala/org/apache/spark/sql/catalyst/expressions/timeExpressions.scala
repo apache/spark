@@ -32,7 +32,8 @@ import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, DataType, DecimalType, IntegerType, ObjectType, TimeType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, ObjectType, TimeType}
+import org.apache.spark.sql.types.DayTimeIntervalType.SECOND
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -562,4 +563,43 @@ case class MakeTime(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): MakeTime =
     copy(hours = newChildren(0), minutes = newChildren(1), secsAndMicros = newChildren(2))
+}
+
+/**
+ * Adds day-time interval to time.
+ */
+case class TimeAddInterval(time: Expression, interval: Expression)
+  extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
+
+  override def left: Expression = time
+  override def right: Expression = interval
+
+  override def toString: String = s"$left + $right"
+  override def sql: String = s"${left.sql} + ${right.sql}"
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType, DayTimeIntervalType)
+
+  override def replacement: Expression = {
+    val (timePrecision, intervalEndField) = (time.dataType, interval.dataType) match {
+      case (TimeType(p), DayTimeIntervalType(_, endField)) => (p, endField)
+      case _ => (TimeType.DEFAULT_PRECISION, DayTimeIntervalType.DEFAULT.endField)
+    }
+    val intervalPrecision = if (intervalEndField < SECOND) {
+      TimeType.MIN_PRECISION
+    } else {
+      TimeType.MICROS_PRECISION
+    }
+    val resultPrecision = Math.max(timePrecision, intervalPrecision)
+    StaticInvoke(
+      classOf[DateTimeUtils.type],
+      TimeType(resultPrecision),
+      "timeAddInterval",
+      Seq(time, Literal(timePrecision), interval, Literal(intervalEndField)),
+      Seq(AnyTimeType, IntegerType, DayTimeIntervalType, ByteType)
+    )
+  }
+
+  override protected def withNewChildrenInternal(
+      newTime: Expression, newInterval: Expression): TimeAddInterval =
+    copy(time = newTime, interval = newInterval)
 }
