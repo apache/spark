@@ -347,7 +347,8 @@ public class SparkBloomFilterSuite {
                 "mightContainLong must return true for all inserted numbers"
         );
 
-        double actualFpp = mightContainOddIndexed.doubleValue() / confirmedAsNotInserted.doubleValue();
+        double actualFpp =
+                mightContainOddIndexed.doubleValue() / confirmedAsNotInserted.doubleValue();
         double acceptableFpp = expectedFpp * (1 + FPP_RANDOM_ERROR_FACTOR);
 
         testOut.printf("mightContainOddIndexed: %10d\n", mightContainOddIndexed.longValue());
