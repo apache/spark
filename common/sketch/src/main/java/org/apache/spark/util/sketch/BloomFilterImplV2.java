@@ -18,6 +18,7 @@
 package org.apache.spark.util.sketch;
 
 import java.io.*;
+import java.util.Objects;
 
 class BloomFilterImplV2 extends BloomFilter implements Serializable {
 
@@ -54,12 +55,14 @@ class BloomFilterImplV2 extends BloomFilter implements Serializable {
       return false;
     }
 
-    return this.numHashFunctions == that.numHashFunctions && this.bits.equals(that.bits);
+    return this.numHashFunctions == that.numHashFunctions
+            && this.seed == that.seed
+            && Objects.equals(this.bits, that.bits);
   }
 
   @Override
   public int hashCode() {
-    return bits.hashCode() * 31 + numHashFunctions;
+    return Objects.hash(numHashFunctions, seed, bits);
   }
 
   @Override
