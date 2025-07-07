@@ -140,17 +140,11 @@ public class JavaUDFSuite implements Serializable {
 
   @Test
   public void udf8Test() {
-    String originConf = spark.conf().get(SQLConf.DATETIME_JAVA8API_ENABLED().key());
-    try {
-      spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), "true");
       spark.udf().register(
           "plusTwoHours",
           (java.time.LocalTime lt) -> lt.plusHours(2), new TimeType(6));
       Row result = spark.sql("SELECT plusTwoHours(TIME '09:10:10')").head();
       Assertions.assertEquals(LocalTime.of(11, 10, 10), result.get(0));
-    } finally {
-      spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), originConf);
-    }
   }
 
   @Test
