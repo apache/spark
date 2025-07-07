@@ -323,7 +323,42 @@ object ApproxTopK {
     StructType(
       StructField("Sketch", BinaryType, nullable = false) ::
         StructField("ItemTypeNull", itemDataType) ::
-        StructField("MaxItemsTracked", IntegerType, nullable = false) :: Nil)
+        StructField("MaxItemsTracked", IntegerType, nullable = false) ::
+        StructField("TypeCode", BinaryType, nullable = false) :: Nil)
+
+  def dataTypeToBytes(dataType: DataType): Array[Byte] = {
+    dataType match {
+      case _: BooleanType => Array(0, 0, 0)
+      case _: ByteType => Array(1, 0, 0)
+      case _: ShortType => Array(2, 0, 0)
+      case _: IntegerType => Array(3, 0, 0)
+      case _: LongType => Array(4, 0, 0)
+      case _: FloatType => Array(5, 0, 0)
+      case _: DoubleType => Array(6, 0, 0)
+      case _: DateType => Array(7, 0, 0)
+      case _: TimestampType => Array(8, 0, 0)
+      case _: TimestampNTZType => Array(9, 0, 0)
+      case _: StringType => Array(10, 0, 0)
+      case dt: DecimalType => Array(11, dt.precision.toByte, dt.scale.toByte)
+    }
+  }
+
+  def bytesToDataType(bytes: Array[Byte]): DataType = {
+    bytes(0) match {
+      case 0 => BooleanType
+      case 1 => ByteType
+      case 2 => ShortType
+      case 3 => IntegerType
+      case 4 => LongType
+      case 5 => FloatType
+      case 6 => DoubleType
+      case 7 => DateType
+      case 8 => TimestampType
+      case 9 => TimestampNTZType
+      case 10 => StringType
+      case 11 => DecimalType(bytes(1).toInt, bytes(2).toInt)
+    }
+  }
 }
 
 /**
@@ -415,7 +450,8 @@ case class ApproxTopKAccumulate(
 
   override def eval(buffer: ItemsSketch[Any]): Any = {
     val sketchBytes = serialize(buffer)
-    InternalRow.apply(sketchBytes, null, maxItemsTrackedVal)
+    val typeCode = ApproxTopK.dataTypeToBytes(itemDataType)
+    InternalRow.apply(sketchBytes, null, maxItemsTrackedVal, typeCode)
   }
 
   override def serialize(buffer: ItemsSketch[Any]): Array[Byte] =
@@ -441,10 +477,25 @@ case class ApproxTopKAccumulate(
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("approx_top_k_accumulate")
 }
 
-class CombineInternal[T](sketch: ItemsSketch[T], itemDataType: DataType, var maxItemsTracked: Int) {
+class CombineInternal[T](
+    sketch: ItemsSketch[T],
+    var itemDataType: DataType,
+    var maxItemsTracked: Int) {
   def getSketch: ItemsSketch[T] = sketch
 
   def getItemDataType: DataType = itemDataType
+
+  def setItemDataType(dataType: DataType): Unit = {
+    if (this.itemDataType == null) {
+      this.itemDataType = dataType
+    } else if (this.itemDataType != dataType) {
+      throw new SparkUnsupportedOperationException(
+        errorClass = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
+        messageParameters = Map(
+          "type1" -> this.itemDataType.typeName,
+          "type2" -> dataType.typeName))
+    }
+  }
 
   def getMaxItemsTracked: Int = maxItemsTracked
 
@@ -470,7 +521,7 @@ case class ApproxTopKCombine(
 
   def this(child: Expression) = this(child, Literal(ApproxTopK.VOID_MAX_ITEMS_TRACKED), 0, 0)
 
-  private lazy val itemDataType: DataType =
+  private lazy val uncheckedItemDataType: DataType =
     expr.dataType.asInstanceOf[StructType]("ItemTypeNull").dataType
   private lazy val maxItemsTrackedVal: Int = maxItemsTracked.eval().asInstanceOf[Int]
   private lazy val combineSizeSpecified: Boolean =
@@ -493,16 +544,19 @@ case class ApproxTopKCombine(
     }
   }
 
-  override def dataType: DataType = ApproxTopK.getSketchStateDataType(itemDataType)
+  override def dataType: DataType = ApproxTopK.getSketchStateDataType(uncheckedItemDataType)
 
   override def createAggregationBuffer(): CombineInternal[Any] = {
     if (combineSizeSpecified) {
       val maxMapSize = ApproxTopK.calMaxMapSize(maxItemsTrackedVal)
-      new CombineInternal[Any](new ItemsSketch[Any](maxMapSize), itemDataType, maxItemsTrackedVal)
+      new CombineInternal[Any](
+        new ItemsSketch[Any](maxMapSize),
+        null,
+        maxItemsTrackedVal)
     } else {
       new CombineInternal[Any](
         new ItemsSketch[Any](ApproxTopK.SKETCH_SIZE_PLACEHOLDER),
-        itemDataType,
+        null,
         ApproxTopK.VOID_MAX_ITEMS_TRACKED)
     }
   }
@@ -510,17 +564,11 @@ case class ApproxTopKCombine(
   override def update(buffer: CombineInternal[Any], input: InternalRow): CombineInternal[Any] = {
     val inputSketchBytes = expr.eval(input).asInstanceOf[InternalRow].getBinary(0)
     val inputMaxItemsTracked = expr.eval(input).asInstanceOf[InternalRow].getInt(2)
-    val inputSketch = try {
-      ItemsSketch.getInstance(
-        Memory.wrap(inputSketchBytes), ApproxTopK.genSketchSerDe(buffer.getItemDataType))
-    } catch {
-      case _: SketchesArgumentException |
-           _: NumberFormatException |
-           _: java.lang.ClassCastException =>
-        throw new SparkUnsupportedOperationException(
-          errorClass = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED"
-        )
-    }
+    val typeCode = expr.eval(input).asInstanceOf[InternalRow].getBinary(3)
+    val actualItemDataType = ApproxTopK.bytesToDataType(typeCode)
+    buffer.setItemDataType(actualItemDataType)
+    val inputSketch = ItemsSketch.getInstance(
+      Memory.wrap(inputSketchBytes), ApproxTopK.genSketchSerDe(buffer.getItemDataType))
     buffer.getSketch.merge(inputSketch)
     if (!combineSizeSpecified) {
       buffer.setMaxItemsTracked(inputMaxItemsTracked)
@@ -544,6 +592,18 @@ case class ApproxTopKCombine(
             "size2" -> input.getMaxItemsTracked.toString))
       }
     }
+    // check item data type
+    if (buffer.getItemDataType != null && input.getItemDataType != null &&
+      buffer.getItemDataType != input.getItemDataType) {
+      throw new SparkUnsupportedOperationException(
+        errorClass = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
+        messageParameters = Map(
+          "type1" -> buffer.getItemDataType.typeName,
+          "type2" -> input.getItemDataType.typeName))
+    } else if (buffer.getItemDataType == null) {
+      // If buffer is a placeholder sketch, set it to the input sketch's item data type
+      buffer.setItemDataType(input.getItemDataType)
+    }
     buffer.getSketch.merge(input.getSketch)
     buffer
   }
@@ -558,25 +618,30 @@ case class ApproxTopKCombine(
         )
     }
     val maxItemsTracked = buffer.getMaxItemsTracked
-    InternalRow.apply(sketchBytes, null, maxItemsTracked)
+    val typeCode = ApproxTopK.dataTypeToBytes(buffer.getItemDataType)
+    InternalRow.apply(sketchBytes, null, maxItemsTracked, typeCode)
   }
 
   override def serialize(buffer: CombineInternal[Any]): Array[Byte] = {
     val sketchBytes = buffer.getSketch.toByteArray(
       ApproxTopK.genSketchSerDe(buffer.getItemDataType))
     val maxItemsTrackedByte = buffer.getMaxItemsTracked.toByte
-    val byteArray = new Array[Byte](sketchBytes.length + 1)
+    val itemDataTypeBytes = ApproxTopK.dataTypeToBytes(buffer.getItemDataType)
+    val byteArray = new Array[Byte](sketchBytes.length + 4)
     byteArray(0) = maxItemsTrackedByte
-    System.arraycopy(sketchBytes, 0, byteArray, 1, sketchBytes.length)
+    System.arraycopy(itemDataTypeBytes, 0, byteArray, 1, itemDataTypeBytes.length)
+    System.arraycopy(sketchBytes, 0, byteArray, 4, sketchBytes.length)
     byteArray
   }
 
   override def deserialize(buffer: Array[Byte]): CombineInternal[Any] = {
     val maxItemsTracked = buffer(0).toInt
-    val sketchBytes = buffer.slice(1, buffer.length)
+    val itemDataTypeBytes = buffer.slice(1, 4)
+    val actualItemDataType = ApproxTopK.bytesToDataType(itemDataTypeBytes)
+    val sketchBytes = buffer.slice(4, buffer.length)
     val sketch = ItemsSketch.getInstance(
-      Memory.wrap(sketchBytes), ApproxTopK.genSketchSerDe(itemDataType))
-    new CombineInternal[Any](sketch, itemDataType, maxItemsTracked)
+      Memory.wrap(sketchBytes), ApproxTopK.genSketchSerDe(actualItemDataType))
+    new CombineInternal[Any](sketch, actualItemDataType, maxItemsTracked)
   }
 
   override protected def withNewChildrenInternal(

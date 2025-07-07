@@ -3084,115 +3084,54 @@ class DataFrameAggregateSuite extends QueryTest
 
   def setupMixedTypeAccumulation(seq1: Seq[Any], seq2: Seq[Any]): Unit = {
     sql(s"SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      s"FROM VALUES ${seq1.mkString(", ")} AS tab(expr);").createOrReplaceTempView("accumulation1")
+      s"FROM VALUES ${seq1.mkString(", ")} AS tab(expr);")
+      .createOrReplaceTempView("accumulation1")
 
     sql(s"SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      s"FROM VALUES ${seq2.mkString(", ")} AS tab(expr);").createOrReplaceTempView("accumulation2")
+      s"FROM VALUES ${seq2.mkString(", ")} AS tab(expr);")
+      .createOrReplaceTempView("accumulation2")
 
-    sql("SELECT approx_top_k_combine(acc, 30) as com " +
-      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-      .createOrReplaceTempView("combined")
-    sql("SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2;").show(false)
+    sql("SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2")
+      .createOrReplaceTempView("unioned")
   }
 
   test("SPARK-combine: different types, same size, specified combine size - fail") {
-//    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-//      "FROM VALUES cast('2023-01-01' AS DATE), cast('2023-01-01' AS DATE), " +
-//      "cast('2023-01-02' AS DATE), cast('2023-01-02' AS DATE), " +
-//      "cast('2023-01-03' AS DATE), cast('2023-01-04' AS DATE), " +
-//      "cast('2023-01-05' AS DATE), cast('2023-01-05' AS DATE) AS tab(expr);")
-//    acc2.createOrReplaceTempView("accumulation2")
-
-//    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-//      "FROM VALUES cast(0.0 AS FLOAT), cast(0.0 AS FLOAT), " +
-//      "cast(1.0 AS FLOAT), cast(1.0 AS FLOAT), " +
-//      "cast(2.0 AS FLOAT), cast(3.0 AS FLOAT), " +
-//      "cast(4.0 AS FLOAT), cast(4.0 AS FLOAT) AS tab(expr);")
-//    acc2.createOrReplaceTempView("accumulation2")
-
-//    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-//      "FROM VALUES CAST(0.0 AS DECIMAL(20, 3)), CAST(0.0 AS DECIMAL(20, 3)), " +
-//      "CAST(1.0 AS DECIMAL(20, 3)), CAST(1.0 AS DECIMAL(20, 3)), " +
-//      "CAST(2.0 AS DECIMAL(20, 3)), CAST(3.0 AS DECIMAL(20, 3)), " +
-//      "CAST(4.0 AS DECIMAL(20, 3)), CAST(4.0 AS DECIMAL(20, 3)) AS tab(expr);")
-//    acc2.createOrReplaceTempView("accumulation2")
-    //
-    //    val comb = sql("SELECT approx_top_k_combine(acc, 30) as com " +
-    //      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-    //    comb.createOrReplaceTempView("combined")
-
-//    Seq("DATE'2023-01-01'", "DATE'2023-01-01'", "DATE'2023-01-02'", "DATE'2023-01-03'")
-
     val mixedTypeSeqs = Seq(
-      Seq(0, 0, 0, 1, 1, 2, 2, 3),
-      Seq("\'a\'", "\'b\'", "\'c\'", "\'c\'", "\'c\'", "\'c\'", "\'d\'", "\'d\'"),
-      Seq("cast(0 AS BYTE)", "cast(0 AS BYTE)", "cast(1 AS BYTE)", "cast(2 AS BYTE)"),
-      Seq("cast(0 AS SHORT)", "cast(0 AS SHORT)", "cast(1 AS SHORT)", "cast(2 AS SHORT)"),
-      Seq("cast(0 AS FLOAT)", "cast(0 AS FLOAT)", "cast(1 AS FLOAT)", "cast(2 AS FLOAT)"),
-      Seq("cast(0 AS DOUBLE)", "cast(0 AS DOUBLE)", "cast(1 AS DOUBLE)", "cast(2 AS DOUBLE)"),
-      Seq("cast(0 AS DECIMAL(4, 2))", "cast(0 AS DECIMAL(4, 2))",
-        "cast(1 AS DECIMAL(4, 2))", "cast(2 AS DECIMAL(4, 2))"),
-      Seq("cast(0 AS DECIMAL(10, 2))", "cast(0 AS DECIMAL(10, 2))",
-        "cast(1 AS DECIMAL(10, 2))", "cast(2 AS DECIMAL(10, 2))"),
-      Seq("cast(0 AS DECIMAL(20, 3))", "cast(0 AS DECIMAL(20, 3))",
-        "cast(1 AS DECIMAL(20, 3))", "cast(2 AS DECIMAL(20, 3))")
+      (IntegerType.typeName, Seq(0, 0, 0, 1, 1, 2, 2, 3)),
+      (StringType.typeName, Seq("'a'", "'b'", "'c'", "'c'", "'c'", "'c'", "'d'", "'d'")),
+      //      (BooleanType.typeName, Seq("(true)", "(true)", "(true)", "(false)", "(false)")),
+      (ByteType.typeName, Seq("cast(0 AS BYTE)", "cast(0 AS BYTE)", "cast(1 AS BYTE)")),
+      (ShortType.typeName, Seq("cast(0 AS SHORT)", "cast(0 AS SHORT)", "cast(1 AS SHORT)")),
+      (LongType.typeName, Seq("cast(0 AS LONG)", "cast(0 AS LONG)", "cast(1 AS LONG)")),
+      (FloatType.typeName, Seq("cast(0 AS FLOAT)", "cast(0 AS FLOAT)", "cast(1 AS FLOAT)")),
+      (DoubleType.typeName, Seq("cast(0 AS DOUBLE)", "cast(0 AS DOUBLE)", "cast(1 AS DOUBLE)")),
+      (DecimalType(4, 2).typeName, Seq("cast(0 AS DECIMAL(4, 2))", "cast(0 AS DECIMAL(4, 2))",
+        "cast(1 AS DECIMAL(4, 2))")),
+      (DecimalType(10, 2).typeName, Seq("cast(0 AS DECIMAL(10, 2))", "cast(0 AS DECIMAL(10, 2))",
+        "cast(1 AS DECIMAL(10, 2))")),
+      (DecimalType(20, 3).typeName, Seq("cast(0 AS DECIMAL(20, 3))", "cast(0 AS DECIMAL(20, 3))",
+        "cast(1 AS DECIMAL(20, 3))"))
+      //      DateType.typeName -> Seq("DATE'2025-01-01'", "DATE'2025-01-01'", "DATE'2025-01-02'"),
+      //      TimestampType.typeName -> Seq("TIMESTAMP'2025-01-01 00:00:00'",
+      //        "TIMESTAMP'2025-01-01 00:00:00'", "TIMESTAMP'2025-01-02 00:00:00'"),
+      //      TimestampNTZType.typeName -> Seq("TIMESTAMP_NTZ'2025-01-01 00:00:00'",
+      //        "TIMESTAMP_NTZ'2025-01-01 00:00:00'", "TIMESTAMP_NTZ'2025-01-02 00:00:00'")
     )
 
-    // for any two sequences of different types, the combine should fail
-    mixedTypeSeqs.foreach { seq1 =>
-      mixedTypeSeqs.foreach { seq2 =>
-        if (seq1 != seq2) {
-          // scalastyle:off
-          println(seq1.mkString(", "))
-          println(seq2.mkString(", "))
-          // scalastyle:on
-          setupMixedTypeAccumulation(seq1, seq2)
-          checkError(
-            exception = intercept[SparkUnsupportedOperationException] {
-              sql("SELECT approx_top_k_estimate(com) FROM combined;").collect()
-            },
-            condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED"
-          )
-        }
+    for (i <- 0 until mixedTypeSeqs.size - 1) {
+      for (j <- i + 1 until mixedTypeSeqs.size) {
+        val (type1, seq1) = mixedTypeSeqs(i)
+        val (type2, seq2) = mixedTypeSeqs(j)
+        setupMixedTypeAccumulation(seq1, seq2)
+        checkError(
+          exception = intercept[SparkUnsupportedOperationException] {
+            sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned;").collect()
+          },
+          condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
+          parameters = Map("type1" -> type1, "type2" -> type2)
+        )
       }
     }
-  }
-
-  test("SPARK-decimal: different type (decimal(10, 2) VS decimal(20, 3)), same size - fail") {
-    val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES CAST(0.0 AS DECIMAL(10, 2)), CAST(0.0 AS DECIMAL(10, 2)), " +
-      "CAST(1.0 AS DECIMAL(10, 2)), CAST(1.0 AS DECIMAL(10, 2)), " +
-      "CAST(2.0 AS DECIMAL(10, 2)), CAST(3.0 AS DECIMAL(10, 2)), " +
-      "CAST(4.0 AS DECIMAL(10, 2)), CAST(4.0 AS DECIMAL(10, 2)) AS tab(expr);")
-    acc1.createOrReplaceTempView("accumulation1")
-
-    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES CAST(0.0 AS DECIMAL(20, 3)), CAST(0.0 AS DECIMAL(20, 3)), " +
-      "CAST(1.0 AS DECIMAL(20, 3)), CAST(1.0 AS DECIMAL(20, 3)), " +
-      "CAST(2.0 AS DECIMAL(20, 3)), CAST(3.0 AS DECIMAL(20, 3)), " +
-      "CAST(4.0 AS DECIMAL(20, 3)), CAST(4.0 AS DECIMAL(20, 3)) AS tab(expr);")
-    acc2.createOrReplaceTempView("accumulation2")
-
-    val comb = sql("SELECT approx_top_k_combine(acc, 30) as com " +
-      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-    comb.createOrReplaceTempView("combined")
-
-    val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
-    checkError(
-      exception = intercept[SparkUnsupportedOperationException] {
-        est.collect()
-      },
-      condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED")
-  }
-
-  test("SPARK-dd: different type (decimal(10, 2) VS decimal(20, 3)), same size - fail") {
-    val ddouble = Seq("cast(0 AS DOUBLE)", "cast(0 AS DOUBLE)",
-      "cast(1 AS DOUBLE)", "cast(2 AS DOUBLE)")
-    val ddecimal = Seq("cast(0 AS DECIMAL(10, 2))", "cast(0 AS DECIMAL(10, 2))",
-      "cast(1 AS DECIMAL(10, 2))", "cast(2 AS DECIMAL(10, 2))")
-
-    setupMixedTypeAccumulation(ddouble, ddecimal)
-    sql("SELECT approx_top_k_estimate(com) FROM combined;").show(false)
   }
 }
 
