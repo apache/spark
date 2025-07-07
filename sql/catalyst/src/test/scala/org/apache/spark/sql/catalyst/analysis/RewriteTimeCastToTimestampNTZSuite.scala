@@ -18,12 +18,18 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, CurrentDate, Literal, MakeTimestampNTZ}
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.{TimestampNTZType, TimeType}
 
 class RewriteTimeCastToTimestampNTZSuite extends AnalysisTest {
 
   test("SPARK-52617: RewriteTimeCastToTimestampNTZ rewrites") {
+
+    val rules = Seq(RewriteTimeCastToTimestampNTZ)
+    val analyzer = new RuleExecutor[LogicalPlan] {
+      override val batches = Seq(Batch("RewriteTimeCastToTimestampNTZ", Once, rules: _*))
+    }
 
     // TIME: 15:30:00 => nanos = 15 * 3600 + 30 * 60 = 55800s => nanos
     val nanos = 55800L * 1_000_000_000L
@@ -36,7 +42,7 @@ class RewriteTimeCastToTimestampNTZSuite extends AnalysisTest {
         Alias(MakeTimestampNTZ(CurrentDate(Some("true")), timeLiteral), "ts")()),
       OneRowRelation())
 
-    val rewrittenPlan = RewriteTimeCastToTimestampNTZ(originalPlan)
+    val rewrittenPlan = analyzer.execute(originalPlan)
     comparePlans(rewrittenPlan, expectedPlan)
   }
 }
