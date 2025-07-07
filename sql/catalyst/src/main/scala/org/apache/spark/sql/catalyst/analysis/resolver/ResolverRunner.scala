@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, CleanupAliases}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, CleanupAliases, StripIsDuplicateMetadata}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -41,6 +41,7 @@ class ResolverRunner(
    */
   private val planRewriteRules: Seq[Rule[LogicalPlan]] = Seq(
     PruneMetadataColumns,
+    StripIsDuplicateMetadata,
     CleanupAliases
   )
 
