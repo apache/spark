@@ -209,7 +209,10 @@ class BloomFilterImplV2 extends BloomFilter implements Serializable {
       return false;
     }
 
-    return this.bitSize() == that.bitSize() && this.numHashFunctions == that.numHashFunctions;
+    return
+      this.bitSize() == that.bitSize()
+      && this.numHashFunctions == that.numHashFunctions
+      && this.seed == that.seed;
   }
 
   @Override
