@@ -3133,6 +3133,110 @@ class DataFrameAggregateSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-combine: different types - fail on UNION") {
+    val seq1 = Seq(0, 0, 0, 1, 1, 2, 2, 3)
+    val seq2 = Seq("(true)", "(true)", "(false)", "(false)")
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        setupMixedTypeAccumulation(seq1, seq2)
+      },
+      condition = "INCOMPATIBLE_COLUMN_TYPE",
+      parameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "first",
+        "dataType2" -> ("\"STRUCT<Sketch: BINARY NOT NULL, ItemTypeNull: INT, " +
+          "MaxItemsTracked: INT NOT NULL, TypeCode: BINARY NOT NULL>\""),
+        "operator" -> "UNION",
+        "hint" -> "",
+        "dataType1" -> ("\"STRUCT<Sketch: BINARY NOT NULL, ItemTypeNull: BOOLEAN, " +
+          "MaxItemsTracked: INT NOT NULL, TypeCode: BINARY NOT NULL>\"")
+      ),
+      queryContext = Array(
+        ExpectedContext(
+          "SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2", 0, 68))
+    )
+  }
+
+  test("SPARK-combine: different types Date vs Timestamp - fail") {
+    val (type1, seq1) = (DateType.typeName,
+      Seq("DATE'2025-01-01'", "DATE'2025-01-01'", "DATE'2025-01-02'"))
+    val (type2, seq2) = (TimestampType.typeName, Seq("TIMESTAMP'2025-01-01 00:00:00'",
+      "TIMESTAMP'2025-01-01 00:00:00'", "TIMESTAMP'2025-01-02 00:00:00'"))
+    setupMixedTypeAccumulation(seq1, seq2)
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned;").collect()
+      },
+      condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
+      parameters = Map("type1" -> type1, "type2" -> type2)
+    )
+  }
+
+  test("SPARK-combine: different types Timestamp vs TimestampNTZ - fail") {
+    val (type1, seq1) = (TimestampType.typeName,
+      Seq("TIMESTAMP'2025-01-01 00:00:00'", "TIMESTAMP'2025-01-01 00:00:00'",
+        "TIMESTAMP'2025-01-02 00:00:00'"))
+    val (type2, seq2) = (TimestampNTZType.typeName,
+      Seq("TIMESTAMP_NTZ'2025-01-01 00:00:00'", "TIMESTAMP_NTZ'2025-01-01 00:00:00'",
+        "TIMESTAMP_NTZ'2025-01-02 00:00:00'"))
+    setupMixedTypeAccumulation(seq1, seq2)
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned;").collect()
+      },
+      condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
+      parameters = Map("type1" -> type1, "type2" -> type2)
+    )
+  }
+
+  test("SPARK-combine: different types Int vs Date - fail on UNION") {
+    val seq1 = Seq(0, 0, 0, 1, 1, 2, 2, 3)
+    val seq2 = Seq("DATE'2025-01-01'", "DATE'2025-01-01'", "DATE'2025-01-02'")
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        setupMixedTypeAccumulation(seq1, seq2)
+      },
+      condition = "INCOMPATIBLE_COLUMN_TYPE",
+      parameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "first",
+        "dataType2" -> ("\"STRUCT<Sketch: BINARY NOT NULL, ItemTypeNull: INT, " +
+          "MaxItemsTracked: INT NOT NULL, TypeCode: BINARY NOT NULL>\""),
+        "operator" -> "UNION",
+        "hint" -> "",
+        "dataType1" -> ("\"STRUCT<Sketch: BINARY NOT NULL, ItemTypeNull: DATE, " +
+          "MaxItemsTracked: INT NOT NULL, TypeCode: BINARY NOT NULL>\"")
+      ),
+      queryContext = Array(
+        ExpectedContext(
+          "SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2", 0, 68))
+    )
+  }
+
+  test("SPARK-combine: different types Long vs Timestamp - fail on UNION") {
+    val seq1 = Seq("cast(0 AS LONG)", "cast(0 AS LONG)", "cast(1 AS LONG)")
+    val seq2 = Seq("TIMESTAMP'2025-01-01 00:00:00'", "TIMESTAMP'2025-01-01 00:00:00'")
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        setupMixedTypeAccumulation(seq1, seq2)
+      },
+      condition = "INCOMPATIBLE_COLUMN_TYPE",
+      parameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "first",
+        "dataType2" -> ("\"STRUCT<Sketch: BINARY NOT NULL, ItemTypeNull: BIGINT, " +
+          "MaxItemsTracked: INT NOT NULL, TypeCode: BINARY NOT NULL>\""),
+        "operator" -> "UNION",
+        "hint" -> "",
+        "dataType1" -> ("\"STRUCT<Sketch: BINARY NOT NULL, ItemTypeNull: TIMESTAMP, " +
+          "MaxItemsTracked: INT NOT NULL, TypeCode: BINARY NOT NULL>\"")
+      ),
+      queryContext = Array(
+        ExpectedContext(
+          "SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2", 0, 68))
+    )
+  }
 }
 
 case class B(c: Option[Double])
