@@ -1,5 +1,15 @@
 <?xml version="1.0"?>
 <catalog>
+   <book id="bk111">
+      <author>O'Brien, Tim</author>
+      <title>MSXML3: A Comprehensive Guide</title>
+      <genre>Computer</genre>
+      <price>36.95</price>
+      <publish_date>2000-12-01</publish_date>
+      <description>The Microsoft MSXML3 parser is covered in
+         detail, with attention to XML DOM interfaces, XSLT processing,
+         SAX and more.</description>
+   </book>
    <book id="Malformed attribute with " caracter ">
       <author>Kress, Peter</author>
       <title>Paradox Lost</title>
@@ -18,16 +28,6 @@
       <publish_date>2000-12-09</publish_date>
       <description>Microsoft's .NET initiative is explored in
       detail in this deep programmer's reference.</description>
-   </book>
-   <book id="bk111">
-      <author>O'Brien, Tim</author>
-      <title>MSXML3: A Comprehensive Guide</title>
-      <genre>Computer</genre>
-      <price>36.95</price>
-      <publish_date>2000-12-01</publish_date>
-      <description>The Microsoft MSXML3 parser is covered in
-      detail, with attention to XML DOM interfaces, XSLT processing,
-      SAX and more.</description>
    </book>
    <book id="bk112">
       <author>Galos, Mike</author>

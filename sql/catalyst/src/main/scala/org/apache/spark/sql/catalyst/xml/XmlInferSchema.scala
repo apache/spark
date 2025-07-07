@@ -114,8 +114,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
     // perform schema inference on each row and merge afterwards
     val mergedTypesFromPartitions = sampledRdd.mapPartitions { iter =>
-      val t = iter.reduceOption(compatibleType(caseSensitive, options.valueTag))
-      t.iterator
+      iter.reduceOption(compatibleType(caseSensitive, options.valueTag)).iterator
     }
 
     // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running
