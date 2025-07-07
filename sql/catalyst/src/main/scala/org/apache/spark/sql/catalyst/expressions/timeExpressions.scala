@@ -596,8 +596,8 @@ case class TimeAddInterval(time: Expression, interval: Expression)
       "timeAddInterval",
       Seq(time, Literal(timePrecision), interval, Literal(intervalEndField),
         Literal(targetPrecision)),
-      Seq(AnyTimeType, IntegerType, DayTimeIntervalType, ByteType, IntegerType)
-    )
+      Seq(AnyTimeType, IntegerType, DayTimeIntervalType, ByteType, IntegerType),
+      propagateNull = nullIntolerant)
   }
 
   override protected def withNewChildrenInternal(
