@@ -45,6 +45,7 @@ import java.nio.ByteBuffer;
 public abstract class BloomFilter {
 
   public enum Version {
+
     /**
      * {@code BloomFilter} binary format version 1. All values written in big-endian order:
      * <ul>
@@ -55,6 +56,20 @@ public abstract class BloomFilter {
      * </ul>
      */
     V1(1),
+
+    /**
+     * {@code BloomFilter} binary format version 2.
+     * Fixes the int32 truncation issue with V1 indexes, but by changing the bit pattern,
+     * it will become incompatible with V1 serializations.
+     * All values written in big-endian order:
+     * <ul>
+     *   <li>Version number, always 2 (32 bit)</li>
+     *   <li>Number of hash functions (32 bit)</li>
+     *   <li>Integer seed to initialize hash functions (32 bit) </li>
+     *   <li>Total number of words of the underlying bit array (32 bit)</li>
+     *   <li>The words/longs (numWords * 64 bit)</li>
+     * </ul>
+     */
     V2(2);
 
     private final int versionNumber;
