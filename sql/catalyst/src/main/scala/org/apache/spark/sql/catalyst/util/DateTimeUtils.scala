@@ -843,7 +843,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * @param interval A day-time interval in microseconds.
    * @param intervalEndField The rightmost field which the interval comprises of.
    *                         Valid values: 0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND).
-   * @targetPrecision The number of digits of the fraction part of the resulting time.
+   * @param targetPrecision The number of digits of the fraction part of the resulting time.
    * @return A time value in nanoseconds or throw an arithmetic overflow
    *         if the result out of valid time range [00:00, 24:00).
    */
@@ -853,7 +853,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
       interval: Long,
       intervalEndField: Byte,
       targetPrecision: Int): Long = {
-    val result = time + interval * NANOS_PER_MICROS
+    val result = MathUtils.addExact(time, MathUtils.multiplyExact(interval, NANOS_PER_MICROS))
     if (0 <= result && result < NANOS_PER_DAY) {
       truncateTimeToPrecision(result, targetPrecision)
     } else {

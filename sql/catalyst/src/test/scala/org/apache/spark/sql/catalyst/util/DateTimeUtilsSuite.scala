@@ -32,6 +32,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianMicros
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLConf
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -1280,6 +1282,16 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       condition = "DATETIME_OVERFLOW",
       parameters = Map("operation" ->
         "add INTERVAL '-00.000001' SECOND to the time value TIME '00:00:00'")
+    )
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        timeAddInterval(0, 0, Long.MaxValue, SECOND, 6)
+      },
+      condition = "ARITHMETIC_OVERFLOW",
+      parameters = Map(
+        "message" -> "long overflow",
+        "alternative" -> "",
+        "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY))
     )
   }
 }
