@@ -306,13 +306,6 @@
       <properties>
         <hive.deps.scope>provided</hive.deps.scope>
         <hive.llap.scope>provided</hive.llap.scope>
-        <hive.jackson.scope>provided</hive.jackson.scope>
-      </properties>
-    </profile>
-    <profile>
-      <id>hive-jackson-provided</id>
-      <properties>
-        <hive.jackson.scope>provided</hive.jackson.scope>
       </properties>
     </profile>
     <profile>

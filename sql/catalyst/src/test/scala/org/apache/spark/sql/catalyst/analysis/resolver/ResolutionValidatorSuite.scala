@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   GreaterThan,
   Literal,
   NamedExpression,
-  TimeAdd
+  TimestampAddInterval
 }
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.types.{
@@ -188,7 +188,7 @@ class ResolutionValidatorSuite extends SparkFunSuite with SQLConfHelper {
       Project(
         projectList = Seq(
           Alias(
-            child = TimeAdd(
+            child = TimestampAddInterval(
               start = Cast(
                 child = Literal("2024-10-01"),
                 dataType = TimestampType,
@@ -205,7 +205,7 @@ class ResolutionValidatorSuite extends SparkFunSuite with SQLConfHelper {
         ),
         child = LocalRelation(output = colInteger)
       ),
-      error = Some("TimezoneId is not set for TimeAdd")
+      error = Some("TimezoneId is not set for TimestampAddInterval")
     )
   }
 

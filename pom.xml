@@ -174,14 +174,13 @@
     <scala.version>2.13.16</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
-    <scala-maven-plugin.version>4.9.2</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.9.5</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
     <versions-maven-plugin.version>2.18.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
-    <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.19.0</fasterxml.jackson.version>
     <fasterxml.jackson.databind.version>2.19.0</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
@@ -219,13 +218,13 @@
     <netty.version>4.1.122.Final</netty.version>
     <netty-tcnative.version>2.0.72.Final</netty-tcnative.version>
     <icu4j.version>77.1</icu4j.version>
-    <junit-jupiter.version>5.12.2</junit-jupiter.version>
-    <junit-platform.version>1.12.2</junit-platform.version>
+    <junit-jupiter.version>5.13.1</junit-jupiter.version>
+    <junit-platform.version>1.13.1</junit-platform.version>
     <!--
       SPARK-50299: When updating `sbt-jupiter-interface.version`,
       also need to update the version in `SparkBuild.scala` and `plugins.sbt`.
     -->
-    <sbt-jupiter-interface.version>0.14.0</sbt-jupiter-interface.version>
+    <sbt-jupiter-interface.version>0.15.0</sbt-jupiter-interface.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py,
@@ -281,7 +280,6 @@
     <hive.deps.scope>compile</hive.deps.scope>
     <hive.storage.version>2.8.1</hive.storage.version>
     <hive.storage.scope>compile</hive.storage.scope>
-    <hive.jackson.scope>compile</hive.jackson.scope>
     <hive.common.scope>compile</hive.common.scope>
     <hive.llap.scope>test</hive.llap.scope>
     <hive.serde.scope>compile</hive.serde.scope>
@@ -310,7 +308,7 @@
     <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
 
     <!-- Version used in Profiler -->
-    <ap-loader.version>3.0-9</ap-loader.version>
+    <ap-loader.version>4.0-10</ap-loader.version>
 
     <CodeCacheSize>128m</CodeCacheSize>
     <!-- Needed for consistent times -->
@@ -764,7 +762,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>9.8.4</version>
+        <version>10.2.1</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -1622,19 +1620,6 @@
             <artifactId>logback-core</artifactId>
           </exclusion>
         </exclusions>
-      </dependency>
-      <!-- Hive 2.3 need this to init Hive's FunctionRegistry -->
-      <dependency>
-        <groupId>org.codehaus.jackson</groupId>
-        <artifactId>jackson-core-asl</artifactId>
-        <version>${codehaus.jackson.version}</version>
-        <scope>${hive.jackson.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.codehaus.jackson</groupId>
-        <artifactId>jackson-mapper-asl</artifactId>
-        <version>${codehaus.jackson.version}</version>
-        <scope>${hive.jackson.scope}</scope>
       </dependency>
       <dependency>
         <groupId>${hive.group}</groupId>
@@ -2685,7 +2670,7 @@
             <dependency>
               <groupId>org.codehaus.mojo</groupId>
               <artifactId>extra-enforcer-rules</artifactId>
-              <version>1.9.0</version>
+              <version>1.10.0</version>
             </dependency>
           </dependencies>
         </plugin>

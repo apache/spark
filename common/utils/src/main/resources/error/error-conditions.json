@@ -90,6 +90,30 @@
     ],
     "sqlState" : "42000"
   },
+  "APPROX_TOP_K_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT" : {
+    "message" : [
+      "The max items tracked `maxItemsTracked`(<maxItemsTracked>) of `approx_top_k` should be less than or equal to <limit>."
+    ],
+    "sqlState" : "22023"
+  },
+  "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K" : {
+    "message" : [
+      "The max items tracked `maxItemsTracked`(<maxItemsTracked>) of `approx_top_k` should be greater than or equal to `k`(<k>)."
+    ],
+    "sqlState" : "22023"
+  },
+  "APPROX_TOP_K_NON_POSITIVE_ARG" : {
+    "message" : [
+      "The value of <argName> in `approx_top_k` must be a positive integer, but got <argValue>."
+    ],
+    "sqlState" : "22023"
+  },
+  "APPROX_TOP_K_NULL_ARG" : {
+    "message" : [
+      "The value of <argName> in `approx_top_k` cannot be NULL."
+    ],
+    "sqlState" : "22004"
+  },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
@@ -851,6 +875,11 @@
         "message" : [
           "The fitted or loaded model size is about <modelSize> bytes.",
           "Please fit or load a model smaller than <modelMaxSize> bytes."
+        ]
+      },
+      "MODEL_SUMMARY_LOST" : {
+        "message" : [
+          "The model <objectName> summary is lost because the cached model is offloaded."
         ]
       },
       "UNSUPPORTED_EXCEPTION" : {
@@ -2714,6 +2743,34 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_FLOW_QUERY_TYPE" : {
+    "message" : [
+      "Flow <flowIdentifier> returns an invalid relation type."
+    ],
+    "subClass" : {
+      "BATCH_RELATION_FOR_STREAMING_TABLE" : {
+        "message" : [
+          "Streaming tables may only be defined by streaming relations, but the flow <flowIdentifier> attempts to write a batch relation to the streaming table <tableIdentifier>. Consider using the STREAM operator in Spark-SQL to convert the batch relation into a streaming relation, or populating the streaming table with an append once-flow instead."
+        ]
+      },
+      "STREAMING_RELATION_FOR_MATERIALIZED_VIEW" : {
+        "message" : [
+          "Materialized views may only be defined by a batch relation, but the flow <flowIdentifier> attempts to write a streaming relation to the materialized view <tableIdentifier>."
+        ]
+      },
+      "STREAMING_RELATION_FOR_ONCE_FLOW" : {
+        "message" : [
+          "<flowIdentifier> is an append once-flow that is defined by a streaming relation. Append once-flows may only be defined by or return a batch relation."
+        ]
+      },
+      "STREAMING_RELATION_FOR_PERSISTED_VIEW" : {
+        "message" : [
+          "Persisted views may only be defined by a batch relation, but the flow <flowIdentifier> attempts to write a streaming relation to the persisted view <viewIdentifier>."
+        ]
+      }
+    },
+    "sqlState" : "42000"
+  },
   "INVALID_FORMAT" : {
     "message" : [
       "The format is invalid: <format>."
@@ -3424,7 +3481,7 @@
     "subClass" : {
       "PLACE" : {
         "message" : [
-          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins and in aggregates"
+          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins, in aggregates, window functions or sorts"
         ]
       }
     },
@@ -8286,11 +8343,6 @@
   "_LEGACY_ERROR_TEMP_2154" : {
     "message" : [
       "Failed to get outer pointer for <innerCls>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2155" : {
-    "message" : [
-      "<userClass> is not annotated with SQLUserDefinedType nor registered with UDTRegistration.}"
     ]
   },
   "_LEGACY_ERROR_TEMP_2163" : {

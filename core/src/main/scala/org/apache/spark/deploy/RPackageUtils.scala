@@ -153,7 +153,7 @@ private[deploy] object RPackageUtils extends Logging {
           if (verbose) {
             print(log"Creating directory: ${MDC(PATH, dir)}", printStream)
           }
-          dir.mkdirs
+          Utils.createDirectory(dir)
         } else {
           val inStream = jar.getInputStream(entry)
           val outPath = new File(tempDir, entryPath)

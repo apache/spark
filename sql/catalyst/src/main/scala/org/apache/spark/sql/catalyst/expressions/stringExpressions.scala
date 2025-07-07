@@ -2354,7 +2354,7 @@ case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
     If(
       LessThanOrEqual(len, Literal(0)),
       Literal(UTF8String.EMPTY_UTF8, str.dataType),
-      new Substring(str, UnaryMinus(len))
+      new Substring(str, UnaryMinus(len, failOnError = false))
     )
   )
 

@@ -765,7 +765,6 @@ class FrameReindexingMixin:
         self.assertRaises(AssertionError, lambda: psdf.swapaxes(0, 1, copy=False))
         self.assertRaises(ValueError, lambda: psdf.swapaxes(0, -1))
 
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_isin(self):
         pdf = pd.DataFrame(
             {

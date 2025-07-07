@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.annotation.tailrec
+
 import org.apache.spark.sql.types._
 
 /**
@@ -192,6 +194,7 @@ final class MutableAny extends MutableValue {
  */
 final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGenericInternalRow {
 
+  @tailrec
   private[this] def dataTypeToMutableValue(dataType: DataType): MutableValue = dataType match {
     // We use INT for DATE and YearMonthIntervalType internally
     case IntegerType | DateType | _: YearMonthIntervalType => new MutableInt
@@ -203,6 +206,7 @@ final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGen
     case BooleanType => new MutableBoolean
     case ByteType => new MutableByte
     case ShortType => new MutableShort
+    case udt: UserDefinedType[_] => dataTypeToMutableValue(udt.sqlType)
     case _ => new MutableAny
   }
 

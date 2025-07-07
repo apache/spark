@@ -1695,8 +1695,18 @@ object SQLConf {
     buildConf("spark.sql.dataSource.skipAssertOnPredicatePushdown")
       .internal()
       .doc("Enable skipping assert when expression in not translated to predicate.")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(!Utils.isTesting)
+
+  val DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE =
+    buildConf("spark.sql.dataSource.alwaysCreateV2Predicate")
+      .internal()
+      .doc("When true, the v2 push-down framework always wraps the expression that returns " +
+        "boolean type with a v2 Predicate so that it can be pushed down.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
 
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
@@ -3356,6 +3366,13 @@ object SQLConf {
       .intConf
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
+  val WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD =
+    buildConf("spark.sql.windowExec.buffer.spill.size.threshold")
+      .internal()
+      .doc("Threshold for size of rows to be spilled by window operator")
+      .version("4.1.0")
+      .fallbackConf(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD)
+
   val WINDOW_GROUP_LIMIT_THRESHOLD =
     buildConf("spark.sql.optimizer.windowGroupLimitThreshold")
       .internal()
@@ -3376,6 +3393,15 @@ object SQLConf {
       .version("3.2.0")
       .intConf
       .createWithDefault(4096)
+
+  val SESSION_WINDOW_BUFFER_SPILL_SIZE_THRESHOLD =
+    buildConf("spark.sql.sessionWindow.buffer.spill.size.threshold")
+      .internal()
+      .doc("Threshold for size of rows to be spilled by window operator. Note that " +
+        "the buffer is used only for the query Spark cannot apply aggregations on determining " +
+        "session window.")
+      .version("4.1.0")
+      .fallbackConf(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD)
 
   val SESSION_WINDOW_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.sessionWindow.buffer.spill.threshold")
@@ -3420,6 +3446,13 @@ object SQLConf {
       .intConf
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
+  val SORT_MERGE_JOIN_EXEC_BUFFER_SIZE_SPILL_THRESHOLD =
+    buildConf("spark.sql.sortMergeJoinExec.buffer.spill.size.threshold")
+      .internal()
+      .doc("Threshold for size of rows to be spilled by sort merge join operator")
+      .version("4.1.0")
+      .fallbackConf(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD)
+
   val CARTESIAN_PRODUCT_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.cartesianProductExec.buffer.in.memory.threshold")
       .internal()
@@ -3436,6 +3469,13 @@ object SQLConf {
       .version("2.2.0")
       .intConf
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
+
+  val CARTESIAN_PRODUCT_EXEC_BUFFER_SIZE_SPILL_THRESHOLD =
+    buildConf("spark.sql.cartesianProductExec.buffer.spill.size.threshold")
+      .internal()
+      .doc("Threshold for size of rows to be spilled by cartesian product operator")
+      .version("4.1.0")
+      .fallbackConf(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD)
 
   val SUPPORT_QUOTED_REGEX_COLUMN_NAME = buildConf("spark.sql.parser.quotedRegexColumnNames")
     .doc("When true, quoted Identifiers (using backticks) in SELECT statement are interpreted" +
@@ -3549,6 +3589,14 @@ object SQLConf {
       .version("4.1.0")
       .fallbackConf(Python.PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT)
 
+  val PYTHON_UDF_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS =
+    buildConf("spark.sql.execution.pyspark.udf.tracebackDumpIntervalSeconds")
+      .doc(
+        s"Same as ${Python.PYTHON_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS.key} " +
+          "for Python execution with DataFrame and SQL. It can change during runtime.")
+      .version("4.1.0")
+      .fallbackConf(Python.PYTHON_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
+
   val PYSPARK_PLOT_MAX_ROWS =
     buildConf("spark.sql.pyspark.plotting.max_rows")
       .doc("The visual limit on plots. If set to 1000 for top-n-based plots (pie, bar, barh), " +
@@ -3648,7 +3696,7 @@ object SQLConf {
         errorMsg = "The value of " +
           "spark.sql.execution.arrow.maxBytesPerBatch should be greater " +
           "than zero and less than INT_MAX.")
-      .createWithDefaultString("256MB")
+      .createWithDefaultString("64MB")
 
   val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.transformWithStateInPySpark.maxStateRecordsPerBatch")
@@ -4077,6 +4125,16 @@ object SQLConf {
     .version("3.4.0")
     .booleanConf
     .createWithDefault(false)
+
+  val LEGACY_CONSECUTIVE_STRING_LITERALS =
+    buildConf("spark.sql.legacy.consecutiveStringLiterals.enabled")
+      .internal()
+      .doc("When true, consecutive string literals separated by double quotes (e.g. 'a''b') will " +
+        "be parsed as concatenated strings. This preserves pre-Spark 4.0 behavior where" +
+        "'a''b' would be parsed as 'ab' instead of 'a'b'.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val ANSI_RELATION_PRECEDENCE = buildConf("spark.sql.ansi.relationPrecedence")
     .doc(s"When true and '${ANSI_ENABLED.key}' is true, JOIN takes precedence over comma when " +
@@ -5607,7 +5665,7 @@ object SQLConf {
       .internal()
       .doc("When true, exclude the references from the subquery expressions (in, exists, etc.) " +
         s"while removing redundant aliases.")
-      .version("4.0.0")
+      .version("3.5.1")
       .booleanConf
       .createWithDefault(true)
 
@@ -5948,6 +6006,28 @@ object SQLConf {
       .intConf
       .createWithDefault(2)
   }
+
+  val HADOOP_LINE_RECORD_READER_ENABLED =
+    buildConf("spark.sql.execution.datasources.hadoopLineRecordReader.enabled")
+      .internal()
+      .doc("Enable the imported Hadoop's LineRecordReader. This was imported and renamed to " +
+        "HadoopLineRecordReader to add support for compression option and other " +
+        "future codecs like ZSTD, etc. Setting the conf to false will use the LineRecordReader " +
+        "class from the hadoop jar instead of the imported one.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENFORCE_TYPE_COERCION_BEFORE_UNION_DEDUPLICATION =
+    buildConf("spark.sql.enforceTypeCoercionBeforeUnionDeduplication.enabled")
+      .internal()
+      .doc(
+        "When set to true, we enforce type coercion to run before deduplication of UNION " +
+        "children outputs. Otherwise, order is relative to rule ordering."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -6649,11 +6729,16 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
 
+  def windowExecBufferSpillSizeThreshold: Long = getConf(WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD)
+
   def windowGroupLimitThreshold: Int = getConf(WINDOW_GROUP_LIMIT_THRESHOLD)
 
   def sessionWindowBufferInMemoryThreshold: Int = getConf(SESSION_WINDOW_BUFFER_IN_MEMORY_THRESHOLD)
 
   def sessionWindowBufferSpillThreshold: Int = getConf(SESSION_WINDOW_BUFFER_SPILL_THRESHOLD)
+
+  def sessionWindowBufferSpillSizeThreshold: Long =
+    getConf(SESSION_WINDOW_BUFFER_SPILL_SIZE_THRESHOLD)
 
   def sortMergeJoinExecBufferInMemoryThreshold: Int =
     getConf(SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
@@ -6661,11 +6746,17 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def sortMergeJoinExecBufferSpillThreshold: Int =
     getConf(SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD)
 
+  def sortMergeJoinExecBufferSpillSizeThreshold: Long =
+    getConf(SORT_MERGE_JOIN_EXEC_BUFFER_SIZE_SPILL_THRESHOLD)
+
   def cartesianProductExecBufferInMemoryThreshold: Int =
     getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
 
   def cartesianProductExecBufferSpillThreshold: Int =
     getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_SPILL_THRESHOLD)
+
+  def cartesianProductExecBufferSizeSpillThreshold: Long =
+    getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_SIZE_SPILL_THRESHOLD)
 
   def codegenSplitAggregateFunc: Boolean = getConf(SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC)
 
@@ -6708,6 +6799,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonUDFWorkerIdleTimeoutSeconds: Long = getConf(PYTHON_UDF_WORKER_IDLE_TIMEOUT_SECONDS)
 
   def pythonUDFWorkerKillOnIdleTimeout: Boolean = getConf(PYTHON_UDF_WORKER_KILL_ON_IDLE_TIMEOUT)
+
+  def pythonUDFWorkerTracebackDumpIntervalSeconds: Long =
+    getConf(PYTHON_UDF_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
 
   def pythonUDFArrowConcurrencyLevel: Option[Int] = getConf(PYTHON_UDF_ARROW_CONCURRENCY_LEVEL)
 
@@ -7020,6 +7114,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   }
 
   def maxFlowRetryAttempts: Int = getConf(SQLConf.PIPELINES_MAX_FLOW_RETRY_ATTEMPTS)
+
+  def hadoopLineRecordReaderEnabled: Boolean = getConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

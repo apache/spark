@@ -3534,6 +3534,38 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithChangelogCheckpointingEnabled("SPARK-52553 - v1 changelog with invalid version number" +
+    " does not cause NumberFormatException") {
+    withTempDir { dir =>
+      withDB(dir.getCanonicalPath) { db =>
+        // In v1 changelog, the first key size would be written first in the file.
+        // We want the first few bytes in the changelog file to represent the UTF-8 string "v)"
+        // Because it has a prefix v, the changelog factory would try to parse ) as the version.
+        val dfsChangelogFileMethod = PrivateMethod[Path](Symbol("dfsChangelogFile"))
+        val changelogFilePath = db.fileManager invokePrivate dfsChangelogFileMethod(1L, None)
+
+        val fileManagerMethod = PrivateMethod[CheckpointFileManager](Symbol("fm"))
+        val fm = db.fileManager invokePrivate fileManagerMethod()
+
+        val codecMethod = PrivateMethod[CompressionCodec](Symbol("codec"))
+        val codec = db.fileManager invokePrivate codecMethod()
+
+        // Write a changelog file (1.changelog) with the desired content
+        val output = new DataOutputStream(codec.compressedOutputStream(
+          fm.createAtomic(changelogFilePath, overwriteIfPossible = true)))
+        // Write the string "v)"
+        output.writeUTF("v)")
+        output.close()
+
+        // Now try to read the changelog file using changelog reader
+        // It shouldn't throw NumberFormatException
+        val changelogReader = db.fileManager.getChangelogReader(1)
+        assert(changelogReader.version === 1)
+        changelogReader.closeIfNeeded()
+      }
+    }
+  }
+
   private def assertAcquiredThreadIsCurrentThread(db: RocksDB): Unit = {
     val threadInfo = db.getAcquiredThreadInfo()
     assert(threadInfo != None,

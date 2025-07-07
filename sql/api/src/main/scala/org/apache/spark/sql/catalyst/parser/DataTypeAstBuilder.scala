@@ -70,7 +70,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    */
   override def visitTimeDataType(ctx: TimeDataTypeContext): DataType = withOrigin(ctx) {
     val precision = if (ctx.precision == null) {
-      TimeType.MICROS_PRECISION
+      TimeType.DEFAULT_PRECISION
     } else {
       ctx.precision.getText.toInt
     }
