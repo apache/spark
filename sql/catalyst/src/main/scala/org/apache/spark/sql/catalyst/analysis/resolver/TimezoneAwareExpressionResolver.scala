@@ -17,13 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.{
-  Cast,
-  DefaultStringProducingExpression,
-  Expression,
-  TimeZoneAwareExpression
-}
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.catalyst.expressions.{Cast, CurrentDate, DefaultStringProducingExpression, Expression, MakeTimestampNTZ, TimeZoneAwareExpression}
+import org.apache.spark.sql.types.{StringType, TimestampNTZType, TimeType}
 
 /**
  * Resolves [[TimeZoneAwareExpressions]] by applying the session's local timezone.
@@ -55,19 +50,25 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
     val expressionWithResolvedChildren =
       withResolvedChildren(unresolvedTimezoneExpression, expressionResolver.resolve _)
 
-    val expressionWithResolvedCast =
-      RewriteTimeCastToTimestampNTZ.rewrite(expressionWithResolvedChildren)
-
     val expressionWithResolvedChildrenAndTimeZone = TimezoneAwareExpressionResolver.resolveTimezone(
-      expressionWithResolvedCast,
+      expressionWithResolvedChildren,
       traversals.current.sessionLocalTimeZone
     )
-    coerceExpressionTypes(
+
+    val coercedExpr = coerceExpressionTypes(
       expression = expressionWithResolvedChildrenAndTimeZone,
       expressionTreeTraversal = traversals.current
     ) match {
       case cast: Cast if traversals.current.defaultCollation.isDefined =>
         tryCollapseCast(cast, traversals.current.defaultCollation.get)
+      case other =>
+        other
+    }
+
+    coercedExpr match {
+      case c @ Cast(child, TimestampNTZType, _, _)
+        if child.resolved && child.dataType.isInstanceOf[TimeType] =>
+        MakeTimestampNTZ(CurrentDate(), child)
       case other =>
         other
     }

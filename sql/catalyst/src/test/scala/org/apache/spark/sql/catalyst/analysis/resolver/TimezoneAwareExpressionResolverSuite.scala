@@ -21,15 +21,10 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.FunctionResolution
-import org.apache.spark.sql.catalyst.expressions.{
-  AttributeReference,
-  Cast,
-  Expression,
-  TimeZoneAwareExpression
-}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, CurrentDate, Expression, Literal, MakeTimestampNTZ, TimeZoneAwareExpression}
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{IntegerType, StringType, TimestampNTZType, TimeType}
 
 class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
 
@@ -71,5 +66,25 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
     assert(resolvedExpression.children.head == resolvedChild)
     assert(resolvedExpression.timeZoneId.nonEmpty)
     assert(resolvedExpression.getTagValue(Cast.USER_SPECIFIED_CAST).nonEmpty)
+  }
+
+  test("SPARK-52617: rewrite TIME -> TIMESTAMP_NTZ cast to MakeTimestampNTZ") {
+    // TIME: 15:30:00 -> seconds = 15*3600 + 30*60 = 55800
+    val nanos = 55800L * 1_000_000_000L
+    val timeLiteral = Literal(nanos, TimeType(6))
+
+    val castExpr = Cast(timeLiteral, TimestampNTZType)
+    val rewrittenExpr = RewriteTimeCastToTimestampNTZ.rewrite(castExpr)
+
+    val expectedExpr = MakeTimestampNTZ(CurrentDate(), timeLiteral)
+
+    assert(
+      rewrittenExpr.semanticEquals(expectedExpr),
+      s"""
+         |Expected:
+         |  $expectedExpr
+         |But got:
+         |  $rewrittenExpr
+         |""".stripMargin)
   }
 }
