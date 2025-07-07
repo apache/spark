@@ -38,8 +38,7 @@ class RewriteTimeCastToTimestampNTZSuite extends AnalysisTest {
     val originalPlan =
       Project(Seq(Alias(Cast(timeLiteral, TimestampNTZType), "ts")()), OneRowRelation())
     val expectedPlan = Project(
-      Seq(
-        Alias(MakeTimestampNTZ(CurrentDate(Some("true")), timeLiteral), "ts")()),
+      Seq(Alias(MakeTimestampNTZ(CurrentDate(Some("true")), timeLiteral), "ts")()),
       OneRowRelation())
 
     val rewrittenPlan = analyzer.execute(originalPlan)
