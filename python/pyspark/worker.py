@@ -212,8 +212,10 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_co
 
 def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf, input_types=None):
     import pyarrow as pa
+    from pyspark.sql.types import VariantType, VariantVal  # type: ignore
 
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
+
     zero_arg_exec = False
     if len(args_kwargs_offsets) == 0:
         args_kwargs_offsets = (0,)
@@ -229,7 +231,7 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
     elif type(return_type) == BinaryType:
         result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
 
-    # Get input types for UDT conversion    
+    # input conversion
     def convert_input_value(value, input_type):
         if value is None or input_type is None:
             return value
@@ -277,9 +279,7 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
                 return value
 
         if isinstance(input_type, ArrayType):
-            if isinstance(value, dict):
-                return value
-            if isinstance(value, Row):
+            if isinstance(value, (dict, Row)):
                 return value
             if not isinstance(value, (list, tuple)):
                 value = [value]
@@ -303,22 +303,20 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
             else:
                 return value
 
-            result = {
+            return {
                 convert_input_value(k, input_type.keyType): convert_input_value(v, input_type.valueType)
                 for k, v in items_iter
             }
-            return result
 
         return value
 
-    # variant and nested elements follow internal representation expected by Arrow serializer.
-    from pyspark.sql.types import VariantType, VariantVal  # type: ignore
-
+    # output conversion
     def convert_output_value(value, data_type):
         if value is None or data_type is None:
             return value
+
         if isinstance(value, str):
-            # Implicitly cast string literals to appropriate primitive numeric types
+            # Implicit cast from string to numeric
             try:
                 if isinstance(data_type, (ByteType, ShortType, IntegerType, LongType)):
                     value = int(value)
@@ -335,11 +333,10 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
 
         if isinstance(data_type, StructType):
             if isinstance(value, dict):
-                ordered = {
+                return {
                     field.name: convert_output_value(value.get(field.name), field.dataType)
                     for field in data_type
                 }
-                return ordered
             elif isinstance(value, Row):
                 conv_vals = [convert_output_value(v, f.dataType) for v, f in zip(value, data_type)]
                 return {f.name: v for f, v in zip(data_type, conv_vals)}
@@ -349,8 +346,7 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
         if isinstance(data_type, ArrayType):
             if isinstance(value, (list, tuple)):
                 return [convert_output_value(v, data_type.elementType) for v in value]
-            else:
-                return value
+            return value
 
         if isinstance(data_type, MapType):
             if isinstance(value, dict):
@@ -358,14 +354,13 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
                     convert_output_value(k, data_type.keyType): convert_output_value(v, data_type.valueType)
                     for k, v in value.items()
                 }
-            else:
-                return value
+            return value
 
         return value
 
     if zero_arg_exec:
         def get_args(*args: pa.RecordBatch):
-            if len(args) > 0:
+            if args:
                 if hasattr(args[0], "num_rows"):
                     batch_size = args[0].num_rows
                 else:
@@ -379,84 +374,88 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
                 arg.combine_chunks() if isinstance(arg, pa.ChunkedArray) else arg
                 for arg in args
             ]
-            
+
             def get_python_value(array, index):
                 value = array[index]
 
                 if hasattr(value, 'item') and hasattr(value, 'size') and value.size == 1:
-                    # Single-element numpy array
+                    # Handle single-element NumPy arrays
                     return value.item()
                 elif hasattr(value, 'tolist') and hasattr(value, 'dtype'):
+                    # Other NumPy arrays
                     result = value.tolist()
-                    
+
                     def convert_nested_numpy_arrays(obj):
                         if hasattr(obj, 'tolist') and hasattr(obj, 'dtype'):
                             return obj.tolist()
-                        
                         try:
                             import numpy as np
                             if isinstance(obj, np.ndarray):
                                 return obj.tolist()
                         except ImportError:
                             pass
-                        
                         if isinstance(obj, list):
                             return [convert_nested_numpy_arrays(item) for item in obj]
                         elif isinstance(obj, tuple):
                             return tuple(convert_nested_numpy_arrays(item) for item in obj)
                         else:
                             return obj
-                    
+
                     return convert_nested_numpy_arrays(result)
                 elif hasattr(value, "as_py"):
+                    # Handle Arrow scalars
                     python_value = value.as_py()
-
                     from pyspark.sql import Row as _RowCls
 
-                    def _convert(obj):
+                    def convert_dicts_to_rows(obj):
                         if isinstance(obj, dict):
-                            return _RowCls(**{k: _convert(v) for k, v in obj.items()})
+                            return _RowCls(**{k: convert_dicts_to_rows(v) for k, v in obj.items()})
                         elif isinstance(obj, list):
-                            return [_convert(v) for v in obj]
+                            return [convert_dicts_to_rows(v) for v in obj]
                         elif isinstance(obj, tuple):
-                            return tuple(_convert(v) for v in obj)
+                            return tuple(convert_dicts_to_rows(v) for v in obj)
                         else:
                             return obj
 
-                    converted = _convert(python_value)
-                    return converted
+                    return convert_dicts_to_rows(python_value)
                 else:
+                    # Handle PySpark Rows
                     from pyspark.sql import Row as _RowCls
                     if isinstance(value, _RowCls):
-                        def _convert_nested(obj):
+                        def convert_nested(obj):
                             if isinstance(obj, dict):
-                                return _RowCls(**{k: _convert_nested(v) for k, v in obj.items()})
+                                return _RowCls(**{k: convert_nested(v) for k, v in obj.items()})
                             elif isinstance(obj, list):
-                                return [_convert_nested(v) for v in obj]
+                                return [convert_nested(v) for v in obj]
                             elif isinstance(obj, tuple):
-                                return tuple(_convert_nested(v) for v in obj)
+                                return tuple(convert_nested(v) for v in obj)
                             else:
                                 return obj
-                        new_vals = [_convert_nested(v) for v in value]
+
+                        new_vals = [convert_nested(v) for v in value]
                         RowCls = _RowCls(*value.__fields__)
                         return RowCls(*new_vals)
+
                     return value
-            
+
+            # If provided, convert input types
             if input_types is not None:
                 converted_args = []
-                for i in range(len(arrays[0]) if arrays else 0):
-                    row_values = []
+                num_rows = len(arrays[0]) if arrays else 0
+                for i in range(num_rows):
+                    row = []
                     for j, array in enumerate(arrays):
                         py_value = get_python_value(array, i)
-                        converted_value = convert_input_value(py_value, input_types[j] if j < len(input_types) else None)
-                        row_values.append(converted_value)
-                    converted_args.append(tuple(row_values))
+                        input_type = input_types[j] if j < len(input_types) else None
+                        row.append(convert_input_value(py_value, input_type))
+                    converted_args.append(tuple(row))
                 return converted_args
             else:
                 raw_args = []
-                for i in range(len(arrays[0]) if arrays else 0):
-                    row_values = tuple(get_python_value(array, i) for array in arrays)
-                    raw_args.append(row_values)
+                num_rows = len(arrays[0]) if arrays else 0
+                for i in range(num_rows):
+                    row = tuple(get_python_value(array, i) for array in arrays)
+                    raw_args.append(row)
                 return raw_args
 
     @fail_on_stopiteration
