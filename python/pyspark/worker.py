@@ -77,6 +77,7 @@ from pyspark.sql.types import (
     StructType,
     _create_row,
     _parse_datatype_json_string,
+    ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType
 )
 from pyspark.util import fail_on_stopiteration, handle_worker_exception
 from pyspark import shuffle
@@ -246,6 +247,17 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
                 value_to_pass = tuple(value.tolist())
             else:
                 value_to_pass = value
+
+            # Convert datetime object to int
+            if hasattr(value_to_pass, 'timetuple'):
+                import calendar
+                dt = value_to_pass
+                value_to_pass = int(calendar.timegm(dt.timetuple()) * 1000000 + dt.microsecond)
+
+            # Convert timedelta object to int
+            if hasattr(value_to_pass, 'total_seconds'):
+                value_to_pass = int(value_to_pass.total_seconds() * 1000000)
+
             return input_type.fromInternal(value_to_pass)
 
         if isinstance(input_type, StructType):
@@ -299,12 +311,21 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
 
         return value
 
-    # ensure variant and nested elements follow internal representation expected by Arrow serializer.
+    # variant and nested elements follow internal representation expected by Arrow serializer.
     from pyspark.sql.types import VariantType, VariantVal  # type: ignore
 
     def convert_output_value(value, data_type):
         if value is None or data_type is None:
             return value
+        if isinstance(value, str):
+            # Implicitly cast string literals to appropriate primitive numeric types
+            try:
+                if isinstance(data_type, (ByteType, ShortType, IntegerType, LongType)):
+                    value = int(value)
+                elif isinstance(data_type, (FloatType, DoubleType)):
+                    value = float(value)
+            except (ValueError, TypeError):
+                pass
 
         if hasattr(data_type, "toInternal") and not isinstance(data_type, (StructType, ArrayType, MapType)):
             try:
@@ -2614,7 +2635,22 @@ def read_udfs(pickleSer, infile, eval_type):
         def mapper(a):
             if hasattr(a, 'num_columns') and a.num_columns == 0:
                 return None
-            result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
+
+            result = []
+            for arg_offsets, f in udfs:
+                # handle zero-arg UDFs
+                is_zero_arg = (
+                    len(arg_offsets) == 1
+                    and arg_offsets[0] == 0
+                    and (not hasattr(a, "__len__") or len(a) == 0)
+                )
+
+                if is_zero_arg:
+                    result.append(f())
+                else:
+                    result.append(f(*[a[o] for o in arg_offsets]))
+
+            result = tuple(result)
             # In the special case of a single UDF this will return a single result rather
             # than a tuple of results; this is the format that the JVM side expects.
             if len(result) == 1:
