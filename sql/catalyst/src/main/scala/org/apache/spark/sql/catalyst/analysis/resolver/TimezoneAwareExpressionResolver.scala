@@ -19,10 +19,11 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.expressions.{
   Cast,
+  CurrentDate,
   DefaultStringProducingExpression,
   Expression,
-  TimeZoneAwareExpression
-}
+  MakeTimestampNTZ,
+  TimeZoneAwareExpression}
 import org.apache.spark.sql.types.{StringType, TimestampNTZType, TimeType}
 
 /**
