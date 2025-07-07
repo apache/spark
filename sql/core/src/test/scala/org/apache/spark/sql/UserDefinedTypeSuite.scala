@@ -22,7 +22,7 @@ import java.util.Arrays
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.{Cast, CodegenObjectFactoryMode, ExpressionEvalHelper, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, CodegenObjectFactoryMode, ExpressionEvalHelper, Literal, SpecificInternalRow}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -311,5 +311,12 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
         }
       }
     }
+  }
+
+  test("SPARK-52666: Map UDT to correct MutableValue in SpecificInternalRow") {
+    val udt = new YearUDT()
+    val row = new SpecificInternalRow(Seq(udt))
+    row.setInt(0, udt.serialize(Year.of(2018)))
+    assert(row.getInt(0) == 2018)
   }
 }

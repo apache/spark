@@ -1179,13 +1179,13 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     val secAndMicros = Decimal(sec + (micros / MICROS_PER_SECOND.toFloat), 16, 6)
 
     // Valid case
-    val microSecsTime = timeToMicros(hour, min, secAndMicros)
-    assert(microSecsTime === localTime(hour.toByte, min.toByte, sec.toByte, micros))
+    val nanoSecsTime = makeTime(hour, min, secAndMicros)
+    assert(nanoSecsTime === localTime(hour.toByte, min.toByte, sec.toByte, micros))
 
     // Invalid hour
     checkError(
       exception = intercept[SparkDateTimeException] {
-        timeToMicros(-1, min, secAndMicros)
+        makeTime(-1, min, secAndMicros)
       },
       condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
       parameters = Map("rangeMessage" -> "Invalid value for HourOfDay (valid values 0 - 23): -1"))
@@ -1193,7 +1193,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     // Invalid minute
     checkError(
       exception = intercept[SparkDateTimeException] {
-        timeToMicros(hour, -1, secAndMicros)
+        makeTime(hour, -1, secAndMicros)
       },
       condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
       parameters = Map("rangeMessage" ->
@@ -1209,7 +1209,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     ).foreach { invalidSecond =>
       checkError(
         exception = intercept[SparkDateTimeException] {
-          timeToMicros(hour, min, Decimal(invalidSecond, 16, 6))
+          makeTime(hour, min, Decimal(invalidSecond, 16, 6))
         },
         condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
         parameters = Map("rangeMessage" ->

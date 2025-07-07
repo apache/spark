@@ -134,6 +134,8 @@ object Cast extends QueryErrorsBase {
     // to convert data of these types to Variant Objects.
     case (_, VariantType) => variant.VariantGet.checkDataType(from, allowStructsAndMaps = false)
 
+    case (_: TimeType, _: TimeType) => true
+
     // non-null variants can generate nulls even in ANSI mode
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canAnsiCast(fromType, toType) && resolvableNullability(fn || (fromType == VariantType), tn)
@@ -250,6 +252,8 @@ object Cast extends QueryErrorsBase {
     // lossless equivalents for these types. The `to_variant_object` expression can be used instead
     // to convert data of these types to Variant Objects.
     case (_, VariantType) => variant.VariantGet.checkDataType(from, allowStructsAndMaps = false)
+
+    case (_: TimeType, _: TimeType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canCast(fromType, toType) &&
@@ -733,13 +737,15 @@ case class Cast(
       buildCast[Long](_, t => microsToDays(t, ZoneOffset.UTC))
   }
 
-  private[this] def castToTime(from: DataType): Any => Any = from match {
+  private[this] def castToTime(from: DataType, to: TimeType): Any => Any = from match {
     case _: StringType =>
       if (ansiEnabled) {
         buildCast[UTF8String](_, s => DateTimeUtils.stringToTimeAnsi(s, getContextOrNull()))
       } else {
         buildCast[UTF8String](_, s => DateTimeUtils.stringToTime(s).orNull)
       }
+    case _: TimeType =>
+      buildCast[Long](_, nanos => DateTimeUtils.truncateTimeToPrecision(nanos, to.precision))
   }
 
   // IntervalConverter
@@ -1149,7 +1155,7 @@ case class Cast(
         case s: StringType => castToString(from, s.constraint)
         case BinaryType => castToBinary(from)
         case DateType => castToDate(from)
-        case _: TimeType => castToTime(from)
+        case it: TimeType => castToTime(from, it)
         case decimal: DecimalType => castToDecimal(from, decimal)
         case TimestampType => castToTimestamp(from)
         case TimestampNTZType => castToTimestampNTZ(from)
@@ -1257,7 +1263,7 @@ case class Cast(
       (c, evPrim, _) => castToStringCode(from, ctx, s.constraint).apply(c, evPrim)
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)
-    case _: TimeType => castToTimeCode(from, ctx)
+    case it: TimeType => castToTimeCode(from, it, ctx)
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
     case TimestampType => castToTimestampCode(from, ctx)
     case TimestampNTZType => castToTimestampNTZCode(from, ctx)
@@ -1354,6 +1360,7 @@ case class Cast(
 
   private[this] def castToTimeCode(
       from: DataType,
+      to: TimeType,
       ctx: CodegenContext): CastFunction = {
     from match {
       case _: StringType =>
@@ -1374,7 +1381,11 @@ case class Cast(
               }
             """
           }
-
+      case _: TimeType =>
+        (nanos, evPrim, _) =>
+          code"""
+            $evPrim = $dateTimeUtilsCls.truncateTimeToPrecision($nanos, ${to.precision});
+          """
       case _ =>
         (_, _, evNull) => code"$evNull = true;"
     }
