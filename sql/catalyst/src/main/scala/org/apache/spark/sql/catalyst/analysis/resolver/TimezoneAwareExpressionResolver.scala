@@ -17,12 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.{
-  Cast,
-  DefaultStringProducingExpression,
-  Expression,
-  TimeZoneAwareExpression
-}
+import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, TimeZoneAwareExpression}
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -54,8 +49,12 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
   override def resolve(unresolvedTimezoneExpression: TimeZoneAwareExpression): Expression = {
     val expressionWithResolvedChildren =
       withResolvedChildren(unresolvedTimezoneExpression, expressionResolver.resolve _)
+
+    val expressionWithResolvedCast =
+      RewriteTimeCastToTimestampNTZ.rewrite(expressionWithResolvedChildren)
+
     val expressionWithResolvedChildrenAndTimeZone = TimezoneAwareExpressionResolver.resolveTimezone(
-      expressionWithResolvedChildren,
+      expressionWithResolvedCast,
       traversals.current.sessionLocalTimeZone
     )
     coerceExpressionTypes(

@@ -834,4 +834,19 @@ object DateTimeUtils extends SparkDateTimeUtils {
   def makeTimestampNTZ(days: Int, nanos: Long): Long = {
     localDateTimeToMicros(LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos)))
   }
+
+  /**
+   * Returns the number of nanoseconds past midnight for a given timestamp in microseconds.
+   *
+   * This method uses `toJulianDay`, which splits the timestamp into (Julian day, nanoseconds in
+   * day), and returns only the nanosecond component.
+   *
+   * @param micros
+   *   The timestamp in microseconds since the epoch.
+   * @return
+   *   The number of nanoseconds past midnight on that day.
+   */
+  def getNanosInADay(micros: Long): Long = {
+    toJulianDay(micros)._2
+  }
 }

@@ -754,7 +754,7 @@ case class Cast(
       buildCast[Long](
         _,
         micros => {
-          val nanosInDay = DateTimeUtils.toJulianDay(micros)._2
+          val nanosInDay = DateTimeUtils.getNanosInADay(micros)
           DateTimeUtils.truncateTimeToPrecision(nanosInDay, to.precision)
         })
   }

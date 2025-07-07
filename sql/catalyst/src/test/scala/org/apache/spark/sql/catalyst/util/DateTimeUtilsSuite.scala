@@ -1250,4 +1250,27 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(truncateTimeToPrecision(localTime(23, 59, 59, 987654), 1) ==
       localTime(23, 59, 59, 900000))
   }
+
+  test("get nanos in a day") {
+    def toMicros(hours: Int, minutes: Int, seconds: Int): Long = {
+      val microsInSecond = 1_000_000L
+      (hours * 3600L + minutes * 60 + seconds) * microsInSecond
+    }
+
+    // Midnight: 00:00:00
+    val midnightMicros = toMicros(0, 0, 0)
+    assert(getNanosInADay(midnightMicros) === 0L)
+
+    // Noon: 12:00:00
+    val noonMicros = toMicros(12, 0, 0)
+    assert(getNanosInADay(noonMicros) === 12L * 3600 * 1_000_000_000L)
+
+    // 23:59:59
+    val endOfDayMicros = toMicros(23, 59, 59)
+    assert(getNanosInADay(endOfDayMicros) === ((23L * 3600 + 59 * 60 + 59) * 1_000_000_000L))
+
+    // 01:30:15
+    val earlyMorningMicros = toMicros(1, 30, 15)
+    assert(getNanosInADay(earlyMorningMicros) === ((1L * 3600 + 30 * 60 + 15) * 1_000_000_000L))
+  }
 }

@@ -21,7 +21,6 @@ import java.sql.{Date, Timestamp}
 import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, Period}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
-
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -30,8 +29,8 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.IntervalUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -305,11 +304,11 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(ts, DoubleType), 15.003)
 
     checkEvaluation(cast(cast(tss, ShortType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(cast(cast(tss, LongType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(
       cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimestampType), FloatType),
       millis.toFloat / MILLIS_PER_SECOND)
@@ -334,18 +333,18 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     for (tz <- ALL_TIMEZONES) {
       val timeZoneId = Option(tz.getId)
-      var c = Calendar.getInstance(DateTimeUtils.TimeZoneUTC)
+      var c = Calendar.getInstance(TimeZoneUTC)
       c.set(2015, 2, 8, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
-        DateTimeUtils.millisToMicros(c.getTimeInMillis))
-      c = Calendar.getInstance(DateTimeUtils.TimeZoneUTC)
+        millisToMicros(c.getTimeInMillis))
+      c = Calendar.getInstance(TimeZoneUTC)
       c.set(2015, 10, 1, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
-        DateTimeUtils.millisToMicros(c.getTimeInMillis))
+        millisToMicros(c.getTimeInMillis))
     }
 
     checkEvaluation(cast("abdef", StringType), "abdef")
@@ -356,7 +355,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(nts, TimestampType, UTC_OPT), StringType, UTC_OPT), nts)
     checkEvaluation(
       cast(cast(ts, StringType, UTC_OPT), TimestampType, UTC_OPT),
-      DateTimeUtils.fromJavaTimestamp(ts))
+      fromJavaTimestamp(ts))
 
     // all convert to string type to check
     checkEvaluation(
@@ -1524,8 +1523,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val testCases = Seq(
       ("2023-01-01T15:30:00.123456789", 9),
       ("2023-01-01T15:30:00.123456", 6),
-      ("2023-01-01T15:30:00", 0)
-    )
+      ("2023-01-01T15:30:00", 0))
 
     testCases.foreach { case (s, precision) =>
       val ldt = LocalDateTime.parse(s)
@@ -1533,10 +1531,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       val nanosOfDay = ldt.toLocalTime().toNanoOfDay
       val expected = DateTimeUtils.truncateTimeToPrecision(nanosOfDay, precision)
 
-      checkEvaluation(
-        Cast(Literal(micros, TimestampNTZType), TimeType(precision)),
-        expected
-      )
+      checkEvaluation(Cast(Literal(micros, TimestampNTZType), TimeType(precision)), expected)
     }
   }
 }
