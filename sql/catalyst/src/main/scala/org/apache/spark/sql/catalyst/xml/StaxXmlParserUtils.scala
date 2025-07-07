@@ -16,8 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.{InputStreamReader, StringReader}
-import java.nio.charset.Charset
+import java.io.StringReader
 import javax.xml.namespace.QName
 import javax.xml.stream.{EventFilter, XMLEventReader, XMLInputFactory, XMLStreamConstants}
 import javax.xml.stream.events._
@@ -58,14 +57,17 @@ object StaxXmlParserUtils {
   }
 
   def filteredReader(inputStream: java.io.InputStream, options: XmlOptions): XMLEventReader = {
-    val inputStreamReader = new InputStreamReader(inputStream, Charset.forName(options.charset))
-    val eventReader = factory.createXMLEventReader(inputStreamReader)
+    val eventReader = factory.createXMLEventReader(inputStream, options.charset)
     factory.createFilteredReader(eventReader, filter)
   }
 
   def gatherRootAttributes(parser: XMLEventReader): Array[Attribute] = {
-    val rootEvent =
-      StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
+    val rootEvent = parser.peek() match {
+      case _: StartElement =>
+        parser.nextEvent()
+      case _ =>
+        StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
+    }
     rootEvent.asStartElement.getAttributes.asScala.toArray
   }
 

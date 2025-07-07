@@ -16,8 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.{BufferedReader, CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader}
-import java.nio.charset.{Charset, MalformedInputException}
+import java.io.{CharConversionException, FileNotFoundException, InputStream, IOException, StringReader}
+import java.nio.charset.MalformedInputException
 import java.text.NumberFormat
 import java.util
 import java.util.Locale
@@ -41,9 +41,8 @@ import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, DateFormatter, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, DateFormatter, FailureSafeParser, GenericArrayData, MapData, PartialResultArrayException, PartialResultException, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
-import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -90,7 +89,7 @@ class StaxXmlParser(
       (_: String) => Some(InternalRow.empty)
     } else {
       val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
-      (input: String) => doParseColumn(input, options.parseMode, xsdSchema)
+      (input: String) => doParseColumn(input, xsdSchema)
     }
   }
 
@@ -102,130 +101,67 @@ class StaxXmlParser(
     }
   }
 
+  /**
+   * XML stream parser that reads XML records from the input file stream sequentially without
+   * loading each individual XML record string into memory.
+   */
   def parseStream(
-      inputStream: InputStream,
-      schema: StructType): Iterator[InternalRow] = {
-    val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
-    val safeParser = new FailureSafeParser[String](
-      input => doParseColumn(input, options.parseMode, xsdSchema),
-      options.parseMode,
-      schema,
-      options.columnNameOfCorruptRecord)
-
-    val xmlTokenizer = new XmlTokenizer(inputStream, options)
-    convertStream(xmlTokenizer) { tokens =>
-      safeParser.parse(tokens)
-    }.flatten
-  }
-
-  /**
-   * Parse the given XML string record as an InternalRow
-   * @param xml The single XML record string to parse
-   * @param xsdSchema The xsd schema to validate the XML against, if provided.
-   */
-  def doParseColumn(xml: String,
-      parseMode: ParseMode,
-      xsdSchema: Option[Schema]): Option[InternalRow] = {
-    lazy val xmlRecord = UTF8String.fromString(xml)
-    try {
-      xsdSchema.foreach { schema =>
-        schema.newValidator().validate(new StreamSource(new StringReader(xml)))
-      }
-      options.singleVariantColumn match {
-        case Some(_) =>
-          // If the singleVariantColumn is specified, parse the entire xml string as a Variant
-          val v = StaxXmlParser.parseVariant(xml, options)
-          Some(InternalRow(v))
-        case _ =>
-          // Otherwise, parse the xml string as Structs
-          val parser = StaxXmlParserUtils.filteredReader(xml)
-          val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-          val result = Some(convertObject(parser, schema, rootAttributes))
-          parser.close()
-          result
-      }
-    } catch {
-      case e: SparkUpgradeException => throw e
-      case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
-              | _: SAXException) =>
-        // XML parser currently doesn't support partial results for corrupted records.
-        // For such records, all fields other than the field configured by
-        // `columnNameOfCorruptRecord` are set to `null`.
-        throw BadRecordException(() => xmlRecord, () => Array.empty, e)
-      case e: CharConversionException if options.charset.isEmpty =>
-        val msg =
-          """XML parser cannot handle a character in its input.
-            |Specifying encoding as an input option explicitly might help to resolve the issue.
-            |""".stripMargin + e.getMessage
-        val wrappedCharException = new CharConversionException(msg)
-        wrappedCharException.initCause(e)
-        throw BadRecordException(() => xmlRecord, () => Array.empty,
-          wrappedCharException)
-      case PartialResultException(row, cause) =>
-        throw BadRecordException(
-          record = () => xmlRecord,
-          partialResults = () => Array(row),
-          cause)
-      case PartialResultArrayException(rows, cause) =>
-        throw BadRecordException(
-          record = () => xmlRecord,
-          partialResults = () => rows,
-          cause)
-    }
-  }
-
-  /**
-   * The optimized version of the XML stream parser that reads XML records from the input file
-   * stream sequentially without loading each individual XML record string into memory.
-   */
-  def parseStreamOptimized(
       inputStream: InputStream,
       schema: StructType,
       streamLiteral: () => UTF8String): Iterator[InternalRow] = {
-    // XSD validation would require converting to string first, which defeats the purpose
-    // For now, skip XSD validation in the optimized parsing mode to maintain memory efficiency
-    if (Option(options.rowValidationXSDPath).isDefined) {
-      logWarning("XSD validation is not supported in streaming mode and will be skipped")
-    }
+    val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
     val safeParser = new FailureSafeParser[XMLEventReader](
-      input => {
-        // The first event is guaranteed to be a StartElement, so we can read attributes from it
-        // without using StaxXmlParserUtils.skipUntil.
-        val attributes = input.nextEvent().asStartElement().getAttributes.asScala.toArray
-        doParseColumn(input, attributes, streamLiteral)
-      },
+      input => doParseColumn(input, xsdSchema, streamLiteral),
       options.parseMode,
       schema,
       options.columnNameOfCorruptRecord
     )
 
-    val xmlTokenizer = new OptimizedXmlTokenizer(inputStream, options)
+    val xmlTokenizer = new XmlTokenizer(inputStream, options)
     StaxXmlParser.convertStream(xmlTokenizer) { tokens =>
       safeParser.parse(tokens)
     }.flatten
   }
 
   /**
-   * Parse the next XML record from the event stream.
-   * @param parser The XML event reader over the entire XML file stream. The first event has been
-   *               advanced to the next record in the file.
-   * @param rootAttributes The attributes of the record root element.
+   * Parse a single XML record string and return an InternalRow.
+   */
+  def doParseColumn(xml: String, xsdSchema: Option[Schema]): Option[InternalRow] = {
+    val parser = StaxXmlParserUtils.filteredReader(xml)
+    try {
+      doParseColumn(parser, xsdSchema, () => UTF8String.fromString(xml))
+    } finally {
+      parser.close()
+    }
+  }
+
+  /**
+   * Parse the next XML record from the XML event stream.
+   * Note that the method will **NOT** close the XML event stream as there could have more XML
+   * records to parse. It's the caller's responsibility to close the stream.
+   *
+   * @param parser The XML event reader.
    * @param xmlLiteral A function that returns the entire XML file content as a UTF8String. Used
    *                   to create a BadRecordException in case of parsing errors.
    *                   TODO: Only include the file content starting with the current record.
    */
   def doParseColumn(
       parser: XMLEventReader,
-      rootAttributes: Array[Attribute],
+      xsdSchema: Option[Schema] = None,
       xmlLiteral: () => UTF8String): Option[InternalRow] = {
     try {
+      // TODO: support XSD validation
+      xsdSchema.foreach { schema =>
+        schema.newValidator().validate(new StreamSource(new StringReader(xmlLiteral().toString)))
+      }
       options.singleVariantColumn match {
         case Some(_) =>
           // If the singleVariantColumn is specified, parse the entire xml record as a Variant
-          val v = StaxXmlParser.parseVariant(parser, rootAttributes, options)
+          val v = StaxXmlParser.parseVariant(parser, options)
           Some(InternalRow(v))
         case _ =>
           // Otherwise, parse the xml record as Structs
+          val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
           val result = Some(convertObject(parser, schema, rootAttributes))
           result
       }
@@ -713,290 +649,18 @@ class StaxXmlParser(
   }
 }
 
-trait XmlTokenizerBase[T] extends Logging {
-  /**
-   * Finds the next XML record in the stream.
-   * @return an Option containing the next XML record as a String, or None if no more records
-   */
-  def next(): Option[T]
-}
-
 /**
- * XMLRecordReader class to read through a given xml document to output xml blocks as records
- * as specified by the start tag and end tag.
- *
- * This implementation is ultimately loosely based on LineRecordReader in Hadoop.
+ * XML tokenizer that never buffers complete XML records in memory. It uses XMLEventReader to parse
+ * XML file stream directly and can move to the next XML record based on the rowTag option.
  */
-class XmlTokenizer(
-  inputStream: InputStream,
-  options: XmlOptions) extends XmlTokenizerBase[String] {
-  private var reader = new BufferedReader(
-    new InputStreamReader(inputStream, Charset.forName(options.charset)))
-  private var currentStartTag: String = _
-  private var buffer = new StringBuilder()
-  private val startTag = s"<${options.rowTag}>"
-  private val endTag = s"</${options.rowTag}>"
-  private val commentStart = s"<!--"
-  private val commentEnd = s"-->"
-  private val cdataStart = s"<![CDATA["
-  private val cdataEnd = s"]]>"
-
-    /**
-   * Finds the start of the next record.
-   * It treats data from `startTag` and `endTag` as a record.
-   *
-   * @param key the current key that will be written
-   * @param value  the object that will be written
-   * @return whether it reads successfully
-   */
-    override def next(): Option[String] = {
-      var nextString: Option[String] = None
-      try {
-        if (readUntilStartElement()) {
-          buffer.append(currentStartTag)
-          // Don't check whether the end element was found. Even if not, return everything
-          // that was read, which will invariably cause a parse error later
-          readUntilEndElement(currentStartTag.endsWith(">"))
-          nextString = Some(buffer.toString())
-          buffer = new StringBuilder()
-        }
-      } catch {
-        case e: FileNotFoundException if options.ignoreMissingFiles =>
-          logWarning(
-            "Skipping the rest of" +
-              " the content in the missing file during schema inference",
-            e)
-        case NonFatal(e) =>
-          ExceptionUtils.getRootCause(e) match {
-            case _: AccessControlException | _: BlockMissingException =>
-              reader.close()
-              reader = null
-              throw e
-            case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
-              logWarning(
-                "Skipping the rest of" +
-                  " the content in the corrupted file during schema inference",
-                e)
-            case e: Throwable =>
-              reader.close()
-              reader = null
-              throw e
-          }
-      } finally {
-        if (nextString.isEmpty && reader != null) {
-          reader.close()
-          reader = null
-        }
-      }
-      nextString
-    }
-
-  private def readUntilMatch(end: String): Boolean = {
-    var i = 0
-    while (true) {
-      val cOrEOF = reader.read()
-      if (cOrEOF == -1) {
-        // End of file.
-        return false
-      }
-      val c = cOrEOF.toChar
-      if (c == end(i)) {
-        i += 1
-        if (i >= end.length) {
-          // Found the end string.
-          return true
-        }
-      } else {
-        i = 0
-      }
-    }
-    // Unreachable.
-    false
-  }
-
-  private def readUntilStartElement(): Boolean = {
-    currentStartTag = startTag
-    var i = 0
-    var commentIdx = 0
-    var cdataIdx = 0
-
-    while (true) {
-      val cOrEOF = reader.read()
-      if (cOrEOF == -1) { // || (i == 0 && getFilePosition() > end)) {
-        // End of file or end of split.
-        return false
-      }
-      val c = cOrEOF.toChar
-
-      if (c == commentStart(commentIdx)) {
-        if (commentIdx >= commentStart.length - 1) {
-          //  If a comment beigns we must ignore all character until its end
-          commentIdx = 0
-          readUntilMatch(commentEnd)
-        } else {
-          commentIdx += 1
-        }
-      } else {
-        commentIdx = 0
-      }
-
-      if (c == cdataStart(cdataIdx)) {
-        if (cdataIdx >= cdataStart.length - 1) {
-          //  If a CDATA beigns we must ignore all character until its end
-          cdataIdx = 0
-          readUntilMatch(cdataEnd)
-        } else {
-          cdataIdx += 1
-        }
-      } else {
-        cdataIdx = 0
-      }
-
-      if (c == startTag(i)) {
-        if (i >= startTag.length - 1) {
-          // Found start tag.
-          return true
-        }
-        // else in start tag
-        i += 1
-      } else {
-        // if doesn't match the closing angle bracket, check if followed by attributes
-        if (i == (startTag.length - 1) && Character.isWhitespace(c)) {
-          // Found start tag with attributes. Remember to write with following whitespace
-          // char, not angle bracket
-          currentStartTag = startTag.dropRight(1) + c
-          return true
-        }
-        // else not in start tag
-        i = 0
-      }
-    }
-    // Unreachable.
-    false
-  }
-
-  private def readUntilEndElement(startTagClosed: Boolean): Boolean = {
-    // Index into the start or end tag that has matched so far
-    var si = 0
-    var ei = 0
-    // Index into the start of a comment tag that matched so far
-    var commentIdx = 0
-    // Index into the start of a CDATA tag that matched so far
-    var cdataIdx = 0
-    // How many other start tags enclose the one that's started already?
-    var depth = 0
-    // Previously read character
-    var prevC = '\u0000'
-
-    // The current start tag already found may or may not have terminated with
-    // a '>' as it may have attributes we read here. If not, we search for
-    // a self-close tag, but only until a non-self-closing end to the start
-    // tag is found
-    var canSelfClose = !startTagClosed
-
-    while (true) {
-
-      val cOrEOF = reader.read()
-      if (cOrEOF == -1) {
-        // End of file (ignore end of split).
-        return false
-      }
-
-      val c = cOrEOF.toChar
-      buffer.append(c)
-
-      if (c == commentStart(commentIdx)) {
-        if (commentIdx >= commentStart.length - 1) {
-          //  If a comment beigns we must ignore everything until its end
-          buffer.setLength(buffer.length - commentStart.length)
-          commentIdx = 0
-          readUntilMatch(commentEnd)
-        } else {
-          commentIdx += 1
-        }
-      } else {
-        commentIdx = 0
-      }
-
-      if (c == '>' && prevC != '/') {
-        canSelfClose = false
-      }
-
-      // Still matching a start tag?
-      if (c == startTag(si)) {
-        // Still also matching an end tag?
-        if (c == endTag(ei)) {
-          // In start tag or end tag.
-          si += 1
-          ei += 1
-        } else {
-          if (si >= startTag.length - 1) {
-            // Found start tag.
-            si = 0
-            ei = 0
-            depth += 1
-          } else {
-            // In start tag.
-            si += 1
-            ei = 0
-          }
-        }
-      } else if (c == endTag(ei)) {
-        if (ei >= endTag.length - 1) {
-          if (depth == 0) {
-            // Found closing end tag.
-            return true
-          }
-          // else found nested end tag.
-          si = 0
-          ei = 0
-          depth -= 1
-        } else {
-          // In end tag.
-          si = 0
-          ei += 1
-        }
-      } else if (c == '>' && prevC == '/' && canSelfClose) {
-        if (depth == 0) {
-          // found a self-closing tag (end tag)
-          return true
-        }
-        // else found self-closing nested tag (end tag)
-        si = 0
-        ei = 0
-        depth -= 1
-      } else if (si == (startTag.length - 1) && Character.isWhitespace(c)) {
-        // found a start tag with attributes
-        si = 0
-        ei = 0
-        depth += 1
-      } else {
-        // Not in start tag or end tag.
-        si = 0
-        ei = 0
-      }
-      prevC = c
-    }
-    // Unreachable.
-    false
-  }
-}
-
-/**
- * Optimized XML tokenizer that avoids loading entire XML records into memory.
- * - Uses XMLEventReader to parse XML stream directly
- * - Never buffers complete XML records in memory
- * - Allows the parser to work directly with XML events
- */
-class OptimizedXmlTokenizer(inputStream: InputStream, options: XmlOptions)
-    extends XmlTokenizerBase[XMLEventReader] {
+class XmlTokenizer(inputStream: InputStream, options: XmlOptions) extends Logging {
   private var reader = StaxXmlParserUtils.filteredReader(inputStream, options)
 
   /**
    * Returns the next XML record as a positioned XMLEventReader.
    * This avoids creating intermediate string representations.
    */
-  override def next(): Option[XMLEventReader] = {
+  def next(): Option[XMLEventReader] = {
     var nextRecord: Option[XMLEventReader] = None
     try {
       // Skip to the next row start element
@@ -1064,27 +728,20 @@ object StaxXmlParser {
   /**
    * Parses a stream that contains CSV strings and turns it into an iterator of tokens.
    */
-  def tokenizeStream(inputStream: InputStream, options: XmlOptions): Iterator[String] = {
+  def tokenizeStream(inputStream: InputStream, options: XmlOptions): Iterator[XMLEventReader] = {
     val xmlTokenizer = new XmlTokenizer(inputStream, options)
     convertStream(xmlTokenizer)(tokens => tokens)
   }
 
-  def tokenizeStreamOptimized(
-      inputStream: InputStream,
-      options: XmlOptions): Iterator[XMLEventReader] = {
-    val xmlTokenizer = new OptimizedXmlTokenizer(inputStream, options)
-    convertStream(xmlTokenizer)(tokens => tokens)
-  }
-
-  private def convertStream[TokenType, ResultType](
-    xmlTokenizer: XmlTokenizerBase[TokenType])(
-    convert: TokenType => ResultType) = new Iterator[ResultType] {
+  def convertStream[T](
+    xmlTokenizer: XmlTokenizer)(
+    convert: XMLEventReader => T): Iterator[T] = new Iterator[T] {
 
     private var nextRecord = xmlTokenizer.next()
 
     override def hasNext: Boolean = nextRecord.nonEmpty
 
-    override def next(): ResultType = {
+    override def next(): T = {
       if (!hasNext) {
         throw QueryExecutionErrors.endOfStreamError()
       }
@@ -1099,16 +756,15 @@ object StaxXmlParser {
    */
   def parseVariant(xml: String, options: XmlOptions): VariantVal = {
     val parser = StaxXmlParserUtils.filteredReader(xml)
-    val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-    val v = parseVariant(parser, rootAttributes, options)
-    parser.close()
-    new VariantVal(v.getValue, v.getMetadata)
+    try {
+      parseVariant(xml, options)
+    } finally {
+      parser.close()
+    }
   }
 
-  def parseVariant(
-      parser: XMLEventReader,
-      rootAttributes: Array[Attribute],
-      options: XmlOptions): VariantVal = {
+  def parseVariant(parser: XMLEventReader, options: XmlOptions): VariantVal = {
+    val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
     val v = convertVariant(parser, rootAttributes, options)
     new VariantVal(v.getValue, v.getMetadata)
   }

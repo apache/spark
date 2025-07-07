@@ -30,7 +30,7 @@ import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 object XmlExpressionEvalUtils {
 
   def schemaOfXml(xmlInferSchema: XmlInferSchema, xml: UTF8String): UTF8String = {
-    val dataType = xmlInferSchema.infer(xml.toString).get match {
+    val dataType = xmlInferSchema.infer(xml.toString, None).get match {
       case st: StructType =>
         xmlInferSchema.canonicalizeType(st).getOrElse(StructType(Nil))
       case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
@@ -155,7 +155,7 @@ case class XmlToStructsEvaluator(
     val xsdSchema = Option(parsedOptions.rowValidationXSDPath).map(ValidatorUtil.getSchema)
 
     new FailureSafeParser[String](
-      input => rawParser.doParseColumn(input, mode, xsdSchema),
+      input => rawParser.doParseColumn(input, xsdSchema),
       mode,
       schema,
       parsedOptions.columnNameOfCorruptRecord)

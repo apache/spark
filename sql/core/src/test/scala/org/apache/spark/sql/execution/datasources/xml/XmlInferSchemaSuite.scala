@@ -36,9 +36,7 @@ import org.apache.spark.sql.types.{
   StructType
 }
 
-class XmlInferSchemaSuite extends XmlInferSchemaTests
-
-trait XmlInferSchemaTests
+class XmlInferSchemaSuite
     extends QueryTest
     with SharedSparkSession
     with TestXmlData
