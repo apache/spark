@@ -17,7 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, TimeZoneAwareExpression}
+import org.apache.spark.sql.catalyst.expressions.{
+  Cast,
+  DefaultStringProducingExpression,
+  Expression,
+  TimeZoneAwareExpression
+}
 import org.apache.spark.sql.types.StringType
 
 /**
