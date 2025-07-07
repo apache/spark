@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.time.DateTimeException
 import java.util.Locale
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -582,7 +583,8 @@ case class TimeAddInterval(time: Expression, interval: Expression)
   override def replacement: Expression = {
     val (timePrecision, intervalEndField) = (time.dataType, interval.dataType) match {
       case (TimeType(p), DayTimeIntervalType(_, endField)) => (p, endField)
-      case _ => (TimeType.DEFAULT_PRECISION, DayTimeIntervalType.DEFAULT.endField)
+      case _ => throw SparkException.internalError("Unexpected input types: " +
+        s"time type ${time.dataType.sql}, interval type ${interval.dataType.sql}.")
     }
     val intervalPrecision = if (intervalEndField < SECOND) {
       TimeType.MIN_PRECISION
