@@ -103,11 +103,11 @@ class BloomFilterImplV2 extends BloomFilter implements Serializable {
     long combinedHash = (long) h1 * Integer.MAX_VALUE;
     for (long i = 0; i < numHashFunctions; i++) {
       combinedHash += h2;
+
       // Flip all the bits if it's negative (guaranteed positive number)
-      if (combinedHash < 0) {
-        combinedHash = ~combinedHash;
-      }
-      bitsChanged |= bits.set(combinedHash % bitSize);
+      long combinedIndex = combinedHash < 0 ? ~combinedHash : combinedHash;
+
+      bitsChanged |= bits.set(combinedIndex % bitSize);
     }
     return bitsChanged;
   }
@@ -128,11 +128,11 @@ class BloomFilterImplV2 extends BloomFilter implements Serializable {
     long combinedHash = (long) h1 * Integer.MAX_VALUE;
     for (long i = 0; i < numHashFunctions; i++) {
       combinedHash += h2;
+
       // Flip all the bits if it's negative (guaranteed positive number)
-      if (combinedHash < 0) {
-        combinedHash = ~combinedHash;
-      }
-      if (!bits.get(combinedHash % bitSize)) {
+      long combinedIndex = combinedHash < 0 ? ~combinedHash : combinedHash;
+
+      if (!bits.get(combinedIndex % bitSize)) {
         return false;
       }
     }
@@ -158,10 +158,9 @@ class BloomFilterImplV2 extends BloomFilter implements Serializable {
       combinedHash += h2;
 
       // Flip all the bits if it's negative (guaranteed positive number)
-      if (combinedHash < 0) {
-        combinedHash = ~combinedHash;
-      }
-      bitsChanged |= bits.set(combinedHash % bitSize);
+      long combinedIndex = combinedHash < 0 ? ~combinedHash : combinedHash;
+
+      bitsChanged |= bits.set(combinedIndex % bitSize);
     }
     return bitsChanged;
   }
@@ -179,10 +178,9 @@ class BloomFilterImplV2 extends BloomFilter implements Serializable {
       combinedHash += h2;
 
       // Flip all the bits if it's negative (guaranteed positive number)
-      if (combinedHash < 0) {
-        combinedHash = ~combinedHash;
-      }
-      if (!bits.get(combinedHash % bitSize)) {
+      long combinedIndex = combinedHash < 0 ? ~combinedHash : combinedHash;
+
+      if (!bits.get(combinedIndex % bitSize)) {
         return false;
       }
     }
