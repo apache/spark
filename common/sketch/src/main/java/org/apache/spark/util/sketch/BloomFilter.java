@@ -200,19 +200,11 @@ public abstract class BloomFilter {
     int version = ByteBuffer.wrap(bin.readNBytes(4)).getInt();
     bin.reset();
 
-    BloomFilter result;
-    switch (version) {
-      case 1:
-        result = BloomFilterImpl.readFrom(bin);
-        break;
-      case 2:
-        result = BloomFilterImplV2.readFrom(bin);
-        break;
-      default:
-        throw new IllegalArgumentException("Unknown BloomFilter version: " + version);
-    }
-
-    return result;
+    return switch (version) {
+      case 1 -> BloomFilterImpl.readFrom(bin);
+      case 2 -> BloomFilterImplV2.readFrom(bin);
+      default -> throw new IllegalArgumentException("Unknown BloomFilter version: " + version);
+    };
   }
 
   /**
@@ -318,17 +310,10 @@ public abstract class BloomFilter {
 
     int numHashFunctions = optimalNumOfHashFunctions(expectedNumItems, numBits);
 
-    BloomFilter result;
-    switch (version) {
-      case V1:
-        result = new BloomFilterImpl(numHashFunctions, numBits);
-        break;
-      case V2:
-        result = new BloomFilterImplV2(numHashFunctions, numBits, seed);
-        break;
-      default:
-        throw new IllegalArgumentException("Unknown BloomFilter version: " + version);
-    }
-    return result;
+    return switch (version) {
+      case V1 -> new BloomFilterImpl(numHashFunctions, numBits);
+      case V2 -> new BloomFilterImplV2(numHashFunctions, numBits, seed);
+      default -> throw new IllegalArgumentException("Unknown BloomFilter version: " + version);
+    };
   }
 }
