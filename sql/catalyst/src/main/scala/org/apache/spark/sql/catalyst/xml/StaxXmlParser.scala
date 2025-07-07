@@ -757,7 +757,7 @@ object StaxXmlParser {
   def parseVariant(xml: String, options: XmlOptions): VariantVal = {
     val parser = StaxXmlParserUtils.filteredReader(xml)
     try {
-      parseVariant(xml, options)
+      parseVariant(parser, options)
     } finally {
       parser.close()
     }

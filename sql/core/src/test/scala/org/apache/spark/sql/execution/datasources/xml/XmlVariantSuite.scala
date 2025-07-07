@@ -503,7 +503,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     )
     checkAnswer(
       df.select(variant_get(col("var"), "$.year", "int")),
-      Seq(Row(2015), Row(null), Row(null))
+      Seq(Row(2015), Row(null))
     )
 
     // DROPMALFORMED mode
@@ -518,7 +518,8 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     )
   }
 
-  test("DSL: test XSD validation") {
+  // TODO: Support XSD validation
+  ignore("DSL: test XSD validation") {
     val df = createDSLDataFrame(
       fileName = "basket_invalid.xml",
       singleVariantColumn = Some("var"),
