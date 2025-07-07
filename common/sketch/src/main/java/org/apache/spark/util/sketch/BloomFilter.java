@@ -289,6 +289,7 @@ public abstract class BloomFilter {
     return create(expectedNumItems, optimalNumOfBits(expectedNumItems, fpp));
   }
 
+
   /**
    * Creates a {@link BloomFilter} with given {@code expectedNumItems} and {@code numBits}, it will
    * pick an optimal {@code numHashFunctions} which can minimize {@code fpp} for the bloom filter.
