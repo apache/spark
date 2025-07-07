@@ -74,7 +74,7 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
     val timeLiteral = Literal(nanos, TimeType(6))
 
     val castExpr = Cast(timeLiteral, TimestampNTZType)
-    val rewrittenExpr = RewriteTimeCastToTimestampNTZ.rewrite(castExpr)
+    val rewrittenExpr = timezoneAwareExpressionResolver.resolve(castExpr)
 
     val expectedExpr = MakeTimestampNTZ(CurrentDate(), timeLiteral)
 
