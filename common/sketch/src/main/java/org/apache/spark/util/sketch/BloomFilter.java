@@ -194,25 +194,25 @@ public abstract class BloomFilter {
    * the stream.
    */
   public static BloomFilter readFrom(InputStream in) throws IOException {
-      // peek into the inputstream so we can determine the version
-      BufferedInputStream bin = new BufferedInputStream(in);
-      bin.mark(4);
-      int version = ByteBuffer.wrap(bin.readNBytes(4)).getInt();
-      bin.reset();
+    // peek into the inputstream so we can determine the version
+    BufferedInputStream bin = new BufferedInputStream(in);
+    bin.mark(4);
+    int version = ByteBuffer.wrap(bin.readNBytes(4)).getInt();
+    bin.reset();
 
-      BloomFilter result;
-      switch (version) {
-        case 1:
-          result = BloomFilterImpl.readFrom(bin);
-          break;
-        case 2:
-          result = BloomFilterImplV2.readFrom(bin);
-          break;
-        default:
-          throw new IllegalArgumentException("Unknown BloomFilter version: " + version);
-      }
+    BloomFilter result;
+    switch (version) {
+      case 1:
+        result = BloomFilterImpl.readFrom(bin);
+        break;
+      case 2:
+        result = BloomFilterImplV2.readFrom(bin);
+        break;
+      default:
+        throw new IllegalArgumentException("Unknown BloomFilter version: " + version);
+    }
 
-      return result;
+    return result;
   }
 
   /**
@@ -302,10 +302,10 @@ public abstract class BloomFilter {
   }
 
   public static BloomFilter create(
-      Version version,
-      long expectedNumItems,
-      long numBits,
-      int seed
+    Version version,
+    long expectedNumItems,
+    long numBits,
+    int seed
   ) {
     if (expectedNumItems <= 0) {
       throw new IllegalArgumentException("Expected insertions must be positive");
