@@ -55,9 +55,10 @@ class BloomFilterImplV2 extends BloomFilter implements Serializable {
       return false;
     }
 
-    return this.numHashFunctions == that.numHashFunctions
-            && this.seed == that.seed
-            && Objects.equals(this.bits, that.bits);
+    return
+      this.numHashFunctions == that.numHashFunctions
+      && this.seed == that.seed
+      && this.bits.equals(that.bits);
   }
 
   @Override
