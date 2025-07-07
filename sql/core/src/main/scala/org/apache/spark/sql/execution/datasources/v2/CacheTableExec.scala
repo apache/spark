@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.Locale
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.LocalTempView
@@ -26,8 +28,10 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-import org.apache.spark.sql.execution.command.CreateViewCommand
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.execution.command.{CreateViewCommand, DropTempViewCommand}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 trait BaseCacheTableExec extends LeafV2CommandExec {
   def relationName: String
@@ -60,7 +64,16 @@ trait BaseCacheTableExec extends LeafV2CommandExec {
 
     if (!isLazy) {
       // Performs eager caching.
-      dataFrameForCachedPlan.count()
+      try {
+        dataFrameForCachedPlan.count()
+      } catch {
+        case NonFatal(e) =>
+          // If the query fails, we should remove the cached table.
+          Utils.tryLogNonFatalError {
+            session.sharedState.cacheManager.uncacheQuery(session, planToCache, cascade = false)
+          }
+          throw e
+      }
     }
 
     Seq.empty
@@ -112,6 +125,18 @@ case class CacheTableAsSelectExec(
 
   override lazy val dataFrameForCachedPlan: DataFrame = {
     session.table(tempViewName)
+  }
+
+  override def run(): Seq[InternalRow] = {
+    try {
+      super.run()
+    } catch {
+      case NonFatal(e) =>
+        Utils.tryLogNonFatalError {
+          DropTempViewCommand(Identifier.of(Array.empty, tempViewName)).run(session)
+        }
+        throw e
+    }
   }
 }
 

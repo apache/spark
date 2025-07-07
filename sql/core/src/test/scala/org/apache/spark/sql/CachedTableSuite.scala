@@ -26,7 +26,7 @@ import scala.concurrent.duration._
 
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.CleanerListener
+import org.apache.spark.{CleanerListener, SparkException}
 import org.apache.spark.executor.DataReadMethod._
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
@@ -1728,5 +1728,14 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       assert(getNumInMemoryRelations(df) == 1)
     }
 
+  }
+
+  test("SPARK-52684: Atomicity of cache table on error") {
+    withTempView("SPARK_52684") {
+      intercept[SparkException] {
+        spark.sql("CACHE TABLE SPARK_52684 AS SELECT raise_error('SPARK-52684') AS c1")
+      }
+      assert(!spark.catalog.tableExists("SPARK_52684"))
+    }
   }
 }
