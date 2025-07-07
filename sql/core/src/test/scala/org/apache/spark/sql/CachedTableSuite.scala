@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.io.{File, FilenameFilter}
 import java.nio.file.{Files, Paths}
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, LocalTime, Period}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.HashSet
@@ -1789,6 +1789,19 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       checkAnswer(df,
         Row(0, 1, 0, 1) :: Row(1, 2, 1, 2) :: Nil)
       assert(getNumInMemoryRelations(df) == 1)
+    }
+  }
+
+  test("SPARK-52692: Support cache/uncache table with Time type") {
+    val tableName = "timeCache"
+    withTable(tableName) {
+      sql(s"CACHE TABLE $tableName AS SELECT TIME'22:00:00'")
+      checkAnswer(spark.table(tableName), Row(LocalTime.parse("22:00:00")))
+      spark.table(tableName).queryExecution.withCachedData.collect {
+        case cached: InMemoryRelation =>
+          assert(cached.stats.sizeInBytes === 8)
+      }
+      sql(s"UNCACHE TABLE $tableName")
     }
   }
 
