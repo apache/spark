@@ -788,14 +788,14 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Converts separate time fields in a long that represents microseconds since the start of
+   * Converts separate time fields in a long that represents nanoseconds since the start of
    * the day
    * @param hours the hour, from 0 to 23
    * @param minutes the minute, from 0 to 59
    * @param secsAndMicros the second, from 0 to 59.999999
-   * @return A time value represented as microseconds since the start of the day
+   * @return A time value represented as nanoseconds since the start of the day
    */
-  def timeToMicros(hours: Int, minutes: Int, secsAndMicros: Decimal): Long = {
+  def makeTime(hours: Int, minutes: Int, secsAndMicros: Decimal): Long = {
     try {
       val unscaledSecFrac = secsAndMicros.toUnscaledLong
       val fullSecs = Math.floorDiv(unscaledSecFrac, MICROS_PER_SECOND)
@@ -833,6 +833,33 @@ object DateTimeUtils extends SparkDateTimeUtils {
    */
   def makeTimestampNTZ(days: Int, nanos: Long): Long = {
     localDateTimeToMicros(LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos)))
+  }
+
+  /**
+   * Adds a day-time interval to a time.
+   *
+   * @param time A time in nanoseconds.
+   * @param timePrecision The number of digits of the fraction part of time.
+   * @param interval A day-time interval in microseconds.
+   * @param intervalEndField The rightmost field which the interval comprises of.
+   *                         Valid values: 0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND).
+   * @param targetPrecision The number of digits of the fraction part of the resulting time.
+   * @return A time value in nanoseconds or throw an arithmetic overflow
+   *         if the result out of valid time range [00:00, 24:00).
+   */
+  def timeAddInterval(
+      time: Long,
+      timePrecision: Int,
+      interval: Long,
+      intervalEndField: Byte,
+      targetPrecision: Int): Long = {
+    val result = MathUtils.addExact(time, MathUtils.multiplyExact(interval, NANOS_PER_MICROS))
+    if (0 <= result && result < NANOS_PER_DAY) {
+      truncateTimeToPrecision(result, targetPrecision)
+    } else {
+      throw QueryExecutionErrors.timeAddIntervalOverflowError(
+        time, timePrecision, interval, intervalEndField)
+    }
   }
 
   /**

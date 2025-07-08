@@ -26,12 +26,15 @@ import java.util.concurrent.TimeUnit
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.{SparkDateTimeException, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianMicros
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLConf
+import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -1179,13 +1182,13 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     val secAndMicros = Decimal(sec + (micros / MICROS_PER_SECOND.toFloat), 16, 6)
 
     // Valid case
-    val microSecsTime = timeToMicros(hour, min, secAndMicros)
-    assert(microSecsTime === localTime(hour.toByte, min.toByte, sec.toByte, micros))
+    val nanoSecsTime = makeTime(hour, min, secAndMicros)
+    assert(nanoSecsTime === localTime(hour.toByte, min.toByte, sec.toByte, micros))
 
     // Invalid hour
     checkError(
       exception = intercept[SparkDateTimeException] {
-        timeToMicros(-1, min, secAndMicros)
+        makeTime(-1, min, secAndMicros)
       },
       condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
       parameters = Map("rangeMessage" -> "Invalid value for HourOfDay (valid values 0 - 23): -1"))
@@ -1193,7 +1196,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     // Invalid minute
     checkError(
       exception = intercept[SparkDateTimeException] {
-        timeToMicros(hour, -1, secAndMicros)
+        makeTime(hour, -1, secAndMicros)
       },
       condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
       parameters = Map("rangeMessage" ->
@@ -1209,7 +1212,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     ).foreach { invalidSecond =>
       checkError(
         exception = intercept[SparkDateTimeException] {
-          timeToMicros(hour, min, Decimal(invalidSecond, 16, 6))
+          makeTime(hour, min, Decimal(invalidSecond, 16, 6))
         },
         condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
         parameters = Map("rangeMessage" ->
@@ -1272,5 +1275,46 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     // 01:30:15
     val earlyMorningMicros = toMicros(1, 30, 15)
     assert(getNanosInADay(earlyMorningMicros) === ((1L * 3600 + 30 * 60 + 15) * 1_000_000_000L))
+  }
+
+  test("add day-time interval to time") {
+    assert(timeAddInterval(0, 0, 0, SECOND, 6) == localTime())
+    assert(timeAddInterval(0, 6, MICROS_PER_DAY - 1, SECOND, 6) ==
+      localTime(23, 59, 59, 999999))
+    assert(timeAddInterval(localTime(23, 59, 59, 999999), 0, -MICROS_PER_DAY + 1, SECOND, 6) ==
+      localTime(0, 0))
+    assert(timeAddInterval(localTime(12, 30, 43, 123400), 4, 10 * MICROS_PER_MINUTE, SECOND, 6) ==
+      localTime(12, 40, 43, 123400))
+    assert(timeAddInterval(localTime(19, 31, 45, 123450), 5, 6, SECOND, 6) ==
+      localTime(19, 31, 45, 123456))
+    assert(timeAddInterval(localTime(1, 2, 3, 1), 6, MICROS_PER_HOUR, HOUR, 6) ==
+      localTime(2, 2, 3, 1))
+
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        timeAddInterval(1, 6, MICROS_PER_DAY, SECOND, 6)
+      },
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" ->
+        "add INTERVAL '86400' SECOND to the time value TIME '00:00:00.000000001'")
+    )
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        timeAddInterval(0, 0, -1, SECOND, 6)
+      },
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" ->
+        "add INTERVAL '-00.000001' SECOND to the time value TIME '00:00:00'")
+    )
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        timeAddInterval(0, 0, Long.MaxValue, SECOND, 6)
+      },
+      condition = "ARITHMETIC_OVERFLOW",
+      parameters = Map(
+        "message" -> "long overflow",
+        "alternative" -> "",
+        "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY))
+    )
   }
 }
