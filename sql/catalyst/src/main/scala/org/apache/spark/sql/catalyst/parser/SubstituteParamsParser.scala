@@ -37,6 +37,7 @@ class SubstituteParamsParser extends Logging {
    */
   def substitute(
                   sqlText: String,
+                  rule: String,
                   namedParams: Map[String, String] = Map.empty,
                   positionalParams: List[String] = List.empty): String = {
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(sqlText)))
@@ -51,7 +52,12 @@ class SubstituteParamsParser extends Logging {
     val astBuilder = new SubstituteParmsAstBuilder()
 
     // Parse as a single statement to get parameter locations
-    val ctx = parser.expression()
+    val ctx = rule match {
+      case "query" => parser.query()
+      case "expression" => parser.expression()
+      case _ =>
+        throw new IllegalArgumentException(s"Missing rule for substitute parser: $rule")
+    }
     val parameterLocations = astBuilder.extractParameterLocations(ctx)
 
     // Substitute parameters in the original text
@@ -122,8 +128,9 @@ object SubstituteParamsParser {
 
   def substitute(
       sqlText: String,
+      rule: String,
       namedParams: Map[String, String] = Map.empty,
       positionalParams: List[String] = List.empty): String =
-    instance.substitute(sqlText, namedParams, positionalParams)
+    instance.substitute(sqlText, rule, namedParams, positionalParams)
 }
 

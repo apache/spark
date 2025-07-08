@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, LeafExpression, Literal, MapFromArrays, MapFromEntries, SubqueryExpression, Unevaluable, VariableReference}
 import org.apache.spark.sql.catalyst.parser.SubstituteParamsParser
-import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, LogicalPlan, SupervisingCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, CreateView, LogicalPlan, SupervisingCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
 import org.apache.spark.sql.errors.QueryErrorsBase
@@ -198,27 +198,40 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         val args = argNames.zip(argValues).toMap
         checkArgs(args)
 
-        val newChild = substituteSQL(child)
-        { case CreateVariable(ident, defaultExpr, replace) =>
-          // Substitute named parameters in the SQL text of the variable definition
-          val substitutedSQL = {
-            val parser = new SubstituteParamsParser()
-            // Convert expressions to values for named parameters
-            val namedValues = args.map { case (name, expr) =>
-              val value = expr match {
-                case lit: Literal => lit.sql
-                case _ => expr.toString // fallback for non-literal expressions
+        val newChild = substituteSQL(child) {
+          case createVariable: CreateVariable =>
+            // Substitute named parameters in the SQL text of the variable definition
+            val substitutedSQL = {
+              val parser = new SubstituteParamsParser()
+              // Convert expressions to values for named parameters
+              val namedValues = args.map { case (name, expr) =>
+                val value = expr match {
+                  case lit: Literal => lit.sql
+                  case _ => expr.toString // fallback for non-literal expressions
+                }
+                (name, value)
               }
-              (name, value)
+              parser.substitute(createVariable.defaultExpr.originalSQL, "expression", namedValues)
             }
-            parser.substitute(defaultExpr.originalSQL, namedValues)
-          }
-          val newDefaultExpr = DefaultValueExpression(
-            defaultExpr.child,
-            substitutedSQL,
-            defaultExpr.analyzedChild)
-          CreateVariable(ident, newDefaultExpr, replace)
+            val newDefaultExpr = createVariable.defaultExpr.copy(originalSQL = substitutedSQL)
+            createVariable.copy(defaultExpr = newDefaultExpr)
+
+          case createView: CreateView if (createView.originalText.isDefined) =>
+            val substitutedSQL = {
+              val parser = new SubstituteParamsParser()
+              // Convert expressions to values for named parameters
+              val namedValues = args.map { case (name, expr) =>
+                val value = expr match {
+                  case lit: Literal => lit.sql
+                  case _ => expr.toString // fallback for non-literal expressions
+                }
+                (name, value)
+              }
+              parser.substitute(createView.originalText.get, "query", namedValues)
+            }
+            createView.copy(originalText = Some(substitutedSQL))
         }
+
         bind(newChild) { case NamedParameter(name) if args.contains(name) => args(name) }
 
       case PosParameterizedQuery(child, args)
@@ -227,27 +240,40 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         val indexedArgs = args.zipWithIndex
         checkArgs(indexedArgs.map(arg => (s"_${arg._2}", arg._1)))
 
-        val newChild = substituteSQL(child)
-        { case CreateVariable(ident, defaultExpr, replace) =>
-          // Substitute positional parameters in the SQL text of the variable definition
-          val substitutedSQL = try {
-            val parser = new SubstituteParamsParser()
-            // Convert expressions to values for positional parameters
-            val positionalValues = args.map {
-              case lit: Literal => lit.sql
-              case expr => expr.toString // fallback for non-literal expressions
-            }.toList
-            parser.substitute(defaultExpr.originalSQL, positionalParams = positionalValues)
-          } catch {
-            case e: Exception =>
-              logWarning(s"Failed to substitute parameters in variable definition: ${e.getMessage}")
-              defaultExpr.originalSQL
-          }
-          val newDefaultExpr = DefaultValueExpression(
-            defaultExpr.child,
-            substitutedSQL,
-            defaultExpr.analyzedChild)
-          CreateVariable(ident, newDefaultExpr, replace)
+        val newChild = substituteSQL(child) {
+          case createVariable: CreateVariable =>
+            // Substitute positional parameters in the SQL text of the variable definition
+            val substitutedSQL = {
+              val parser = new SubstituteParamsParser()
+              // Convert expressions to values for positional parameters
+              val positionalValues = args.map {
+                case lit: Literal => lit.sql
+                case expr => expr.toString // fallback for non-literal expressions
+              }.toList
+              parser.substitute(
+                createVariable.defaultExpr.originalSQL,
+                "expression",
+                positionalParams = positionalValues
+              )
+            }
+            val newDefaultExpr = createVariable.defaultExpr.copy(originalSQL = substitutedSQL)
+            createVariable.copy(defaultExpr = newDefaultExpr)
+
+          case createView: CreateView if (createView.originalText.isDefined) =>
+            val substitutedSQL = {
+              val parser = new SubstituteParamsParser()
+              // Convert expressions to values for positional parameters
+              val positionalValues = args.map {
+                case lit: Literal => lit.sql
+                case expr => expr.toString // fallback for non-literal expressions
+              }.toList
+              parser.substitute(
+                createView.originalText.get,
+                "query",
+                positionalParams = positionalValues
+              )
+            }
+            createView.copy(originalText = Some(substitutedSQL))
         }
 
         val positions = scala.collection.mutable.Set.empty[Int]
