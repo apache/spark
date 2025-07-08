@@ -181,7 +181,7 @@ private[spark] object AnsiIntervalType extends AbstractDataType {
  */
 private[sql] abstract class AnyTimeType extends DatetimeType
 
-private[spark] object AnyTimeType extends AbstractDataType {
+private[spark] object AnyTimeType extends AbstractDataType with Serializable {
   override private[sql] def simpleString: String = "time"
 
   override private[sql] def acceptsType(other: DataType): Boolean =
