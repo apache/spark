@@ -123,6 +123,9 @@ case class JDBCScanBuilder(
     }
   }
 
+  // TODO: We should check that credentials are same in case they are not the part of URL. We should
+  // also check if joins are done on 2 tables from 2 different databases withing same host. These
+  // shouldn't be allowed.
   override def isOtherSideCompatibleForJoin(other: SupportsPushDownJoin): Boolean = {
     if (!jdbcOptions.pushDownJoin || !dialect.supportsJoin) {
       return false
@@ -131,7 +134,6 @@ case class JDBCScanBuilder(
     other.isInstanceOf[JDBCScanBuilder] &&
       jdbcOptions.url == other.asInstanceOf[JDBCScanBuilder].jdbcOptions.url
   };
-
 
   /**
    * Helper method to calculate StructType based on the SupportsPushDownJoin.ColumnWithAlias and
@@ -149,8 +151,11 @@ case class JDBCScanBuilder(
       val alias = columnWithAlias.alias()
       val field = schema(colName)
 
-      val newName = if (alias == null) colName else alias
-      newSchema = newSchema.add(newName, field.dataType, field.nullable, field.metadata)
+      if (alias == null) {
+        newSchema = newSchema.add(field)
+      } else {
+        newSchema = newSchema.add(alias, field.dataType, field.nullable, field.metadata)
+      }
     }
 
     newSchema
@@ -159,8 +164,8 @@ case class JDBCScanBuilder(
   override def pushDownJoin(
       other: SupportsPushDownJoin,
       joinType: JoinType,
-      leftSideRequiredColumnWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
-      rightSideRequiredColumnWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
+      leftSideRequiredColumnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
+      rightSideRequiredColumnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
       condition: Predicate ): Boolean = {
     if (!jdbcOptions.pushDownJoin || !dialect.supportsJoin) {
       return false
@@ -183,10 +188,10 @@ case class JDBCScanBuilder(
 
     // requiredSchema will become the finalSchema of this JDBCScanBuilder
     var requiredSchema = StructType(Seq())
-    requiredSchema = calculateJoinOutputSchema(leftSideRequiredColumnWithAliases, finalSchema)
+    requiredSchema = calculateJoinOutputSchema(leftSideRequiredColumnsWithAliases, finalSchema)
     requiredSchema = requiredSchema.merge(
       calculateJoinOutputSchema(
-        rightSideRequiredColumnWithAliases,
+        rightSideRequiredColumnsWithAliases,
         otherJdbcScanBuilder.finalSchema
       )
     )
@@ -196,9 +201,9 @@ case class JDBCScanBuilder(
 
     // Get left side and right side of join sql query builders and recursively build them when
     // crafting join sql query.
-    val leftSideJdbcSQLBuilder = getJoinPushdownJdbcSQLBuilder(leftSideRequiredColumnWithAliases)
+    val leftSideJdbcSQLBuilder = getJoinPushdownJdbcSQLBuilder(leftSideRequiredColumnsWithAliases)
     val otherSideJdbcSQLBuilder = otherJdbcScanBuilder
-      .getJoinPushdownJdbcSQLBuilder(rightSideRequiredColumnWithAliases)
+      .getJoinPushdownJdbcSQLBuilder(rightSideRequiredColumnsWithAliases)
 
     val joinQuery = dialect
       .getJdbcSQLQueryBuilder(jdbcOptions)
@@ -213,10 +218,10 @@ case class JDBCScanBuilder(
       )
       .build()
 
-    val newMap = jdbcOptions.parameters.originalMap +
+    val newJdbcOptionsMap = jdbcOptions.parameters.originalMap +
       (JDBCOptions.JDBC_QUERY_STRING -> joinQuery) - JDBCOptions.JDBC_TABLE_NAME
 
-    jdbcOptions = new JDBCOptions(newMap)
+    jdbcOptions = new JDBCOptions(newJdbcOptionsMap)
     finalSchema = requiredSchema
 
     // We need to reset the pushedPredicate because it has already been consumed in previously

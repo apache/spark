@@ -112,10 +112,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     // JOIN
     // (SELECT * FROM tbl t3 JOIN tbl3 t4) q
     // ON p.t1.col = q.t3.col (this is not possible)
-    // It's because there are 2 same tables in both sides of top level join and it not possible
-    // to fully qualified the column names in condition. Therefore, query should be rewritten so
-    // that each of the outputs of child joins are aliased, so there would be a projection
-    // with aliases between top level join and scanBuilderHolder (that has pushed child joins).
+    // It's because there are duplicated columns in both sides of top level join and it's not
+    // possible to fully qualified the column names in condition. Therefore, query should be
+    // rewritten so that each of the outputs of child joins are aliased, so there would be a
+    // projection with aliases between top level join and scanBuilderHolder (that has pushed
+    // child joins).
     case node @ Join(
       PhysicalOperation(
         leftProjections,
@@ -130,19 +131,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       joinType,
       condition,
     _) if conf.dataSourceV2JoinPushdown &&
-      // We do not support pushing down anything besides AttributeReference.
-      leftProjections.forall(_.isInstanceOf[AttributeReference]) &&
-      rightProjections.forall(_.isInstanceOf[AttributeReference]) &&
-      // Cross joins are not supported because they increase the amount of data.
-      condition.isDefined &&
-      // Joins on top of sampled tables are not supported
-      leftHolder.pushedSample.isEmpty &&
-      rightHolder.pushedSample.isEmpty &&
-      lBuilder.isOtherSideCompatibleForJoin(rBuilder) =>
-
-      def generateJoinOutputAlias(name: String): String =
-        s"${name}_${java.util.UUID.randomUUID().toString.replace("-", "_")}"
-
+        // We do not support pushing down anything besides AttributeReference.
+        leftProjections.forall(_.isInstanceOf[AttributeReference]) &&
+        rightProjections.forall(_.isInstanceOf[AttributeReference]) &&
+        // Cross joins are not supported because they increase the amount of data.
+        condition.isDefined &&
+        // Joins on top of sampled tables are not supported
+        leftHolder.pushedSample.isEmpty &&
+        rightHolder.pushedSample.isEmpty &&
+        lBuilder.isOtherSideCompatibleForJoin(rBuilder) =>
       val leftSideRequiredColumnNames = getRequiredColumnNames(leftProjections, leftHolder)
       val rightSideRequiredColumnNames = getRequiredColumnNames(rightProjections, rightHolder)
 
@@ -159,8 +156,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         new SupportsPushDownJoin.ColumnWithAlias(name, aliasName)
       }
 
-      // Aliasing of duplicated columns in right side of the join is not needed because the
-      // the conflicts are resolved by aliasing the left side.
+      // Aliasing of duplicated columns in right side is done only if there are duplicates in
+      // right side only. There won't be a conflict with left side columns because they are
+      // already aliased.
       val rightSideRequiredColumnsWithAliases = rightSideRequiredColumnNames.map { name =>
         val aliasName =
           if (rightSideRequiredColumnNames.count(_ == name) > 1) {
@@ -199,13 +197,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val translatedJoinType = DataSourceStrategy.translateJoinType(joinType)
 
       if (translatedJoinType.isDefined &&
-          translatedCondition.isDefined &&
-          lBuilder.pushDownJoin(
-            rBuilder,
-            translatedJoinType.get,
-            leftSideRequiredColumnsWithAliases,
-            rightSideRequiredColumnsWithAliases,
-            translatedCondition.get)
+        translatedCondition.isDefined &&
+        lBuilder.pushDownJoin(
+          rBuilder,
+          translatedJoinType.get,
+          leftSideRequiredColumnsWithAliases,
+          rightSideRequiredColumnsWithAliases,
+          translatedCondition.get)
       ) {
         leftHolder.joinedRelations = leftHolder.joinedRelations ++ rightHolder.joinedRelations
         leftHolder.pushedPredicates = leftHolder.pushedPredicates ++
@@ -219,6 +217,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         node
       }
   }
+
+  def generateJoinOutputAlias(name: String): String =
+    s"${name}_${java.util.UUID.randomUUID().toString.replace("-", "_")}"
 
   // projections' names are maybe not up to date if the joins have been previously pushed down.
   // For this reason, we need to use pushedJoinOutputMap to get up to date names.
