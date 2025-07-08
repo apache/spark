@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector.join;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * Base class of the public Join type API.
+ * Enum representing the join type in public API.
  *
  * @since 4.1.0
  */

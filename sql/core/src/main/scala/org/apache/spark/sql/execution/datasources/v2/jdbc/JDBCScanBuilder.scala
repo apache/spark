@@ -124,6 +124,8 @@ case class JDBCScanBuilder(
   }
 
   override def isOtherSideCompatibleForJoin(other: SupportsPushDownJoin): Boolean = {
+    if (!jdbcOptions.pushDownJoin || !dialect.supportsJoin) return false
+
     other.isInstanceOf[JDBCScanBuilder] &&
       jdbcOptions.url == other.asInstanceOf[JDBCScanBuilder].jdbcOptions.url
   };
@@ -155,24 +157,24 @@ case class JDBCScanBuilder(
   override def pushDownJoin(
       other: SupportsPushDownJoin,
       joinType: JoinType,
-      leftSideRequiredOutputWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
-      rightSideRequiredOutputWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
+      leftSideRequiredColumnWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
+      rightSideRequiredColumnWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
       condition: Predicate ): Boolean = {
     if (!jdbcOptions.pushDownJoin || !dialect.supportsJoin) return false
     val otherJdbcScanBuilder = other.asInstanceOf[JDBCScanBuilder]
 
     // Get left side and right side of join sql queries. These will be used as subqueries in final
     // join query.
-    val sqlQuery = buildSQLQueryUsedInJoinPushDown(leftSideRequiredOutputWithAliases)
+    val sqlQuery = buildSQLQueryUsedInJoinPushDown(leftSideRequiredColumnWithAliases)
     val otherSideSqlQuery = otherJdbcScanBuilder
-      .buildSQLQueryUsedInJoinPushDown(rightSideRequiredOutputWithAliases)
+      .buildSQLQueryUsedInJoinPushDown(rightSideRequiredColumnWithAliases)
 
     // requiredSchema will become the finalSchema of this JDBCScanBuilder
     var requiredSchema = StructType(Seq())
-    requiredSchema = calculateJoinOutputSchema(leftSideRequiredOutputWithAliases, finalSchema)
+    requiredSchema = calculateJoinOutputSchema(leftSideRequiredColumnWithAliases, finalSchema)
     requiredSchema = requiredSchema.merge(
       calculateJoinOutputSchema(
-        rightSideRequiredOutputWithAliases,
+        rightSideRequiredColumnWithAliases,
         otherJdbcScanBuilder.finalSchema
       )
     )
