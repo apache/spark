@@ -70,7 +70,9 @@ def _non_fractional_astype(
         return _as_other_type(index_ops, dtype, spark_type)
 
 
-def _cast_back_float(expr: PySparkColumn, left_dtype: Union[str, type, Dtype], right: Any):
+def _cast_back_float(
+    expr: PySparkColumn, left_dtype: Union[str, type, Dtype], right: Any
+) -> PySparkColumn:
     """
     Cast the result expression back to the original float dtype if needed.
 
