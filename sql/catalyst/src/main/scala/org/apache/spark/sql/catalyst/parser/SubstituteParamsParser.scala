@@ -21,6 +21,19 @@ import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
 import org.apache.spark.internal.Logging
 
 /**
+ * Enumeration for the types of SQL rules that can be parsed for parameter substitution.
+ */
+sealed trait SubstitutionRule
+
+object SubstitutionRule {
+  /** Rule for parsing complete SQL queries */
+  case object Query extends SubstitutionRule
+
+  /** Rule for parsing SQL expressions */
+  case object Expression extends SubstitutionRule
+}
+
+/**
  * A parameter substitution parser that replaces parameter markers in SQL text with their values.
  * This parser finds parameter markers and substitutes them with provided values to produce
  * a modified SQL string ready for execution.
@@ -31,13 +44,14 @@ class SubstituteParamsParser extends Logging {
    * Substitute parameter markers in SQL text with provided values.
    *
    * @param sqlText          The original SQL text containing parameter markers
+   * @param rule             The type of SQL rule to parse (Query or Expression)
    * @param namedParams      Map of named parameter values (paramName -> value)
    * @param positionalParams List of positional parameter values in order
    * @return Modified SQL string with parameters substituted
    */
   def substitute(
                   sqlText: String,
-                  rule: String,
+                  rule: SubstitutionRule,
                   namedParams: Map[String, String] = Map.empty,
                   positionalParams: List[String] = List.empty): String = {
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(sqlText)))
@@ -53,10 +67,8 @@ class SubstituteParamsParser extends Logging {
 
     // Parse as a single statement to get parameter locations
     val ctx = rule match {
-      case "query" => parser.query()
-      case "expression" => parser.expression()
-      case _ =>
-        throw new IllegalArgumentException(s"Missing rule for substitute parser: $rule")
+      case SubstitutionRule.Query => parser.query()
+      case SubstitutionRule.Expression => parser.expression()
     }
     val parameterLocations = astBuilder.extractParameterLocations(ctx)
 
@@ -128,7 +140,7 @@ object SubstituteParamsParser {
 
   def substitute(
       sqlText: String,
-      rule: String,
+      rule: SubstitutionRule,
       namedParams: Map[String, String] = Map.empty,
       positionalParams: List[String] = List.empty): String =
     instance.substitute(sqlText, rule, namedParams, positionalParams)
