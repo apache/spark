@@ -36,64 +36,55 @@ class DeclareVariableParserSuite extends AnalysisTest with SharedSparkSession {
       CreateVariable(
         UnresolvedIdentifier(Seq("var1")),
         DefaultValueExpression(Cast(Literal(1, IntegerType), IntegerType), "1"),
-        replace = false,
-        None))
+        replace = false))
     comparePlans(
       parsePlan("DECLARE var1 INT"),
       CreateVariable(
         UnresolvedIdentifier(Seq("var1")),
         DefaultValueExpression(Literal(null, IntegerType), "null"),
-        replace = false,
-        None))
+        replace = false))
     comparePlans(
       parsePlan("DECLARE var1 = 1"),
       CreateVariable(
         UnresolvedIdentifier(Seq("var1")),
         DefaultValueExpression(Literal(1, IntegerType), "1"),
-        replace = false,
-        None))
+        replace = false))
     comparePlans(
       parsePlan("DECLARE VARIABLE var1 = 1"),
       CreateVariable(
         UnresolvedIdentifier(Seq("var1")),
         DefaultValueExpression(Literal(1, IntegerType), "1"),
-        replace = false,
-        None))
+        replace = false))
     comparePlans(
       parsePlan("DECLARE VAR var1 = 1"),
       CreateVariable(
         UnresolvedIdentifier(Seq("var1")),
         DefaultValueExpression(Literal(1, IntegerType), "1"),
-        replace = false,
-        None))
+        replace = false))
     comparePlans(
       parsePlan("DECLARE VARIABLE var1 DEFAULT 1"),
       CreateVariable(
         UnresolvedIdentifier(Seq("var1")),
         DefaultValueExpression(Literal(1, IntegerType), "1"),
-        replace = false,
-        None))
+        replace = false))
     comparePlans(
       parsePlan("DECLARE VARIABLE var1 INT DEFAULT 1"),
       CreateVariable(
         UnresolvedIdentifier(Seq("var1")),
         DefaultValueExpression(Cast(Literal(1, IntegerType), IntegerType), "1"),
-        replace = false,
-        None))
+        replace = false))
     comparePlans(
       parsePlan("DECLARE VARIABLE system.session.var1 DEFAULT 1"),
       CreateVariable(
         UnresolvedIdentifier(Seq("system", "session", "var1")),
         DefaultValueExpression(Literal(1, IntegerType), "1"),
-        replace = false,
-        None))
+        replace = false))
     comparePlans(
       parsePlan("DECLARE VARIABLE session.var1 DEFAULT 1"),
       CreateVariable(
         UnresolvedIdentifier(Seq("session", "var1")),
         DefaultValueExpression(Literal(1, IntegerType), "1"),
-        replace = false,
-        None))
+        replace = false))
     comparePlans(
       parsePlan("DECLARE VARIABLE var1 STRING DEFAULT CURRENT_DATABASE()"),
       CreateVariable(
@@ -101,8 +92,7 @@ class DeclareVariableParserSuite extends AnalysisTest with SharedSparkSession {
         DefaultValueExpression(
           Cast(UnresolvedFunction("CURRENT_DATABASE", Nil, isDistinct = false), StringType),
           "CURRENT_DATABASE()"),
-        replace = false,
-        None))
+        replace = false))
     val subqueryAliasChild =
       if (conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)) {
         EvaluateUnresolvedInlineTable.evaluate(
@@ -120,8 +110,7 @@ class DeclareVariableParserSuite extends AnalysisTest with SharedSparkSession {
               SubqueryAlias(Seq("T"),
                 subqueryAliasChild))), IntegerType),
           "(SELECT c1 FROM VALUES(1) AS T(c1))"),
-        replace = false,
-        None))
+        replace = false))
   }
 
   test("declare or replace variable") {
@@ -130,8 +119,7 @@ class DeclareVariableParserSuite extends AnalysisTest with SharedSparkSession {
       CreateVariable(
         UnresolvedIdentifier(Seq("var1")),
         DefaultValueExpression(Literal(1, IntegerType), "1"),
-        replace = true,
-        None))
+        replace = true))
     comparePlans(
       parsePlan("DECLARE OR REPLACE VARIABLE var1 DOUBLE DEFAULT 1 + RAND(5)"),
       CreateVariable(
@@ -142,22 +130,19 @@ class DeclareVariableParserSuite extends AnalysisTest with SharedSparkSession {
               UnresolvedFunction("RAND", Seq(Literal(5, IntegerType)), isDistinct = false)),
             DoubleType),
           "1 + RAND(5)"),
-        replace = true,
-        None))
+        replace = true))
     comparePlans(
       parsePlan("DECLARE OR REPLACE VARIABLE var1 DEFAULT NULL"),
       CreateVariable(
         UnresolvedIdentifier(Seq("var1")),
         DefaultValueExpression(Literal(null, NullType), "NULL"),
-        replace = true,
-        None))
+        replace = true))
     comparePlans(
       parsePlan("DECLARE OR REPLACE VARIABLE INT DEFAULT 5.0"),
       CreateVariable(
         UnresolvedIdentifier(Seq("INT")),
         DefaultValueExpression(Literal(Decimal("5.0"), DecimalType(2, 1)), "5.0"),
-        replace = true,
-        None))
+        replace = true))
     comparePlans(
       parsePlan("DECLARE OR REPLACE VARIABLE var1 MAP<string, double> " +
         "DEFAULT MAP('Hello', 5.1, 'World', -7.1E10)"),
@@ -171,15 +156,13 @@ class DeclareVariableParserSuite extends AnalysisTest with SharedSparkSession {
             Literal(-7.1E10, DoubleType)), isDistinct = false),
           MapType(StringType, DoubleType)),
           "MAP('Hello', 5.1, 'World', -7.1E10)"),
-        replace = true,
-        None))
+        replace = true))
     comparePlans(
       parsePlan("DECLARE OR REPLACE VARIABLE var1 INT DEFAULT NULL"),
       CreateVariable(
         UnresolvedIdentifier(Seq("var1")),
         DefaultValueExpression(Cast(Literal(null, NullType), IntegerType), "NULL"),
-        replace = true,
-        None))
+        replace = true))
     comparePlans(
       parsePlan("DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 1 / 0"),
       CreateVariable(
@@ -187,8 +170,7 @@ class DeclareVariableParserSuite extends AnalysisTest with SharedSparkSession {
         DefaultValueExpression(Cast(
           Divide(Literal(1, IntegerType), Literal(0, IntegerType)), IntegerType),
           "1 / 0"),
-        replace = true,
-        None))
+        replace = true))
   }
 
   test("declare variable - not support syntax") {

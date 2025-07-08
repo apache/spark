@@ -547,7 +547,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         "'" + st.typeName.substring(6)
     case (v: Byte, ByteType) => s"${v}Y"
     case (v: Short, ShortType) => s"${v}S"
-    case (v: Integer, IntegerType) => s"${v}"
+    case (v: Int, IntegerType) => s"${v}"
     case (v: Long, LongType) => s"${v}L"
     // Float type doesn't have a suffix
     case (v: Float, FloatType) =>

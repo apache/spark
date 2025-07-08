@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import java.util.Locale
-
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
 
 import org.apache.spark.internal.Logging
@@ -39,20 +37,8 @@ class SubstituteParamsParser extends Logging {
    */
   def substitute(
                   sqlText: String,
-                  namedParams: Map[String, Any] = Map.empty,
-                  positionalParams: List[Any] = List.empty): String = {
-
-    substituteUsingParseTree(sqlText, namedParams, positionalParams)
-  }
-
-  /**
-   * Substitute parameters using parse tree traversal for accurate context-aware replacement.
-   */
-  private def substituteUsingParseTree(
-                                        sqlText: String,
-                                        namedParams: Map[String, Any],
-                                        positionalParams: List[Any]): String = {
-
+                  namedParams: Map[String, String] = Map.empty,
+                  positionalParams: List[String] = List.empty): String = {
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(sqlText)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
@@ -78,8 +64,8 @@ class SubstituteParamsParser extends Logging {
   private def substituteAtLocations(
                                      sqlText: String,
                                      locations: ParameterLocationInfo,
-                                     namedParams: Map[String, Any],
-                                     positionalParams: List[Any]): String = {
+                                     namedParams: Map[String, String],
+                                     positionalParams: List[String]): String = {
 
     val substitutions = scala.collection.mutable.ListBuffer[Substitution]()
 
@@ -87,7 +73,7 @@ class SubstituteParamsParser extends Logging {
     locations.namedParameterLocations.foreach { case (name, location) =>
       namedParams.get(name) match {
         case Some(value) =>
-          substitutions += Substitution(location.start, location.end, formatValue(value))
+          substitutions += Substitution(location.start, location.end, value)
         case None =>
           throw new IllegalArgumentException(s"Missing value for named parameter: $name")
       }
@@ -102,7 +88,7 @@ class SubstituteParamsParser extends Logging {
 
     locations.positionalParameterLocations.zip(positionalParams).foreach {
       case (location, value) =>
-        substitutions += Substitution(location.start, location.end, formatValue(value))
+        substitutions += Substitution(location.start, location.end, value)
     }
 
     applySubstitutions(sqlText, substitutions.toList)
@@ -123,18 +109,6 @@ class SubstituteParamsParser extends Logging {
     }
     result
   }
-
-  /**
-   * Format a value for SQL substitution.
-   */
-  private def formatValue(value: Any): String = {
-    value match {
-      case null => "NULL"
-      case s: String => s"'${s.replace("'", "''")}'" // Escape single quotes
-      case b: Boolean => b.toString.toUpperCase(Locale.ROOT)
-      case _ => value.toString
-    }
-  }
 }
 
 /**
@@ -148,8 +122,8 @@ object SubstituteParamsParser {
 
   def substitute(
       sqlText: String,
-      namedParams: Map[String, Any] = Map.empty,
-      positionalParams: List[Any] = List.empty): String =
+      namedParams: Map[String, String] = Map.empty,
+      positionalParams: List[String] = List.empty): String =
     instance.substitute(sqlText, namedParams, positionalParams)
 }
 

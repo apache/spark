@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, LeafExpression, Literal, MapFromArrays, MapFromEntries, SubqueryExpression, Unevaluable, VariableReference}
 import org.apache.spark.sql.catalyst.parser.SubstituteParamsParser
-import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, LogicalPlan, SupervisingCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, LogicalPlan, SupervisingCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
 import org.apache.spark.sql.errors.QueryErrorsBase
@@ -199,7 +199,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         checkArgs(args)
 
         val newChild = substituteSQL(child)
-        { case CreateVariable(ident, defaultExpr, replace, None) =>
+        { case CreateVariable(ident, defaultExpr, replace) =>
           // Substitute named parameters in the SQL text of the variable definition
           val substitutedSQL = {
             val parser = new SubstituteParamsParser()
@@ -213,7 +213,11 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
             }
             parser.substitute(defaultExpr.originalSQL, namedValues)
           }
-          CreateVariable(ident, defaultExpr, replace, Some(substitutedSQL))
+          val newDefaultExpr = DefaultValueExpression(
+            defaultExpr.child,
+            substitutedSQL,
+            defaultExpr.analyzedChild)
+          CreateVariable(ident, newDefaultExpr, replace)
         }
         bind(newChild) { case NamedParameter(name) if args.contains(name) => args(name) }
 
@@ -224,13 +228,13 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         checkArgs(indexedArgs.map(arg => (s"_${arg._2}", arg._1)))
 
         val newChild = substituteSQL(child)
-        { case CreateVariable(ident, defaultExpr, replace, None) =>
+        { case CreateVariable(ident, defaultExpr, replace) =>
           // Substitute positional parameters in the SQL text of the variable definition
           val substitutedSQL = try {
             val parser = new SubstituteParamsParser()
             // Convert expressions to values for positional parameters
             val positionalValues = args.map {
-              case lit: Literal => lit.value
+              case lit: Literal => lit.sql
               case expr => expr.toString // fallback for non-literal expressions
             }.toList
             parser.substitute(defaultExpr.originalSQL, positionalParams = positionalValues)
@@ -239,7 +243,11 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
               logWarning(s"Failed to substitute parameters in variable definition: ${e.getMessage}")
               defaultExpr.originalSQL
           }
-          CreateVariable(ident, defaultExpr, replace, Some(substitutedSQL))
+          val newDefaultExpr = DefaultValueExpression(
+            defaultExpr.child,
+            substitutedSQL,
+            defaultExpr.analyzedChild)
+          CreateVariable(ident, newDefaultExpr, replace)
         }
 
         val positions = scala.collection.mutable.Set.empty[Int]

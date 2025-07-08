@@ -6360,8 +6360,7 @@ class AstBuilder extends DataTypeAstBuilder
     CreateVariable(
       withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
       defaultExpression,
-      ctx.REPLACE() != null,
-      None  // defaultExpressionText will be populated during analysis if needed
+      ctx.REPLACE() != null
     )
   }
 

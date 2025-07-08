@@ -1693,8 +1693,7 @@ case class TableSpec(
 case class CreateVariable(
     name: LogicalPlan,
     defaultExpr: DefaultValueExpression,
-    replace: Boolean,
-    defaultExpressionText: Option[String] = None) extends UnaryCommand with SupportsSubquery {
+    replace: Boolean) extends UnaryCommand with SupportsSubquery {
   override def child: LogicalPlan = name
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(name = newChild)
