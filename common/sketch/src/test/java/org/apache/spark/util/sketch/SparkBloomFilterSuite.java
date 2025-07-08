@@ -380,8 +380,8 @@ public class SparkBloomFilterSuite {
   }
 
   // quick scrambling logic hacked out from java.util.Random
-//   its range is only 48bits (out of the 64bits of a Long value),
-//   but it should be enough for the purposes of this test.
+  //   its range is only 48bits (out of the 64bits of a Long value),
+  //   but it should be enough for the purposes of this test.
   private static final long multiplier = 0x5DEECE66DL;
   private static final long addend = 0xBL;
   private static final long mask = (1L << 48) - 1;
