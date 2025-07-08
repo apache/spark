@@ -55,23 +55,20 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
   override def resolve(unresolvedTimezoneExpression: TimeZoneAwareExpression): Expression = {
     val expressionWithResolvedChildren =
       withResolvedChildren(unresolvedTimezoneExpression, expressionResolver.resolve _)
-
     val expressionWithResolvedChildrenAndTimeZone = TimezoneAwareExpressionResolver.resolveTimezone(
       expressionWithResolvedChildren,
       traversals.current.sessionLocalTimeZone
     )
 
-    val coercedExpr = coerceExpressionTypes(
+    coerceExpressionTypes(
       expression = expressionWithResolvedChildrenAndTimeZone,
       expressionTreeTraversal = traversals.current
     ) match {
       case cast: Cast if traversals.current.defaultCollation.isDefined =>
         tryCollapseCast(cast, traversals.current.defaultCollation.get)
       case other =>
-        other
+        rewriteTimeCastToTimestampNTZ(other)
     }
-
-    rewriteTimeCastToTimestampNTZ(coercedExpr)
   }
 
   /**
@@ -124,7 +121,7 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
 
   private def rewriteTimeCastToTimestampNTZ(expr: Expression): Expression = expr match {
     case Cast(child, TimestampNTZType, _, _)
-      if child.resolved && child.dataType.isInstanceOf[TimeType] =>
+      if child.dataType.isInstanceOf[TimeType] =>
       MakeTimestampNTZ(CurrentDate(), child)
     case other =>
       other
