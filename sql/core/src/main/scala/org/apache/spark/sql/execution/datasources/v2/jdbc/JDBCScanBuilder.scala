@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownAggrega
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
-import org.apache.spark.sql.jdbc.JdbcDialects
+import org.apache.spark.sql.jdbc.{JdbcDialects, JdbcSQLQueryBuilder}
 import org.apache.spark.sql.types.StructType
 
 case class JDBCScanBuilder(
@@ -124,7 +124,9 @@ case class JDBCScanBuilder(
   }
 
   override def isOtherSideCompatibleForJoin(other: SupportsPushDownJoin): Boolean = {
-    if (!jdbcOptions.pushDownJoin || !dialect.supportsJoin) return false
+    if (!jdbcOptions.pushDownJoin || !dialect.supportsJoin) {
+      return false
+    }
 
     other.isInstanceOf[JDBCScanBuilder] &&
       jdbcOptions.url == other.asInstanceOf[JDBCScanBuilder].jdbcOptions.url
@@ -143,8 +145,8 @@ case class JDBCScanBuilder(
       schema: StructType): StructType = {
     var newSchema = StructType(Seq())
     columnsWithAliases.foreach { columnWithAlias =>
-      val colName = columnWithAlias.getColName
-      val alias = columnWithAlias.getAlias
+      val colName = columnWithAlias.colName()
+      val alias = columnWithAlias.alias()
       val field = schema(colName)
 
       val newName = if (alias == null) colName else alias
@@ -160,14 +162,24 @@ case class JDBCScanBuilder(
       leftSideRequiredColumnWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
       rightSideRequiredColumnWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
       condition: Predicate ): Boolean = {
-    if (!jdbcOptions.pushDownJoin || !dialect.supportsJoin) return false
-    val otherJdbcScanBuilder = other.asInstanceOf[JDBCScanBuilder]
+    if (!jdbcOptions.pushDownJoin || !dialect.supportsJoin) {
+      return false
+    }
 
-    // Get left side and right side of join sql queries. These will be used as subqueries in final
-    // join query.
-    val sqlQuery = buildSQLQueryUsedInJoinPushDown(leftSideRequiredColumnWithAliases)
-    val otherSideSqlQuery = otherJdbcScanBuilder
-      .buildSQLQueryUsedInJoinPushDown(rightSideRequiredColumnWithAliases)
+    val joinTypeStringOption = joinType match {
+      case JoinType.INNER_JOIN => Some("INNER JOIN")
+      case _ => None
+    }
+    if (!joinTypeStringOption.isDefined) {
+      return false
+    }
+
+    val compiledCondition = dialect.compileExpression(condition)
+    if (!compiledCondition.isDefined) {
+      return false
+    }
+
+    val otherJdbcScanBuilder = other.asInstanceOf[JDBCScanBuilder]
 
     // requiredSchema will become the finalSchema of this JDBCScanBuilder
     var requiredSchema = StructType(Seq())
@@ -179,31 +191,30 @@ case class JDBCScanBuilder(
       )
     )
 
-    val joinOutputColumnsString =
-      requiredSchema.fields.map(f => dialect.quoteIdentifier(f.name)).mkString(",")
-
-    val joinTypeStringOption = joinType match {
-      case JoinType.INNER_JOIN => Some("INNER JOIN")
-      case _ => None
-    }
-
-    if (!joinTypeStringOption.isDefined) return false
-
-    val compiledCondition = dialect.compileExpression(condition)
-    if (!compiledCondition.isDefined) return false
-
+    val joinOutputColumns = requiredSchema.fields.map(f => dialect.quoteIdentifier(f.name))
     val conditionString = compiledCondition.get
 
-    val joinQuery = s"""
-      |SELECT $joinOutputColumnsString FROM
-      |($sqlQuery) ${JoinPushdownAliasGenerator.getSubqueryQualifier}
-      |${joinTypeStringOption.get}
-      |($otherSideSqlQuery) ${JoinPushdownAliasGenerator.getSubqueryQualifier}
-      |ON $conditionString
-      |""".stripMargin
+    // Get left side and right side of join sql query builders and recursively build them when
+    // crafting join sql query.
+    val leftSideJdbcSQLBuilder = getJoinPushdownJdbcSQLBuilder(leftSideRequiredColumnWithAliases)
+    val otherSideJdbcSQLBuilder = otherJdbcScanBuilder
+      .getJoinPushdownJdbcSQLBuilder(rightSideRequiredColumnWithAliases)
+
+    val joinQuery = dialect
+      .getJdbcSQLQueryBuilder(jdbcOptions)
+      .withJoin(
+        leftSideJdbcSQLBuilder,
+        otherSideJdbcSQLBuilder,
+        JoinPushdownAliasGenerator.getSubqueryQualifier,
+        JoinPushdownAliasGenerator.getSubqueryQualifier,
+        joinOutputColumns,
+        joinTypeStringOption.get,
+        conditionString
+      )
+      .build()
 
     val newMap = jdbcOptions.parameters.originalMap +
-      (JDBCOptions.JDBC_QUERY_STRING -> joinQuery) - (JDBCOptions.JDBC_TABLE_NAME)
+      (JDBCOptions.JDBC_QUERY_STRING -> joinQuery) - JDBCOptions.JDBC_TABLE_NAME
 
     jdbcOptions = new JDBCOptions(newMap)
     finalSchema = requiredSchema
@@ -215,11 +226,11 @@ case class JDBCScanBuilder(
     true
   }
 
-  def buildSQLQueryUsedInJoinPushDown(
-      columnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias]): String = {
-    val quotedColumns = columnsWithAliases.map(col => dialect.quoteIdentifier(col.getColName))
+  def getJoinPushdownJdbcSQLBuilder(
+      columnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias]): JdbcSQLQueryBuilder = {
+    val quotedColumns = columnsWithAliases.map(col => dialect.quoteIdentifier(col.colName()))
     val quotedAliases = columnsWithAliases
-      .map(col => Option(col.getAlias).map(dialect.quoteIdentifier))
+      .map(col => Option(col.alias()).map(dialect.quoteIdentifier))
 
     // Only filters can be pushed down before join pushdown, so we need to craft SQL query
     // that contains filters as well.
@@ -228,7 +239,6 @@ case class JDBCScanBuilder(
       .getJdbcSQLQueryBuilder(jdbcOptions)
       .withPredicates(pushedPredicate, JDBCPartition(whereClause = null, idx = 1))
       .withAliasedColumns(quotedColumns, quotedAliases)
-      .build()
   }
 
   override def pushTableSample(

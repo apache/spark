@@ -267,7 +267,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     super.afterAll()
   }
 
-  test("Test 2-way join without condition - no join pushdown") {
+  // Conditionless joins are not supported in join pushdown
+  test("Test that 2-way join without condition should not have join pushed down") {
     val sqlQuery = "SELECT * FROM h2.test.employee a, h2.test.employee b"
     val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
       sql(sqlQuery).collect().toSeq
@@ -284,7 +285,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
   }
 
-  test("Test multi-way join without condition - no join pushdown") {
+  // Conditionless joins are not supported in join pushdown
+  test("Test that multi-way join without condition should not have join pushed down") {
     val sqlQuery = """
       |SELECT * FROM
       |h2.test.employee a,
@@ -452,6 +454,26 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
       assert(joinNodes.nonEmpty)
       checkAnswer(df, rows)
+    }
+  }
+
+  test("Test join with dataframe with duplicated columns") {
+    val df1 = sql("SELECT dept FROM h2.test.employee")
+    val df2 = sql("SELECT dept, dept FROM h2.test.employee")
+
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      df1.join(df2, "dept").collect().toSeq
+    }
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val joinDf = df1.join(df2, "dept")
+      val joinNodes = joinDf.queryExecution.optimizedPlan.collect {
+        case j: Join => j
+      }
+
+      assert(joinNodes.isEmpty)
+      checkPushedInfo(joinDf, "PushedJoins: [h2.test.employee, h2.test.employee]")
+      checkAnswer(joinDf, rows)
     }
   }
 
