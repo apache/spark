@@ -2790,8 +2790,8 @@ class DataFrameAggregateSuite extends QueryTest
       exception = intercept[SparkRuntimeException] {
         sql("SELECT approx_top_k(expr, 10, -1) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
       },
-      condition = "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K",
-      parameters = Map("maxItemsTracked" -> "-1", "k" -> "10")
+      condition = "APPROX_TOP_K_NON_POSITIVE_ARG",
+      parameters = Map("argName" -> "`maxItemsTracked`", "argValue" -> "-1")
     )
   }
 
