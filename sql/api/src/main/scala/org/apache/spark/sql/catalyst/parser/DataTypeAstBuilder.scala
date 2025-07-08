@@ -86,13 +86,11 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
         case CHARACTER | CHAR =>
           if (currentCtx.length == null) {
             throw QueryParsingErrors.charVarcharTypeMissingLengthError(typeCtx.getText, ctx)
-          }
-          else CharType(currentCtx.length.getText.toInt)
+          } else CharType(currentCtx.length.getText.toInt)
         case VARCHAR =>
           if (currentCtx.length == null) {
             throw QueryParsingErrors.charVarcharTypeMissingLengthError(typeCtx.getText, ctx)
-          }
-          else VarcharType(currentCtx.length.getText.toInt)
+          } else VarcharType(currentCtx.length.getText.toInt)
         case DECIMAL | DEC | NUMERIC =>
           if (currentCtx.precision == null) {
             DecimalType.USER_DEFAULT
@@ -132,11 +130,9 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
         case INTERVAL =>
           if (currentCtx.fromDayTime != null) {
             visitDayTimeIntervalDataType(currentCtx)
-          }
-          else if (currentCtx.fromYearMonth != null) {
+          } else if (currentCtx.fromYearMonth != null) {
             visitYearMonthIntervalDataType(currentCtx)
-          }
-          else {
+          } else {
             CalendarIntervalType
           }
         case VARIANT => VariantType
@@ -167,7 +163,8 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     }
   }
 
-  private def visitDayTimeIntervalDataType(ctx: PrimitiveTypeWithoutParametersContext): DataType = {
+  private def visitDayTimeIntervalDataType(
+      ctx: PrimitiveTypeWithoutParametersContext): DataType = {
     val startStr = ctx.fromDayTime.getText.toLowerCase(Locale.ROOT)
     val start = DayTimeIntervalType.stringToField(startStr)
     if (ctx.to != null) {
