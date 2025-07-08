@@ -970,8 +970,10 @@ object StaxXmlParser {
       options: XmlOptions,
       partitionSchema: StructType = StructType(Seq.empty),
       partitionValues: InternalRow = InternalRow.empty): Variant = {
+    val variantAllowDuplicateKeys = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)
+
     // The variant builder for the root startElement
-    val rootBuilder = new VariantBuilder(false)
+    val rootBuilder = new VariantBuilder(variantAllowDuplicateKeys)
     val start = rootBuilder.getWritePos
 
     // Map to store the variant values of all child fields
@@ -989,7 +991,7 @@ object StaxXmlParser {
     // Handle attributes first
     StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options).foreach {
       case (f, v) =>
-        val builder = new VariantBuilder(false)
+        val builder = new VariantBuilder(variantAllowDuplicateKeys)
         appendXMLCharacterToVariant(builder, v, options)
         val variants = fieldToVariants.getOrElseUpdate(f, new java.util.ArrayList[Variant]())
         variants.add(builder.result())
@@ -1009,7 +1011,7 @@ object StaxXmlParser {
         case c: Characters if !c.isWhiteSpace =>
           // Treat the character as a value tag field, where we use the [[XMLOptions.valueTag]] as
           // the field key
-          val builder = new VariantBuilder(false)
+          val builder = new VariantBuilder(variantAllowDuplicateKeys)
           appendXMLCharacterToVariant(builder, c.getData, options)
           val variants = fieldToVariants.getOrElseUpdate(
             options.valueTag,
@@ -1025,7 +1027,7 @@ object StaxXmlParser {
               case (field, i) =>
                 val value = partitionValues.get(i, field.dataType)
                 if (value != null) {
-                  val builder = new VariantBuilder(true)
+                  val builder = new VariantBuilder(variantAllowDuplicateKeys)
                   appendXMLCharacterToVariant(builder, value.toString, options)
                   val variants = fieldToVariants.getOrElseUpdate(
                     field.name,

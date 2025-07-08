@@ -137,11 +137,32 @@ trait FileFormat {
     val dataReader = buildReader(
       sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
 
-    if (options.contains(DataSourceOptions.SINGLE_VARIANT_COLUMN) &&
-      SQLConf.get.includePartitionColumnsInSingleVariantColumn) {
+    val includePartitionColsInSingleVariantColumn =
+      options.contains(DataSourceOptions.SINGLE_VARIANT_COLUMN) &&
+      SQLConf.get.includePartitionColumnsInSingleVariantColumn
+
+    if (includePartitionColsInSingleVariantColumn) {
+      if (partitionSchema.exists(f1 => dataSchema.exists(f2 => f1.name == f2.name))) {
+        if (!SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)) {
+          throw QueryExecutionErrors.variantDataSchemaConflictWithPartitionSchema(
+            dataSchema, partitionSchema
+          )
+        }
+      }
+
       // In singleVariantColumn mode, the partition values should be pushed down to the parser and
       // included in variant column of the output rows
-      return (file: PartitionedFile) => dataReader(file)
+      return new (PartitionedFile => Iterator[InternalRow]) with Serializable {
+        private val schema = toAttributes(requiredSchema)
+        private lazy val appendPartitionColumns = GenerateUnsafeProjection.generate(schema, schema)
+
+        override def apply(file: PartitionedFile): Iterator[InternalRow] = {
+          val converter = appendPartitionColumns
+          dataReader(file).map { dataRow =>
+            converter(dataRow)
+          }
+        }
+      }
     }
 
     new (PartitionedFile => Iterator[InternalRow]) with Serializable {

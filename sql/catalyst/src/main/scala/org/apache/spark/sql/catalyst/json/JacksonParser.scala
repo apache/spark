@@ -147,17 +147,6 @@ class JacksonParser(
   // When singleVariantColumn is defined and we have partition columns, build the variant
   // value with the partition fields
   protected final def parseVariantWithPartitionValues(parser: JsonParser): VariantVal = {
-    schema match {
-      case dataSchema: StructType =>
-        if (partitionSchema.exists(f1 => dataSchema.exists(f2 => f1.name == f2.name))) {
-          if (!variantAllowDuplicateKeys) {
-            throw QueryExecutionErrors.variantDataSchemaConflictWithPartitionSchema(
-              dataSchema, partitionSchema
-            )
-          }
-        }
-      case _ =>
-    }
     val partitionColumnNames = partitionSchema.fields.map(_.name)
     val partitionColumnValues = (0 until partitionValues.numFields).map { i =>
       if (!partitionValues.isNullAt(i)) {

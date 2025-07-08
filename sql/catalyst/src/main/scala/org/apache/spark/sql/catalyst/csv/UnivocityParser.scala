@@ -346,7 +346,7 @@ class UnivocityParser(
     (tokens: Array[String], index: Int) => tokens(tokenIndexArr(index))
   }
 
-  val variantAllowDuplicateKeys = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)
+  private val variantAllowDuplicateKeys = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)
 
   /**
    * The entire line of CSV data is collected into a single variant object. When `headerColumnNames`
@@ -364,14 +364,7 @@ class UnivocityParser(
         val extra = numFields - singleVariantFieldConverters.length
         singleVariantFieldConverters.appendAll(Array.fill(extra)(new VariantValueConverter))
       }
-      if (partitionSchema.exists(f1 => dataSchema.exists(f2 => f1.name == f2.name))) {
-        if (!SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)) {
-          throw QueryExecutionErrors.variantDataSchemaConflictWithPartitionSchema(
-            dataSchema, partitionSchema
-          )
-        }
-      }
-      val builder = new VariantBuilder(true)
+      val builder = new VariantBuilder(variantAllowDuplicateKeys)
       val start = builder.getWritePos
       val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](numFields)
       for (i <- 0 until numFields) {
@@ -383,26 +376,21 @@ class UnivocityParser(
 
       // Add the partition columns to the variant object
       if (partitionSchema.nonEmpty && SQLConf.get.includePartitionColumnsInSingleVariantColumn) {
-        partitionSchema.zipWithIndex.foreach { case (field, index) =>
-          val value = partitionValues.get(index, field.dataType)
-          if (value != null) {
-            val id = builder.addKey(field.name)
-            fields.add(new VariantBuilder.FieldEntry(field.name, id, builder.getWritePos - start))
-            field.dataType match {
-              case IntegerType | LongType => builder.appendLong(value.toString.toLong)
-              case _: DecimalType => builder.appendDecimal(
-                decimalParser(value.toString)
-              )
-              case DateType => builder.appendDate(dateFormatter.parse(value.toString))
-              case TimestampNTZType =>
-                builder.appendTimestampNtz(timestampNTZFormatter.parse(value.toString))
-              case TimestampType =>
-                builder.appendTimestamp(timestampFormatter.parse(value.toString))
-              case BooleanType => builder.appendBoolean(value.toString.toBoolean)
-              case StringType => builder.appendString(value.toString)
-            }
+        val partitionColumnNames = partitionSchema.fields.map(_.name)
+        val partitionColumnValues = (0 until partitionValues.numFields).map { i =>
+          if (!partitionValues.isNullAt(i)) {
+            partitionValues.get(i, partitionSchema.fields(i).dataType)
+          } else {
+            null
           }
-        }
+        }.toArray
+        VariantBuilder.appendPartitionValues(
+          builder,
+          start,
+          fields,
+          partitionColumnNames,
+          partitionColumnValues
+        )
       }
 
       builder.finishWritingObject(start, fields)

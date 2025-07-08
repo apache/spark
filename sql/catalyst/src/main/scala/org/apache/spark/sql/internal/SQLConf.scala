@@ -5019,8 +5019,8 @@ object SQLConf {
   val VARIANT_ALLOW_DUPLICATE_KEYS =
     buildConf("spark.sql.variant.allowDuplicateKeys")
       .internal()
-      .doc("When set to false, parsing variant from JSON will throw an error if there are " +
-        "duplicate keys in the input JSON object. When set to true, the parser will keep the " +
+      .doc("When set to false, parsing variant will throw an error if there are duplicate keys in" +
+        "the input object. When set to true, the parser will keep the " +
         "last occurrence of all fields with the same key.")
       .version("4.0.0")
       .booleanConf

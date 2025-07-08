@@ -575,18 +575,35 @@ public class VariantBuilder {
 
     // Then add partition columns if they exist
     if (partitionColumns != null && partitionValues != null) {
-      for (int i = 0; i < partitionColumns.length; i++) {
-        if (partitionValues[i] != null) {
-          int id = builder.addKey(partitionColumns[i]);
-          fields.add(new FieldEntry(partitionColumns[i], id, builder.getWritePos() - start));
-          builder.appendPartitionValue(partitionValues[i]);
-        }
-      }
+      appendPartitionValues(builder, start, fields, partitionColumns, partitionValues);
     }
 
     // Finish writing the object with all fields
     builder.finishWritingObject(start, fields);
     return builder.result();
+  }
+
+  /**
+   * Append partition values to the top-level variant object.
+   * @param builder The variant builder
+   * @param start The starting position of the top-level variant object in the builder
+   * @param fields The current data fields of the top-level variant object
+   * @param partitionColumns Array of partition column names, can be null
+   * @param partitionValues Array of partition values corresponding to the partitionColumns
+   */
+  public static void appendPartitionValues(
+      VariantBuilder builder,
+      int start,
+      ArrayList<FieldEntry> fields,
+      String[] partitionColumns,
+      Object[] partitionValues) {
+    for (int i = 0; i < partitionColumns.length; i++) {
+      if (partitionValues[i] != null) {
+        int id = builder.addKey(partitionColumns[i]);
+        fields.add(new FieldEntry(partitionColumns[i], id, builder.getWritePos() - start));
+        builder.appendPartitionValue(partitionValues[i]);
+      }
+    }
   }
 
   /**
