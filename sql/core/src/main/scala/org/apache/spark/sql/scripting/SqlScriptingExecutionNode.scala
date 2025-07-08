@@ -1176,7 +1176,8 @@ class ForStatementExec(
     val declareVariable = CreateVariable(
       UnresolvedIdentifier(Seq(varName)),
       defaultExpression,
-      replace = false
+      replace = false,
+      None  // defaultExpressionText will be populated during analysis if needed
     )
     new SingleStatementExec(declareVariable, Origin(), Map.empty, isInternal = true, context)
   }

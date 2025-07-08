@@ -22,28 +22,31 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.withOrigin
 
 /**
- * AST builder for extracting parameter markers from SQL parse trees.
- * This builder traverses the parse tree and collects all parameter literals
- * without building full Catalyst expressions.
+ * AST builder for extracting parameter markers and their locations from SQL parse trees.
+ * This builder traverses the parse tree and collects parameter information for substitution.
  */
 class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
 
   private val namedParams = scala.collection.mutable.Set[String]()
   private val positionalParams = scala.collection.mutable.ListBuffer[Int]()
+  private val namedParamLocations = scala.collection.mutable.Map[String, ParameterLocation]()
+  private val positionalParamLocations = scala.collection.mutable.ListBuffer[ParameterLocation]()
 
   /**
-   * Extract parameter information from a parse context.
-   * This method traverses the entire parse tree to find parameter markers.
+   * Extract parameter location information from a parse context.
+   * This method traverses the parse tree and collects parameter locations for substitution.
    */
-  def extractFromContext(ctx: ParseTree): ParameterInfo = {
+  def extractParameterLocations(ctx: ParseTree): ParameterLocationInfo = {
     // Clear previous state
     namedParams.clear()
     positionalParams.clear()
+    namedParamLocations.clear()
+    positionalParamLocations.clear()
 
-    // Visit the context to collect parameters
+    // Visit the context to collect parameters and their locations
     visit(ctx)
 
-    ParameterInfo(namedParams.toSet, positionalParams.toList)
+    ParameterLocationInfo(namedParamLocations.toMap, positionalParamLocations.toList)
   }
 
   /**
@@ -53,6 +56,12 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       ctx: NamedParameterLiteralContext): String = withOrigin(ctx) {
     val paramName = ctx.identifier().getText
     namedParams += paramName
+
+    // Calculate the location of the entire parameter (including the colon)
+    val startIndex = ctx.getStart.getStartIndex
+    val stopIndex = ctx.getStop.getStopIndex + 1
+    namedParamLocations(paramName) = ParameterLocation(startIndex, stopIndex)
+
     paramName
   }
 
@@ -64,6 +73,11 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       ctx: PosParameterLiteralContext): String = withOrigin(ctx) {
     val startIndex = ctx.QUESTION().getSymbol.getStartIndex
     positionalParams += startIndex
+
+    // Calculate the location of the question mark
+    val stopIndex = ctx.QUESTION().getSymbol.getStopIndex + 1
+    positionalParamLocations += ParameterLocation(startIndex, stopIndex)
+
     "?"
   }
 
@@ -147,3 +161,20 @@ case class ParameterInfo(
     if (parts.nonEmpty) s"ParameterInfo(${parts.mkString(", ")})" else "ParameterInfo(empty)"
   }
 }
+
+/**
+ * Data class to hold parameter location information for substitution.
+ */
+case class ParameterLocationInfo(
+    namedParameterLocations: Map[String, ParameterLocation],
+    positionalParameterLocations: List[ParameterLocation]) {
+
+  def isEmpty: Boolean = namedParameterLocations.isEmpty && positionalParameterLocations.isEmpty
+  def nonEmpty: Boolean = !isEmpty
+  def totalCount: Int = namedParameterLocations.size + positionalParameterLocations.size
+}
+
+/**
+ * Data class representing a parameter location in the source text.
+ */
+case class ParameterLocation(start: Int, end: Int)

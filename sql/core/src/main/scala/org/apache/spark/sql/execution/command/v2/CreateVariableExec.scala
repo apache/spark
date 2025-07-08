@@ -33,7 +33,9 @@ import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 case class CreateVariableExec(
     resolvedIdentifier: ResolvedIdentifier,
     defaultExpr: DefaultValueExpression,
-    replace: Boolean) extends LeafV2CommandExec with ExpressionsEvaluator {
+    replace: Boolean,
+    defaultExpressionText: Option[String] = None)
+  extends LeafV2CommandExec with ExpressionsEvaluator {
 
   override protected def run(): Seq[InternalRow] = {
     val scriptingVariableManager = SqlScriptingContextManager.get().map(_.getVariableManager)
@@ -50,7 +52,10 @@ case class CreateVariableExec(
         resolvedIdentifier.identifier.namespace().map(_.toLowerCase(Locale.ROOT)),
         resolvedIdentifier.identifier.name().toLowerCase(Locale.ROOT))
     }
-    val varDef = VariableDefinition(normalizedIdentifier, defaultExpr.originalSQL, initValue)
+
+    // Use the substituted SQL text if available, otherwise fall back to original SQL
+    val sqlText = defaultExpressionText.getOrElse(defaultExpr.originalSQL)
+    val varDef = VariableDefinition(normalizedIdentifier, sqlText, initValue)
 
     // create local variable if we are in a script, otherwise create session variable
     scriptingVariableManager

@@ -27,8 +27,8 @@ object V2CommandStrategy extends Strategy {
 
   // TODO: move v2 commands to here which are not data source v2 related.
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case CreateVariable(ident: ResolvedIdentifier, defaultExpr, replace) =>
-      CreateVariableExec(ident, defaultExpr, replace) :: Nil
+    case CreateVariable(ident: ResolvedIdentifier, defaultExpr, replace, defaultExpressionText) =>
+      CreateVariableExec(ident, defaultExpr, replace, defaultExpressionText) :: Nil
 
     case DropVariable(ident: ResolvedIdentifier, ifExists) =>
       DropVariableExec(ident.identifier.name, ifExists) :: Nil

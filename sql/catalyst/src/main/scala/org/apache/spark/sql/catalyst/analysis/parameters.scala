@@ -19,7 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, LeafExpression, Literal, MapFromArrays, MapFromEntries, SubqueryExpression, Unevaluable, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SupervisingCommand}
+import org.apache.spark.sql.catalyst.parser.SubstituteParamsParser
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, LogicalPlan, SupervisingCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
 import org.apache.spark.sql.errors.QueryErrorsBase
@@ -173,6 +174,16 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
     }
   }
 
+  private def substituteSQL(p0: LogicalPlan)(f: PartialFunction[LogicalPlan, LogicalPlan]):
+  LogicalPlan = {
+    var stop = false
+    p0.resolveOperatorsDownWithPruning(_.containsPattern(PARAMETER) && !stop) {
+      case p1 =>
+        stop = p1.isInstanceOf[ParameterizedQuery]
+        p1.resolveOperatorsWithPruning(_.containsPattern(COMMAND)) (f)
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(_.containsPattern(PARAMETERIZED_QUERY)) {
       // We should wait for `CTESubstitution` to resolve CTE before binding parameters, as CTE
@@ -186,7 +197,25 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         }
         val args = argNames.zip(argValues).toMap
         checkArgs(args)
-        bind(child) { case NamedParameter(name) if args.contains(name) => args(name) }
+
+        val newChild = substituteSQL(child)
+        { case CreateVariable(ident, defaultExpr, replace, None) =>
+          // Substitute named parameters in the SQL text of the variable definition
+          val substitutedSQL = {
+            val parser = new SubstituteParamsParser()
+            // Convert expressions to values for named parameters
+            val namedValues = args.map { case (name, expr) =>
+              val value = expr match {
+                case lit: Literal => lit.sql
+                case _ => expr.toString // fallback for non-literal expressions
+              }
+              (name, value)
+            }
+            parser.substitute(defaultExpr.originalSQL, namedValues)
+          }
+          CreateVariable(ident, defaultExpr, replace, Some(substitutedSQL))
+        }
+        bind(newChild) { case NamedParameter(name) if args.contains(name) => args(name) }
 
       case PosParameterizedQuery(child, args)
         if !child.containsPattern(UNRESOLVED_WITH) &&
@@ -194,11 +223,30 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         val indexedArgs = args.zipWithIndex
         checkArgs(indexedArgs.map(arg => (s"_${arg._2}", arg._1)))
 
+        val newChild = substituteSQL(child)
+        { case CreateVariable(ident, defaultExpr, replace, None) =>
+          // Substitute positional parameters in the SQL text of the variable definition
+          val substitutedSQL = try {
+            val parser = new SubstituteParamsParser()
+            // Convert expressions to values for positional parameters
+            val positionalValues = args.map {
+              case lit: Literal => lit.value
+              case expr => expr.toString // fallback for non-literal expressions
+            }.toList
+            parser.substitute(defaultExpr.originalSQL, positionalParams = positionalValues)
+          } catch {
+            case e: Exception =>
+              logWarning(s"Failed to substitute parameters in variable definition: ${e.getMessage}")
+              defaultExpr.originalSQL
+          }
+          CreateVariable(ident, defaultExpr, replace, Some(substitutedSQL))
+        }
+
         val positions = scala.collection.mutable.Set.empty[Int]
-        bind(child) { case p @ PosParameter(pos) => positions.add(pos); p }
+        bind(newChild) { case p @ PosParameter(pos) => positions.add(pos); p }
         val posToIndex = positions.toSeq.sorted.zipWithIndex.toMap
 
-        bind(child) {
+        bind(newChild) {
           case PosParameter(pos) if posToIndex.contains(pos) && args.size > posToIndex(pos) =>
             args(posToIndex(pos))
         }

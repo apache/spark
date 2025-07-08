@@ -16,107 +16,140 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import java.util.Locale
+
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
 
+import org.apache.spark.internal.Logging
+
 /**
- * A shallow parser that only extracts parameter markers from SQL text.
- * This parser is lightweight and doesn't perform full SQL parsing,
- * making it suitable for parameter substitution preprocessing.
+ * A parameter substitution parser that replaces parameter markers in SQL text with their values.
+ * This parser finds parameter markers and substitutes them with provided values to produce
+ * a modified SQL string ready for execution.
  */
-class SubstituteParamsParser {
+class SubstituteParamsParser extends Logging {
 
   /**
-   * Extract all parameter markers from the given SQL text.
+   * Substitute parameter markers in SQL text with provided values.
    *
-   * @param sqlText The SQL text to parse
-   * @return A ParameterInfo object containing all found parameters
+   * @param sqlText          The original SQL text containing parameter markers
+   * @param namedParams      Map of named parameter values (paramName -> value)
+   * @param positionalParams List of positional parameter values in order
+   * @return Modified SQL string with parameters substituted
    */
-  def extractParameters(sqlText: String): ParameterInfo = {
+  def substitute(
+                  sqlText: String,
+                  namedParams: Map[String, Any] = Map.empty,
+                  positionalParams: List[Any] = List.empty): String = {
 
-    try {
-      val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(sqlText)))
-      lexer.removeErrorListeners()
-      lexer.addErrorListener(ParseErrorListener)
-
-      val tokenStream = new CommonTokenStream(lexer)
-      val parser = new SqlBaseParser(tokenStream)
-      parser.removeErrorListeners()
-      parser.addErrorListener(ParseErrorListener)
-
-      val astBuilder = new SubstituteParmsAstBuilder()
-
-      // Try to parse as a single statement to extract parameters
-      val ctx = parser.singleStatement()
-      astBuilder.extractFromContext(ctx)
-
-    } catch {
-      case _: Exception =>
-        // If parsing fails, fall back to token-based extraction
-        extractParametersFromTokens(sqlText)
-    }
+    substituteUsingParseTree(sqlText, namedParams, positionalParams)
   }
 
   /**
-   * Fallback method to extract parameters using token-level parsing.
-   * This is used when full parsing fails but we still need to find parameter markers.
+   * Substitute parameters using parse tree traversal for accurate context-aware replacement.
    */
-  private def extractParametersFromTokens(sqlText: String): ParameterInfo = {
+  private def substituteUsingParseTree(
+                                        sqlText: String,
+                                        namedParams: Map[String, Any],
+                                        positionalParams: List[Any]): String = {
+
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(sqlText)))
     lexer.removeErrorListeners()
+    lexer.addErrorListener(ParseErrorListener)
 
     val tokenStream = new CommonTokenStream(lexer)
-    tokenStream.fill()
+    val parser = new SqlBaseParser(tokenStream)
+    parser.removeErrorListeners()
+    parser.addErrorListener(ParseErrorListener)
 
-    val namedParams = scala.collection.mutable.Set[String]()
-    val positionalParams = scala.collection.mutable.ListBuffer[Int]()
+    val astBuilder = new SubstituteParmsAstBuilder()
 
-    for (i <- 0 until tokenStream.size()) {
-      val token = tokenStream.get(i)
-      token.getType match {
-        case SqlBaseLexer.COLON =>
-          // Check if next token is an identifier (named parameter)
-          if (i + 1 < tokenStream.size()) {
-            val nextToken = tokenStream.get(i + 1)
-            if (nextToken.getType == SqlBaseLexer.IDENTIFIER) {
-              namedParams += nextToken.getText
-            }
-          }
-        case SqlBaseLexer.QUESTION =>
-          // Positional parameter
-          positionalParams += token.getStartIndex
-        case _ =>
-          // Ignore other tokens
+    // Parse as a single statement to get parameter locations
+    val ctx = parser.expression()
+    val parameterLocations = astBuilder.extractParameterLocations(ctx)
+
+    // Substitute parameters in the original text
+    substituteAtLocations(sqlText, parameterLocations, namedParams, positionalParams)
+  }
+
+  /**
+   * Apply substitutions to the original SQL text at specified locations.
+   */
+  private def substituteAtLocations(
+                                     sqlText: String,
+                                     locations: ParameterLocationInfo,
+                                     namedParams: Map[String, Any],
+                                     positionalParams: List[Any]): String = {
+
+    val substitutions = scala.collection.mutable.ListBuffer[Substitution]()
+
+    // Handle named parameters
+    locations.namedParameterLocations.foreach { case (name, location) =>
+      namedParams.get(name) match {
+        case Some(value) =>
+          substitutions += Substitution(location.start, location.end, formatValue(value))
+        case None =>
+          throw new IllegalArgumentException(s"Missing value for named parameter: $name")
       }
     }
 
-    ParameterInfo(namedParams.toSet, positionalParams.toList)
+    // Handle positional parameters
+    if (locations.positionalParameterLocations.length != positionalParams.length) {
+      throw new IllegalArgumentException(
+        s"Expected ${locations.positionalParameterLocations.length} positional parameters, " +
+          s"but got ${positionalParams.length}")
+    }
+
+    locations.positionalParameterLocations.zip(positionalParams).foreach {
+      case (location, value) =>
+        substitutions += Substitution(location.start, location.end, formatValue(value))
+    }
+
+    applySubstitutions(sqlText, substitutions.toList)
   }
 
   /**
-   * Check if the given SQL text contains any parameter markers.
+   * Apply a list of substitutions to the SQL text.
    */
-  def hasParameters(sqlText: String): Boolean = {
-    val params = extractParameters(sqlText)
-    params.namedParameters.nonEmpty || params.positionalParameters.nonEmpty
+  private def applySubstitutions(sqlText: String, substitutions: List[Substitution]): String = {
+    // Sort substitutions by start position in reverse order to avoid offset issues
+    val sortedSubstitutions = substitutions.sortBy(-_.start)
+
+    var result = sqlText
+    sortedSubstitutions.foreach { substitution =>
+      result = result.substring(0, substitution.start) +
+        substitution.replacement +
+        result.substring(substitution.end)
+    }
+    result
   }
 
   /**
-   * Count the total number of parameter markers in the SQL text.
+   * Format a value for SQL substitution.
    */
-  def countParameters(sqlText: String): Int = {
-    val params = extractParameters(sqlText)
-    params.namedParameters.size + params.positionalParameters.size
+  private def formatValue(value: Any): String = {
+    value match {
+      case null => "NULL"
+      case s: String => s"'${s.replace("'", "''")}'" // Escape single quotes
+      case b: Boolean => b.toString.toUpperCase(Locale.ROOT)
+      case _ => value.toString
+    }
   }
 }
 
-// ParameterInfo is defined in SubstituteParmsAstBuilder.scala
+/**
+ * Case class representing a text substitution.
+ */
+case class Substitution(start: Int, end: Int, replacement: String)
 
 object SubstituteParamsParser {
   /** Singleton instance for convenience */
   private val instance = new SubstituteParamsParser()
 
-  def extractParameters(sqlText: String): ParameterInfo = instance.extractParameters(sqlText)
-  def hasParameters(sqlText: String): Boolean = instance.hasParameters(sqlText)
-  def countParameters(sqlText: String): Int = instance.countParameters(sqlText)
+  def substitute(
+      sqlText: String,
+      namedParams: Map[String, Any] = Map.empty,
+      positionalParams: List[Any] = List.empty): String =
+    instance.substitute(sqlText, namedParams, positionalParams)
 }
 
