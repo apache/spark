@@ -1060,9 +1060,7 @@ class XmlSuite
     assert(results(0)(0) === "bk111")
   }
 
-  // The document starts with a Byte Order Mark (BOM) character, which causes the XML event reader
-  // to fail at the very beginning
-  ignore("read utf-8 encoded file with empty tag") {
+  test("read utf-8 encoded file with empty tag") {
     val df = spark.read
       .option("excludeAttribute", "false")
       .option("rowTag", "House")
@@ -1836,9 +1834,7 @@ class XmlSuite
     assert(df.collect().length === 3)
   }
 
-  // The document starts with a Byte Order Mark (BOM) character, which causes the XML event reader
-  // to fail at the very beginning
-  ignore("read utf-8 encoded file with empty tag 2") {
+  test("read utf-8 encoded file with empty tag 2") {
     val df = spark.read
       .option("charset", StandardCharsets.UTF_8.name)
       .option("rowTag", "House")

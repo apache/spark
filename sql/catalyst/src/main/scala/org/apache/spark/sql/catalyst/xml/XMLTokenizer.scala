@@ -171,8 +171,8 @@ object XMLEventReaderWithXSDValidation {
 
 /**
  * XMLEventReader wrapper that injects StartDocument and EndDocument events around
- * an input XMLEventReader. This is useful when working with XML fragments that need
- * to be treated as complete documents.
+ * an input XMLEventReader. This is required in XSD schema validation, as the Validator:validate
+ * works only if the input StAXSource contains a complete XML document.
  */
 case class DocumentWrappingXMLEventReader(
     wrappedReader: XMLEventReader,

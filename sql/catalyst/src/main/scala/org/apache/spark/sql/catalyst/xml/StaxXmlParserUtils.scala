@@ -24,6 +24,8 @@ import javax.xml.stream.events._
 import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
 
+import org.apache.commons.io.input.BOMInputStream
+
 object StaxXmlParserUtils {
 
   private[sql] val factory: XMLInputFactory = {
@@ -57,7 +59,9 @@ object StaxXmlParserUtils {
   }
 
   def filteredReader(inputStream: java.io.InputStream, options: XmlOptions): XMLEventReader = {
-    val eventReader = factory.createXMLEventReader(inputStream, options.charset)
+    val bomInputStreamBuilder = new BOMInputStream.Builder()
+    bomInputStreamBuilder.setInputStream(inputStream)
+    val eventReader = factory.createXMLEventReader(bomInputStreamBuilder.get(), options.charset)
     factory.createFilteredReader(eventReader, filter)
   }
 
