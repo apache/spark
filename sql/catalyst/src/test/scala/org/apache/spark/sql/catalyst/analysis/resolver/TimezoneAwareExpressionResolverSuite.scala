@@ -17,11 +17,21 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
+import java.sql.Time
+
 import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.FunctionResolution
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, CurrentDate, Expression, Literal, MakeTimestampNTZ, TimeZoneAwareExpression}
+import org.apache.spark.sql.catalyst.expressions.{
+  AttributeReference,
+  Cast,
+  CurrentDate,
+  Expression,
+  Literal,
+  MakeTimestampNTZ,
+  TimeZoneAwareExpression
+}
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types.{IntegerType, StringType, TimestampNTZType, TimeType}
@@ -38,6 +48,16 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
     override def resolve(expression: Expression): Expression = resolvedExpression
   }
 
+  class NewExpressionResolver(catalogManager: CatalogManager)
+    extends ExpressionResolver(
+      resolver = new Resolver(catalogManager),
+      functionResolution =
+        new FunctionResolution(catalogManager, Resolver.createRelationResolution(catalogManager)),
+      planLogger = new PlanLogger
+    ) {
+    override def resolve(expression: Expression): Expression = expression
+  }
+
   private val unresolvedChild =
     AttributeReference(name = "unresolvedChild", dataType = StringType)()
   private val resolvedChild = AttributeReference(name = "resolvedChild", dataType = IntegerType)()
@@ -49,6 +69,14 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
   private val timezoneAwareExpressionResolver = new TimezoneAwareExpressionResolver(
     expressionResolver
   )
+
+  private val newExpressionResolver = new NewExpressionResolver(
+    catalogManager = mock[CatalogManager]
+  )
+  private val newTimezoneAwareExpressionResolver = new TimezoneAwareExpressionResolver(
+    newExpressionResolver
+  )
+
 
   test("TimeZoneAwareExpression resolution") {
     assert(castExpression.children.head == unresolvedChild)
@@ -68,23 +96,19 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
     assert(resolvedExpression.getTagValue(Cast.USER_SPECIFIED_CAST).nonEmpty)
   }
 
-  test("SPARK-52617: rewrite TIME -> TIMESTAMP_NTZ cast to MakeTimestampNTZ") {
-    // TIME: 15:30:00 -> seconds = 15*3600 + 30*60 = 55800
-    val nanos = 55800L * 1_000_000_000L
-    val timeLiteral = Literal(nanos, TimeType(6))
+  test("SPARK-52617: Rewrite Cast(TimeType -> TimestampNTZType) to MakeTimestampNTZ") {
+    val millis = Time.valueOf("12:34:56").getTime
+    val timeExpr = Literal(millis * 1000L, TimeType(6))  // microseconds since midnight
 
-    val castExpr = Cast(timeLiteral, TimestampNTZType)
-    val rewrittenExpr = timezoneAwareExpressionResolver.resolve(castExpr)
+    val input = Cast(timeExpr, TimestampNTZType)
+    val resolved =
+      newExpressionResolver.getExpressionTreeTraversals.withNewTraversal(OneRowRelation()) {
+        newTimezoneAwareExpressionResolver.resolve(input)
+    }
+    assert(resolved.isInstanceOf[MakeTimestampNTZ])
 
-    val expectedExpr = MakeTimestampNTZ(CurrentDate(), timeLiteral)
-
-    assert(
-      rewrittenExpr.semanticEquals(expectedExpr),
-      s"""
-         |Expected:
-         |  $expectedExpr
-         |But got:
-         |  $rewrittenExpr
-         |""".stripMargin)
+    val makeTs = resolved.asInstanceOf[MakeTimestampNTZ]
+    assert(makeTs.left.isInstanceOf[CurrentDate])
+    assert(makeTs.right.semanticEquals(timeExpr))
   }
 }

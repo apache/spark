@@ -71,13 +71,7 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
         other
     }
 
-    coercedExpr match {
-      case c @ Cast(child, TimestampNTZType, _, _)
-        if child.resolved && child.dataType.isInstanceOf[TimeType] =>
-        MakeTimestampNTZ(CurrentDate(), child)
-      case other =>
-        other
-    }
+    rewriteTimeCastToTimestampNTZ(coercedExpr)
   }
 
   /**
@@ -126,6 +120,14 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
           false
       }
     }
+  }
+
+  private def rewriteTimeCastToTimestampNTZ(expr: Expression): Expression = expr match {
+    case Cast(child, TimestampNTZType, _, _)
+      if child.resolved && child.dataType.isInstanceOf[TimeType] =>
+      MakeTimestampNTZ(CurrentDate(), child)
+    case other =>
+      other
   }
 }
 
