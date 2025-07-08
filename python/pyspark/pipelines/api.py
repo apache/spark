@@ -35,7 +35,6 @@ def append_flow(
     *,
     target: str,
     name: Optional[str] = None,
-    comment: Optional[str] = None,
     spark_conf: Optional[Dict[str, str]] = None,
     once: bool = False,
 ) -> Callable[[QueryFunction], None]:
@@ -44,7 +43,6 @@ def append_flow(
 
     :param name: The name of the flow. If unspecified, the query function's name will be used.
     :param target: The name of the dataset this flow writes to. Must be specified.
-    :param comment: Description of the flow. If unspecified, the dataset's comment will be used.
     :param spark_conf: A dict whose keys are the conf names and values are the conf values. \
         These confs will be set when the flow is executed; they can override confs set for the \
         destination, for the pipeline, or on the cluster.
