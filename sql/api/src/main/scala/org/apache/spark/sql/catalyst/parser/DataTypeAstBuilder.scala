@@ -146,8 +146,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     }
   }
 
-  private def visitYearMonthIntervalDataType(
-      ctx: PrimitiveTypeWithoutParametersContext): DataType = {
+  private def visitYearMonthIntervalDataType(ctx: NonTrivialPrimitiveTypeContext): DataType = {
     val startStr = ctx.fromYearMonth.getText.toLowerCase(Locale.ROOT)
     val start = YearMonthIntervalType.stringToField(startStr)
     if (ctx.to != null) {
@@ -162,8 +161,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     }
   }
 
-  private def visitDayTimeIntervalDataType(
-      ctx: PrimitiveTypeWithoutParametersContext): DataType = {
+  private def visitDayTimeIntervalDataType(ctx: NonTrivialPrimitiveTypeContext): DataType = {
     val startStr = ctx.fromDayTime.getText.toLowerCase(Locale.ROOT)
     val start = DayTimeIntervalType.stringToField(startStr)
     if (ctx.to != null) {
