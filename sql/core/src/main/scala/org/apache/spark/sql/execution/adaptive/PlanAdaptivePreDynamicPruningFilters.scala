@@ -18,9 +18,8 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{Alias, BindReferences, DynamicPruningExpression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{BindReferences, DynamicPruningExpression, Literal}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
@@ -39,7 +38,7 @@ case class PlanAdaptivePreDynamicPruningFilters(
     }
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
-      case expressions.DynamicPruningSubquery(value, buildPlan,
+      case dps @ expressions.DynamicPruningSubquery(value, buildPlan,
       buildKeys, indices, onlyInBroadcast, exprId, _) =>
         val name = s"dynamicpruning#${exprId.id}"
         val sparkPlan = QueryExecution.prepareExecutedPlan(
@@ -63,24 +62,26 @@ case class PlanAdaptivePreDynamicPruningFilters(
           }
 
         if (canReuseExchange) {
-          exchange.setLogicalLink(adaptivePlan.executedPlan.logicalLink.get)
-          val newAdaptivePlan = adaptivePlan.copy(inputPlan = exchange)
-
-          val broadcastValues = SubqueryBroadcastExec(
-            name, indices, buildKeys, newAdaptivePlan)
-          DynamicPruningExpression(InSubqueryExec(value, broadcastValues, exprId))
+//          exchange.setLogicalLink(adaptivePlan.executedPlan.logicalLink.get)
+//          val newAdaptivePlan = adaptivePlan.copy(inputPlan = exchange)
+//
+//          val broadcastValues = SubqueryBroadcastExec(
+//            name, indices, buildKeys, newAdaptivePlan)
+//          DynamicPruningExpression(InSubqueryExec(value, broadcastValues, exprId))
+          dps
         } else if (onlyInBroadcast) {
           DynamicPruningExpression(Literal.TrueLiteral)
         } else {
-          // we need to apply an aggregate on the buildPlan in order to be column pruned
-          val aliases = indices.map(idx => Alias(buildKeys(idx), buildKeys(idx).toString)())
-          val aggregate = Aggregate(aliases, aliases, buildPlan)
-
-          val sparkPlan = QueryExecution.prepareExecutedPlan(aggregate, adaptivePlan.context)
-          assert(sparkPlan.isInstanceOf[AdaptiveSparkPlanExec])
-          val newAdaptivePlan = sparkPlan.asInstanceOf[AdaptiveSparkPlanExec]
-          val values = SubqueryExec(name, newAdaptivePlan)
-          DynamicPruningExpression(InSubqueryExec(value, values, exprId))
+//          // we need to apply an aggregate on the buildPlan in order to be column pruned
+//          val aliases = indices.map(idx => Alias(buildKeys(idx), buildKeys(idx).toString)())
+//          val aggregate = Aggregate(aliases, aliases, buildPlan)
+//
+//          val sparkPlan = QueryExecution.prepareExecutedPlan(aggregate, adaptivePlan.context)
+//          assert(sparkPlan.isInstanceOf[AdaptiveSparkPlanExec])
+//          val newAdaptivePlan = sparkPlan.asInstanceOf[AdaptiveSparkPlanExec]
+//          val values = SubqueryExec(name, newAdaptivePlan)
+//          DynamicPruningExpression(InSubqueryExec(value, values, exprId))
+          dps
         }
     }
   }
