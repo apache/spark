@@ -70,9 +70,9 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    */
   override def visitPrimitiveDataType(ctx: PrimitiveDataTypeContext): DataType = withOrigin(ctx) {
     val typeCtx = ctx.`primitiveType`
-    if (typeCtx.`primitiveTypeWithParameters` != null) {
+    if (typeCtx.`nonTrivialPrimitiveType` != null) {
       // This is a primitive type with parameters, e.g. VARCHAR(10), DECIMAL(10, 2), etc.
-      val currentCtx = typeCtx.`primitiveTypeWithParameters`
+      val currentCtx = typeCtx.`nonTrivialPrimitiveType`
       currentCtx.start.getType match {
         case STRING =>
           currentCtx.children.asScala.toSeq match {
@@ -107,9 +107,9 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
           }
           TimeType(precision)
       }
-    } else if (typeCtx.`primitiveTypeWithoutParameters` != null) {
+    } else if (typeCtx.`trivialPrimitiveType` != null) {
       // This is a primitive type without parameters, e.g. BOOLEAN, TINYINT, etc.
-      val currentCtx = typeCtx.`primitiveTypeWithoutParameters`
+      val currentCtx = typeCtx.`trivialPrimitiveType`
       currentCtx.start.getType match {
         case BOOLEAN => BooleanType
         case TINYINT | BYTE => ByteType
@@ -120,7 +120,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
         case DOUBLE => DoubleType
         case DATE => DateType
         case TIMESTAMP =>
-          if (typeCtx.`primitiveTypeWithoutParameters`.WITHOUT() == null) {
+          if (typeCtx.`trivialPrimitiveType`.WITHOUT() == null) {
             SqlApiConf.get.timestampType
           } else TimestampNTZType
         case TIMESTAMP_LTZ => TimestampType

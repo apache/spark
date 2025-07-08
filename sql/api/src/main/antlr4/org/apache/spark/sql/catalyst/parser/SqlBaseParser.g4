@@ -1340,7 +1340,7 @@ collateClause
     : COLLATE collationName=multipartIdentifier
     ;
 
-primitiveTypeWithParameters
+nonTrivialPrimitiveType
     : STRING collateClause?
     | (CHARACTER | CHAR) (LEFT_PAREN length=INTEGER_VALUE RIGHT_PAREN)?
     | VARCHAR (LEFT_PAREN length=INTEGER_VALUE RIGHT_PAREN)?
@@ -1349,7 +1349,7 @@ primitiveTypeWithParameters
     | TIME (LEFT_PAREN precision=INTEGER_VALUE RIGHT_PAREN)? (WITHOUT TIME ZONE)?
     ;
 
-primitiveTypeWithoutParameters
+trivialPrimitiveType
     : BOOLEAN
     | TINYINT | BYTE
     | SMALLINT | SHORT
@@ -1368,8 +1368,8 @@ primitiveTypeWithoutParameters
     ;
 
 primitiveType
-    : primitiveTypeWithParameters
-    | primitiveTypeWithoutParameters
+    : nonTrivialPrimitiveType
+    | trivialPrimitiveType
     | unsupportedType=identifier (LEFT_PAREN INTEGER_VALUE(COMMA INTEGER_VALUE)* RIGHT_PAREN)?
     ;
 
