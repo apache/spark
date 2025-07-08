@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 
@@ -235,6 +235,20 @@ trait FileFormat {
    */
   def fileConstantMetadataExtractors: Map[String, PartitionedFile => Any] =
     FileFormat.BASE_METADATA_EXTRACTORS
+
+  protected def sessionState(sparkSession: SparkSession): SessionState = {
+    sparkSession.sessionState
+  }
+
+  protected def sqlConf(sparkSession: SparkSession): SQLConf = {
+    sessionState(sparkSession).conf
+  }
+
+  protected def hadoopConf(
+      sparkSession: SparkSession,
+      options: Map[String, String]): Configuration = {
+    sessionState(sparkSession).newHadoopConfWithOptions(options)
+  }
 }
 
 object FileFormat {
@@ -364,8 +378,7 @@ abstract class TextBasedFileFormat extends FileFormat {
       options: Map[String, String],
       path: Path): Boolean = {
     if (codecFactory == null) {
-      codecFactory = new CompressionCodecFactory(
-        sparkSession.sessionState.newHadoopConfWithOptions(options))
+      codecFactory = new CompressionCodecFactory(hadoopConf(sparkSession, options))
     }
     val codec = codecFactory.getCodec(path)
     codec == null || codec.isInstanceOf[SplittableCompressionCodec]
