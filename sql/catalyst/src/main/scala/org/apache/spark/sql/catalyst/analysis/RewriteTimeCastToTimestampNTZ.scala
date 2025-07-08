@@ -45,7 +45,8 @@ import org.apache.spark.sql.types.{TimestampNTZType, TimeType}
  */
 object RewriteTimeCastToTimestampNTZ extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case c @ Cast(child: TimeType, TimestampNTZType, _, _) if child.resolved =>
+    case c @ Cast(child, TimestampNTZType, _, _)
+      if child.resolved && child.dataType.isInstanceOf[TimeType] =>
       MakeTimestampNTZ(CurrentDate(), child)
   }
 }

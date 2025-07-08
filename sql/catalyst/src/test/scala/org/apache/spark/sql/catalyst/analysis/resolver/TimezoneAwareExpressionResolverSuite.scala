@@ -48,16 +48,6 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
     override def resolve(expression: Expression): Expression = resolvedExpression
   }
 
-  class NewExpressionResolver(catalogManager: CatalogManager)
-    extends ExpressionResolver(
-      resolver = new Resolver(catalogManager),
-      functionResolution =
-        new FunctionResolution(catalogManager, Resolver.createRelationResolution(catalogManager)),
-      planLogger = new PlanLogger
-    ) {
-    override def resolve(expression: Expression): Expression = expression
-  }
-
   private val unresolvedChild =
     AttributeReference(name = "unresolvedChild", dataType = StringType)()
   private val resolvedChild = AttributeReference(name = "resolvedChild", dataType = IntegerType)()
@@ -68,13 +58,6 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
   )
   private val timezoneAwareExpressionResolver = new TimezoneAwareExpressionResolver(
     expressionResolver
-  )
-
-  private val newExpressionResolver = new NewExpressionResolver(
-    catalogManager = mock[CatalogManager]
-  )
-  private val newTimezoneAwareExpressionResolver = new TimezoneAwareExpressionResolver(
-    newExpressionResolver
   )
 
 
@@ -101,13 +84,23 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
     val timeExpr = Literal(millis * 1000L, TimeType(6))  // microseconds since midnight
 
     val input = Cast(timeExpr, TimestampNTZType)
-    val resolved =
+
+    val newExpressionResolver = new HardCodedExpressionResolver(
+      catalogManager = mock[CatalogManager],
+      resolvedExpression = timeExpr
+    )
+
+    val newTimezoneAwareExpressionResolver = new TimezoneAwareExpressionResolver(
+      newExpressionResolver
+    )
+
+    val resolvedExpr =
       newExpressionResolver.getExpressionTreeTraversals.withNewTraversal(OneRowRelation()) {
         newTimezoneAwareExpressionResolver.resolve(input)
     }
-    assert(resolved.isInstanceOf[MakeTimestampNTZ])
+    assert(resolvedExpr.isInstanceOf[MakeTimestampNTZ])
 
-    val makeTs = resolved.asInstanceOf[MakeTimestampNTZ]
+    val makeTs = resolvedExpr.asInstanceOf[MakeTimestampNTZ]
     assert(makeTs.left.isInstanceOf[CurrentDate])
     assert(makeTs.right.semanticEquals(timeExpr))
   }
