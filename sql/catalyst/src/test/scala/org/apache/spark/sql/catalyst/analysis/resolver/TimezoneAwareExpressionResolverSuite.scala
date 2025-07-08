@@ -60,7 +60,6 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
     expressionResolver
   )
 
-
   test("TimeZoneAwareExpression resolution") {
     assert(castExpression.children.head == unresolvedChild)
     assert(castExpression.timeZoneId.isEmpty)
