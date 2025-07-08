@@ -16,14 +16,13 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.{CharConversionException, FileNotFoundException, InputStream, IOException, StringReader}
+import java.io.{CharConversionException, FileNotFoundException, InputStream, IOException}
 import java.nio.charset.MalformedInputException
 import java.text.NumberFormat
 import java.util
 import java.util.Locale
 import javax.xml.stream.{XMLEventReader, XMLStreamException}
 import javax.xml.stream.events._
-import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
 
 import scala.collection.mutable.ArrayBuffer
@@ -33,6 +32,7 @@ import scala.util.control.Exception.allCatch
 import scala.util.control.NonFatal
 import scala.xml.SAXException
 
+import com.google.common.io.ByteStreams
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.security.AccessControlException
@@ -50,6 +50,7 @@ import org.apache.spark.types.variant.{Variant, VariantBuilder}
 import org.apache.spark.types.variant.VariantBuilder.FieldEntry
 import org.apache.spark.types.variant.VariantUtil
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
+import org.apache.spark.util.Utils
 
 class StaxXmlParser(
     schema: StructType,
@@ -105,12 +106,15 @@ class StaxXmlParser(
    * XML stream parser that reads XML records from the input file stream sequentially without
    * loading each individual XML record string into memory.
    */
-  def parseStream(
-      inputStream: InputStream,
-      schema: StructType,
-      streamLiteral: () => UTF8String): Iterator[InternalRow] = {
+  def parseStream(inputStream: () => InputStream, schema: StructType): Iterator[InternalRow] = {
     val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
-    val safeParser = new FailureSafeParser[XMLEventReader](
+    val streamLiteral = () =>
+      Utils.tryWithResource(
+        inputStream()
+      ) { is =>
+        UTF8String.fromBytes(ByteStreams.toByteArray(is))
+      }
+    val safeParser = new FailureSafeParser[XMLEventReaderWithXSDValidation](
       input => doParseColumn(input, xsdSchema, streamLiteral),
       options.parseMode,
       schema,
@@ -118,16 +122,18 @@ class StaxXmlParser(
     )
 
     val xmlTokenizer = new XmlTokenizer(inputStream, options)
-    StaxXmlParser.convertStream(xmlTokenizer) { tokens =>
-      safeParser.parse(tokens)
-    }.flatten
+    StaxXmlParser
+      .convertStream(xmlTokenizer) { parser =>
+        safeParser.parse(parser)
+      }
+      .flatten
   }
 
   /**
    * Parse a single XML record string and return an InternalRow.
    */
   def doParseColumn(xml: String, xsdSchema: Option[Schema]): Option[InternalRow] = {
-    val parser = StaxXmlParserUtils.filteredReader(xml)
+    val parser = XMLEventReaderWithXSDValidation(xml, options)
     try {
       doParseColumn(parser, xsdSchema, () => UTF8String.fromString(xml))
     } finally {
@@ -146,13 +152,12 @@ class StaxXmlParser(
    *                   TODO: Only include the file content starting with the current record.
    */
   def doParseColumn(
-      parser: XMLEventReader,
+      parser: XMLEventReaderWithXSDValidation,
       xsdSchema: Option[Schema] = None,
       xmlLiteral: () => UTF8String): Option[InternalRow] = {
     try {
-      // TODO: support XSD validation
       xsdSchema.foreach { schema =>
-        schema.newValidator().validate(new StreamSource(new StringReader(xmlLiteral().toString)))
+        parser.validateXSDSchema(schema)
       }
       options.singleVariantColumn match {
         case Some(_) =>
@@ -653,19 +658,27 @@ class StaxXmlParser(
  * XML tokenizer that never buffers complete XML records in memory. It uses XMLEventReader to parse
  * XML file stream directly and can move to the next XML record based on the rowTag option.
  */
-class XmlTokenizer(inputStream: InputStream, options: XmlOptions) extends Logging {
-  private var reader = StaxXmlParserUtils.filteredReader(inputStream, options)
+class XmlTokenizer(inputStream: () => InputStream, options: XmlOptions) extends Logging {
+  // Primary XML event reader for parsing
+  private val in1 = inputStream()
+  private var reader = StaxXmlParserUtils.filteredReader(in1, options)
+
+  // Optional XML event reader for XSD validation.
+  private val in2 = Option(options.rowValidationXSDPath).map(_ => inputStream())
+  private val readerForXSDValidation = in2.map( in =>
+    StaxXmlParserUtils.filteredReader(in, options)
+  )
 
   /**
    * Returns the next XML record as a positioned XMLEventReader.
    * This avoids creating intermediate string representations.
    */
-  def next(): Option[XMLEventReader] = {
-    var nextRecord: Option[XMLEventReader] = None
+  def next(): Option[XMLEventReaderWithXSDValidation] = {
+    var nextRecord: Option[XMLEventReaderWithXSDValidation] = None
     try {
       // Skip to the next row start element
       if (skipToNextRowStart()) {
-        nextRecord = Some(reader)
+        nextRecord = Some(XMLEventReaderWithXSDValidation(reader, readerForXSDValidation, options))
       }
     } catch {
       case e: FileNotFoundException if options.ignoreMissingFiles =>
@@ -693,8 +706,9 @@ class XmlTokenizer(inputStream: InputStream, options: XmlOptions) extends Loggin
 
   def close(): Unit = {
     if (reader != null) {
+      in1.close()
+      in2.foreach(_.close())
       reader.close()
-      inputStream.close()
       reader = null
     }
   }
@@ -719,23 +733,17 @@ class XmlTokenizer(inputStream: InputStream, options: XmlOptions) extends Loggin
       }
       // if not the event we want, advance the reader
       reader.nextEvent()
+      // advance the reader for XSD validation as well to keep them in sync
+      readerForXSDValidation.foreach(_.nextEvent())
     }
     false
   }
 }
 
 object StaxXmlParser {
-  /**
-   * Parses a stream that contains CSV strings and turns it into an iterator of tokens.
-   */
-  def tokenizeStream(inputStream: InputStream, options: XmlOptions): Iterator[XMLEventReader] = {
-    val xmlTokenizer = new XmlTokenizer(inputStream, options)
-    convertStream(xmlTokenizer)(tokens => tokens)
-  }
-
   def convertStream[T](
     xmlTokenizer: XmlTokenizer)(
-    convert: XMLEventReader => T): Iterator[T] = new Iterator[T] {
+    convert: XMLEventReaderWithXSDValidation => T): Iterator[T] = new Iterator[T] {
 
     private var nextRecord = xmlTokenizer.next()
 

@@ -16,13 +16,11 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.{CharConversionException, FileNotFoundException, IOException, StringReader}
+import java.io.{CharConversionException, FileNotFoundException, IOException}
 import java.nio.charset.MalformedInputException
 import java.util.Locale
 import javax.xml.stream.{XMLEventReader, XMLStreamException}
 import javax.xml.stream.events._
-import javax.xml.transform.stream.StreamSource
-import javax.xml.validation.Schema
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -95,11 +93,9 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
    */
   def infer(xml: RDD[String]): StructType = {
     val inferredTypesRdd = xml.mapPartitions { iter =>
-      val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
-
       iter.flatMap { xml =>
-        val parser = StaxXmlParserUtils.filteredReader(xml)
-        infer(parser, xsdSchema, () => "")
+        val parser = XMLEventReaderWithXSDValidation(xml, options)
+        infer(parser)
       }
     }
 
@@ -142,10 +138,10 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
   /**
    * Infer the schema of the single XML record string
    */
-  def infer(xml: String, xsdSchema: Option[Schema]): Option[DataType] = {
-    val parser = StaxXmlParserUtils.filteredReader(xml)
+  def infer(xml: String): Option[DataType] = {
+    val parser = XMLEventReaderWithXSDValidation(xml, options)
     try {
-      infer(parser, xsdSchema, () => xml)
+      infer(parser)
     } finally {
       parser.close()
     }
@@ -156,21 +152,18 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
    * Note that the method will **NOT** close the XML event stream as there could have more XML
    * records to parse. It's the caller's responsibility to close the stream.
    */
-  def infer(
-      parser: XMLEventReader,
-      xsdSchema: Option[Schema] = None,
-      xmlLiteral: () => String): Option[DataType] = {
+  def infer(parser: XMLEventReaderWithXSDValidation): Option[DataType] = {
     try {
-      val xsd = xsdSchema.orElse(Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema))
-      // TODO: handle the XSD validation correctly
+      val xsd = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
       xsd.foreach { schema =>
-        schema.newValidator().validate(new StreamSource(new StringReader(xmlLiteral())))
+        parser.validateXSDSchema(schema)
       }
       val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
       val schema = Some(inferObject(parser, rootAttributes))
       schema
     } catch {
       case e @ (_: XMLStreamException | _: MalformedInputException | _: SAXException) =>
+        logWarning("Malformed XML record found", e)
         // Close the XML event stream from the first malformed XML record
         parser.close()
         handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
@@ -194,6 +187,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         logWarning("Skipped the rest of the content in the corrupted file", e)
         Some(StructType(Nil))
       case NonFatal(e) =>
+        logWarning("Failed to infer schema from XML record", e)
         handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
     }
   }

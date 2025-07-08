@@ -518,8 +518,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     )
   }
 
-  // TODO: Support XSD validation
-  ignore("DSL: test XSD validation") {
+  test("DSL: test XSD validation") {
     val df = createDSLDataFrame(
       fileName = "basket_invalid.xml",
       singleVariantColumn = Some("var"),

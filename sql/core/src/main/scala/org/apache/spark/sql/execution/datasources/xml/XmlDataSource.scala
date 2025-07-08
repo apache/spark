@@ -22,7 +22,6 @@ import java.nio.charset.{Charset, StandardCharsets}
 
 import scala.util.control.NonFatal
 
-import com.google.common.io.ByteStreams
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -38,13 +37,12 @@ import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
-import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions, XmlTokenizer}
+import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlInferSchema, XmlOptions, XmlTokenizer}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.types.{DataType, StructField, StructType, VariantType}
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
@@ -178,15 +176,8 @@ object MultiLineXmlDataSource extends XmlDataSource {
       parser: StaxXmlParser,
       requiredSchema: StructType): Iterator[InternalRow] = {
     parser.parseStream(
-      CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
-      requiredSchema,
-      () => {
-        Utils.tryWithResource(
-          CodecStreams.createInputStreamWithCloseResource(conf, file.toPath)
-        ) { is =>
-          UTF8String.fromBytes(ByteStreams.toByteArray(is))
-        }
-      }
+      () => CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
+      requiredSchema
     )
   }
 
@@ -196,21 +187,22 @@ object MultiLineXmlDataSource extends XmlDataSource {
       parsedOptions: XmlOptions): StructType = {
     val xml = createBaseRdd(sparkSession, inputPaths, parsedOptions)
 
-    val xsdSchema = Option(parsedOptions.rowValidationXSDPath).map(ValidatorUtil.getSchema)
     val xmlInferSchema =
       new XmlInferSchema(parsedOptions, sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     SQLExecution.withSQLConfPropagated(sparkSession) {
       val inferredTypeRdd: RDD[DataType] = xml.flatMap { portableDataStream =>
         try {
-          val inputStream = CodecStreams.createInputStreamWithCloseResource(
+          val inputStream = () => CodecStreams.createInputStreamWithCloseResource(
             portableDataStream.getConfiguration,
             new Path(portableDataStream.getPath())
           )
+
+          // XML tokenizer for parsing XML records
           val xmlTokenizer = new XmlTokenizer(inputStream, parsedOptions)
           StaxXmlParser
             .convertStream(xmlTokenizer) { parser =>
-              xmlInferSchema.infer(parser, xsdSchema, () => "")
+               xmlInferSchema.infer(parser)
             }
             .flatten
         } catch {

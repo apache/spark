@@ -1218,8 +1218,7 @@ class XmlSuite
     assert(mixedDF.select("missing").head().getString(0) === "ipsum")
   }
 
-  // TODO: support XSD validation
-  ignore("test XSD validation") {
+  test("test XSD validation") {
     Seq("basket.xsd", "include-example/first.xsd").foreach { xsdFile =>
       val basketDF = spark.read
         .option("rowTag", "basket")
@@ -1232,8 +1231,7 @@ class XmlSuite
     }
   }
 
-  // TODO: support XSD validation
-  ignore("test XSD validation with validation error") {
+  test("test XSD validation with validation error") {
     val basketDF = spark.read
       .option("rowTag", "basket")
       .option("inferSchema", true)
@@ -1242,15 +1240,13 @@ class XmlSuite
       .option("mode", "PERMISSIVE")
       .option("columnNameOfCorruptRecord", "_malformed_records")
       .xml(getTestResourcePath(resDir + "basket_invalid.xml")).cache()
+    // The first record is valid and the second is invalid, the whole document is put in the
+    // _malformed_records column for the second record.
     assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
     assert(basketDF.filter($"_malformed_records".isNull).count() == 1)
-    val rec = basketDF.select("_malformed_records").collect()(1).getString(0)
-    assert(rec.startsWith("<basket>") && rec.indexOf("<extra>123</extra>") != -1 &&
-      rec.endsWith("</basket>"))
   }
 
-  // TODO: Support XSD validation
-  ignore("test XSD validation with addFile() with validation error") {
+  test("test XSD validation with addFile() with validation error") {
     spark.sparkContext.addFile(getTestResourcePath(resDir + "basket.xsd"))
     val basketDF = spark.read
       .option("rowTag", "basket")
@@ -1259,11 +1255,10 @@ class XmlSuite
       .option("mode", "PERMISSIVE")
       .option("columnNameOfCorruptRecord", "_malformed_records")
       .xml(getTestResourcePath(resDir + "basket_invalid.xml")).cache()
+    // The first record is valid and the second is invalid, the whole document is put in the
+    // _malformed_records column for the second record.
     assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
     assert(basketDF.filter($"_malformed_records".isNull).count() == 1)
-    val rec = basketDF.select("_malformed_records").collect()(1).getString(0)
-    assert(rec.startsWith("<basket>") && rec.indexOf("<extra>123</extra>") != -1 &&
-      rec.endsWith("</basket>"))
   }
 
   test("test xmlDataset") {
