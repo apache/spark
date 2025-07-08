@@ -229,9 +229,7 @@ private[connect] object MLHandler extends Logging {
         if (obj != null && obj.isInstanceOf[HasTrainingSummary[_]]
           && methods(0).getMethod == "summary"
           && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
-          throw MLCacheInvalidException(
-            objRefId,
-            sessionHolder.mlCache.getOffloadingTimeoutMinute)
+          throw MLModelSummaryLostException(objRefId)
         }
         val helper = AttributeHelper(sessionHolder, objRefId, methods)
         val attrResult = helper.getAttribute
@@ -264,9 +262,13 @@ private[connect] object MLHandler extends Logging {
 
       case proto.MlCommand.CommandCase.DELETE =>
         val ids = mutable.ArrayBuilder.make[String]
-        mlCommand.getDelete.getObjRefsList.asScala.toArray.foreach { objId =>
+        val deleteCmd = mlCommand.getDelete
+        val evictOnly = if (deleteCmd.hasEvictOnly) {
+          deleteCmd.getEvictOnly
+        } else { false }
+        deleteCmd.getObjRefsList.asScala.toArray.foreach { objId =>
           if (!objId.getId.contains(".")) {
-            if (mlCache.remove(objId.getId)) {
+            if (mlCache.remove(objId.getId, evictOnly)) {
               ids += objId.getId
             }
           }
@@ -400,9 +402,34 @@ private[connect] object MLHandler extends Logging {
           .setParam(LiteralValueProtoConverter.toLiteralProto(metric))
           .build()
 
+      case proto.MlCommand.CommandCase.CREATE_SUMMARY =>
+        val createSummaryCmd = mlCommand.getCreateSummary
+        createModelSummary(sessionHolder, createSummaryCmd)
+
       case other => throw MlUnsupportedException(s"$other not supported")
     }
   }
+
+  private def createModelSummary(
+      sessionHolder: SessionHolder,
+      createSummaryCmd: proto.MlCommand.CreateSummary): proto.MlCommandResult =
+    sessionHolder.mlCache.synchronized {
+      val refId = createSummaryCmd.getModelRef.getId
+      val model = sessionHolder.mlCache.get(refId).asInstanceOf[HasTrainingSummary[_]]
+      val isCreated = if (!model.hasSummary) {
+        val dataset = MLUtils.parseRelationProto(createSummaryCmd.getDataset, sessionHolder)
+        val modelPath = sessionHolder.mlCache.getModelOffloadingPath(refId)
+        val summaryPath = modelPath.resolve("summary").toString
+        model.loadSummary(summaryPath, dataset)
+        true
+      } else {
+        false
+      }
+      proto.MlCommandResult
+        .newBuilder()
+        .setParam(LiteralValueProtoConverter.toLiteralProto(isCreated))
+        .build()
+    }
 
   def transformMLRelation(relation: proto.MlRelation, sessionHolder: SessionHolder): DataFrame = {
     relation.getMlTypeCase match {
@@ -433,10 +460,28 @@ private[connect] object MLHandler extends Logging {
 
       // Get the attribute from a cached object which could be a model or summary
       case proto.MlRelation.MlTypeCase.FETCH =>
-        val helper = AttributeHelper(
-          sessionHolder,
-          relation.getFetch.getObjRef.getId,
-          relation.getFetch.getMethodsList.asScala.toArray)
+        val objRefId = relation.getFetch.getObjRef.getId
+        val methods = relation.getFetch.getMethodsList.asScala.toArray
+        val obj = sessionHolder.mlCache.get(objRefId)
+        sessionHolder.mlCache.synchronized {
+          if (obj != null && obj.isInstanceOf[HasTrainingSummary[_]]
+            && methods(0).getMethod == "summary"
+            && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
+
+            if (relation.hasModelSummaryDataset) {
+              val dataset =
+                MLUtils.parseRelationProto(relation.getModelSummaryDataset, sessionHolder)
+              val modelPath = sessionHolder.mlCache.getModelOffloadingPath(objRefId)
+              val summaryPath = modelPath.resolve("summary").toString
+              obj.asInstanceOf[HasTrainingSummary[_]].loadSummary(summaryPath, dataset)
+            } else {
+              // For old Spark client backward compatibility.
+              throw MLModelSummaryLostException(objRefId)
+            }
+          }
+        }
+
+        val helper = AttributeHelper(sessionHolder, objRefId, methods)
         helper.getAttribute.asInstanceOf[DataFrame]
 
       case other => throw MlUnsupportedException(s"$other not supported")

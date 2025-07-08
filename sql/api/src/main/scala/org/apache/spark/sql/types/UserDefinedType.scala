@@ -94,6 +94,22 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
   }
 
   override def catalogString: String = sqlType.simpleString
+
+  /**
+   * This method is used to convert the value of a UDT to a string representation.
+   *
+   * By default, it simply calls `toString` on the object.
+   *
+   * @param obj
+   *   The object to convert to a string.
+   * @return
+   *   A string representation of the object.
+   * @since 4.1.0
+   */
+  @Since("4.1.0")
+  def stringifyValue(obj: Any): String = {
+    obj.toString
+  }
 }
 
 private[spark] object UserDefinedType {

@@ -536,7 +536,9 @@ class ScalarArrowUDFTestsMixin:
             F.col("id").alias("long"),
             F.col("id").cast("float").alias("float"),
             F.col("id").cast("double").alias("double"),
-            # F.col("id").cast("decimal").alias("decimal"),
+            F.col("id").cast("decimal").alias("decimal1"),
+            F.col("id").cast("decimal(10, 0)").alias("decimal2"),
+            F.col("id").cast("decimal(38, 18)").alias("decimal3"),
             F.col("id").cast("boolean").alias("bool"),
         )
 
@@ -549,7 +551,9 @@ class ScalarArrowUDFTestsMixin:
             long_f = arrow_udf(f, "long", udf_type)
             float_f = arrow_udf(f, "float", udf_type)
             double_f = arrow_udf(f, "double", udf_type)
-            # decimal_f = arrow_udf(f, "decimal(38, 18)", udf_type)
+            decimal1_f = arrow_udf(f, "decimal", udf_type)
+            decimal2_f = arrow_udf(f, "decimal(10, 0)", udf_type)
+            decimal3_f = arrow_udf(f, "decimal(38, 18)", udf_type)
             bool_f = arrow_udf(f, "boolean", udf_type)
             res = df.select(
                 str_f(F.col("str")),
@@ -557,7 +561,9 @@ class ScalarArrowUDFTestsMixin:
                 long_f(F.col("long")),
                 float_f(F.col("float")),
                 double_f(F.col("double")),
-                # decimal_f("decimal"),
+                decimal1_f("decimal1"),
+                decimal2_f("decimal2"),
+                decimal3_f("decimal3"),
                 bool_f(F.col("bool")),
             )
             self.assertEqual(df.collect(), res.collect())

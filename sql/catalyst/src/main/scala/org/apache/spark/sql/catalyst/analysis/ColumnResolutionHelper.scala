@@ -210,7 +210,11 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         case u @ UnresolvedHaving(_, agg: Aggregate) =>
           agg.resolveChildren(nameParts, conf.resolver)
             .orElse(u.resolveChildren(nameParts, conf.resolver))
-            .map(wrapOuterReference)
+            .map {
+              case alias: Alias =>
+                wrapOuterReference(alias.child)
+              case other => wrapOuterReference(other)
+            }
         case other =>
           other.resolveChildren(nameParts, conf.resolver).map(wrapOuterReference)
       }
@@ -503,6 +507,33 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       },
       throws = true,
       includeLastResort = includeLastResort)
+  }
+
+  // Try to resolve `UnresolvedAttribute` by the children with Plan Ids.
+  // The `UnresolvedAttribute` must have a Plan Id:
+  //  - If Plan Id not found in the plan, raise CANNOT_RESOLVE_DATAFRAME_COLUMN.
+  //  - If Plan Id found in the plan, but column not found, return None.
+  //  - Otherwise, return the resolved expression.
+  private[sql] def tryResolveColumnByPlanChildren(
+      u: UnresolvedAttribute,
+      q: LogicalPlan,
+      includeLastResort: Boolean = false): Option[Expression] = {
+    assert(u.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty,
+      s"UnresolvedAttribute $u should have a Plan Id tag")
+
+    resolveDataFrameColumn(u, q.children).map { r =>
+      resolveExpression(
+        r,
+        resolveColumnByName = nameParts => {
+          q.resolveChildren(nameParts, conf.resolver)
+        },
+        getAttrCandidates = () => {
+          assert(q.children.length == 1)
+          q.children.head.output
+        },
+        throws = true,
+        includeLastResort = includeLastResort)
+    }
   }
 
   /**

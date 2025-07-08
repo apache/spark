@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Literal,
   SubtractDates,
   SubtractTimestamps,
-  TimeAdd,
+  TimestampAddInterval,
   UnaryMinus,
   UnaryPositive
 }
@@ -77,7 +77,7 @@ object AnsiStringPromotionTypeCoercion {
       s.copy(left = Cast(s.left, DateType))
     case s @ SubtractDates(_, right @ StringTypeExpression(), _) =>
       s.copy(right = Cast(s.right, DateType))
-    case t @ TimeAdd(left @ StringTypeExpression(), _, _) =>
+    case t @ TimestampAddInterval(left @ StringTypeExpression(), _, _) =>
       t.copy(start = Cast(t.start, TimestampType))
     case t @ SubtractTimestamps(left @ StringTypeExpression(), _, _, _) =>
       t.copy(left = Cast(t.left, t.right.dataType))

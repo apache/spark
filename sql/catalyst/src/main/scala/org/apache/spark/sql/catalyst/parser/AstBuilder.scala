@@ -36,20 +36,22 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Last}
+import org.apache.spark.sql.catalyst.expressions.json.JsonPathParser
+import org.apache.spark.sql.catalyst.expressions.json.PathInstruction.Named
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, IntervalUtils, SparkParserUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LEGACY_BANG_EQUALS_NOT
+import org.apache.spark.sql.internal.SQLConf.{LEGACY_BANG_EQUALS_NOT, LEGACY_CONSECUTIVE_STRING_LITERALS}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -128,7 +130,7 @@ class AstBuilder extends DataTypeAstBuilder
    * @return The original input text, including all whitespaces and formatting.
    */
   private def getOriginalText(ctx: ParserRuleContext): String = {
-    SparkParserUtils.source(ctx)
+    source(ctx)
   }
 
   /**
@@ -1823,7 +1825,7 @@ class AstBuilder extends DataTypeAstBuilder
             // syntax error here accordingly.
             val error: String = (if (n.name != null) n.name else n.identifierList).getText
             throw new ParseException(
-              command = Some(SparkParserUtils.command(n)),
+              command = Some(command(n)),
               start = Origin(),
               errorClass = "PARSE_SYNTAX_ERROR",
               messageParameters = Map(
@@ -3323,6 +3325,24 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Create a [[SemiStructuredExtract]] expression.
+   */
+  override def visitSemiStructuredExtract(
+      ctx: SemiStructuredExtractContext): Expression = withOrigin(ctx) {
+    val field = ctx.path.getText
+    // When `field` starts with a bracket, do not add a `.` as the bracket already implies nesting
+    // Also the bracket will imply case sensitive field extraction.
+    val path = if (field.startsWith("[")) "$" + field else s"$$.$field"
+    val parsedPath = JsonPathParser.parse(path)
+    if (parsedPath.isEmpty) {
+      throw new ParseException(errorClass = "PARSE_SYNTAX_ERROR", ctx = ctx)
+    }
+    val potentialAlias = parsedPath.get.collect { case Named(name) => name }.lastOption
+    val node = SemiStructuredExtract(expression(ctx.col), path)
+    potentialAlias.map { colName => Alias(node, colName)() }.getOrElse(node)
+  }
+
+  /**
    * Create an [[UnresolvedAttribute]] expression or a [[UnresolvedRegex]] if it is a regex
    * quoted in ``
    */
@@ -3622,6 +3642,8 @@ class AstBuilder extends DataTypeAstBuilder
   private def createString(ctx: StringLiteralContext): String = {
     if (conf.escapedStringLiterals) {
       ctx.stringLit.asScala.map(x => stringWithoutUnescape(visitStringLit(x))).mkString
+    } else if (conf.getConf(LEGACY_CONSECUTIVE_STRING_LITERALS)) {
+      ctx.stringLit.asScala.map(x => stringIgnoreQuoteQuote(visitStringLit(x))).mkString
     } else {
       ctx.stringLit.asScala.map(x => string(visitStringLit(x))).mkString
     }

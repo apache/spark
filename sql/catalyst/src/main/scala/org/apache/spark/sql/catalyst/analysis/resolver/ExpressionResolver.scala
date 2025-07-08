@@ -136,7 +136,7 @@ class ExpressionResolver(
     aggregateExpressionResolver,
     binaryArithmeticResolver
   )
-  private val timeAddResolver = new TimeAddResolver(this)
+  private val timestampAddResolver = new TimestampAddResolver(this)
   private val unaryMinusResolver = new UnaryMinusResolver(this)
   private val subqueryExpressionResolver = new SubqueryExpressionResolver(this, resolver)
   private val ordinalResolver = new OrdinalResolver(this)
@@ -262,8 +262,8 @@ class ExpressionResolver(
             subqueryExpressionResolver.resolveScalarSubquery(unresolvedScalarSubquery)
           case unresolvedListQuery: ListQuery =>
             subqueryExpressionResolver.resolveListQuery(unresolvedListQuery)
-          case unresolvedTimeAdd: TimeAdd =>
-            timeAddResolver.resolve(unresolvedTimeAdd)
+          case unresolvedTimestampAdd: TimestampAddInterval =>
+            timestampAddResolver.resolve(unresolvedTimestampAdd)
           case unresolvedUnaryMinus: UnaryMinus =>
             unaryMinusResolver.resolve(unresolvedUnaryMinus)
           case createNamedStruct: CreateNamedStruct =>

@@ -897,7 +897,7 @@ case class AdaptiveSparkPlanExec(
     val e = if (originalErrors.size == 1) {
       originalErrors.head
     } else {
-      val se = QueryExecutionErrors.multiFailuresInStageMaterializationError(originalErrors.head)
+      val se = QueryExecutionErrors.multiFailuresInStageMaterializationError(originalErrors)
       originalErrors.tail.foreach(se.addSuppressed)
       se
     }

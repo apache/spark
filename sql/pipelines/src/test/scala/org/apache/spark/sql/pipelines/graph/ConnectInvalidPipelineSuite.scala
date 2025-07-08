@@ -429,6 +429,77 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     )
   }
 
+  test("Streaming table backed by batch relation fails validation") {
+    val session = spark
+    import session.implicits._
+
+    val graph = new TestGraphRegistrationContext(spark) {
+      registerTable("a", query = Option(dfFlowFunc(Seq(1, 2).toDF())))
+    }.resolveToDataflowGraph()
+
+    val ex = intercept[AnalysisException] {
+      graph.validate()
+    }
+
+    checkError(
+      exception = ex,
+      condition = "INVALID_FLOW_QUERY_TYPE.BATCH_RELATION_FOR_STREAMING_TABLE",
+      parameters = Map(
+        "flowIdentifier" -> fullyQualifiedIdentifier("a").quotedString,
+        "tableIdentifier" -> fullyQualifiedIdentifier("a").quotedString
+      )
+    )
+  }
+
+  test("Materialized view backed by streaming relation fails validation") {
+    val session = spark
+    import session.implicits._
+
+    val graph = new TestGraphRegistrationContext(spark) {
+      registerMaterializedView("a", query = dfFlowFunc(MemoryStream[Int].toDF()))
+    }.resolveToDataflowGraph()
+
+    val ex = intercept[AnalysisException] {
+      graph.validate()
+    }
+
+    checkError(
+      exception = ex,
+      condition = "INVALID_FLOW_QUERY_TYPE.STREAMING_RELATION_FOR_MATERIALIZED_VIEW",
+      parameters = Map(
+        "flowIdentifier" -> fullyQualifiedIdentifier("a").quotedString,
+        "tableIdentifier" -> fullyQualifiedIdentifier("a").quotedString
+      )
+    )
+  }
+
+  test("Once flow backed by streaming relation fails validation") {
+    val session = spark
+    import session.implicits._
+
+    val graph = new TestGraphRegistrationContext(spark) {
+      registerTable("a")
+      registerFlow(
+        destinationName = "a",
+        name = "once_flow",
+        query = dfFlowFunc(MemoryStream[Int].toDF()),
+        once = true
+      )
+    }.resolveToDataflowGraph()
+
+    val ex = intercept[AnalysisException] {
+      graph.validate()
+    }
+
+    checkError(
+      exception = ex,
+      condition = "INVALID_FLOW_QUERY_TYPE.STREAMING_RELATION_FOR_ONCE_FLOW",
+      parameters = Map(
+        "flowIdentifier" -> fullyQualifiedIdentifier("once_flow").quotedString
+      )
+    )
+  }
+
   test("Inferred schema that isn't a subset of user-specified schema") {
     val session = spark
     import session.implicits._

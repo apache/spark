@@ -64,6 +64,7 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   checkDataType("TIME(6)", TimeType(6))
   checkDataType("TIME(6) WITHOUT TIME ZONE", TimeType(6))
   checkDataType("timestamp", TimestampType)
+  checkDataType("TIMESTAMP WITHOUT TIME ZONE", TimestampNTZType)
   checkDataType("timestamp_ntz", TimestampNTZType)
   checkDataType("timestamp_ltz", TimestampType)
   checkDataType("string", StringType)
@@ -160,6 +161,7 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
     }
     withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_LTZ.toString) {
       assert(parse("timestamp") === TimestampType)
+      assert(parse("timestamp without time zone") === TimestampNTZType)
     }
   }
 
@@ -216,6 +218,21 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
     checkError(
       exception = intercept[ParseException] {
         CatalystSqlParser.parseDataType("time(0) WITH TIME ZONE")
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'WITH'", "hint" -> ""))
+  }
+
+  test("invalid TIMESTAMP suffix") {
+    checkError(
+      exception = intercept[ParseException] {
+        CatalystSqlParser.parseDataType("timestamp WITHOUT TIMEZONE")
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'WITHOUT'", "hint" -> ""))
+    checkError(
+      exception = intercept[ParseException] {
+        CatalystSqlParser.parseDataType("timestamp WITH TIME ZONE")
       },
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'WITH'", "hint" -> ""))
