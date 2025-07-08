@@ -19,12 +19,15 @@ from collections import UserDict
 from dataclasses import dataclass
 from typing import (
     Any,
+    Dict,
     Iterable,
     Iterator,
     List,
     Optional,
     Sequence,
+    Tuple,
     Type,
+    Union,
     TYPE_CHECKING,
 )
 
@@ -46,6 +49,7 @@ __all__ = [
     "DataSourceStreamWriter",
     "DataSourceRegistration",
     "InputPartition",
+    "SimpleDataSourceStreamReader",
     "WriterCommitMessage",
     "Filter",
     "EqualTo",
@@ -80,7 +84,7 @@ class DataSource(ABC):
     .. versionadded: 4.0.0
     """
 
-    def __init__(self, options: dict[str, str]) -> None:
+    def __init__(self, options: Dict[str, str]) -> None:
         """
         Initializes the data source with user-provided options.
 
@@ -110,7 +114,7 @@ class DataSource(ABC):
         """
         return cls.__name__
 
-    def schema(self) -> StructType | str:
+    def schema(self) -> Union[StructType, str]:
         """
         Returns the schema of the data source.
 
@@ -257,7 +261,7 @@ class DataSource(ABC):
         )
 
 
-ColumnPath = tuple[str, ...]
+ColumnPath = Tuple[str, ...]
 """
 A tuple of strings representing a column reference.
 
@@ -403,7 +407,7 @@ class In(Filter):
     """
 
     attribute: ColumnPath
-    value: tuple[Any, ...]
+    value: Tuple[Any, ...]
 
 
 @dataclass(frozen=True)
@@ -627,7 +631,7 @@ class DataSourceReader(ABC):
         )
 
     @abstractmethod
-    def read(self, partition: InputPartition) -> Iterator[tuple] | Iterator["RecordBatch"]:
+    def read(self, partition: InputPartition) -> Union[Iterator[Tuple], Iterator["RecordBatch"]]:
         """
         Generates data for a given partition and returns an iterator of tuples or rows.
 
@@ -756,7 +760,7 @@ class DataSourceStreamReader(ABC):
         )
 
     @abstractmethod
-    def read(self, partition: InputPartition) -> Iterator[tuple] | Iterator["RecordBatch"]:
+    def read(self, partition: InputPartition) -> Union[Iterator[Tuple], Iterator["RecordBatch"]]:
         """
         Generates data for a given partition and returns an iterator of tuples or rows.
 
@@ -848,7 +852,7 @@ class SimpleDataSourceStreamReader(ABC):
             messageParameters={"feature": "initialOffset"},
         )
 
-    def read(self, start: dict) -> tuple[Iterator[tuple], dict]:
+    def read(self, start: dict) -> Tuple[Iterator[Tuple], dict]:
         """
         Read all available data from start offset and return the offset that next read attempt
         starts from.
@@ -860,7 +864,7 @@ class SimpleDataSourceStreamReader(ABC):
 
         Returns
         -------
-        A :class:`tuple` of an iterator of :class:`tuple` and a dict\\s
+        A :class:`Tuple` of an iterator of :class:`Tuple` and a dict\\s
             The iterator contains all the available records after start offset.
             The dict is the end offset of this read attempt and the start of next read attempt.
         """
@@ -869,7 +873,7 @@ class SimpleDataSourceStreamReader(ABC):
             messageParameters={"feature": "read"},
         )
 
-    def readBetweenOffsets(self, start: dict, end: dict) -> Iterator[tuple]:
+    def readBetweenOffsets(self, start: dict, end: dict) -> Iterator[Tuple]:
         """
         Read all available data from specific start offset and end offset.
         This is invoked during failure recovery to re-read a batch deterministically.
@@ -884,7 +888,7 @@ class SimpleDataSourceStreamReader(ABC):
 
         Returns
         -------
-        iterator of :class:`tuple`\\s
+        iterator of :class:`Tuple`\\s
             All the records between start offset and end offset.
         """
         raise PySparkNotImplementedError(
