@@ -140,21 +140,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       rightHolder.pushedSample.isEmpty &&
       lBuilder.isOtherSideCompatibleForJoin(rBuilder) =>
 
-      // projections' names are maybe not up to date if the joins have been previously pushed down.
-      // For this reason, we need to use pushedJoinOutputMap to get up to date names.
-      def getRequiredColumnNames(
-          projections: Seq[NamedExpression],
-          sHolder: ScanBuilderHolder): Array[String] = {
-        val normalizedProjections = DataSourceStrategy.normalizeExprs(
-          projections,
-          sHolder.output.map { a =>
-            sHolder.pushedJoinOutputMap.getOrElse(a, a).asInstanceOf[AttributeReference]
-          }
-        ).asInstanceOf[Seq[AttributeReference]]
-
-        normalizedProjections.map(_.name).toArray
-      }
-
       def generateJoinOutputAlias(name: String): String =
         s"${name}_${java.util.UUID.randomUUID().toString.replace("-", "_")}"
 
@@ -163,19 +148,28 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
       // Alias the duplicated columns from left side of the join.
       val leftSideRequiredColumnsWithAliases = leftSideRequiredColumnNames.map { name =>
-        val aliasName = if (rightSideRequiredColumnNames.contains(name)) {
-          generateJoinOutputAlias(name)
-        } else {
-          null
-        }
+        val aliasName =
+          if (leftSideRequiredColumnNames.count(_ == name) > 1 ||
+              rightSideRequiredColumnNames.contains(name)) {
+            generateJoinOutputAlias(name)
+          } else {
+            null
+          }
 
         new SupportsPushDownJoin.ColumnWithAlias(name, aliasName)
       }
 
       // Aliasing of duplicated columns in right side of the join is not needed because the
       // the conflicts are resolved by aliasing the left side.
-      val rightSideRequiredColumnsWithAliases = rightSideRequiredColumnNames.map { field =>
-        new SupportsPushDownJoin.ColumnWithAlias(field, null)
+      val rightSideRequiredColumnsWithAliases = rightSideRequiredColumnNames.map { name =>
+        val aliasName =
+          if (rightSideRequiredColumnNames.count(_ == name) > 1) {
+            generateJoinOutputAlias(name)
+          } else {
+            null
+          }
+
+        new SupportsPushDownJoin.ColumnWithAlias(name, aliasName)
       }
 
       // Create the AttributeMap that holds (Attribute -> Attribute with up to date name) mapping.
@@ -183,8 +177,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         node.output.asInstanceOf[Seq[AttributeReference]]
           .zip(leftSideRequiredColumnsWithAliases ++ rightSideRequiredColumnsWithAliases)
           .collect {
-            case (attr, columnWithAlias) if columnWithAlias.getAlias != null =>
-              (attr, attr.withName(columnWithAlias.getAlias))
+            case (attr, columnWithAlias) if columnWithAlias.alias() != null =>
+              (attr, attr.withName(columnWithAlias.alias()))
           }
           .toMap
       )
@@ -194,7 +188,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val normalizedCondition = condition.map { e =>
         DataSourceStrategy.normalizeExprs(
           Seq(e),
-          node.output.map { a =>
+          (leftHolder.output ++ rightHolder.output).map { a =>
             pushedJoinOutputMap.getOrElse(a, a).asInstanceOf[AttributeReference]
           }
         ).head
@@ -205,14 +199,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val translatedJoinType = DataSourceStrategy.translateJoinType(joinType)
 
       if (translatedJoinType.isDefined &&
-        translatedCondition.isDefined &&
-        lBuilder.pushDownJoin(
-          rBuilder,
-          translatedJoinType.get,
-          leftSideRequiredColumnsWithAliases,
-          rightSideRequiredColumnsWithAliases,
-          translatedCondition.get
-        )) {
+          translatedCondition.isDefined &&
+          lBuilder.pushDownJoin(
+            rBuilder,
+            translatedJoinType.get,
+            leftSideRequiredColumnsWithAliases,
+            rightSideRequiredColumnsWithAliases,
+            translatedCondition.get)
+      ) {
         leftHolder.joinedRelations = leftHolder.joinedRelations ++ rightHolder.joinedRelations
         leftHolder.pushedPredicates = leftHolder.pushedPredicates ++
           rightHolder.pushedPredicates :+ translatedCondition.get
@@ -224,6 +218,21 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         node
       }
+  }
+
+  // projections' names are maybe not up to date if the joins have been previously pushed down.
+  // For this reason, we need to use pushedJoinOutputMap to get up to date names.
+  def getRequiredColumnNames(
+      projections: Seq[NamedExpression],
+      sHolder: ScanBuilderHolder): Array[String] = {
+    val normalizedProjections = DataSourceStrategy.normalizeExprs(
+      projections,
+      sHolder.output.map { a =>
+        sHolder.pushedJoinOutputMap.getOrElse(a, a).asInstanceOf[AttributeReference]
+      }
+    ).asInstanceOf[Seq[AttributeReference]]
+
+    normalizedProjections.map(_.name).toArray
   }
 
   def pushDownAggregates(plan: LogicalPlan): LogicalPlan = plan.transform {
