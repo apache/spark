@@ -931,11 +931,12 @@ if [[ "$1" == "publish-release" ]]; then
     DEADLINE=$(TZ=America/Los_Angeles date -d "+4 days" "+%a, %d %b %Y %H:%M:%S %Z")
 
     JIRA_API_URL="https://issues.apache.org/jira/rest/api/2/project/SPARK/versions"
+    SPARK_VERSION_BASE=$(echo "$SPARK_VERSION" | sed 's/-preview[0-9]*//')
     JIRA_VERSION_ID=$(curl -s "$JIRA_API_URL" | \
       # Split JSON objects by replacing '},{' with a newline-separated pattern
       tr '}' '\n' | \
       # Find the block containing the exact version name
-      grep -F "\"name\":\"$SPARK_VERSION\"" -A 5 | \
+      grep -F "\"name\":\"$SPARK_VERSION_BASE\"" -A 5 | \
       # Extract the line with "id"
       grep '"id"' | \
       # Extract the numeric id value (assuming "id":"123456")
