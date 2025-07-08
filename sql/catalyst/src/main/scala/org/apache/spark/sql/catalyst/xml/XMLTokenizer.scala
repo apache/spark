@@ -29,6 +29,7 @@ import scala.xml.SAXException
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.security.AccessControlException
+import org.apache.hadoop.shaded.com.ctc.wstx.exc.WstxEOFException
 
 import org.apache.spark.internal.Logging
 
@@ -62,14 +63,11 @@ class XmlTokenizer(inputStream: () => InputStream, options: XmlOptions) extends 
       case NonFatal(e) =>
         ExceptionUtils.getRootCause(e) match {
           case _: AccessControlException | _: BlockMissingException =>
-            close()
             throw e
-          case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
-            logWarning("Skipping the rest of the content in the corrupted file", e)
-          case _: XMLStreamException =>
+          case _: RuntimeException | _: IOException | _: XMLStreamException
+              if options.ignoreCorruptFiles =>
             logWarning("Skipping the rest of the content in the corrupted file", e)
           case e: Throwable =>
-            close()
             throw e
         }
     } finally {
@@ -94,25 +92,31 @@ class XmlTokenizer(inputStream: () => InputStream, options: XmlOptions) extends 
    */
   private def skipToNextRowStart(): Boolean = {
     val rowTagName = options.rowTag
-    while (reader.hasNext) {
-      val event = reader.peek()
-      event match {
-        case startElement: StartElement =>
-          val elementName = StaxXmlParserUtils.getName(startElement.getName, options)
-          if (elementName == rowTagName) {
-            return true
-          }
-        case _: EndDocument =>
-          return false
-        case _ =>
-        // Continue searching
+    try {
+      while (reader.hasNext) {
+        val event = reader.peek()
+        event match {
+          case startElement: StartElement =>
+            val elementName = StaxXmlParserUtils.getName(startElement.getName, options)
+            if (elementName == rowTagName) {
+              return true
+            }
+          case _: EndDocument =>
+            return false
+          case _ =>
+          // Continue searching
+        }
+        // if not the event we want, advance the reader
+        reader.nextEvent()
+        // advance the reader for XSD validation as well to keep them in sync
+        readerForXSDValidation.foreach(_.nextEvent())
       }
-      // if not the event we want, advance the reader
-      reader.nextEvent()
-      // advance the reader for XSD validation as well to keep them in sync
-      readerForXSDValidation.foreach(_.nextEvent())
+      false
+    } catch {
+      case NonFatal(e) if ExceptionUtils.getRootCause(e).isInstanceOf[WstxEOFException] =>
+        logWarning("Reached end of file while looking for next row start element.")
+        false
     }
-    false
   }
 }
 
@@ -132,7 +136,8 @@ case class XMLEventReaderWithXSDValidation(
         } catch {
           case e: SAXException =>
             try {
-              // If the validation fails, try with the primary parser
+              // If the validation fails, try the same validation on the primary parser to keep
+              // the two parsers in sync.
               val streamingReader = XMLEventReaderToCharacterReader(parser, options)
               schema.newValidator().validate(new StreamSource(streamingReader))
             } finally {

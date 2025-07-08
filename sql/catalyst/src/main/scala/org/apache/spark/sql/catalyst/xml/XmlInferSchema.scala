@@ -95,7 +95,9 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     val inferredTypesRdd = xml.mapPartitions { iter =>
       iter.flatMap { xml =>
         val parser = XMLEventReaderWithXSDValidation(xml, options)
-        infer(parser)
+        val inferredType = infer(parser)
+        parser.close()
+        inferredType
       }
     }
 

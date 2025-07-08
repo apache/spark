@@ -244,8 +244,8 @@ class XmlSuite
       .option("mode", DropMalformedMode.name)
       .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
 
-    // There is no record parsed from the malformed XML file because the first record is malformed.
     assert(cars.count() == 1)
+    assert(cars.head() === Row("Chevy", "Volt", 2015))
   }
 
   test("DSL test for failing fast") {
@@ -1244,6 +1244,8 @@ class XmlSuite
     // _malformed_records column for the second record.
     assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
     assert(basketDF.filter($"_malformed_records".isNull).count() == 1)
+    val rec = basketDF.select("_malformed_records").collect()(1).getString(0)
+    assert(rec.startsWith("<baskets>") && rec.endsWith("</baskets>"))
   }
 
   test("test XSD validation with addFile() with validation error") {
@@ -1259,6 +1261,8 @@ class XmlSuite
     // _malformed_records column for the second record.
     assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
     assert(basketDF.filter($"_malformed_records".isNull).count() == 1)
+    val rec = basketDF.select("_malformed_records").collect()(1).getString(0)
+    assert(rec.startsWith("<baskets>") && rec.endsWith("</baskets>"))
   }
 
   test("test xmlDataset") {
@@ -2247,7 +2251,7 @@ class XmlSuite
             .save(dir.getCanonicalPath)
         }
 
-        Seq(true).foreach { caseSensitive =>
+        Seq(true, false).foreach { caseSensitive =>
           withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
             val df = spark.read.option("rowTag", "ROW").xml(dir.getCanonicalPath)
             assert(df.schema == (if (caseSensitive) writeSchema else expectedSchema))
