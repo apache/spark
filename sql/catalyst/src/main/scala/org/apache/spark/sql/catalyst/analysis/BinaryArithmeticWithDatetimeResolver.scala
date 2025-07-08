@@ -123,7 +123,7 @@ object BinaryArithmeticWithDatetimeResolver {
             )
           )
         case (_: TimeType, _: DayTimeIntervalType) =>
-          TimeAddInterval(l, UnaryMinus(r, mode == EvalMode.ANSI))
+          DatetimeSub(l, r, TimeAddInterval(l, UnaryMinus(r, mode == EvalMode.ANSI)))
         case (_, CalendarIntervalType | _: DayTimeIntervalType) =>
           Cast(DatetimeSub(l, r,
             TimestampAddInterval(l, UnaryMinus(r, mode == EvalMode.ANSI))), l.dataType)
