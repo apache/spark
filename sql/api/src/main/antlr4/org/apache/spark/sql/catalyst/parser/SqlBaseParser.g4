@@ -1346,6 +1346,10 @@ nonTrivialPrimitiveType
     | VARCHAR (LEFT_PAREN length=INTEGER_VALUE RIGHT_PAREN)?
     | (DECIMAL | DEC | NUMERIC)
         (LEFT_PAREN precision=INTEGER_VALUE (COMMA scale=INTEGER_VALUE)? RIGHT_PAREN)?
+    | INTERVAL
+        (fromYearMonth=(YEAR | MONTH) (TO to=MONTH)? |
+         fromDayTime=(DAY | HOUR | MINUTE | SECOND) (TO to=(HOUR | MINUTE | SECOND))?)?
+    | TIMESTAMP (WITHOUT TIME ZONE)?
     | TIME (LEFT_PAREN precision=INTEGER_VALUE RIGHT_PAREN)? (WITHOUT TIME ZONE)?
     ;
 
@@ -1358,12 +1362,9 @@ trivialPrimitiveType
     | FLOAT | REAL
     | DOUBLE
     | DATE
-    | TIMESTAMP_LTZ | TIMESTAMP_NTZ | TIMESTAMP (WITHOUT TIME ZONE)?
+    | TIMESTAMP_LTZ | TIMESTAMP_NTZ
     | BINARY
     | VOID
-    | INTERVAL
-        (fromYearMonth=(YEAR | MONTH) (TO to=MONTH)? |
-         fromDayTime=(DAY | HOUR | MINUTE | SECOND) (TO to=(HOUR | MINUTE | SECOND))?)?
     | VARIANT
     ;
 

@@ -69,10 +69,10 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    * Resolve/create a primitive type.
    */
   override def visitPrimitiveDataType(ctx: PrimitiveDataTypeContext): DataType = withOrigin(ctx) {
-    val typeCtx = ctx.`primitiveType`
-    if (typeCtx.`nonTrivialPrimitiveType` != null) {
+    val typeCtx = ctx.primitiveType
+    if (typeCtx.nonTrivialPrimitiveType != null) {
       // This is a primitive type with parameters, e.g. VARCHAR(10), DECIMAL(10, 2), etc.
-      val currentCtx = typeCtx.`nonTrivialPrimitiveType`
+      val currentCtx = typeCtx.nonTrivialPrimitiveType
       currentCtx.start.getType match {
         case STRING =>
           currentCtx.children.asScala.toSeq match {
@@ -99,34 +99,6 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
           } else {
             DecimalType(currentCtx.precision.getText.toInt, currentCtx.scale.getText.toInt)
           }
-        case TIME =>
-          val precision = if (currentCtx.precision == null) {
-            TimeType.DEFAULT_PRECISION
-          } else {
-            currentCtx.precision.getText.toInt
-          }
-          TimeType(precision)
-      }
-    } else if (typeCtx.`trivialPrimitiveType` != null) {
-      // This is a primitive type without parameters, e.g. BOOLEAN, TINYINT, etc.
-      val currentCtx = typeCtx.`trivialPrimitiveType`
-      currentCtx.start.getType match {
-        case BOOLEAN => BooleanType
-        case TINYINT | BYTE => ByteType
-        case SMALLINT | SHORT => ShortType
-        case INT | INTEGER => IntegerType
-        case BIGINT | LONG => LongType
-        case FLOAT | REAL => FloatType
-        case DOUBLE => DoubleType
-        case DATE => DateType
-        case TIMESTAMP =>
-          if (typeCtx.`trivialPrimitiveType`.WITHOUT() == null) {
-            SqlApiConf.get.timestampType
-          } else TimestampNTZType
-        case TIMESTAMP_LTZ => TimestampType
-        case TIMESTAMP_NTZ => TimestampNTZType
-        case BINARY => BinaryType
-        case VOID => NullType
         case INTERVAL =>
           if (currentCtx.fromDayTime != null) {
             visitDayTimeIntervalDataType(currentCtx)
@@ -135,6 +107,33 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
           } else {
             CalendarIntervalType
           }
+        case TIMESTAMP =>
+          if (currentCtx.WITHOUT() == null) {
+            SqlApiConf.get.timestampType
+          } else TimestampNTZType
+        case TIME =>
+          val precision = if (currentCtx.precision == null) {
+            TimeType.DEFAULT_PRECISION
+          } else {
+            currentCtx.precision.getText.toInt
+          }
+          TimeType(precision)
+      }
+    } else if (typeCtx.trivialPrimitiveType != null) {
+      // This is a primitive type without parameters, e.g. BOOLEAN, TINYINT, etc.
+      typeCtx.trivialPrimitiveType.start.getType match {
+        case BOOLEAN => BooleanType
+        case TINYINT | BYTE => ByteType
+        case SMALLINT | SHORT => ShortType
+        case INT | INTEGER => IntegerType
+        case BIGINT | LONG => LongType
+        case FLOAT | REAL => FloatType
+        case DOUBLE => DoubleType
+        case DATE => DateType
+        case TIMESTAMP_LTZ => TimestampType
+        case TIMESTAMP_NTZ => TimestampNTZType
+        case BINARY => BinaryType
+        case VOID => NullType
         case VARIANT => VariantType
       }
     } else {
