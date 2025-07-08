@@ -16,13 +16,105 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import javax.xml.stream.XMLEventReader
-import javax.xml.stream.events.{Characters, EndElement, StartElement, XMLEvent}
+import java.io.{FileNotFoundException, InputStream, IOException}
+import javax.xml.stream.{XMLEventReader, XMLStreamException}
+import javax.xml.stream.events.{Characters, EndDocument, EndElement, StartElement, XMLEvent}
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
 
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 import scala.xml.SAXException
+
+import org.apache.commons.lang3.exception.ExceptionUtils
+import org.apache.hadoop.hdfs.BlockMissingException
+import org.apache.hadoop.security.AccessControlException
+
+import org.apache.spark.internal.Logging
+
+/**
+ * XML tokenizer that never buffers complete XML records in memory. It uses XMLEventReader to parse
+ * XML file stream directly and can move to the next XML record based on the rowTag option.
+ */
+class XmlTokenizer(inputStream: () => InputStream, options: XmlOptions) extends Logging {
+  // Primary XML event reader for parsing
+  private val in1 = inputStream()
+  private var reader = StaxXmlParserUtils.filteredReader(in1, options)
+
+  // Optional XML event reader for XSD validation.
+  private val in2 = Option(options.rowValidationXSDPath).map(_ => inputStream())
+  private val readerForXSDValidation = in2.map(in => StaxXmlParserUtils.filteredReader(in, options))
+
+  /**
+   * Returns the next XML record as a positioned XMLEventReader.
+   * This avoids creating intermediate string representations.
+   */
+  def next(): Option[XMLEventReaderWithXSDValidation] = {
+    var nextRecord: Option[XMLEventReaderWithXSDValidation] = None
+    try {
+      // Skip to the next row start element
+      if (skipToNextRowStart()) {
+        nextRecord = Some(XMLEventReaderWithXSDValidation(reader, readerForXSDValidation, options))
+      }
+    } catch {
+      case e: FileNotFoundException if options.ignoreMissingFiles =>
+        logWarning("Skipping the rest of the content in the missing file", e)
+      case NonFatal(e) =>
+        ExceptionUtils.getRootCause(e) match {
+          case _: AccessControlException | _: BlockMissingException =>
+            close()
+            throw e
+          case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
+            logWarning("Skipping the rest of the content in the corrupted file", e)
+          case _: XMLStreamException =>
+            logWarning("Skipping the rest of the content in the corrupted file", e)
+          case e: Throwable =>
+            close()
+            throw e
+        }
+    } finally {
+      if (nextRecord.isEmpty && reader != null) {
+        close()
+      }
+    }
+    nextRecord
+  }
+
+  def close(): Unit = {
+    if (reader != null) {
+      in1.close()
+      in2.foreach(_.close())
+      reader.close()
+      reader = null
+    }
+  }
+
+  /**
+   * Skip through the XML stream until we find the next row start element.
+   */
+  private def skipToNextRowStart(): Boolean = {
+    val rowTagName = options.rowTag
+    while (reader.hasNext) {
+      val event = reader.peek()
+      event match {
+        case startElement: StartElement =>
+          val elementName = StaxXmlParserUtils.getName(startElement.getName, options)
+          if (elementName == rowTagName) {
+            return true
+          }
+        case _: EndDocument =>
+          return false
+        case _ =>
+        // Continue searching
+      }
+      // if not the event we want, advance the reader
+      reader.nextEvent()
+      // advance the reader for XSD validation as well to keep them in sync
+      readerForXSDValidation.foreach(_.nextEvent())
+    }
+    false
+  }
+}
 
 case class XMLEventReaderWithXSDValidation(
     parser: XMLEventReader,
