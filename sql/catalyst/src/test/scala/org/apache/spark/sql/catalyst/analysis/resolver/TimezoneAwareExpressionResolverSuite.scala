@@ -80,23 +80,21 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
 
   test("SPARK-52617: Rewrite Cast(TimeType -> TimestampNTZType) to MakeTimestampNTZ") {
     val millis = Time.valueOf("12:34:56").getTime
-    val timeExpr = Literal(millis * 1000L, TimeType(6))  // microseconds since midnight
+    val timeExpr = Literal(millis * 1000L, TimeType(6)) // microseconds since midnight
 
     val input = Cast(timeExpr, TimestampNTZType)
 
     val newExpressionResolver = new HardCodedExpressionResolver(
       catalogManager = mock[CatalogManager],
-      resolvedExpression = timeExpr
-    )
+      resolvedExpression = timeExpr)
 
-    val newTimezoneAwareExpressionResolver = new TimezoneAwareExpressionResolver(
-      newExpressionResolver
-    )
+    val newTimezoneAwareExpressionResolver =
+      new TimezoneAwareExpressionResolver(newExpressionResolver)
 
     val resolvedExpr =
       newExpressionResolver.getExpressionTreeTraversals.withNewTraversal(OneRowRelation()) {
         newTimezoneAwareExpressionResolver.resolve(input)
-    }
+      }
     assert(resolvedExpr.isInstanceOf[MakeTimestampNTZ])
 
     val makeTs = resolvedExpr.asInstanceOf[MakeTimestampNTZ]

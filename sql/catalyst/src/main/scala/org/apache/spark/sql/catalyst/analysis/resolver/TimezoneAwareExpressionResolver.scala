@@ -120,8 +120,7 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
   }
 
   private def rewriteTimeCastToTimestampNTZ(expr: Expression): Expression = expr match {
-    case Cast(child, TimestampNTZType, _, _)
-      if child.dataType.isInstanceOf[TimeType] =>
+    case Cast(child, TimestampNTZType, _, _) if child.dataType.isInstanceOf[TimeType] =>
       MakeTimestampNTZ(CurrentDate(), child)
     case other =>
       other
