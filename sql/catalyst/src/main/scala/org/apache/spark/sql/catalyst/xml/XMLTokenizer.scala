@@ -18,11 +18,10 @@ package org.apache.spark.sql.catalyst.xml
 
 import java.io.{FileNotFoundException, InputStream, IOException}
 import javax.xml.stream.{XMLEventReader, XMLStreamException}
-import javax.xml.stream.events.{Characters, EndDocument, EndElement, StartElement, XMLEvent}
-import javax.xml.transform.stream.StreamSource
+import javax.xml.stream.events.{EndDocument, StartElement, XMLEvent}
+import javax.xml.transform.stax.StAXSource
 import javax.xml.validation.Schema
 
-import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import scala.xml.SAXException
 
@@ -130,16 +129,15 @@ case class XMLEventReaderWithXSDValidation(
     parserForXSDValidation match {
       case Some(p) =>
         try {
-          // Use StreamSource with a Reader that produces characters directly from XMLEventReader
-          val streamingReader = XMLEventReaderToCharacterReader(p, options)
-          schema.newValidator().validate(new StreamSource(streamingReader))
+          schema.newValidator().validate(new StAXSource(DocumentWrappingXMLEventReader(p, options)))
         } catch {
           case e: SAXException =>
             try {
               // If the validation fails, try the same validation on the primary parser to keep
               // the two parsers in sync.
-              val streamingReader = XMLEventReaderToCharacterReader(parser, options)
-              schema.newValidator().validate(new StreamSource(streamingReader))
+              schema.newValidator().validate(
+                new StAXSource(DocumentWrappingXMLEventReader(parser, options))
+              )
             } finally {
               throw e
             }
@@ -172,164 +170,154 @@ object XMLEventReaderWithXSDValidation {
 }
 
 /**
- * A Reader that produces characters directly from XMLEventReader without any copying.
- * Characters are generated on-demand as the validator requests them, stopping at
- * the row tag boundary.
+ * XMLEventReader wrapper that injects StartDocument and EndDocument events around
+ * an input XMLEventReader. This is useful when working with XML fragments that need
+ * to be treated as complete documents.
  */
-case class XMLEventReaderToCharacterReader(parser: XMLEventReader, options: XmlOptions)
-    extends java.io.Reader {
-  private var currentEventChars: Iterator[Char] = Iterator.empty
-  private var finished = false
-  private var rowTagStarted = false
-  private val rowTagName =
-    StaxXmlParserUtils.getName(javax.xml.namespace.QName.valueOf(options.rowTag), options)
+case class DocumentWrappingXMLEventReader(
+    wrappedReader: XMLEventReader,
+    options: XmlOptions)
+    extends XMLEventReader {
+  import javax.xml.stream.{XMLEventFactory, XMLStreamException}
+  import javax.xml.stream.events.{StartElement, EndElement}
+  private val rowTag = options.rowTag
 
-  override def read(): Int = {
-    if (getNextChar()) {
-      currentEventChars.next().toInt
-    } else {
-      -1
+  private val eventFactory = XMLEventFactory.newInstance()
+  eventFactory.setLocation(
+    // Create a dummy location to avoid null pointer exceptions
+    new javax.xml.stream.Location {
+      override def getLineNumber: Int = -1
+      override def getColumnNumber: Int = -1
+      override def getCharacterOffset: Int = -1
+      override def getPublicId: String = null
+      override def getSystemId: String = ""
     }
-  }
+  )
+  private var state: DocumentWrapperState = StartDocumentState
+  private var rowTagDepth = 0 // Track nesting depth of rowTag elements
 
-  override def read(cbuf: Array[Char], off: Int, len: Int): Int = {
-    if (finished && !currentEventChars.hasNext) {
-      return -1
-    }
+  private sealed trait DocumentWrapperState
+  private case object StartDocumentState extends DocumentWrapperState
+  private case object DelegatingState extends DocumentWrapperState
+  private case object EndDocumentState extends DocumentWrapperState
+  private case object FinishedState extends DocumentWrapperState
 
-    var count = 0
-    while (count < len && getNextChar()) {
-      cbuf(off + count) = currentEventChars.next()
-      count += 1
-    }
+  override def nextEvent(): XMLEvent = {
+    state match {
+      case StartDocumentState =>
+        state = DelegatingState
+        eventFactory.createStartDocument()
 
-    if (count == 0 && finished) -1 else count
-  }
+      case DelegatingState =>
+        if (wrappedReader.hasNext) {
+          val event = wrappedReader.nextEvent()
 
-  private def getNextChar(): Boolean = {
-    // If current event has more characters, return true
-    if (currentEventChars.hasNext) {
-      return true
-    }
+          // Track nesting depth of rowTag elements to handle nested elements with same name
+          event match {
+            case startElement: StartElement =>
+              val elementName = StaxXmlParserUtils.getName(startElement.getName, options)
+              if (elementName == rowTag) {
+                rowTagDepth += 1 // Enter a rowTag element (could be nested)
+              }
 
-    // Need to get next event
-    if (finished) {
-      return false
-    }
+            case endElement: EndElement =>
+              val elementName = StaxXmlParserUtils.getName(endElement.getName, options)
+              if (elementName == rowTag && rowTagDepth > 0) {
+                rowTagDepth -= 1 // Exit a rowTag element
+                // Only transition to EndDocumentState when we've closed the top-level rowTag
+                if (rowTagDepth == 0) {
+                  state = EndDocumentState
+                }
+              }
 
-    // Get next XML event and create character iterator
-    if (parser.hasNext) {
-      val event = parser.nextEvent()
+            case _ => // Other events, just pass through
+          }
 
-      // Check if this is the end of our row
-      if (event.isEndElement) {
-        val elementName = StaxXmlParserUtils.getName(event.asEndElement.getName, options)
-        if (rowTagStarted && elementName == rowTagName) {
-          finished = true
+          event
+        } else {
+          state = EndDocumentState
+          nextEvent() // Recursively call to get the EndDocument event
         }
-      } else if (event.isStartElement && !rowTagStarted) {
-        val elementName = StaxXmlParserUtils.getName(event.asStartElement.getName, options)
-        if (elementName == rowTagName) {
-          rowTagStarted = true
-        }
-      }
 
-      // Create character iterator directly from event
-      currentEventChars = createEventCharIterator(event)
+      case EndDocumentState =>
+        state = FinishedState
+        eventFactory.createEndDocument()
 
-      // Check if we got any characters, if not try next event
-      if (currentEventChars.hasNext) {
-        true
-      } else {
-        getNextChar() // Recursively try next event
-      }
-    } else {
-      finished = true
-      false
+      case FinishedState =>
+        throw new XMLStreamException("No more events available")
     }
   }
 
-  private def createEventCharIterator(event: XMLEvent): Iterator[Char] = {
-    event match {
-      case se: StartElement =>
-        val elementStr = createStartElementString(se)
-        elementStr.iterator
-
-      case ee: EndElement =>
-        s"</${ee.getName}>".iterator
-
-      case c: Characters =>
-        escapeXmlIterator(c.getData)
-
-      case _ =>
-        Iterator.empty // Skip other event types
+  override def hasNext: Boolean = {
+    state match {
+      case StartDocumentState => true
+      case DelegatingState =>
+        true // Either has wrapped events or will transition to EndDocumentState
+      case EndDocumentState => true
+      case FinishedState => false
     }
   }
 
-  private def createStartElementString(se: StartElement): String = {
-    val sb = new StringBuilder()
-    sb.append('<').append(se.getName)
-    se.getAttributes.asScala.foreach { att =>
-      sb.append(' ')
-        .append(att.getName)
-        .append("=\"")
-        .append(escapeXml(att.getValue))
-        .append('"')
-    }
-    sb.append('>')
-    sb.toString()
-  }
+  override def peek(): XMLEvent = {
+    state match {
+      case StartDocumentState =>
+        eventFactory.createStartDocument()
 
-  private def escapeXmlIterator(text: String): Iterator[Char] = {
-    new Iterator[Char] {
-      private var pos = 0
-      private var replacementChars: Iterator[Char] = Iterator.empty
+      case DelegatingState =>
+        if (wrappedReader.hasNext) {
+          val nextEvent = wrappedReader.peek()
 
-      override def hasNext: Boolean = {
-        replacementChars.hasNext || pos < text.length
-      }
-
-      override def next(): Char = {
-        if (replacementChars.hasNext) {
-          replacementChars.next()
-        } else if (pos < text.length) {
-          val char = text.charAt(pos)
-          pos += 1
-          char match {
-            case '&' =>
-              replacementChars = "amp;".iterator
-              '&'
-            case '<' =>
-              replacementChars = "lt;".iterator
-              '&'
-            case '>' =>
-              replacementChars = "gt;".iterator
-              '&'
-            case '"' =>
-              replacementChars = "quot;".iterator
-              '&'
-            case '\'' =>
-              replacementChars = "apos;".iterator
-              '&'
-            case c => c
+          // Check if the next event would cause us to transition to EndDocumentState
+          nextEvent match {
+            case endElement: EndElement =>
+              val elementName = StaxXmlParserUtils.getName(endElement.getName, options)
+              if (elementName == rowTag && rowTagDepth > 0) {
+                // The next event would be the end of our row if it brings depth to 0
+                // But we return the actual next event first
+                nextEvent
+              } else {
+                nextEvent
+              }
+            case _ => nextEvent
           }
         } else {
-          throw new NoSuchElementException()
+          // Don't modify state in peek - just return what the next event would be
+          eventFactory.createEndDocument()
         }
-      }
+
+      case EndDocumentState =>
+        eventFactory.createEndDocument()
+
+      case FinishedState =>
+        throw new XMLStreamException("No more events available")
     }
   }
 
-  private def escapeXml(text: String): String = {
-    text
-      .replace("&", "&amp;")
-      .replace("<", "&lt;")
-      .replace(">", "&gt;")
-      .replace("\"", "&quot;")
-      .replace("'", "&apos;")
+  override def getElementText: String = {
+    state match {
+      case DelegatingState if wrappedReader.hasNext =>
+        wrappedReader.getElementText
+      case _ =>
+        throw new XMLStreamException("getElementText() not supported in current state")
+    }
+  }
+
+  override def nextTag(): XMLEvent = {
+    state match {
+      case DelegatingState if wrappedReader.hasNext =>
+        wrappedReader.nextTag()
+      case _ =>
+        throw new XMLStreamException("nextTag() not supported in current state")
+    }
+  }
+
+  override def getProperty(name: String): AnyRef = {
+    wrappedReader.getProperty(name)
   }
 
   override def close(): Unit = {
-    // XMLEventReader will be closed by the caller
+    state = FinishedState
   }
+
+  override def next(): AnyRef = nextEvent()
 }
