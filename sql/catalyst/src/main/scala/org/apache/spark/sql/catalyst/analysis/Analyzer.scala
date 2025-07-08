@@ -483,6 +483,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         ResolveWithCTE,
         ExtractDistributedSequenceID) ++
       Seq(ResolveUpdateEventTimeWatermarkColumn) ++
+      Seq(RewriteTimeCastToTimestampNTZ) ++
       extendedResolutionRules : _*),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Post-Hoc Resolution", Once,
