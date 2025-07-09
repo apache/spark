@@ -933,7 +933,6 @@ class SparkConnectServiceSuite
           executeHolder.eventsManager.hasError.isDefined,
           s"Error has not been recorded in events manager within $EVENT_WAIT_TIMEOUT")
       }
-
     }
     def onCompleted(producedRowCount: Option[Long] = None): Unit = {
       assert(executeHolder.eventsManager.getProducedRowCount == producedRowCount)
