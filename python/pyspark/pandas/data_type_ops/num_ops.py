@@ -103,9 +103,16 @@ class NumericOps(DataTypeOps):
         _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Addition can not be applied to given types.")
+        spark_session = left._internal.spark_frame.sparkSession
+        new_right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
 
-        right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
-        return column_op(PySparkColumn.__add__)(left, right)
+        def wrapped_add(lc, rc):
+            expr = PySparkColumn.__add__(lc, rc)
+            if is_ansi_mode_enabled(spark_session):
+                expr = _cast_back_float(expr, left.dtype, right)
+            return expr
+
+        return column_op(wrapped_add)(left, new_right)
 
     def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
