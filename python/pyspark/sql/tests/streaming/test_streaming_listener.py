@@ -405,6 +405,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                 terminated_event = None
                 bad_udf = udf(lambda x: 1 / 0)
                 q = df.select(bad_udf(col("value"))).writeStream.format("noop").start()
+                wait_count = 0
                 while terminated_event is None:
                     time.sleep(0.5)
                     wait_count = wait_count + 1
