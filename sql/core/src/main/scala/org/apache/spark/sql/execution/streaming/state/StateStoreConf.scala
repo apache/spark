@@ -22,7 +22,8 @@ import org.apache.spark.sql.internal.SQLConf
 
 /** A class that contains configuration parameters for [[StateStore]]s. */
 class StateStoreConf(
-    @transient private[state] val sqlConf: SQLConf,
+    // Must be private to avoid serialization issues with transient annotation
+    @transient private val sqlConf: SQLConf,
     val extraOptions: Map[String, String] = Map.empty)
   extends Serializable {
 
@@ -105,6 +106,9 @@ class StateStoreConf(
 
   /** Whether to unload the store on task completion. */
   val unloadOnCommit = sqlConf.stateStoreUnloadOnCommit
+
+  /** The version of the state store checkpoint format. */
+  val stateStoreCheckpointFormatVersion: Int = sqlConf.stateStoreCheckpointFormatVersion
 
   /**
    * Additional configurations related to state store. This will capture all configs in
