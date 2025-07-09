@@ -316,9 +316,9 @@ object ApproxTopK {
 
   def getSketchStateDataType(itemDataType: DataType): StructType =
     StructType(
-      StructField("Sketch", BinaryType, nullable = false) ::
-        StructField("ItemTypeNull", itemDataType) ::
-        StructField("MaxItemsTracked", IntegerType, nullable = false) :: Nil)
+      StructField("sketch", BinaryType, nullable = false) ::
+        StructField("itemTypeNull", itemDataType) ::
+        StructField("maxItemsTracked", IntegerType, nullable = false) :: Nil)
 }
 
 /**
