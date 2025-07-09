@@ -19,10 +19,8 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, ExecutorService}
 import java.util.concurrent.atomic.AtomicLong
-
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
-
 import org.apache.spark.{ErrorMessageFormat, JobArtifactSet, SparkContext, SparkEnv, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT_ON_CANCEL}
 import org.apache.spark.internal.Logging
@@ -30,6 +28,7 @@ import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PRE
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
@@ -178,8 +177,11 @@ object SQLExecution extends Logging {
                 val shuffleIds = queryExecution.executedPlan match {
                   case ae: AdaptiveSparkPlanExec =>
                     ae.context.shuffleIds.asScala.keys
-                  case _ =>
-                    Iterable.empty
+                  case nonAdaptivePlan =>
+                    nonAdaptivePlan.collect {
+                      case exec: ShuffleExchangeLike =>
+                        exec.shuffleId
+                    }
                 }
                 shuffleIds.foreach { shuffleId =>
                   queryExecution.shuffleCleanupMode match {
