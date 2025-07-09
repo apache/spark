@@ -3129,7 +3129,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .head.rdd.asInstanceOf[JDBCRDD]
 
     // This is the Metadata for the testing H2 database
-    val expectedMetadata = JDBCDatabaseMetadataEdge(
+    val expectedMetadata = JDBCDatabaseMetadata(
       databaseMajorVersion = Some(2),
       databaseMinorVersion = Some(3),
       databaseDriverMajorVersion = Some(2),

@@ -66,12 +66,12 @@ object JDBCDatabaseMetadata extends Logging {
    * @param conn The active database connection.
    * @return A new instance of DatabaseMetadataEdge containing the version metadata.
    */
-  def fromJDBCConnection(conn: Connection): JDBCDatabaseMetadataEdge = {
+  def fromJDBCConnection(conn: Connection): JDBCDatabaseMetadata = {
     try {
       // getMetaData itself can throw, so we catch that and return None for all fields
       val databaseMetadata = conn.getMetaData
 
-      JDBCDatabaseMetadataEdge(
+      JDBCDatabaseMetadata(
         databaseMajorVersion = safeGet(databaseMetadata.getDatabaseMajorVersion),
         databaseMinorVersion = safeGet(databaseMetadata.getDatabaseMinorVersion),
         databaseDriverMajorVersion = safeGet(databaseMetadata.getDriverMajorVersion),
@@ -80,7 +80,7 @@ object JDBCDatabaseMetadata extends Logging {
     } catch {
       case NonFatal(e) =>
         logWarning(log"Exception while getting database metadata object from connection", e)
-        JDBCDatabaseMetadataEdge(None, None, None, None)
+        JDBCDatabaseMetadata(None, None, None, None)
     }
 
   }
