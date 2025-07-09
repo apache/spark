@@ -241,6 +241,14 @@ object SQLConf {
     }
   }
 
+  val STRIP_IS_DUPLICATE_METADATA =
+    buildConf("spark.sql.analyzer.stripIsDuplicateMetadata")
+    .internal()
+    .doc("When true, strip __is_duplicate metadata after resolution batch in analysis since " +
+      "it is no longer needed.")
+    .booleanConf
+    .createWithDefault(true)
+
   val ONLY_NECESSARY_AND_UNIQUE_METADATA_COLUMNS =
     buildConf("spark.sql.analyzer.uniqueNecessaryMetadataColumns")
     .internal()

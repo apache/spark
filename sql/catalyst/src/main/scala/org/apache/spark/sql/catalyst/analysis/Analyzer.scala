@@ -504,6 +504,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveEncodersInUDF),
     Batch("Subquery", Once,
       UpdateOuterReferences),
+    Batch("Strip __is_duplicate metadata", Once, StripIsDuplicateMetadata),
     Batch("Cleanup", fixedPoint,
       CleanupAliases),
     Batch("HandleSpecialCommand", Once,
