@@ -140,6 +140,7 @@ object JDBCRDD extends Logging {
       requiredColumns
     }
     val connectionFactory = dialect.createConnectionFactory(options)
+
     new JDBCRDD(
       sc,
       connectionFactory,
