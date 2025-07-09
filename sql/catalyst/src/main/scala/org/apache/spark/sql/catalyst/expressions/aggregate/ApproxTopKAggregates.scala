@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.datasketches.common._
@@ -317,7 +316,7 @@ object ApproxTopK {
   def getSketchStateDataType(itemDataType: DataType): StructType =
     StructType(
       StructField("sketch", BinaryType, nullable = false) ::
-        StructField("itemTypeNull", itemDataType) ::
+        StructField("itemDataType", itemDataType) ::
         StructField("maxItemsTracked", IntegerType, nullable = false) :: Nil)
 }
 

@@ -65,8 +65,8 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
   def this(child: Expression) = this(child, Literal(ApproxTopK.DEFAULT_K))
 
   private lazy val itemDataType: DataType = {
-    // itemDataType is the type of the "itemTypeNull" field of the output of ACCUMULATE or COMBINE
-    state.dataType.asInstanceOf[StructType]("itemTypeNull").dataType
+    // itemDataType is the type of the "itemDataType" field of the output of ACCUMULATE or COMBINE
+    state.dataType.asInstanceOf[StructType]("itemDataType").dataType
   }
 
   override def left: Expression = state
@@ -89,8 +89,8 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
     } else if (structType("sketch").dataType != BinaryType) {
       TypeCheckFailure("'sketch' field of state struct must be of BinaryType. " +
         "Got: " + structType("sketch").dataType.simpleString)
-    } else if (!structFieldNames.contains("itemTypeNull")) {
-      TypeCheckFailure("State struct must contain a field named 'itemTypeNull'.")
+    } else if (!structFieldNames.contains("itemDataType")) {
+      TypeCheckFailure("State struct must contain a field named 'itemDataType'.")
     } else if (!structFieldNames.contains("maxItemsTracked")) {
       TypeCheckFailure("State struct must contain a field named 'maxItemsTracked'.")
     } else if (structType("maxItemsTracked").dataType != IntegerType) {
