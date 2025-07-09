@@ -38,7 +38,7 @@ case class JDBCDatabaseMetadata(
  )
 
 /**
- * Companion object for DatabaseMetadataEdge.
+ * Companion object for DatabaseMetadata.
  * Contains factory methods to build instances.
  */
 object JDBCDatabaseMetadata extends Logging {
@@ -60,11 +60,11 @@ object JDBCDatabaseMetadata extends Logging {
   }
 
   /**
-   * Creates a DatabaseMetadataEdge instance from a JDBC Connection,
+   * Creates a DatabaseMetadata instance from a JDBC Connection,
    * handling errors for each field individually.
    *
    * @param conn The active database connection.
-   * @return A new instance of DatabaseMetadataEdge containing the version metadata.
+   * @return A new instance of DatabaseMetadata containing the version metadata.
    */
   def fromJDBCConnection(conn: Connection): JDBCDatabaseMetadata = {
     try {
