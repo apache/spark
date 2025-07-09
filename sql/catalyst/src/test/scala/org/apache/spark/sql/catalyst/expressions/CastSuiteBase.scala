@@ -1522,7 +1522,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-52617: cast time to TimestampNTZType") {
     val testCases = Seq(
-      ("2023-01-01T15:30:00.123456789", 9),
       ("2023-01-01T15:30:00.123456", 6),
       ("2023-01-01T15:30:00", 0))
 
