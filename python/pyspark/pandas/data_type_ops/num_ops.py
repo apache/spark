@@ -161,8 +161,16 @@ class NumericOps(DataTypeOps):
         _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("Addition can not be applied to given types.")
-        right = transform_boolean_operand_to_numeric(right)
-        return column_op(PySparkColumn.__radd__)(left, right)
+        spark_session = left._internal.spark_frame.sparkSession
+        new_right = transform_boolean_operand_to_numeric(right)
+
+        def wrapped_radd(lc, rc):
+            expr = PySparkColumn.__radd__(lc, rc)
+            if is_ansi_mode_enabled(spark_session):
+                expr = _cast_back_float(expr, left.dtype, right)
+            return expr
+
+        return column_op(wrapped_radd)(left, new_right)
 
     def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
