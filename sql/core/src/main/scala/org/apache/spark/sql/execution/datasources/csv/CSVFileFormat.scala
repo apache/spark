@@ -168,7 +168,7 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
   private def getCsvOptions(
       sparkSession: SparkSession,
       options: Map[String, String]): CSVOptions = {
-    val conf = sqlConf(sparkSession)
+    val conf = getSqlConf(sparkSession)
     new CSVOptions(
       options,
       conf.csvColumnPruning,
