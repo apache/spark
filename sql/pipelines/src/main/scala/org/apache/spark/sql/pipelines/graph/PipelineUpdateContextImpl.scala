@@ -18,11 +18,7 @@
 package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.pipelines.logging.{
-  FlowProgressEventLogger,
-  PipelineEvent,
-  PipelineRunEventBuffer
-}
+import org.apache.spark.sql.pipelines.logging.{FlowProgressEventLogger, PipelineEvent}
 
 /**
  * An implementation of the PipelineUpdateContext trait used in production.
@@ -31,17 +27,15 @@ import org.apache.spark.sql.pipelines.logging.{
  */
 class PipelineUpdateContextImpl(
     override val unresolvedGraph: DataflowGraph,
-    eventCallback: PipelineEvent => Unit
+    override val eventCallback: PipelineEvent => Unit
 ) extends PipelineUpdateContext {
 
   override val spark: SparkSession = SparkSession.getActiveSession.getOrElse(
     throw new IllegalStateException("SparkSession is not available")
   )
 
-  override val eventBuffer = new PipelineRunEventBuffer(eventCallback)
-
   override val flowProgressEventLogger: FlowProgressEventLogger =
-    new FlowProgressEventLogger(eventBuffer = eventBuffer)
+    new FlowProgressEventLogger(eventCallback = eventCallback)
 
   override val refreshTables: TableFilter = AllTables
   override val fullRefreshTables: TableFilter = NoTables
