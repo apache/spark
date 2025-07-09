@@ -76,26 +76,26 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(StructType, IntegerType)
 
   def checkStateFieldAndType(state: Expression): TypeCheckResult = {
-    if (state.dataType.asInstanceOf[StructType].length != 3) {
-      TypeCheckFailure("State must be a struct with 3 fields. Expected fields: " +
-        "\"sketch\" (BinaryType), \"itemDataType\" (DataType), \"maxItemsTracked\" (IntegerType)." +
-        " Got: " + state.dataType.simpleString)
+    val stateStructType = state.dataType.asInstanceOf[StructType]
+    if (stateStructType.length != 3) {
+      return TypeCheckFailure("State must be a struct with 3 fields. " +
+        "Expected struct: struct<sketch:binary,itemDataType:any,maxItemsTracked:int>. " +
+        "Got: " + state.dataType.simpleString)
     }
-    val structType = state.dataType.asInstanceOf[StructType]
-    val structFieldNames = structType.fieldNames
 
+    val structFieldNames = stateStructType.fieldNames
     if (!structFieldNames.contains("sketch")) {
       TypeCheckFailure("State struct must contain a field named 'sketch'.")
-    } else if (structType("sketch").dataType != BinaryType) {
+    } else if (stateStructType("sketch").dataType != BinaryType) {
       TypeCheckFailure("'sketch' field of state struct must be of BinaryType. " +
-        "Got: " + structType("sketch").dataType.simpleString)
+        "Got: " + stateStructType("sketch").dataType.simpleString)
     } else if (!structFieldNames.contains("itemDataType")) {
       TypeCheckFailure("State struct must contain a field named 'itemDataType'.")
     } else if (!structFieldNames.contains("maxItemsTracked")) {
       TypeCheckFailure("State struct must contain a field named 'maxItemsTracked'.")
-    } else if (structType("maxItemsTracked").dataType != IntegerType) {
+    } else if (stateStructType("maxItemsTracked").dataType != IntegerType) {
       TypeCheckFailure("'maxItemsTracked' field of state struct must be of IntegerType. " +
-        "Got: " + structType("maxItemsTracked").dataType.simpleString)
+        "Got: " + stateStructType("maxItemsTracked").dataType.simpleString)
     } else {
       TypeCheckSuccess
     }
