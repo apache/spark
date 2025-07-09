@@ -23,6 +23,7 @@ import pandas as pd
 from pandas.api.types import (  # type: ignore[attr-defined]
     is_bool_dtype,
     is_integer_dtype,
+    is_float_dtype,
     CategoricalDtype,
     is_list_like,
 )
@@ -42,7 +43,7 @@ from pyspark.pandas.data_type_ops.base import (
     _is_valid_for_logical_operator,
     _is_boolean_type,
 )
-from pyspark.pandas.typedef.typehints import extension_dtypes, pandas_on_spark_type
+from pyspark.pandas.typedef.typehints import extension_dtypes, pandas_on_spark_type, as_spark_type
 from pyspark.pandas.utils import is_ansi_mode_enabled
 from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import (
@@ -67,6 +68,26 @@ def _non_fractional_astype(
         return _as_string_type(index_ops, dtype, null_str="NaN")
     else:
         return _as_other_type(index_ops, dtype, spark_type)
+
+
+def _cast_back_float(
+    expr: PySparkColumn, left_dtype: Union[str, type, Dtype], right: Any
+) -> PySparkColumn:
+    """
+    Cast the result expression back to the original float dtype if needed.
+
+    This function ensures pandas on Spark matches pandas behavior when performing
+    arithmetic operations involving float and boolean values. In such cases, under ANSI mode,
+    Spark implicitly widen float32 to float64, which deviates from pandas behavior where the
+    result retains float32.
+    """
+    is_left_float = is_float_dtype(left_dtype)
+    is_right_bool = isinstance(right, bool) or (
+        hasattr(right, "dtype") and is_bool_dtype(right.dtype)
+    )
+    if is_left_float and is_right_bool:
+        return expr.cast(as_spark_type(left_dtype))
+    return expr
 
 
 class NumericOps(DataTypeOps):
@@ -98,16 +119,19 @@ class NumericOps(DataTypeOps):
             raise TypeError("Modulo can not be applied to given types.")
         spark_session = left._internal.spark_frame.sparkSession
 
-        def mod(left: PySparkColumn, right: Any) -> PySparkColumn:
+        def mod(left_op: PySparkColumn, right_op: Any) -> PySparkColumn:
             if is_ansi_mode_enabled(spark_session):
-                return F.when(F.lit(right == 0), F.lit(None)).otherwise(
-                    ((left % right) + right) % right
+                expr = F.when(F.lit(right_op == 0), F.lit(None)).otherwise(
+                    ((left_op % right_op) + right_op) % right_op
                 )
+                expr = _cast_back_float(expr, left.dtype, right)
             else:
-                return ((left % right) + right) % right
+                expr = ((left_op % right_op) + right_op) % right_op
+            return expr
 
-        right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
-        return column_op(mod)(left, right)
+        new_right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
+
+        return column_op(mod)(left, new_right)
 
     def pow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
