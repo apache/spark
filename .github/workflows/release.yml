@@ -227,9 +227,18 @@ jobs:
             cp "$file" "$file.bak"
             for pattern in "${PATTERNS[@]}"; do
               [ -n "$pattern" ] || continue  # Skip empty patterns
-              escaped_pattern=$(printf '%s\n' "$pattern" | sed 's/[\/&]/\\&/g')
-              sed -i "s/${escaped_pattern}/***/g" "$file"
+          
+              # Safely escape special characters for sed
+              escaped_pattern=${pattern//\\/\\\\} # Escape backslashes
+              escaped_pattern=${escaped_pattern//\//\\/} # Escape forward slashes
+              escaped_pattern=${escaped_pattern//&/\\&} # Escape &
+              escaped_pattern=${escaped_pattern//$'\n'/} # Remove newlines
+              escaped_pattern=${escaped_pattern//$'\r'/} # Remove carriage returns (optional)
+          
+              # Redact the pattern
+              sed -i.bak "s/${escaped_pattern}/***/g" "$file"
             done
+            rm -f "$file.bak"
           done
 
           # Zip logs/output
