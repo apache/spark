@@ -4337,6 +4337,76 @@ ResetCommand spark.sql.ansi.enabled
 
 
 -- !query
+CREATE FUNCTION foo3_14a() RETURNS INT RETURN 1
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_14a`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_14b() RETURNS TABLE (a INT) RETURN SELECT 1
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`default`.`foo3_14b`"
+  }
+}
+
+
+-- !query
+SELECT * FROM foo3_14a()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_TABLE_FUNCTION",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "functionName" : "`spark_catalog`.`default`.`foo3_14a`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 24,
+    "fragment" : "foo3_14a()"
+  } ]
+}
+
+
+-- !query
+SELECT foo3_14b()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_SCALAR_FUNCTION",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "functionName" : "`spark_catalog`.`default`.`foo3_14b`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "foo3_14b()"
+  } ]
+}
+
+
+-- !query
 CREATE FUNCTION foo4_0() RETURNS TABLE (x INT) RETURN SELECT 1
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
