@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, LeafExpression, Literal, MapFromArrays, MapFromEntries, SubqueryExpression, Unevaluable, VariableReference}
 import org.apache.spark.sql.catalyst.parser.{SubstituteParamsParser, SubstitutionRule}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, CreateView, LogicalPlan, SupervisingCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateUserDefinedFunction, CreateVariable, CreateView, LogicalPlan, SupervisingCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
 import org.apache.spark.sql.errors.QueryErrorsBase
@@ -206,7 +206,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
   private def performSqlSubstitution(
       child: LogicalPlan,
       substitutionFn: (String, SubstitutionRule) => String): LogicalPlan = {
-    substituteSQL(child) {
+    child match {
       case createVariable: CreateVariable =>
         val substitutedSQL = substitutionFn(createVariable.defaultExpr.originalSQL,
           SubstitutionRule.Expression)
@@ -217,6 +217,18 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         val substitutedSQL = substitutionFn(createView.originalText.get,
           SubstitutionRule.Query)
         createView.copy(originalText = Some(substitutedSQL))
+
+      case createFunction: CreateUserDefinedFunction =>
+        val inputParamText = createFunction.inputParamText map (p => substitutionFn(p,
+          SubstitutionRule.ColDefinitionList))
+        val exprText = createFunction.exprText map (p => substitutionFn(p,
+          SubstitutionRule.Expression))
+        val queryText = createFunction.queryText map (p => substitutionFn(p,
+          SubstitutionRule.Query))
+        createFunction.copy(
+          inputParamText = inputParamText,
+          exprText = exprText,
+          queryText = queryText)
     }
   }
 

@@ -31,6 +31,9 @@ object SubstitutionRule {
 
   /** Rule for parsing SQL expressions */
   case object Expression extends SubstitutionRule
+
+  /** Rule for parsing Column definition lists */
+  case object ColDefinitionList extends SubstitutionRule
 }
 
 /**
@@ -69,6 +72,7 @@ class SubstituteParamsParser extends Logging {
     val ctx = rule match {
       case SubstitutionRule.Query => parser.query()
       case SubstitutionRule.Expression => parser.expression()
+      case SubstitutionRule.ColDefinitionList => parser.colDefinitionList()
     }
     val parameterLocations = astBuilder.extractParameterLocations(ctx)
 

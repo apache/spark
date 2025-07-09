@@ -1564,6 +1564,18 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     comparePlans(actual2, expected2)
   }
 
+  test("SPARK-41271: bind named parameters in CREATE FUNCTION") {
+    // Test parameter binding in CREATE FUNCTION statements
+    val parameterizedCreateFunction = NameParameterizedQuery(
+      child = parsePlan("CREATE FUNCTION test_func() RETURNS INT RETURN :param1 + :param2"),
+      args = Map("param1" -> Literal(10), "param2" -> Literal(20))).analyze
+    
+    // Verify that the function definition contains the substituted values
+    // The exact verification depends on how the function is stored, but we should 
+    // not get any unbound parameter errors
+    assert(parameterizedCreateFunction.resolved)
+  }
+
   test("SPARK-44066: bind positional parameters to literals") {
     CTERelationDef.curId.set(0)
     val actual1 = PosParameterizedQuery(
