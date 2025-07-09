@@ -241,6 +241,15 @@ object SQLConf {
     }
   }
 
+  val UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED =
+    buildConf("spark.sql.analyzer.unionIsResolvedWhenDuplicatesPerChildResolved")
+    .internal()
+    .doc(
+      "When true, union should only be resolved once there are no duplicate attributes in " +
+      "each branch.")
+    .booleanConf
+    .createWithDefault(true)
+
   val ONLY_NECESSARY_AND_UNIQUE_METADATA_COLUMNS =
     buildConf("spark.sql.analyzer.uniqueNecessaryMetadataColumns")
     .internal()
@@ -6892,6 +6901,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def useNullsForMissingDefaultColumnValues: Boolean =
     getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)
+
+  def unionIsResolvedWhenDuplicatesPerChildResolved: Boolean =
+    getConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED)
 
   override def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
 
