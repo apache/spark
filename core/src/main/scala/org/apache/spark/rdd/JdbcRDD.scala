@@ -55,7 +55,7 @@ private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) e
  *   This should only call getInt, getString, etc; the RDD takes care of calling next.
  *   The default maps a ResultSet to an array of Object.
  */
-@deprecated("JDBC RDD is deprecated, consider using JDBC data source instead.")
+@deprecated("Jdbc RDD is deprecated, consider using JDBC data source instead.")
 class JdbcRDD[T: ClassTag](
     sc: SparkContext,
     getConnection: () => Connection,
