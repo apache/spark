@@ -324,7 +324,9 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def charTypeMissingLengthError(dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
+  def charVarcharTypeMissingLengthError(
+      dataType: String,
+      ctx: PrimitiveDataTypeContext): Throwable = {
     new ParseException(
       errorClass = "DATATYPE_MISSING_SIZE",
       messageParameters = Map("type" -> toSQLType(dataType)),
@@ -333,7 +335,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def nestedTypeMissingElementTypeError(
       dataType: String,
-      ctx: PrimitiveDataTypeContext): Throwable = {
+      ctx: ComplexDataTypeContext): Throwable = {
     dataType.toUpperCase(Locale.ROOT) match {
       case "ARRAY" =>
         new ParseException(
