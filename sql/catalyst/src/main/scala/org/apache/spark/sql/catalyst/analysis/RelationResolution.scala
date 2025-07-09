@@ -21,6 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.{
+  CatalogTable,
   CatalogTableType,
   TemporaryViewRelation,
   UnresolvedCatalogRelation
@@ -34,6 +35,7 @@ import org.apache.spark.sql.connector.catalog.{
   Identifier,
   LookupCatalog,
   Table,
+  TableCapability,
   V1Table,
   V2TableWithV1Fallback
 }
@@ -163,6 +165,22 @@ class RelationResolution(override val catalogManager: CatalogManager)
       table: Option[Table],
       options: CaseInsensitiveStringMap,
       isStreaming: Boolean): Option[LogicalPlan] = {
+    def createDataSourceV1Scan(v1Table: CatalogTable): LogicalPlan = {
+      if (isStreaming) {
+        if (v1Table.tableType == CatalogTableType.VIEW) {
+          throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
+            ident.quoted
+          )
+        }
+        SubqueryAlias(
+          catalog.name +: ident.asMultipartIdentifier,
+          UnresolvedCatalogRelation(v1Table, options, isStreaming = true)
+        )
+      } else {
+        v1SessionCatalog.getRelation(v1Table, options)
+      }
+    }
+
     table.map {
       // To utilize this code path to execute V1 commands, e.g. INSERT,
       // either it must be session catalog, or tracksPartitionsInCatalog
@@ -173,19 +191,10 @@ class RelationResolution(override val catalogManager: CatalogManager)
       case v1Table: V1Table
           if CatalogV2Util.isSessionCatalog(catalog)
           || !v1Table.catalogTable.tracksPartitionsInCatalog =>
-        if (isStreaming) {
-          if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
-            throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
-              ident.quoted
-            )
-          }
-          SubqueryAlias(
-            catalog.name +: ident.asMultipartIdentifier,
-            UnresolvedCatalogRelation(v1Table.v1Table, options, isStreaming = true)
-          )
-        } else {
-          v1SessionCatalog.getRelation(v1Table.v1Table, options)
-        }
+        createDataSourceV1Scan(v1Table.v1Table)
+
+      case t if t.capabilities().contains(TableCapability.GENERAL_TABLE) =>
+        createDataSourceV1Scan(V1Table.toCatalogTable(catalog, ident, t))
 
       case table =>
         if (isStreaming) {
