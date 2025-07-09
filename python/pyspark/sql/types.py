@@ -2012,7 +2012,7 @@ def _parse_datatype_json_value(
         else:
             raise PySparkValueError(
                 errorClass="CANNOT_PARSE_DATATYPE",
-                messageParameters={"error": str(json_value)},
+                messageParameters={"msg": str(json_value)},
             )
     else:
         tpe = json_value["type"]
