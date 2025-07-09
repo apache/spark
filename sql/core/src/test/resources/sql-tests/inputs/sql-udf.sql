@@ -783,6 +783,13 @@ SELECT * FROM foo3_3ct();
 SELECT * FROM foo3_3dt();
 RESET spark.sql.ansi.enabled;
 
+-- 3.14 Invalid usage of SQL scalar/table functions in query clauses.
+CREATE FUNCTION foo3_14a() RETURNS INT RETURN 1;
+CREATE FUNCTION foo3_14b() RETURNS TABLE (a INT) RETURN SELECT 1;
+-- Expect error
+SELECT * FROM foo3_14a();
+SELECT foo3_14b();
+
 -- 4. SQL table functions
 CREATE FUNCTION foo4_0() RETURNS TABLE (x INT) RETURN SELECT 1;
 CREATE FUNCTION foo4_1(x INT) RETURNS TABLE (a INT) RETURN SELECT x;
