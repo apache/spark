@@ -986,8 +986,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  test("HDFSBackedStateStoreProvider checkpoint format version 2 with deserialized sqlConf " +
-    "throws error correctly") {
+  test("SPARK-52740 - HDFSBackedStateStoreProvider checkpoint format version 2 with " +
+    "deserialized sqlConf throws error correctly") {
     val sqlConf = getDefaultSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
       SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get)
     sqlConf.setConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
@@ -1019,7 +1019,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         deserializedConf,
         hadoopConf)
     }
-    assert(e.getMessage.contains("HDFS State Store Provider doesn't support checkpointFormatVersion >= 2"))
+    assert(e.getMessage.contains(
+      "HDFS State Store Provider doesn't support checkpointFormatVersion >= 2"))
   }
 
   override def newStoreProvider(): HDFSBackedStateStoreProvider = {
