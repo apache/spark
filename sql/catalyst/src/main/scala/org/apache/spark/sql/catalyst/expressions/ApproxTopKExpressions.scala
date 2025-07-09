@@ -65,8 +65,8 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
   def this(child: Expression) = this(child, Literal(ApproxTopK.DEFAULT_K))
 
   private lazy val itemDataType: DataType = {
-    // itemDataType is the type of the "ItemTypeNull" field of the output of ACCUMULATE or COMBINE
-    state.dataType.asInstanceOf[StructType]("ItemTypeNull").dataType
+    // itemDataType is the type of the "itemTypeNull" field of the output of ACCUMULATE or COMBINE
+    state.dataType.asInstanceOf[StructType]("itemTypeNull").dataType
   }
 
   override def left: Expression = state
@@ -75,14 +75,46 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StructType, IntegerType)
 
+  def checkStateFieldAndType(state: Expression): TypeCheckResult = {
+    if (state.dataType.asInstanceOf[StructType].length != 3) {
+      TypeCheckFailure("State must be a struct with 3 fields. Expected fields: " +
+        "\"sketch\" (BinaryType), \"itemDataType\" (DataType), \"maxItemsTracked\" (IntegerType)." +
+        " Got: " + state.dataType.simpleString)
+    }
+    val structType = state.dataType.asInstanceOf[StructType]
+    val structFieldNames = structType.fieldNames
+
+    if (!structFieldNames.contains("sketch")) {
+      TypeCheckFailure("State struct must contain a field named 'sketch'.")
+    } else if (structType("sketch").dataType != BinaryType) {
+      TypeCheckFailure("'sketch' field of state struct must be of BinaryType. " +
+        "Got: " + structType("sketch").dataType.simpleString)
+    } else if (!structFieldNames.contains("itemTypeNull")) {
+      TypeCheckFailure("State struct must contain a field named 'itemTypeNull'.")
+    } else if (!structFieldNames.contains("maxItemsTracked")) {
+      TypeCheckFailure("State struct must contain a field named 'maxItemsTracked'.")
+    } else if (structType("maxItemsTracked").dataType != IntegerType) {
+      TypeCheckFailure("'maxItemsTracked' field of state struct must be of IntegerType. " +
+        "Got: " + structType("maxItemsTracked").dataType.simpleString)
+    } else {
+      TypeCheckSuccess
+    }
+  }
+
+
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
       defaultCheck
-    } else if (!k.foldable) {
-      TypeCheckFailure("K must be a constant literal")
     } else {
-      TypeCheckSuccess
+      val stateCheck = checkStateFieldAndType(state)
+      if (stateCheck.isFailure) {
+        stateCheck
+      } else if (!k.foldable) {
+        TypeCheckFailure("K must be a constant literal")
+      } else {
+        TypeCheckSuccess
+      }
     }
   }
 
