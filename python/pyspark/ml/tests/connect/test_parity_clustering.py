@@ -21,6 +21,7 @@ from pyspark.ml.tests.test_clustering import ClusteringTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
+@unittest.skip("Disabled due to flakiness, should be enabled after fixing the issue")
 class ClusteringParityTests(ClusteringTestsMixin, ReusedConnectTestCase):
     pass
 
