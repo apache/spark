@@ -136,7 +136,7 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       spark: SparkSession,
       options: Map[String, String],
       inRead: Boolean = true): JSONOptions = {
-    val conf = sqlConf(spark)
+    val conf = getSqlConf(spark)
     if (inRead) {
       new JSONOptionsInRead(options, conf.sessionLocalTimeZone, conf.columnNameOfCorruptRecord)
     } else {

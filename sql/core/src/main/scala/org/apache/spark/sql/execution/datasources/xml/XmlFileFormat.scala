@@ -42,7 +42,7 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
   private def getXmlOptions(
       sparkSession: SparkSession,
       parameters: Map[String, String]): XmlOptions = {
-    val conf = sqlConf(sparkSession)
+    val conf = getSqlConf(sparkSession)
     new XmlOptions(parameters, conf.sessionLocalTimeZone, conf.columnNameOfCorruptRecord, true)
   }
 
