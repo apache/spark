@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
  * The metadata is static database information such as the version, or the version
  * of the JDBC driver.
  *
- * This object is used in QPL to log the database metadata for JDBC connections.
+ * This object is stored in JDBCRDD.
  */
 case class JDBCDatabaseMetadata(
    databaseMajorVersion: Option[Int],
