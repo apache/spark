@@ -229,6 +229,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
           inputParamText = inputParamText,
           exprText = exprText,
           queryText = queryText)
+      case other => child
     }
   }
 
