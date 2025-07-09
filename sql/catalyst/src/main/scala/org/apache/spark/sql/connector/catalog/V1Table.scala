@@ -22,8 +22,9 @@ import java.util
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, CatalogUtils}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.V1Table.addV2TableProperties
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, Transform}
 import org.apache.spark.sql.types.StructType
@@ -49,7 +50,6 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
   override lazy val schema: StructType = v1Table.schema
 
   override lazy val partitioning: Array[Transform] = {
-    import CatalogV2Implicits._
     val partitions = new mutable.ArrayBuffer[Transform]()
 
     v1Table.partitionColumnNames.foreach { col =>
@@ -70,7 +70,7 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
   override def name: String = v1Table.identifier.quoted
 
   override def capabilities: util.Set[TableCapability] =
-    util.EnumSet.noneOf(classOf[TableCapability])
+    util.EnumSet.of(TableCapability.GENERAL_TABLE)
 
   override def toString: String = s"V1Table($name)"
 }
@@ -108,6 +108,48 @@ private[sql] object V1Table {
       case CatalogTableType.VIEW => Some(TableSummary.VIEW_TABLE_TYPE)
       case _ => None
     }
+  }
+
+  def toCatalogTable(catalog: CatalogPlugin, ident: Identifier, t: Table): CatalogTable = {
+    if (t.isInstanceOf[V1Table]) {
+      return t.asInstanceOf[V1Table].v1Table
+    }
+    assert(t.capabilities().contains(TableCapability.GENERAL_TABLE))
+    val tableType = t.properties().get(TableCatalog.PROP_TABLE_TYPE) match {
+      case TableSummary.VIEW_TABLE_TYPE => CatalogTableType.VIEW
+      case TableSummary.MANAGED_TABLE_TYPE => CatalogTableType.MANAGED
+      case _ => CatalogTableType.EXTERNAL
+    }
+    val location = Option(t.properties().get(TableCatalog.PROP_LOCATION))
+    val viewText = Option(t.properties().get(TableCatalog.PROP_VIEW_TEXT))
+    val (serdeProps, tableProps) = t.properties().asScala
+      .partition(_._1.startsWith(TableCatalog.OPTION_PREFIX))
+    val (partCols, bucketSpec, clusterBySpec) = t.partitioning().toSeq.convertTransforms
+    CatalogTable(
+      identifier = TableIdentifier(
+        table = ident.name(),
+        database = Some(ident.namespace().lastOption.getOrElse("root")),
+        catalog = Some(catalog.name())),
+      tableType = tableType,
+      storage = CatalogStorageFormat.empty.copy(
+        locationUri = location.map(CatalogUtils.stringToURI),
+        // v2 table properties should be put into the serde properties as well in case
+        // it contains data source options.
+        properties = tableProps.toMap ++ serdeProps.map {
+          case (k, v) => k.drop(TableCatalog.OPTION_PREFIX.length) -> v
+        }
+      ),
+      schema = CatalogV2Util.v2ColumnsToStructType(t.columns()),
+      provider = Option(t.properties().get(TableCatalog.PROP_PROVIDER)),
+      partitionColumnNames = partCols,
+      bucketSpec = bucketSpec,
+      owner = Option(t.properties().get(TableCatalog.PROP_OWNER)).getOrElse("unknown"),
+      viewText = viewText,
+      viewOriginalText = viewText,
+      comment = Option(t.properties().get(TableCatalog.PROP_COMMENT)),
+      collation = Option(t.properties().get(TableCatalog.PROP_COLLATION)),
+      properties = tableProps.toMap ++ clusterBySpec.map(ClusterBySpec.toPropertyWithoutValidation)
+    )
   }
 }
 
