@@ -79,8 +79,9 @@ def _cast_back_float(
 
     This function ensures pandas on Spark matches pandas behavior when performing
     arithmetic operations involving float32 and numeric values. In such cases, under ANSI mode,
-    Spark implicitly widen float32 to float64, when the other operand is a numeric type but not float32 (e.g., int,
-    bool), which deviates from pandas behavior where the result retains float32.
+    Spark implicitly widen float32 to float64, when the other operand is a numeric type
+    but not float32 (e.g., int, bool), which deviates from pandas behavior where the result
+    retains float32.
     """
     is_left_float = is_float_dtype(left_dtype)
     is_right_numeric = isinstance(right, (int, float, bool)) or (
