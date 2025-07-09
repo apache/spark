@@ -81,6 +81,8 @@ object JDBCDatabaseMetadata extends Logging {
       case NonFatal(e) =>
         logWarning(log"Exception while getting database metadata object from connection", e)
         JDBCDatabaseMetadata(None, None, None, None)
+    } finally {
+      conn.close()
     }
 
   }
