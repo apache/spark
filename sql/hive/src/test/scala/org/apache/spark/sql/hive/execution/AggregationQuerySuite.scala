@@ -899,6 +899,15 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       ArrayType(IntegerType), MapType(StringType, LongType), struct,
       new TestUDT.MyDenseVectorUDT()) ++ dayTimeIntervalTypes ++ unsafeRowMutableFieldTypes ++
       timeTypes
+    udafTest(dataTypes)
+  }
+
+  test("udaf with unsafe row as underlying buffer") {
+    val dataTypes = dayTimeIntervalTypes ++ unsafeRowMutableFieldTypes ++ timeTypes
+    udafTest(dataTypes)
+  }
+
+  def udafTest(dataTypes: Seq[DataType]): Unit = {
     // Right now, we will use SortAggregate to handle UDAFs.
     // UnsafeRow.mutableFieldTypes.asScala.toSeq will trigger SortAggregate to use
     // UnsafeRow as the aggregation buffer. While, dataTypes will trigger
