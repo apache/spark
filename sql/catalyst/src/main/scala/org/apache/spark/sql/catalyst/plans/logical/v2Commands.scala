@@ -1682,13 +1682,6 @@ case class TableSpec(
 
 /**
  * The logical plan of the DECLARE [OR REPLACE] TEMPORARY VARIABLE command.
- *
- * @param name The identifier for the variable
- * @param defaultExpr The default value expression
- * @param replace Whether this replaces an existing variable
- * @param defaultExpressionText Optional substituted SQL text for the default expression.
- *                             When present, this should be used instead of defaultExpr.originalSQL
- *                             for variable definition storage.
  */
 case class CreateVariable(
     name: LogicalPlan,
