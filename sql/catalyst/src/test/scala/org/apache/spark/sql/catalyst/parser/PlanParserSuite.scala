@@ -257,9 +257,11 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("SPARK-42552: select and union without parentheses") {
-    val plan = Distinct(OneRowRelation().select(Literal(1))
-      .union(OneRowRelation().select(Literal(1))))
-    assertEqual("select 1 union select 1", plan)
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      val plan = Distinct(OneRowRelation().select(Literal(1))
+        .union(OneRowRelation().select(Literal(1))))
+      assertEqual("select 1 union select 1", plan)
+    }
   }
 
   test("set operations") {

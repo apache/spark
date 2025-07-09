@@ -3213,7 +3213,9 @@ class HiveDDLSuite
   }
 
   test("SPARK-33844, 37969: Insert overwrite directory should check schema too") {
-    withSQLConf(HiveUtils.CONVERT_METASTORE_INSERT_DIR.key -> "false") {
+    withSQLConf(
+      SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false",
+      HiveUtils.CONVERT_METASTORE_INSERT_DIR.key -> "false") {
       withView("v") {
         spark.range(1).createTempView("v")
         withTempPath { path =>

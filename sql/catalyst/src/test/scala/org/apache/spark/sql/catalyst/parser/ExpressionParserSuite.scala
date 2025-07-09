@@ -137,9 +137,11 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("exists expression") {
-    assertEqual(
-      "exists (select 1 from b where b.x = a.x)",
-      Exists(table("b").where($"b.x" === $"a.x").select(1)))
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      assertEqual(
+        "exists (select 1 from b where b.x = a.x)",
+        Exists(table("b").where($"b.x" === $"a.x").select(1)))
+    }
   }
 
   test("comparison expressions") {
@@ -333,20 +335,22 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("function expressions with named arguments") {
-    assertEqual("encode(value => 'abc', charset => 'utf-8')",
-      $"encode".function(NamedArgumentExpression("value", Literal("abc")),
-      NamedArgumentExpression("charset", Literal("utf-8"))))
-    assertEqual("encode('abc', charset => 'utf-8')",
-      $"encode".function(Literal("abc"), NamedArgumentExpression("charset", Literal("utf-8"))))
-    assertEqual("encode(charset => 'utf-8', 'abc')",
-      $"encode".function(NamedArgumentExpression("charset", Literal("utf-8")), Literal("abc")))
-    assertEqual("encode('abc', charset => 'utf' || '-8')",
-      $"encode".function(Literal("abc"), NamedArgumentExpression("charset",
-        Concat(Literal("utf") :: Literal("-8") :: Nil))))
-    val unresolvedAlias = Project(Seq(UnresolvedAlias(Literal("1"))), OneRowRelation())
-    assertEqual("encode(value => ((select '1')), charset => 'utf-8')",
-      $"encode".function(NamedArgumentExpression("value", ScalarSubquery(plan = unresolvedAlias)),
-        NamedArgumentExpression("charset", Literal("utf-8"))))
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      assertEqual("encode(value => 'abc', charset => 'utf-8')",
+        $"encode".function(NamedArgumentExpression("value", Literal("abc")),
+          NamedArgumentExpression("charset", Literal("utf-8"))))
+      assertEqual("encode('abc', charset => 'utf-8')",
+        $"encode".function(Literal("abc"), NamedArgumentExpression("charset", Literal("utf-8"))))
+      assertEqual("encode(charset => 'utf-8', 'abc')",
+        $"encode".function(NamedArgumentExpression("charset", Literal("utf-8")), Literal("abc")))
+      assertEqual("encode('abc', charset => 'utf' || '-8')",
+        $"encode".function(Literal("abc"), NamedArgumentExpression("charset",
+          Concat(Literal("utf") :: Literal("-8") :: Nil))))
+      val unresolvedAlias = Project(Seq(UnresolvedAlias(Literal("1"))), OneRowRelation())
+      assertEqual("encode(value => ((select '1')), charset => 'utf-8')",
+        $"encode".function(NamedArgumentExpression("value", ScalarSubquery(plan = unresolvedAlias)),
+          NamedArgumentExpression("charset", Literal("utf-8"))))
+    }
   }
 
   private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
@@ -477,12 +481,14 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("scalar sub-query") {
-    assertEqual(
-      "(select max(val) from tbl) > current",
-      ScalarSubquery(table("tbl").select($"max".function($"val"))) > $"current")
-    assertEqual(
-      "a = (select b from s)",
-      $"a" === ScalarSubquery(table("s").select($"b")))
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      assertEqual(
+        "(select max(val) from tbl) > current",
+        ScalarSubquery(table("tbl").select($"max".function($"val"))) > $"current")
+      assertEqual(
+        "a = (select b from s)",
+        $"a" === ScalarSubquery(table("s").select($"b")))
+    }
   }
 
   test("case when") {

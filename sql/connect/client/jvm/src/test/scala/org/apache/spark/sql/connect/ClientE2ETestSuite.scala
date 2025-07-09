@@ -1277,19 +1277,21 @@ class ClientE2ETestSuite
   }
 
   test("sql() with positional parameters") {
-    val result0 = spark.sql("select 1", Array.empty).collect()
-    assert(result0.length == 1 && result0(0).getInt(0) === 1)
+    withSQLConf("spark.sql.stableDerivedColumnAlias.enabled" -> "false") {
+      val result0 = spark.sql("select 1", Array.empty).collect()
+      assert(result0.length == 1 && result0(0).getInt(0) === 1)
 
-    val result1 = spark.sql("select ?", Array(1)).collect()
-    assert(result1.length == 1 && result1(0).getInt(0) === 1)
+      val result1 = spark.sql("select ?", Array(1)).collect()
+      assert(result1.length == 1 && result1(0).getInt(0) === 1)
 
-    val result2 = spark.sql("select ?, ?", Array(1, "abc")).collect()
-    assert(result2.length == 1)
-    assert(result2(0).getInt(0) === 1)
-    assert(result2(0).getString(1) === "abc")
+      val result2 = spark.sql("select ?, ?", Array(1, "abc")).collect()
+      assert(result2.length == 1)
+      assert(result2(0).getInt(0) === 1)
+      assert(result2(0).getString(1) === "abc")
 
-    val result3 = spark.sql("select element_at(?, 1)", Array(array(lit(1)))).collect()
-    assert(result3.length == 1 && result3(0).getInt(0) === 1)
+      val result3 = spark.sql("select element_at(?, 1)", Array(array(lit(1)))).collect()
+      assert(result3.length == 1 && result3(0).getInt(0) === 1)
+    }
   }
 
   test("sql() with named parameters") {

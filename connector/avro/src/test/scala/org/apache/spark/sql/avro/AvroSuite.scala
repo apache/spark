@@ -1762,7 +1762,9 @@ abstract class AvroSuite
   }
 
   test("error handling for unsupported Interval data types") {
-    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+    withSQLConf(
+      SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false",
+      SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
       withTempDir { dir =>
         val tempDir = new File(dir, "files").getCanonicalPath
         checkError(
@@ -3016,34 +3018,36 @@ abstract class AvroSuite
   }
 
   test("SPARK-33865: CREATE TABLE DDL with avro should check col name") {
-    withTable("test_ddl") {
-      withView("v") {
-        spark.range(1).createTempView("v")
-        withTempDir { dir =>
-          checkError(
-            exception = intercept[AnalysisException] {
-              sql(
-                s"""
-                   |CREATE TABLE test_ddl USING AVRO
-                   |LOCATION '${dir}'
-                   |AS SELECT ID, IF(ID=1,1,0) FROM v""".stripMargin)
-            },
-            condition = "INVALID_COLUMN_NAME_AS_PATH",
-            parameters = Map(
-              "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
-          )
-        }
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      withTable("test_ddl") {
+        withView("v") {
+          spark.range(1).createTempView("v")
+          withTempDir { dir =>
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql(
+                  s"""
+                     |CREATE TABLE test_ddl USING AVRO
+                     |LOCATION '${dir}'
+                     |AS SELECT ID, IF(ID=1,1,0) FROM v""".stripMargin)
+              },
+              condition = "INVALID_COLUMN_NAME_AS_PATH",
+              parameters = Map(
+                "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
+            )
+          }
 
-        withTempDir { dir =>
-          spark.sql(
-            s"""
-               |CREATE TABLE test_ddl USING AVRO
-               |LOCATION '${dir}'
-               |AS SELECT ID, IF(ID=1,ID,0) AS A, ABS(ID) AS B
-               |FROM v""".stripMargin)
-          val expectedSchema = StructType(Seq(StructField("ID", LongType, true),
-            StructField("A", LongType, true), StructField("B", LongType, true)))
-          assert(spark.table("test_ddl").schema == expectedSchema)
+          withTempDir { dir =>
+            spark.sql(
+              s"""
+                 |CREATE TABLE test_ddl USING AVRO
+                 |LOCATION '${dir}'
+                 |AS SELECT ID, IF(ID=1,ID,0) AS A, ABS(ID) AS B
+                 |FROM v""".stripMargin)
+            val expectedSchema = StructType(Seq(StructField("ID", LongType, true),
+              StructField("A", LongType, true), StructField("B", LongType, true)))
+            assert(spark.table("test_ddl").schema == expectedSchema)
+          }
         }
       }
     }
@@ -3142,31 +3146,33 @@ class AvroV1Suite extends AvroSuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
 
   test("SPARK-36271: V1 insert should check schema field name too") {
-    withView("v") {
-      spark.range(1).createTempView("v")
-      withTempDir { dir =>
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql("SELECT ID, IF(ID=1,1,0) FROM v").write.mode(SaveMode.Overwrite)
-              .format("avro").save(dir.getCanonicalPath)
-          },
-          condition = "INVALID_COLUMN_NAME_AS_PATH",
-          parameters = Map(
-            "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
-        )
-      }
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      withView("v") {
+        spark.range(1).createTempView("v")
+        withTempDir { dir =>
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql("SELECT ID, IF(ID=1,1,0) FROM v").write.mode(SaveMode.Overwrite)
+                .format("avro").save(dir.getCanonicalPath)
+            },
+            condition = "INVALID_COLUMN_NAME_AS_PATH",
+            parameters = Map(
+              "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
+          )
+        }
 
-      withTempDir { dir =>
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql("SELECT NAMED_STRUCT('(IF((ID = 1), 1, 0))', IF(ID=1,ID,0)) AS col1 FROM v")
-              .write.mode(SaveMode.Overwrite)
-              .format("avro").save(dir.getCanonicalPath)
-          },
-          condition = "INVALID_COLUMN_NAME_AS_PATH",
-          parameters = Map(
-            "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
-        )
+        withTempDir { dir =>
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql("SELECT NAMED_STRUCT('(IF((ID = 1), 1, 0))', IF(ID=1,ID,0)) AS col1 FROM v")
+                .write.mode(SaveMode.Overwrite)
+                .format("avro").save(dir.getCanonicalPath)
+            },
+            condition = "INVALID_COLUMN_NAME_AS_PATH",
+            parameters = Map(
+              "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
+          )
+        }
       }
     }
   }

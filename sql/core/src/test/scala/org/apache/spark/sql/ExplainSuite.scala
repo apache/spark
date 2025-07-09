@@ -111,30 +111,32 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
   }
 
   test("optimized plan should show the rewritten expression") {
-    withTempView("test_agg") {
-      sql(
-        """
-          |CREATE TEMPORARY VIEW test_agg AS SELECT * FROM VALUES
-          |  (1, true), (1, false),
-          |  (2, true),
-          |  (3, false), (3, null),
-          |  (4, null), (4, null),
-          |  (5, null), (5, true), (5, false) AS test_agg(k, v)
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      withTempView("test_agg") {
+        sql(
+          """
+            |CREATE TEMPORARY VIEW test_agg AS SELECT * FROM VALUES
+            |  (1, true), (1, false),
+            |  (2, true),
+            |  (3, false), (3, null),
+            |  (4, null), (4, null),
+            |  (5, null), (5, true), (5, false) AS test_agg(k, v)
         """.stripMargin)
 
-      // simple explain of queries having every/some/any aggregates. Optimized
-      // plan should show the rewritten aggregate expression.
-      val df = sql("SELECT k, every(v), some(v), any(v) FROM test_agg GROUP BY k")
-      checkKeywordsExistsInExplain(df,
-        "Aggregate [k#x], [k#x, every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, " +
-          "any(v#x) AS any(v)#x]")
-    }
+        // simple explain of queries having every/some/any aggregates. Optimized
+        // plan should show the rewritten aggregate expression.
+        val df = sql("SELECT k, every(v), some(v), any(v) FROM test_agg GROUP BY k")
+        checkKeywordsExistsInExplain(df,
+          "Aggregate [k#x], [k#x, every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, " +
+            "any(v#x) AS any(v)#x]")
+      }
 
-    withTable("t") {
-      sql("CREATE TABLE t(col TIMESTAMP) USING parquet")
-      val df = sql("SELECT date_part('month', col) FROM t")
-      checkKeywordsExistsInExplain(df,
-        "Project [month(cast(col#x as date)) AS date_part(month, col)#x]")
+      withTable("t") {
+        sql("CREATE TABLE t(col TIMESTAMP) USING parquet")
+        val df = sql("SELECT date_part('month', col) FROM t")
+        checkKeywordsExistsInExplain(df,
+          "Project [month(cast(col#x as date)) AS date_part(month, col)#x]")
+      }
     }
   }
 
@@ -218,39 +220,43 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
   }
 
   test("check operator precedence") {
-    // We follow Oracle operator precedence in the table below that lists the levels
-    // of precedence among SQL operators from high to low:
-    // ---------------------------------------------------------------------------------------
-    // Operator                                          Operation
-    // ---------------------------------------------------------------------------------------
-    // +, -                                              identity, negation
-    // *, /                                              multiplication, division
-    // +, -, ||                                          addition, subtraction, concatenation
-    // =, !=, <, >, <=, >=, IS NULL, LIKE, BETWEEN, IN   comparison
-    // NOT                                               exponentiation, logical negation
-    // AND                                               conjunction
-    // OR                                                disjunction
-    // ---------------------------------------------------------------------------------------
-    checkKeywordsExistsInExplain(sql("select '1' || 1 + 2"),
-      "Project [13", " AS (concat(1, 1) + 2)#x")
-    checkKeywordsExistsInExplain(sql("select 1 - 2 || 'b'"),
-      "Project [-1b AS concat((1 - 2), b)#x]")
-    checkKeywordsExistsInExplain(sql("select 2 * 4  + 3 || 'b'"),
-      "Project [11b AS concat(((2 * 4) + 3), b)#x]")
-    checkKeywordsExistsInExplain(sql("select 3 + 1 || 'a' || 4 / 2"),
-      "Project [4a2.0 AS concat(concat((3 + 1), a), (4 / 2))#x]")
-    checkKeywordsExistsInExplain(sql("select 1 == 1 OR 'a' || 'b' ==  'ab'"),
-      "Project [true AS ((1 = 1) OR (concat(a, b) = ab))#x]")
-    checkKeywordsExistsInExplain(sql("select 'a' || 'c' == 'ac' AND 2 == 3"),
-      "Project [false AS ((concat(a, c) = ac) AND (2 = 3))#x]")
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      // We follow Oracle operator precedence in the table below that lists the levels
+      // of precedence among SQL operators from high to low:
+      // ---------------------------------------------------------------------------------------
+      // Operator                                          Operation
+      // ---------------------------------------------------------------------------------------
+      // +, -                                              identity, negation
+      // *, /                                              multiplication, division
+      // +, -, ||                                          addition, subtraction, concatenation
+      // =, !=, <, >, <=, >=, IS NULL, LIKE, BETWEEN, IN   comparison
+      // NOT                                               exponentiation, logical negation
+      // AND                                               conjunction
+      // OR                                                disjunction
+      // ---------------------------------------------------------------------------------------
+      checkKeywordsExistsInExplain(sql("select '1' || 1 + 2"),
+        "Project [13", " AS (concat(1, 1) + 2)#x")
+      checkKeywordsExistsInExplain(sql("select 1 - 2 || 'b'"),
+        "Project [-1b AS concat((1 - 2), b)#x]")
+      checkKeywordsExistsInExplain(sql("select 2 * 4  + 3 || 'b'"),
+        "Project [11b AS concat(((2 * 4) + 3), b)#x]")
+      checkKeywordsExistsInExplain(sql("select 3 + 1 || 'a' || 4 / 2"),
+        "Project [4a2.0 AS concat(concat((3 + 1), a), (4 / 2))#x]")
+      checkKeywordsExistsInExplain(sql("select 1 == 1 OR 'a' || 'b' ==  'ab'"),
+        "Project [true AS ((1 = 1) OR (concat(a, b) = ab))#x]")
+      checkKeywordsExistsInExplain(sql("select 'a' || 'c' == 'ac' AND 2 == 3"),
+        "Project [false AS ((concat(a, c) = ac) AND (2 = 3))#x]")
+    }
   }
 
   test("explain for these functions; use range to avoid constant folding") {
-    val df = sql("select ifnull(id, 1), nullif(id, 1), nvl(id, 1), nvl2(id, 1, 2) " +
-      "from range(2)")
-    checkKeywordsExistsInExplain(df,
-      "Project [id#xL AS ifnull(id, 1)#xL, if ((id#xL = 1)) null " +
-        "else id#xL AS nullif(id, 1)#xL, id#xL AS nvl(id, 1)#xL, 1 AS nvl2(id, 1, 2)#x]")
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      val df = sql("select ifnull(id, 1), nullif(id, 1), nvl(id, 1), nvl2(id, 1, 2) " +
+        "from range(2)")
+      checkKeywordsExistsInExplain(df,
+        "Project [id#xL AS ifnull(id, 1)#xL, if ((id#xL = 1)) null " +
+          "else id#xL AS nullif(id, 1)#xL, id#xL AS nvl(id, 1)#xL, 1 AS nvl2(id, 1, 2)#x]")
+    }
   }
 
   test("SPARK-26659: explain of DataWritingCommandExec should not contain duplicate cmd.nodeName") {

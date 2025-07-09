@@ -20,6 +20,7 @@ package org.apache.spark.sql.collation
 import org.apache.spark.{SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
@@ -190,30 +191,31 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
   }
 
   test("create table as select fails with indeterminate collation") {
-    withTestTable {
-      assertIndeterminateCollationInSchemaError("concat(c1, c2)") {
-        sql(s"""
-             |CREATE TABLE t AS
-             |SELECT c1 || c2 FROM $testTableName
-             |""".stripMargin)
-      }
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      withTestTable {
+        assertIndeterminateCollationInSchemaError("concat(c1, c2)") {
+          sql(s"""
+            |CREATE TABLE t AS
+            |SELECT c1 || c2 FROM $testTableName""".stripMargin)
+        }
 
-      assertIndeterminateCollationInSchemaError("col") {
-        sql(s"""
-             |CREATE TABLE t AS
-             |SELECT concat_ws(', ', c1, c2) as col FROM $testTableName
-             |""".stripMargin)
-      }
+        assertIndeterminateCollationInSchemaError("col") {
+          sql(s"""
+            |CREATE TABLE t AS
+            |SELECT concat_ws(', ', c1, c2) as col FROM $testTableName""".stripMargin)
+        }
 
-      assertIndeterminateCollationInSchemaError("arr.element", "map.value", "struct.f1")(sql(s"""
-             |CREATE TABLE t
-             |USING $dataSource
-             |AS SELECT
-             |  array(c1 || c2) AS arr,
-             |  map('a', c1 || c2) AS map,
-             |  named_struct('f1', c1 || c2, 'f2', c2) AS struct
-             |FROM $testTableName
-             |""".stripMargin))
+        assertIndeterminateCollationInSchemaError("arr.element", "map.value", "struct.f1")(sql(
+          s"""
+            |CREATE TABLE t
+            |USING $dataSource
+            |AS SELECT
+            |  array(c1 || c2) AS arr,
+            |  map('a', c1 || c2) AS map,
+            |  named_struct('f1', c1 || c2, 'f2', c2) AS struct
+            |FROM $testTableName
+            |""".stripMargin))
+      }
     }
   }
 

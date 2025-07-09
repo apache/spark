@@ -798,7 +798,9 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         test(s"SPARK-25389 INSERT OVERWRITE $local DIRECTORY ... STORED AS with duplicated names" +
           s"(caseSensitivity=$caseSensitivity, format=$format)") {
           withTempDir { dir =>
-            withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitivity") {
+            withSQLConf(
+              SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false",
+              SQLConf.CASE_SENSITIVE.key -> s"$caseSensitivity") {
               val e = intercept[AnalysisException] {
                 sql(
                   s"""
