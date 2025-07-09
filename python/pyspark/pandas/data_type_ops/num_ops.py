@@ -24,6 +24,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
     is_bool_dtype,
     is_integer_dtype,
     is_float_dtype,
+    is_numeric_dtype,
     CategoricalDtype,
     is_list_like,
 )
@@ -77,15 +78,15 @@ def _cast_back_float(
     Cast the result expression back to the original float dtype if needed.
 
     This function ensures pandas on Spark matches pandas behavior when performing
-    arithmetic operations involving float and boolean values. In such cases, under ANSI mode,
-    Spark implicitly widen float32 to float64, which deviates from pandas behavior where the
-    result retains float32.
+    arithmetic operations involving float32 and numeric values. In such cases, under ANSI mode,
+    Spark implicitly widen float32 to float64, when the other operand is a numeric type but not float32 (e.g., int,
+    bool), which deviates from pandas behavior where the result retains float32.
     """
     is_left_float = is_float_dtype(left_dtype)
-    is_right_bool = isinstance(right, bool) or (
-        hasattr(right, "dtype") and is_bool_dtype(right.dtype)
+    is_right_numeric = isinstance(right, (int, float, bool)) or (
+        hasattr(right, "dtype") and is_numeric_dtype(right.dtype)
     )
-    if is_left_float and is_right_bool:
+    if is_left_float and is_right_numeric:
         return expr.cast(as_spark_type(left_dtype))
     return expr
 
@@ -186,19 +187,20 @@ class NumericOps(DataTypeOps):
             raise TypeError("Modulo can not be applied to given types.")
         spark_session = left._internal.spark_frame.sparkSession
 
-        right = transform_boolean_operand_to_numeric(right)
+        new_right = transform_boolean_operand_to_numeric(right)
 
-        def safe_rmod(left: PySparkColumn, right: Any) -> PySparkColumn:
+        def safe_rmod(left_op: PySparkColumn, right_op: Any) -> PySparkColumn:
             if is_ansi_mode_enabled(spark_session):
                 # Java-style modulo -> Python-style modulo
-                result = F.when(left != 0, ((F.lit(right) % left) + left) % left).otherwise(
-                    F.lit(None)
-                )
+                result = F.when(
+                    left_op != 0, ((F.lit(right_op) % left_op) + left_op) % left_op
+                ).otherwise(F.lit(None))
+                result = _cast_back_float(result, left.dtype, right)
                 return result
             else:
-                return ((right % left) + left) % left
+                return ((right_op % left_op) + left_op) % left_op
 
-        return column_op(safe_rmod)(left, right)
+        return column_op(safe_rmod)(left, new_right)
 
     def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
         return operand._with_new_scol(-operand.spark.column, field=operand._internal.data_fields[0])
