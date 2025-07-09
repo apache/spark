@@ -173,6 +173,7 @@ class JDBCRDD(
     partitions: Array[Partition],
     url: String,
     options: JDBCOptions,
+    databaseMetadata: JDBCDatabaseMetadata,
     groupByColumns: Option[Array[String]],
     sample: Option[TableSampleInfo],
     limit: Int,
