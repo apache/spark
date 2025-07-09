@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.{LongType, StructField, StructType, TimeType}
 
 
 class ApproxTopKSuite extends QueryTest
-  with SharedSparkSession {
+                      with SharedSparkSession {
 
   import testImplicits._
 
@@ -472,15 +472,55 @@ class ApproxTopKSuite extends QueryTest
     )
   }
 
-  test("SPARK-fold") {
-    sql("SELECT approx_top_k_accumulate(expr) as acc FROM VALUES 0, 0, 1 AS tab(expr);")
-      .createOrReplaceTempView("acc1")
-    sql("SELECT approx_top_k_accumulate(expr) as acc FROM VALUES 2, 3, 3 AS tab(expr);")
-      .createOrReplaceTempView("acc2")
-    val union = sql("SELECT acc FROM acc1 UNION ALL SELECT acc FROM acc2;")
-    union.createOrReplaceTempView("unioned_acc")
-    union.show(false)
-    sql("SELECT approx_top_k_estimate(acc) FROM unioned_acc;").show(false)
+  test("SPARK-52588state: invalid estimate if state is not a struct") {
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        sql("SELECT approx_top_k_estimate(1, 5);")
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"approx_top_k_estimate(1, 5)\"",
+        "paramIndex" -> "first",
+        "inputSql" -> "\"1\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"STRUCT\""),
+      queryContext = Array(ExpectedContext("approx_top_k_estimate(1, 5)", 7, 33))
+    )
+  }
+
+  test("SPARK-52588state: invalid estimate if state struct length is not 3") {
+    val invalidateState = "named_struct('sketch', X'01', 'itemDataType', CAST(NULL AS INT), " +
+      "'maxItemsTracked', 10, 'invalidField', 1)"
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        sql(s"SELECT approx_top_k_estimate($invalidateState, 5);")
+      },
+      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+      parameters = Map(
+        "sqlExpr" -> s"\"approx_top_k_estimate($invalidateState, 5)\"",
+        "msg" -> ("State must be a struct with 3 fields. " +
+          "Expected struct: struct<sketch:binary,itemDataType:any,maxItemsTracked:int>. " +
+          "Got: struct<col1:binary,col2:int,col3:int,col4:int>"),
+        "hint" -> ""),
+      queryContext = Array(ExpectedContext(s"approx_top_k_estimate($invalidateState, 5)", 7, 75))
+    )
+  }
+
+  test("SPARK-52588state: invalid estimate if state struct does not have 'sketch' field") {
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        sql("SELECT approx_top_k_estimate(struct(X'01', CAST(NULL AS INT), 10000), 5);")
+      },
+      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+      parameters = Map(
+        "sqlExpr" -> "\"approx_top_k_estimate(struct(X'01', CAST(NULL AS INT), 10000), 5)\"",
+        "msg" -> "State struct must contain a field named 'sketch'.",
+        "hint" -> ""
+      ),
+      queryContext = Array(ExpectedContext(
+        "approx_top_k_estimate(struct(X'01', CAST(NULL AS INT), 10000), 5)", 7, 71))
+    )
+
   }
 
   test("SPARK-checkStruct") {
