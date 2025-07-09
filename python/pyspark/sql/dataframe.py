@@ -576,7 +576,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             except Exception as e:
                 raise PySparkValueError(
                     error_class="CANNOT_PARSE_DATATYPE",
-                    message_parameters={"error": str(e)},
+                    message_parameters={"msg": str(e)},
                 )
         return self._schema
 

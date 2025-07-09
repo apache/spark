@@ -1411,7 +1411,7 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
         else:
             raise PySparkValueError(
                 error_class="CANNOT_PARSE_DATATYPE",
-                message_parameters={"error": str(json_value)},
+                message_parameters={"msg": str(json_value)},
             )
     else:
         tpe = json_value["type"]
