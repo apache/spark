@@ -84,6 +84,5 @@ object JDBCDatabaseMetadata extends Logging {
     } finally {
       conn.close()
     }
-
   }
 }
