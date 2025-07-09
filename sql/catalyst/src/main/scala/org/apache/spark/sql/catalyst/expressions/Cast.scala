@@ -1397,6 +1397,13 @@ case class Cast(
           code"""
             $evPrim = $dateTimeUtilsCls.truncateTimeToPrecision($nanos, ${to.precision});
           """
+      case _: TimestampNTZType =>
+        val nanos = ctx.freshName("nanos")
+        (micros, evPrim, _) =>
+          code"""
+          final long $nanos = $dateTimeUtilsCls.getNanosInADay($micros);
+          $evPrim = $dateTimeUtilsCls.truncateTimeToPrecision($nanos, ${to.precision});
+        """
       case _ =>
         (_, _, evNull) => code"$evNull = true;"
     }
