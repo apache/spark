@@ -2229,6 +2229,16 @@
     },
     "sqlState" : "21S01"
   },
+  "INSERT_INTO_SCHEMA_MISMATCH": {
+  "message": "InsertInto schema mismatch at column '%columnName%':\n- DataFrame column has type %sourceType%\n- Target table column '%targetColumnName%' has type %targetType%\n- Columns matched by position",
+  "sqlState": "42K09",
+  "parameters": [
+    "columnName",
+    "sourceType",
+    "targetColumnName",
+    "targetType"
+    ]
+  },
   "INSERT_PARTITION_COLUMN_ARITY_MISMATCH" : {
     "message" : [
       "Cannot write to '<tableName>', <reason>:",
