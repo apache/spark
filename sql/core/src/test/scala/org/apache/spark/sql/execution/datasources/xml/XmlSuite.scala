@@ -2964,8 +2964,7 @@ class XmlSuite
       val data =
         spark.sparkContext.parallelize(
           (0 until numRecords).map(i => Row(i.toLong, (i * 2).toLong)))
-      val schema = buildSchema(
-        field("_corrupted_record", LongType), field("a1", LongType), field("a2", LongType))
+      val schema = buildSchema(field("a1", LongType), field("a2", LongType))
       val df = spark.createDataFrame(data, schema)
 
       df.coalesce(4)
@@ -2985,7 +2984,7 @@ class XmlSuite
             .option("rowTag", "row")
             .load(corruptedDir.getCanonicalPath)
           val results = dfCorrupted.collect()
-          assert(results(1) === Row(null, 1, 2))
+          assert(results(1) === Row(1, 2))
           assert(results.length > 100)
           val dfCorruptedWSchema = spark.read
             .format(format)

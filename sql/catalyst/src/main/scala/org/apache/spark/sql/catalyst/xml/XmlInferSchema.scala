@@ -194,6 +194,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           case _: AccessControlException | _: BlockMissingException => throw e
           case _: IOException | _: RuntimeException if options.ignoreCorruptFiles =>
             logWarning("Skipped the rest of the content in the corrupted file", e)
+            parser.closeAllReaders()
             Some(StructType(Nil))
           case _ =>
             logWarning("Failed to infer schema from XML record", e)
