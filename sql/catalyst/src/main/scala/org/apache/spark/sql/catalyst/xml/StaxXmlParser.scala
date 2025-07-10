@@ -112,7 +112,7 @@ class StaxXmlParser(
       ) { is =>
         UTF8String.fromBytes(ByteStreams.toByteArray(is))
       }
-    val safeParser = new FailureSafeParser[XMLEventReaderWithXSDValidation](
+    val safeParser = new FailureSafeParser[StaxXMLRecordReader](
       input => doParseColumn(input, xsdSchema, streamLiteral),
       options.parseMode,
       schema,
@@ -129,7 +129,7 @@ class StaxXmlParser(
    * Parse a single XML record string and return an InternalRow.
    */
   def doParseColumn(xml: String, xsdSchema: Option[Schema]): Option[InternalRow] = {
-    val parser = XMLEventReaderWithXSDValidation(xml, options)
+    val parser = StaxXMLRecordReader(xml, options)
     try {
       doParseColumn(parser, xsdSchema, () => UTF8String.fromString(xml))
     } finally {
@@ -148,9 +148,9 @@ class StaxXmlParser(
    *                   TODO: Only include the file content starting with the current record.
    */
   def doParseColumn(
-      parser: XMLEventReaderWithXSDValidation,
-      xsdSchema: Option[Schema] = None,
-      xmlLiteral: () => UTF8String): Option[InternalRow] = {
+                     parser: StaxXMLRecordReader,
+                     xsdSchema: Option[Schema] = None,
+                     xmlLiteral: () => UTF8String): Option[InternalRow] = {
     try {
       xsdSchema.foreach { schema =>
         parser.validateXSDSchema(schema)
@@ -653,7 +653,7 @@ class StaxXmlParser(
 object StaxXmlParser {
   def convertStream[T](
     xmlTokenizer: XmlTokenizer)(
-    convert: XMLEventReaderWithXSDValidation => T): Iterator[T] = new Iterator[T] {
+    convert: StaxXMLRecordReader => T): Iterator[T] = new Iterator[T] {
 
     private var nextRecord = xmlTokenizer.next()
 

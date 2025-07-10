@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.xml
 
 import java.io.StringReader
 import javax.xml.namespace.QName
-import javax.xml.stream.{EventFilter, XMLEventReader, XMLInputFactory, XMLStreamConstants}
+import javax.xml.stream.{EventFilter, StreamFilter, XMLEventReader, XMLInputFactory, XMLStreamConstants, XMLStreamReader}
 import javax.xml.stream.events._
 
 import scala.annotation.tailrec
@@ -37,7 +37,7 @@ object StaxXmlParserUtils {
     factory
   }
 
-  val filter = new EventFilter {
+  private val filter = new EventFilter {
     override def accept(event: XMLEvent): Boolean =
       event.getEventType match {
         // Ignore comments and processing instructions
@@ -63,6 +63,49 @@ object StaxXmlParserUtils {
     bomInputStreamBuilder.setInputStream(inputStream)
     val eventReader = factory.createXMLEventReader(bomInputStreamBuilder.get(), options.charset)
     factory.createFilteredReader(eventReader, filter)
+  }
+
+  def filteredReader(streamReader: XMLStreamReader): XMLEventReader = {
+    val eventReader = factory.createXMLEventReader(streamReader)
+    factory.createFilteredReader(eventReader, filter)
+  }
+
+  private val streamFilter = new StreamFilter {
+    override def accept(reader: XMLStreamReader): Boolean = reader.getEventType match {
+      // Ignore comments and processing instructions
+      case XMLStreamConstants.COMMENT | XMLStreamConstants.PROCESSING_INSTRUCTION => false
+      // unsupported events
+      case XMLStreamConstants.DTD |
+           XMLStreamConstants.ENTITY_DECLARATION |
+           XMLStreamConstants.ENTITY_REFERENCE |
+           XMLStreamConstants.NOTATION_DECLARATION => false
+      case _ => true
+    }
+  }
+
+  def filteredStreamReader(xml: String): XMLStreamReader = {
+    val eventReader = factory.createXMLStreamReader(new StringReader(xml))
+    factory.createFilteredReader(eventReader, streamFilter)
+  }
+
+  def filteredStreamReader(
+      inputStream: java.io.InputStream,
+      options: XmlOptions): XMLStreamReader = {
+    val streamReader = factory.createXMLStreamReader(inputStream, options.charset)
+    factory.createFilteredReader(streamReader, streamFilter)
+  }
+
+  def getAttributes(parser: XMLStreamReader, options: XmlOptions): Array[Attribute] = {
+    val attributes = for (i <- 0 until parser.getAttributeCount) yield {
+      val name = parser.getAttributeName(i)
+      val value = if (options.ignoreSurroundingSpaces) {
+        parser.getAttributeValue(i).trim
+      } else {
+        parser.getAttributeValue(i)
+      }
+      new AttributeImpl(getName(name, options), value)
+    }
+    attributes.toArray[Attribute]
   }
 
   def gatherRootAttributes(parser: XMLEventReader): Array[Attribute] = {

@@ -17,13 +17,12 @@
 package org.apache.spark.sql.catalyst.xml
 
 import java.io.{FileNotFoundException, InputStream, IOException}
-import javax.xml.stream.{XMLEventReader, XMLStreamException}
+import javax.xml.stream.{XMLEventReader, XMLStreamConstants, XMLStreamException, XMLStreamReader}
 import javax.xml.stream.events.{EndDocument, StartElement, XMLEvent}
 import javax.xml.transform.stax.StAXSource
 import javax.xml.validation.Schema
 
 import scala.util.control.NonFatal
-import scala.xml.SAXException
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hdfs.BlockMissingException
@@ -35,26 +34,25 @@ import org.apache.spark.internal.Logging
 /**
  * XML tokenizer that never buffers complete XML records in memory. It uses XMLEventReader to parse
  * XML file stream directly and can move to the next XML record based on the rowTag option.
+ *
+ * The file stream will be closed by the XMLTokenizer if there is no more records available.
  */
 class XmlTokenizer(inputStream: () => InputStream, options: XmlOptions) extends Logging {
-  // Primary XML event reader for parsing
-  private val in1 = inputStream()
-  private var reader = StaxXmlParserUtils.filteredReader(in1, options)
-
-  // Optional XML event reader for XSD validation.
-  private val in2 = Option(options.rowValidationXSDPath).map(_ => inputStream())
-  private val readerForXSDValidation = in2.map(in => StaxXmlParserUtils.filteredReader(in, options))
+  private var reader: StaxXMLRecordReader = StaxXMLRecordReader(
+    () => StaxXmlParserUtils.filteredStreamReader(inputStream(), options),
+    options
+  )
 
   /**
    * Returns the next XML record as a positioned XMLEventReader.
    * This avoids creating intermediate string representations.
    */
-  def next(): Option[XMLEventReaderWithXSDValidation] = {
-    var nextRecord: Option[XMLEventReaderWithXSDValidation] = None
+  def next(): Option[StaxXMLRecordReader] = {
+    var nextRecord: Option[StaxXMLRecordReader] = None
     try {
       // Skip to the next row start element
-      if (skipToNextRowStart()) {
-        nextRecord = Some(XMLEventReaderWithXSDValidation(reader, readerForXSDValidation, options))
+      if (reader.getAllValidEventReaders.forall(skipToNextRowStart)) {
+        nextRecord = Some(reader)
       }
     } catch {
       case e: FileNotFoundException if options.ignoreMissingFiles =>
@@ -79,9 +77,7 @@ class XmlTokenizer(inputStream: () => InputStream, options: XmlOptions) extends 
 
   def close(): Unit = {
     if (reader != null) {
-      in1.close()
-      in2.foreach(_.close())
-      reader.close()
+      reader.closeAllReaders()
       reader = null
     }
   }
@@ -89,7 +85,7 @@ class XmlTokenizer(inputStream: () => InputStream, options: XmlOptions) extends 
   /**
    * Skip through the XML stream until we find the next row start element.
    */
-  private def skipToNextRowStart(): Boolean = {
+  private def skipToNextRowStart(reader: XMLEventReader): Boolean = {
     val rowTagName = options.rowTag
     try {
       while (reader.hasNext) {
@@ -107,8 +103,6 @@ class XmlTokenizer(inputStream: () => InputStream, options: XmlOptions) extends 
         }
         // if not the event we want, advance the reader
         reader.nextEvent()
-        // advance the reader for XSD validation as well to keep them in sync
-        readerForXSDValidation.foreach(_.nextEvent())
       }
       false
     } catch {
@@ -119,25 +113,44 @@ class XmlTokenizer(inputStream: () => InputStream, options: XmlOptions) extends 
   }
 }
 
-case class XMLEventReaderWithXSDValidation(
-    parser: XMLEventReader,
-    parserForXSDValidation: Option[XMLEventReader] = None,
-    options: XmlOptions)
+/**
+ * XML record reader that reads the next XML record in the underlying XML stream. It can support XSD
+ * schema validation by maintaining a separate XML reader and keep it in sync with the primary XML
+ * reader.
+ */
+case class StaxXMLRecordReader(createStreamReader: () => XMLStreamReader, options: XmlOptions)
     extends XMLEventReader {
+  // Reader for the XML record parsing.
+  private val primaryEventReader = StaxXmlParserUtils.filteredReader(createStreamReader())
+  // Reader for the XSD validation, if an XSD schema is provided.
+  private val streamReaderForXSDValidation =
+    Option(options.rowValidationXSDPath).map(_ => createStreamReader())
+  private val eventReaderForXSDValidation =
+    streamReaderForXSDValidation.map(StaxXmlParserUtils.filteredReader)
+
+  def getAllValidEventReaders: Seq[XMLEventReader] =
+    Seq(primaryEventReader) ++ eventReaderForXSDValidation
 
   def validateXSDSchema(schema: Schema): Unit = {
-    parserForXSDValidation match {
+    streamReaderForXSDValidation match {
       case Some(p) =>
         try {
-          schema.newValidator().validate(new StAXSource(DocumentWrappingXMLEventReader(p, options)))
+          // StAXSource requires the stream reader to start with the START_DOCUMENT OR START_ELEMENT
+          // events.
+          def rowTagStarted: Boolean =
+            p.getEventType == XMLStreamConstants.START_ELEMENT &&
+            StaxXmlParserUtils.getName(p.getName, options) == options.rowTag
+          while (!rowTagStarted && p.hasNext) {
+            p.next()
+          }
+          schema.newValidator().validate(new StAXSource(p))
         } catch {
-          case e: SAXException =>
+          case NonFatal(e) =>
             try {
-              // If the validation fails, try the same validation on the primary parser to keep
-              // the two parsers in sync.
-              schema.newValidator().validate(
-                new StAXSource(DocumentWrappingXMLEventReader(parser, options))
-              )
+              // If the validation fails, we need to skip the current record in the primary reader
+              // advancing the primary event reader so that the XMLTokenizer will continue to the
+              // next record.
+              primaryEventReader.next()
             } finally {
               throw e
             }
@@ -146,178 +159,27 @@ case class XMLEventReaderWithXSDValidation(
     }
   }
 
-  override def nextEvent(): XMLEvent = parser.nextEvent()
-  override def hasNext: Boolean = parser.hasNext
-  override def peek(): XMLEvent = parser.peek()
-  override def getElementText: String = parser.getElementText
-  override def nextTag(): XMLEvent = parser.nextTag()
-  override def getProperty(name: String): AnyRef = parser.getProperty(name)
-  override def close(): Unit = {
-    parser.close()
-    parserForXSDValidation.foreach(_.close())
+  def closeAllReaders(): Unit = {
+    primaryEventReader.close()
+    streamReaderForXSDValidation.foreach(_.close())
+    eventReaderForXSDValidation.foreach(_.close())
   }
-  override def next(): AnyRef = parser.next()
+
+  override def nextEvent(): XMLEvent = primaryEventReader.nextEvent()
+  override def hasNext: Boolean = primaryEventReader.hasNext
+  override def peek(): XMLEvent = primaryEventReader.peek()
+  override def getElementText: String = primaryEventReader.getElementText
+  override def nextTag(): XMLEvent = primaryEventReader.nextTag()
+  override def getProperty(name: String): AnyRef = primaryEventReader.getProperty(name)
+  override def close(): Unit = {}
+  override def next(): AnyRef = primaryEventReader.next()
 }
 
-object XMLEventReaderWithXSDValidation {
-  def apply(xml: String, options: XmlOptions): XMLEventReaderWithXSDValidation = {
-    XMLEventReaderWithXSDValidation(
-      StaxXmlParserUtils.filteredReader(xml),
-      Option(options.rowValidationXSDPath).map(_ => StaxXmlParserUtils.filteredReader(xml)),
+object StaxXMLRecordReader {
+  def apply(xml: String, options: XmlOptions): StaxXMLRecordReader = {
+    StaxXMLRecordReader(
+      () => StaxXmlParserUtils.filteredStreamReader(xml),
       options
     )
   }
-}
-
-/**
- * XMLEventReader wrapper that injects StartDocument and EndDocument events around
- * an input XMLEventReader. This is required in XSD schema validation, as the Validator:validate
- * works only if the input StAXSource contains a complete XML document.
- */
-case class DocumentWrappingXMLEventReader(
-    wrappedReader: XMLEventReader,
-    options: XmlOptions)
-    extends XMLEventReader {
-  import javax.xml.stream.{XMLEventFactory, XMLStreamException}
-  import javax.xml.stream.events.{StartElement, EndElement}
-  private val rowTag = options.rowTag
-
-  private val eventFactory = XMLEventFactory.newInstance()
-  eventFactory.setLocation(
-    // Create a dummy location to avoid null pointer exceptions
-    new javax.xml.stream.Location {
-      override def getLineNumber: Int = -1
-      override def getColumnNumber: Int = -1
-      override def getCharacterOffset: Int = -1
-      override def getPublicId: String = null
-      override def getSystemId: String = ""
-    }
-  )
-  private var state: DocumentWrapperState = StartDocumentState
-  private var rowTagDepth = 0 // Track nesting depth of rowTag elements
-
-  private sealed trait DocumentWrapperState
-  private case object StartDocumentState extends DocumentWrapperState
-  private case object DelegatingState extends DocumentWrapperState
-  private case object EndDocumentState extends DocumentWrapperState
-  private case object FinishedState extends DocumentWrapperState
-
-  override def nextEvent(): XMLEvent = {
-    state match {
-      case StartDocumentState =>
-        state = DelegatingState
-        eventFactory.createStartDocument()
-
-      case DelegatingState =>
-        if (wrappedReader.hasNext) {
-          val event = wrappedReader.nextEvent()
-
-          // Track nesting depth of rowTag elements to handle nested elements with same name
-          event match {
-            case startElement: StartElement =>
-              val elementName = StaxXmlParserUtils.getName(startElement.getName, options)
-              if (elementName == rowTag) {
-                rowTagDepth += 1 // Enter a rowTag element (could be nested)
-              }
-
-            case endElement: EndElement =>
-              val elementName = StaxXmlParserUtils.getName(endElement.getName, options)
-              if (elementName == rowTag && rowTagDepth > 0) {
-                rowTagDepth -= 1 // Exit a rowTag element
-                // Only transition to EndDocumentState when we've closed the top-level rowTag
-                if (rowTagDepth == 0) {
-                  state = EndDocumentState
-                }
-              }
-
-            case _ => // Other events, just pass through
-          }
-
-          event
-        } else {
-          state = EndDocumentState
-          nextEvent() // Recursively call to get the EndDocument event
-        }
-
-      case EndDocumentState =>
-        state = FinishedState
-        eventFactory.createEndDocument()
-
-      case FinishedState =>
-        throw new XMLStreamException("No more events available")
-    }
-  }
-
-  override def hasNext: Boolean = {
-    state match {
-      case StartDocumentState => true
-      case DelegatingState =>
-        true // Either has wrapped events or will transition to EndDocumentState
-      case EndDocumentState => true
-      case FinishedState => false
-    }
-  }
-
-  override def peek(): XMLEvent = {
-    state match {
-      case StartDocumentState =>
-        eventFactory.createStartDocument()
-
-      case DelegatingState =>
-        if (wrappedReader.hasNext) {
-          val nextEvent = wrappedReader.peek()
-
-          // Check if the next event would cause us to transition to EndDocumentState
-          nextEvent match {
-            case endElement: EndElement =>
-              val elementName = StaxXmlParserUtils.getName(endElement.getName, options)
-              if (elementName == rowTag && rowTagDepth > 0) {
-                // The next event would be the end of our row if it brings depth to 0
-                // But we return the actual next event first
-                nextEvent
-              } else {
-                nextEvent
-              }
-            case _ => nextEvent
-          }
-        } else {
-          // Don't modify state in peek - just return what the next event would be
-          eventFactory.createEndDocument()
-        }
-
-      case EndDocumentState =>
-        eventFactory.createEndDocument()
-
-      case FinishedState =>
-        throw new XMLStreamException("No more events available")
-    }
-  }
-
-  override def getElementText: String = {
-    state match {
-      case DelegatingState if wrappedReader.hasNext =>
-        wrappedReader.getElementText
-      case _ =>
-        throw new XMLStreamException("getElementText() not supported in current state")
-    }
-  }
-
-  override def nextTag(): XMLEvent = {
-    state match {
-      case DelegatingState if wrappedReader.hasNext =>
-        wrappedReader.nextTag()
-      case _ =>
-        throw new XMLStreamException("nextTag() not supported in current state")
-    }
-  }
-
-  override def getProperty(name: String): AnyRef = {
-    wrappedReader.getProperty(name)
-  }
-
-  override def close(): Unit = {
-    state = FinishedState
-  }
-
-  override def next(): AnyRef = nextEvent()
 }

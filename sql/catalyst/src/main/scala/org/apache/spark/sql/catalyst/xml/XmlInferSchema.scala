@@ -94,7 +94,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
   def infer(xml: RDD[String]): StructType = {
     val inferredTypesRdd = xml.mapPartitions { iter =>
       iter.flatMap { xml =>
-        val parser = XMLEventReaderWithXSDValidation(xml, options)
+        val parser = StaxXMLRecordReader(xml, options)
         val inferredType = infer(parser)
         parser.close()
         inferredType
@@ -141,7 +141,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
    * Infer the schema of the single XML record string
    */
   def infer(xml: String): Option[DataType] = {
-    val parser = XMLEventReaderWithXSDValidation(xml, options)
+    val parser = StaxXMLRecordReader(xml, options)
     try {
       infer(parser)
     } finally {
@@ -154,7 +154,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
    * Note that the method will **NOT** close the XML event stream as there could have more XML
    * records to parse. It's the caller's responsibility to close the stream.
    */
-  def infer(parser: XMLEventReaderWithXSDValidation): Option[DataType] = {
+  def infer(parser: StaxXMLRecordReader): Option[DataType] = {
     try {
       val xsd = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
       xsd.foreach { schema =>
