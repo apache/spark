@@ -581,7 +581,6 @@ object ResolveDefaultColumns extends QueryErrorsBase
     }.toSeq
   }
 
-
   /**
    * These define existence default values for the struct fields for efficiency purposes.
    * The caller should avoid using such methods in a loop for efficiency.
