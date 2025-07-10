@@ -19,8 +19,10 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, ExecutorService}
 import java.util.concurrent.atomic.AtomicLong
+
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
+
 import org.apache.spark.{ErrorMessageFormat, JobArtifactSet, SparkContext, SparkEnv, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT_ON_CANCEL}
 import org.apache.spark.internal.Logging
