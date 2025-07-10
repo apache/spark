@@ -206,7 +206,7 @@ private[connect] object PipelinesHandler extends Logging {
         destinationIdentifier = GraphIdentifierManager
           .parseTableIdentifier(name = flow.getTargetDatasetName, spark = sparkSession),
         func =
-          FlowAnalysis.createFlowFunctionFromLogicalPlan(transformRelationFunc(flow.getPlan)),
+          FlowAnalysis.createFlowFunctionFromLogicalPlan(transformRelationFunc(flow.getRelation)),
         sqlConf = flow.getSqlConfMap.asScala.toMap,
         once = flow.getOnce,
         queryContext = QueryContext(
