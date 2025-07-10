@@ -22,7 +22,8 @@ import org.apache.spark.sql.internal.SQLConf
 
 /** A class that contains configuration parameters for [[StateStore]]s. */
 class StateStoreConf(
-    // Must be private to avoid serialization issues with transient annotation
+    // Should be private because it could be null under serialization (due to
+    // the transient annotation)
     @transient private val sqlConf: SQLConf,
     val extraOptions: Map[String, String] = Map.empty)
   extends Serializable {
