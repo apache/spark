@@ -387,11 +387,15 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
   // ====== DSL reader tests ======
   // ==============================
 
-  protected def createDSLDataFrame(
+  private def createDSLDataFrame(
       fileName: String,
       singleVariantColumn: Option[String] = None,
       schemaDDL: Option[String] = None,
       extraOptions: Map[String, String] = Map.empty): DataFrame = {
+    assert(
+      singleVariantColumn.isDefined || schemaDDL.isDefined,
+      "Either singleVariantColumn or schema must be defined to ingest XML files as variants via DSL"
+    )
     var reader = spark.read.format("xml").options(baseOptions ++ extraOptions)
     singleVariantColumn.foreach(
       singleVariantColumnName =>

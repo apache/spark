@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.{CharConversionException, FileNotFoundException, IOException, InputStream}
+import java.io.{CharConversionException, FileNotFoundException, InputStream, IOException}
 import java.nio.charset.MalformedInputException
 import java.text.NumberFormat
 import java.util
@@ -24,14 +24,17 @@ import java.util.Locale
 import javax.xml.stream.{XMLEventReader, XMLStreamException}
 import javax.xml.stream.events._
 import javax.xml.validation.Schema
+
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.Exception.allCatch
 import scala.util.control.NonFatal
 import scala.xml.SAXException
+
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.shaded.org.apache.commons.lang3.exception.ExceptionUtils
+
 import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
