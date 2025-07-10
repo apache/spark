@@ -62,12 +62,13 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
 
     coerceExpressionTypes(
       expression = expressionWithResolvedChildrenAndTimeZone,
-      expressionTreeTraversal = traversals.current
-    ) match {
+      expressionTreeTraversal = traversals.current) match {
       case cast: Cast if traversals.current.defaultCollation.isDefined =>
         tryCollapseCast(cast, traversals.current.defaultCollation.get)
+      case Cast(child, TimestampNTZType, _, _) if child.dataType.isInstanceOf[TimeType] =>
+        MakeTimestampNTZ(CurrentDate(), child)
       case other =>
-        rewriteTimeCastToTimestampNTZ(other)
+        other
     }
   }
 
@@ -117,13 +118,6 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
           false
       }
     }
-  }
-
-  private def rewriteTimeCastToTimestampNTZ(expr: Expression): Expression = expr match {
-    case Cast(child, TimestampNTZType, _, _) if child.dataType.isInstanceOf[TimeType] =>
-      MakeTimestampNTZ(CurrentDate(), child)
-    case other =>
-      other
   }
 }
 
