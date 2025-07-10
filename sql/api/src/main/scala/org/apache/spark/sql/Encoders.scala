@@ -369,9 +369,7 @@ object Encoders {
   def scalaBoolean: Encoder[Boolean] = PrimitiveBooleanEncoder
 
   /**
-   * :: DeveloperApi ::
-   *
-   * An encoder for [[UserDefinedType]].
+   * An encoder for UserDefinedType.
    * @since 4.1.0
    */
   def udt[T >: Null](tpe: UserDefinedType[T]): Encoder[T] = {
