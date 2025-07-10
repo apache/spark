@@ -341,6 +341,9 @@ class PythonPipelineSuite
 
   test("view works") {
     val graph = buildGraph(s"""
+         |@sdp.table
+         |def mv_1():
+         |  return spark.range(5)
          |@sdp.temporary_view
          |def view_1():
          |  return spark.range(5)
@@ -354,9 +357,9 @@ class PythonPipelineSuite
          |  return spark.read.table("view_1")
          |""".stripMargin).resolve()
     // views are temporary views, so they're not fully qualified.
-    assert(graph.tables.isEmpty)
     assert(
-      graph.flows.map(_.identifier.unquotedString).toSet == Set("view_1", "view_2", "view_3"))
+      Set("view_1", "view_2", "view_3").subsetOf(
+        graph.flows.map(_.identifier.unquotedString).toSet))
     // dependencies are correctly resolved view_2 reading from view_1
     assert(
       graph.resolvedFlow(TableIdentifier("view_2")).inputs.contains(TableIdentifier("view_1")))
@@ -414,6 +417,26 @@ class PythonPipelineSuite
       graph
         .flowsTo(graphIdentifier("a"))
         .map(_.identifier) == Seq(graphIdentifier("a"), graphIdentifier("something")))
+  }
+
+  test("create pipeline without table will fail") {
+    val ex = intercept[AnalysisException] {
+      buildGraph(s"""
+            |spark.range(1)
+            |""".stripMargin)
+    }
+    assert(ex.getCondition == "NO_TABLES_IN_PIPELINE")
+  }
+
+  test("create pipeline with only temp view will fail") {
+    val ex = intercept[AnalysisException] {
+      buildGraph(s"""
+          |@sdp.temporary_view
+          |def view_1():
+          |  return spark.range(5)
+          |""".stripMargin)
+    }
+    assert(ex.getCondition == "NO_TABLES_IN_PIPELINE")
   }
 
   /**

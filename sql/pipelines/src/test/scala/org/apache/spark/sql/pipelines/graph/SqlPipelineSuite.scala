@@ -852,4 +852,39 @@ class SQLPipelineSuite extends PipelineTest with SQLTestUtils {
       )
     )
   }
+
+  test("No table defined pipeline fails") {
+    val graphRegistrationContext = new TestGraphRegistrationContext(spark)
+    val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
+
+    sqlGraphRegistrationContext.processSqlFile(sqlText = "", sqlFilePath = "a.sql", spark = spark)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        graphRegistrationContext.toDataflowGraph
+      },
+      condition = "NO_TABLES_IN_PIPELINE",
+      sqlState = Option("42617"),
+      parameters = Map.empty)
+  }
+
+  test("Only temp view pipeline fails") {
+    val graphRegistrationContext = new TestGraphRegistrationContext(spark)
+    val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
+
+    sqlGraphRegistrationContext.processSqlFile(
+      sqlText = s"""
+                   |CREATE TEMPORARY VIEW a AS SELECT id FROM range(1,3);
+                   |""".stripMargin,
+      sqlFilePath = "a.sql",
+      spark = spark)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        graphRegistrationContext.toDataflowGraph
+      },
+      condition = "NO_TABLES_IN_PIPELINE",
+      sqlState = Option("42617"),
+      parameters = Map.empty)
+  }
 }
