@@ -238,6 +238,9 @@ case class JDBCScanBuilder(
     // We need to reset the pushedPredicate because it has already been consumed in previously
     // crafted SQL query.
     pushedPredicate = Array.empty[Predicate]
+    // Table sample is pushed down already as well, so we need to reset it to None to not push it
+    // down again when join pushdown is triggered again on this JDBCScanBuilder.
+    tableSample = None
 
     true
   }

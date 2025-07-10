@@ -47,8 +47,10 @@ public interface SupportsPushDownJoin extends ScanBuilder {
    * @param other {@code SupportsPushDownJoin} that this {@code SupportsPushDownJoin}
    * gets joined with.
    * @param joinType the type of join.
-   * @param leftSideRequiredColumnsWithAliases required output of the left side {@code SupportsPushDownJoin}
-   * @param rightSideRequiredColumnsWithAliases required output of the right side {@code SupportsPushDownJoin}
+   * @param leftSideRequiredColumnsWithAliases required output of the
+   *                                           left side {@code SupportsPushDownJoin}
+   * @param rightSideRequiredColumnsWithAliases required output of the
+   *                                            right side {@code SupportsPushDownJoin}
    * @param condition join condition. Columns are named after the specified aliases in
    * {@code leftSideRequiredColumnWithAliases} and {@code rightSideRequiredColumnWithAliases}
    * @return True if join has been successfully pushed down.
