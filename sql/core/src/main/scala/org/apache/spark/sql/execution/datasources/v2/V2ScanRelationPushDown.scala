@@ -136,18 +136,22 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         rightProjections.forall(_.isInstanceOf[AttributeReference]) &&
         // Cross joins are not supported because they increase the amount of data.
         condition.isDefined &&
-        // Joins on top of sampled tables are not supported
-        leftHolder.pushedSample.isEmpty &&
-        rightHolder.pushedSample.isEmpty &&
         lBuilder.isOtherSideCompatibleForJoin(rBuilder) =>
       val leftSideRequiredColumnNames = getRequiredColumnNames(leftProjections, leftHolder)
       val rightSideRequiredColumnNames = getRequiredColumnNames(rightProjections, rightHolder)
 
-      // Alias the duplicated columns from left side of the join.
+      // Alias the duplicated columns from left side of the join. We are creating the
+      // Map[String, Int] to tell how many times each column name has occured within one side.
+      val leftSideNameCounts: Map[String, Int] =
+        leftSideRequiredColumnNames.groupBy(identity).view.mapValues(_.size).toMap
+      val rightSideNameCounts: Map[String, Int] =
+        rightSideRequiredColumnNames.groupBy(identity).view.mapValues(_.size).toMap
+      // It's more performant to call contains on Set than on Seq
+      val rightSideColumnNamesSet = rightSideRequiredColumnNames.toSet
+
       val leftSideRequiredColumnsWithAliases = leftSideRequiredColumnNames.map { name =>
         val aliasName =
-          if (leftSideRequiredColumnNames.count(_ == name) > 1 ||
-              rightSideRequiredColumnNames.contains(name)) {
+          if (leftSideNameCounts(name) > 1 || rightSideColumnNamesSet.contains(name)) {
             generateJoinOutputAlias(name)
           } else {
             null
@@ -161,7 +165,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // already aliased.
       val rightSideRequiredColumnsWithAliases = rightSideRequiredColumnNames.map { name =>
         val aliasName =
-          if (rightSideRequiredColumnNames.count(_ == name) > 1) {
+          if (rightSideNameCounts(name) > 1) {
             generateJoinOutputAlias(name)
           } else {
             null
