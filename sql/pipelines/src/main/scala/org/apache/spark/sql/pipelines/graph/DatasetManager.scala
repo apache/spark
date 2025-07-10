@@ -24,7 +24,13 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, TableChange, TableInfo}
+import org.apache.spark.sql.connector.catalog.{
+  CatalogV2Util,
+  Identifier,
+  TableCatalog,
+  TableChange,
+  TableInfo
+}
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
 import org.apache.spark.sql.connector.expressions.Expressions
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
