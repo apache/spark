@@ -778,7 +778,8 @@ private[spark] class TaskSchedulerImpl(
           case Some(taskSet) =>
             assert(state != TaskState.LOST)
             if (TaskState.isFinished(state)) {
-              executorIdToRunningTaskIds(taskIdToExecutorId(tid)).put(tid, false)
+              executorIdToRunningTaskIds.get(taskSet.taskInfos(tid).executorId)
+                .foreach(_.put(tid, false))
               taskSet.removeRunningTask(tid)
               if (state == TaskState.FINISHED) {
                 taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)

@@ -1785,7 +1785,6 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val conf = createConf(0, 1, 1)
       .set(config.DYN_ALLOCATION_TESTING, false)
       .set("spark.resultGetter.threads", "1")
-      .set(config.TASK_MAX_FAILURES, 0)
       .set(config.EXECUTOR_CORES, 1)
       .set(config.TASK_MAX_DIRECT_RESULT_SIZE.key, "1B")
       .set(config.SHUFFLE_SERVICE_ENABLED, false)
