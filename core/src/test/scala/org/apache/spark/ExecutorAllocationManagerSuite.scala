@@ -17,7 +17,8 @@
 
 package org.apache.spark
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{CountDownLatch, ExecutorService, TimeUnit}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable
 
@@ -1778,6 +1779,84 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     schedule(manager)
     // once the schedule is run target executor number should be 1
     assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+  }
+
+  test("SPARK-52752: test handling delayed task events") {
+    val conf = createConf(0, 1, 1)
+      .set(config.DYN_ALLOCATION_TESTING, false)
+      .set("spark.resultGetter.threads", "1")
+      .set("spark.task.maxFailures", "0")
+      .set("spark.executor.cores", "1")
+      .set("spark.task.maxDirectResultSize", "1b")
+      .set("spark.shuffle.service.enabled", "false")
+      .set("spark.dynamicAllocation.shuffleTracking.enabled", "true")
+      .set("spark.testing.dynamicAllocation.schedule.enabled", "true")
+      .setMaster("local-cluster[1,1,1024]")
+      .setAppName(getClass().getName())
+    val sc = new SparkContext(conf)
+    try {
+      def blockGetResultThreads(sleppMS: Long): Unit = {
+        val getTaskResultGetter = PrivateMethod[TaskResultGetter](
+          Symbol("taskResultGetter"))
+        val taskScheduler = sc.taskScheduler.asInstanceOf[TaskSchedulerImpl]
+        val taskResultGetter = taskScheduler invokePrivate getTaskResultGetter()
+        val getTaskResultExecutorMethod = PrivateMethod[ExecutorService](
+          Symbol("getTaskResultExecutor"))
+        val getTaskResultExecutor = taskResultGetter invokePrivate getTaskResultExecutorMethod()
+        getTaskResultExecutor.execute(new Runnable {
+          override def run(): Unit = {
+            Thread.sleep(sleppMS)
+          }
+        })
+      }
+
+      val failedTasks = new AtomicInteger(0)
+      val firstTaskEndLatch = new CountDownLatch(1)
+      val blockLatch = new CountDownLatch(2)
+      // Block the management listener queue
+      val blockListener = new SparkListener {
+        override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+          blockLatch.await()
+          if (taskEnd.taskInfo.failed) {
+            failedTasks.incrementAndGet()
+          }
+        }
+      }
+      // when all tasks are finished, release the management listener queue
+      val releaseListener = new SparkListener {
+        override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+          blockLatch.countDown()
+          firstTaskEndLatch.countDown()
+        }
+      }
+      sc.listenerBus.addToManagementQueue(blockListener)
+      sc.listenerBus.addToSharedQueue(releaseListener)
+
+      val iter = sc.parallelize(1 to 1000, 2).mapPartitions { i =>
+        if (TaskContext.get().partitionId() == 1) {
+          // over this executor idle timeout
+          Thread.sleep(3000)
+        }
+        Seq(i.count(_ => true)).iterator
+      }.toLocalIterator
+      var count = 0
+      assert(iter.hasNext)
+      count += iter.next()
+      // avoid task 2 start event before task 1 end event
+      firstTaskEndLatch.await()
+      // over this executor maybe removed time
+      blockGetResultThreads(5000)
+      assert(iter.hasNext)
+      count += iter.next()
+      assert(!iter.hasNext)
+
+      sc.listenerBus.waitUntilEmpty()
+      assert(count == 1000)
+      // assert no task failed
+      assert(failedTasks.get() == 0)
+    } finally {
+      sc.stop()
+    }
   }
 
   private def createConf(

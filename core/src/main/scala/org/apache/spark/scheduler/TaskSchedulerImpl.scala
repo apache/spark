@@ -142,8 +142,8 @@ private[spark] class TaskSchedulerImpl(
   // Incrementing task IDs
   val nextTaskId = new AtomicLong(0)
 
-  // IDs of the tasks running on each executor
-  private val executorIdToRunningTaskIds = new HashMap[String, HashSet[Long]]
+  // IDs of the tasks running on each executor, <executorId, <taskId, isRunning>>
+  private val executorIdToRunningTaskIds = new HashMap[String, HashMap[Long, Boolean]]
 
   // We add executors here when we first get decommission notification for them. Executors can
   // continue to run even after being asked to decommission, but they will eventually exit.
@@ -444,7 +444,7 @@ private[spark] class TaskSchedulerImpl(
   private def addRunningTask(tid: Long, execId: String, taskSet: TaskSetManager): Unit = {
     taskIdToTaskSetManager.put(tid, taskSet)
     taskIdToExecutorId(tid) = execId
-    executorIdToRunningTaskIds(execId).add(tid)
+    executorIdToRunningTaskIds(execId).put(tid, true)
   }
 
   /**
@@ -499,7 +499,7 @@ private[spark] class TaskSchedulerImpl(
         hostToExecutors(o.host) += o.executorId
         executorAdded(o.executorId, o.host)
         executorIdToHost(o.executorId) = o.host
-        executorIdToRunningTaskIds(o.executorId) = HashSet[Long]()
+        executorIdToRunningTaskIds(o.executorId) = new HashMap[Long, Boolean]()
         newExecAvail = true
       }
     }
@@ -778,7 +778,7 @@ private[spark] class TaskSchedulerImpl(
           case Some(taskSet) =>
             assert(state != TaskState.LOST)
             if (TaskState.isFinished(state)) {
-              cleanupTaskState(tid)
+              executorIdToRunningTaskIds(taskIdToExecutorId(tid)).put(tid, false)
               taskSet.removeRunningTask(tid)
               if (state == TaskState.FINISHED) {
                 taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
@@ -871,6 +871,7 @@ private[spark] class TaskSchedulerImpl(
       tid: Long,
       taskResult: DirectTaskResult[_]): Unit = synchronized {
     taskSetManager.handleSuccessfulTask(tid, taskResult)
+    cleanupTaskState(tid)
   }
 
   def handleFailedTask(
@@ -884,6 +885,7 @@ private[spark] class TaskSchedulerImpl(
       // reflect failed tasks that need to be re-run.
       backend.reviveOffers()
     }
+    cleanupTaskState(tid)
   }
 
   /**
@@ -1063,7 +1065,7 @@ private[spark] class TaskSchedulerImpl(
   private def removeExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
     // The tasks on the lost executor may not send any more status updates (because the executor
     // has been lost), so they should be cleaned up here.
-    executorIdToRunningTaskIds.remove(executorId).foreach { taskIds =>
+    executorIdToRunningTaskIds.remove(executorId).map(_.keySet).foreach { taskIds =>
       logDebug("Cleaning up TaskScheduler state for tasks " +
         s"${taskIds.mkString("[", ",", "]")} on failed executor $executorId")
       // We do not notify the TaskSetManager of the task failures because that will
@@ -1116,7 +1118,17 @@ private[spark] class TaskSchedulerImpl(
     executorIdToRunningTaskIds.contains(execId) && !isExecutorDecommissioned(execId)
   }
 
+  /**
+   * Check if the executor is busy, returns true if there are any running tasks.
+   */
   def isExecutorBusy(execId: String): Boolean = synchronized {
+    executorIdToRunningTaskIds.get(execId).exists(_.exists(_._2))
+  }
+
+  /**
+   * Check if the executor has any unfinished tasks
+   */
+  def isExecutorHasUnfinishedTask(execId: String): Boolean = synchronized {
     executorIdToRunningTaskIds.get(execId).exists(_.nonEmpty)
   }
 

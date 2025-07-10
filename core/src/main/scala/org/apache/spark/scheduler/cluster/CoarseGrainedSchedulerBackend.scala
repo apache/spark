@@ -974,7 +974,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // If this executor is busy, do not kill it unless we are told to force kill it (SPARK-9552)
       val executorsToKill = knownExecutors
         .filter { id => !executorsPendingToRemove.contains(id) }
-        .filter { id => force || !scheduler.isExecutorBusy(id) }
+        .filter { id => force || !scheduler.isExecutorHasUnfinishedTask(id) }
       executorsToKill.foreach { id => executorsPendingToRemove(id) = !countFailures }
 
       logInfo(log"Actual list of executor(s) to be killed is " +
