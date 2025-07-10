@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, ObjectType, TimeType}
-import org.apache.spark.sql.types.DayTimeIntervalType.SECOND
+import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -605,4 +605,28 @@ case class TimeAddInterval(time: Expression, interval: Expression)
   override protected def withNewChildrenInternal(
       newTime: Expression, newInterval: Expression): TimeAddInterval =
     copy(time = newTime, interval = newInterval)
+}
+
+/**
+ * Returns a day-time interval between time values.
+ */
+case class SubtractTimes(left: Expression, right: Expression)
+  extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType, AnyTimeType)
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    DayTimeIntervalType(HOUR, SECOND),
+    "subtractTimes",
+    children,
+    inputTypes
+  )
+
+  override def toString: String = s"$left - $right"
+  override def sql: String = s"${left.sql} - ${right.sql}"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): SubtractTimes =
+    copy(left = newLeft, right = newRight)
 }
