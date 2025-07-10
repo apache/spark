@@ -53,14 +53,15 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
     val (col1, col2) = ($"col1".int, $"col2".int)
     val input = LocalRelation(col1, col2)
     val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
-    val rankExpr = Rank(Seq.empty).over(Seq(col1), Seq(col2.asc), frame).as("rank")
+    val spec = WindowSpecDefinition(Seq(col1), Seq(col2.asc), frame)
+    val rankExpression = WindowExpression(Rank(Seq.empty), spec).as("rank")
 
     val baselinePlan = input
       .select(col1, col2)
-      .window(Seq(rankExpr), Seq(col1), Seq(col2.asc))
+      .window(Seq(rankExpression), Seq(col1), Seq(col2.asc))
     val testPlan = input
       .select(col2, col1)
-      .window(Seq(rankExpr), Seq(col1), Seq(col2.asc))
+      .window(Seq(rankExpression), Seq(col1), Seq(col2.asc))
 
     assert(baselinePlan != testPlan)
     assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
@@ -70,9 +71,10 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
     val (col1, col2, col3) = ($"col1".int, $"col2".int, $"col3".int)
     val input = LocalRelation(col1, col2, col3)
     val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
+    val spec = WindowSpecDefinition(Seq(col1), Seq(col2.asc), frame)
 
     val innerSpec = WindowSpecDefinition(Seq(col1), Seq(col2.asc), frame)
-    val rankExpression = WindowExpression(Rank(Seq.empty), innerSpec).as("rank")
+    val rankExpression = WindowExpression(Rank(Seq.empty), spec).as("rank")
     val denseRankExpression = WindowExpression(DenseRank(Seq.empty), innerSpec).as("dense_rank")
 
     val baselineInnerWindow =
