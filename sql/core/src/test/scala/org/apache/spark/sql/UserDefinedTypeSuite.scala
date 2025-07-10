@@ -320,7 +320,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
     assert(row.getInt(0) == 2018)
   }
 
-  test("SPARK-52694: Add a DeveloperApi - Encoders#udt") {
+  test("SPARK-52694: Add Encoders#udt") {
     val udt = new YearUDT()
     implicit val yearEncoder: Encoder[Year] = Encoders.udt(udt)
     val ds = spark.createDataset(Seq(Year.of(2018), Year.of(2019)))
