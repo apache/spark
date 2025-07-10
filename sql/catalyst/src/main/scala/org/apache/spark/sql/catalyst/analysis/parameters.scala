@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, LeafExpression, Literal, MapFromArrays, MapFromEntries, SubqueryExpression, Unevaluable, VariableReference}
 import org.apache.spark.sql.catalyst.parser.{SubstituteParamsParser, SubstitutionRule}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateUserDefinedFunction, CreateVariable, CreateView, LogicalPlan, SupervisingCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterViewAs, CreateTable, CreateUserDefinedFunction, CreateVariable, CreateView, DefaultValueExpression, LogicalPlan, SupervisingCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
 import org.apache.spark.sql.errors.QueryErrorsBase
@@ -206,19 +206,36 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
   private def performSqlSubstitution(
       child: LogicalPlan,
       substitutionFn: (String, SubstitutionRule) => String): LogicalPlan = {
-    child match {
+    substituteSQL(child) {
       case createVariable: CreateVariable =>
         val substitutedSQL = substitutionFn(createVariable.defaultExpr.originalSQL,
           SubstitutionRule.Expression)
         val newDefaultExpr = createVariable.defaultExpr.copy(originalSQL = substitutedSQL)
         createVariable.copy(defaultExpr = newDefaultExpr)
 
-      case createView: CreateView if createView.originalText.isDefined =>
-        val substitutedSQL = substitutionFn(createView.originalText.get,
-          SubstitutionRule.Query)
-        createView.copy(originalText = Some(substitutedSQL))
+    case createView: CreateView if createView.originalText.isDefined =>
+      val substitutedSQL = substitutionFn(createView.originalText.get,
+        SubstitutionRule.Query)
+      createView.copy(originalText = Some(substitutedSQL))
 
-      case createFunction: CreateUserDefinedFunction =>
+    case alterViewAs: AlterViewAs =>
+      val substitutedSQL = substitutionFn(alterViewAs.originalText,
+        SubstitutionRule.Query)
+      alterViewAs.copy(originalText = substitutedSQL)
+
+    case alterColumns: AlterColumns =>
+      val specs = alterColumns.specs
+      val substitutedSpecs = specs.map { spec =>
+        spec.newDefaultExpression match {
+          case Some(defExpr: DefaultValueExpression) =>
+            val substitutedSQL = substitutionFn(defExpr.originalSQL, SubstitutionRule.Expression)
+            spec.copy(newDefaultExpression = Some(defExpr.copy(originalSQL = substitutedSQL)))
+          case _ => spec
+        }
+      }
+      alterColumns.copy(specs = substitutedSpecs)
+
+    case createFunction: CreateUserDefinedFunction =>
         val inputParamText = createFunction.inputParamText map (p => substitutionFn(p,
           SubstitutionRule.ColDefinitionList))
         val exprText = createFunction.exprText map (p => substitutionFn(p,
@@ -229,7 +246,19 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
           inputParamText = inputParamText,
           exprText = exprText,
           queryText = queryText)
-      case other => child
+
+      case createTable: CreateTable =>
+        val columns = createTable.columns
+        val substitutedColumns = columns.map { col =>
+          col.defaultValue match {
+            case Some(defExpr: DefaultValueExpression) =>
+              val substitutedSQL = substitutionFn(defExpr.originalSQL, SubstitutionRule.Expression)
+              col.copy(defaultValue = Some(defExpr.copy(originalSQL = substitutedSQL)))
+            case _ => col
+          }
+        }
+        createTable.copy(columns = substitutedColumns)
+      case other => other
     }
   }
 
