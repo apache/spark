@@ -84,7 +84,7 @@ case class DescribeTableExec(
   private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {
     rows ++= table.columns().map{ column =>
       toCatalystRow(
-        column.name, column.dataType.simpleString, column.comment())
+        column.name, column.dataType.simpleString, column.comment)
     }
   }
 

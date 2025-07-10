@@ -574,10 +574,10 @@ object ResolveDefaultColumns extends QueryErrorsBase
   }
 
   /** If any fields in a schema have default values, appends them to the result. */
-  def getDescribeMetadata(cols: Array[Column]): Seq[(String, String, Any)] = {
+  def getDescribeMetadata(cols: Array[Column]): Seq[(String, String, String)] = {
     cols.filter(_.defaultValue() != null).flatMap { col =>
       ("", "", "") :: ("# Column Default Values", "", "") ::
-        (col.name, col.dataType.simpleString, col.defaultValue().getValue.value()) :: Nil
+        (col.name, col.dataType.simpleString, col.defaultValue().getSql) :: Nil
     }.toSeq
   }
 
