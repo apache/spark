@@ -106,7 +106,7 @@ class NumericOps(DataTypeOps):
         spark_session = left._internal.spark_frame.sparkSession
         new_right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
 
-        def wrapped_add(lc, rc):
+        def wrapped_add(lc: PySparkColumn, rc: Any) -> PySparkColumn:
             expr = PySparkColumn.__add__(lc, rc)
             if is_ansi_mode_enabled(spark_session):
                 expr = _cast_back_float(expr, left.dtype, right)
@@ -164,7 +164,7 @@ class NumericOps(DataTypeOps):
         spark_session = left._internal.spark_frame.sparkSession
         new_right = transform_boolean_operand_to_numeric(right)
 
-        def wrapped_radd(lc, rc):
+        def wrapped_radd(lc: PySparkColumn, rc: Any) -> PySparkColumn:
             expr = PySparkColumn.__radd__(lc, rc)
             if is_ansi_mode_enabled(spark_session):
                 expr = _cast_back_float(expr, left.dtype, right)
