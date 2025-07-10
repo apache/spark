@@ -6441,9 +6441,9 @@
     },
     "sqlState" : "42809"
   },
-  "UNSUPPORTED_JOIN_TYPE_IN_CONNECTOR_EXPRESSION" : {
+  "UNSUPPORTED_JOIN_TYPE" : {
     "message" : [
-      "Unsupported join type in connector expression: <joinType>"
+      "Unsupported join type '<typ>'. Supported join types include: <supported>."
     ],
     "sqlState" : "0A000"
   },
@@ -9642,11 +9642,6 @@
   "_LEGACY_ERROR_TEMP_3208" : {
     "message" : [
       "The number of fields (<numFields>) in the partition identifier is not equal to the partition schema length (<schemaLen>). The identifier might not refer to one partition."
-    ]
-  },
-  "UNSUPPORTED_JOIN_TYPES": {
-    "message" : [
-      "Unsupported join type: <joinType>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3215" : {

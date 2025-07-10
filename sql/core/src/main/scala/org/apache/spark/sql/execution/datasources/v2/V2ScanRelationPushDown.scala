@@ -172,7 +172,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
       // Create the AttributeMap that holds (Attribute -> Attribute with up to date name) mapping.
       val pushedJoinOutputMap = AttributeMap[Expression](
-        node.output.asInstanceOf[Seq[AttributeReference]]
+        node.output
           .zip(leftSideRequiredColumnsWithAliases ++ rightSideRequiredColumnsWithAliases)
           .collect {
             case (attr, columnWithAlias) if columnWithAlias.alias() != null =>
