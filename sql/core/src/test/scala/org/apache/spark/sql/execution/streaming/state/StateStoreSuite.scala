@@ -986,7 +986,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  test("SPARK-52740 - HDFSBackedStateStoreProvider checkpoint format version 2 with " +
+  test("SPARK-52740: HDFSBackedStateStoreProvider checkpoint format version 2 with " +
     "deserialized sqlConf throws error correctly") {
     val sqlConf = getDefaultSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
       SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get)
