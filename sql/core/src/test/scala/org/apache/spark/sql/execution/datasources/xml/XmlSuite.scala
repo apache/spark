@@ -16,11 +16,11 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
-import java.io.{EOFException, File, StringWriter}
+import java.io.{EOFException, File, FileOutputStream, StringWriter}
 import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDateTime}
+import java.time.{Instant, LocalDateTime, Year}
 import java.util.TimeZone
 import java.util.concurrent.ConcurrentHashMap
 import javax.xml.stream.{XMLOutputFactory, XMLStreamException}
@@ -34,10 +34,12 @@ import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FSDataInputStream
 import org.apache.hadoop.io.{LongWritable, Text}
-import org.apache.hadoop.io.compress.GzipCodec
+import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 
 import org.apache.spark.{DebugFilesystem, SparkException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
+import org.apache.spark.io.ZStdCompressionCodec
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode, YearUDT}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UDTEncoder
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.catalyst.xml.{IndentingXMLStreamWriter, XmlOptions}
@@ -188,6 +190,16 @@ class XmlSuite
     val results = spark.read
       .option("rowTag", "ROW")
       .xml(getTestResourcePath(resDir + "cars.xml.bz2"))
+      .select("year")
+      .collect()
+
+    assert(results.length === 3)
+  }
+
+  test("DSL test zstd compressed file") {
+    val results = spark.read
+      .option("rowTag", "ROW")
+      .xml(getTestResourcePath(resDir + "cars.xml.zst"))
       .select("year")
       .collect()
 
@@ -3397,6 +3409,109 @@ class XmlSuite
         "decoded",
         from_xml(df.col("payload"), schema, Map[String, String]().asJava)
       )
+    }
+  }
+
+  private def createTestFiles(dir: File, fileFormatWriter: Boolean): Seq[Row] = {
+    val numRecord = 100
+    val codecExtensionMap = HadoopCompressionCodec.values()
+      .map(c => (c.lowerCaseName(),
+        Option(c.getCompressionCodec).map(_.getDefaultExtension).getOrElse(""))) ++
+      Seq(("zstd", ".zst"), ("zstd", ".zstd"), ("gzip", ".gzip"))
+
+    val codecFactory = new CompressionCodecFactory(spark.sessionState.newHadoopConf())
+    codecExtensionMap.foreach { case (codec, ext) =>
+
+      val records: Seq[(Int, String)] = (1 to numRecord).map(id => (id, s"value_${codec}$ext"))
+      val file = new File(dir, s"test_$codec.xml$ext")
+
+      // file data source writers do not support zstd codec yet.
+      if (fileFormatWriter && !codec.equals("zstd")) {
+        val df = records.toDF("id", "value")
+        df.coalesce(1).write
+          .option("rowTag", "ROW")
+          .option("compression", codec)
+          .xml(file.getCanonicalPath)
+
+        val compressedFiles = new File(file.getCanonicalPath).listFiles()
+
+        compressedFiles.foreach { file =>
+          if (file.isFile && file.getName.startsWith("part")) {
+            val newName = file.getName.split("\\.").init.mkString(".") + ext
+            val status = file.renameTo(new File(dir, newName))
+            assert(status)
+          }
+        }
+      } else {
+        val data = records.map {
+          case (id, value) =>
+            s"""  <ROW>
+               |    <id>${id}</id>
+               |    <value>${value}</value>
+               |  </ROW>""".stripMargin
+        }.mkString("<ROWS>\n", "\n", "\n</ROWS>")
+        val os = new FileOutputStream(file)
+
+        val outputStream = codec match {
+          case "zstd" =>
+            new ZStdCompressionCodec(sparkConf).compressedOutputStream(os)
+          case codec if ext.nonEmpty =>
+            val compressionCodec = codecFactory.getCodecByName(codec)
+            compressionCodec.createOutputStream(os)
+          case _ => os
+        }
+        outputStream.write(data.getBytes(StandardCharsets.UTF_8))
+        outputStream.close()
+      }
+    }
+
+    val expectedOutput = codecExtensionMap.flatMap {
+      case (codec, ext) =>
+        val data = (1 to numRecord).map(i => Row(i, s"value_${codec}$ext"))
+        data
+    }.toSeq
+    assert(expectedOutput.length == codecExtensionMap.length * numRecord)
+    expectedOutput
+  }
+
+  test("Test all supported codec and extension including zst, zstd and gzip") {
+    for (
+      fileFormatWriter <- Seq(true, false)
+    ) {
+      logInfo(s"Testing with fileFormatWriter=$fileFormatWriter")
+      withTempDir { dir =>
+        val options = Map(
+          "rowTag" -> "ROW",
+          "recursiveFileLookup" -> "true"
+        )
+
+        val expectedOutput = createTestFiles(dir, fileFormatWriter)
+        val df = spark.read.options(options).xml(dir.getCanonicalPath)
+        checkAnswer(df, expectedOutput)
+      }
+    }
+  }
+
+  test("SPARK-52695: UDT write support for xml file format") {
+    val udt = new YearUDT()
+    val encoder = UDTEncoder(udt, classOf[YearUDT])
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      // Write a dataset of Year objects
+      val df1 = spark.range(2018, 2025).map(y => Year.of(y.toInt))(encoder)
+
+      df1
+      .write
+      .mode(SaveMode.Overwrite)
+      .option("rowTag", "ROW")
+      .xml(path)
+
+      val df = spark.read
+        .option("rowTag", "ROW")
+        .xml(path)
+
+      assert(df.schema === StructType(Seq(StructField("value", LongType))))
+      checkAnswer(df, spark.range(2018, 2025).toDF("value"))
     }
   }
 }

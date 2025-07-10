@@ -292,6 +292,7 @@ case class SimpleCaseStatement(
     conditionExpressions: Seq[Expression],
     conditionalBodies: Seq[CompoundBody],
     elseBody: Option[CompoundBody]) extends CompoundPlanStatement {
+  assert(conditionExpressions.nonEmpty)
   assert(conditionExpressions.length == conditionalBodies.length)
 
   override def output: Seq[Attribute] = Seq.empty

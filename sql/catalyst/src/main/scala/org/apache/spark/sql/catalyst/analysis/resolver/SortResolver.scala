@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.{HashMap, IdentityHashMap, LinkedHashMap}
+import java.util.{HashMap, LinkedHashMap}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{
   NondeterministicExpressionCollection,
   UnresolvedAttribute
@@ -35,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   NamedExpression,
   SortOrder
 }
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project, Sort}
 
 /**
  * Resolves a [[Sort]] by resolving its child and order expressions.
@@ -122,10 +121,10 @@ class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionRes
         scopes.current.output.map(a => sortOrder.copy(child = a.toAttribute))
       unresolvedSort.copy(child = resolvedChild, order = resolvedOrder)
     } else {
-      val unresolvedSortWithResolvedChild = unresolvedSort.copy(child = resolvedChild)
+      val partiallyResolvedSort = unresolvedSort.copy(child = resolvedChild)
 
-      val (resolvedOrderExpressions, missingAttributes, aggregateExpressionsAliased) =
-        resolveOrderExpressions(unresolvedSortWithResolvedChild)
+      val (resolvedOrderExpressions, missingAttributes) =
+        resolveOrderExpressions(partiallyResolvedSort)
 
       val (finalOrderExpressions, missingExpressions) = resolvedChild match {
         case _ if scopes.current.hasLcaInAggregate =>
@@ -133,9 +132,17 @@ class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionRes
             "Lateral column alias in Aggregate below a Sort"
           )
         case aggregate: Aggregate =>
-          val (cleanedOrderExpressions, referencedGroupingExpressions) =
+          val (cleanedOrderExpressions, extractedExpressions) =
             extractReferencedGroupingAndAggregateExpressions(aggregate, resolvedOrderExpressions)
-          (cleanedOrderExpressions, aggregateExpressionsAliased ++ referencedGroupingExpressions)
+          (cleanedOrderExpressions, extractedExpressions)
+        case filter @ Filter(_, aggregate: Aggregate) =>
+          val (cleanedOrderExpressions, extractedExpressions) =
+            extractReferencedGroupingAndAggregateExpressions(aggregate, resolvedOrderExpressions)
+          (cleanedOrderExpressions, extractedExpressions)
+        case project @ Project(_, Filter(_, aggregate: Aggregate)) =>
+          throw new ExplicitlyUnsupportedResolverFeature(
+            "Project on top of HAVING below a Sort"
+          )
         case other =>
           (resolvedOrderExpressions, missingAttributes)
       }
@@ -190,28 +197,63 @@ class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionRes
    *     SELECT col1 FROM VALUES(1,2) GROUP BY col1 HAVING col1 > 1 ORDER BY col2;
    *     SELECT col1 FROM VALUES(1) ORDER BY col2;
    *     }}}
+   *
+   * If the order expression is not present in the current scope, but an alias of this expression
+   * is, replace the order expression with its alias (see
+   * [[tryReplaceSortOrderExpressionWithAlias]]).
    */
   private def resolveOrderExpressions(
-      unresolvedSort: Sort): (Seq[SortOrder], Seq[Attribute], Seq[Alias]) = {
+      partiallyResolvedSort: Sort): (Seq[SortOrder], Seq[Attribute]) = {
     val referencedAttributes = new HashMap[ExprId, Attribute]
-    val aggregateExpressionsAliased = new mutable.ArrayBuffer[Alias]
 
-    val resolvedSortOrder = unresolvedSort.order.map { sortOrder =>
+    val resolvedSortOrder = partiallyResolvedSort.order.map { sortOrder =>
       val resolvedSortOrder = expressionResolver
-        .resolveExpressionTreeInOperator(sortOrder, unresolvedSort)
+        .resolveExpressionTreeInOperator(sortOrder, partiallyResolvedSort)
         .asInstanceOf[SortOrder]
 
-      referencedAttributes.putAll(expressionResolver.getLastReferencedAttributes)
-      aggregateExpressionsAliased ++= expressionResolver.getLastExtractedAggregateExpressionAliases
+      tryReplaceSortOrderExpressionWithAlias(resolvedSortOrder).getOrElse {
+        referencedAttributes.putAll(expressionResolver.getLastReferencedAttributes)
 
-      resolvedSortOrder
+        resolvedSortOrder
+      }
     }
 
     val missingAttributes = scopes.current.resolveMissingAttributesByHiddenOutput(
       referencedAttributes
     )
 
-    (resolvedSortOrder, missingAttributes, aggregateExpressionsAliased.toSeq)
+    (resolvedSortOrder, missingAttributes)
+  }
+
+  /**
+   * When resolving [[SortOrder]] on top of an [[Aggregate]], if there is an attribute that is
+   * present in `hiddenOutput` and there is an [[Alias]] of this attribute in the `output`,
+   * [[SortOrder]] should be resolved by the [[Alias]] instead of an attribute. This is done as
+   * optimization in order to avoid a [[Project]] node being added when resolving the attribute via
+   * missing input (because attribute is not present in direct output, only its alias is).
+   *
+   * For example, for a query like:
+   *
+   * {{{
+   * SELECT col1 + 1 AS a FROM VALUES(1) GROUP BY a ORDER BY col1 + 1;
+   * }}}
+   *
+   * The resolved plan should be:
+   *
+   * Sort [a#2 ASC NULLS FIRST], true
+   * +- Aggregate [(col1#1 + 1)], [(col1#1 + 1) AS a#2]
+   *    +- LocalRelation [col1#1]
+   *
+   * [[SortOrder]] expression is resolved to alias of `col1 + 1` instead of `col1 + 1` itself.
+   */
+  private def tryReplaceSortOrderExpressionWithAlias(sortOrder: SortOrder): Option[SortOrder] = {
+    scopes.current.aggregateListAliases
+      .collectFirst {
+        case alias if alias.child.semanticEquals(sortOrder.child) => alias.toAttribute
+      }
+      .map { aliasCandidate =>
+        sortOrder.withNewChildren(newChildren = Seq(aliasCandidate)).asInstanceOf[SortOrder]
+      }
   }
 
   /**
@@ -238,72 +280,36 @@ class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionRes
    *   +- Sort [col2 ASC NULLS FIRST], true
    *     +- Aggregate [col1, col2], [col1, col2]
    *       +- LocalRelation [col1, col2]
+   *
+   * Extraction is done in a top-down manner by traversing the expression tree of the condition,
+   * swapping an underlying expression found in the grouping or aggregate expressions with the one
+   * that matches it and populating the `referencedGroupingExpressions` and
+   * `extractedAggregateExpressionAliases` lists to insert missing expressions later.
    */
   private def extractReferencedGroupingAndAggregateExpressions(
       aggregate: Aggregate,
       sortOrderEntries: Seq[SortOrder]): (Seq[SortOrder], Seq[NamedExpression]) = {
-    val aliasChildToAliasInAggregateExpressions = new IdentityHashMap[Expression, Alias]
-    val aggregateExpressionsSemanticComparator = new SemanticComparator(
-      aggregate.aggregateExpressions.map {
-        case alias: Alias =>
-          aliasChildToAliasInAggregateExpressions.put(alias.child, alias)
-          alias.child
-        case other => other
-      }
-    )
-
-    val groupingExpressionsSemanticComparator = new SemanticComparator(
-      aggregate.groupingExpressions
-    )
+    val groupingAndAggregateExpressionsExtractor =
+      new GroupingAndAggregateExpressionsExtractor(aggregate, autoGeneratedAliasProvider)
 
     val referencedGroupingExpressions = new mutable.ArrayBuffer[NamedExpression]
+    val extractedAggregateExpressionAliases = new mutable.ArrayBuffer[Alias]
+
     val transformedSortOrderEntries = sortOrderEntries.map { sortOrder =>
-      sortOrder.copy(child = sortOrder.child.transform {
+      sortOrder.copy(child = sortOrder.child.transformDown {
         case expression: Expression =>
-          extractReferencedGroupingAndAggregateExpressionsFromOrderExpression(
+          groupingAndAggregateExpressionsExtractor.extractReferencedGroupingAndAggregateExpressions(
             expression = expression,
-            aggregateExpressionsSemanticComparator = aggregateExpressionsSemanticComparator,
-            groupingExpressionsSemanticComparator = groupingExpressionsSemanticComparator,
-            aliasChildToAliasInAggregateExpressions = aliasChildToAliasInAggregateExpressions,
-            referencedGroupingExpressions = referencedGroupingExpressions
+            referencedGroupingExpressions = referencedGroupingExpressions,
+            extractedAggregateExpressionAliases = extractedAggregateExpressionAliases
           )
       })
     }
-    (transformedSortOrderEntries, referencedGroupingExpressions.toSeq)
-  }
 
-  private def extractReferencedGroupingAndAggregateExpressionsFromOrderExpression(
-      expression: Expression,
-      aggregateExpressionsSemanticComparator: SemanticComparator,
-      groupingExpressionsSemanticComparator: SemanticComparator,
-      aliasChildToAliasInAggregateExpressions: IdentityHashMap[Expression, Alias],
-      referencedGroupingExpressions: mutable.ArrayBuffer[NamedExpression]): Expression = {
-    aggregateExpressionsSemanticComparator.collectFirst(expression) match {
-      case Some(attribute: Attribute)
-          if !aliasChildToAliasInAggregateExpressions.containsKey(attribute) =>
-        attribute
-      case Some(expression) =>
-        aliasChildToAliasInAggregateExpressions.get(expression) match {
-          case null =>
-            throw SparkException.internalError(
-              s"No parent alias for expression $expression while extracting aggregate" +
-              s"expressions in Sort operator."
-            )
-          case alias: Alias =>
-            alias.toAttribute
-        }
-      case None if groupingExpressionsSemanticComparator.exists(expression) =>
-        expression match {
-          case attribute: Attribute =>
-            referencedGroupingExpressions += attribute
-            attribute
-          case other =>
-            val alias = autoGeneratedAliasProvider.newAlias(child = other)
-            referencedGroupingExpressions += alias
-            alias.toAttribute
-        }
-      case None => expression
-    }
+    (
+      transformedSortOrderEntries,
+      referencedGroupingExpressions.toSeq ++ extractedAggregateExpressionAliases.toSeq
+    )
   }
 
   /**

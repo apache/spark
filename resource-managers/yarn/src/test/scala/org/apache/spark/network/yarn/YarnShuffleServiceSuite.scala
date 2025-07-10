@@ -129,12 +129,12 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
       reduceId: Int,
       blockId: String): AppShufflePartitionInfo = {
     val dataFile = ShuffleTestAccessor.getMergedShuffleDataFile(mergeManager, partitionId, reduceId)
-    dataFile.getParentFile.mkdirs()
+    Utils.createDirectory(dataFile.getParentFile)
     val indexFile =
       ShuffleTestAccessor.getMergedShuffleIndexFile(mergeManager, partitionId, reduceId)
-    indexFile.getParentFile.mkdirs()
+    Utils.createDirectory(indexFile.getParentFile)
     val metaFile = ShuffleTestAccessor.getMergedShuffleMetaFile(mergeManager, partitionId, reduceId)
-    metaFile.getParentFile.mkdirs()
+    Utils.createDirectory(metaFile.getParentFile)
     val partitionInfo = ShuffleTestAccessor.getOrCreateAppShufflePartitionInfo(
       mergeManager, partitionId, reduceId, blockId)
 

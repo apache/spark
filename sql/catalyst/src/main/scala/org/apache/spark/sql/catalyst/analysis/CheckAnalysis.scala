@@ -569,7 +569,19 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 messageParameters = Map.empty)
             }
 
-          case a: Aggregate => ExprUtils.assertValidAggregation(a)
+          case a: Aggregate =>
+            a.groupingExpressions.foreach(
+              expression =>
+                if (!expression.deterministic) {
+                  throw SparkException.internalError(
+                    msg = s"Non-deterministic expression '${toSQLExpr(expression)}' should not " +
+                      "appear in grouping expression.",
+                    context = expression.origin.getQueryContext,
+                    summary = expression.origin.context.summary
+                  )
+                }
+            )
+            ExprUtils.assertValidAggregation(a)
 
           case CollectMetrics(name, metrics, _, _) =>
             if (name == null || name.isEmpty) {
@@ -947,30 +959,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     if (expr.plan.isStreaming) {
       plan.failAnalysis("INVALID_SUBQUERY_EXPRESSION.STREAMING_QUERY", Map.empty)
     }
-    assertNoRecursiveCTE(expr.plan)
     checkAnalysis0(expr.plan)
     ValidateSubqueryExpression(plan, expr)
   }
 
-  private def assertNoRecursiveCTE(plan: LogicalPlan): Unit = {
-    plan.foreach {
-      case r: CTERelationRef if r.recursive =>
-        throw new AnalysisException(
-          errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
-          messageParameters = Map.empty)
-      case p => p.expressions.filter(_.containsPattern(PLAN_EXPRESSION)).foreach {
-        expr => expr.foreach {
-          case s: SubqueryExpression => assertNoRecursiveCTE(s.plan)
-          case _ =>
-        }
-      }
-    }
-  }
-
   /**
    * Validate that collected metrics names are unique. The same name cannot be used for metrics
-   * with different results. However multiple instances of metrics with with same result and name
-   * are allowed (e.g. self-joins).
+   * with different results. However, multiple instances of metrics with same result and name are
+   * allowed (e.g. self-joins).
    */
   private def checkCollectedMetrics(plan: LogicalPlan): Unit = {
     val metricsMap = mutable.Map.empty[String, CollectMetrics]

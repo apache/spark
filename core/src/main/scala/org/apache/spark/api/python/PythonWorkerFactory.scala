@@ -130,12 +130,13 @@ private[spark] class PythonWorkerFactory(
         // Pull from idle workers until we one that is alive, otherwise create a new one.
         while (idleWorkers.nonEmpty) {
           val worker = idleWorkers.dequeue()
-          val workerHandle = daemonWorkers(worker)
-          if (workerHandle.isAlive()) {
-            try {
-              return (worker.refresh(), Some(workerHandle))
-            } catch {
-              case c: CancelledKeyException => /* pass */
+          daemonWorkers.get(worker).foreach { workerHandle =>
+            if (workerHandle.isAlive()) {
+              try {
+                return (worker.refresh(), Some(workerHandle))
+              } catch {
+                case _: CancelledKeyException => /* pass */
+              }
             }
           }
           logWarning(log"Worker ${MDC(WORKER, worker)} " +

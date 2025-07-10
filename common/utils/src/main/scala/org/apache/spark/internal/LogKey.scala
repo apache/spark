@@ -291,6 +291,7 @@ private[spark] object LogKeys {
   case object FINAL_PATH extends LogKey
   case object FINISH_TIME extends LogKey
   case object FINISH_TRIGGER_DURATION extends LogKey
+  case object FLOW_NAME extends LogKey
   case object FREE_MEMORY_SIZE extends LogKey
   case object FROM_OFFSET extends LogKey
   case object FROM_TIME extends LogKey
@@ -486,6 +487,7 @@ private[spark] object LogKeys {
   case object NUM_DRIVERS extends LogKey
   case object NUM_DROPPED_PARTITIONS extends LogKey
   case object NUM_EFFECTIVE_RULE_OF_RUNS extends LogKey
+  case object NUM_ELEMENTS_SPILL_RECORDS extends LogKey
   case object NUM_ELEMENTS_SPILL_THRESHOLD extends LogKey
   case object NUM_EVENTS extends LogKey
   case object NUM_EXAMPLES extends LogKey
@@ -767,6 +769,8 @@ private[spark] object LogKeys {
   case object SPARK_REPO_URL extends LogKey
   case object SPARK_REVISION extends LogKey
   case object SPARK_VERSION extends LogKey
+  case object SPILL_RECORDS_SIZE extends LogKey
+  case object SPILL_RECORDS_SIZE_THRESHOLD extends LogKey
   case object SPILL_TIMES extends LogKey
   case object SQL_TEXT extends LogKey
   case object SRC_PATH extends LogKey

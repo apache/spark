@@ -56,7 +56,11 @@ trait KeepAnalyzedQuery extends Command {
 /**
  * Base trait for DataSourceV2 write commands
  */
-trait V2WriteCommand extends UnaryCommand with KeepAnalyzedQuery with CTEInChildren {
+trait V2WriteCommand
+    extends UnaryCommand
+    with KeepAnalyzedQuery
+    with CTEInChildren
+    with IgnoreCachedData {
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean

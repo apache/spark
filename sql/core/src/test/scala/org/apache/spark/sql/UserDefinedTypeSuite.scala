@@ -22,7 +22,7 @@ import java.util.Arrays
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.{Cast, CodegenObjectFactoryMode, ExpressionEvalHelper, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, CodegenObjectFactoryMode, ExpressionEvalHelper, Literal, SpecificInternalRow}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -245,6 +245,19 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
     checkEvaluation(ret, "(1.0, 3.0, 5.0, 7.0, 9.0)")
   }
 
+  test("SPARK-52583: Cast UserDefinedType to string with custom stringifyValue") {
+    val udt = new TestUDT.MyDenseVectorUDT() {
+      override def stringifyValue(obj: Any): String = {
+        val v = obj.asInstanceOf[TestUDT.MyDenseVector]
+        v.toString.stripPrefix("(").stripSuffix(")")
+      }
+    }
+    val vector = new TestUDT.MyDenseVector(Array(1.0, 3.0, 5.0, 7.0, 9.0))
+    val data = udt.serialize(vector)
+    val ret = Cast(Literal(data, udt), StringType, None)
+    checkEvaluation(ret, "1.0, 3.0, 5.0, 7.0, 9.0")
+  }
+
   test("SPARK-28497 Can't up cast UserDefinedType to string") {
     val udt = new TestUDT.MyDenseVectorUDT()
     assert(!Cast.canUpCast(udt, StringType))
@@ -298,5 +311,12 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
         }
       }
     }
+  }
+
+  test("SPARK-52666: Map UDT to correct MutableValue in SpecificInternalRow") {
+    val udt = new YearUDT()
+    val row = new SpecificInternalRow(Seq(udt))
+    row.setInt(0, udt.serialize(Year.of(2018)))
+    assert(row.getInt(0) == 2018)
   }
 }

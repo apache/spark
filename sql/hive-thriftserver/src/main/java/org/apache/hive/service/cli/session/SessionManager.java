@@ -43,6 +43,7 @@ import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
+import org.apache.spark.util.Utils;
 
 /**
  * SessionManager.
@@ -126,7 +127,7 @@ public class SessionManager extends CompositeService {
     }
 
     if (!operationLogRootDir.exists()) {
-      if (!operationLogRootDir.mkdirs()) {
+      if (!Utils.createDirectory(operationLogRootDir)) {
         LOG.warn("Unable to create operation log root directory: {}",
           MDC.of(LogKeys.PATH$.MODULE$, operationLogRootDir.getAbsolutePath()));
         isOperationLogEnabled = false;

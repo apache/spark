@@ -904,7 +904,7 @@ class SparkSubmitSuite
     // compile a small jar containing a class that will be called from R code.
     withTempDir { tempDir =>
       val srcDir = new File(tempDir, "sparkrtest")
-      srcDir.mkdirs()
+      Utils.createDirectory(srcDir)
       val excSource = new JavaSourceFromString(new File(srcDir, "DummyClass").toURI.getPath,
         """package sparkrtest;
         |

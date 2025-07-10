@@ -455,7 +455,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("SPARK-22585 addJar argument without scheme is interpreted literally without url decoding") {
     withTempDir { dir =>
       val tmpDir = new File(dir, "host%3A443")
-      tmpDir.mkdirs()
+      Utils.createDirectory(tmpDir)
       val tmpJar = File.createTempFile("t%2F", ".jar", tmpDir)
 
       sc = new SparkContext("local", "test")

@@ -27,12 +27,11 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedAttribute
 }
 import org.apache.spark.sql.catalyst.expressions.{
+  Alias,
   AttributeReference,
   Expression,
   ExprId,
   ExprUtils,
-  IntegerLiteral,
-  Literal,
   NamedExpression
 }
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
@@ -69,7 +68,9 @@ class AggregateResolver(operatorResolver: Resolver, expressionResolver: Expressi
    * output of [[Aggregate]] and return the result.
    */
   def resolve(unresolvedAggregate: Aggregate): LogicalPlan = {
-    val resolvedAggregate = scopes.withNewScope() {
+    scopes.pushScope()
+
+    val resolvedAggregate = try {
       val resolvedChild = operatorResolver.resolve(unresolvedAggregate.child)
 
       val resolvedAggregateExpressions = expressionResolver.resolveAggregateExpressions(
@@ -124,9 +125,11 @@ class AggregateResolver(operatorResolver: Resolver, expressionResolver: Expressi
           operator = resolvedAggregate,
           outputList = resolvedAggregate.aggregateExpressions,
           groupingAttributeIds = Some(getGroupingAttributeIds(resolvedAggregate)),
-          aggregateListAliases = scopes.current.getAggregateListAliases
+          aggregateListAliases = scopes.current.getTopAggregateExpressionAliases
         )
       }
+    } finally {
+      scopes.popScope()
     }
 
     scopes.overwriteOutputAndExtendHiddenOutput(
@@ -179,10 +182,13 @@ class AggregateResolver(operatorResolver: Resolver, expressionResolver: Expressi
    *
    * Example 5:
    *
-   * {{{ SELECT col1, 5 FROM VALUES(1) GROUP BY ALL; }}}
-   * this one should be grouped by keyword `ALL`. If there is an aggregate expression which is a
-   * [[Literal]] with the Integer data type - preserve the ordinal literal in order to pass logical
-   * plan comparison. The grouping expressions list will be [col1, 2].
+   * {{{ SELECT col1 AS b, sum(col2) + col1 FROM VALUES (1, 2) GROUP BY ALL; }}}
+   * this one should be grouped by keyword `ALL`. It means that the grouping expressions list is
+   * going to contain all the aggregate expressions that don't have aggregate expressions in their
+   * subtrees. The grouping expressions list will be [col1 AS `col1`].
+   * All the [[Alias]]es should be stripped in order to pass logical plan comparison and to prevent
+   * unintentional exceptions from being thrown by [[ExprUtils.assertValidAggregation]], so the
+   * final grouping expressions list will be [col1].
    */
   private def tryResolveGroupByAll(
       aggregateExpressions: ResolvedAggregateExpressions,
@@ -195,13 +201,10 @@ class AggregateResolver(operatorResolver: Resolver, expressionResolver: Expressi
       )
     }
 
-    aggregateExpressions.resolvedExpressionsWithoutAggregates.zipWithIndex.map {
-      case (expression, index) =>
-        expression match {
-          case IntegerLiteral(_) =>
-            Literal(index + 1)
-          case _ => expression
-        }
+    aggregateExpressions.resolvedExpressionsWithoutAggregates.map {
+      case alias: Alias =>
+        alias.child
+      case other => other
     }
   }
 
