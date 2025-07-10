@@ -22,7 +22,6 @@ import java.lang.reflect.Modifier
 import scala.reflect.{classTag, ClassTag}
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{Codec, JavaSerializationCodec, KryoSerializationCodec, RowEncoder => SchemaInference}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
