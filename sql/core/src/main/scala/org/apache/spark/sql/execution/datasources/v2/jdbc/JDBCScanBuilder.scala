@@ -123,16 +123,27 @@ case class JDBCScanBuilder(
     }
   }
 
-  // TODO: We should check that credentials are same in case they are not the part of URL. We should
-  // also check if joins are done on 2 tables from 2 different databases withing same host. These
-  // shouldn't be allowed.
+  // TODO: currently we check that all the options are same (besides dbtable and query options).
+  // That is too strict, so in the future we should relax this check by asserting only specific
+  // options are some (e.g. host, port, username, password, database...).
+  // Also, we need to check if join is done on 2 tables from 2 different databases within same
+  // host. These shouldn't be allowed.
   override def isOtherSideCompatibleForJoin(other: SupportsPushDownJoin): Boolean = {
-    if (!jdbcOptions.pushDownJoin || !dialect.supportsJoin) {
+    if (!jdbcOptions.pushDownJoin ||
+        !dialect.supportsJoin ||
+        !other.isInstanceOf[JDBCScanBuilder]) {
       return false
     }
 
-    other.isInstanceOf[JDBCScanBuilder] &&
-      jdbcOptions.url == other.asInstanceOf[JDBCScanBuilder].jdbcOptions.url
+    val filteredJDBCOptions = jdbcOptions.parameters -
+      JDBCOptions.JDBC_TABLE_NAME -
+      JDBCOptions.JDBC_QUERY_STRING
+
+    val otherSideFilteredJDBCOptions = other.asInstanceOf[JDBCScanBuilder].jdbcOptions.parameters -
+      JDBCOptions.JDBC_TABLE_NAME -
+      JDBCOptions.JDBC_QUERY_STRING
+
+    filteredJDBCOptions == otherSideFilteredJDBCOptions
   };
 
   /**
