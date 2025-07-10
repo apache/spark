@@ -63,10 +63,24 @@ object JDBCDatabaseMetadata extends Logging {
    * Creates a DatabaseMetadata instance from a JDBC Connection,
    * handling errors for each field individually.
    *
-   * @param conn The active database connection.
+   * @param getConnection A JDBC connection factory.
    * @return A new instance of DatabaseMetadata containing the version metadata.
    */
-  def fromJDBCConnection(conn: Connection): JDBCDatabaseMetadata = {
+  def fromJDBCConnectionFactory(getConnection: Int => Connection): JDBCDatabaseMetadata = {
+    var conn: Connection = null
+
+    def closeConnection(): Unit = {
+      try {
+        if (null != conn) {
+          conn.close()
+        }
+        logInfo("closed connection during metadata fetch")
+      } catch {
+        case e: Exception => logWarning("Exception closing connection during metadata fetch", e)
+      }
+    }
+
+    conn = getConnection(-1)
     try {
       // getMetaData itself can throw, so we catch that and return None for all fields
       val databaseMetadata = conn.getMetaData
@@ -82,7 +96,7 @@ object JDBCDatabaseMetadata extends Logging {
         logWarning(log"Exception while getting database metadata object from connection", e)
         JDBCDatabaseMetadata(None, None, None, None)
     } finally {
-      conn.close()
+      closeConnection()
     }
   }
 }

@@ -150,7 +150,7 @@ object JDBCRDD extends Logging {
       parts,
       url,
       options,
-      databaseMetadata = JDBCDatabaseMetadata.fromJDBCConnection(connectionFactory(-1)),
+      databaseMetadata = JDBCDatabaseMetadata.fromJDBCConnectionFactory(connectionFactory),
       groupByColumns,
       sample,
       limit,
