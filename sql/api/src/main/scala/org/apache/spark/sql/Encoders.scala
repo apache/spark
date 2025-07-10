@@ -22,6 +22,7 @@ import java.lang.reflect.Modifier
 import scala.reflect.{classTag, ClassTag}
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{Codec, JavaSerializationCodec, KryoSerializationCodec, RowEncoder => SchemaInference}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
@@ -368,4 +369,13 @@ object Encoders {
    */
   def scalaBoolean: Encoder[Boolean] = PrimitiveBooleanEncoder
 
+  /**
+   * An encoder for UserDefinedType.
+   * @since 4.1.0
+   */
+  @DeveloperApi
+  @Since("4.1.0")
+  def udt[T >: Null](tpe: UserDefinedType[T]): Encoder[T] = {
+    UDTEncoder(tpe)
+  }
 }
