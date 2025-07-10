@@ -360,8 +360,8 @@ class QueryExecutionSuite extends SharedSparkSession {
         assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
         assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
         cleanupShuffles()
+        }
       }
-    }
     }
   }
 
