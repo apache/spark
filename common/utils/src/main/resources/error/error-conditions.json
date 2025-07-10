@@ -4520,7 +4520,7 @@
     "sqlState" : "42S22"
   },
   "NO_TABLES_IN_PIPELINE" : {
-    "message": [
+    "message" : [
       "Pipelines are expected to have at least one table defined but no tables were found in your pipeline.",
       "Please verify that you have included the expected source files, and that your source code includes table definitions (e.g., CREATE MATERIALIZED VIEW in SQL code, @sdp.table in python code).",
       "",
