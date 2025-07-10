@@ -87,14 +87,17 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
     if (!structFieldNames.contains("sketch")) {
       TypeCheckFailure("State struct must contain a field named 'sketch'.")
     } else if (stateStructType("sketch").dataType != BinaryType) {
-      TypeCheckFailure("'sketch' field of state struct must be of BinaryType. " +
+      TypeCheckFailure("'sketch' field type of state struct must be binary. " +
         "Got: " + stateStructType("sketch").dataType.simpleString)
     } else if (!structFieldNames.contains("itemDataType")) {
       TypeCheckFailure("State struct must contain a field named 'itemDataType'.")
+    } else if (!ApproxTopK.isDataTypeSupported(stateStructType("itemDataType").dataType)) {
+      TypeCheckFailure("'itemDataType' field type of state struct must be a supported data type. " +
+        "Got: " + stateStructType("itemDataType").dataType.simpleString)
     } else if (!structFieldNames.contains("maxItemsTracked")) {
       TypeCheckFailure("State struct must contain a field named 'maxItemsTracked'.")
     } else if (stateStructType("maxItemsTracked").dataType != IntegerType) {
-      TypeCheckFailure("'maxItemsTracked' field of state struct must be of IntegerType. " +
+      TypeCheckFailure("'maxItemsTracked' field type of state struct must be of int. " +
         "Got: " + stateStructType("maxItemsTracked").dataType.simpleString)
     } else {
       TypeCheckSuccess

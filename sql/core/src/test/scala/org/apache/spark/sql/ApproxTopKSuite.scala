@@ -508,8 +508,8 @@ class ApproxTopKSuite extends QueryTest
   }
 
   test("SPARK-52588state: invalid estimate if state struct does not have 'sketch' field") {
-    val invalidState = "named_struct('notSketch', X'01', 'itemDataType', CAST(NULL AS INT), " +
-      "'maxItemsTracked', 10)"
+    val invalidState =
+      "named_struct('notSketch', X'01', 'itemDataType', CAST(NULL AS INT), 'maxItemsTracked', 10)"
     checkError(
       exception = intercept[ExtendedAnalysisException] {
         sql(s"SELECT approx_top_k_estimate($invalidState, 5);")
@@ -523,6 +523,68 @@ class ApproxTopKSuite extends QueryTest
       ),
       queryContext = Array(ExpectedContext(s"approx_top_k_estimate($invalidState, 5)", 7, 122))
     )
+  }
+
+  test("SPARK-52588state: invalid estimate if 'sketch' field is not binary") {
+    val invalidState =
+      "named_struct('sketch', 1, 'itemDataType', CAST(NULL AS INT), 'maxItemsTracked', 10)"
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        sql(s"SELECT approx_top_k_estimate($invalidState, 5);")
+      },
+      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+      parameters = Map(
+        "sqlExpr" -> ("\"approx_top_k_estimate(named_struct(sketch, 1, itemDataType, " +
+          "CAST(NULL AS INT), maxItemsTracked, 10), 5)\""),
+        "msg" -> "'sketch' field type of state struct must be binary. Got: int",
+        "hint" -> ""
+      ),
+      queryContext = Array(ExpectedContext(s"approx_top_k_estimate($invalidState, 5)", 7, 115))
+    )
+  }
+
+  test("SPARK-52588state: invalid estimate if state struct does not have 'itemDataType' field") {
+    val invalidState =
+      "named_struct('sketch', X'01', 'notItemDataType', CAST(NULL AS INT), 'maxItemsTracked', 10)"
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        sql(s"SELECT approx_top_k_estimate($invalidState, 5);")
+      },
+      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+      parameters = Map(
+        "sqlExpr" -> ("\"approx_top_k_estimate(named_struct(sketch, X'01', notItemDataType, " +
+          "CAST(NULL AS INT), maxItemsTracked, 10), 5)\""),
+        "msg" -> "State struct must contain a field named 'itemDataType'.",
+        "hint" -> ""
+      ),
+      queryContext = Array(ExpectedContext(s"approx_top_k_estimate($invalidState, 5)", 7, 122))
+    )
+  }
+
+  test("SPARK-52588state: invalid estimate if 'itemDataType' field is not supported data type") {
+    val invalidState =
+      "named_struct('sketch', X'01', 'itemDataType', CAST(NULL AS BINARY), 'maxItemsTracked', 10)"
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        sql(s"SELECT approx_top_k_estimate($invalidState, 5);")
+      },
+      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+      parameters = Map(
+        "sqlExpr" -> ("\"approx_top_k_estimate(named_struct(sketch, X'01', itemDataType, " +
+          "CAST(NULL AS BINARY), maxItemsTracked, 10), 5)\""),
+        "msg" -> ("'itemDataType' field type of state struct must be a supported data type. " +
+          "Got: binary"),
+        "hint" -> ""
+      ),
+      queryContext = Array(ExpectedContext(s"approx_top_k_estimate($invalidState, 5)", 7, 122))
+    )
+  }
+
+  test("SPARK-52588state: invalid estimate if state struct does not have 'maxItemsTracked' field") {
+
+  }
+
+  test("SPARK-52588state: invalid estimate if 'maxItemsTracked' field is not int") {
 
   }
 
