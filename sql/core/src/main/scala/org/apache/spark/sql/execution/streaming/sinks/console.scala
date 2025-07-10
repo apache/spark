@@ -64,7 +64,7 @@ object ConsoleTable extends Table with SupportsWrite {
 
   override def name(): String = "console"
 
-  override def schema(): StructType = StructType(Nil)
+  override def columns(): Array[Column] = Array.empty
 
   override def capabilities(): util.Set[TableCapability] = {
     util.EnumSet.of(TableCapability.STREAMING_WRITE)

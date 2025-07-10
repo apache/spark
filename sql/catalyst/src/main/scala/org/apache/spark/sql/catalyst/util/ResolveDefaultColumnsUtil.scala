@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
-import org.apache.spark.sql.connector.catalog.{CatalogManager, DefaultValue, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultValue, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
@@ -572,6 +572,15 @@ object ResolveDefaultColumns extends QueryErrorsBase
     }
     rows.toSeq
   }
+
+  /** If any fields in a schema have default values, appends them to the result. */
+  def getDescribeMetadata(cols: Array[Column]): Seq[(String, String, Any)] = {
+    cols.filter(_.defaultValue() != null).flatMap { col =>
+      ("", "", "") :: ("# Column Default Values", "", "") ::
+        (col.name, col.dataType.simpleString, col.defaultValue().getValue.value()) :: Nil
+    }.toSeq
+  }
+
 
   /**
    * These define existence default values for the struct fields for efficiency purposes.

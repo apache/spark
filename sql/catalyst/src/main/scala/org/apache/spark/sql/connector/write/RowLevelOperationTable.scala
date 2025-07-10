@@ -38,7 +38,6 @@ private[sql] case class RowLevelOperationTable(
     operation: RowLevelOperation) extends Table with SupportsRead with SupportsWrite {
 
   override def name: String = table.name
-  override def schema: StructType = table.schema
   override def columns: Array[Column] = table.columns()
   override def capabilities: util.Set[TableCapability] = table.capabilities
   override def constraints(): Array[Constraint] = table.constraints()

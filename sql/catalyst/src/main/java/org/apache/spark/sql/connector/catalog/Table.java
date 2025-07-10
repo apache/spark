@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.constraints.Constraint;
 import org.apache.spark.sql.connector.expressions.Transform;
+import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.types.StructType;
 
 import java.util.Collections;
@@ -56,7 +57,9 @@ public interface Table {
    * @deprecated This is deprecated. Please override {@link #columns} instead.
    */
   @Deprecated(since = "3.4.0")
-  StructType schema();
+  default StructType schema() {
+    throw QueryCompilationErrors.mustOverrideOneMethodError("columns");
+  }
 
   /**
    * Returns the columns of this table. If the table is not readable and doesn't have a schema, an
