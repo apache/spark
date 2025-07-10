@@ -93,7 +93,7 @@ class SparkDeclarativePipelinesServerSuite
                 .setDataflowGraphId(graphId)
                 .setFlowName("mv")
                 .setTargetDatasetName("mv")
-                .setPlan(
+                .setRelation(
                   Relation
                     .newBuilder()
                     .setUnresolvedTableValuedFunction(
