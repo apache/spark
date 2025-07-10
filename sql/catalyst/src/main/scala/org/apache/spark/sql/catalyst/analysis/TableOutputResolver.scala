@@ -570,7 +570,16 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
     val canWriteExpr = canWrite(
       tableName, queryExpr.dataType, attrTypeWithoutCharVarchar,
-      byName, conf, addError, colPath)
+      byName, conf, errorMsg => {
+        val colName = colPath.lastOption.getOrElse(tableAttr.name)
+        addError(QueryCompilationErrors.insertIntoSchemaMismatchError(
+        colName,
+        queryExpr.dataType.simpleString,
+        tableAttr.name,
+        attrTypeWithoutCharVarchar.simpleString
+        ))
+      }
+      , colPath)
 
     if (canWriteExpr) outputField else None
   }

@@ -576,6 +576,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = t.origin)
   }
 
+  def insertIntoSchemaMismatchError(
+    columnName: String,
+    sourceType: String,
+    targetColumnName: String,
+    targetType: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = "INSERT_INTO_SCHEMA_MISMATCH",
+      messageParameters = Map(
+        "columnName" -> columnName,
+        "sourceType" -> sourceType,
+        "targetColumnName" -> targetColumnName,
+        "targetType" -> targetType
+        )
+    )
+  }
+
+
   def writeIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1011",
