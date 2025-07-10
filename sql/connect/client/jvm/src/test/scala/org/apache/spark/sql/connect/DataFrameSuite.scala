@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions.{concat, lit, when}
 
@@ -41,5 +42,17 @@ class DataFrameSuite extends QueryTest with RemoteSparkSession {
 
     assert(df4.columns === Array("colA", "colB", "colC", "colC", "colD", "colE"))
     assert(df4.count() === 1)
+  }
+
+  test("lazy column validation") {
+    val session = spark
+    import session.implicits._
+
+    val df1 = Seq(1 -> "y").toDF("a", "y")
+    val df2 = Seq(1 -> "x").toDF("a", "x")
+    val df3 = df1.join(df2, df1("a") === df2("a"))
+    val df4 = df3.select(df1("x")) // <- No exception here
+
+    intercept[AnalysisException] { df4.schema }
   }
 }
