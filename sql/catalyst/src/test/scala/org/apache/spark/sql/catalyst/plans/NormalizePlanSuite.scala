@@ -86,17 +86,18 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
     val baselineRankAttr = baselineInnerWindow.output.find(_.name == "rank").get
     val testRankAttr = testInnerWindow.output.find(_.name == "rank").get
 
-    val baselinePlan = baselineInnerWindow.window(
-      Seq(RowNumber().over(Seq(col3), Seq(baselineRankAttr.asc), frame).as("row_num")),
-      Seq(col3),
-      Seq(baselineRankAttr.asc)
-    )
+    val baselineOuterSpec = WindowSpecDefinition(Seq(col3), Seq(baselineRankAttr.asc), frame)
+    val baselineRowNumberExpression = WindowExpression(RowNumber(), baselineOuterSpec).as("row_num")
 
-    val testPlan = testInnerWindow.window(
-      Seq(RowNumber().over(Seq(col3), Seq(testRankAttr.asc), frame).as("row_num")),
-      Seq(col3),
-      Seq(testRankAttr.asc)
-    )
+    val testOuterSpec = WindowSpecDefinition(Seq(col3), Seq(testRankAttr.asc), frame)
+    val testRowNumberExpression = WindowExpression(RowNumber(), testOuterSpec).as("row_num")
+
+    val baselinePlan =
+      baselineInnerWindow.window(
+        Seq(baselineRowNumberExpression), Seq(col3), Seq(baselineRankAttr.asc)
+      )
+    val testPlan =
+      testInnerWindow.window(Seq(testRowNumberExpression), Seq(col3), Seq(testRankAttr.asc))
 
     assert(baselinePlan != testPlan)
     assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
@@ -192,7 +193,7 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
 
     // Before applying timezone, no timezone is set.
     testPlan.expressions.foreach {
-      case _ @ AssertTrue(firstCast: Cast, _, _ @ If(secondCast: Cast, _, _)) =>
+      case _@AssertTrue(firstCast: Cast, _, _@If(secondCast: Cast, _, _)) =>
         assert(firstCast.timeZoneId.isEmpty)
         assert(secondCast.timeZoneId.isEmpty)
       case _ =>
@@ -203,7 +204,7 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
 
     // After applying timezone, only the second cast gets timezone.
     resolvedTestPlan.expressions.foreach {
-      case _ @ AssertTrue(firstCast: Cast, _, _ @ If(secondCast: Cast, _, _)) =>
+      case _@AssertTrue(firstCast: Cast, _, _@If(secondCast: Cast, _, _)) =>
         assert(firstCast.timeZoneId.isEmpty)
         assert(secondCast.timeZoneId.isDefined)
       case _ =>
