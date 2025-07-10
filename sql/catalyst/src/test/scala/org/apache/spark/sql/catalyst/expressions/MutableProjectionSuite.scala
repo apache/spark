@@ -32,7 +32,8 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   val fixedLengthTypes = Array[DataType](
     BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
-    DateType, TimestampType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes
+    DateType, TimestampType, TimestampNTZType, new TimeType(6)) ++
+    dayTimeIntervalTypes ++ yearMonthIntervalTypes
 
   val variableLengthTypes = Array(
     StringType, DecimalType.defaultConcreteType, CalendarIntervalType, BinaryType,
@@ -46,7 +47,7 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   testBothCodegenAndInterpreted("fixed-length types") {
     val inputRow = InternalRow.fromSeq(Seq(
-      true, 3.toByte, 15.toShort, -83, 129L, 1.0f, 5.0, 1, 2L) ++
+      true, 3.toByte, 15.toShort, -83, 129L, 1.0f, 5.0, 1, 2L, 3L, 4L) ++
       Seq.tabulate(dayTimeIntervalTypes.length)(_ => Long.MaxValue) ++
       Seq.tabulate(yearMonthIntervalTypes.length)(_ => Int.MaxValue))
     val proj = createMutableProjection(fixedLengthTypes)
@@ -55,7 +56,7 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   testBothCodegenAndInterpreted("unsafe buffer") {
     val inputRow = InternalRow.fromSeq(Seq(
-      false, 1.toByte, 9.toShort, -18, 53L, 3.2f, 7.8, 4, 9L) ++
+      false, 1.toByte, 9.toShort, -18, 53L, 3.2f, 7.8, 4, 9L, 10L, 11L) ++
       Seq.tabulate(dayTimeIntervalTypes.length)(_ => Long.MaxValue) ++
       Seq.tabulate(yearMonthIntervalTypes.length)(_ => Int.MaxValue))
     val numFields = fixedLengthTypes.length

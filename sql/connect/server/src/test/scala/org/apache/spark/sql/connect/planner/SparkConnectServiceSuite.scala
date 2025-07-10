@@ -30,7 +30,6 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{BigIntVector, Float8Vector}
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.mockito.Mockito.when
-import org.scalatest.Tag
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar.convertIntToGrainOfTime
 import org.scalatestplus.mockito.MockitoSugar
@@ -894,13 +893,6 @@ class SparkConnectServiceSuite
       spark.sparkContext.removeSparkListener(verifyEvents.listener)
       SparkConnectService.sessionManager.invalidateAllSessions()
       SparkConnectPluginRegistry.reset()
-    }
-  }
-
-  protected def gridTest[A](testNamePrefix: String, testTags: Tag*)(params: Seq[A])(
-      testFun: A => Unit): Unit = {
-    for (param <- params) {
-      test(testNamePrefix + s" ($param)", testTags: _*)(testFun(param))
     }
   }
 

@@ -38,8 +38,13 @@ class InMemoryRowLevelOperationTable(
     partitioning: Array[Transform],
     properties: util.Map[String, String],
     constraints: Array[Constraint] = Array.empty)
-  extends InMemoryTable(name, schema, partitioning, properties, constraints)
-    with SupportsRowLevelOperations {
+  extends InMemoryTable(
+    name,
+    CatalogV2Util.structTypeToV2Columns(schema),
+    partitioning,
+    properties,
+    constraints)
+  with SupportsRowLevelOperations {
 
   private final val PARTITION_COLUMN_REF = FieldReference(PartitionKeyColumn.name)
   private final val INDEX_COLUMN_REF = FieldReference(IndexColumn.name)

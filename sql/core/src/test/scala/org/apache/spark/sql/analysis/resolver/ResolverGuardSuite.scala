@@ -181,7 +181,7 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
     checkResolverGuard("SELECT * FROM (SELECT * FROM (SELECT * FROM VALUES(1)))", shouldPass = true)
   }
 
-  for(setOperation <- Seq("UNION", "INTERSECT", "EXCEPT")) {
+  for (setOperation <- Seq("UNION", "INTERSECT", "EXCEPT")) {
     test(s"$setOperation ALL") {
       checkResolverGuard(
         s"SELECT * FROM VALUES(1) $setOperation ALL SELECT * FROM VALUES(2)",
@@ -277,6 +277,13 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
 
   test("DESCRIBE") {
     checkResolverGuard("DESCRIBE QUERY SELECT * FROM VALUES (1)", shouldPass = true)
+  }
+
+  test("HAVING") {
+    checkResolverGuard(
+      "SELECT col1 FROM VALUES(1) GROUP BY col1 HAVING col1 > 1",
+      shouldPass = true
+    )
   }
 
   // Queries that shouldn't pass the OperatorResolverGuard

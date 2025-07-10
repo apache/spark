@@ -128,6 +128,22 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+select 1 from "not_""exists"
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'\"not_\"\"exists\"'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
 SELECT 1 FROM `hello`
 -- !query schema
 struct<>

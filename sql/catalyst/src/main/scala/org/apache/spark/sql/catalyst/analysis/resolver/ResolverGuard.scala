@@ -19,11 +19,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.{
-  FunctionIdentifier,
-  SQLConfHelper,
-  SqlScriptingContextManager
-}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, SqlScriptingContextManager}
 import org.apache.spark.sql.catalyst.analysis.{
   FunctionRegistry,
   GetViewColumnByNameAndOrdinal,
@@ -31,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedAlias,
   UnresolvedAttribute,
   UnresolvedFunction,
+  UnresolvedHaving,
   UnresolvedInlineTable,
   UnresolvedOrdinal,
   UnresolvedRelation,
@@ -144,6 +141,8 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
         true
       case repartition: Repartition =>
         checkRepartition(repartition)
+      case having: UnresolvedHaving =>
+        checkHaving(having)
       case _ =>
         false
     }
@@ -363,6 +362,9 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
     checkOperator(repartition.child)
   }
 
+  private def checkHaving(having: UnresolvedHaving) =
+    checkExpression(having.havingCondition) && checkOperator(having.child)
+
   /**
    * Most of the expressions come from resolving the [[UnresolvedFunction]], but here we have some
    * popular expressions allowlist for two reasons:
@@ -448,6 +450,8 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
     } else if (conf.getConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY) !=
       LegacyBehaviorPolicy.CORRECTED) {
       Some("legacyCTEPrecedencePolicy")
+    } else if (conf.getConfString("pipelines.id", null) != null) {
+      Some("dlt")
     } else {
       None
     }
@@ -505,19 +509,24 @@ object ResolverGuard {
     map += ("array_sort", ())
     map += ("transform", ())
     // Functions that require generator support.
+    map += ("collations", ())
     map += ("explode", ())
     map += ("explode_outer", ())
     map += ("inline", ())
     map += ("inline_outer", ())
+    map += ("json_tuple", ())
     map += ("posexplode", ())
     map += ("posexplode_outer", ())
+    map += ("stack", ())
+    map += ("sql_keywords", ())
+    map += ("variant_explode", ())
+    map += ("variant_explode_outer", ())
     // Functions that require session/time window resolution.
     map += ("session_window", ())
     map += ("window", ())
     map += ("window_time", ())
     // Functions that are not resolved properly.
     map += ("collate", ())
-    map += ("json_tuple", ())
     // Functions that produce wrong schemas/plans because of alias assignment.
     map += ("from_json", ())
     map += ("schema_of_json", ())

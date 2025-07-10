@@ -264,9 +264,9 @@ private class PartitionFileExistCommitProtocol(
   override def setupJob(jobContext: JobContext): Unit = {
     super.setupJob(jobContext)
     val stagingDir = new File(new Path(path).toUri.getPath, s".spark-staging-$jobId")
-    stagingDir.mkdirs()
+    Utils.createDirectory(stagingDir)
     val stagingPartDir = new File(stagingDir, "p1=2")
-    stagingPartDir.mkdirs()
+    Utils.createDirectory(stagingPartDir)
     val conflictTaskFile = new File(stagingPartDir, s"part-00000-$jobId.c000.snappy.parquet")
     conflictTaskFile.createNewFile()
   }

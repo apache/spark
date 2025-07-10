@@ -1484,4 +1484,27 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(Literal.create("23:59:59.000001     "),
       TimeType(6)), localTime(23, 59, 59, 1))
   }
+
+  test("cast time to time") {
+    checkEvaluation(cast(Literal(localTime(), TimeType(0)), TimeType(0)), 0L)
+    checkEvaluation(cast(Literal(localTime(0, 0, 0, 1), TimeType(6)), TimeType(6)),
+      localTime(0, 0, 0, 1))
+    checkEvaluation(cast(Literal(localTime(0, 0, 0, 19), TimeType(6)), TimeType(5)),
+      localTime(0, 0, 0, 10))
+    checkEvaluation(cast(Literal(localTime(23, 59, 59, 999990), TimeType(5)), TimeType(6)),
+      localTime(23, 59, 59, 999990))
+    checkEvaluation(cast(Literal(localTime(23, 59, 59, 999999), TimeType(6)), TimeType(5)),
+      localTime(23, 59, 59, 999990))
+    checkEvaluation(cast(Literal(localTime(11, 58, 59, 123400), TimeType(4)), TimeType(5)),
+      localTime(11, 58, 59, 123400))
+    checkEvaluation(cast(Literal(localTime(19, 2, 3, 765000), TimeType(3)), TimeType(2)),
+      localTime(19, 2, 3, 760000))
+
+    for (sp <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+      for (tp <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (child: Expression) => Cast(child, TimeType(sp)), TimeType(tp))
+      }
+    }
+  }
 }

@@ -28,6 +28,7 @@ from pyspark.sql.streaming.stateful_processor import (
     StatefulProcessorHandle,
     TimerValues,
 )
+from pyspark.sql.streaming.stateful_processor_api_client import ExpiredTimerIterator
 from pyspark.sql.types import Row
 
 if TYPE_CHECKING:
@@ -218,24 +219,19 @@ class TransformWithStateInPandasUdfUtils:
         )
 
         if self._time_mode.lower() == "processingtime":
-            expiry_list_iter = stateful_processor_api_client.get_expiry_timers_iterator(
-                batch_timestamp
-            )
+            expiry_iter = ExpiredTimerIterator(stateful_processor_api_client, batch_timestamp)
         elif self._time_mode.lower() == "eventtime":
-            expiry_list_iter = stateful_processor_api_client.get_expiry_timers_iterator(
-                watermark_timestamp
-            )
+            expiry_iter = ExpiredTimerIterator(stateful_processor_api_client, watermark_timestamp)
         else:
-            expiry_list_iter = iter([[]])
+            expiry_iter = iter([])  # type: ignore[assignment]
 
         # process with expiry timers, only timer related rows will be emitted
-        for expiry_list in expiry_list_iter:
-            for key_obj, expiry_timestamp in expiry_list:
-                stateful_processor_api_client.set_implicit_key(key_obj)
-                for pd in self._stateful_processor.handleExpiredTimer(
-                    key=key_obj,
-                    timerValues=TimerValues(batch_timestamp, watermark_timestamp),
-                    expiredTimerInfo=ExpiredTimerInfo(expiry_timestamp),
-                ):
-                    yield pd
-                stateful_processor_api_client.delete_timer(expiry_timestamp)
+        for key_obj, expiry_timestamp in expiry_iter:
+            stateful_processor_api_client.set_implicit_key(key_obj)
+            for pd in self._stateful_processor.handleExpiredTimer(
+                key=key_obj,
+                timerValues=TimerValues(batch_timestamp, watermark_timestamp),
+                expiredTimerInfo=ExpiredTimerInfo(expiry_timestamp),
+            ):
+                yield pd
+            stateful_processor_api_client.delete_timer(expiry_timestamp)

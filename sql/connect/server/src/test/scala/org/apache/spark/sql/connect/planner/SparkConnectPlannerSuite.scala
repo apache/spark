@@ -120,7 +120,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
 class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Simple Limit") {
-    assertThrows[IndexOutOfBoundsException] {
+    assertThrows[InvalidPlanInput] {
       new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(None.orNull))
         .transformRelation(
           proto.Relation.newBuilder
@@ -131,14 +131,20 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("InvalidInputs") {
     // No Relation Set
-    intercept[IndexOutOfBoundsException](
+    val notSetException = intercept[InvalidPlanInput](
       new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(None.orNull))
         .transformRelation(proto.Relation.newBuilder().build()))
+    assert(
+      notSetException.getMessage.contains(
+        "This oneOf field in spark.connect.Relation is not set: RELTYPE_NOT_SET"))
 
-    intercept[InvalidPlanInput](
+    val notSupportedException = intercept[InvalidPlanInput](
       new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(None.orNull))
         .transformRelation(
           proto.Relation.newBuilder.setUnknown(proto.Unknown.newBuilder().build()).build()))
+    assert(
+      notSupportedException.getMessage.contains(
+        "This oneOf field message in spark.connect.Relation is not supported: UNKNOWN(999)"))
   }
 
   test("Simple Read") {
@@ -195,7 +201,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val sort = proto.Sort.newBuilder
       .addAllOrder(Seq(proto.Expression.SortOrder.newBuilder().build()).asJava)
       .build()
-    intercept[IndexOutOfBoundsException](
+    intercept[InvalidPlanInput](
       transform(proto.Relation.newBuilder().setSort(sort).build()),
       "No Input set.")
 
@@ -243,7 +249,9 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val msg = intercept[InvalidPlanInput] {
       transform(union)
     }
-    assert(msg.getMessage.contains("Unsupported set operation"))
+    assert(
+      msg.getMessage.contains("This enum value of spark.connect.SetOperation.SetOpType " +
+        "is invalid: SET_OP_TYPE_UNSPECIFIED(0)"))
 
     val res = transform(
       proto.Relation.newBuilder

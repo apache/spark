@@ -51,7 +51,7 @@ import com.google.common.net.InetAddresses
 import jakarta.ws.rs.core.UriBuilder
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.io.IOUtils
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
+import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
@@ -458,7 +458,7 @@ private[spark] object Utils
    * to work around a security issue, see also SPARK-38631.
    */
   private def unTarUsingJava(source: File, dest: File): Unit = {
-    if (!dest.mkdirs && !dest.isDirectory) {
+    if (!Utils.createDirectory(dest) && !dest.isDirectory) {
       throw new IOException(s"Mkdirs failed to create $dest")
     } else {
       try {
@@ -810,19 +810,18 @@ private[spark] object Utils
     configuredLocalDirs.flatMap { root =>
       try {
         val rootDir = new File(root)
-        if (rootDir.exists || rootDir.mkdirs()) {
+        if (rootDir.exists || Utils.createDirectory(rootDir)) {
           val dir = createTempDir(root)
           chmod700(dir)
           Some(dir.getAbsolutePath)
         } else {
           logError(log"Failed to create dir in ${MDC(PATH, root)}. Ignoring this directory.")
-
           None
         }
       } catch {
         case e: IOException =>
           logError(
-            log"Failed to create local root dir in ${MDC(PATH, root)}. Ignoring this directory.")
+            log"Failed to create local root dir in ${MDC(PATH, root)}. Ignoring this directory.", e)
           None
       }
     }
@@ -1869,9 +1868,14 @@ private[spark] object Utils
   val isMac = SystemUtils.IS_OS_MAC_OSX
 
   /**
+   * Whether the underlying Java version is at most 17.
+   */
+  val isJavaVersionAtMost17 = Runtime.version().feature() <= 17
+
+  /**
    * Whether the underlying Java version is at least 21.
    */
-  val isJavaVersionAtLeast21 = SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_21)
+  val isJavaVersionAtLeast21 = Runtime.version().feature() >= 21
 
   /**
    * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
@@ -3056,9 +3060,9 @@ private[spark] object Utils
   }
 
   /** Returns a string message about delegation token generation failure */
-  def createFailedToGetTokenMessage(serviceName: String, e: scala.Throwable): MessageWithContext = {
-    log"Failed to get token from service ${MDC(SERVICE_NAME, serviceName)} " +
-      log"due to ${MDC(ERROR, e)}. If ${MDC(SERVICE_NAME, serviceName)} is not used, " +
+  def createFailedToGetTokenMessage(serviceName: String): MessageWithContext = {
+    log"Failed to get token from service ${MDC(SERVICE_NAME, serviceName)}. " +
+      log"If ${MDC(SERVICE_NAME, serviceName)} is not used, " +
       log"set spark.security.credentials.${MDC(SERVICE_NAME, serviceName)}.enabled to false."
   }
 

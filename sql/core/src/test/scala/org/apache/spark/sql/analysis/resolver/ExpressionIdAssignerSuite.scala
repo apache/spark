@@ -52,8 +52,8 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       assigner.mapExpression(col1Integer)
     }
 
-    assigner.withNewMapping() {
-      assigner.withNewMapping() {
+    withNewMapping(assigner) {
+      withNewMapping(assigner) {
         intercept[SparkException] {
           assigner.mapExpression(col1Integer)
         }
@@ -69,8 +69,8 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       assigner.createMappingForLeafOperator(newOperator = LocalRelation())
     }
 
-    assigner.withNewMapping() {
-      assigner.withNewMapping() {
+    withNewMapping(assigner) {
+      withNewMapping(assigner) {
         assigner.createMappingForLeafOperator(newOperator = LocalRelation())
 
         intercept[SparkException] {
@@ -107,20 +107,10 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Collect child mappings without creating a lower mapping first") {
-    val assigner = new ExpressionIdAssigner
-
-    assigner.withNewMapping() {}
-
-    intercept[SparkException] {
-      assigner.withNewMapping(collectChildMapping = true) {}
-    }
-  }
-
   test("Create mapping from absent chid mappings") {
     val assigner = new ExpressionIdAssigner
 
-    assigner.withNewMapping() {
+    withNewMapping(assigner) {
       val oldOperator = LocalRelation(output = Seq(col1Integer))
 
       assigner.createMappingForLeafOperator(
@@ -137,7 +127,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
   test("Dangling references") {
     val assigner = new ExpressionIdAssigner
 
-    assigner.withNewMapping() {
+    withNewMapping(assigner) {
       assigner.createMappingForLeafOperator(newOperator = LocalRelation())
 
       intercept[SparkException] {
@@ -145,7 +135,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       }
     }
 
-    assigner.withNewMapping() {
+    withNewMapping(assigner) {
       val oldOperator = LocalRelation(output = Seq(col1Integer))
 
       assigner.createMappingForLeafOperator(
@@ -166,7 +156,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
   test("Single AttributeReference") {
     val assigner = new ExpressionIdAssigner
 
-    assigner.withNewMapping() {
+    withNewMapping(assigner) {
       val oldOperator = LocalRelation(output = Seq(col1Integer))
 
       assert(assigner.shouldPreserveLeafOperatorIds(oldOperator))
@@ -184,7 +174,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       assert(col1IntegerMappedReferenced.exprId == col1IntegerMapped.exprId)
     }
 
-    assigner.withNewMapping() {
+    withNewMapping(assigner) {
       val oldOperator = LocalRelation(output = Seq(col1Integer))
 
       val col1IntegerNew = col1Integer.newInstance()
@@ -210,7 +200,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
   test("Single Alias") {
     val assigner = new ExpressionIdAssigner
 
-    assigner.withNewMapping() {
+    withNewMapping(assigner) {
       val oldOperator = LocalRelation(output = Seq(col1Integer))
 
       assert(assigner.shouldPreserveLeafOperatorIds(oldOperator))
@@ -238,7 +228,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       assert(col1IntegerAliasMappedAgain.exprId != col1IntegerAliasMapped.exprId)
     }
 
-    assigner.withNewMapping() {
+    withNewMapping(assigner) {
       val oldOperator = LocalRelation(output = Seq(col1Integer))
 
       assert(!assigner.shouldPreserveLeafOperatorIds(oldOperator))
@@ -266,7 +256,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
   test("Duplicate Alias") {
     val assigner = new ExpressionIdAssigner
 
-    assigner.withNewMapping() {
+    withNewMapping(assigner) {
       val oldOperator = LocalRelation(output = Seq(col1Integer))
 
       assert(assigner.shouldPreserveLeafOperatorIds(oldOperator))
@@ -297,7 +287,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
   test("Duplicate Alias deprioritized") {
     val assigner = new ExpressionIdAssigner
 
-    assigner.withNewMapping() {
+    withNewMapping(assigner) {
       val oldOperator = LocalRelation(output = Seq(col1Integer))
 
       assert(assigner.shouldPreserveLeafOperatorIds(oldOperator))
@@ -327,7 +317,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
   test("Attributes and aliases") {
     val assigner = new ExpressionIdAssigner
 
-    assigner.withNewMapping() {
+    withNewMapping(assigner) {
       val oldOperator = LocalRelation(output = Seq(col1Integer, col2Integer))
 
       assert(assigner.shouldPreserveLeafOperatorIds(oldOperator))
@@ -349,7 +339,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       }
     }
 
-    assigner.withNewMapping() {
+    withNewMapping(assigner) {
       val oldOperator = LocalRelation(output = Seq(col1Integer, col2Integer))
 
       val col1IntegerNew = col1Integer.newInstance()
@@ -397,7 +387,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
     val col4IntegerNew2 = col4Integer.newInstance()
     val col5IntegerNew = col5Integer.newInstance()
 
-    assigner.withNewMapping(collectChildMapping = true) {
+    withNewMapping(assigner, collectChildMapping = true) {
       val oldOperator = LocalRelation(output = Seq(col1Integer, col2Integer))
 
       assert(assigner.shouldPreserveLeafOperatorIds(oldOperator))
@@ -406,7 +396,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       )
     }
 
-    assigner.withNewMapping(collectChildMapping = true) {
+    withNewMapping(assigner, collectChildMapping = true) {
       val oldOperator = LocalRelation(output = Seq(col1Integer, col2Integer))
 
       assert(!assigner.shouldPreserveLeafOperatorIds(oldOperator))
@@ -416,7 +406,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       )
     }
 
-    assigner.withNewMapping(collectChildMapping = true) {
+    withNewMapping(assigner, collectChildMapping = true) {
       val oldOperator = LocalRelation(output = Seq(col3Integer, col4Integer))
 
       assert(assigner.shouldPreserveLeafOperatorIds(oldOperator))
@@ -425,7 +415,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       )
     }
 
-    assigner.withNewMapping(collectChildMapping = true) {
+    withNewMapping(assigner, collectChildMapping = true) {
       val oldOperator = LocalRelation(output = Seq(col3Integer, col4Integer))
 
       assert(!assigner.shouldPreserveLeafOperatorIds(oldOperator))
@@ -435,7 +425,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       )
     }
 
-    assigner.withNewMapping(collectChildMapping = true) {
+    withNewMapping(assigner, collectChildMapping = true) {
       val oldOperator = LocalRelation(output = Seq(col2Integer, col4Integer))
 
       assert(!assigner.shouldPreserveLeafOperatorIds(oldOperator))
@@ -445,7 +435,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       )
     }
 
-    assigner.withNewMapping(collectChildMapping = true) {
+    withNewMapping(assigner, collectChildMapping = true) {
       val oldOperator = LocalRelation(output = Seq(col3Integer, col5Integer))
 
       assert(!assigner.shouldPreserveLeafOperatorIds(oldOperator))
@@ -503,7 +493,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
     val col1IntegerNew = col1Integer.newInstance()
     val col2IntegerNew = col2Integer.newInstance()
 
-    assigner.withNewMapping(collectChildMapping = true) {
+    withNewMapping(assigner, collectChildMapping = true) {
       val oldOperator = LocalRelation(output = Seq(col1Integer, col2Integer))
 
       assert(assigner.shouldPreserveLeafOperatorIds(oldOperator))
@@ -513,7 +503,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
     }
 
     val (col1IntegerAliasMapped, col2IntegerAliasMapped) =
-      assigner.withNewMapping(collectChildMapping = true) {
+      withNewMapping(assigner, collectChildMapping = true) {
         val oldOperator = LocalRelation(output = Seq(col1Integer, col2Integer))
 
         assert(!assigner.shouldPreserveLeafOperatorIds(oldOperator))
@@ -550,7 +540,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
   test("Update existing mapping") {
     // The usage pattern in the test corresponds to how we would apply Assigner for LateralJoins.
     val assigner = new ExpressionIdAssigner
-    assigner.withNewMapping(collectChildMapping = true) {
+    withNewMapping(assigner, collectChildMapping = true) {
       val oldOperator = LocalRelation(output = Seq(col1Integer, col2Integer))
       assigner.createMappingForLeafOperator(
         newOperator = oldOperator
@@ -558,7 +548,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
     }
     assigner.createMappingFromChildMappings(newOutputIds = Set.empty[ExprId])
 
-    assigner.withNewMapping(collectChildMapping = true) {
+    withNewMapping(assigner, collectChildMapping = true) {
       val oldOperator = LocalRelation(output = Seq(col3Integer, col4Integer))
       assigner.createMappingForLeafOperator(
         newOperator = oldOperator
@@ -583,8 +573,8 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
     val literalAlias1 = Alias(Literal(1), "a")()
     val literalAlias2 = Alias(Literal(2), "b")()
 
-    val output1 = assigner.withNewMapping(collectChildMapping = true) {
-      val output1 = assigner.withNewMapping(collectChildMapping = true) {
+    val output1 = withNewMapping(assigner, collectChildMapping = true) {
+      val output1 = withNewMapping(assigner, collectChildMapping = true) {
         val col1IntegerNew = col1Integer.newInstance()
         val col2IntegerNew = col2Integer.newInstance()
 
@@ -600,7 +590,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
         )
       }
 
-      val output2 = assigner.withNewMapping(collectChildMapping = true) {
+      val output2 = withNewMapping(assigner, collectChildMapping = true) {
         val oldOperator = LocalRelation(output = Seq(col1Integer, col2Integer))
 
         val col1IntegerNew = col1Integer.newInstance()
@@ -617,7 +607,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
         )
       }
 
-      val output3 = assigner.withNewMapping() {
+      val output3 = withNewMapping(assigner) {
         assigner.createMappingForLeafOperator(newOperator = LocalRelation())
 
         intercept[SparkException] {
@@ -646,7 +636,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       Seq(literalAlias1Remapped.toAttribute, literalAlias2Remapped.toAttribute) ++ output2
     }
 
-    val output2 = assigner.withNewMapping(collectChildMapping = true) {
+    val output2 = withNewMapping(assigner, collectChildMapping = true) {
       assigner.createMappingForLeafOperator(newOperator = LocalRelation())
 
       val literalAlias1Remapped = assigner.mapExpression(literalAlias1)
@@ -698,7 +688,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       assigner.mapOuterReference(col1IntegerNew)
     }
 
-    assigner.withNewMapping(isSubqueryRoot = true) {
+    withNewMapping(assigner, isSubqueryRoot = true) {
       val oldOperator = LocalRelation(output = Seq(col2Integer))
 
       val col2IntegerNew = col2Integer.newInstance()
@@ -719,7 +709,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
         assigner.mapOuterReference(col3Integer)
       }
 
-      assigner.withNewMapping(isSubqueryRoot = true) {
+      withNewMapping(assigner, isSubqueryRoot = true) {
         val oldOperator = LocalRelation(output = Seq(col3Integer))
 
         val col3IntegerNew = col3Integer.newInstance()
@@ -762,7 +752,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       oldOperator = Some(oldOperator)
     )
 
-    assigner.withNewMapping(isSubqueryRoot = true) {
+    withNewMapping(assigner, isSubqueryRoot = true) {
       val oldOperator = LocalRelation(output = Seq(col3Integer, col4Integer))
 
       val col3IntegerNew = col3Integer.newInstance()
@@ -802,7 +792,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
   test("First CTE reference preserves its IDs") {
     val assigner = new ExpressionIdAssigner
 
-    assigner.withNewMapping() {
+    withNewMapping(assigner) {
       val oldOperator = LocalRelation(output = Seq(col1Integer, col2Integer))
 
       assert(assigner.shouldPreserveLeafOperatorIds(oldOperator))
@@ -811,7 +801,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       )
     }
 
-    assigner.withNewMapping() {
+    withNewMapping(assigner) {
       val oldOperator = CTERelationRef(
         cteId = 0,
         _resolved = true,
@@ -825,7 +815,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       )
     }
 
-    assigner.withNewMapping() {
+    withNewMapping(assigner) {
       val oldOperator = CTERelationRef(
         cteId = 0,
         _resolved = true,
@@ -855,7 +845,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       oldOperator = Some(oldOperator)
     )
 
-    assigner.withNewMapping(isSubqueryRoot = true) {
+    withNewMapping(assigner, isSubqueryRoot = true) {
       val oldOperator = LocalRelation(output = Seq(col2Integer))
 
       val col2IntegerNew = col2Integer.newInstance()
@@ -869,7 +859,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
       val col1IntegerRemapped = assigner.mapOuterReference(col1Integer)
       assert(col1IntegerRemapped.exprId == col1IntegerNew.exprId)
 
-      assigner.withNewMapping() {
+      withNewMapping(assigner) {
         val oldOperator = LocalRelation(output = Seq(col3Integer))
 
         val col3IntegerNew = col3Integer.newInstance()
@@ -883,7 +873,7 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
         val col1IntegerRemapped = assigner.mapOuterReference(col1Integer)
         assert(col1IntegerRemapped.exprId == col1IntegerNew.exprId)
 
-        assigner.withNewMapping(isSubqueryRoot = true) {
+        withNewMapping(assigner, isSubqueryRoot = true) {
           val oldOperator = LocalRelation(output = Seq(col4Integer))
 
           val col4IntegerNew = col4Integer.newInstance()
@@ -1718,6 +1708,18 @@ class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
         case attribute: AttributeReference => attribute
         case alias: Alias => alias
       }
+    }
+  }
+
+  private def withNewMapping[R](
+      assigner: ExpressionIdAssigner,
+      isSubqueryRoot: Boolean = false,
+      collectChildMapping: Boolean = false)(body: => R): R = {
+    assigner.pushMapping(isSubqueryRoot = isSubqueryRoot)
+    try {
+      body
+    } finally {
+      assigner.popMapping(collectChildMapping = collectChildMapping)
     }
   }
 }

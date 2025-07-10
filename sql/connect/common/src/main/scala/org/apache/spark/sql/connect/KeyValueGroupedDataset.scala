@@ -137,14 +137,14 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
   }
 
   /** @inheritdoc */
-  private[sql] def transformWithState[U: Encoder](
+  def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
       outputMode: OutputMode): Dataset[U] =
     transformWithStateHelper(statefulProcessor, timeMode, outputMode)
 
   /** @inheritdoc */
-  private[sql] def transformWithState[U: Encoder, S: Encoder](
+  def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeMode: TimeMode,
       outputMode: OutputMode,
@@ -152,7 +152,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
     transformWithStateHelper(statefulProcessor, timeMode, outputMode, Some(initialState))
 
   /** @inheritdoc */
-  override private[sql] def transformWithState[U: Encoder](
+  override def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       eventTimeColumnName: String,
       outputMode: OutputMode): Dataset[U] =
@@ -163,7 +163,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
       eventTimeColumnName = eventTimeColumnName)
 
   /** @inheritdoc */
-  override private[sql] def transformWithState[U: Encoder, S: Encoder](
+  override def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       eventTimeColumnName: String,
       outputMode: OutputMode,
@@ -261,29 +261,29 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
     initialState)
 
   /** @inheritdoc */
-  override private[sql] def transformWithState[U: Encoder](
+  override def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
       outputMode: OutputMode,
-      outputEncoder: Encoder[U]) =
+      outputEncoder: Encoder[U]): Dataset[U] =
     super.transformWithState(statefulProcessor, timeMode, outputMode, outputEncoder)
 
   /** @inheritdoc */
-  override private[sql] def transformWithState[U: Encoder](
+  override def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       eventTimeColumnName: String,
       outputMode: OutputMode,
-      outputEncoder: Encoder[U]) =
+      outputEncoder: Encoder[U]): Dataset[U] =
     super.transformWithState(statefulProcessor, eventTimeColumnName, outputMode, outputEncoder)
 
   /** @inheritdoc */
-  override private[sql] def transformWithState[U: Encoder, S: Encoder](
+  override def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeMode: TimeMode,
       outputMode: OutputMode,
       initialState: sql.KeyValueGroupedDataset[K, S],
       outputEncoder: Encoder[U],
-      initialStateEncoder: Encoder[S]) = super.transformWithState(
+      initialStateEncoder: Encoder[S]): Dataset[U] = super.transformWithState(
     statefulProcessor,
     timeMode,
     outputMode,
@@ -292,13 +292,13 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
     initialStateEncoder)
 
   /** @inheritdoc */
-  override private[sql] def transformWithState[U: Encoder, S: Encoder](
+  override def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       outputMode: OutputMode,
       initialState: sql.KeyValueGroupedDataset[K, S],
       eventTimeColumnName: String,
       outputEncoder: Encoder[U],
-      initialStateEncoder: Encoder[S]) = super.transformWithState(
+      initialStateEncoder: Encoder[S]): Dataset[U] = super.transformWithState(
     statefulProcessor,
     outputMode,
     initialState,

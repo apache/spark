@@ -71,7 +71,7 @@ class MetadataResolver(
         _.containsAnyPattern(UNRESOLVED_RELATION, UNRESOLVED_WITH)
       ) {
         case unresolvedRelation: UnresolvedRelation =>
-          handleUnresolvedRelation(
+          tryResolveRelation(
             unresolvedRelation = unresolvedRelation
           )
 
@@ -79,7 +79,9 @@ class MetadataResolver(
 
         case unresolvedWith: UnresolvedWith =>
           for (cteRelation <- unresolvedWith.cteRelations) {
-            resolve(unresolvedPlan = cteRelation._2)
+            resolve(
+              unresolvedPlan = cteRelation._2
+            )
           }
 
           unresolvedWith
@@ -87,7 +89,7 @@ class MetadataResolver(
     }
   }
 
-  def handleUnresolvedRelation(unresolvedRelation: UnresolvedRelation): Unit = {
+  def tryResolveRelation(unresolvedRelation: UnresolvedRelation): Unit = {
     val relationId = relationIdFromUnresolvedRelation(unresolvedRelation)
 
     if (!relationsWithResolvedMetadata.containsKey(relationId)) {
@@ -125,15 +127,26 @@ class MetadataResolver(
       relationAfterDefaultResolution: LogicalPlan): Option[LogicalPlan] = {
     relationAfterDefaultResolution match {
       case subqueryAlias: SubqueryAlias =>
-        super.tryDelegateResolutionToExtension(subqueryAlias.child, prohibitedResolver).map {
-          relation =>
-            subqueryAlias.copy(child = relation)
+        runExtensions(subqueryAlias.child).map { relation =>
+          subqueryAlias.copy(child = relation)
         }
       case _ =>
-        super.tryDelegateResolutionToExtension(
-          relationAfterDefaultResolution,
-          prohibitedResolver
-        )
+        runExtensions(relationAfterDefaultResolution)
+    }
+  }
+
+  private def runExtensions(relationAfterDefaultResolution: LogicalPlan): Option[LogicalPlan] = {
+    super.tryDelegateResolutionToExtension(relationAfterDefaultResolution, prohibitedResolver)
+  }
+
+  private[sql] object TestOnly {
+    def getRelationsWithResolvedMetadata: RelationsWithResolvedMetadata = {
+      val result = new RelationsWithResolvedMetadata
+      relationsWithResolvedMetadata.forEach {
+        case (relationId, relationWithResolvedMetadata) =>
+          result.put(relationId, relationWithResolvedMetadata)
+      }
+      result
     }
   }
 }

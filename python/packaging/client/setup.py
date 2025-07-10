@@ -111,6 +111,7 @@ if "SPARK_TESTING" in os.environ:
         "pyspark.pandas.tests.connect.reshape",
         "pyspark.pandas.tests.connect.series",
         "pyspark.pandas.tests.connect.window",
+        "pyspark.pipelines.tests",
         "pyspark.logger.tests",
         "pyspark.logger.tests.connect",
     ]
@@ -182,6 +183,7 @@ try:
         "pyspark.pandas.spark",
         "pyspark.pandas.typedef",
         "pyspark.pandas.usage_logging",
+        "pyspark.pipelines",
         "pyspark.testing",
         "pyspark.resource",
         "pyspark.errors",
@@ -212,11 +214,10 @@ try:
             "numpy>=%s" % _minimum_numpy_version,
             "pyyaml>=%s" % _minimum_pyyaml_version,
         ],
-        python_requires=">=3.9",
+        python_requires=">=3.10",
         classifiers=[
             "Development Status :: 5 - Production/Stable",
             "License :: OSI Approved :: Apache Software License",
-            "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",

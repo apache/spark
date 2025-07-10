@@ -136,8 +136,11 @@ class ExpressionResolutionValidator(resolutionValidator: ResolutionValidator) {
   private def validateLiteral(literal: Literal): Unit = {}
 
   private def validateScalarSubquery(scalarSubquery: ScalarSubquery): Unit = {
-    attributeScopeStack.withNewScope(isSubqueryRoot = true) {
+    attributeScopeStack.pushScope(isSubqueryRoot = true)
+    try {
       resolutionValidator.validate(scalarSubquery.plan)
+    } finally {
+      attributeScopeStack.popScope()
     }
 
     for (outerAttribute <- scalarSubquery.outerAttrs) {
@@ -159,8 +162,11 @@ class ExpressionResolutionValidator(resolutionValidator: ResolutionValidator) {
   }
 
   private def validateListQuery(listQuery: ListQuery): Unit = {
-    attributeScopeStack.withNewScope(isSubqueryRoot = true) {
+    attributeScopeStack.pushScope(isSubqueryRoot = true)
+    try {
       resolutionValidator.validate(listQuery.plan)
+    } finally {
+      attributeScopeStack.popScope()
     }
 
     for (outerAttribute <- listQuery.outerAttrs) {
@@ -169,8 +175,11 @@ class ExpressionResolutionValidator(resolutionValidator: ResolutionValidator) {
   }
 
   private def validateExists(exists: Exists): Unit = {
-    attributeScopeStack.withNewScope(isSubqueryRoot = true) {
+    attributeScopeStack.pushScope(isSubqueryRoot = true)
+    try {
       resolutionValidator.validate(exists.plan)
+    } finally {
+      attributeScopeStack.popScope()
     }
 
     for (outerAttribute <- exists.outerAttrs) {

@@ -375,14 +375,14 @@ object CatalystTypeConverters {
 
   private object TimeConverter extends CatalystTypeConverter[LocalTime, LocalTime, Any] {
     override def toCatalystImpl(scalaValue: LocalTime): Long = {
-      DateTimeUtils.localTimeToMicros(scalaValue)
+      DateTimeUtils.localTimeToNanos(scalaValue)
     }
     override def toScala(catalystValue: Any): LocalTime = {
       if (catalystValue == null) null
-      else DateTimeUtils.microsToLocalTime(catalystValue.asInstanceOf[Long])
+      else DateTimeUtils.nanosToLocalTime(catalystValue.asInstanceOf[Long])
     }
     override def toScalaImpl(row: InternalRow, column: Int): LocalTime =
-      DateTimeUtils.microsToLocalTime(row.getLong(column))
+      DateTimeUtils.nanosToLocalTime(row.getLong(column))
   }
 
   private object TimestampConverter extends CatalystTypeConverter[Any, Timestamp, Any] {
