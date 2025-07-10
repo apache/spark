@@ -37,7 +37,7 @@ import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
-import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlInferSchema, XmlOptions, XmlTokenizer}
+import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
@@ -199,10 +199,9 @@ object MultiLineXmlDataSource extends XmlDataSource {
           )
 
           // XML tokenizer for parsing XML records
-          val xmlTokenizer = new XmlTokenizer(inputStream, parsedOptions)
           StaxXmlParser
-            .convertStream(xmlTokenizer) { parser =>
-               xmlInferSchema.infer(parser)
+            .convertStream(inputStream, parsedOptions) { reader =>
+               xmlInferSchema.infer(reader, shouldSkipToNextReader = true)
             }
             .flatten
         } catch {

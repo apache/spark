@@ -283,9 +283,7 @@ class XmlSuite
     )
   }
 
-  // The record in the test XML file doesn't have a valid start row tag, thus no record is tokenized
-  // and parsed.
-  ignore("test FAILFAST with unclosed tag") {
+  test("test FAILFAST with unclosed tag") {
     val inputFile = getTestResourcePath(resDir + "unclosed_tag.xml")
     checkError(
       exception = intercept[SparkException] {
@@ -2678,15 +2676,20 @@ class XmlSuite
       .option("rowTag", "ROW")
       .load(getTestResourcePath(resDir + "cdata-ending-eof.xml"))
 
-    val expectedResults2 = Seq.range(1, 18).map(Row(_))
-    checkAnswer(results2, expectedResults2)
+    assert(
+      results2.schema == new StructType().add("_corrupt_record", StringType).add("a", LongType))
+
+    // The last row is null because the last CDATA at eof is invalid
+    val expectedResults2 = Seq.range(1, 18).map(Row(_)) ++ Seq(Row(null))
+    checkAnswer(results2.selectExpr("a"), expectedResults2)
 
     val results3 = spark.read.format("xml")
       .option("rowTag", "ROW")
       .load(getTestResourcePath(resDir + "cdata-no-close.xml"))
 
-    val expectedResults3 = Seq.range(1, 18).map(Row(_))
-    checkAnswer(results3, expectedResults3)
+    // Similar to the previous test, the last row is null because the last CDATA section is invalid
+    val expectedResults3 = Seq.range(1, 18).map(Row(_)) ++ Seq(Row(null))
+    checkAnswer(results3.select("a"), expectedResults3)
 
     val results4 = spark.read.format("xml")
       .option("rowTag", "ROW")

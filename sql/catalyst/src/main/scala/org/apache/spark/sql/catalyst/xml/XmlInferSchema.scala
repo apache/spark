@@ -30,6 +30,7 @@ import scala.xml.SAXException
 
 import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.security.AccessControlException
+import org.apache.hadoop.shaded.org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.Logging
@@ -94,8 +95,8 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
   def infer(xml: RDD[String]): StructType = {
     val inferredTypesRdd = xml.mapPartitions { iter =>
       iter.flatMap { xml =>
-        val parser = StaxXMLRecordReader(xml, options)
-        val inferredType = infer(parser)
+        val parser = StaxXmlParserUtils.staxXMLRecordReader(xml, options)
+        val inferredType = infer(parser, shouldSkipToNextReader = false)
         parser.close()
         inferredType
       }
@@ -141,9 +142,9 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
    * Infer the schema of the single XML record string
    */
   def infer(xml: String): Option[DataType] = {
-    val parser = StaxXMLRecordReader(xml, options)
+    val parser = StaxXmlParserUtils.staxXMLRecordReader(xml, options)
     try {
-      infer(parser)
+      infer(parser, shouldSkipToNextReader = false)
     } finally {
       parser.close()
     }
@@ -154,8 +155,12 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
    * Note that the method will **NOT** close the XML event stream as there could have more XML
    * records to parse. It's the caller's responsibility to close the stream.
    */
-  def infer(parser: StaxXMLRecordReader): Option[DataType] = {
+  def infer(parser: StaxXMLRecordReader, shouldSkipToNextReader: Boolean): Option[DataType] = {
     try {
+      if (shouldSkipToNextReader && !parser.skipToNextRecord()) {
+        return None
+      }
+
       val xsd = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
       xsd.foreach { schema =>
         parser.validateXSDSchema(schema)
@@ -164,11 +169,6 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       val schema = Some(inferObject(parser, rootAttributes))
       schema
     } catch {
-      case e @ (_: XMLStreamException | _: MalformedInputException | _: SAXException) =>
-        logWarning("Malformed XML record found", e)
-        // Close the XML event stream from the first malformed XML record
-        parser.close()
-        handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
       case e: CharConversionException if options.charset.isEmpty =>
         val msg =
           """XML parser cannot handle a character in its input.
@@ -184,13 +184,21 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         logWarning("Skipped missing file", e)
         Some(StructType(Nil))
       case e: FileNotFoundException if !options.ignoreMissingFiles => throw e
-      case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
-      case e @ (_: IOException | _: RuntimeException) if options.ignoreCorruptFiles =>
-        logWarning("Skipped the rest of the content in the corrupted file", e)
-        Some(StructType(Nil))
       case NonFatal(e) =>
-        logWarning("Failed to infer schema from XML record", e)
-        handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
+        ExceptionUtils.getRootCause(e) match {
+          case _: XMLStreamException | _: MalformedInputException | _: SAXException =>
+            logWarning("Malformed XML record found", e)
+            // Close the XML event stream from the first malformed XML record
+            parser.closeAllReaders()
+            handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
+          case _: AccessControlException | _: BlockMissingException => throw e
+          case _: IOException | _: RuntimeException if options.ignoreCorruptFiles =>
+            logWarning("Skipped the rest of the content in the corrupted file", e)
+            Some(StructType(Nil))
+          case _ =>
+            logWarning("Failed to infer schema from XML record", e)
+            handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
+        }
     }
   }
 

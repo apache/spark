@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.StringReader
 import javax.xml.namespace.QName
 import javax.xml.stream.{EventFilter, StreamFilter, XMLEventReader, XMLInputFactory, XMLStreamConstants, XMLStreamReader}
 import javax.xml.stream.events._
@@ -37,75 +36,46 @@ object StaxXmlParserUtils {
     factory
   }
 
-  private val filter = new EventFilter {
-    override def accept(event: XMLEvent): Boolean =
-      event.getEventType match {
-        // Ignore comments and processing instructions
-        case XMLStreamConstants.COMMENT | XMLStreamConstants.PROCESSING_INSTRUCTION => false
-        // unsupported events
-        case XMLStreamConstants.DTD |
-             XMLStreamConstants.ENTITY_DECLARATION |
-             XMLStreamConstants.ENTITY_REFERENCE |
-             XMLStreamConstants.NOTATION_DECLARATION => false
-        case _ => true
-      }
-  }
-
-  def filteredReader(xml: String): XMLEventReader = {
-    // It does not have to skip for white space, since `XmlInputFormat`
-    // always finds the root tag without a heading space.
-    val eventReader = factory.createXMLEventReader(new StringReader(xml))
-    factory.createFilteredReader(eventReader, filter)
-  }
-
-  def filteredReader(inputStream: java.io.InputStream, options: XmlOptions): XMLEventReader = {
-    val bomInputStreamBuilder = new BOMInputStream.Builder()
-    bomInputStreamBuilder.setInputStream(inputStream)
-    val eventReader = factory.createXMLEventReader(bomInputStreamBuilder.get(), options.charset)
-    factory.createFilteredReader(eventReader, filter)
-  }
-
-  def filteredReader(streamReader: XMLStreamReader): XMLEventReader = {
-    val eventReader = factory.createXMLEventReader(streamReader)
-    factory.createFilteredReader(eventReader, filter)
-  }
-
-  private val streamFilter = new StreamFilter {
-    override def accept(reader: XMLStreamReader): Boolean = reader.getEventType match {
-      // Ignore comments and processing instructions
-      case XMLStreamConstants.COMMENT | XMLStreamConstants.PROCESSING_INSTRUCTION => false
-      // unsupported events
-      case XMLStreamConstants.DTD |
-           XMLStreamConstants.ENTITY_DECLARATION |
-           XMLStreamConstants.ENTITY_REFERENCE |
-           XMLStreamConstants.NOTATION_DECLARATION => false
-      case _ => true
-    }
-  }
-
-  def filteredStreamReader(xml: String): XMLStreamReader = {
-    val eventReader = factory.createXMLStreamReader(new StringReader(xml))
-    factory.createFilteredReader(eventReader, streamFilter)
+  private val eventTypeFilter: Int => Boolean = {
+    // Ignore comments and processing instructions
+    case XMLStreamConstants.COMMENT |
+         XMLStreamConstants.PROCESSING_INSTRUCTION => false
+    // unsupported events
+    case XMLStreamConstants.DTD |
+         XMLStreamConstants.ENTITY_DECLARATION |
+         XMLStreamConstants.ENTITY_REFERENCE |
+         XMLStreamConstants.NOTATION_DECLARATION => false
+    case _ => true
   }
 
   def filteredStreamReader(
       inputStream: java.io.InputStream,
       options: XmlOptions): XMLStreamReader = {
-    val streamReader = factory.createXMLStreamReader(inputStream, options.charset)
-    factory.createFilteredReader(streamReader, streamFilter)
+    val filter = new StreamFilter {
+      override def accept(event: XMLStreamReader): Boolean = eventTypeFilter(event.getEventType)
+    }
+    val bomInputStreamBuilder = new BOMInputStream.Builder
+    bomInputStreamBuilder.setInputStream(inputStream)
+    val streamReader = factory.createXMLStreamReader(bomInputStreamBuilder.get(), options.charset)
+    factory.createFilteredReader(streamReader, filter)
   }
 
-  def getAttributes(parser: XMLStreamReader, options: XmlOptions): Array[Attribute] = {
-    val attributes = for (i <- 0 until parser.getAttributeCount) yield {
-      val name = parser.getAttributeName(i)
-      val value = if (options.ignoreSurroundingSpaces) {
-        parser.getAttributeValue(i).trim
-      } else {
-        parser.getAttributeValue(i)
-      }
-      new AttributeImpl(getName(name, options), value)
+  def filteredEventReader(inputStream: java.io.InputStream, options: XmlOptions): XMLEventReader = {
+    val streamReader = filteredStreamReader(inputStream, options)
+    filteredEventReader(streamReader)
+  }
+
+  def filteredEventReader(streamReader: XMLStreamReader): XMLEventReader = {
+    val filter = new EventFilter {
+      override def accept(event: XMLEvent): Boolean = eventTypeFilter(event.getEventType)
     }
-    attributes.toArray[Attribute]
+    val eventReader = factory.createXMLEventReader(streamReader)
+    factory.createFilteredReader(eventReader, filter)
+  }
+
+  def staxXMLRecordReader(xml: String, options: XmlOptions): StaxXMLRecordReader = {
+    val inputStream = () => new java.io.ByteArrayInputStream(xml.getBytes(options.charset))
+    StaxXMLRecordReader(inputStream, options)
   }
 
   def gatherRootAttributes(parser: XMLEventReader): Array[Attribute] = {

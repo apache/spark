@@ -16,8 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.{FileNotFoundException, InputStream, IOException}
-import javax.xml.stream.{XMLEventReader, XMLStreamConstants, XMLStreamException, XMLStreamReader}
+import java.io.InputStream
+import javax.xml.stream.{XMLEventReader, XMLStreamConstants}
 import javax.xml.stream.events.{EndDocument, StartElement, XMLEvent}
 import javax.xml.transform.stax.StAXSource
 import javax.xml.validation.Schema
@@ -25,61 +25,42 @@ import javax.xml.validation.Schema
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.exception.ExceptionUtils
-import org.apache.hadoop.hdfs.BlockMissingException
-import org.apache.hadoop.security.AccessControlException
 import org.apache.hadoop.shaded.com.ctc.wstx.exc.WstxEOFException
 
 import org.apache.spark.internal.Logging
 
 /**
- * XML tokenizer that never buffers complete XML records in memory. It uses XMLEventReader to parse
- * XML file stream directly and can move to the next XML record based on the rowTag option.
- *
- * The file stream will be closed by the XMLTokenizer if there is no more records available.
+ * XML record reader that reads the next XML record in the underlying XML stream. It can support XSD
+ * schema validation by maintaining a separate XML reader and keep it in sync with the primary XML
+ * reader.
  */
-class XmlTokenizer(inputStream: () => InputStream, options: XmlOptions) extends Logging {
-  private var reader: StaxXMLRecordReader = StaxXMLRecordReader(
-    () => StaxXmlParserUtils.filteredStreamReader(inputStream(), options),
-    options
-  )
+case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptions)
+    extends XMLEventReader
+    with Logging {
+  // Reader for the XML record parsing.
+  private val in1 = inputStream()
+  private val primaryEventReader = StaxXmlParserUtils.filteredEventReader(in1, options)
+  // Reader for the XSD validation, if an XSD schema is provided.
+  private val in2 = Option(options.rowValidationXSDPath).map(_ => inputStream())
+  private val streamReaderForXSDValidation =
+    in2.map(in => StaxXmlParserUtils.filteredStreamReader(in, options))
+  private val eventReaderForXSDValidation =
+    streamReaderForXSDValidation.map(StaxXmlParserUtils.filteredEventReader)
+
+  final var hasMoreRecord: Boolean = true
 
   /**
-   * Returns the next XML record as a positioned XMLEventReader.
-   * This avoids creating intermediate string representations.
+   * Skip through the XML stream until we find the next row start element.
+   * Returns true if a row start element is found, false if end of stream is reached.
    */
-  def next(): Option[StaxXMLRecordReader] = {
-    var nextRecord: Option[StaxXMLRecordReader] = None
-    try {
-      // Skip to the next row start element
-      if (reader.getAllValidEventReaders.forall(skipToNextRowStart)) {
-        nextRecord = Some(reader)
-      }
-    } catch {
-      case e: FileNotFoundException if options.ignoreMissingFiles =>
-        logWarning("Skipping the rest of the content in the missing file", e)
-      case NonFatal(e) =>
-        ExceptionUtils.getRootCause(e) match {
-          case _: AccessControlException | _: BlockMissingException =>
-            throw e
-          case _: RuntimeException | _: IOException | _: XMLStreamException
-              if options.ignoreCorruptFiles =>
-            logWarning("Skipping the rest of the content in the corrupted file", e)
-          case e: Throwable =>
-            throw e
-        }
-    } finally {
-      if (nextRecord.isEmpty && reader != null) {
-        close()
-      }
+  def skipToNextRecord(): Boolean = {
+    hasMoreRecord = skipToNextRowStart(primaryEventReader) && eventReaderForXSDValidation.forall(
+      skipToNextRowStart
+    )
+    if (!hasMoreRecord) {
+      closeAllReaders()
     }
-    nextRecord
-  }
-
-  def close(): Unit = {
-    if (reader != null) {
-      reader.closeAllReaders()
-      reader = null
-    }
+    hasMoreRecord
   }
 
   /**
@@ -111,25 +92,6 @@ class XmlTokenizer(inputStream: () => InputStream, options: XmlOptions) extends 
         false
     }
   }
-}
-
-/**
- * XML record reader that reads the next XML record in the underlying XML stream. It can support XSD
- * schema validation by maintaining a separate XML reader and keep it in sync with the primary XML
- * reader.
- */
-case class StaxXMLRecordReader(createStreamReader: () => XMLStreamReader, options: XmlOptions)
-    extends XMLEventReader {
-  // Reader for the XML record parsing.
-  private val primaryEventReader = StaxXmlParserUtils.filteredReader(createStreamReader())
-  // Reader for the XSD validation, if an XSD schema is provided.
-  private val streamReaderForXSDValidation =
-    Option(options.rowValidationXSDPath).map(_ => createStreamReader())
-  private val eventReaderForXSDValidation =
-    streamReaderForXSDValidation.map(StaxXmlParserUtils.filteredReader)
-
-  def getAllValidEventReaders: Seq[XMLEventReader] =
-    Seq(primaryEventReader) ++ eventReaderForXSDValidation
 
   def validateXSDSchema(schema: Schema): Unit = {
     streamReaderForXSDValidation match {
@@ -148,7 +110,7 @@ case class StaxXMLRecordReader(createStreamReader: () => XMLStreamReader, option
           case NonFatal(e) =>
             try {
               // If the validation fails, we need to skip the current record in the primary reader
-              // advancing the primary event reader so that the XMLTokenizer will continue to the
+              // advancing the primary event reader so that the parser will continue to the
               // next record.
               primaryEventReader.next()
             } finally {
@@ -163,6 +125,9 @@ case class StaxXMLRecordReader(createStreamReader: () => XMLStreamReader, option
     primaryEventReader.close()
     streamReaderForXSDValidation.foreach(_.close())
     eventReaderForXSDValidation.foreach(_.close())
+    in1.close()
+    in2.foreach(_.close())
+    hasMoreRecord = false
   }
 
   override def nextEvent(): XMLEvent = primaryEventReader.nextEvent()
@@ -173,13 +138,4 @@ case class StaxXMLRecordReader(createStreamReader: () => XMLStreamReader, option
   override def getProperty(name: String): AnyRef = primaryEventReader.getProperty(name)
   override def close(): Unit = {}
   override def next(): AnyRef = primaryEventReader.next()
-}
-
-object StaxXMLRecordReader {
-  def apply(xml: String, options: XmlOptions): StaxXMLRecordReader = {
-    StaxXMLRecordReader(
-      () => StaxXmlParserUtils.filteredStreamReader(xml),
-      options
-    )
-  }
 }
