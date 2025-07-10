@@ -80,8 +80,8 @@ object JDBCDatabaseMetadata extends Logging {
       }
     }
 
-    conn = getConnection(-1)
     try {
+      conn = getConnection(-1)
       // getMetaData itself can throw, so we catch that and return None for all fields
       val databaseMetadata = conn.getMetaData
 
