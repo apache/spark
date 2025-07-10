@@ -45,8 +45,11 @@ class DataFrameSuite extends QueryTest with RemoteSparkSession {
   }
 
   test("lazy column validation") {
-    val df1 = sql("select * from values(1, 'y') as t1(a, y)")
-    val df2 = sql("select * from values(1, 'x') as t2(a, x)")
+    val session = spark
+    import session.implicits._
+
+    val df1 = Seq(1 -> "y").toDF("a", "y")
+    val df2 = Seq(1 -> "x").toDF("a", "x")
     val df3 = df1.join(df2, df1("a") === df2("a"))
     val df4 = df3.select(df1("x")) // <- No exception here
 
