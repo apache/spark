@@ -59,7 +59,6 @@ class ArithmeticTestsMixin:
                 else:
                     self.assertRaises(TypeError, lambda: psser + psdf[n_col])
 
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_sub(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
