@@ -183,8 +183,16 @@ class NumericOps(DataTypeOps):
         _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("Multiplication can not be applied to given types.")
-        right = transform_boolean_operand_to_numeric(right)
-        return column_op(PySparkColumn.__rmul__)(left, right)
+        spark_session = left._internal.spark_frame.sparkSession
+        new_right = transform_boolean_operand_to_numeric(right)
+
+        def wrapped_rmul(lc: PySparkColumn, rc: Any) -> PySparkColumn:
+            expr = PySparkColumn.__mul__(lc, rc)
+            if is_ansi_mode_enabled(spark_session):
+                expr = _cast_back_float(expr, left.dtype, right)
+            return expr
+
+        return column_op(wrapped_rmul)(left, new_right)
 
     def rpow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
@@ -400,9 +408,16 @@ class FractionalOps(NumericOps):
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Multiplication can not be applied to given types.")
 
-        right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
+        spark_session = left._internal.spark_frame.sparkSession
+        new_right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
 
-        return column_op(PySparkColumn.__mul__)(left, right)
+        def wrapped_mul(lc: PySparkColumn, rc: Any) -> PySparkColumn:
+            expr = PySparkColumn.__mul__(lc, rc)
+            if is_ansi_mode_enabled(spark_session):
+                expr = _cast_back_float(expr, left.dtype, right)
+            return expr
+
+        return column_op(wrapped_mul)(left, new_right)
 
     def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
