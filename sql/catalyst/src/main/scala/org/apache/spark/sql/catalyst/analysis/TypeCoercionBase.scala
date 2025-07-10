@@ -25,8 +25,10 @@ import org.apache.spark.sql.catalyst.expressions.{
   CaseWhen,
   Cast,
   Concat,
+  CurrentDate,
   Elt,
   Expression,
+  MakeTimestampNTZ,
   MapZipWith,
   Stack,
   WindowSpecDefinition
@@ -51,7 +53,7 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.errors.DataTypeErrors.cannotMergeIncompatibleDataTypesError
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, TimestampNTZType, TimeType}
 
 abstract class TypeCoercionBase extends TypeCoercionHelper {
 
@@ -478,6 +480,37 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
       case withChildrenResolved => StringLiteralTypeCoercion(withChildrenResolved)
+    }
+  }
+
+  /**
+   * Rewrites a cast from [[TimeType]] to [[TimestampNTZType]] into a [[MakeTimestampNTZ]]
+   * expression.
+   *
+   * The conversion from TIME to TIMESTAMP_NTZ requires a date component, which TIME itself does
+   * not provide. This rule injects [[CurrentDate]] as the implicit date part, effectively
+   * treating the TIME value as a time of day on the current date. This rewrite ensures that all
+   * such casts within a query use a consistent date, as required by the [[ComputeCurrentTime]]
+   * rule which replaces [[CurrentDate]] with a fixed value during analysis.
+   *
+   * For example, the following SQL:
+   * {{{
+   *   SELECT CAST(make_time(12, 30, 0) AS TIMESTAMP_NTZ)
+   * }}}
+   * will be rewritten to:
+   * {{{
+   *   SELECT make_timestamp_ntz(current_date, make_time(12, 30, 0))
+   * }}}
+   */
+  object RewriteTimeCastToTimestampNTZ extends TypeCoercionRule {
+    override def transform: PartialFunction[Expression, Expression] = {
+      case c @ Cast(child, TimestampNTZType, _, _) if child.resolved =>
+        child.dataType match {
+          case _: TimeType =>
+            // Convert TIME -> TIMESTAMP_NTZ using MakeTimestampNTZ(CurrentDate(), time)
+            MakeTimestampNTZ(CurrentDate(), child)
+          case _ => c
+        }
     }
   }
 }

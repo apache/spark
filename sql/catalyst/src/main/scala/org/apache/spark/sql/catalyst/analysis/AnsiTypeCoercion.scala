@@ -93,6 +93,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       StackCoercion ::
       Division ::
       IntegralDivision ::
+      RewriteTimeCastToTimestampNTZ ::
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
