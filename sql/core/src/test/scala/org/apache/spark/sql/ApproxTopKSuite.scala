@@ -489,36 +489,39 @@ class ApproxTopKSuite extends QueryTest
   }
 
   test("SPARK-52588state: invalid estimate if state struct length is not 3") {
-    val invalidateState = "named_struct('sketch', X'01', 'itemDataType', CAST(NULL AS INT), " +
+    val invalidState = "named_struct('sketch', X'01', 'itemDataType', CAST(NULL AS INT), " +
       "'maxItemsTracked', 10, 'invalidField', 1)"
     checkError(
       exception = intercept[ExtendedAnalysisException] {
-        sql(s"SELECT approx_top_k_estimate($invalidateState, 5);")
+        sql(s"SELECT approx_top_k_estimate($invalidState, 5);")
       },
       condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
       parameters = Map(
-        "sqlExpr" -> s"\"approx_top_k_estimate($invalidateState, 5)\"",
+        "sqlExpr" -> ("\"approx_top_k_estimate(named_struct(sketch, X'01', itemDataType, " +
+          "CAST(NULL AS INT), maxItemsTracked, 10, invalidField, 1), 5)\""),
         "msg" -> ("State must be a struct with 3 fields. " +
           "Expected struct: struct<sketch:binary,itemDataType:any,maxItemsTracked:int>. " +
-          "Got: struct<col1:binary,col2:int,col3:int,col4:int>"),
+          "Got: struct<sketch:binary,itemDataType:int,maxItemsTracked:int,invalidField:int>"),
         "hint" -> ""),
-      queryContext = Array(ExpectedContext(s"approx_top_k_estimate($invalidateState, 5)", 7, 75))
+      queryContext = Array(ExpectedContext(s"approx_top_k_estimate($invalidState, 5)", 7, 138))
     )
   }
 
   test("SPARK-52588state: invalid estimate if state struct does not have 'sketch' field") {
+    val invalidState = "named_struct('notSketch', X'01', 'itemDataType', CAST(NULL AS INT), " +
+      "'maxItemsTracked', 10)"
     checkError(
       exception = intercept[ExtendedAnalysisException] {
-        sql("SELECT approx_top_k_estimate(struct(X'01', CAST(NULL AS INT), 10000), 5);")
+        sql(s"SELECT approx_top_k_estimate($invalidState, 5);")
       },
       condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
       parameters = Map(
-        "sqlExpr" -> "\"approx_top_k_estimate(struct(X'01', CAST(NULL AS INT), 10000), 5)\"",
+        "sqlExpr" -> ("\"approx_top_k_estimate(named_struct(notSketch, X'01', itemDataType, " +
+          "CAST(NULL AS INT), maxItemsTracked, 10), 5)\""),
         "msg" -> "State struct must contain a field named 'sketch'.",
         "hint" -> ""
       ),
-      queryContext = Array(ExpectedContext(
-        "approx_top_k_estimate(struct(X'01', CAST(NULL AS INT), 10000), 5)", 7, 71))
+      queryContext = Array(ExpectedContext(s"approx_top_k_estimate($invalidState, 5)", 7, 122))
     )
 
   }
