@@ -67,7 +67,6 @@ class ReverseTestsMixin:
             self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) - psser)
             self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) - psser)
 
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_rmul(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
