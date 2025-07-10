@@ -929,6 +929,7 @@ if [[ "$1" == "publish-release" ]]; then
 
     # Calculate deadline in Pacific Time (PST/PDT)
     DEADLINE=$(TZ=America/Los_Angeles date -d "+4 days" "+%a, %d %b %Y %H:%M:%S %Z")
+    PYSPARK_VERSION=`echo "$RELEASE_VERSION" |  sed -e "s/-/./" -e "s/preview/dev/"`
 
     JIRA_API_URL="https://issues.apache.org/jira/rest/api/2/project/SPARK/versions"
     SPARK_VERSION_BASE=$(echo "$SPARK_VERSION" | sed 's/-preview[0-9]*//')
@@ -1008,7 +1009,7 @@ EOF
       echo "reporting any regressions."
       echo
       echo "If you're working in PySpark you can set up a virtual env and install"
-      echo "the current RC via \"pip install https://dist.apache.org/repos/dist/dev/spark/${GIT_REF}-bin/pyspark-${SPARK_VERSION}.tar.gz\""
+      echo "the current RC via \"pip install https://dist.apache.org/repos/dist/dev/spark/${GIT_REF}-bin/pyspark-${PYSPARK_VERSION}.tar.gz\""
       echo "and see if anything important breaks."
       echo "In the Java/Scala, you can add the staging repository to your project's resolvers and test"
       echo "with the RC (make sure to clean up the artifact cache before/after so"
