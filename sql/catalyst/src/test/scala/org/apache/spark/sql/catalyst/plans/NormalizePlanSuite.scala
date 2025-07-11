@@ -83,17 +83,18 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
       input.window(Seq(denseRankExpression, rankExpression), Seq(col1), Seq(col2.asc))
     assert(baselineInnerWindow != testInnerWindow)
 
-    val baselinePlan = baselineInnerWindow.window(
-      Seq(RowNumber().over(Seq(col3), Seq(rankExpression.toAttribute.asc), frame).as("row_num")),
-      Seq(col3),
-      Seq(rankExpression.toAttribute.asc)
-    )
+    val baselineOuterSpec = WindowSpecDefinition(Seq(col3), Seq(rankExpression.toAttribute.asc), frame)
+    val baselineRowNumberExpression = WindowExpression(RowNumber(), baselineOuterSpec).as("row_num")
 
-    val testPlan = testInnerWindow.window(
-      Seq(RowNumber().over(Seq(col3), Seq(rankExpression.toAttribute.asc), frame).as("row_num")),
-      Seq(col3),
-      Seq(rankExpression.toAttribute.asc)
-    )
+    val testOuterSpec = WindowSpecDefinition(Seq(col3), Seq(rankExpression.toAttribute.asc), frame)
+    val testRowNumberExpression = WindowExpression(RowNumber(), testOuterSpec).as("row_num")
+
+    val baselinePlan =
+      baselineInnerWindow.window(
+        Seq(baselineRowNumberExpression), Seq(col3), Seq(rankExpression.toAttribute.asc)
+      )
+    val testPlan =
+      testInnerWindow.window(Seq(testRowNumberExpression), Seq(col3), Seq(rankExpression.toAttribute.asc))
 
     assert(baselinePlan != testPlan)
     assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
