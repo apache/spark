@@ -21,7 +21,7 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, In, Not}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, InMemoryTable, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -1811,6 +1811,17 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(1, 1000, "hr"), // updated
           Row(2, 200, "software"),
           Row(3, 300, "hr")))
+
+      val table = catalog.loadTable(ident)
+      val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+      assert(commitProps("numTargetRowsCopied") === (if (deltaMerge) "0" else "2"))
+      assert(commitProps("numTargetRowsInserted") === "0")
+      assert(commitProps("numTargetRowsUpdated") === "1")
+      assert(commitProps("numTargetRowsDeleted") === "0")
+      assert(commitProps("numTargetRowsMatchedUpdated") === "1")
+      assert(commitProps("numTargetRowsMatchedDeleted") === "0")
+      assert(commitProps("numTargetRowsNotMatchedBySourceUpdated") === "0")
+      assert(commitProps("numTargetRowsNotMatchedBySourceDeleted") === "0")
     }
   }
 
@@ -1856,6 +1867,17 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(2, 200, "software"),
           Row(3, 300, "hr"),
           Row(5, 400, "executive"))) // inserted
+
+      val table = catalog.loadTable(ident)
+      val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+      assert(commitProps("numTargetRowsCopied") === "0")
+      assert(commitProps("numTargetRowsInserted") === "1")
+      assert(commitProps("numTargetRowsUpdated") === "0")
+      assert(commitProps("numTargetRowsDeleted") === "0")
+      assert(commitProps("numTargetRowsMatchedUpdated") === "0")
+      assert(commitProps("numTargetRowsMatchedDeleted") === "0")
+      assert(commitProps("numTargetRowsNotMatchedBySourceUpdated") === "0")
+      assert(commitProps("numTargetRowsNotMatchedBySourceDeleted") === "0")
     }
   }
 
@@ -1883,7 +1905,6 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
            |""".stripMargin
       }
 
-
       assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
       assertMetric(mergeExec, "numTargetRowsInserted", 0)
       assertMetric(mergeExec, "numTargetRowsUpdated", 2)
@@ -1901,6 +1922,17 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(3, 300, "hr"),
           Row(4, 400, "marketing"),
           Row(5, -1, "executive"))) // updated
+
+      val table = catalog.loadTable(ident)
+      val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+      assert(commitProps("numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
+      assert(commitProps("numTargetRowsInserted") === "0")
+      assert(commitProps("numTargetRowsUpdated") === "2")
+      assert(commitProps("numTargetRowsDeleted") === "0")
+      assert(commitProps("numTargetRowsMatchedUpdated") === "1")
+      assert(commitProps("numTargetRowsMatchedDeleted") === "0")
+      assert(commitProps("numTargetRowsNotMatchedBySourceUpdated") === "1")
+      assert(commitProps("numTargetRowsNotMatchedBySourceDeleted") === "0")
     }
   }
 
@@ -1947,6 +1979,17 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(4, 400, "marketing"))
           // Row(5, 500, "executive") deleted
       )
+
+      val table = catalog.loadTable(ident)
+      val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+      assert(commitProps("numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
+      assert(commitProps("numTargetRowsInserted") === "0")
+      assert(commitProps("numTargetRowsUpdated") === "0")
+      assert(commitProps("numTargetRowsDeleted") === "2")
+      assert(commitProps("numTargetRowsMatchedUpdated") === "0")
+      assert(commitProps("numTargetRowsMatchedDeleted") === "1")
+      assert(commitProps("numTargetRowsNotMatchedBySourceUpdated") === "0")
+      assert(commitProps("numTargetRowsNotMatchedBySourceDeleted") === "1")
     }
   }
 
@@ -1994,6 +2037,17 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(4, 400, "marketing"),
           Row(5, -1, "executive"), // updated
           Row(6, -1, "dummy"))) // inserted
+
+      val table = catalog.loadTable(ident)
+      val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+      assert(commitProps("numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
+      assert(commitProps("numTargetRowsInserted") === "1")
+      assert(commitProps("numTargetRowsUpdated") === "2")
+      assert(commitProps("numTargetRowsDeleted") === "0")
+      assert(commitProps("numTargetRowsMatchedUpdated") === "1")
+      assert(commitProps("numTargetRowsMatchedDeleted") === "0")
+      assert(commitProps("numTargetRowsNotMatchedBySourceUpdated") === "1")
+      assert(commitProps("numTargetRowsNotMatchedBySourceDeleted") === "0")
     }
   }
 
@@ -2032,7 +2086,6 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 0)
       assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 1)
 
-
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(
@@ -2042,11 +2095,21 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(4, 400, "marketing"),
           // Row(5, 500, "executive") deleted
           Row(6, -1, "dummy"))) // inserted
+
+      val table = catalog.loadTable(ident)
+      val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+      assert(commitProps("numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
+      assert(commitProps("numTargetRowsInserted") === "1")
+      assert(commitProps("numTargetRowsUpdated") === "0")
+      assert(commitProps("numTargetRowsDeleted") === "2")
+      assert(commitProps("numTargetRowsMatchedUpdated") === "0")
+      assert(commitProps("numTargetRowsMatchedDeleted") === "1")
+      assert(commitProps("numTargetRowsNotMatchedBySourceUpdated") === "0")
+      assert(commitProps("numTargetRowsNotMatchedBySourceDeleted") === "1")
     }
   }
 
-  test("V2 write metrics for merge") {
-
+  test("SPARK-52689: V2 write metrics for merge") {
     Seq("true", "false").foreach { aqeEnabled: String =>
       withTempView("source") {
         withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled) {
@@ -2075,9 +2138,16 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           )
 
           val table = catalog.loadTable(ident)
-          // scalastyle:off println
-          println(table)
-          // scalastyle:on println
+          val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+          assert(commitProps("numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
+          assert(commitProps("numTargetRowsInserted") === "1")
+          assert(commitProps("numTargetRowsUpdated") === "0")
+          assert(commitProps("numTargetRowsDeleted") === "2")
+          assert(commitProps("numTargetRowsMatchedUpdated") === "0")
+          assert(commitProps("numTargetRowsMatchedDeleted") === "1")
+          assert(commitProps("numTargetRowsNotMatchedBySourceUpdated") === "0")
+          assert(commitProps("numTargetRowsNotMatchedBySourceDeleted") === "1")
+
           sql(s"DROP TABLE $tableNameAsString")
         }
       }
