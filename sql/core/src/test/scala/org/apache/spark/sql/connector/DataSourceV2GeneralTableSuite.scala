@@ -130,7 +130,7 @@ class TestingGeneralJsonTable(path: String) extends Table {
   override def schema(): StructType = new StructType().add("col", "string")
 
   override def capabilities(): util.Set[TableCapability] =
-    util.EnumSet.of(TableCapability.GENERAL_TABLE)
+    util.EnumSet.of(TableCapability.SPARK_TABLE_OR_VIEW)
 
   override def properties(): util.Map[String, String] = util.Map.ofEntries(
     util.Map.entry(TableCatalog.PROP_PROVIDER, "json"),
@@ -144,7 +144,7 @@ class TestingGeneralPartitionedJsonTable(path: String) extends Table {
   override def schema(): StructType = new StructType().add("c1", "int").add("c2", "int")
 
   override def capabilities(): util.Set[TableCapability] =
-    util.EnumSet.of(TableCapability.GENERAL_TABLE)
+    util.EnumSet.of(TableCapability.SPARK_TABLE_OR_VIEW)
 
   override def partitioning(): Array[Transform] =
     Array(LogicalExpressions.identity(LogicalExpressions.reference(Seq("c2"))))
@@ -161,7 +161,7 @@ class TestingGeneralV2Table extends Table {
   override def schema(): StructType = FakeV2Provider.schema
 
   override def capabilities(): util.Set[TableCapability] =
-    util.EnumSet.of(TableCapability.GENERAL_TABLE)
+    util.EnumSet.of(TableCapability.SPARK_TABLE_OR_VIEW)
 
   override def properties(): util.Map[String, String] = util.Map.ofEntries(
     util.Map.entry(TableCatalog.PROP_PROVIDER, classOf[FakeV2Provider].getName)
@@ -174,7 +174,7 @@ class TestingGeneralViewTable(ansi: Boolean) extends Table {
   override def schema(): StructType = new StructType().add("col", "string").add("i", "int")
 
   override def capabilities(): util.Set[TableCapability] =
-    util.EnumSet.of(TableCapability.GENERAL_TABLE)
+    util.EnumSet.of(TableCapability.SPARK_TABLE_OR_VIEW)
 
   override def properties(): util.Map[String, String] = util.Map.ofEntries(
     util.Map.entry(TableCatalog.PROP_TABLE_TYPE, TableSummary.VIEW_TABLE_TYPE),
