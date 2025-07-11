@@ -36,7 +36,7 @@ private[sql] object SqlApiConfHelper {
   val PARSER_DFA_CACHE_FLUSH_THRESHOLD_KEY: String =
     "spark.sql.parser.parserDfaCacheFlushThreshold"
   val PARSER_DFA_CACHE_FLUSH_RATIO_KEY: String = "spark.sql.parser.parserDfaCacheFlushRatio"
-  val MANAGE_PARSER_CACHES_KEY: String = "spark.sql.parser.manageParserCachesKillSwitch"
+  val MANAGE_PARSER_CACHES_KEY: String = "spark.sql.parser.manageParserCaches"
 
   val confGetter: AtomicReference[() => SqlApiConf] = {
     new AtomicReference[() => SqlApiConf](() => DefaultSqlApiConf)

@@ -1034,7 +1034,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-30886 Deprecate two-parameter TRIM/LTRIM/RTRIM") {
     Seq("trim", "ltrim", "rtrim").foreach { f =>
-      withSQLConf(SQLConf.MANAGE_PARSER_CACHES.key -> "false") {
+      withSQLConf(SQLConf.MANAGE_PARSER_CACHES.key -> "false") { // Avoid additional logging
         val logAppender = new LogAppender("deprecated two-parameter TRIM/LTRIM/RTRIM functions")
         def check(count: Int): Unit = {
           val message = "Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated."

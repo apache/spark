@@ -1212,9 +1212,9 @@ object SQLConf {
           |Active values should be in the range 0-100, and a negative value disables the feature.
           |If both this config and `spark.sql.parser.parserDfaCacheFlushThreshold` are set, the
           |cache is flushed if either condition is met.
-          |Requires `spark.sql.parser.manageParserCachesKillSwitch` to be true to take effect.
+          |Requires `spark.sql.parser.manageParserCaches` to be true to take effect.
           |""".stripMargin)
-      .version("4.0.0")
+      .version("4.1.0")
       .doubleConf
       .checkValue(_ <= 100.0, "The ratio must be less than 100%")
       .createWithDefault(-1.0)
@@ -1235,22 +1235,22 @@ object SQLConf {
           |If this config is set to a negative value, it is ignored.
           |If both this config and `spark.sql.parser.parserDfaCacheFlushRatio` are set, the
           |cache is flushed if either condition is met.
-          |Requires `spark.sql.parser.manageParserCachesKillSwitch` to be true to take effect.
+          |Requires `spark.sql.parser.manageParserCaches` to be true to take effect.
           |
           |Can significantly slow down parsing in exchange for better memory stability.
           |""".stripMargin)
-      .version("4.0.0")
+      .version("4.1.0")
       .intConf
       .createWithDefault(-1)
 
   val MANAGE_PARSER_CACHES =
-    buildConf("spark.sql.parser.manageParserCachesKillSwitch")
+    buildConf("spark.sql.parser.manageParserCaches")
       .internal()
       .doc(
         """When true, we install our own ANTLR caches to manage memory usage. When false, we use the
           |default ANTLR caches. Dependency for
           |`spark.sql.parser.parserDfaCacheFlushThreshold`.""".stripMargin)
-      .version("4.0.0")
+      .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
 
