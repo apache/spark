@@ -339,7 +339,8 @@ class PythonPipelineSuite
         TableIdentifier("st", Some("some_schema"), Some("some_catalog"))))
   }
 
-  test("view works") {
+  test("temporary views works") {
+    // A table is defined since pipeline with only temporary views is invalid.
     val graph = buildGraph(s"""
          |@sdp.table
          |def mv_1():

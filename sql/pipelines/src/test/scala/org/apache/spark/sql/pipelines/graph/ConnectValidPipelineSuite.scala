@@ -55,12 +55,16 @@ class ConnectValidPipelineSuite extends PipelineTest {
     verifyFlowSchema(
       p,
       fullyQualifiedIdentifier("a"),
-      new StructType().add("x", IntegerType, false))
+      new StructType().add("x", IntegerType, false)
+    )
     val outSchema = new StructType().add("y", IntegerType, false)
     verifyFlowSchema(p, fullyQualifiedIdentifier("b"), outSchema)
     assert(
-      p.resolvedFlow(fullyQualifiedIdentifier("b")).inputs == Set(fullyQualifiedIdentifier("a")),
-      "Flow did not have the expected inputs")
+      p.resolvedFlow(fullyQualifiedIdentifier("b")).inputs == Set(
+        fullyQualifiedIdentifier("a")
+      ),
+      "Flow did not have the expected inputs"
+    )
   }
 
   test("Dependencies") {
@@ -86,7 +90,8 @@ class ConnectValidPipelineSuite extends PipelineTest {
     class P extends TestGraphRegistrationContext(spark) {
       registerPersistedView(
         "b",
-        query = sqlFlowFunc(spark, """SELECT * FROM VALUES ((1)) OUTER JOIN d ON false"""))
+        query = sqlFlowFunc(spark, """SELECT * FROM VALUES ((1)) OUTER JOIN d ON false""")
+      )
       registerPersistedView("e", query = readFlowFunc("b"))
       registerPersistedView("d", query = dfFlowFunc(Seq(1).toDF("y")))
     }
@@ -111,8 +116,10 @@ class ConnectValidPipelineSuite extends PipelineTest {
     assert(
       p.resolvedFlow(fullyQualifiedIdentifier("c")).inputs == Set(
         fullyQualifiedIdentifier("a"),
-        fullyQualifiedIdentifier("b")),
-      "Flow did not have the expected inputs")
+        fullyQualifiedIdentifier("b")
+      ),
+      "Flow did not have the expected inputs"
+    )
   }
 
   test("Real join merges schema") {
@@ -122,10 +129,12 @@ class ConnectValidPipelineSuite extends PipelineTest {
     class P extends TestGraphRegistrationContext(spark) {
       registerPersistedView(
         "a",
-        query = dfFlowFunc(Seq((1, "a"), (2, "b"), (3, "c")).toDF("x", "y")))
+        query = dfFlowFunc(Seq((1, "a"), (2, "b"), (3, "c")).toDF("x", "y"))
+      )
       registerPersistedView(
         "b",
-        query = dfFlowFunc(Seq((2, "m"), (3, "n"), (4, "o")).toDF("x", "z")))
+        query = dfFlowFunc(Seq((2, "m"), (3, "n"), (4, "o")).toDF("x", "z"))
+      )
       registerPersistedView("c", query = sqlFlowFunc(spark, "SELECT * FROM a JOIN b USING (x)"))
     }
     val p = new P().resolveToDataflowGraph()
@@ -137,8 +146,10 @@ class ConnectValidPipelineSuite extends PipelineTest {
     assert(
       p.resolvedFlow(fullyQualifiedIdentifier("c")).inputs == Set(
         fullyQualifiedIdentifier("a"),
-        fullyQualifiedIdentifier("b")),
-      "Flow did not have the expected inputs")
+        fullyQualifiedIdentifier("b")
+      ),
+      "Flow did not have the expected inputs"
+    )
   }
 
   test("Union of streaming and batch Dataframes") {
@@ -171,12 +182,15 @@ class ConnectValidPipelineSuite extends PipelineTest {
     verifyFlowSchema(
       p,
       fullyQualifiedIdentifier("c"),
-      new StructType().add("value", IntegerType, false))
+      new StructType().add("value", IntegerType, false)
+    )
     assert(
       p.resolvedFlow(fullyQualifiedIdentifier("c")).inputs == Set(
         fullyQualifiedIdentifier("a"),
-        fullyQualifiedIdentifier("b")),
-      "Flow did not have the expected inputs")
+        fullyQualifiedIdentifier("b")
+      ),
+      "Flow did not have the expected inputs"
+    )
   }
 
   test("Union of two streaming Dataframes") {
@@ -215,12 +229,15 @@ class ConnectValidPipelineSuite extends PipelineTest {
     verifyFlowSchema(
       p,
       fullyQualifiedIdentifier("c"),
-      new StructType().add("value", IntegerType, false))
+      new StructType().add("value", IntegerType, false)
+    )
     assert(
       p.resolvedFlow(fullyQualifiedIdentifier("c")).inputs == Set(
         fullyQualifiedIdentifier("a"),
-        fullyQualifiedIdentifier("b")),
-      "Flow did not have the expected inputs")
+        fullyQualifiedIdentifier("b")
+      ),
+      "Flow did not have the expected inputs"
+    )
   }
 
   test("MultipleInputs") {
@@ -232,7 +249,8 @@ class ConnectValidPipelineSuite extends PipelineTest {
       registerPersistedView("b", query = dfFlowFunc(Seq(4, 5, 6).toDF("y")))
       registerPersistedView(
         "c",
-        query = sqlFlowFunc(spark, "SELECT x AS z FROM a UNION SELECT y AS z FROM b"))
+        query = sqlFlowFunc(spark, "SELECT x AS z FROM a UNION SELECT y AS z FROM b")
+      )
     }
     val p = new P().resolveToDataflowGraph()
     val schema = new StructType().add("z", IntegerType, false)
@@ -253,13 +271,15 @@ class ConnectValidPipelineSuite extends PipelineTest {
       registerTable(
         "d",
         query = Option(sqlFlowFunc(spark, "SELECT * FROM b UNION SELECT * FROM c")),
-        Map("d" -> "d-val"))
+        Map("d" -> "d-val")
+      )
     }
     val graph = p.resolveToDataflowGraph()
     assert(
       graph
-        .flow(fullyQualifiedIdentifier("d", isTemporaryView = false))
-        .sqlConf == Map("a" -> "a-val", "b" -> "b-val", "c" -> "c-val", "d" -> "d-val"))
+        .flow(fullyQualifiedIdentifier("d"))
+        .sqlConf == Map("a" -> "a-val", "b" -> "b-val", "c" -> "c-val", "d" -> "d-val")
+    )
   }
 
   test("Confs aren't fused past materialization points") {
@@ -272,23 +292,27 @@ class ConnectValidPipelineSuite extends PipelineTest {
       registerPersistedView(
         "c",
         query = dfFlowFunc(Seq(2).toDF("x")),
-        sqlConf = Map("c" -> "c-val"))
+        sqlConf = Map("c" -> "c-val")
+      )
       registerTable(
         "d",
         query = Option(sqlFlowFunc(spark, "SELECT * FROM b UNION SELECT * FROM c")),
-        Map("d" -> "d-val"))
+        Map("d" -> "d-val")
+      )
     }
     val graph = p.resolveToDataflowGraph()
     assert(graph.flow(fullyQualifiedIdentifier("a")).sqlConf == Map("a" -> "a-val"))
     assert(
       graph
         .flow(fullyQualifiedIdentifier("b"))
-        .sqlConf == Map("a" -> "a-val", "b" -> "b-val"))
+        .sqlConf == Map("a" -> "a-val", "b" -> "b-val")
+    )
     assert(graph.flow(fullyQualifiedIdentifier("c")).sqlConf == Map("c" -> "c-val"))
     assert(
       graph
         .flow(fullyQualifiedIdentifier("d"))
-        .sqlConf == Map("c" -> "c-val", "d" -> "d-val"))
+        .sqlConf == Map("c" -> "c-val", "d" -> "d-val")
+    )
   }
 
   test("Setting the same conf with the same value is totally cool") {
@@ -301,7 +325,8 @@ class ConnectValidPipelineSuite extends PipelineTest {
       registerTable(
         "c",
         query = Option(sqlFlowFunc(spark, "SELECT * FROM a UNION SELECT * FROM b")),
-        Map("key" -> "val"))
+        Map("key" -> "val")
+      )
     }
     val graph = p.resolveToDataflowGraph()
     assert(graph.flow(fullyQualifiedIdentifier("c")).sqlConf == Map("key" -> "val"))
@@ -322,8 +347,10 @@ class ConnectValidPipelineSuite extends PipelineTest {
     verifyFlowSchema(p, fullyQualifiedIdentifier("b-query"), schema)
     assert(
       p.resolvedFlow(fullyQualifiedIdentifier("b-query")).inputs == Set(
-        fullyQualifiedIdentifier("a")),
-      "Flow did not have the expected inputs")
+        fullyQualifiedIdentifier("a")
+      ),
+      "Flow did not have the expected inputs"
+    )
   }
 
   test("Default query and named query") {
@@ -342,15 +369,20 @@ class ConnectValidPipelineSuite extends PipelineTest {
     verifyFlowSchema(p, fullyQualifiedIdentifier("a"), schema)
     verifyFlowSchema(p, fullyQualifiedIdentifier("b2"), schema)
     assert(
-      p.resolvedFlow(fullyQualifiedIdentifier("b2")).inputs == Set(fullyQualifiedIdentifier("a")),
-      "Flow did not have the expected inputs")
+      p.resolvedFlow(fullyQualifiedIdentifier("b2")).inputs == Set(
+        fullyQualifiedIdentifier("a")
+      ),
+      "Flow did not have the expected inputs"
+    )
     verifyFlowSchema(
       p,
       fullyQualifiedIdentifier("b"),
-      new StructType().add("y", IntegerType, false))
+      new StructType().add("y", IntegerType, false)
+    )
     assert(
       p.resolvedFlow(fullyQualifiedIdentifier("b")).inputs == Set.empty,
-      "Flow did not have the expected inputs")
+      "Flow did not have the expected inputs"
+    )
   }
 
   test("Multi-query table with 2 complete queries") {
@@ -382,58 +414,78 @@ class ConnectValidPipelineSuite extends PipelineTest {
           UnresolvedRelation(
             TableIdentifier("incremental-view"),
             extraOptions = CaseInsensitiveStringMap.empty(),
-            isStreaming = true)))
+            isStreaming = true
+          )
+        )
+      )
       registerFlow(
         "`incremental-table`",
         "`append-once`",
         dfFlowFunc(Seq(1, 2).toDF("x")),
-        once = true)
+        once = true
+      )
     }.resolveToDataflowGraph()
 
     assert(
       graph
         .flow(fullyQualifiedIdentifier("complete-view"))
-        .isInstanceOf[CompleteFlow])
+        .isInstanceOf[CompleteFlow]
+    )
     assert(
       graph
         .flow(fullyQualifiedIdentifier("incremental-view"))
-        .isInstanceOf[StreamingFlow])
+        .isInstanceOf[StreamingFlow]
+    )
     assert(
       graph
         .flow(fullyQualifiedIdentifier("complete-table"))
-        .isInstanceOf[CompleteFlow])
+        .isInstanceOf[CompleteFlow]
+    )
     assert(
       graph
         .flow(fullyQualifiedIdentifier("incremental-table"))
-        .isInstanceOf[StreamingFlow])
+        .isInstanceOf[StreamingFlow]
+    )
     assert(
       graph
         .flow(fullyQualifiedIdentifier("append-once"))
-        .isInstanceOf[AppendOnceFlow])
+        .isInstanceOf[AppendOnceFlow]
+    )
   }
 
   test("Pipeline level default spark confs are applied with correct precedence") {
     val session = spark
     import session.implicits._
 
-    val P = new TestGraphRegistrationContext(spark, Map("default.conf" -> "value")) {
+    val P = new TestGraphRegistrationContext(
+      spark,
+      Map("default.conf" -> "value")
+    ) {
       registerTable(
         "a",
         query = Option(dfFlowFunc(Seq(1, 2, 3).toDF("x"))),
-        sqlConf = Map("other.conf" -> "value"))
+        sqlConf = Map("other.conf" -> "value")
+      )
       registerTable(
         "b",
         query = Option(sqlFlowFunc(spark, "SELECT x as y FROM a")),
-        sqlConf = Map("default.conf" -> "other-value"))
+        sqlConf = Map("default.conf" -> "other-value")
+      )
     }
     val p = P.resolveToDataflowGraph()
 
     assert(
       p.flow(fullyQualifiedIdentifier("a")).sqlConf == Map(
         "default.conf" -> "value",
-        "other.conf" -> "value"))
+        "other.conf" -> "value"
+      )
+    )
 
-    assert(p.flow(fullyQualifiedIdentifier("b")).sqlConf == Map("default.conf" -> "other-value"))
+    assert(
+      p.flow(fullyQualifiedIdentifier("b")).sqlConf == Map(
+        "default.conf" -> "other-value"
+      )
+    )
   }
 
   /** Verifies the [[DataflowGraph]] has the specified [[Flow]] with the specified schema. */
@@ -444,12 +496,15 @@ class ConnectValidPipelineSuite extends PipelineTest {
     assert(
       pipeline.flow.contains(identifier),
       s"Flow ${identifier.unquotedString} not found," +
-        s" all flow names: ${pipeline.flow.keys.map(_.unquotedString)}")
+        s" all flow names: ${pipeline.flow.keys.map(_.unquotedString)}"
+    )
     assert(
       pipeline.resolvedFlow.contains(identifier),
-      s"Flow ${identifier.unquotedString} has not been resolved")
+      s"Flow ${identifier.unquotedString} has not been resolved"
+    )
     assert(
       pipeline.resolvedFlow(identifier).schema == expected,
-      s"Flow ${identifier.unquotedString} has the wrong schema")
+      s"Flow ${identifier.unquotedString} has the wrong schema"
+    )
   }
 }
