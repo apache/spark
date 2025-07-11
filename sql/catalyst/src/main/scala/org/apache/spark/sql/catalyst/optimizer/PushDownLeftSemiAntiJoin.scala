@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.LEFT_SEMI_OR_ANTI_JOIN
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This rule is a variant of [[PushPredicateThroughNonJoin]] which can handle
@@ -35,7 +36,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.LEFT_SEMI_OR_ANTI_JOIN
 object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
   with PredicateHelper
   with JoinSelectionHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val pushThroughUnion = SQLConf.get.getConf(SQLConf.PUSH_LEFT_SEMI_ANTI_THROUGH_UNION)
+    plan.transformWithPruning(
     _.containsPattern(LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
     // LeftSemi/LeftAnti over Project
     case j @ Join(p @ Project(pList, gChild), rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
@@ -85,7 +88,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
 
     // LeftSemi/LeftAnti over Union
     case Join(union: Union, rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
-        if canPushThroughCondition(union.children, joinCond, rightOp) =>
+        if pushThroughUnion && canPushThroughCondition(union.children, joinCond, rightOp) =>
       if (joinCond.isEmpty) {
         // Push down the Join below Union
         val newGrandChildren = union.children.map { Join(_, rightOp, joinType, joinCond, hint) }
@@ -108,6 +111,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
         if PushPredicateThroughNonJoin.canPushThrough(u) && u.expressions.forall(_.deterministic) =>
       val validAttrs = u.child.outputSet ++ rightOp.outputSet
       pushDownJoin(join, _.references.subsetOf(validAttrs), _.reduce(And))
+  }
   }
 
   /**

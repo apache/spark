@@ -103,6 +103,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         ReorderJoin,
         EliminateOuterJoin,
         PushDownPredicates,
+        InferAntiJoin,
         PushDownLeftSemiAntiJoin,
         PushLeftSemiLeftAntiThroughJoin,
         OptimizeJoinCondition,
@@ -277,6 +278,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
   /**
    * Defines rules that cannot be excluded from the Optimizer even if they are specified in
    * SQL config "excludedRules".
+   *
    *
    * Implementations of this class can override this method if necessary. The rule batches
    * that eventually run in the Optimizer, i.e., returned by [[batches]], will be
@@ -2191,7 +2193,108 @@ object EliminateOffsets extends Rule[LogicalPlan] {
 }
 
 /**
- * Check if there any cartesian products between joins of any type in the optimized plan tree.
+ * This rule looks for Left Outer Join followed by IsNull(rhs column) and rewrites it as
+ * Anti Join if possible
+ *
+ * In the simplest case it expects select L.* from L LOJ R on l1 = r1 where r1 is null
+ * or select L.* from L LOJ (select s1 as r1, s2 as r2 from S) R on l1 = r1 where r2 is null.
+ *
+ * The implementation is not comprehensive but is meant to address the common cases seen in
+ * legacy systems submitting queries with "synthetic anti join" expressed as Left Outer
+ * followed by IsNull filter.
+ *
+ * This runs before AntiJoin pushdown rules but after PushDownPredicates and EliminateOuterJoin
+ * Thus the Filter after the join should not have any nullIntolerant predicates using only
+ * one side of the join.
+ */
+object InferAntiJoin extends Rule[LogicalPlan]  with AliasHelper with PredicateHelper {
+  private def suitableFilter(filterCondition: Expression,
+                             outerChild: LogicalPlan,
+                             innerChild: LogicalPlan,
+                             onClauseCond: Expression): Boolean = {
+    // checks if two expressions are on opposite sides of the join
+    def fromDifferentSides(x: Expression, y: Expression): Boolean = {
+      def fromLeftRight(x: Expression, y: Expression) =
+        !x.references.isEmpty && x.references.subsetOf(outerChild.outputSet) &&
+          !y.references.isEmpty && y.references.subsetOf(innerChild.outputSet)
+      fromLeftRight(x, y) || fromLeftRight(y, x)
+    }
+    def suitableEqualTo(eqCond: EqualTo): Boolean = {
+      if (!fromDifferentSides(eqCond.left, eqCond.right)) {
+        return false
+      }
+      val rhsJoinKey = if (eqCond.left.references.subsetOf(outerChild.outputSet)) {
+        eqCond.right
+      } else {
+        eqCond.left
+      }
+
+      /**
+       * Given EqualTo(?, rhsJoinJoin) from the ON clause and IsNull(child)
+       * check if child is the same as rhsJoinKey directly or via alias
+       */
+      def matchesByAlias(aMap: AttributeMap[Alias], child: Expression) = {
+        val newChild = replaceAlias(child, aMap)
+        val newKey = replaceAlias(rhsJoinKey, aMap)
+        newKey.semanticEquals(newChild)
+      }
+      rhsJoinKey match {
+        case e: Expression if e.nullIntolerant =>
+          filterCondition match {
+            /* The "if" ensures it's not something like "L.a + R.b is null" since AJ doesn't
+             output any RHS columns */
+            case IsNull(child: Expression) if child.references.subsetOf(innerChild.outputSet) =>
+              innerChild match {
+                case p : Project =>
+                  matchesByAlias(getAliasMap(p), child)
+                case a: Aggregate =>
+                  // after CollapseProject Aggregate may define aliases
+                  matchesByAlias(getAliasMap(a), child)
+                case _ =>
+                  rhsJoinKey.semanticEquals(child)
+              }
+            case _ => false
+          }
+        case _ => false
+      }
+    }
+
+    val eqConditions = splitConjunctivePredicates(onClauseCond)
+    def suitableExpression(onClauseExpr: Expression): (Boolean, Boolean) = onClauseExpr match {
+      case e: EqualTo => (true, suitableEqualTo(e))
+      case _ => (false, false)
+    }
+    // atLeastOneIsSuitable because all are NullIntolerant (EqualTo)
+    val (allConjunctsAreEqualTo, atLeastOneIsSuitable) =
+      eqConditions.tail.foldLeft(suitableExpression(eqConditions.head))((accum, nextExpr) => {
+      val(a, b) = suitableExpression(nextExpr)
+      (accum._1 && a, accum._2 || b)
+    })
+    allConjunctsAreEqualTo && atLeastOneIsSuitable
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (SQLConf.get.getConf(SQLConf.INFER_ANTI_JOIN)) {
+      plan transformDown {
+        case p@Project(_, Filter(filterCondition,
+        j@Join(lChild, rChild: LogicalPlan, LeftOuter, Some(onClause: Expression), _))) if
+          // nothing from RHS of the join is used above the filter
+          p.references.intersect(rChild.outputSet).isEmpty &&
+            suitableFilter(filterCondition, lChild, rChild, onClause) =>
+          p.copy(child = j.copy(joinType = LeftAnti))
+        case op@Aggregate(_, _, Filter(filterCondition,
+        j@Join(lChild, rChild: LogicalPlan, LeftOuter, Some(onClause: Expression), _)), _) if
+          op.references.intersect(rChild.outputSet).isEmpty &&
+            suitableFilter(filterCondition, lChild, rChild, onClause) =>
+          op.copy(child = j.copy(joinType = LeftAnti))
+      }
+    } else {
+      plan
+    }
+  }
+}
+/**
+ * Check if there are any cartesian products between joins of any type in the optimized plan tree.
  * Throw an error if a cartesian product is found without an explicit cross join specified.
  * This rule is effectively disabled if the CROSS_JOINS_ENABLED flag is true.
  *
