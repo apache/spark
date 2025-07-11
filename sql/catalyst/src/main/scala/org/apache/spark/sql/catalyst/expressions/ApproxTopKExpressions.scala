@@ -97,7 +97,7 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
     } else if (!structFieldNames.contains("maxItemsTracked")) {
       TypeCheckFailure("State struct must contain a field named 'maxItemsTracked'.")
     } else if (stateStructType("maxItemsTracked").dataType != IntegerType) {
-      TypeCheckFailure("'maxItemsTracked' field type of state struct must be of int. " +
+      TypeCheckFailure("'maxItemsTracked' field type of state struct must be int. " +
         "Got: " + stateStructType("maxItemsTracked").dataType.simpleString)
     } else {
       TypeCheckSuccess
