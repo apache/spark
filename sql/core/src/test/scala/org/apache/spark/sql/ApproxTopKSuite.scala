@@ -472,7 +472,7 @@ class ApproxTopKSuite extends QueryTest
     )
   }
 
-  test("SPARK-52588state: invalid estimate if state is not a struct") {
+  test("SPARK-52588: invalid estimate if state is not a struct") {
     checkError(
       exception = intercept[ExtendedAnalysisException] {
         sql("SELECT approx_top_k_estimate(1, 5);")
@@ -488,7 +488,7 @@ class ApproxTopKSuite extends QueryTest
     )
   }
 
-  test("SPARK-52588state: invalid estimate if state struct length is not 3") {
+  test("SPARK-52588: invalid estimate if state struct length is not 3") {
     val invalidState = "named_struct('sketch', X'01', 'itemDataType', CAST(NULL AS INT), " +
       "'maxItemsTracked', 10, 'invalidField', 1)"
     checkError(
@@ -507,7 +507,7 @@ class ApproxTopKSuite extends QueryTest
     )
   }
 
-  test("SPARK-52588state: invalid estimate if state struct does not have 'sketch' field") {
+  test("SPARK-52588: invalid estimate if state struct does not have 'sketch' field") {
     val invalidState =
       "named_struct('notSketch', X'01', 'itemDataType', CAST(NULL AS INT), 'maxItemsTracked', 10)"
     checkError(
@@ -525,7 +525,7 @@ class ApproxTopKSuite extends QueryTest
     )
   }
 
-  test("SPARK-52588state: invalid estimate if 'sketch' field is not binary") {
+  test("SPARK-52588: invalid estimate if 'sketch' field is not binary") {
     val invalidState =
       "named_struct('sketch', 1, 'itemDataType', CAST(NULL AS INT), 'maxItemsTracked', 10)"
     checkError(
@@ -543,7 +543,7 @@ class ApproxTopKSuite extends QueryTest
     )
   }
 
-  test("SPARK-52588state: invalid estimate if state struct does not have 'itemDataType' field") {
+  test("SPARK-52588: invalid estimate if state struct does not have 'itemDataType' field") {
     val invalidState =
       "named_struct('sketch', X'01', 'notItemDataType', CAST(NULL AS INT), 'maxItemsTracked', 10)"
     checkError(
@@ -561,7 +561,7 @@ class ApproxTopKSuite extends QueryTest
     )
   }
 
-  test("SPARK-52588state: invalid estimate if 'itemDataType' field is not supported data type") {
+  test("SPARK-52588: invalid estimate if 'itemDataType' field is not supported data type") {
     val invalidState =
       "named_struct('sketch', X'01', 'itemDataType', CAST(NULL AS BINARY), 'maxItemsTracked', 10)"
     checkError(
@@ -580,7 +580,7 @@ class ApproxTopKSuite extends QueryTest
     )
   }
 
-  test("SPARK-52588state: invalid estimate if state struct does not have 'maxItemsTracked' field") {
+  test("SPARK-52588: invalid estimate if state struct does not have 'maxItemsTracked' field") {
     val invalidState =
       "named_struct('sketch', X'01', 'itemDataType', CAST(NULL AS INT), 'notMaxItemsTracked', 10)"
     checkError(
@@ -598,7 +598,7 @@ class ApproxTopKSuite extends QueryTest
     )
   }
 
-  test("SPARK-52588state: invalid estimate if 'maxItemsTracked' field is not int") {
+  test("SPARK-52588: invalid estimate if 'maxItemsTracked' field is not int") {
     val invalidState =
       "named_struct('sketch', X'01', 'itemDataType', CAST(NULL AS INT), 'maxItemsTracked', 10L)"
     checkError(
