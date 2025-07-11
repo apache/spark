@@ -30,7 +30,6 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.util.Utils
 
-
 class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite {
 
   private val credentialsTempDirectory = Utils.createTempDir()
