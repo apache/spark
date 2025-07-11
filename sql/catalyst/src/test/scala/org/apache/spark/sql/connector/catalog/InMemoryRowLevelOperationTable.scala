@@ -20,14 +20,12 @@ package org.apache.spark.sql.connector.catalog
 import java.time.Instant
 import java.util
 
-import scala.collection.mutable.ListBuffer
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
-import org.apache.spark.sql.connector.metric.CustomTaskMetric
+import org.apache.spark.sql.connector.metric.MergeMetrics
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
@@ -50,8 +48,6 @@ class InMemoryRowLevelOperationTable(
     constraints)
   with SupportsRowLevelOperations {
 
-  private val _scans = ListBuffer.empty[Scan]
-
   private final val PARTITION_COLUMN_REF = FieldReference(PartitionKeyColumn.name)
   private final val INDEX_COLUMN_REF = FieldReference(IndexColumn.name)
   private final val SUPPORTS_DELTAS = "supports-deltas"
@@ -71,16 +67,6 @@ class InMemoryRowLevelOperationTable(
       () => DeltaBasedOperation(info.command)
     } else {
       () => PartitionBasedOperation(info.command)
-    }
-  }
-
-  class InMemoryRowLevelOperationScanBuilder(tableSchema: StructType,
-                                             options: CaseInsensitiveStringMap)
-    extends InMemoryScanBuilder(tableSchema, options) {
-    override def build: Scan = {
-      val scan = super.build
-      _scans += scan
-      scan
     }
   }
 
@@ -117,7 +103,7 @@ class InMemoryRowLevelOperationTable(
                 SortDirection.ASCENDING.defaultNullOrdering()))
           }
 
-          override def toBatch: BatchWrite = PartitionBasedReplaceData(configuredScan, command)
+          override def toBatch: BatchWrite = PartitionBasedReplaceData(configuredScan)
 
           override def description: String = "InMemoryWrite"
         }
@@ -127,44 +113,38 @@ class InMemoryRowLevelOperationTable(
     override def description(): String = "InMemoryPartitionReplaceOperation"
   }
 
-  abstract class RowLevelOperationBatchWrite(command: Command) extends TestBatchWrite {
-    override def requestExecMetrics(): Command = command
+  abstract class RowLevelOperationBatchWrite extends TestBatchWrite {
+    override def requestMergeMetrics(): Boolean = true
 
-    override def execMetrics(metrics: Array[CustomTaskMetric]): Unit = {
-      metrics.foreach(m => commitProperties += (m.name() -> m.value().toString))
+    override def commitWithMerge(messages: Array[WriterCommitMessage], metrics: MergeMetrics):
+    Unit = {
+      commitProperties += "numTargetRowsCopied" -> metrics.numTargetRowsCopied().toString
+      commitProperties += "numTargetRowsInserted" -> metrics.numTargetRowsInserted().toString
+      commitProperties += "numTargetRowsDeleted" -> metrics.numTargetRowsDeleted().toString
+      commitProperties += "numTargetRowsUpdated" -> metrics.numTargetRowsUpdated().toString
+      commitProperties += "numTargetRowsInserted" -> metrics.numTargetRowsInserted().toString
+      commitProperties += ("numTargetRowsNotMatchedBySourceUpdated"
+        -> metrics.numTargetRowsNotMatchedBySourceUpdated().toString)
+      commitProperties += ("numTargetRowsNotMatchedBySourceDeleted"
+        -> metrics.numTargetRowsNotMatchedBySourceDeleted().toString)
+      commitProperties += ("numTargetRowsMatchedDeleted"
+        -> metrics.numTargetRowsMatchedDeleted().toString)
+      commitProperties += ("numTargetRowsMatchedUpdated"
+        -> metrics.numTargetRowsMatchedUpdated().toString)
+      commit(messages)
+      commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
+      commitProperties.clear()
     }
 
     override def commit(messages: Array[WriterCommitMessage]): Unit = {
-      assert(_scans.size <= 2, "Expected at most two scans in row-level operations")
-      assert(_scans.count{ case s: InMemoryBatchScan => s.setFilters.nonEmpty } <= 1,
-        "Expected at most one scan with runtime filters in row-level operations")
-      assert(_scans.count{ case s: InMemoryBatchScan => s.setFilters.isEmpty } <= 1,
-        "Expected at most one scan without runtime filters in row-level operations")
-
-      _scans.foreach{
-        case s: InMemoryBatchScan =>
-          val prefix = if (s.setFilters.isEmpty) {
-            ""
-          } else {
-            "secondScan."
-          }
-          s.reportDriverMetrics().foreach { metric =>
-            commitProperties += (prefix + metric.name() -> metric.value().toString)
-          }
-        case _ =>
-      }
-      _scans.clear()
       doCommit(messages)
-      commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
-      commitProperties.clear()
     }
 
     def doCommit(messages: Array[WriterCommitMessage]): Unit
   }
 
-  private case class PartitionBasedReplaceData(scan: InMemoryBatchScan,
-                                               command: RowLevelOperation.Command)
-    extends RowLevelOperationBatchWrite(command) {
+  private case class PartitionBasedReplaceData(scan: InMemoryBatchScan)
+    extends RowLevelOperationBatchWrite {
 
     override def doCommit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
@@ -187,7 +167,7 @@ class InMemoryRowLevelOperationTable(
     override def rowId(): Array[NamedReference] = Array(PK_COLUMN_REF)
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new InMemoryRowLevelOperationScanBuilder(schema, options)
+      new InMemoryScanBuilder(schema, options)
     }
 
     override def newWriteBuilder(info: LogicalWriteInfo): DeltaWriteBuilder = {
@@ -208,7 +188,7 @@ class InMemoryRowLevelOperationTable(
             )
           }
 
-          override def toBatch: DeltaBatchWrite = TestDeltaBatchWrite(command)
+          override def toBatch: DeltaBatchWrite = TestDeltaBatchWrite
         }
       }
     }
@@ -218,9 +198,7 @@ class InMemoryRowLevelOperationTable(
     }
   }
 
-  private case class TestDeltaBatchWrite(command: Command)
-    extends RowLevelOperationBatchWrite(command) with DeltaBatchWrite{
-
+  private object TestDeltaBatchWrite extends RowLevelOperationBatchWrite with DeltaBatchWrite{
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DeltaWriterFactory = {
       DeltaBufferedRowsWriterFactory
     }

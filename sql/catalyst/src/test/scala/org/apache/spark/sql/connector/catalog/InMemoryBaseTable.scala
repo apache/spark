@@ -516,24 +516,6 @@ abstract class InMemoryBaseTable(
       options: CaseInsensitiveStringMap)
     extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
 
-    var setFilters = Array.empty[Filter]
-
-    override def reportDriverMetrics(): Array[CustomTaskMetric] =
-      Array(new CustomTaskMetric{
-        override def name(): String = "numSplits"
-        override def value(): Long = 1L
-      })
-
-    override def supportedCustomMetrics(): Array[CustomMetric] = {
-      Array(new CustomMetric {
-        override def name(): String = "numSplits"
-        override def description(): String = "number of splits in the scan"
-        override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
-          taskMetrics.sum.toString
-        }
-      })
-    }
-
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet
       partitioning.flatMap(_.references)
@@ -541,7 +523,6 @@ abstract class InMemoryBaseTable(
     }
 
     override def filter(filters: Array[Filter]): Unit = {
-      this.setFilters = filters
       if (partitioning.length == 1 && partitioning.head.references().length == 1) {
         val ref = partitioning.head.references().head
         filters.foreach {
@@ -818,14 +799,6 @@ private class BufferedRowsReader(
   }
 
   override def close(): Unit = {}
-
-  override def currentMetricsValues(): Array[CustomTaskMetric] =
-    Array[CustomTaskMetric](
-      new CustomTaskMetric {
-        override def name(): String = "numSplits"
-        override def value(): Long = 1
-      }
-    )
 
   private def extractFieldValue(
       field: StructField,
