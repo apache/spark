@@ -424,18 +424,19 @@ class FractionalOps(NumericOps):
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("True division can not be applied to given types.")
         spark_session = left._internal.spark_frame.sparkSession
-        right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
+        new_right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
+        left_dtype = left.dtype
 
         def truediv(left: PySparkColumn, right: Any) -> PySparkColumn:
             if is_ansi_mode_enabled(spark_session):
-                return F.when(
+                expr = F.when(
                     F.lit(right == 0),
                     F.when(left < 0, F.lit(float("-inf")))
                     .when(left > 0, F.lit(float("inf")))
                     .otherwise(F.lit(np.nan)),
                 ).otherwise(left / right)
             else:
-                return F.when(
+                expr = F.when(
                     F.lit(right != 0) | F.lit(right).isNull(),
                     left.__div__(right),
                 ).otherwise(
@@ -443,8 +444,9 @@ class FractionalOps(NumericOps):
                         F.lit(np.inf).__div__(left)
                     )
                 )
+            return _cast_back_float(expr, left_dtype, right)
 
-        return numpy_column_op(truediv)(left, right)
+        return numpy_column_op(truediv)(left, new_right)
 
     def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
@@ -452,6 +454,7 @@ class FractionalOps(NumericOps):
             raise TypeError("Floor division can not be applied to given types.")
         spark_session = left._internal.spark_frame.sparkSession
         use_try_divide = is_ansi_mode_enabled(spark_session)
+        left_dtype = left.dtype
 
         def fallback_div(x: PySparkColumn, y: PySparkColumn) -> PySparkColumn:
             return x.__div__(y)
@@ -461,7 +464,7 @@ class FractionalOps(NumericOps):
         )
 
         def floordiv(left: PySparkColumn, right: Any) -> PySparkColumn:
-            return F.when(F.lit(right is np.nan), np.nan).otherwise(
+            expr = F.when(F.lit(right is np.nan), np.nan).otherwise(
                 F.when(
                     F.lit(right != 0) | F.lit(right).isNull(),
                     F.floor(left.__div__(right)),
@@ -471,9 +474,10 @@ class FractionalOps(NumericOps):
                     )
                 )
             )
+            return _cast_back_float(expr, left_dtype, right)
 
-        right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
-        return numpy_column_op(floordiv)(left, right)
+        new_right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
+        return numpy_column_op(floordiv)(left, new_right)
 
     def rtruediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
