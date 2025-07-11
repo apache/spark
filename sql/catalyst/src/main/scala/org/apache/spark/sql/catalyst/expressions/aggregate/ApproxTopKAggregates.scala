@@ -43,9 +43,11 @@ import org.apache.spark.unsafe.types.UTF8String
  * See [[https://datasketches.apache.org/docs/Frequency/FrequencySketches.html]]
  * for more information.
  *
- * @param expr            the child expression to estimate the top K items from
- * @param k               the number of top items to return (K)
- * @param maxItemsTracked the maximum number of items to track in the sketch
+ * @param expr                   the child expression to estimate the top K items from
+ * @param k                      the number of top items to return (K)
+ * @param maxItemsTracked        the maximum number of items to track in the sketch
+ * @param mutableAggBufferOffset the offset for mutable aggregation buffer
+ * @param inputAggBufferOffset   the offset for input aggregation buffer
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -329,8 +331,10 @@ object ApproxTopK {
  * a null object indicating the type of items in the sketch,
  * and the maximum number of items tracked by the sketch.
  *
- * @param expr            the child expression to accumulate items from
- * @param maxItemsTracked the maximum number of items to track in the sketch
+ * @param expr                   the child expression to accumulate items from
+ * @param maxItemsTracked        the maximum number of items to track in the sketch
+ * @param mutableAggBufferOffset the offset for mutable aggregation buffer
+ * @param inputAggBufferOffset   the offset for input aggregation buffer
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
