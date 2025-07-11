@@ -68,15 +68,15 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     assert(
       ex.getMessage.contains(
         s"Flows with errors: " +
-          s"${fullyQualifiedIdentifier("b").unquotedString}," +
-          s" ${fullyQualifiedIdentifier("e").unquotedString}"
+        s"${fullyQualifiedIdentifier("b").unquotedString}," +
+        s" ${fullyQualifiedIdentifier("e").unquotedString}"
       )
     )
     assert(
       ex.getMessage.contains(
         s"Flows that failed due to upstream errors: " +
-          s"${fullyQualifiedIdentifier("c").unquotedString}, " +
-          s"${fullyQualifiedIdentifier("f").unquotedString}"
+        s"${fullyQualifiedIdentifier("c").unquotedString}, " +
+        s"${fullyQualifiedIdentifier("f").unquotedString}"
       )
     )
     assert(
@@ -113,8 +113,8 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
         .getMessage
         .contains(
           s"Failed to read dataset " +
-            s"'${fullyQualifiedIdentifier("b").unquotedString}'. " +
-            s"Dataset is defined in the pipeline but could not be resolved"
+          s"'${fullyQualifiedIdentifier("b").unquotedString}'. " +
+          s"Dataset is defined in the pipeline but could not be resolved"
         )
     )
     assert(
@@ -126,8 +126,8 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
         .getMessage
         .contains(
           s"Failed to read dataset " +
-            s"'${fullyQualifiedIdentifier("e").unquotedString}'. " +
-            s"Dataset is defined in the pipeline but could not be resolved"
+          s"'${fullyQualifiedIdentifier("e").unquotedString}'. " +
+          s"Dataset is defined in the pipeline but could not be resolved"
         )
     )
   }
@@ -357,14 +357,14 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     assert(
       ex.getMessage.contains(
         s"Found duplicate sql conf for dataset " +
-          s"'${fullyQualifiedIdentifier("b").unquotedString}':"
+        s"'${fullyQualifiedIdentifier("b").unquotedString}':"
       )
     )
     assert(
       ex.getMessage.contains(
         s"'x' is defined by both " +
-          s"'${fullyQualifiedIdentifier("a").unquotedString}' " +
-          s"and '${fullyQualifiedIdentifier("b").unquotedString}'"
+        s"'${fullyQualifiedIdentifier("a").unquotedString}' " +
+        s"and '${fullyQualifiedIdentifier("b").unquotedString}'"
       )
     )
   }
@@ -386,14 +386,14 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     assert(
       ex.getMessage.contains(
         s"Found duplicate sql conf for dataset " +
-          s"'${fullyQualifiedIdentifier("c").unquotedString}':"
+        s"'${fullyQualifiedIdentifier("c").unquotedString}':"
       )
     )
     assert(
       ex.getMessage.contains(
         s"'x' is defined by both " +
-          s"'${fullyQualifiedIdentifier("a").unquotedString}' " +
-          s"and '${fullyQualifiedIdentifier("b").unquotedString}'"
+        s"'${fullyQualifiedIdentifier("a").unquotedString}' " +
+        s"and '${fullyQualifiedIdentifier("b").unquotedString}'"
       )
     )
   }
@@ -412,7 +412,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
         .getMessage
         .contains(
           s"View ${fullyQualifiedIdentifier("a").quotedString}" +
-            s" is a batch view and must be referenced using SparkSession#read."
+          s" is a batch view and must be referenced using SparkSession#read."
         )
     )
   }
@@ -433,7 +433,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
         .getMessage
         .contains(
           s"View ${fullyQualifiedIdentifier("a").quotedString} " +
-            s"is a streaming view and must be referenced using SparkSession#readStream"
+          s"is a streaming view and must be referenced using SparkSession#readStream"
         )
     )
   }
@@ -524,7 +524,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     assert(
       ex1.getMessage.contains(
         s"'${fullyQualifiedIdentifier("a").unquotedString}' " +
-          s"has a user-specified schema that is incompatible"
+        s"has a user-specified schema that is incompatible"
       )
     )
     assert(ex1.getMessage.contains("incorrect-col-name"))
@@ -537,7 +537,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     assert(
       ex2.getMessage.contains(
         s"'${fullyQualifiedIdentifier("a").unquotedString}' " +
-          s"has a user-specified schema that is incompatible"
+        s"has a user-specified schema that is incompatible"
       )
     )
     assert(ex2.getMessage.contains("boolean") && ex2.getMessage.contains("integer"))
