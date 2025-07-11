@@ -156,7 +156,6 @@ class TestGraphRegistrationContext(
           ),
           sqlConf = sqlConf,
           once = false,
-          comment = comment,
           origin = baseOrigin
         )
       )
@@ -207,7 +206,6 @@ class TestGraphRegistrationContext(
         ),
         sqlConf = sqlConf,
         once = false,
-        comment = comment,
         origin = origin
       )
     )
@@ -236,7 +234,6 @@ class TestGraphRegistrationContext(
         ),
         sqlConf = Map.empty,
         once = once,
-        comment = None,
         origin = QueryOrigin()
       )
     )

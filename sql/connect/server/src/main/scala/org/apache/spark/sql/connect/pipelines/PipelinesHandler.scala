@@ -212,7 +212,6 @@ private[connect] object PipelinesHandler extends Logging {
         queryContext = QueryContext(
           Option(graphElementRegistry.defaultCatalog),
           Option(graphElementRegistry.defaultDatabase)),
-        comment = None,
         origin = QueryOrigin(
           objectType = Option(QueryOriginType.Flow.toString),
           objectName = Option(flowIdentifier.unquotedString),
