@@ -115,6 +115,8 @@ object Cast extends QueryErrorsBase {
     case (_: AnsiIntervalType, _: IntegralType | _: DecimalType) => true
     case (_: IntegralType | _: DecimalType, _: AnsiIntervalType) => true
 
+    case (_: TimeType, _: DecimalType) => true
+
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
 
@@ -229,6 +231,8 @@ object Cast extends QueryErrorsBase {
     case (_: StringType, _: TimeType) => true
     case (TimestampType, DateType) => true
     case (TimestampNTZType, DateType) => true
+
+    case (_: TimeType, _: DecimalType) => true
 
     case (_: StringType, CalendarIntervalType) => true
     case (_: StringType, _: DayTimeIntervalType) => true
@@ -1011,6 +1015,8 @@ case class Cast(
     case TimestampType =>
       // Note that we lose precision here.
       buildCast[Long](_, t => changePrecision(Decimal(timestampToDouble(t)), target))
+    case _: TimeType =>
+      buildCast[Long](_, t => changePrecision(Decimal(t / MICROS_PER_SECOND.toDouble), target))
     case dt: DecimalType =>
       b => toPrecision(b.asInstanceOf[Decimal], target, getContextOrNull())
     case t: IntegralType =>
@@ -1474,6 +1480,13 @@ case class Cast(
           code"""
             Decimal $tmp = Decimal.apply(
               scala.math.BigDecimal.valueOf(${timestampToDoubleCode(c)}));
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
+          """
+      case _: TimeType =>
+        (c, evPrim, evNull) =>
+          code"""
+            Decimal $tmp = Decimal.apply(
+              scala.math.BigDecimal.valueOf((double)$c / $MICROS_PER_SECOND));
             ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case DecimalType() =>

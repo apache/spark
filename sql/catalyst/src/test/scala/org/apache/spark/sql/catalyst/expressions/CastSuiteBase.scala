@@ -1507,4 +1507,50 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+
+  test("cast time to decimal") {
+    // Test various TIME values converted to decimals.
+    Seq(
+      // 00:00:00 -> 0
+      (LocalTime.MIDNIGHT, Decimal(0)),
+      // 01:00:00 -> 3600
+      (LocalTime.of(1, 0, 0), Decimal(3600)),
+      // 01:01:00 -> 3660
+      (LocalTime.of(1, 1, 0), Decimal(3660)),
+      // 01:01:01 -> 3661
+      (LocalTime.of(1, 1, 1), Decimal(3661)),
+      // 01:02:03 -> 3723
+      (LocalTime.of(1, 2, 3), Decimal(3723)),
+      // 12:00:00 -> 43200
+      (LocalTime.NOON, Decimal(43200)),
+      // 23:59:59 -> 86399
+      (LocalTime.of(23, 59, 59), Decimal(86399)),
+      // 23:59:59.1 -> 86399.1
+      (LocalTime.of(23, 59, 59, 100000000), Decimal(86399.1)),
+      // 23:59:59.01 -> 86399.01
+      (LocalTime.of(23, 59, 59, 10000000), Decimal(86399.01)),
+      // 23:59:59.001 -> 86399.001
+      (LocalTime.of(23, 59, 59, 1000000), Decimal(86399.001)),
+      // 23:59:59.0001 -> 86399.0001
+      (LocalTime.of(23, 59, 59, 100000), Decimal(86399.0001)),
+      // 23:59:59.00001 -> 86399.00001
+      (LocalTime.of(23, 59, 59, 10000), Decimal(86399.00001)),
+      // 23:59:59.000001 -> 86399.000001
+      (LocalTime.of(23, 59, 59, 1000), Decimal(86399.000001))
+    ).foreach { case (time, expectedDecimal) =>
+      checkEvaluation(Cast(Literal(time), DecimalType(11, 6)), expectedDecimal)
+    }
+
+    // Test with different decimal precision and scale.
+    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(6, 1)), Decimal(43200.0, 6, 1))
+    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(7, 2)), Decimal(43200.00, 7, 2))
+    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(8, 3)), Decimal(43200.000, 8, 3))
+    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(9, 4)), Decimal(43200.0000, 9, 4))
+    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(10, 5)), Decimal(43200.00000, 10, 5))
+    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(11, 6)), Decimal(43200.000000, 11, 6))
+
+    // Test consistency between interpreted and codegen modes.
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => Cast(child, DecimalType(11, 6)), TimeType())
+  }
 }
