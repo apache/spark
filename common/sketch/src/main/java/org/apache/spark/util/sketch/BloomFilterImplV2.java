@@ -18,29 +18,15 @@
 package org.apache.spark.util.sketch;
 
 import java.io.*;
-import java.util.Objects;
 
-class BloomFilterImplV2 extends BloomFilter implements Serializable {
-
-  public static final int DEFAULT_SEED = 0;
-
-  private int seed;
-  private int numHashFunctions;
-
-  private BitArray bits;
-
-  BloomFilterImplV2(int numHashFunctions, long numBits) {
-    this(numHashFunctions, numBits, DEFAULT_SEED);
-  }
+class BloomFilterImplV2 extends BloomFilterBase implements Serializable {
 
   BloomFilterImplV2(int numHashFunctions, long numBits, int seed) {
     this(new BitArray(numBits), numHashFunctions, seed);
   }
 
   private BloomFilterImplV2(BitArray bits, int numHashFunctions, int seed) {
-    this.bits = bits;
-    this.numHashFunctions = numHashFunctions;
-    this.seed = seed;
+    super(bits, numHashFunctions, seed);
   }
 
   private BloomFilterImplV2() {}
@@ -62,37 +48,6 @@ class BloomFilterImplV2 extends BloomFilter implements Serializable {
   }
 
   @Override
-  public int hashCode() {
-    return Objects.hash(numHashFunctions, seed, bits);
-  }
-
-  @Override
-  public double expectedFpp() {
-    return Math.pow((double) bits.cardinality() / bits.bitSize(), numHashFunctions);
-  }
-
-  @Override
-  public long bitSize() {
-    return bits.bitSize();
-  }
-
-  @Override
-  public boolean put(Object item) {
-    if (item instanceof String str) {
-      return putString(str);
-    } else if (item instanceof byte[] bytes) {
-      return putBinary(bytes);
-    } else {
-      return putLong(Utils.integralToLong(item));
-    }
-  }
-
-  @Override
-  public boolean putString(String item) {
-    return putBinary(Utils.getBytesFromUTF8String(item));
-  }
-
-  @Override
   public boolean putBinary(byte[] item) {
     int h1 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, seed);
     int h2 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, h1);
@@ -111,11 +66,6 @@ class BloomFilterImplV2 extends BloomFilter implements Serializable {
       bitsChanged |= bits.set(combinedIndex % bitSize);
     }
     return bitsChanged;
-  }
-
-  @Override
-  public boolean mightContainString(String item) {
-    return mightContainBinary(Utils.getBytesFromUTF8String(item));
   }
 
   @Override
@@ -188,55 +138,7 @@ class BloomFilterImplV2 extends BloomFilter implements Serializable {
     return true;
   }
 
-  @Override
-  public boolean mightContain(Object item) {
-    if (item instanceof String str) {
-      return mightContainString(str);
-    } else if (item instanceof byte[] bytes) {
-      return mightContainBinary(bytes);
-    } else {
-      return mightContainLong(Utils.integralToLong(item));
-    }
-  }
-
-  @Override
-  public boolean isCompatible(BloomFilter other) {
-    if (other == null) {
-      return false;
-    }
-
-    if (!(other instanceof BloomFilterImplV2 that)) {
-      return false;
-    }
-
-    return
-      this.bitSize() == that.bitSize()
-      && this.numHashFunctions == that.numHashFunctions
-      && this.seed == that.seed;
-  }
-
-  @Override
-  public BloomFilter mergeInPlace(BloomFilter other) throws IncompatibleMergeException {
-    BloomFilterImplV2 otherImplInstance = checkCompatibilityForMerge(other);
-
-    this.bits.putAll(otherImplInstance.bits);
-    return this;
-  }
-
-  @Override
-  public BloomFilter intersectInPlace(BloomFilter other) throws IncompatibleMergeException {
-    BloomFilterImplV2 otherImplInstance = checkCompatibilityForMerge(other);
-
-    this.bits.and(otherImplInstance.bits);
-    return this;
-  }
-
-  @Override
-  public long cardinality() {
-    return this.bits.cardinality();
-  }
-
-  private BloomFilterImplV2 checkCompatibilityForMerge(BloomFilter other)
+  protected BloomFilterImplV2 checkCompatibilityForMerge(BloomFilter other)
           throws IncompatibleMergeException {
     // Duplicates the logic of `isCompatible` here to provide better error message.
     if (other == null) {
@@ -296,10 +198,12 @@ class BloomFilterImplV2 extends BloomFilter implements Serializable {
     return filter;
   }
 
+  @Serial
   private void writeObject(ObjectOutputStream out) throws IOException {
     writeTo(out);
   }
 
+  @Serial
   private void readObject(ObjectInputStream in) throws IOException {
     readFrom0(in);
   }

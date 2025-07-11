@@ -19,66 +19,13 @@ package org.apache.spark.util.sketch;
 
 import java.io.*;
 
-class BloomFilterImpl extends BloomFilter implements Serializable {
-
-  private int numHashFunctions;
-
-  private BitArray bits;
+class BloomFilterImpl extends BloomFilterBase implements Serializable {
 
   BloomFilterImpl(int numHashFunctions, long numBits) {
-    this(new BitArray(numBits), numHashFunctions);
-  }
-
-  private BloomFilterImpl(BitArray bits, int numHashFunctions) {
-    this.bits = bits;
-    this.numHashFunctions = numHashFunctions;
+    super(numHashFunctions, numBits);
   }
 
   private BloomFilterImpl() {}
-
-  @Override
-  public boolean equals(Object other) {
-    if (other == this) {
-      return true;
-    }
-
-    if (!(other instanceof BloomFilterImpl that)) {
-      return false;
-    }
-
-    return this.numHashFunctions == that.numHashFunctions && this.bits.equals(that.bits);
-  }
-
-  @Override
-  public int hashCode() {
-    return bits.hashCode() * 31 + numHashFunctions;
-  }
-
-  @Override
-  public double expectedFpp() {
-    return Math.pow((double) bits.cardinality() / bits.bitSize(), numHashFunctions);
-  }
-
-  @Override
-  public long bitSize() {
-    return bits.bitSize();
-  }
-
-  @Override
-  public boolean put(Object item) {
-    if (item instanceof String str) {
-      return putString(str);
-    } else if (item instanceof byte[] bytes) {
-      return putBinary(bytes);
-    } else {
-      return putLong(Utils.integralToLong(item));
-    }
-  }
-
-  @Override
-  public boolean putString(String item) {
-    return putBinary(Utils.getBytesFromUTF8String(item));
-  }
 
   @Override
   public boolean putBinary(byte[] item) {
@@ -96,11 +43,6 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
       bitsChanged |= bits.set(combinedHash % bitSize);
     }
     return bitsChanged;
-  }
-
-  @Override
-  public boolean mightContainString(String item) {
-    return mightContainBinary(Utils.getBytesFromUTF8String(item));
   }
 
   @Override
@@ -164,52 +106,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     return true;
   }
 
-  @Override
-  public boolean mightContain(Object item) {
-    if (item instanceof String str) {
-      return mightContainString(str);
-    } else if (item instanceof byte[] bytes) {
-      return mightContainBinary(bytes);
-    } else {
-      return mightContainLong(Utils.integralToLong(item));
-    }
-  }
-
-  @Override
-  public boolean isCompatible(BloomFilter other) {
-    if (other == null) {
-      return false;
-    }
-
-    if (!(other instanceof BloomFilterImpl that)) {
-      return false;
-    }
-
-    return this.bitSize() == that.bitSize() && this.numHashFunctions == that.numHashFunctions;
-  }
-
-  @Override
-  public BloomFilter mergeInPlace(BloomFilter other) throws IncompatibleMergeException {
-    BloomFilterImpl otherImplInstance = checkCompatibilityForMerge(other);
-
-    this.bits.putAll(otherImplInstance.bits);
-    return this;
-  }
-
-  @Override
-  public BloomFilter intersectInPlace(BloomFilter other) throws IncompatibleMergeException {
-    BloomFilterImpl otherImplInstance = checkCompatibilityForMerge(other);
-
-    this.bits.and(otherImplInstance.bits);
-    return this;
-  }
-
-  @Override
-  public long cardinality() {
-    return this.bits.cardinality();
-  }
-
-  private BloomFilterImpl checkCompatibilityForMerge(BloomFilter other)
+  protected BloomFilterImpl checkCompatibilityForMerge(BloomFilter other)
           throws IncompatibleMergeException {
     // Duplicates the logic of `isCompatible` here to provide better error message.
     if (other == null) {
@@ -240,6 +137,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
     dos.writeInt(Version.V1.getVersionNumber());
     dos.writeInt(numHashFunctions);
+    // ignore seed
     bits.writeTo(dos);
   }
 
@@ -252,6 +150,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     }
 
     this.numHashFunctions = dis.readInt();
+    this.seed = DEFAULT_SEED;
     this.bits = BitArray.readFrom(dis);
   }
 
@@ -267,10 +166,12 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     return BloomFilter.readFrom(bytes);
   }
 
+  @Serial
   private void writeObject(ObjectOutputStream out) throws IOException {
     writeTo(out);
   }
 
+  @Serial
   private void readObject(ObjectInputStream in) throws IOException {
     readFrom0(in);
   }
