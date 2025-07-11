@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUt
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSERT_OPERATION, REINSERT_OPERATION, UPDATE_OPERATION, WRITE_OPERATION, WRITE_WITH_METADATA_OPERATION}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
+import org.apache.spark.sql.connector.metric.{CustomMetric, MergeMetrics}
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, RowLevelOperation, Write, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryExecNode}
@@ -255,7 +255,8 @@ case class AtomicReplaceTableAsSelectExec(
 case class AppendDataExec(
     query: SparkPlan,
     refreshCache: () => Unit,
-    write: Write) extends V2ExistingTableWriteExec {
+    write: Write,
+    override val command: Option[RowLevelOperation.Command]) extends V2ExistingTableWriteExec {
   override protected def withNewChildInternal(newChild: SparkPlan): AppendDataExec =
     copy(query = newChild)
 }
@@ -302,7 +303,8 @@ case class ReplaceDataExec(
     query: SparkPlan,
     refreshCache: () => Unit,
     projections: ReplaceDataProjections,
-    write: Write) extends V2ExistingTableWriteExec {
+    write: Write,
+    override val command: Option[RowLevelOperation.Command]) extends V2ExistingTableWriteExec {
 
   override val stringArgs: Iterator[Any] = Iterator(query, write)
 
@@ -327,7 +329,8 @@ case class WriteDeltaExec(
     query: SparkPlan,
     refreshCache: () => Unit,
     projections: WriteDeltaProjections,
-    write: DeltaWrite) extends V2ExistingTableWriteExec {
+    write: DeltaWrite,
+    override val command: Option[RowLevelOperation.Command]) extends V2ExistingTableWriteExec {
 
   override lazy val stringArgs: Iterator[Any] = Iterator(query, write)
 
@@ -348,7 +351,8 @@ case class WriteToDataSourceV2Exec(
     batchWrite: BatchWrite,
     refreshCache: () => Unit,
     query: SparkPlan,
-    writeMetrics: Seq[CustomMetric]) extends V2TableWriteExec {
+    writeMetrics: Seq[CustomMetric],
+    override val command: Option[RowLevelOperation.Command]) extends V2TableWriteExec {
 
   override val customMetrics: Map[String, SQLMetric] = writeMetrics.map { customMetric =>
     customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
@@ -402,6 +406,7 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec {
 trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSparkPlanHelper {
   def query: SparkPlan
   def writingTask: WritingSparkTask[_] = DataWritingSparkTask
+  def command: Option[RowLevelOperation.Command] = None
 
   var commitProgress: Option[StreamWriterCommitProgress] = None
 
@@ -422,21 +427,6 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
       } else {
         tempRdd
       }
-    }
-
-    val metricsOpt = batchWrite.requestExecMetrics() match {
-      case RowLevelOperation.Command.MERGE =>
-        collectFirst(query) {
-          case m: MergeRowsExec => m.metrics
-        }
-      case _ => None
-    }
-    metricsOpt.foreach { metrics =>
-      batchWrite.execMetrics(
-        metrics.map {
-          case (k, v) => V2ExecMetric(k, v.value)
-        }.toArray
-      )
     }
 
     // introduce a local var to avoid serializing the whole class
@@ -468,8 +458,17 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
         }
       )
 
+      val mergeMetricsOpt = command.collect{
+        case c: RowLevelOperation.Command if c == RowLevelOperation.Command.MERGE
+            && batchWrite.requestMergeMetrics() =>
+          getMergeMetrics(query)
+      }
+
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} is committing.")
-      batchWrite.commit(messages)
+      mergeMetricsOpt match {
+        case Some(metrics) => batchWrite.commitWithMerge(messages, metrics)
+        case None => batchWrite.commit(messages)
+      }
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} committed.")
       commitProgress = Some(StreamWriterCommitProgress(totalNumRowsAccumulator.value))
     } catch {
@@ -490,6 +489,36 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
     }
 
     Nil
+  }
+
+  private def getMergeMetrics(query: SparkPlan): MergeMetrics = {
+    val mergeMetricsBuilder = new MergeMetrics.Builder()
+    val mergeNode = collectFirst(query) {case c: MergeRowsExec => c}
+    mergeNode.foreach {n => mergeMetricValues(n.metrics, mergeMetricsBuilder)}
+    mergeMetricsBuilder.build()
+  }
+
+  private def metric(metrics: Map[String, SQLMetric], metric: String): Long = {
+    metrics.get(metric) match {
+      case Some(m) => m.value
+      case None => -1
+    }
+  }
+
+  private def mergeMetricValues(mergeNodeMetrics: Map[String, SQLMetric],
+                           metricBuilder: MergeMetrics.Builder): Option[MergeMetrics.Builder] = {
+    metricBuilder
+      .numTargetRowsCopied(metric(mergeNodeMetrics, "numTargetRowsCopied"))
+      .numTargetRowsDeleted(metric(mergeNodeMetrics, "numTargetRowsDeleted"))
+      .numTargetRowsUpdated(metric(mergeNodeMetrics, "numTargetRowsUpdated"))
+      .numTargetRowsInserted(metric(mergeNodeMetrics, "numTargetRowsInserted"))
+      .numTargetRowsNotMatchedBySourceDeleted(
+        metric(mergeNodeMetrics, "numTargetRowsNotMatchedBySourceDeleted"))
+      .numTargetRowsNotMatchedBySourceUpdated(
+        metric(mergeNodeMetrics, "numTargetRowsNotMatchedBySourceUpdated"))
+      .numTargetRowsMatchedDeleted(metric(mergeNodeMetrics, "numTargetRowsMatchedDeleted"))
+      .numTargetRowsMatchedUpdated(metric(mergeNodeMetrics, "numTargetRowsMatchedUpdated"))
+    Some(metricBuilder)
   }
 }
 
@@ -745,5 +774,3 @@ private[v2] case class DataWritingSparkTaskResult(
  * Sink progress information collected after commit.
  */
 private[sql] case class StreamWriterCommitProgress(numOutputRows: Long)
-
-private [v2] case class V2ExecMetric(name: String, value: Long) extends CustomTaskMetric
