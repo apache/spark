@@ -122,8 +122,7 @@ class FrameBinaryOpsMixin:
             dtype=np.float32,
         )
         psdf = ps.from_pandas(pdf)
-        # TODO(SPARK-52332): Fix promotion from float32 to float64 during division
-        self.assert_eq(psdf["a"] / psdf["b"], (pdf["a"] / pdf["b"]).astype(np.float64))
+        self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
 
         # np.float64
         pdf = pd.DataFrame(
