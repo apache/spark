@@ -4495,6 +4495,13 @@
     ],
     "sqlState" : "42601"
   },
+  "NO_DATASET_IN_PIPELINE" : {
+    "message" : [
+      "Pipelines are expected to have at least one non-temporary dataset defined (tables, persisted views) but no non-temporary datasets were found in your pipeline.",
+      "Please verify that you have included the expected source files, and that your source code includes table definitions (e.g., CREATE MATERIALIZED VIEW in SQL code, @sdp.table in python code)."
+    ],
+    "sqlState" : "42617"
+  },
   "NO_DEFAULT_COLUMN_VALUE_AVAILABLE" : {
     "message" : [
       "Can't determine the default value for <colName> since it is not nullable and it has no default value."
@@ -4518,13 +4525,6 @@
       "Cannot find <catalystFieldPath> in Protobuf schema."
     ],
     "sqlState" : "42S22"
-  },
-  "NO_DATASET_IN_PIPELINE" : {
-    "message" : [
-      "Pipelines are expected to have at least one non-temporary dataset defined (tables, persisted views) but no non-temporary datasets were found in your pipeline.",
-      "Please verify that you have included the expected source files, and that your source code includes table definitions (e.g., CREATE MATERIALIZED VIEW in SQL code, @sdp.table in python code)."
-    ],
-    "sqlState" : "42617"
   },
   "NO_UDF_INTERFACE" : {
     "message" : [
