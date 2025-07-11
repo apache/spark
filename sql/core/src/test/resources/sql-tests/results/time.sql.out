@@ -693,7 +693,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT TIME'12:30:41.123' - TIMESTAMP'10:00:01'
+SELECT TIME'12:30:41.123' - TIMESTAMP'2025-07-11 10:00:01'
 -- !query schema
 struct<>
 -- !query output
@@ -706,14 +706,14 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"TIME(6)\"",
     "paramIndex" : "first",
     "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
-    "sqlExpr" : "\"(TIME '12:30:41.123' - TIMESTAMP '2025-07-10 10:00:01')\""
+    "sqlExpr" : "\"(TIME '12:30:41.123' - TIMESTAMP '2025-07-11 10:00:01')\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 47,
-    "fragment" : "TIME'12:30:41.123' - TIMESTAMP'10:00:01'"
+    "stopIndex" : 58,
+    "fragment" : "TIME'12:30:41.123' - TIMESTAMP'2025-07-11 10:00:01'"
   } ]
 }
 
