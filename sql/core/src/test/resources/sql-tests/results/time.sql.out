@@ -732,3 +732,11 @@ SELECT '23:59:59.999999' :: TIME(6) - '00:00' :: TIME(0)
 struct<CAST(23:59:59.999999 AS TIME(6)) - CAST(00:00 AS TIME(0)):interval hour to second>
 -- !query output
 0 23:59:59.999999000
+
+
+-- !query
+SELECT '00:00:00.1234' :: TIME(4) - TIME'23:59:59'
+-- !query schema
+struct<CAST(00:00:00.1234 AS TIME(4)) - TIME '23:59:59':interval hour to second>
+-- !query output
+-0 23:59:58.876600000

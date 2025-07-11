@@ -620,8 +620,8 @@ case class SubtractTimes(left: Expression, right: Expression)
     DayTimeIntervalType(HOUR, SECOND),
     "subtractTimes",
     children,
-    inputTypes
-  )
+    inputTypes,
+    propagateNull = nullIntolerant)
 
   override def toString: String = s"$left - $right"
   override def sql: String = s"${left.sql} - ${right.sql}"
