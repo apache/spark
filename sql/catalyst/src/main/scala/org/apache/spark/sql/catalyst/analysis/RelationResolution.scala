@@ -193,7 +193,7 @@ class RelationResolution(override val catalogManager: CatalogManager)
           || !v1Table.catalogTable.tracksPartitionsInCatalog =>
         createDataSourceV1Scan(v1Table.v1Table)
 
-      case t if t.capabilities().contains(TableCapability.GENERAL_TABLE) =>
+      case t if t.capabilities().contains(TableCapability.SPARK_TABLE_OR_VIEW) =>
         createDataSourceV1Scan(V1Table.toCatalogTable(catalog, ident, t))
 
       case table =>
