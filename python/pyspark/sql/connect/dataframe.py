@@ -44,6 +44,7 @@ from typing import (
 )
 
 import copy
+import os
 import sys
 import random
 import pyarrow as pa
@@ -1732,6 +1733,24 @@ class DataFrame(ParentDataFrame):
                     )
                 )
             else:
+                # TODO: revisit classic Spark's Dataset.col
+                # if (sparkSession.sessionState.conf.supportQuotedRegexColumnName) {
+                #   colRegex(colName)
+                # } else {
+                #   ConnectColumn(addDataFrameIdToCol(resolve(colName)))
+                # }
+
+                # validate the column name
+                if os.environ.get("PYSPARK_VALIDATE_COLUMN_NAME_LEGACY") == "1" and not hasattr(
+                    self._session, "is_mock_session"
+                ):
+                    from pyspark.sql.connect.types import verify_col_name
+
+                    # Try best to verify the column name with cached schema
+                    # If fails, fall back to the server side validation
+                    if not verify_col_name(item, self._schema):
+                        self.select(item).isLocal()
+
                 return self._col(item)
         elif isinstance(item, Column):
             return self.filter(item)
