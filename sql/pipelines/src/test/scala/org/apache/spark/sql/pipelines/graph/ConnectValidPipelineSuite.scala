@@ -26,8 +26,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * Test suite for resolving the flows in a [[DataflowGraph]]. These examples are all semantically
- * correct and logically correct and connect should not result in any errors.
+ * Test suite for resolving the flows in a [[DataflowGraph]]. These
+ * examples are all semantically correct and logically correct and connect should not result in any
+ * errors.
  */
 class ConnectValidPipelineSuite extends PipelineTest {
   test("Extra simple") {
@@ -157,8 +158,13 @@ class ConnectValidPipelineSuite extends PipelineTest {
               UnresolvedRelation(
                 TableIdentifier("a"),
                 extraOptions = CaseInsensitiveStringMap.empty(),
-                isStreaming = true),
-              UnresolvedRelation(TableIdentifier("b"))))))
+                isStreaming = true
+              ),
+              UnresolvedRelation(TableIdentifier("b"))
+            )
+          )
+        )
+      )
     }
 
     val p = new P().resolveToDataflowGraph()
@@ -187,15 +193,22 @@ class ConnectValidPipelineSuite extends PipelineTest {
       registerPersistedView(
         "c",
         query = FlowAnalysis.createFlowFunctionFromLogicalPlan(
-          Union(Seq(
-            UnresolvedRelation(
-              TableIdentifier("a"),
-              extraOptions = CaseInsensitiveStringMap.empty(),
-              isStreaming = true),
-            UnresolvedRelation(
-              TableIdentifier("b"),
-              extraOptions = CaseInsensitiveStringMap.empty(),
-              isStreaming = true)))))
+          Union(
+            Seq(
+              UnresolvedRelation(
+                TableIdentifier("a"),
+                extraOptions = CaseInsensitiveStringMap.empty(),
+                isStreaming = true
+              ),
+              UnresolvedRelation(
+                TableIdentifier("b"),
+                extraOptions = CaseInsensitiveStringMap.empty(),
+                isStreaming = true
+              )
+            )
+          )
+        )
+      )
     }
 
     val p = new P().resolveToDataflowGraph()
@@ -245,7 +258,7 @@ class ConnectValidPipelineSuite extends PipelineTest {
     val graph = p.resolveToDataflowGraph()
     assert(
       graph
-        .flow(fullyQualifiedIdentifier("d", isView = false))
+        .flow(fullyQualifiedIdentifier("d", isTemporaryView = false))
         .sqlConf == Map("a" -> "a-val", "b" -> "b-val", "c" -> "c-val", "d" -> "d-val"))
   }
 

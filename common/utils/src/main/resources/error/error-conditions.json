@@ -4519,12 +4519,10 @@
     ],
     "sqlState" : "42S22"
   },
-  "NO_TABLES_IN_PIPELINE" : {
+  "NO_DATASET_IN_PIPELINE" : {
     "message" : [
-      "Pipelines are expected to have at least one non-temporary dataset defined but no non-temporary datasets were found in your pipeline.",
-      "Please verify that you have included the expected source files, and that your source code includes table definitions (e.g., CREATE MATERIALIZED VIEW in SQL code, @sdp.table in python code).",
-      "",
-      "Note that only tables and persistent views are counted towards this check. You may also encounter this error if you only include temp views or flows in your pipeline."
+      "Pipelines are expected to have at least one non-temporary dataset defined (tables, persisted views) but no non-temporary datasets were found in your pipeline.",
+      "Please verify that you have included the expected source files, and that your source code includes table definitions (e.g., CREATE MATERIALIZED VIEW in SQL code, @sdp.table in python code)."
     ],
     "sqlState" : "42617"
   },

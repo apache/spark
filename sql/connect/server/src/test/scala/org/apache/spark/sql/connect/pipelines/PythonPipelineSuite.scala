@@ -420,23 +420,27 @@ class PythonPipelineSuite
   }
 
   test("create pipeline without table will fail") {
-    val ex = intercept[AnalysisException] {
-      buildGraph(s"""
+    checkError(
+      exception = intercept[AnalysisException] {
+        buildGraph(s"""
             |spark.range(1)
             |""".stripMargin)
-    }
-    assert(ex.getCondition == "NO_TABLES_IN_PIPELINE")
+      },
+      condition = "NO_DATASET_IN_PIPELINE",
+      parameters = Map.empty)
   }
 
   test("create pipeline with only temp view will fail") {
-    val ex = intercept[AnalysisException] {
-      buildGraph(s"""
-          |@sdp.temporary_view
-          |def view_1():
-          |  return spark.range(5)
-          |""".stripMargin)
-    }
-    assert(ex.getCondition == "NO_TABLES_IN_PIPELINE")
+    checkError(
+      exception = intercept[AnalysisException] {
+        buildGraph(s"""
+            |@sdp.temporary_view
+            |def view_1():
+            |  return spark.range(5)
+            |""".stripMargin)
+      },
+      condition = "NO_DATASET_IN_PIPELINE",
+      parameters = Map.empty)
   }
 
   /**

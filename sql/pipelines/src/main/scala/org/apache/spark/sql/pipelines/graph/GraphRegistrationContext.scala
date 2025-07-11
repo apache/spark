@@ -55,16 +55,19 @@ class GraphRegistrationContext(
         v
       }.isEmpty) {
       throw new AnalysisException(
-        errorClass = "NO_TABLES_IN_PIPELINE",
+        errorClass = "NO_DATASET_IN_PIPELINE",
         messageParameters = Map.empty)
     }
     val qualifiedTables = tables.toSeq.map { t =>
-      t.copy(identifier = GraphIdentifierManager
-        .parseAndQualifyTableIdentifier(
-          rawTableIdentifier = t.identifier,
-          currentCatalog = Some(defaultCatalog),
-          currentDatabase = Some(defaultDatabase))
-        .identifier)
+      t.copy(
+        identifier = GraphIdentifierManager
+          .parseAndQualifyTableIdentifier(
+            rawTableIdentifier = t.identifier,
+            currentCatalog = Some(defaultCatalog),
+            currentDatabase = Some(defaultDatabase)
+          )
+          .identifier
+      )
     }
 
     val validatedViews = views.toSeq.collect {

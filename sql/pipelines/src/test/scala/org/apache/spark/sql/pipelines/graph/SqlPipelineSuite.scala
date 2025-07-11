@@ -863,12 +863,13 @@ class SQLPipelineSuite extends PipelineTest with SQLTestUtils {
       exception = intercept[AnalysisException] {
         graphRegistrationContext.toDataflowGraph
       },
-      condition = "NO_TABLES_IN_PIPELINE",
+      condition = "NO_DATASET_IN_PIPELINE",
       sqlState = Option("42617"),
-      parameters = Map.empty)
+      parameters = Map.empty
+    )
   }
 
-  test("Only temp view pipeline fails") {
+  test("Pipeline with only temp views fails with NO_DATASET_IN_PIPELINE") {
     val graphRegistrationContext = new TestGraphRegistrationContext(spark)
     val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
 
@@ -877,14 +878,16 @@ class SQLPipelineSuite extends PipelineTest with SQLTestUtils {
                    |CREATE TEMPORARY VIEW a AS SELECT id FROM range(1,3);
                    |""".stripMargin,
       sqlFilePath = "a.sql",
-      spark = spark)
+      spark = spark
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
         graphRegistrationContext.toDataflowGraph
       },
-      condition = "NO_TABLES_IN_PIPELINE",
+      condition = "NO_DATASET_IN_PIPELINE",
       sqlState = Option("42617"),
-      parameters = Map.empty)
+      parameters = Map.empty
+    )
   }
 }
