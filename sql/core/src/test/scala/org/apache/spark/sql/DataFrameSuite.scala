@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{ByteArrayOutputStream, File}
 import java.lang.{Long => JLong}
 import java.nio.charset.StandardCharsets
+import java.time.LocalTime
 import java.util.Locale
 
 import scala.collection.immutable.ListMap
@@ -2784,6 +2785,33 @@ class DataFrameSuite extends QueryTest
 
     val df1 = df.select("a").orderBy("b").orderBy("all")
     checkAnswer(df1, Seq(Row(1), Row(4)))
+  }
+
+  test("SPARK-52626: Support group by Time column") {
+    val ts1 = "15:00:00"
+    val ts2 = "22:00:00"
+    val localTime = Seq(ts1, ts1, ts2).map(LocalTime.parse)
+    val df = localTime.toDF("t").groupBy("t").count().orderBy("t")
+    val expectedSchema =
+      new StructType().add(StructField("t", TimeType())).add("count", LongType, false)
+    assert (df.schema == expectedSchema)
+    checkAnswer(df, Seq(Row(LocalTime.parse(ts1), 2), Row(LocalTime.parse(ts2), 1)))
+  }
+
+  test("SPARK-52660: Support aggregation of Time column when codegen is split") {
+    val res = sql(
+      "SELECT max(expr), MIN(expr) " +
+        "FROM VALUES TIME'22:01:00', " +
+        "TIME'22:00:00', " +
+        "TIME'15:00:00', " +
+        "TIME'22:01:00', " +
+        "TIME'13:22:01', " +
+        "TIME'03:00:00', " +
+        "TIME'22:00:00', " +
+        "TIME'17:45:00' AS tab(expr);")
+    checkAnswer(
+      res,
+      Row(LocalTime.of(22, 1, 0), LocalTime.of(3, 0, 0)))
   }
 }
 
