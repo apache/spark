@@ -70,7 +70,7 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
   override def name: String = v1Table.identifier.quoted
 
   override def capabilities: util.Set[TableCapability] =
-    util.EnumSet.of(TableCapability.GENERAL_TABLE)
+    util.EnumSet.of(TableCapability.SPARK_TABLE_OR_VIEW)
 
   override def toString: String = s"V1Table($name)"
 }
@@ -114,7 +114,7 @@ private[sql] object V1Table {
     if (t.isInstanceOf[V1Table]) {
       return t.asInstanceOf[V1Table].v1Table
     }
-    assert(t.capabilities().contains(TableCapability.GENERAL_TABLE))
+    assert(t.capabilities().contains(TableCapability.SPARK_TABLE_OR_VIEW))
     val tableType = t.properties().get(TableCatalog.PROP_TABLE_TYPE) match {
       case TableSummary.VIEW_TABLE_TYPE => CatalogTableType.VIEW
       case TableSummary.MANAGED_TABLE_TYPE => CatalogTableType.MANAGED
