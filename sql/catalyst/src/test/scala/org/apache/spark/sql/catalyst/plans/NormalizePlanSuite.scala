@@ -189,7 +189,7 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
 
     // Before applying timezone, no timezone is set.
     testPlan.expressions.foreach {
-      case _@AssertTrue(firstCast: Cast, _, _@If(secondCast: Cast, _, _)) =>
+      case _ @ AssertTrue(firstCast: Cast, _, _ @ If(secondCast: Cast, _, _)) =>
         assert(firstCast.timeZoneId.isEmpty)
         assert(secondCast.timeZoneId.isEmpty)
       case _ =>
@@ -200,7 +200,7 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
 
     // After applying timezone, only the second cast gets timezone.
     resolvedTestPlan.expressions.foreach {
-      case _@AssertTrue(firstCast: Cast, _, _@If(secondCast: Cast, _, _)) =>
+      case _ @ AssertTrue(firstCast: Cast, _, _ @ If(secondCast: Cast, _, _)) =>
         assert(firstCast.timeZoneId.isEmpty)
         assert(secondCast.timeZoneId.isDefined)
       case _ =>
