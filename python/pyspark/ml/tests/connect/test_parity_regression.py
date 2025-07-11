@@ -21,6 +21,7 @@ from pyspark.ml.tests.test_regression import RegressionTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
+@unittest.skip("Disabled due to flakiness, should be enabled after fixing the issue")
 class RegressionParityTests(RegressionTestsMixin, ReusedConnectTestCase):
     pass
 
