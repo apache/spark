@@ -162,4 +162,23 @@ abstract class BloomFilterBase extends BloomFilter {
   protected abstract BloomFilterBase checkCompatibilityForMerge(BloomFilter other)
     throws IncompatibleMergeException;
 
+  public record HiLoHash (int hi, int lo) {}
+
+  protected HiLoHash hashLongToIntPair(long item, int seed) {
+    // Here we first hash the input long element into 2 int hash values, h1 and h2, then produce n
+    // hash values by `h1 + i * h2` with 1 <= i <= numHashFunctions.
+    // Note that `CountMinSketch` use a different strategy, it hash the input long element with
+    // every i to produce n hash values.
+    // TODO: the strategy of `CountMinSketch` looks more advanced, should we follow it here?
+    int h1 = Murmur3_x86_32.hashLong(item, seed);
+    int h2 = Murmur3_x86_32.hashLong(item, h1);
+    return new HiLoHash(h1, h2);
+  }
+
+  protected HiLoHash hashBytesToIntPair(byte[] item, int seed) {
+    int h1 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, seed);
+    int h2 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, h1);
+    return new HiLoHash(h1, h2);
+  }
+
 }
