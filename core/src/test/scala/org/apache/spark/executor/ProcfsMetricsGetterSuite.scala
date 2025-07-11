@@ -94,7 +94,7 @@ class ProcfsMetricsGetterSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-TODO: testWhitespaceAndParenthesesInProcessName") {
+  test("SPARK-52776: Whitespace and parentheses in the comm field") {
     val p = new ProcfsMetricsGetter(getTestResourcePath("ProcfsMetrics"))
     var r = ProcfsMetrics(0, 0, 0, 0, 0, 0)
     r = p.addProcfsMetricsFromOneProcess(r, 487713)
