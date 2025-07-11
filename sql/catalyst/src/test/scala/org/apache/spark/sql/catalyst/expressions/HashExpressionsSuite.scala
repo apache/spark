@@ -756,9 +756,9 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Support TimeType") {
     val time = Literal.create(LocalTime.of(23, 50, 59, 123456000), TimeType())
-    checkEvaluation(Murmur3Hash(Seq(time), 10), 258472763)
-    checkEvaluation(XxHash64(Seq(time), 10), -9197489935839400467L)
-    checkEvaluation(HiveHash(Seq(time)), -40222445)
+    checkEvaluation(Murmur3Hash(Seq(time), 10), 545499634)
+    checkEvaluation(XxHash64(Seq(time), 10), -3550518982366774761L)
+    checkEvaluation(HiveHash(Seq(time)), -1567775210)
   }
 
   private def testHash(inputSchema: StructType): Unit = {

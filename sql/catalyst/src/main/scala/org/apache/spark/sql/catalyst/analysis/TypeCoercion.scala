@@ -50,6 +50,7 @@ object TypeCoercion extends TypeCoercionBase {
     UnpivotCoercion ::
     WidenSetOperationTypes ::
     ProcedureArgumentCoercion ::
+    DefaultValueExpressionCoercion ::
     new CombinedTypeCoercionRule(
       CollationTypeCasts ::
       InConversion ::

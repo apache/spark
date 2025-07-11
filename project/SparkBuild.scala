@@ -58,10 +58,10 @@ object BuildCommons {
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
-    commonUtils, variant, _*
+    commonUtils, variant, pipelines, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "tags", "sketch", "kvstore", "common-utils", "variant"
+    "tags", "sketch", "kvstore", "common-utils", "variant", "pipelines"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ connectProjects
 
   val optionallyEnabledProjects@Seq(kubernetes, yarn,
@@ -313,6 +313,7 @@ object SparkBuild extends PomBuild {
     (Compile / javacOptions) ++= Seq(
       "-encoding", UTF_8.name(),
       "-g",
+      "-proc:full",
       "--release", javaVersion.value
     ),
     // This -target and Xlint:unchecked options cannot be set in the Compile configuration scope since
@@ -372,8 +373,8 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient,
-      variant, connectShims, profiler
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, pipelines, connectCommon, connect,
+      connectClient, variant, connectShims, profiler
     ).contains(x)
   }
 
@@ -916,14 +917,13 @@ object SparkProtobuf {
     // Exclude `scala-library` from assembly.
     (assembly / assemblyPackageScala / assembleArtifact) := false,
 
-    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`,
-    // `spark-tags_*.jar`, "guava-*.jar" and `unused-1.0.0.jar` from assembly.
+    // SPARK-52227: Include `spark-protobuf-*.jar`, `unused-*.jar`,`protobuf-*.jar`in assembly.
+    // This needs to be consistent with the content of `maven-shade-plugin`.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
-      cp filter { v =>
-        val name = v.data.getName
-        name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
-          name.startsWith("spark-tags_") || name.startsWith("guava-") || name == "unused-1.0.0.jar"
+      val validPrefixes = Set("spark-protobuf", "protobuf-")
+      cp filterNot { v =>
+        validPrefixes.exists(v.data.getName.startsWith)
       }
     },
 
@@ -1517,6 +1517,9 @@ object CopyDependencies {
       val fid = (LocalProject("connect") / assembly).value
       val fidClient = (LocalProject("connect-client-jvm") / assembly).value
       val fidProtobuf = (LocalProject("protobuf") / assembly).value
+      val noProvidedSparkJars: Boolean = sys.env.getOrElse("NO_PROVIDED_SPARK_JARS", "1") == "1" ||
+        sys.env.getOrElse("NO_PROVIDED_SPARK_JARS", "true")
+          .toLowerCase(Locale.getDefault()) == "true"
 
       (Compile / dependencyClasspath).value.map(_.data)
         .filter { jar => jar.isFile() }
@@ -1527,17 +1530,18 @@ object CopyDependencies {
             destJar.delete()
           }
 
-          if (jar.getName.contains("spark-connect-common") &&
-            !SbtPomKeys.profiles.value.contains("noshade-connect")) {
+          if (jar.getName.contains("spark-connect-common")) {
             // Don't copy the spark connect common JAR as it is shaded in the spark connect.
           } else if (jar.getName.contains("connect-client-jvm")) {
             // Do not place Spark Connect client jars as it is not built-in.
-          } else if (jar.getName.contains("spark-connect") &&
-            !SbtPomKeys.profiles.value.contains("noshade-connect")) {
+          } else if (noProvidedSparkJars && jar.getName.contains("spark-avro")) {
+            // Do not place Spark Avro jars as it is not built-in.
+          } else if (jar.getName.contains("spark-connect")) {
             Files.copy(fid.toPath, destJar.toPath)
-          } else if (jar.getName.contains("spark-protobuf") &&
-            !SbtPomKeys.profiles.value.contains("noshade-protobuf")) {
-            Files.copy(fidProtobuf.toPath, destJar.toPath)
+          } else if (jar.getName.contains("spark-protobuf")) {
+            if (!noProvidedSparkJars) {
+              Files.copy(fidProtobuf.toPath, destJar.toPath)
+            }
           } else {
             Files.copy(jar.toPath(), destJar.toPath())
           }
@@ -1723,7 +1727,7 @@ object TestSettings {
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),
     (Test / testOptions) += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
-    libraryDependencies += "com.github.sbt.junit" % "jupiter-interface" % "0.14.0" % "test",
+    libraryDependencies += "com.github.sbt.junit" % "jupiter-interface" % "0.15.0" % "test",
     // `parallelExecutionInTest` controls whether test suites belonging to the same SBT project
     // can run in parallel with one another. It does NOT control whether tests execute in parallel
     // within the same JVM (which is controlled by `testForkedParallel`) or whether test cases

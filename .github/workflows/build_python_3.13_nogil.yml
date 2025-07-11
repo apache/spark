@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / Python-only (master, Python 3.13 no GIL)"
+name: "Build / Python-only (master, Python 3.13, no GIL)"
 
 on:
   schedule:

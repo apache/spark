@@ -41,12 +41,12 @@ object LiteralFunctionResolution {
   // support CURRENT_DATE, CURRENT_TIMESTAMP, CURRENT_TIME,
   //  CURRENT_USER, USER, SESSION_USER and grouping__id
   private val literalFunctions: Seq[(String, () => Expression, Expression => String)] = Seq(
-    (CurrentDate().prettyName, () => CurrentDate(), toPrettySQL(_)),
-    (CurrentTimestamp().prettyName, () => CurrentTimestamp(), toPrettySQL(_)),
-    (CurrentTime().prettyName, () => CurrentTime(), toPrettySQL(_)),
-    (CurrentUser().prettyName, () => CurrentUser(), toPrettySQL(_)),
-    ("user", () => CurrentUser(), toPrettySQL(_)),
-    ("session_user", () => CurrentUser(), toPrettySQL(_)),
+    (CurrentDate().prettyName, () => CurrentDate(), e => toPrettySQL(e)),
+    (CurrentTimestamp().prettyName, () => CurrentTimestamp(), e => toPrettySQL(e)),
+    (CurrentTime().prettyName, () => CurrentTime(), e => toPrettySQL(e)),
+    (CurrentUser().prettyName, () => CurrentUser(), e => toPrettySQL(e)),
+    ("user", () => CurrentUser(), e => toPrettySQL(e)),
+    ("session_user", () => CurrentUser(), e => toPrettySQL(e)),
     (VirtualColumn.hiveGroupingIdName, () => GroupingID(Nil), _ => VirtualColumn.hiveGroupingIdName)
   )
 }

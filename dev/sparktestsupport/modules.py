@@ -408,6 +408,15 @@ mllib = Module(
     ],
 )
 
+pipelines = Module(
+    name="pipelines",
+    dependencies=[],
+    source_file_regexes=["sql/pipelines"],
+    sbt_test_goals=[
+        "pipelines/test",
+    ],
+)
+
 connect = Module(
     name="connect",
     dependencies=[hive, avro, protobuf, mllib],
@@ -532,6 +541,8 @@ pyspark_sql = Module(
         "pyspark.sql.tests.arrow.test_arrow_cogrouped_map",
         "pyspark.sql.tests.arrow.test_arrow_grouped_map",
         "pyspark.sql.tests.arrow.test_arrow_python_udf",
+        "pyspark.sql.tests.arrow.test_arrow_udf",
+        "pyspark.sql.tests.arrow.test_arrow_udf_scalar",
         "pyspark.sql.tests.pandas.test_pandas_cogrouped_map",
         "pyspark.sql.tests.pandas.test_pandas_grouped_map",
         "pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state",
@@ -576,6 +587,14 @@ pyspark_testing = Module(
         # doctests
         "pyspark.testing.utils",
         "pyspark.testing.pandasutils",
+        # unittests
+        "pyspark.testing.tests.test_fail",
+        "pyspark.testing.tests.test_fail_in_set_up_class",
+        "pyspark.testing.tests.test_no_tests",
+        "pyspark.testing.tests.test_pass_all",
+        "pyspark.testing.tests.test_skip_all",
+        "pyspark.testing.tests.test_skip_class",
+        "pyspark.testing.tests.test_skip_set_up_class",
     ],
 )
 
@@ -1091,6 +1110,8 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_grouped_map",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_cogrouped_map",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_python_udf",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf_scalar",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_map",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_grouped_map",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_grouped_map_with_state",
@@ -1488,6 +1509,18 @@ pyspark_logger = Module(
     ],
 )
 
+pyspark_pipelines = Module(
+    name="pyspark-pipelines",
+    dependencies=[pyspark_core, pyspark_sql, pyspark_connect],
+    source_file_regexes=["python/pyspark/pipelines"],
+    python_test_goals=[
+        "pyspark.pipelines.tests.test_block_connect_access",
+        "pyspark.pipelines.tests.test_cli",
+        "pyspark.pipelines.tests.test_decorators",
+        "pyspark.pipelines.tests.test_graph_element_registry",
+        "pyspark.pipelines.tests.test_init_cli",
+    ],
+)
 
 sparkr = Module(
     name="sparkr",

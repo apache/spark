@@ -24,6 +24,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.UnknownRuleId
@@ -55,6 +56,32 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
   def output: Seq[Attribute]
 
+  override def nodeWithOutputColumnsString(maxColumns: Int): String = {
+    try {
+      nodeName + {
+        if (this.output.length > maxColumns) {
+          val outputWithNullability = this.output.take(maxColumns).map { attr =>
+            attr.toString + s"[nullable=${attr.nullable}]"
+          }
+
+          outputWithNullability.mkString(" <output=", ", ",
+            s" ... ${this.output.length - maxColumns} more columns>")
+        } else {
+          val outputWithNullability = this.output.map { attr =>
+            attr.toString + s"[nullable=${attr.nullable}]"
+          }
+
+          outputWithNullability.mkString(" <output=", ", ", ">")
+        }
+      }
+    } catch {
+      case _: UnresolvedException =>
+        // If we encounter an UnresolvedException, it's high likely that the call of `this.output`
+        // throws it. In this case, we may have to give up and only show the nodeName.
+        nodeName + " <output='Unresolved'>"
+    }
+  }
+
   /**
    * Returns the set of attributes that are output by this node.
    */
@@ -70,7 +97,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   def outputOrdering: Seq[SortOrder] = Nil
 
   // Override `treePatternBits` to propagate bits for its expressions.
-  override lazy val treePatternBits: BitSet = {
+  private val _treePatternBits = new BestEffortLazyVal[BitSet](() => {
     val bits: BitSet = getDefaultTreePatternBits
     // Propagate expressions' pattern bits
     val exprIterator = expressions.iterator
@@ -78,7 +105,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       bits.union(exprIterator.next().treePatternBits)
     }
     bits
-  }
+  })
+  override def treePatternBits: BitSet = _treePatternBits()
 
   /**
    * The set of all attributes that are input to this operator by its children.
@@ -378,8 +406,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
           newValidAttrMapping.filterNot { case (_, a) => existingAttrMappingSet.contains(a) }
         }
         val resultAttrMapping = if (canGetOutput(plan)) {
-          // We propagate the attributes mapping to the parent plan node to update attributes, so
-          // the `newAttr` must be part of this plan's output.
           (transferAttrMapping ++ newOtherAttrMapping).filter {
             case (_, newAttr) => planAfterRule.outputSet.contains(newAttr)
           }
@@ -797,9 +823,10 @@ object QueryPlan extends PredicateHelper {
       verbose: Boolean,
       addSuffix: Boolean,
       maxFields: Int = SQLConf.get.maxToStringFields,
-      printOperatorId: Boolean = false): Unit = {
+      printOperatorId: Boolean = false,
+      printOutputColumns: Boolean = false): Unit = {
     try {
-      plan.treeString(append, verbose, addSuffix, maxFields, printOperatorId)
+      plan.treeString(append, verbose, addSuffix, maxFields, printOperatorId, printOutputColumns)
     } catch {
       case e: AnalysisException => append(e.toString)
     }

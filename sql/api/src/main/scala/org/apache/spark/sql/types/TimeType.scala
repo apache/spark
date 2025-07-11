@@ -31,7 +31,7 @@ import org.apache.spark.sql.errors.DataTypeErrors
  * @since 4.1.0
  */
 @Unstable
-case class TimeType(precision: Int) extends DatetimeType {
+case class TimeType(precision: Int) extends AnyTimeType {
 
   if (precision < TimeType.MIN_PRECISION || precision > TimeType.MAX_PRECISION) {
     throw DataTypeErrors.unsupportedTimePrecisionError(precision)
@@ -51,6 +51,8 @@ object TimeType {
   val MIN_PRECISION: Int = 0
   val MICROS_PRECISION: Int = 6
   val MAX_PRECISION: Int = MICROS_PRECISION
+  val DEFAULT_PRECISION: Int = MICROS_PRECISION
+  val NANOS_PRECISION: Int = 9
 
-  def apply(): TimeType = new TimeType(MICROS_PRECISION)
+  def apply(): TimeType = new TimeType(DEFAULT_PRECISION)
 }

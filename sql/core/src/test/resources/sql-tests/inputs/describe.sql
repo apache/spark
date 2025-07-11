@@ -64,6 +64,13 @@ DESC t PARTITION (c='Us');
 -- ParseException: PARTITION specification is incomplete
 DESC t PARTITION (c='Us', d);
 
+-- DESC SCHEMA
+DROP SCHEMA IF EXISTS test_schema;
+CREATE SCHEMA test_schema DEFAULT COLLATION UNICODE;
+DESCRIBE SCHEMA EXTENDED test_schema;
+ALTER SCHEMA test_schema DEFAULT COLLATION UTF8_LCASE;
+DESCRIBE SCHEMA EXTENDED test_schema;
+
 -- DESC Temp View
 
 DESC temp_v;

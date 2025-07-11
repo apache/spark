@@ -629,6 +629,72 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         return "ArrowStreamPandasUDFSerializer"
 
 
+class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
+    """
+    Serializer used by Python worker to evaluate Arrow UDFs
+    """
+
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        assign_cols_by_name,
+        arrow_cast,
+    ):
+        super(ArrowStreamArrowUDFSerializer, self).__init__()
+        self._timezone = timezone
+        self._safecheck = safecheck
+        self._assign_cols_by_name = assign_cols_by_name
+        self._arrow_cast = arrow_cast
+
+    def _create_array(self, arr, arrow_type, arrow_cast):
+        import pyarrow as pa
+
+        assert isinstance(arr, pa.Array)
+        assert isinstance(arrow_type, pa.DataType)
+
+        # TODO: should we handle timezone here?
+
+        try:
+            return arr
+        except pa.lib.ArrowException:
+            if arrow_cast:
+                return arr.cast(target_type=arrow_type, safe=self._safecheck)
+            else:
+                raise
+
+    def dump_stream(self, iterator, stream):
+        """
+        Override because Arrow UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
+        This should be sent after creating the first record batch so in case of an error, it can
+        be sent back to the JVM before the Arrow stream starts.
+        """
+        import pyarrow as pa
+
+        def wrap_and_init_stream():
+            should_write_start_length = True
+            for packed in iterator:
+                if len(packed) == 2 and isinstance(packed[1], pa.DataType):
+                    # single array UDF in a projection
+                    arrs = [self._create_array(packed[0], packed[1], self._arrow_cast)]
+                else:
+                    # multiple array UDFs in a projection
+                    arrs = [self._create_array(t[0], t[1], self._arrow_cast) for t in packed]
+
+                batch = pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
+
+                # Write the first record batch with initialization.
+                if should_write_start_length:
+                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
+                    should_write_start_length = False
+                yield batch
+
+        return ArrowStreamSerializer.dump_stream(self, wrap_and_init_stream(), stream)
+
+    def __repr__(self):
+        return "ArrowStreamArrowUDFSerializer"
+
+
 class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
     """
     Serializer used by Python worker to evaluate Arrow-optimized Python UDTFs.
@@ -1258,7 +1324,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         """
         import pyarrow as pa
         from pyspark.sql.streaming.stateful_processor_util import (
-            TransformWithStateInPySparkFuncMode,
+            TransformWithStateInPandasFuncMode,
         )
 
         def generate_data_batches(batches):
@@ -1284,11 +1350,11 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         data_batches = generate_data_batches(_batches)
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):
-            yield (TransformWithStateInPySparkFuncMode.PROCESS_DATA, k, g)
+            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, g)
 
-        yield (TransformWithStateInPySparkFuncMode.PROCESS_TIMER, None, None)
+        yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
 
-        yield (TransformWithStateInPySparkFuncMode.COMPLETE, None, None)
+        yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)
 
     def dump_stream(self, iterator, stream):
         """
@@ -1326,7 +1392,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
     def load_stream(self, stream):
         import pyarrow as pa
         from pyspark.sql.streaming.stateful_processor_util import (
-            TransformWithStateInPySparkFuncMode,
+            TransformWithStateInPandasFuncMode,
         )
 
         def generate_data_batches(batches):
@@ -1388,11 +1454,11 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
         data_batches = generate_data_batches(_batches)
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):
-            yield (TransformWithStateInPySparkFuncMode.PROCESS_DATA, k, g)
+            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, g)
 
-        yield (TransformWithStateInPySparkFuncMode.PROCESS_TIMER, None, None)
+        yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
 
-        yield (TransformWithStateInPySparkFuncMode.COMPLETE, None, None)
+        yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)
 
 
 class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
@@ -1420,7 +1486,7 @@ class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
         this function works in overall.
         """
         from pyspark.sql.streaming.stateful_processor_util import (
-            TransformWithStateInPySparkFuncMode,
+            TransformWithStateInPandasFuncMode,
         )
         import itertools
 
@@ -1451,11 +1517,11 @@ class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
         for k, g in groupby(data_batches, key=lambda x: x[0]):
             chained = itertools.chain(g)
             chained_values = map(lambda x: x[1], chained)
-            yield (TransformWithStateInPySparkFuncMode.PROCESS_DATA, k, chained_values)
+            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, chained_values)
 
-        yield (TransformWithStateInPySparkFuncMode.PROCESS_TIMER, None, None)
+        yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
 
-        yield (TransformWithStateInPySparkFuncMode.COMPLETE, None, None)
+        yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)
 
     def dump_stream(self, iterator, stream):
         """
@@ -1503,7 +1569,7 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
         import itertools
         import pyarrow as pa
         from pyspark.sql.streaming.stateful_processor_util import (
-            TransformWithStateInPySparkFuncMode,
+            TransformWithStateInPandasFuncMode,
         )
 
         def generate_data_batches(batches):
@@ -1592,8 +1658,8 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
 
             ret_tuple = (chained_input_values_without_none, chained_init_state_values_without_none)
 
-            yield (TransformWithStateInPySparkFuncMode.PROCESS_DATA, k, ret_tuple)
+            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, ret_tuple)
 
-        yield (TransformWithStateInPySparkFuncMode.PROCESS_TIMER, None, None)
+        yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
 
-        yield (TransformWithStateInPySparkFuncMode.COMPLETE, None, None)
+        yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)

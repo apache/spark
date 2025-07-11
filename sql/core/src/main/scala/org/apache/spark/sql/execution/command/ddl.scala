@@ -66,6 +66,7 @@ import org.apache.spark.util.ArrayImplicits._
  * {{{
  *   CREATE (DATABASE|SCHEMA) [IF NOT EXISTS] database_name
  *     [COMMENT database_comment]
+ *     [DEFAULT COLLATION collation]
  *     [LOCATION database_directory]
  *     [WITH DBPROPERTIES (property_name=property_value, ...)];
  * }}}
@@ -188,8 +189,9 @@ case class DescribeDatabaseCommand(
       Row("Catalog Name", SESSION_CATALOG_NAME) ::
         Row("Database Name", dbMetadata.name) ::
         Row("Comment", dbMetadata.description) ::
-        Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri))::
-        Row("Owner", allDbProperties.getOrElse(PROP_OWNER, "")) :: Nil
+        Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri)) ::
+        Row("Owner", allDbProperties.getOrElse(PROP_OWNER, "")) ::
+        allDbProperties.get(PROP_COLLATION).map(Row("Collation", _)).toList
 
     if (extended) {
       val properties = allDbProperties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES

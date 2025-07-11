@@ -83,13 +83,17 @@ class JobCancellationTestsMixin:
             try:
                 setter(job_id)
 
-                def func(itr):
-                    for pdf in itr:
-                        time.sleep(pdf._1.iloc[0])
-                        yield pdf
+                from pyspark.sql.functions import udf
+                from pyspark.sql.types import IntegerType
 
-                self.spark.createDataFrame([[20]]).repartition(1).mapInPandas(
-                    func, schema="_1 LONG"
+                def func(t: int) -> int:
+                    time.sleep(t)
+                    return t
+
+                u = udf(func, IntegerType())
+
+                self.spark.createDataFrame([[20]], ["a"]).repartition(1).select(
+                    u("a").alias("b")
                 ).collect()
                 is_job_cancelled[index] = False
             except Exception:

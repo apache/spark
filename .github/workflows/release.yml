@@ -1,0 +1,276 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+# This workflow is intended for use in forked repositories
+# when manually dispatching this to create an RC.
+# To enable full release functionality, developers should manually configure
+# the following GitHub Secrets in their repository settings:
+#
+# - ASF_USERNAME:
+#     Your Apache Software Foundation (ASF) account ID.
+#
+# - ASF_PASSWORD:
+#     The password associated with your ASF account.
+#
+# - GPG_PRIVATE_KEY:
+#     Your GPG private key, exported using:
+#       gpg --armor --export-secret-keys ABCD1234 > private.key
+#     Ensure this key is registered with a public key server.
+#     For more details, refer to:
+#       https://spark.apache.org/release-process.html#preparing-gpg-key
+#
+# - GPG_PASSPHRASE:
+#     The passphrase for your GPG private key.
+#
+# - PYPI_API_TOKEN:
+#     When you finalize the release, PyPI API token is required. It can be created in
+#     https://pypi.org/manage/account/ once you have the permission to the projects in:
+#       - https://pypi.org/project/pyspark/
+#       - https://pypi.org/project/pyspark-connect/
+#       - https://pypi.org/project/pyspark-client/
+#     Ask private@spark.apache.org to have the permission if you do not have.
+#
+# This workflow supports dry runs by default. If the required GitHub Secrets are not provided,
+# only dry runs will be executed.
+#
+# In case something goes wrong during the process and a release candidate (RC) needs to be
+# cleaned up, follow these steps:
+#
+# 1. Revert the RC-related commits, such as:
+#    - "Preparing development version 3.5.7-SNAPSHOT"
+#    - "Preparing Spark release v3.5.6-rc1"
+#
+# 2. Delete the RC tag from the remote repository, for example:
+#    - git push --delete apache v3.5.6-rc1
+#
+# 3. Remove the RC artifacts from SVN:
+#    - RC=v3.5.6-rc1 && svn rm https://dist.apache.org/repos/dist/dev/spark/"${RC}"-bin/ -m "Removing RC artifacts."
+#    - RC=v3.5.6-rc1 && svn rm https://dist.apache.org/repos/dist/dev/spark/"${RC}"-docs/ -m "Removing RC artifacts."
+#
+# 4. Drop the staging repository if it exists (https://repository.apache.org/#stagingRepositories)
+
+name: Release Apache Spark
+
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to release. Leave it empty to launch a dryrun. Dispatch this workflow only in the forked repository.'
+        required: true
+        default: master
+      release-version:
+        description: 'Release version. Leave it empty to launch a dryrun.'
+        required: false
+      rc-count:
+        description: 'RC number. Leave it empty to launch a dryrun.'
+        required: false
+      finalize:
+        description: 'Whether to convert RC to the official release (IRREVERSIBLE)'
+        required: true
+        default: false
+
+jobs:
+  release:
+    name: Release Apache Spark
+    runs-on: ubuntu-latest
+    # Allow workflow to run only in the following cases:
+    # 1. In the apache/spark repository:
+    #    - Only allow dry runs (i.e., both 'branch' and 'release-version' inputs are empty).
+    # 2. In forked repositories:
+    #    - Allow real runs when both 'branch' and 'release-version' are provided.
+    #    - Allow dry runs only if manually dispatched (not on a schedule).
+    if: |
+      (
+        github.repository == 'apache/spark' &&
+        inputs.branch == '' &&
+        inputs.release-version == ''
+      ) || (
+        github.repository != 'apache/spark' &&
+        (
+          (inputs.branch != '' && inputs.release-version != '') || github.event_name == 'workflow_dispatch'
+        )
+      )
+    steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v4
+        with:
+          repository: apache/spark
+          ref: "${{ inputs.branch }}"
+      - name: Release Apache Spark
+        env:
+          GIT_BRANCH: "${{ inputs.branch }}"
+          RELEASE_VERSION: "${{ inputs.release-version }}"
+          SPARK_RC_COUNT: "${{ inputs.rc-count }}"
+          IS_FINALIZE: "${{ inputs.finalize }}"
+          GIT_NAME: "${{ github.actor }}"
+          ASF_USERNAME: "${{ secrets.ASF_USERNAME }}"
+          ASF_PASSWORD: "${{ secrets.ASF_PASSWORD }}"
+          GPG_PRIVATE_KEY: "${{ secrets.GPG_PRIVATE_KEY }}"
+          GPG_PASSPHRASE: "${{ secrets.GPG_PASSPHRASE }}"
+          PYPI_API_TOKEN: "${{ secrets.PYPI_API_TOKEN }}"
+          DEBUG_MODE: 1
+          ANSWER: y
+        run: |
+          if [ "$IS_FINALIZE" = "true" ]; then
+            echo ""
+            echo "┌────────────────────────────────────────────────────────────────────────────┐"
+            echo "│                               !!! WARNING !!!                              │"
+            echo "├────────────────────────────────────────────────────────────────────────────┤"
+            echo "│ This step will CONVERT THE RC ARTIFACTS into THE OFFICIAL RELEASE.         │"
+            echo "│                                                                            │"
+            echo "│    This action is IRREVERSIBLE.                                            │"
+            echo "│                                                                            │"
+            echo "│ The workflow will continue in 60 seconds.                                  │"
+            echo "│ Cancel this workflow now if you do NOT intend to finalize the release.     │"
+            echo "└────────────────────────────────────────────────────────────────────────────┘"
+            echo ""
+
+            sleep 60
+          fi
+
+          if { [ -n "$RELEASE_VERSION" ] && [ -z "$SPARK_RC_COUNT" ]; } || { [ -z "$RELEASE_VERSION" ] && [ -n "$SPARK_RC_COUNT" ]; }; then
+            echo "Error: Either provide both 'Release version' and 'RC number', or leave both empty for a dryrun."
+            exit 1
+          fi
+
+          if [ -z "$RELEASE_VERSION" ] && [ -z "$SPARK_RC_COUNT" ]; then
+            echo "Dry run mode enabled"
+            export DRYRUN_MODE=1
+            ASF_PASSWORD="not_used"
+            GPG_PRIVATE_KEY="not_used"
+            GPG_PASSPHRASE="not_used"
+            ASF_USERNAME="gurwls223"
+            export SKIP_TAG=1
+            unset RELEASE_VERSION
+          else
+            echo "Full release mode enabled"
+            export DRYRUN_MODE=0
+          fi
+
+          export ASF_PASSWORD GPG_PRIVATE_KEY GPG_PASSPHRASE ASF_USERNAME
+          export GIT_BRANCH="${GIT_BRANCH:-master}"
+          [ -n "$RELEASE_VERSION" ] && export RELEASE_VERSION
+
+          if [ "$DRYRUN_MODE" = "1" ]; then
+            gpg --batch --gen-key <<EOF
+          Key-Type: RSA
+          Key-Length: 4096
+          Name-Real: Test CI User
+          Name-Email: gurwls223@apache.org
+          Expire-Date: 1
+          %no-protection
+          %commit
+          EOF
+          else
+            gpg --batch --import <<< "$GPG_PRIVATE_KEY"
+          fi
+
+          RELEASE_DIR="$PWD"/spark-release
+          OUTPUT_DIR="$RELEASE_DIR/output"
+          mkdir -p "$RELEASE_DIR"
+
+          # Start the release process
+          CMD="dev/create-release/do-release-docker.sh -d \"$RELEASE_DIR\""
+          if [ "$DRYRUN_MODE" = "1" ]; then
+            CMD="$CMD -n"
+          fi
+          if [ "$IS_FINALIZE" = "true" ]; then
+            CMD="$CMD -s finalize"
+          fi
+
+          echo "Running release command: $CMD"
+
+          bash -c "$CMD" &
+          RELEASE_PID=$!
+
+          # Tail logs during dry run
+          LOG_FILE="$RELEASE_DIR/docker-build.log"
+          echo "Waiting for log file: $LOG_FILE"
+          while [ ! -f "$LOG_FILE" ]; do
+            sleep 3
+          done
+            
+          echo "Log file found. Starting tail."
+          tail -F "$LOG_FILE" &
+          TAIL_PID1=$!
+
+          (
+            LOGGED_FILES=()
+            while true; do
+              for file in "$OUTPUT_DIR"/*.log; do
+                [[ -f "$file" ]] || continue
+                if [[ ! " ${LOGGED_FILES[@]} " =~ " ${file} " ]]; then
+                  echo "Tailing new log file: $file"
+                  tail -F "$file" &
+                  LOGGED_FILES+=("$file")
+                fi
+              done
+              sleep 3
+            done
+          ) &
+          TAIL_PID2=$!
+
+          wait $RELEASE_PID
+          kill $TAIL_PID1 $TAIL_PID2 || true
+
+          # Redact sensitive information in log files
+          shopt -s globstar nullglob
+          FILES=("$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/"*.log)
+          PATTERNS=("$ASF_USERNAME" "$ASF_PASSWORD" "$GPG_PRIVATE_KEY" "$GPG_PASSPHRASE" "$PYPI_API_TOKEN")
+          for file in "${FILES[@]}"; do
+            [ -f "$file" ] || continue
+            cp "$file" "$file.bak"
+            for pattern in "${PATTERNS[@]}"; do
+              [ -n "$pattern" ] || continue  # Skip empty patterns
+          
+              # Safely escape special characters for sed
+              escaped_pattern=${pattern//\\/\\\\} # Escape backslashes
+              escaped_pattern=${escaped_pattern//\//\\/} # Escape forward slashes
+              escaped_pattern=${escaped_pattern//&/\\&} # Escape &
+              escaped_pattern=${escaped_pattern//$'\n'/} # Remove newlines
+              escaped_pattern=${escaped_pattern//$'\r'/} # Remove carriage returns (optional)
+          
+              # Redact the pattern
+              sed -i.bak "s/${escaped_pattern}/***/g" "$file"
+            done
+            rm -f "$file.bak"
+          done
+
+          # Zip logs/output
+          if [ "$DRYRUN_MODE" = "1" ]; then
+            zip logs.zip "$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/"*.log
+            zip -9 output.zip -r "$OUTPUT_DIR"
+          else
+            zip -P "$ASF_PASSWORD" logs.zip "$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/"*.log
+            zip -9 -P "$ASF_PASSWORD" output.zip -r "$OUTPUT_DIR"
+          fi
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: logs.zip
+      - name: Upload output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: output.zip

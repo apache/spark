@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, localTimeToMicros}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, localTimeToNanos}
 
 /**
  * Helper functions for testing date and time functionality.
@@ -113,7 +113,7 @@ object DateTimeTestUtils {
     result
   }
 
-  // Returns microseconds since midnight
+  // Returns nanoseconds since midnight
   def localTime(
       hour: Byte = 0,
       minute: Byte = 0,
@@ -121,6 +121,6 @@ object DateTimeTestUtils {
       micros: Int = 0): Long = {
     val nanos = TimeUnit.MICROSECONDS.toNanos(micros).toInt
     val localTime = LocalTime.of(hour, minute, sec, nanos)
-    localTimeToMicros(localTime)
+    localTimeToNanos(localTime)
   }
 }

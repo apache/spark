@@ -30,7 +30,6 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{BigIntVector, Float8Vector}
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.mockito.Mockito.when
-import org.scalatest.Tag
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar.convertIntToGrainOfTime
 import org.scalatestplus.mockito.MockitoSugar
@@ -897,13 +896,6 @@ class SparkConnectServiceSuite
     }
   }
 
-  protected def gridTest[A](testNamePrefix: String, testTags: Tag*)(params: Seq[A])(
-      testFun: A => Unit): Unit = {
-    for (param <- params) {
-      test(testNamePrefix + s" ($param)", testTags: _*)(testFun(param))
-    }
-  }
-
   class VerifyEvents(val sparkContext: SparkContext) {
     val listener: MockSparkListener = new MockSparkListener()
     val listenerBus = sparkContext.listenerBus
@@ -928,7 +920,11 @@ class SparkConnectServiceSuite
     }
     def onError(throwable: Throwable): Unit = {
       assert(executeHolder.eventsManager.hasCanceled.isEmpty)
-      assert(executeHolder.eventsManager.hasError.isDefined)
+      Eventually.eventually(EVENT_WAIT_TIMEOUT) {
+        assert(
+          executeHolder.eventsManager.hasError.isDefined,
+          s"Error has not been recorded in events manager within $EVENT_WAIT_TIMEOUT")
+      }
     }
     def onCompleted(producedRowCount: Option[Long] = None): Unit = {
       assert(executeHolder.eventsManager.getProducedRowCount == producedRowCount)

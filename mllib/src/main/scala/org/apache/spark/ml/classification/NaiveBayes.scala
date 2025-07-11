@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
@@ -600,6 +602,21 @@ class NaiveBayesModel private[ml] (
 object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
   private[ml] case class Data(pi: Vector, theta: Matrix, sigma: Matrix)
 
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeVector(data.pi, dos)
+    serializeMatrix(data.theta, dos)
+    serializeMatrix(data.sigma, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val pi = deserializeVector(dis)
+    val theta = deserializeMatrix(dis)
+    val sigma = deserializeMatrix(dis)
+    Data(pi, theta, sigma)
+  }
+
   @Since("1.6.0")
   override def read: MLReader[NaiveBayesModel] = new NaiveBayesModelReader
 
@@ -623,7 +640,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       }
 
       val data = Data(instance.pi, instance.theta, instance.sigma)
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -647,7 +664,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
             .head()
         new NaiveBayesModel(metadata.uid, pi, theta, Matrices.zeros(0, 0))
       } else {
-        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
         new NaiveBayesModel(metadata.uid, data.pi, data.theta, data.sigma)
       }
 

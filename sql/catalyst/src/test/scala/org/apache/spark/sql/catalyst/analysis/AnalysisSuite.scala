@@ -1206,7 +1206,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
               Seq(Literal(3)),
               Project(testRelation.output, testRelation)
             )
-          )
+          ),
+          None
         )
       )
     )
