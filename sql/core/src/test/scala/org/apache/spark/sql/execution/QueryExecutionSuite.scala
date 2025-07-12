@@ -456,6 +456,27 @@ class QueryExecutionSuite extends SharedSparkSession {
     }
   }
 
+  test("determineShuffleCleanupMode should return correct mode based on SQL configuration") {
+    val conf = new SQLConf()
+
+    // Defaults to doNotCleanup
+    conf.setConf(SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, false)
+    conf.setConf(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED, false)
+    assert(QueryExecution.determineShuffleCleanupMode(conf) === DoNotCleanup)
+
+    // Test RemoveShuffleFiles
+    conf.setConf(SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, true)
+    conf.setConf(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED, false)
+    assert(QueryExecution.determineShuffleCleanupMode(conf) === RemoveShuffleFiles)
+
+    // Test SkipMigration
+    conf.setConf(SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, false)
+    conf.setConf(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED, true)
+    assert(QueryExecution.determineShuffleCleanupMode(conf) === SkipMigration)
+
+    // TODO, when both enabled, RemoveShuffle tasks Precedence, log a warning?
+  }
+
   case class MockCallbackEagerCommand(
       var trackerAnalyzed: QueryPlanningTracker = null,
       var trackerReadyForExecution: QueryPlanningTracker = null)
