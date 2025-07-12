@@ -318,16 +318,25 @@ class LocalDataToArrowConversion:
         rows: List[tuple] = []
 
         for item in data:
-            if isinstance(item, VariantVal):
-                raise PySparkValueError("Rows cannot be of type VariantVal")
-            if not isinstance(item, (Row, tuple)) and hasattr(  # inherited namedtuple
-                item, "__dict__"
-            ):
-                item = item.__dict__
-            if isinstance(item, dict):
-                rows.append(tuple([item.get(col) for i, col in enumerate(column_names)]))
-            elif item is None:
+            if item is None:
                 rows.append(tuple([None for _ in range(len_column_names)]))
+            elif isinstance(item, (Row, tuple)):  # inherited namedtuple
+                if len(item) != len_column_names:
+                    raise PySparkValueError(
+                        errorClass="AXIS_LENGTH_MISMATCH",
+                        messageParameters={
+                            "expected_length": str(len_column_names),
+                            "actual_length": str(len(item)),
+                        },
+                    )
+                rows.append(tuple(item))
+            elif isinstance(item, dict):
+                rows.append(tuple([item.get(col) for i, col in enumerate(column_names)]))
+            elif isinstance(item, VariantVal):
+                raise PySparkValueError("Rows cannot be of type VariantVal")
+            elif hasattr(item, "__dict__"):
+                item = item.__dict__
+                rows.append(tuple([item.get(col) for i, col in enumerate(column_names)]))
             else:
                 if len(item) != len_column_names:
                     raise PySparkValueError(
