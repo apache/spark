@@ -93,6 +93,18 @@ class ProcfsMetricsGetterSuite extends SparkFunSuite {
       SparkEnv.set(originalSparkEnv)
     }
   }
+
+  test("SPARK-52776: Whitespace and parentheses in the comm field") {
+    val p = new ProcfsMetricsGetter(getTestResourcePath("ProcfsMetrics"))
+    var r = ProcfsMetrics(0, 0, 0, 0, 0, 0)
+    r = p.addProcfsMetricsFromOneProcess(r, 487713)
+    assert(r.jvmVmemTotal == 0)
+    assert(r.jvmRSSTotal == 0)
+    assert(r.pythonVmemTotal == 0)
+    assert(r.pythonRSSTotal == 0)
+    assert(r.otherVmemTotal == 7469137920L)
+    assert(r.otherRSSTotal == 494858240)
+  }
 }
 
 object ProcfsMetricsGetterSuite {
