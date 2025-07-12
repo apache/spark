@@ -325,8 +325,7 @@ class LocalDataToArrowConversion:
             if isinstance(item, VariantVal):
                 raise PySparkValueError("Rows cannot be of type VariantVal")
             if (
-                not isinstance(item, Row)
-                and not isinstance(item, tuple)  # inherited namedtuple
+                not isinstance(item, (Row, tuple))  # inherited namedtuple
                 and hasattr(item, "__dict__")
             ):
                 item = item.__dict__
