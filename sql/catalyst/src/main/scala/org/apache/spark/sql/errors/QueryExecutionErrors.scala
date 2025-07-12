@@ -3086,4 +3086,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       )
     )
   }
+
+  def thetaInvalidInputSketchBuffer(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "THETA_INVALID_INPUT_SKETCH_BUFFER",
+      messageParameters = Map("function" -> toSQLId(function)))
+  }
 }
