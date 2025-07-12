@@ -315,11 +315,9 @@ class LocalDataToArrowConversion:
         column_names = schema.fieldNames()
         len_column_names = len(column_names)
 
-        rows: List[tuple] = []
-
-        for item in data:
+        def to_row(item: Any) -> tuple:
             if item is None:
-                rows.append(tuple([None for _ in range(len_column_names)]))
+                return tuple([None for _ in range(len_column_names)])
             elif isinstance(item, (Row, tuple)):  # inherited namedtuple
                 if len(item) != len_column_names:
                     raise PySparkValueError(
@@ -329,14 +327,14 @@ class LocalDataToArrowConversion:
                             "actual_length": str(len(item)),
                         },
                     )
-                rows.append(tuple(item))
+                return tuple(item)
             elif isinstance(item, dict):
-                rows.append(tuple([item.get(col) for i, col in enumerate(column_names)]))
+                return tuple([item.get(col) for i, col in enumerate(column_names)])
             elif isinstance(item, VariantVal):
                 raise PySparkValueError("Rows cannot be of type VariantVal")
             elif hasattr(item, "__dict__"):
                 item = item.__dict__
-                rows.append(tuple([item.get(col) for i, col in enumerate(column_names)]))
+                return tuple([item.get(col) for i, col in enumerate(column_names)])
             else:
                 if len(item) != len_column_names:
                     raise PySparkValueError(
@@ -346,7 +344,9 @@ class LocalDataToArrowConversion:
                             "actual_length": str(len(item)),
                         },
                     )
-                rows.append(tuple(item))
+                return tuple(item)
+
+        rows = [to_row(item) for item in data]
 
         column_convs = [
             LocalDataToArrowConversion._create_converter(field.dataType, field.nullable)
