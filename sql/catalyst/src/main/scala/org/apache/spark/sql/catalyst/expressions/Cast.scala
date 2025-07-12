@@ -122,6 +122,7 @@ object Cast extends QueryErrorsBase {
     case (_: StringType, _: TimeType) => true
     case (TimestampType, DateType) => true
     case (TimestampNTZType, DateType) => true
+    case (TimestampNTZType, _: TimeType) => true
 
     case (_: NumericType, _: NumericType) => true
     case (_: StringType, _: NumericType) => true
@@ -135,6 +136,7 @@ object Cast extends QueryErrorsBase {
     case (_, VariantType) => variant.VariantGet.checkDataType(from, allowStructsAndMaps = false)
 
     case (_: TimeType, _: TimeType) => true
+    case (_: TimeType, TimestampNTZType) => true
 
     // non-null variants can generate nulls even in ANSI mode
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
@@ -229,6 +231,7 @@ object Cast extends QueryErrorsBase {
     case (_: StringType, _: TimeType) => true
     case (TimestampType, DateType) => true
     case (TimestampNTZType, DateType) => true
+    case (TimestampNTZType, _: TimeType) => true
 
     case (_: StringType, CalendarIntervalType) => true
     case (_: StringType, _: DayTimeIntervalType) => true
@@ -254,6 +257,7 @@ object Cast extends QueryErrorsBase {
     case (_, VariantType) => variant.VariantGet.checkDataType(from, allowStructsAndMaps = false)
 
     case (_: TimeType, _: TimeType) => true
+    case (_: TimeType, TimestampNTZType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canCast(fromType, toType) &&
@@ -746,6 +750,13 @@ case class Cast(
       }
     case _: TimeType =>
       buildCast[Long](_, nanos => DateTimeUtils.truncateTimeToPrecision(nanos, to.precision))
+    case _: TimestampNTZType =>
+      buildCast[Long](
+        _,
+        micros => {
+          val nanosInDay = DateTimeUtils.getNanosInADay(micros)
+          DateTimeUtils.truncateTimeToPrecision(nanosInDay, to.precision)
+        })
   }
 
   // IntervalConverter
@@ -1386,6 +1397,13 @@ case class Cast(
           code"""
             $evPrim = $dateTimeUtilsCls.truncateTimeToPrecision($nanos, ${to.precision});
           """
+      case _: TimestampNTZType =>
+        val nanos = ctx.freshName("nanos")
+        (micros, evPrim, _) =>
+          code"""
+          final long $nanos = $dateTimeUtilsCls.getNanosInADay($micros);
+          $evPrim = $dateTimeUtilsCls.truncateTimeToPrecision($nanos, ${to.precision});
+        """
       case _ =>
         (_, _, evNull) => code"$evNull = true;"
     }

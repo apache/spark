@@ -1772,6 +1772,13 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     assert(wp1.isInstanceOf[Project])
     assert(wp1.expressions.forall(!_.exists(_ == t1.output.head)))
   }
+
+  test("SPARK-52617: RewriteTimeCastToTimestampNTZ: TIME to TIMESTAMP_NTZ coercion") {
+    val expr = Cast(Literal.create(123456789L, TimeType(6)), TimestampNTZType)
+    val coerced = RewriteTimeCastToTimestampNTZ.transform.apply(expr)
+    val expected = MakeTimestampNTZ(CurrentDate(), Literal.create(123456789L, TimeType(6)))
+    assert(coerced.semanticEquals(expected))
+  }
 }
 
 
