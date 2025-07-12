@@ -31,7 +31,7 @@ import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{LazyExpression, NameParameterizedQuery, UnsupportedOperationChecker}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, LazyExpression, NameParameterizedQuery, UnsupportedOperationChecker}
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union, WithCTE}
@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
+import org.apache.spark.sql.execution.command.CreateDataSourceTableAsSelectCommand
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
@@ -215,6 +216,14 @@ class QueryExecution(
   }
 
   def optimizedPlan: LogicalPlan = lazyOptimizedPlan.get
+  // Eliminate SubqueryAliases from the optimized plan to help correct the explain result.
+  def optimizedPlanWithoutSubqueries: LogicalPlan = {
+    optimizedPlan match {
+      case s: CreateDataSourceTableAsSelectCommand =>
+        s.copy(query = EliminateSubqueryAliases(s.query))
+      case _ => optimizedPlan
+    }
+  }
 
   def assertOptimized(): Unit = optimizedPlan
 
@@ -365,7 +374,7 @@ class QueryExecution(
       }
       QueryPlan.append(analyzed, append, verbose, addSuffix, maxFields)
       append("\n== Optimized Logical Plan ==\n")
-      QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
+      QueryPlan.append(optimizedPlanWithoutSubqueries, append, verbose, addSuffix, maxFields)
       append("\n== Physical Plan ==\n")
       QueryPlan.append(executedPlan, append, verbose, addSuffix, maxFields)
       extendedExplainInfo(append, executedPlan)
@@ -408,7 +417,8 @@ class QueryExecution(
     }
     // only show optimized logical plan and physical plan
     append("== Optimized Logical Plan ==\n")
-    QueryPlan.append(optimizedPlan, append, verbose = true, addSuffix = true, maxFields)
+    QueryPlan.append(
+      optimizedPlanWithoutSubqueries, append, verbose = true, addSuffix = true, maxFields)
     append("\n== Physical Plan ==\n")
     QueryPlan.append(executedPlan, append, verbose = true, addSuffix = false, maxFields)
     append("\n")
