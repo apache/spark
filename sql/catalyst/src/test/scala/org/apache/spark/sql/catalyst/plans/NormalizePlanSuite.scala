@@ -49,6 +49,65 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
     assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
   }
 
+  test("Normalize ordering in a project list of an inner Project under Window") {
+    val (col1, col2) = ($"col1".int, $"col2".int)
+    val input = LocalRelation(col1, col2)
+    val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
+    val spec = WindowSpecDefinition(Seq(col1), Seq(col2.asc), frame)
+    val rankExpression = WindowExpression(Rank(Seq.empty), spec).as("rank")
+
+    val baselinePlan = input
+      .select(col1, col2)
+      .window(Seq(rankExpression), Seq(col1), Seq(col2.asc))
+    val testPlan = input
+      .select(col2, col1)
+      .window(Seq(rankExpression), Seq(col1), Seq(col2.asc))
+
+    assert(baselinePlan != testPlan)
+    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
+
+  test("Normalize ordering in a window expression list of an inner Window under Window") {
+    val (col1, col2, col3) = ($"col1".int, $"col2".int, $"col3".int)
+    val input = LocalRelation(col1, col2, col3)
+    val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
+    val spec = WindowSpecDefinition(Seq(col1), Seq(col2.asc), frame)
+
+    val innerSpec = WindowSpecDefinition(Seq(col1), Seq(col2.asc), frame)
+    val rankExpression = WindowExpression(Rank(Seq.empty), spec).as("rank")
+    val denseRankExpression = WindowExpression(DenseRank(Seq.empty), innerSpec).as("dense_rank")
+
+    val baselineInnerWindow =
+      input.window(Seq(rankExpression, denseRankExpression), Seq(col1), Seq(col2.asc))
+    val testInnerWindow =
+      input.window(Seq(denseRankExpression, rankExpression), Seq(col1), Seq(col2.asc))
+    assert(baselineInnerWindow != testInnerWindow)
+
+    val baselineOuterSpec =
+      WindowSpecDefinition(Seq(col3), Seq(rankExpression.toAttribute.asc), frame)
+    val baselineRowNumberExpression =
+      WindowExpression(RowNumber(), baselineOuterSpec).as("row_num")
+
+    val testOuterSpec = WindowSpecDefinition(Seq(col3), Seq(rankExpression.toAttribute.asc), frame)
+    val testRowNumberExpression = WindowExpression(RowNumber(), testOuterSpec).as("row_num")
+
+    val baselinePlan =
+      baselineInnerWindow.window(
+        Seq(baselineRowNumberExpression),
+        Seq(col3),
+        Seq(rankExpression.toAttribute.asc)
+      )
+    val testPlan =
+      testInnerWindow.window(
+        Seq(testRowNumberExpression),
+        Seq(col3),
+        Seq(rankExpression.toAttribute.asc)
+      )
+
+    assert(baselinePlan != testPlan)
+    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
+
   test("Normalize ordering in a project list of an inner Project under Aggregate") {
     val baselinePlan =
       LocalRelation($"col1".int, $"col2".string).select($"col1", $"col2").groupBy($"col1")($"col1")

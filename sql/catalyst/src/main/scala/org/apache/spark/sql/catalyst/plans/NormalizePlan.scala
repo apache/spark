@@ -154,6 +154,12 @@ object NormalizePlan extends PredicateHelper {
             .isDefined =>
         project.child
 
+      case window @ Window(_, _, _, innerProject: Project, _) =>
+        window.copy(child = normalizeProjectListOrder(innerProject))
+
+      case window @ Window(_, _, _, innerWindow: Window, _) =>
+        window.copy(child = normalizeWindowListOrder(innerWindow))
+
       case aggregate @ Aggregate(_, _, innerProject: Project, _) =>
         aggregate.copy(child = normalizeProjectListOrder(innerProject))
 
@@ -225,6 +231,10 @@ object NormalizePlan extends PredicateHelper {
 
   private def normalizeProjectListOrder(project: Project): Project = {
     project.copy(projectList = project.projectList.sortBy(_.name))
+  }
+
+  private def normalizeWindowListOrder(window: Window): Window = {
+    window.copy(windowExpressions = window.windowExpressions.sortBy(_.name))
   }
 
   private def normalizeAggregateListOrder(aggregate: Aggregate): Aggregate = {
