@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -294,6 +295,26 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
         } else {
           m
         }
+    }
+  }
+}
+
+
+/**
+ * The "ArrayContains" node checks if a given value is present in a given array,
+ * being similar to the "IN" predicate.
+ *
+ * This optimization rule replaces the "ArrayContains" nodes working on literal
+ * lists with "InSet" nodes in the expression.
+ */
+object ReplaceArrayContainsWithInSet extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan transformAllExpressions  {
+      // In Catalyst, arrays evaluated as NULL values have "arrayParam.value = NULL" set,
+      // so transforming its value to a set of objects will fail.
+      case ArrayContains(arrayParam: Literal, col)
+        if arrayParam.value != null =>
+          InSet(col, arrayParam.value.asInstanceOf[GenericArrayData].array.toSet)
     }
   }
 }
