@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.time.DateTimeException
+import java.time.{DateTimeException, LocalTime}
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.Row
@@ -796,5 +796,19 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
         cast(invalidInput, TimeType()),
         castErrMsg(invalidInput, TimeType()))
     }
+  }
+
+  test("cast TimeType to integral types with overflow") {
+    // Test overflow cases: 23:59:59 = 86399 seconds
+    val largeTime = Literal.create(LocalTime.of(23, 59, 59), TimeType(6))
+
+    // Short and Byte should overflow and throw ArithmeticException (ANSI mode)
+    // 86399 > Short.MaxValue (32767) and > Byte.MaxValue (127)
+    checkExceptionInExpression[SparkArithmeticException](
+      cast(largeTime, ShortType),
+      castOverflowErrMsg(largeTime.value, TimeType(6), ShortType))
+    checkExceptionInExpression[SparkArithmeticException](
+      cast(largeTime, ByteType),
+      castOverflowErrMsg(largeTime.value, TimeType(6), ByteType))
   }
 }

@@ -1507,4 +1507,26 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+  test("cast time to integral types") {
+
+    // Test normal cases that should work with a small number like 112 seconds after midnight
+    val smallTime = Literal.create(LocalTime.of(0, 1, 52), TimeType(6))
+    checkEvaluation(cast(smallTime, ByteType), 112.toByte)
+    checkEvaluation(cast(smallTime, ShortType), 112.toShort)
+    checkEvaluation(cast(smallTime, IntegerType), 112)
+    checkEvaluation(cast(smallTime, LongType), 112L)
+
+    // Test edge cases
+    val midnight = Literal.create(LocalTime.of(0, 0, 0), TimeType(6)) // 0 seconds
+    checkEvaluation(cast(midnight, ByteType), 0.toByte)
+    checkEvaluation(cast(midnight, ShortType), 0.toShort)
+    checkEvaluation(cast(midnight, IntegerType), 0)
+    checkEvaluation(cast(midnight, LongType), 0L)
+
+    // Test fractional seconds rounding
+    val fractionalTime = Literal.create(LocalTime.of(0, 0, 17, 500000000), TimeType(6))
+    checkEvaluation(cast(fractionalTime, IntegerType), 17)
+    checkEvaluation(cast(fractionalTime, LongType), 17L)
+
+  }
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Period}
+import java.time.{Duration, LocalTime, Period}
 import java.time.temporal.ChronoUnit
 
 import org.apache.spark.sql.Row
@@ -906,5 +906,19 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     Seq("a", "123", "00:00:00ABC", "24:00:00").foreach { invalidInput =>
       checkEvaluation(cast(invalidInput, TimeType()), null)
     }
+  }
+
+  test("cast time to integral types with overflow") {
+    // Create a time that will overflow Byte and Short: 23:59:59 = 86399 seconds
+    val largeTime = Literal.create(LocalTime.of(23, 59, 59), TimeType(6))
+
+    // Long and Int should work (86399 fits in both)
+    checkEvaluation(cast(largeTime, LongType), 86399L)
+    checkEvaluation(cast(largeTime, IntegerType), 86399)
+
+    // Short and Byte should overflow and return null (non-ANSI mode)
+    // 86399 > Short.MaxValue (32767) and > Byte.MaxValue (127)
+    checkEvaluation(cast(largeTime, ShortType), null)
+    checkEvaluation(cast(largeTime, ByteType), null)
   }
 }
