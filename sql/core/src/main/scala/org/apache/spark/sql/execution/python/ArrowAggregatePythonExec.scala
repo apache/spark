@@ -22,7 +22,7 @@ import java.io.File
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
+import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -42,11 +42,12 @@ import org.apache.spark.util.Utils
  * finally the executor evaluates any post-aggregation expressions and join the result with the
  * grouped key.
  */
-case class AggregateInPandasExec(
+case class ArrowAggregatePythonExec(
     groupingExpressions: Seq[NamedExpression],
     aggExpressions: Seq[AggregateExpression],
     resultExpressions: Seq[NamedExpression],
-    child: SparkPlan)
+    child: SparkPlan,
+    evalType: Int)
   extends UnaryExecNode with PythonSQLMetrics {
 
   override val output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
@@ -173,7 +174,7 @@ case class AggregateInPandasExec(
 
       val columnarBatchIter = new ArrowPythonWithNamedArgumentRunner(
         pyFuncs,
-        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+        evalType,
         argMetas,
         aggInputSchema,
         sessionLocalTimeZone,
@@ -215,5 +216,19 @@ case class AggregateInPandasExec(
     }
 
     newIter
+  }
+}
+
+object ArrowAggregatePythonExec {
+  def apply(
+      groupingExpressions: Seq[NamedExpression],
+      aggExpressions: Seq[AggregateExpression],
+      resultExpressions: Seq[NamedExpression],
+      child: SparkPlan): ArrowAggregatePythonExec = {
+    val evalTypes = aggExpressions.map(_.aggregateFunction.asInstanceOf[PythonUDAF].evalType)
+    assert(evalTypes.distinct.size == 1,
+      "All aggregate functions must have the same eval type in ArrowAggregatePythonExec")
+    new ArrowAggregatePythonExec(
+      groupingExpressions, aggExpressions, resultExpressions, child, evalTypes.head)
   }
 }
