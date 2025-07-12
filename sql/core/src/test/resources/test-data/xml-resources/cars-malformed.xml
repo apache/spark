@@ -1,6 +1,11 @@
 <?xml version="1.0"?>
 <ROWSET>
     <ROW>
+        <year>2015</year>
+        <make>Chevy</make>
+        <model>Volt</model>
+    </ROW>
+    <ROW>
         <year>2012</year>
         <make>Tesla</make>
         <model>>S
@@ -11,10 +16,5 @@
         <make>Ford</make>
         <model>E350</model>model></model>
         <comment>Go get one now they are going fast</comment>
-    </ROW>
-    <ROW>
-        <year>2015</year>
-        <make>Chevy</make>
-        <model>Volt</model>
     </ROW>
 </ROWSET>

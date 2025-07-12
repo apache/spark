@@ -155,7 +155,7 @@ case class XmlToStructsEvaluator(
     val xsdSchema = Option(parsedOptions.rowValidationXSDPath).map(ValidatorUtil.getSchema)
 
     new FailureSafeParser[String](
-      input => rawParser.doParseColumn(input, mode, xsdSchema),
+      input => rawParser.doParseColumn(input, xsdSchema),
       mode,
       schema,
       parsedOptions.columnNameOfCorruptRecord)
