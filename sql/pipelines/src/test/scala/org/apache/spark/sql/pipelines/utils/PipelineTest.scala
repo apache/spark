@@ -83,9 +83,9 @@ abstract class PipelineTest
       name: String,
       catalog: Option[String] = catalogInPipelineSpec,
       database: Option[String] = databaseInPipelineSpec,
-      isView: Boolean = false
+      isTemporaryView: Boolean = false
   ): TableIdentifier = {
-    if (isView) {
+    if (isTemporaryView) {
       TableIdentifier(name)
     } else {
       TableIdentifier(

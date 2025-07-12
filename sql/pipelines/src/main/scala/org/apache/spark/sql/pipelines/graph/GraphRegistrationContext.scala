@@ -50,6 +50,14 @@ class GraphRegistrationContext(
   }
 
   def toDataflowGraph: DataflowGraph = {
+    // throw exception if pipeline does not have table or persisted view
+    if (tables.isEmpty && views.collect { case v: PersistedView =>
+        v
+      }.isEmpty) {
+      throw new AnalysisException(
+        errorClass = "NO_DATASET_IN_PIPELINE",
+        messageParameters = Map.empty)
+    }
     val qualifiedTables = tables.toSeq.map { t =>
       t.copy(
         identifier = GraphIdentifierManager
