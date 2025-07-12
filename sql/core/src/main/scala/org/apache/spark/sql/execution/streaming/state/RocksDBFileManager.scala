@@ -38,6 +38,7 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
+import org.apache.spark.internal.LogKeys.{DFS_FILE, VERSION_NUM}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
@@ -783,6 +784,17 @@ class RocksDBFileManager(
           log"${MDC(LogKeys.EXISTING_FILE, existingFile)} " +
           log"for ${MDC(LogKeys.FILE_NAME, requiredFile)}")
       }
+    }
+
+    // Delete remaining unnecessary local immutable file mappings.
+    // Files present in the file mapping but not the filesystem may lead to
+    // versionID mismatch error (SPARK-52637), so we should explicitly delete
+    // them.
+    rocksDBFileMapping.purgeIncompatibleMappingsForLoad(version).foreach {
+      case (_, (dfsFileMappedVersion, dfsFile)) =>
+        logInfo(log"Deleted local fileMapping to ${MDC(DFS_FILE, dfsFile)} because " +
+          log"mapped file version ${MDC(VERSION_NUM, dfsFileMappedVersion)} was " +
+          log"incompatible with versionToLoad ${MDC(VERSION_NUM, version)}")
     }
 
     var filesCopied = 0L
