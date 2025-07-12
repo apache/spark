@@ -230,8 +230,7 @@ object ApproxTopK {
     // https://datasketches.apache.org/docs/Frequency/FrequentItemsOverview.html
     val ceilMaxMapSize = math.ceil(maxItemsTracked / 0.75).toInt
     // The maxMapSize must be a power of 2 and greater than ceilMaxMapSize
-    val maxMapSize = math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
-    maxMapSize
+    math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
   }
 
   def createAggregationBuffer(itemExpression: Expression, maxMapSize: Int): ItemsSketch[Any] = {

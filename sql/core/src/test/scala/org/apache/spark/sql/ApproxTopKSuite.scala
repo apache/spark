@@ -18,12 +18,11 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
-import java.time.{LocalDateTime, LocalTime}
+import java.time.LocalDateTime
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{LongType, StructField, StructType, TimeType}
 
 
 class ApproxTopKSuite extends QueryTest
@@ -588,17 +587,4 @@ class ApproxTopKSuite extends QueryTest
       queryContext = Array(ExpectedContext(s"approx_top_k_estimate($invalidState, 5)", 7, 120))
     )
   }
-
-  test("SPARK-checkStruct") {
-    sql("SELECT array(expr) as acc FROM VALUES 0, 0, 1 AS tab(expr);")
-      .createOrReplaceTempView("aaa")
-    sql("SELECT approx_top_k_estimate(acc) FROM aaa;").show(false)
-  }
-
-  test("SPARK-checkStruct2") {
-    sql("SELECT struct('Spark', 5) as acc;")
-      .createOrReplaceTempView("aaa")
-    sql("SELECT approx_top_k_estimate(acc) FROM aaa;").show(false)
-  }
-
 }
