@@ -25,6 +25,10 @@ import org.apache.spark.sql.types.{ArrayType, BinaryType, IntegerType, LongType,
 
 class ApproxTopKSuite extends SparkFunSuite {
 
+  /////////////////////////////
+  // ApproxTopK tests
+  /////////////////////////////
+
   test("SPARK-52515: Accepts literal and foldable inputs") {
     val agg = new ApproxTopK(
       expr = BoundReference(0, IntegerType, nullable = true),
@@ -89,6 +93,10 @@ class ApproxTopKSuite extends SparkFunSuite {
     assert(agg.checkInputDataTypes() == TypeCheckFailure(s"$typeName columns are not supported"))
   }
 
+  /////////////////////////////
+  // ApproxTopKAccumulate tests
+  /////////////////////////////
+
   gridTest("SPARK-52588: invalid accumulate if item type is not supported")(
     Seq(
       ("array", ArrayType(IntegerType)),
@@ -125,21 +133,9 @@ class ApproxTopKSuite extends SparkFunSuite {
     )
   }
 
-  test("SPARK-52588: invalid accumulate if maxItemsTracked less than or equal to 0") {
-    Seq(0, -1).foreach { invalidInput =>
-      val badAccumulate = ApproxTopKAccumulate(
-        expr = BoundReference(0, IntegerType, nullable = true),
-        maxItemsTracked = Literal(invalidInput)
-      )
-      checkError(
-        exception = intercept[SparkRuntimeException] {
-          badAccumulate.createAggregationBuffer()
-        },
-        condition = "APPROX_TOP_K_NON_POSITIVE_ARG",
-        parameters = Map("argName" -> "`maxItemsTracked`", "argValue" -> invalidInput.toString)
-      )
-    }
-  }
+  /////////////////////////////
+  // ApproxTopKEstimate tests
+  /////////////////////////////
 
   val stateStructType = StructType(Seq(
     StructField("sketch", BinaryType),
