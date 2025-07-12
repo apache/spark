@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.connector.expressions.{Expression, Literal}
+import org.apache.spark.sql.connector.expressions.{Expression, Extract, Literal}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.jdbc.OracleDialect._
@@ -44,7 +44,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   // scalastyle:on line.size.limit
   private val supportedAggregateFunctions =
     Set("MAX", "MIN", "SUM", "COUNT", "AVG") ++ distinctUnsupportedAggregateFunctions
-  private val supportedFunctions = supportedAggregateFunctions
+  private val supportedFunctions = supportedAggregateFunctions ++ Set("TRUNC")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
@@ -55,6 +55,29 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   }
 
   class OracleSQLBuilder extends JDBCSQLBuilder {
+
+    override def visitExtract(extract: Extract): String = {
+      val field = extract.field
+      field match {
+        // Oracle does not support the following date fields: DAY_OF_YEAR, WEEK, QUARTER,
+        // DAY_OF_WEEK, or YEAR_OF_WEEK.
+        // We can't push down SECOND due to the difference in result types between Spark and
+        // Oracle. Spark returns decimal(8, 6), but Oracle returns integer.
+        case "DAY_OF_YEAR" | "WEEK" | "QUARTER" | "SECOND" | "DAY_OF_WEEK" | "YEAR_OF_WEEK" =>
+          visitUnexpectedExpr(extract)
+        // MINUTE, HOUR, DAY, MONTH, YEAR are identical on MySQL and Spark for
+        // both datetime and interval types.
+        case _ => super.visitExtract(field, build(extract.source()))
+      }
+    }
+
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
+      funcName match {
+        case "TRUNC" =>
+          s"TRUNC(${inputs(0)}, 'IW')"
+        case _ => super.visitSQLFunction(funcName, inputs)
+      }
+    }
 
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
