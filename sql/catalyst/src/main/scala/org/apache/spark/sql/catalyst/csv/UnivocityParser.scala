@@ -53,7 +53,9 @@ class UnivocityParser(
     dataSchema: StructType,
     requiredSchema: StructType,
     val options: CSVOptions,
-    filters: Seq[Filter]) extends Logging {
+    filters: Seq[Filter],
+    partitionSchema: StructType = StructType(Seq.empty),
+    partitionValues: InternalRow = InternalRow.empty) extends Logging {
   require(requiredSchema.toSet.subsetOf(dataSchema.toSet),
     s"requiredSchema (${requiredSchema.catalogString}) should be the subset of " +
       s"dataSchema (${dataSchema.catalogString}).")
@@ -344,6 +346,8 @@ class UnivocityParser(
     (tokens: Array[String], index: Int) => tokens(tokenIndexArr(index))
   }
 
+  private val variantAllowDuplicateKeys = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)
+
   /**
    * The entire line of CSV data is collected into a single variant object. When `headerColumnNames`
    * is defined, the field names will be extracted from it. Otherwise, the field names will have a
@@ -360,7 +364,7 @@ class UnivocityParser(
         val extra = numFields - singleVariantFieldConverters.length
         singleVariantFieldConverters.appendAll(Array.fill(extra)(new VariantValueConverter))
       }
-      val builder = new VariantBuilder(false)
+      val builder = new VariantBuilder(variantAllowDuplicateKeys)
       val start = builder.getWritePos
       val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](numFields)
       for (i <- 0 until numFields) {
@@ -369,6 +373,26 @@ class UnivocityParser(
         fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
         singleVariantFieldConverters(i).convertInput(builder, tokens(i))
       }
+
+      // Add the partition columns to the variant object
+      if (partitionSchema.nonEmpty && SQLConf.get.includePartitionColumnsInSingleVariantColumn) {
+        val partitionColumnNames = partitionSchema.fields.map(_.name)
+        val partitionColumnValues = (0 until partitionValues.numFields).map { i =>
+          if (!partitionValues.isNullAt(i)) {
+            partitionValues.get(i, partitionSchema.fields(i).dataType)
+          } else {
+            null
+          }
+        }.toArray
+        VariantBuilder.appendPartitionValues(
+          builder,
+          start,
+          fields,
+          partitionColumnNames,
+          partitionColumnValues
+        )
+      }
+
       builder.finishWritingObject(start, fields)
       val v = builder.result()
       row(0) = new VariantVal(v.getValue, v.getMetadata)

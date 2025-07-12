@@ -24,7 +24,7 @@ import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{DataSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -136,6 +136,34 @@ trait FileFormat {
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
     val dataReader = buildReader(
       sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
+
+    val includePartitionColsInSingleVariantColumn =
+      options.contains(DataSourceOptions.SINGLE_VARIANT_COLUMN) &&
+      SQLConf.get.includePartitionColumnsInSingleVariantColumn
+
+    if (includePartitionColsInSingleVariantColumn) {
+      if (partitionSchema.exists(f1 => dataSchema.exists(f2 => f1.name == f2.name))) {
+        if (!SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)) {
+          throw QueryExecutionErrors.variantDataSchemaConflictWithPartitionSchema(
+            dataSchema, partitionSchema
+          )
+        }
+      }
+
+      // In singleVariantColumn mode, the partition values should be pushed down to the parser and
+      // included in variant column of the output rows
+      return new (PartitionedFile => Iterator[InternalRow]) with Serializable {
+        private val schema = toAttributes(requiredSchema)
+        private lazy val appendPartitionColumns = GenerateUnsafeProjection.generate(schema, schema)
+
+        override def apply(file: PartitionedFile): Iterator[InternalRow] = {
+          val converter = appendPartitionColumns
+          dataReader(file).map { dataRow =>
+            converter(dataRow)
+          }
+        }
+      }
+    }
 
     new (PartitionedFile => Iterator[InternalRow]) with Serializable {
       private val fullSchema = toAttributes(requiredSchema) ++ toAttributes(partitionSchema)
