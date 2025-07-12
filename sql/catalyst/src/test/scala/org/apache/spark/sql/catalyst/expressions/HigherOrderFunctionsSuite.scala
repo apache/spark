@@ -18,9 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -149,14 +151,20 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
 
     val plusOne: Expression => Expression = x => x + 1
     val plusIndex: (Expression, Expression) => Expression = (x, i) => x + i
+    val plusIndexRepeated: (Expression, Expression) => Expression =
+      (x, i) => plusIndex(x, i) * plusIndex(x, i)
+    val plusOneFallback: Expression => Expression = x => CodegenFallbackExpr(x + 1)
 
     checkEvaluation(transform(ai0, plusOne), Seq(2, 3, 4))
     checkEvaluation(transform(ai0, plusIndex), Seq(1, 3, 5))
+    checkEvaluation(transform(ai0, plusIndexRepeated), Seq(1, 9, 25))
     checkEvaluation(transform(transform(ai0, plusIndex), plusOne), Seq(2, 4, 6))
     checkEvaluation(transform(ai1, plusOne), Seq(2, null, 4))
     checkEvaluation(transform(ai1, plusIndex), Seq(1, null, 5))
     checkEvaluation(transform(transform(ai1, plusIndex), plusOne), Seq(2, null, 6))
     checkEvaluation(transform(ain, plusOne), null)
+
+    checkEvaluation(transform(ai0, plusOneFallback), Seq(2, 3, 4))
 
     val as0 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType, containsNull = false))
     val as1 = Literal.create(Seq("a", null, "c"), ArrayType(StringType, containsNull = true))
@@ -277,14 +285,20 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val isEven: Expression => Expression = x => x % 2 === 0
     val isNullOrOdd: Expression => Expression = x => x.isNull || x % 2 === 1
     val indexIsEven: (Expression, Expression) => Expression = { case (_, idx) => idx % 2 === 0 }
+    val plusIndexRepeatedEven: (Expression, Expression) => Expression =
+      (x, i) => ((x + i) * (x + i)) % 2 === 0
+    val isEvenFallback: Expression => Expression = x => CodegenFallbackExpr(x % 2 === 0)
 
     checkEvaluation(filter(ai0, isEven), Seq(2))
     checkEvaluation(filter(ai0, isNullOrOdd), Seq(1, 3))
     checkEvaluation(filter(ai0, indexIsEven), Seq(1, 3))
+    checkEvaluation(filter(ai0, plusIndexRepeatedEven), Seq.empty)
     checkEvaluation(filter(ai1, isEven), Seq.empty)
     checkEvaluation(filter(ai1, isNullOrOdd), Seq(1, null, 3))
     checkEvaluation(filter(ain, isEven), null)
     checkEvaluation(filter(ain, isNullOrOdd), null)
+
+    checkEvaluation(filter(ai0, isEvenFallback), Seq(2))
 
     val as0 =
       Literal.create(Seq("a0", "b1", "a2", "c3"), ArrayType(StringType, containsNull = false))
@@ -321,6 +335,9 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val isNullOrOdd: Expression => Expression = x => x.isNull || x % 2 === 1
     val alwaysFalse: Expression => Expression = _ => Literal.FalseLiteral
     val alwaysNull: Expression => Expression = _ => Literal(null, BooleanType)
+    val squareRepeatedEven: Expression => Expression =
+      x => ((x * x) + (x * x)) % 2 === 0
+    val isEvenFallback: Expression => Expression = x => CodegenFallbackExpr(x % 2 === 0)
 
     for (followThreeValuedLogic <- Seq(false, true)) {
       withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key
@@ -329,6 +346,7 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
         checkEvaluation(exists(ai0, isNullOrOdd), true)
         checkEvaluation(exists(ai0, alwaysFalse), false)
         checkEvaluation(exists(ai0, alwaysNull), if (followThreeValuedLogic) null else false)
+        checkEvaluation(exists(ai0, squareRepeatedEven), true)
         checkEvaluation(exists(ai1, isEven), if (followThreeValuedLogic) null else false)
         checkEvaluation(exists(ai1, isNullOrOdd), true)
         checkEvaluation(exists(ai1, alwaysFalse), false)
@@ -337,6 +355,7 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
         checkEvaluation(exists(ain, isNullOrOdd), null)
         checkEvaluation(exists(ain, alwaysFalse), null)
         checkEvaluation(exists(ain, alwaysNull), null)
+        checkEvaluation(exists(ai0, isEvenFallback), true)
       }
     }
 
@@ -383,11 +402,15 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val isNullOrOdd: Expression => Expression = x => x.isNull || x % 2 === 1
     val alwaysFalse: Expression => Expression = _ => Literal.FalseLiteral
     val alwaysNull: Expression => Expression = _ => Literal(null, BooleanType)
+    val squareRepeatedEven: Expression => Expression =
+      x => ((x * x) + (x * x)) % 2 === 0
+    val isEvenFallback: Expression => Expression = x => CodegenFallbackExpr(x % 2 === 0)
 
     checkEvaluation(forall(ai0, isEven), true)
     checkEvaluation(forall(ai0, isNullOrOdd), false)
     checkEvaluation(forall(ai0, alwaysFalse), false)
     checkEvaluation(forall(ai0, alwaysNull), null)
+    checkEvaluation(forall(ai0, squareRepeatedEven), true)
     checkEvaluation(forall(ai1, isEven), false)
     checkEvaluation(forall(ai1, isNullOrOdd), true)
     checkEvaluation(forall(ai1, alwaysFalse), false)
@@ -400,6 +423,8 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(forall(ain, isNullOrOdd), null)
     checkEvaluation(forall(ain, alwaysFalse), null)
     checkEvaluation(forall(ain, alwaysNull), null)
+
+    checkEvaluation(forall(ai0, isEvenFallback), true)
 
     val as0 =
       Literal.create(Seq("a0", "a1", "a2", "a3"), ArrayType(StringType, containsNull = false))
@@ -428,6 +453,12 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(aggregate(ai1, 0, (acc, elem) => acc + coalesce(elem, 0), acc => acc * 10), 40)
     checkEvaluation(aggregate(ai2, 0, (acc, elem) => acc + elem, acc => acc * 10), 0)
     checkEvaluation(aggregate(ain, 0, (acc, elem) => acc + elem, acc => acc * 10), null)
+    checkEvaluation(aggregate(
+      ai0,
+      1,
+      (acc, elem) => (acc * elem) + (acc * elem),
+      acc => (acc * acc) + (acc * acc)
+    ), 4608)
 
     val as0 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType, containsNull = false))
     val as1 = Literal.create(Seq("a", null, "c"), ArrayType(StringType, containsNull = true))
@@ -885,4 +916,13 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
         "actualType" -> toSQLType(StringType)
       )))
   }
+}
+
+case class CodegenFallbackExpr(child: Expression) extends UnaryExpression with CodegenFallback {
+  override def nullable: Boolean = child.nullable
+  override def dataType: DataType = child.dataType
+  override lazy val resolved = child.resolved
+  override def eval(input: InternalRow): Any = child.eval(input)
+  override protected def withNewChildInternal(newChild: Expression): CodegenFallbackExpr =
+    copy(child = newChild)
 }
