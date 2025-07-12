@@ -340,7 +340,7 @@ class SparkContext:
         )
         os.environ["SPARK_BUFFER_SIZE"] = str(self._jvm.PythonUtils.getSparkBufferSize(self._jsc))
 
-        self.pythonExec = os.environ.get("PYSPARK_PYTHON", "python3")
+        self.pythonExec = os.environ.get("PYSPARK_PYTHON", self._get_python_exec_from_conf())
         self.pythonVer = "%d.%d" % sys.version_info[:2]
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
@@ -413,6 +413,30 @@ class SparkContext:
             threading.current_thread(), threading._MainThread  # type: ignore[attr-defined]
         ):
             signal.signal(signal.SIGINT, signal_handler)
+
+    def _get_python_exec_from_conf(self) -> str:
+        """
+        Used to refine the value of the pythonExec variable serialized by the driver in client mode when PYSPARK_PYTHON is not configured.
+        If the environment variable PYSPARK_PYTHON is not set, this method will first try to find the Python environment from the Spark configuration object.
+        If no valid configuration is found, it will return the default Python executable 'python3'.
+
+        Returns:
+        str: The path to the Python executable.
+        """
+        # List of configuration keys to check for Python executable path
+        config_keys = [
+            "spark.pyspark.driver.python",
+            "spark.pyspark.python",
+            "spark.executorEnv.PYSPARK_DRIVER_PYTHON",
+            "spark.executorEnv.PYSPARK_PYTHON"
+        ]
+        python_exec = "python3"
+        for key in config_keys:
+            python_exec = self._conf.get(key, None)
+            if python_exec is not None and python_exec.strip() != "":
+                python_exec = python_exec.strip()
+                break
+        return python_exec
 
     def __repr__(self) -> str:
         return "<SparkContext master={master} appName={appName}>".format(
