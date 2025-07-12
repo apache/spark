@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, ThetaSketch}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, ArrayType, BinaryType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType, TypeCollection}
@@ -78,8 +78,8 @@ case class ThetaSketchAgg(
 
   lazy val lgNomEntries: Int = {
     val lgNomEntriesInput = right.eval().asInstanceOf[Int]
-    val nomEntries = 1 << lgNomEntriesInput
-    ThetaUtil.checkNomLongs(nomEntries)
+    ThetaSketch.checkLgNomLongs(lgNomEntriesInput)
+    lgNomEntriesInput
   }
 
   // Constructors
@@ -296,9 +296,9 @@ case class ThetaUnionAgg(
   // ThetaSketch config - mark as lazy so that they're not evaluated during tree transformation.
 
   lazy val lgNomEntries: Int = {
-    val lgNomEntries = right.eval().asInstanceOf[Int]
-    val nomEntries = 1 << lgNomEntries
-    ThetaUtil.checkNomLongs(nomEntries)
+    val lgNomEntriesInput = right.eval().asInstanceOf[Int]
+    ThetaSketch.checkLgNomLongs(lgNomEntriesInput)
+    lgNomEntriesInput
   }
 
   // Constructors
@@ -496,9 +496,9 @@ case class ThetaIntersectionAgg(
   // ThetaSketch config - mark as lazy so that they're not evaluated during tree transformation.
 
   lazy val lgNomEntries: Int = {
-    val lgNomEntries = right.eval().asInstanceOf[Int]
-    val nomEntries = 1 << lgNomEntries
-    ThetaUtil.checkNomLongs(nomEntries)
+    val lgNomEntriesInput = right.eval().asInstanceOf[Int]
+    ThetaSketch.checkLgNomLongs(lgNomEntriesInput)
+    lgNomEntriesInput
   }
 
   // Constructors

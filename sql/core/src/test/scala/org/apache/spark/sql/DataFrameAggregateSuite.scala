@@ -2221,6 +2221,304 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("SPARK-52407: theta_sketch_agg + theta_union_agg + theta_sketch_estimate positive tests") {
+    val df1 = Seq(
+      (1, "a"), (1, "a"), (1, "a"),
+      (1, "b"),
+      (1, "c"), (1, "c"),
+      (1, "d")
+    ).toDF("id", "value")
+    df1.createOrReplaceTempView("df1")
+
+    val df2 = Seq(
+      (1, "a"),
+      (1, "c"),
+      (1, "d"), (1, "d"), (1, "d"),
+      (1, "e"), (1, "e"),
+      (1, "f")
+    ).toDF("id", "value")
+    df2.createOrReplaceTempView("df2")
+
+    // first test theta_sketch_agg, theta_sketch_estimate via dataframe + sql,
+    // with and without configs, via both DF and SQL implementations
+    val res1 = df1.groupBy("id")
+      .agg(
+        count("value").as("count"),
+        theta_sketch_agg("value").as("sketch_1"),
+        theta_sketch_agg("value", 20).as("sketch_2")
+      )
+      .withColumn("distinct_count_1", theta_sketch_estimate("sketch_1"))
+      .withColumn("distinct_count_2", theta_sketch_estimate("sketch_2"))
+      .drop("sketch_1", "sketch_2")
+    checkAnswer(res1, Row(1, 7, 4, 4))
+
+    val res2 = sql(
+      """with sketches as (
+        |select
+        | id,
+        | count(value) as count,
+        | theta_sketch_agg(value) as sketch_1,
+        | theta_sketch_agg(value, 20) as sketch_2
+        |from df1
+        |group by 1
+        |)
+        |
+        |select
+        | id,
+        | count,
+        | theta_sketch_estimate(sketch_1) as distinct_count_1,
+        | theta_sketch_estimate(sketch_2) as distinct_count_2
+        |from
+        | sketches
+        |""".stripMargin)
+    checkAnswer(res2, Row(1, 7, 4, 4))
+
+    // now test theta_union_agg via dataframe + sql, with and without configs,
+    // unioning together sketches with default, non-default and different configurations
+    val df3 = df1.groupBy("id")
+      .agg(
+        count("value").as("count"),
+        theta_sketch_agg("value").as("thetasketch_1"),
+        theta_sketch_agg("value", 20).as("thetasketch_2"),
+        theta_sketch_agg("value").as("thetasketch_3")
+      )
+    df3.createOrReplaceTempView("df3")
+
+    val df4 = sql(
+      """select
+        | id,
+        | count(value) as count,
+        | theta_sketch_agg(value) as thetasketch_1,
+        | theta_sketch_agg(value, 20) as thetasketch_2,
+        | theta_sketch_agg(value, 20) as thetasketch_3
+        |from df2
+        |group by 1
+        |""".stripMargin)
+    df4.createOrReplaceTempView("df4")
+
+    val res3 = df3.union(df4).groupBy("id")
+      .agg(
+        sum("count").as("count"),
+        theta_sketch_estimate(theta_union_agg("thetasketch_1")).as("distinct_count_1"),
+        theta_sketch_estimate(theta_union_agg("thetasketch_2")).as("distinct_count_2"),
+        theta_sketch_estimate(theta_union_agg("thetasketch_3", 15)).as("distinct_count_3")
+      )
+    checkAnswer(res3, Row(1, 15, 6, 6, 6))
+
+    val res4 = sql(
+      """select
+        | id,
+        | sum(count) as count,
+        | theta_sketch_estimate(theta_union_agg(thetasketch_1)) as distinct_count_1,
+        | theta_sketch_estimate(theta_union_agg(thetasketch_2)) as distinct_count_2,
+        | theta_sketch_estimate(theta_union_agg(thetasketch_3, 15)) as distinct_count_3
+        |from (select * from df3 union all select * from df4)
+        |group by 1
+        |""".stripMargin)
+    checkAnswer(res4, Row(1, 15, 6, 6, 6))
+
+    // add tests to ensure theta_union works via both DF and SQL too
+    val df5 = df3.drop("count")
+    df5.createOrReplaceTempView("df5")
+
+    val df6 = df4.drop("count")
+      .withColumnRenamed("thetasketch_1", "thetasketch_4")
+      .withColumnRenamed("thetasketch_2", "thetasketch_5")
+      .withColumnRenamed("thetasketch_3", "thetasketch_6")
+    df6.createOrReplaceTempView("df6")
+
+    val res5 = df5.join(df6, "id")
+      .withColumn("distinct_count_1",
+        theta_sketch_estimate(theta_union("thetasketch_1", "thetasketch_4")))
+      .withColumn("distinct_count_2",
+        theta_sketch_estimate(theta_union("thetasketch_2", "thetasketch_5")))
+      .withColumn("distinct_count_3",
+        theta_sketch_estimate(theta_union("thetasketch_3", "thetasketch_6", 15)))
+      .drop("thetasketch_1", "thetasketch_2", "thetasketch_3",
+        "thetasketch_4", "thetasketch_5", "thetasketch_6")
+    checkAnswer(res5, Row(1, 6, 6, 6))
+
+    val res6 = sql(
+      """with joined as (
+        |  select
+        |    l.id,
+        |    l.thetasketch_1,
+        |    l.thetasketch_2,
+        |    l.thetasketch_3,
+        |    r.thetasketch_4,
+        |    r.thetasketch_5,
+        |    r.thetasketch_6
+        |  from
+        |    df5 l
+        |    join
+        |    df6 r
+        |     on l.id = r.id
+        | )
+        |
+        |select
+        |  id,
+        |  theta_sketch_estimate(theta_union(thetasketch_1, thetasketch_4)) as distinct_count_1,
+        |  theta_sketch_estimate(theta_union(thetasketch_2, thetasketch_5)) as distinct_count_2,
+        |  theta_sketch_estimate(theta_union(thetasketch_3, thetasketch_6, 20))
+        |  as distinct_count_3
+        |from
+        | joined
+        |""".stripMargin)
+    checkAnswer(res6, Row(1, 6, 6, 6))
+
+    val df7 = Seq(
+      (1, "a"), (1, "a"), (1, "a"),
+      (1, "b"),
+      (1, null),
+      (2, null), (2, null), (2, null)
+    ).toDF("id", "value")
+
+    // empty column test
+    val res7 = df7.where(expr("id = 2")).groupBy("id")
+      .agg(
+        theta_sketch_estimate(theta_sketch_agg("value")).as("distinct_count")
+      )
+    checkAnswer(res7, Row(2, 0))
+
+    // partial empty column test
+    val res8 = df7.groupBy("id")
+      .agg(
+        theta_sketch_estimate(theta_sketch_agg("value")).as("distinct_count")
+      )
+    checkAnswer(res8, Seq(Row(1, 2), Row(2, 0)))
+  }
+
+  test("SPARK-52407: theta_sketch_agg + theta_union_agg + theta_union negative tests") {
+    val df1 = Seq(
+      (1, "a"), (1, "a"), (1, "a"),
+      (1, "b"),
+      (1, "c"), (1, "c"),
+      (1, "d")
+    ).toDF("id", "value")
+    df1.createOrReplaceTempView("df1")
+
+    val df2 = Seq(
+      (1, "a"),
+      (1, "c"),
+      (1, "d"), (1, "d"), (1, "d"),
+      (1, "e"), (1, "e"),
+      (1, "f")
+    ).toDF("id", "value")
+    df2.createOrReplaceTempView("df2")
+
+    // validate that the functions error out when lgNomEntries < 4 or > 26
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        df1.groupBy("id")
+          .agg(theta_sketch_agg("value", 1).as("thetasketch"))
+          .collect()
+      },
+      condition = "THETA_INVALID_LG_NOM_ENTRIES",
+      parameters = Map(
+        "min" -> "4",
+        "max" -> "26",
+        "value" -> "1"
+      ))
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        df1.groupBy("id")
+          .agg(theta_sketch_agg("value", 28).as("thetasketch"))
+          .collect()
+      },
+      condition = "THETA_INVALID_LG_NOM_ENTRIES",
+      parameters = Map(
+        "min" -> "4",
+        "max" -> "26",
+        "value" -> "28"
+      ))
+
+    // validate that the functions error out when provided unexpected types
+    checkError(
+      exception = intercept[AnalysisException] {
+        val res = sql(
+          """
+            |select
+            | id,
+            | theta_sketch_agg(value, 'text')
+            |from
+            | df1
+            |group by 1
+            |""".stripMargin)
+        checkAnswer(res, Nil)
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"theta_sketch_agg(value, text)\"",
+        "paramIndex" -> "second",
+        "inputSql" -> "\"text\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"INT\""
+      ),
+      context = ExpectedContext(
+        fragment = "theta_sketch_agg(value, 'text')",
+        start = 14,
+        stop = 44))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        val res = sql(
+          """with sketch_cte as (
+            |select
+            | id,
+            | theta_sketch_agg(value) as sketch
+            |from
+            | df1
+            |group by 1
+            |)
+            |
+            |select theta_union_agg(sketch, 'Theta_4') from sketch_cte
+            |""".stripMargin)
+        checkAnswer(res, Nil)
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"theta_union_agg(sketch, Theta_4)\"",
+        "paramIndex" -> "second",
+        "inputSql" -> "\"Theta_4\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"INT\""
+      ),
+      context = ExpectedContext(
+        fragment = "theta_union_agg(sketch, 'Theta_4')",
+        start = 99,
+        stop = 132))
+
+  }
+
+  test("SPARK-52407: theta_sketch_agg") {
+    val df = Seq(1, 1, 2, 2, 3).toDF("col")
+    checkAnswer(
+      df.selectExpr("theta_sketch_estimate(theta_sketch_agg(col, 12))"),
+      Seq(Row(3))
+    )
+    checkAnswer(
+      df.select(theta_sketch_estimate(theta_sketch_agg(col("col"), lit(12)))),
+      Seq(Row(3))
+    )
+  }
+
+  test("SPARK-52407: theta_union_agg") {
+    val df = Seq(1).toDF("col")
+    checkAnswer(
+      df.selectExpr("theta_sketch_agg(col) as sketch").unionAll(
+        df.selectExpr("theta_sketch_agg(col, 20) as sketch")).
+        selectExpr("theta_sketch_estimate(theta_union_agg(sketch, 15))"),
+      Seq(Row(1))
+    )
+    checkAnswer(
+      df.select(theta_sketch_agg(col("col")).as("sketch")).unionAll(
+        df.select(theta_sketch_agg(col("col"), lit(20)).as("sketch"))).
+        select(theta_sketch_estimate(theta_union_agg(col("sketch"), lit(15)))),
+      Seq(Row(1))
+    )
+  }
+
   private def assertAggregateOnDataframe(
       df: => DataFrame,
       expected: Int): Unit = {

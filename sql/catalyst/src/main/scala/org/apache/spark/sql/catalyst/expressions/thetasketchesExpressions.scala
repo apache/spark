@@ -24,6 +24,7 @@ import org.apache.datasketches.thetacommon.ThetaUtil
 
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.util.ThetaSketch
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, IntegerType, LongType}
 
@@ -121,6 +122,7 @@ case class ThetaUnion(first: Expression, second: Expression, third: Expression)
           throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
       }
     val logNominalEntries = value3.asInstanceOf[Int]
+    ThetaSketch.checkLgNomLongs(logNominalEntries)
     val union = SetOperation.builder
       .setLogNominalEntries(logNominalEntries)
       .buildUnion
@@ -187,6 +189,7 @@ case class ThetaDifference(first: Expression, second: Expression, third: Express
           throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
       }
     val logNominalEntries = value3.asInstanceOf[Int]
+    ThetaSketch.checkLgNomLongs(logNominalEntries)
     val difference = SetOperation.builder
       .setLogNominalEntries(logNominalEntries)
       .buildANotB
@@ -253,6 +256,7 @@ case class ThetaIntersection(first: Expression, second: Expression, third: Expre
           throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
       }
     val logNominalEntries = value3.asInstanceOf[Int]
+    ThetaSketch.checkLgNomLongs(logNominalEntries)
     val intersection = SetOperation.builder
       .setLogNominalEntries(logNominalEntries)
       .buildIntersection
