@@ -22,9 +22,9 @@ import java.io.File
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{AnalysisException, DataFrame}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalog.{Column, Database, Function, Table}
-import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, ScalaReflection, TableIdentifier}
+import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, InternalRow, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -1136,9 +1136,44 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     }
   }
 
+  test("SPARK-51694: load v2 function with non-buildin V2 session catalog") {
+    withSQLConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key ->
+      classOf[InMemoryTableSessionFunctionCatalog].getName) {
+      assert(spark.sql("SELECT sys.my_function(1)").collect().toSet
+        == Set(Row(123)))
+    }
+  }
+
   private def getConstructorParameterValues(obj: DefinedByConstructorParams): Seq[AnyRef] = {
     ScalaReflection.getConstructorParameterNames(obj.getClass).map { name =>
       obj.getClass.getMethod(name).invoke(obj)
+    }
+  }
+}
+
+class InMemoryTableSessionFunctionCatalog extends InMemoryTableSessionCatalog {
+  override def loadFunction(ident: Identifier): UnboundFunction = {
+    if (ident.equals(Identifier.of(Array("sys"), "my_function"))) {
+      new UnboundFunction {
+        override def bind(inputType: StructType): BoundFunction = new ScalarFunction[Int] {
+          override def inputTypes(): Array[DataType] = Array(IntegerType)
+          override def resultType(): DataType = IntegerType
+          override def name(): String = "my_function"
+          override def produceResult(input: InternalRow): Int = 123
+        }
+        override def description(): String = "hello"
+        override def name(): String = "my_function"
+      }
+    } else {
+      super.loadFunction(ident)
+    }
+  }
+
+  override def functionExists(ident: Identifier): Boolean = {
+    if (ident.equals(Identifier.of(Array("sys"), "my_function"))) {
+      true
+    } else {
+      super.functionExists(ident)
     }
   }
 }
