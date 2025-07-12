@@ -15,13 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.client
+package org.apache.spark.sql.hive
 
-private[client] trait HiveClientVersions {
-  private val testVersions = sys.env.get("SPARK_TEST_HIVE_CLIENT_VERSIONS")
-  protected val versions = if (testVersions.nonEmpty) {
-    testVersions.get.split(",").map(_.trim).filter(_.nonEmpty).toIndexedSeq
-  } else {
-    IndexedSeq("4.0")
+import java.sql.Date
+
+import org.apache.hadoop.hive.common.`type`.{Date => HiveDate, Timestamp => HiveTimestamp}
+
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+
+object HiveDateTimeUtils {
+  def fromHiveTimestamp(t: HiveTimestamp): Long = {
+    DateTimeUtils.fromJavaTimestamp(t.toSqlTimestamp)
   }
+
+  def fromHiveDate(d: HiveDate): Int = {
+    DateTimeUtils.fromJavaDate(new Date(d.toEpochMilli))
+  }
+
 }
