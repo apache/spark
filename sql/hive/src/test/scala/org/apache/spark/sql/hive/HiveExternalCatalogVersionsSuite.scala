@@ -142,7 +142,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
     val outDir = new File(targetDir)
     if (!outDir.exists()) {
-      outDir.mkdirs()
+      Utils.createDirectory(outDir)
     }
 
     // propagate exceptions up to the caller of getFileFromUrl

@@ -135,7 +135,7 @@ class ParquetDeltaLengthByteArrayEncodingSuite
       if (randomEmpty.nextInt() % 11 != 0) {
         maxLen = 0;
       }
-      samples(i) = RandomStringUtils.randomAlphanumeric(0, maxLen)
+      samples(i) = RandomStringUtils.secure.nextAlphanumeric(0, maxLen)
     }
     samples
   }

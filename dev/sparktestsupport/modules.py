@@ -587,6 +587,14 @@ pyspark_testing = Module(
         # doctests
         "pyspark.testing.utils",
         "pyspark.testing.pandasutils",
+        # unittests
+        "pyspark.testing.tests.test_fail",
+        "pyspark.testing.tests.test_fail_in_set_up_class",
+        "pyspark.testing.tests.test_no_tests",
+        "pyspark.testing.tests.test_pass_all",
+        "pyspark.testing.tests.test_skip_all",
+        "pyspark.testing.tests.test_skip_class",
+        "pyspark.testing.tests.test_skip_set_up_class",
     ],
 )
 

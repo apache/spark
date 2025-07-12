@@ -2,16 +2,7 @@
 -- !query
 CREATE FUNCTION foo1a0() RETURNS INT RETURN 1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo1a0`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo1a0, INT, 1, false, false, false, false
 
 
 -- !query
@@ -48,16 +39,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE FUNCTION foo1a1(a INT) RETURNS INT RETURN 1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo1a1`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo1a1, a INT, INT, 1, false, false, false, false
 
 
 -- !query
@@ -94,16 +76,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE FUNCTION foo1a2(a INT, b INT, c INT, d INT) RETURNS INT RETURN 1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo1a2`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo1a2, a INT, b INT, c INT, d INT, INT, 1, false, false, false, false
 
 
 -- !query
@@ -117,16 +90,7 @@ Project [spark_catalog.default.foo1a2(a#x, b#x, c#x, d#x) AS spark_catalog.defau
 -- !query
 CREATE FUNCTION foo1b0() RETURNS TABLE (c1 INT) RETURN SELECT 1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo1b0`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo1b0, c1 INT, SELECT 1, true, false, false, false
 
 
 -- !query
@@ -143,16 +107,7 @@ Project [c1#x]
 -- !query
 CREATE FUNCTION foo1b1(a INT) RETURNS TABLE (c1 INT) RETURN SELECT 1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo1b1`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo1b1, a INT, c1 INT, SELECT 1, true, false, false, false
 
 
 -- !query
@@ -169,16 +124,7 @@ Project [c1#x]
 -- !query
 CREATE FUNCTION foo1b2(a INT, b INT, c INT, d INT) RETURNS TABLE(c1 INT) RETURN SELECT 1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo1b2`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo1b2, a INT, b INT, c INT, d INT, c1 INT, SELECT 1, true, false, false, false
 
 
 -- !query
@@ -643,16 +589,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 CREATE FUNCTION foo2a2() RETURNS TABLE(c1 INT, c2 INT) RETURN SELECT 1, 2
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo2a2`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo2a2, c1 INT, c2 INT, SELECT 1, 2, true, false, false, false
 
 
 -- !query
@@ -669,16 +606,7 @@ Project [c1#x, c2#x]
 -- !query
 CREATE FUNCTION foo2a4() RETURNS TABLE(c1 INT, c2 INT, c3 INT, c4 INT) RETURN SELECT 1, 2, 3, 4
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo2a4`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo2a4, c1 INT, c2 INT, c3 INT, c4 INT, SELECT 1, 2, 3, 4, true, false, false, false
 
 
 -- !query
@@ -788,16 +716,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE FUNCTION foo41() RETURNS INT RETURN SELECT 1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo41`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo41, INT, SELECT 1, false, false, false, false
 
 
 -- !query
@@ -816,16 +735,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE FUNCTION foo51() RETURNS INT RETURN (SELECT a FROM VALUES(1), (2) AS T(a))
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo51`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo51, INT, (SELECT a FROM VALUES(1), (2) AS T(a)), false, false, false, false
 
 
 -- !query
@@ -842,16 +752,7 @@ Project [spark_catalog.default.foo51() AS spark_catalog.default.foo51()#x]
 -- !query
 CREATE FUNCTION foo52() RETURNS INT RETURN (SELECT 1 FROM VALUES(1) WHERE 1 = 0)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo52`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo52, INT, (SELECT 1 FROM VALUES(1) WHERE 1 = 0), false, false, false, false
 
 
 -- !query
@@ -868,16 +769,7 @@ Project [spark_catalog.default.foo52() AS spark_catalog.default.foo52()#x]
 -- !query
 CREATE FUNCTION foo6c(` a` INT, a INT, `a b` INT) RETURNS INT RETURN 1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo6c`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo6c, ` a` INT, a INT, `a b` INT, INT, 1, false, false, false, false
 
 
 -- !query
@@ -891,16 +783,7 @@ Project [spark_catalog.default.foo6c( a#x, a#x, a b#x) AS spark_catalog.default.
 -- !query
 CREATE FUNCTION foo6d() RETURNS TABLE(` a` INT, a INT, `a b` INT) RETURN SELECT 1, 2, 3
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo6d`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo6d, ` a` INT, a INT, `a b` INT, SELECT 1, 2, 3, true, false, false, false
 
 
 -- !query
@@ -920,16 +803,9 @@ SELECT 'Foo.a: ' || a ||  ' Foo.a: ' || foo7a.a
        || ' T.b: ' ||  b || ' Foo.b: ' || foo7a.b
        || ' T.c: ' || c || ' T.c: ' || t.c FROM VALUES('t.b', 't.c') AS T(b, c)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo7a`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo7a, a STRING, b STRING, c STRING, STRING, SELECT 'Foo.a: ' || a ||  ' Foo.a: ' || foo7a.a
+       || ' T.b: ' ||  b || ' Foo.b: ' || foo7a.b
+       || ' T.c: ' || c || ' T.c: ' || t.c FROM VALUES('t.b', 't.c') AS T(b, c), false, false, false, false
 
 
 -- !query
@@ -949,16 +825,9 @@ SELECT CONCAT('Foo.a: ', a), CONCAT('Foo.b: ', foo7at.b), CONCAT('T.b: ', b),
        CONCAT('Foo.c: ', foo7at.c), CONCAT('T.c: ', c)
 FROM VALUES ('t.b', 't.c') AS T(b, c)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo7at`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo7at, a STRING, b STRING, c STRING, a STRING, b STRING, c STRING, d STRING, e STRING, SELECT CONCAT('Foo.a: ', a), CONCAT('Foo.b: ', foo7at.b), CONCAT('T.b: ', b),
+       CONCAT('Foo.c: ', foo7at.c), CONCAT('T.c: ', c)
+FROM VALUES ('t.b', 't.c') AS T(b, c), true, false, false, false
 
 
 -- !query
@@ -976,16 +845,7 @@ Project [a#x, b#x, c#x, d#x, e#x]
 -- !query
 CREATE FUNCTION foo9a(a BOOLEAN) RETURNS BOOLEAN RETURN NOT a
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo9a`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo9a, a BOOLEAN, BOOLEAN, NOT a, false, false, false, false
 
 
 -- !query
@@ -1015,16 +875,7 @@ Project [spark_catalog.default.foo9a(a#x) AS spark_catalog.default.foo9a(Nonsens
 -- !query
 CREATE FUNCTION foo9b(a BYTE) RETURNS BYTE RETURN CAST(a AS SHORT) + 1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo9b`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo9b, a BYTE, BYTE, CAST(a AS SHORT) + 1, false, false, false, false
 
 
 -- !query
@@ -1054,16 +905,7 @@ Project [spark_catalog.default.foo9b(a#x) AS spark_catalog.default.foo9b(128)#x]
 -- !query
 CREATE FUNCTION foo9c(a SHORT) RETURNS SHORT RETURN CAST(a AS INTEGER) + 1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo9c`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo9c, a SHORT, SHORT, CAST(a AS INTEGER) + 1, false, false, false, false
 
 
 -- !query
@@ -1093,16 +935,7 @@ Project [spark_catalog.default.foo9c(a#x) AS spark_catalog.default.foo9c(32768)#
 -- !query
 CREATE FUNCTION foo9d(a INTEGER) RETURNS INTEGER RETURN CAST(a AS BIGINT) + 1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo9d`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo9d, a INTEGER, INTEGER, CAST(a AS BIGINT) + 1, false, false, false, false
 
 
 -- !query
@@ -1132,16 +965,7 @@ Project [spark_catalog.default.foo9d(a#x) AS spark_catalog.default.foo9d((214748
 -- !query
 CREATE FUNCTION foo9e(a BIGINT) RETURNS BIGINT RETURN CAST(a AS DECIMAL(20, 0)) + 1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo9e`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo9e, a BIGINT, BIGINT, CAST(a AS DECIMAL(20, 0)) + 1, false, false, false, false
 
 
 -- !query
@@ -1171,16 +995,7 @@ Project [spark_catalog.default.foo9e(a#xL) AS spark_catalog.default.foo9e((92233
 -- !query
 CREATE FUNCTION foo9f(a DECIMAL( 5, 2 )) RETURNS DECIMAL (5, 2) RETURN CAST(a AS DECIMAL(6, 2)) + 1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo9f`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo9f, a DECIMAL( 5, 2 ), DECIMAL (5, 2), CAST(a AS DECIMAL(6, 2)) + 1, false, false, false, false
 
 
 -- !query
@@ -1210,16 +1025,7 @@ Project [spark_catalog.default.foo9f(a#x) AS spark_catalog.default.foo9f((999 + 
 -- !query
 CREATE FUNCTION foo9g(a FLOAT, b String) RETURNS FLOAT RETURN b || CAST(a AS String)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo9g`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo9g, a FLOAT, b String, FLOAT, b || CAST(a AS String), false, false, false, false
 
 
 -- !query
@@ -1249,16 +1055,7 @@ Project [spark_catalog.default.foo9g(a#x, b#x) AS spark_catalog.default.foo9g(12
 -- !query
 CREATE FUNCTION foo9h(a DOUBLE, b String) RETURNS DOUBLE RETURN b || CAST(a AS String)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo9h`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo9h, a DOUBLE, b String, DOUBLE, b || CAST(a AS String), false, false, false, false
 
 
 -- !query
@@ -1298,16 +1095,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE FUNCTION foo9j(a STRING, b STRING) RETURNS STRING RETURN a || b
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo9j`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo9j, a STRING, b STRING, STRING, a || b, false, false, false, false
 
 
 -- !query
@@ -1329,16 +1117,7 @@ Project [spark_catalog.default.foo9j(a#x, b#x) AS spark_catalog.default.foo9j(12
 -- !query
 CREATE FUNCTION foo9l(a DATE, b INTERVAL) RETURNS DATE RETURN a + b
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo9l`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo9l, a DATE, b INTERVAL, DATE, a + b, false, false, false, false
 
 
 -- !query
@@ -1431,16 +1210,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 CREATE FUNCTION foo9m(a TIMESTAMP, b INTERVAL) RETURNS TIMESTAMP RETURN a + b
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo9m`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo9m, a TIMESTAMP, b INTERVAL, TIMESTAMP, a + b, false, false, false, false
 
 
 -- !query
@@ -1512,16 +1282,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 CREATE FUNCTION foo9n(a ARRAY<INTEGER>) RETURNS ARRAY<INTEGER> RETURN a
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo9n`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo9n, a ARRAY<INTEGER>, ARRAY<INTEGER>, a, false, false, false, false
 
 
 -- !query
@@ -1543,16 +1304,7 @@ Project [spark_catalog.default.foo9n(a#x) AS spark_catalog.default.foo9n(from_js
 -- !query
 CREATE FUNCTION foo9o(a MAP<STRING, INTEGER>) RETURNS MAP<STRING, INTEGER> RETURN a
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo9o`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo9o, a MAP<STRING, INTEGER>, MAP<STRING, INTEGER>, a, false, false, false, false
 
 
 -- !query
@@ -1574,16 +1326,7 @@ Project [spark_catalog.default.foo9o(a#x) AS spark_catalog.default.foo9o(entries
 -- !query
 CREATE FUNCTION foo9p(a STRUCT<a1: INTEGER, a2: STRING>) RETURNS STRUCT<a1: INTEGER, a2: STRING> RETURN a
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo9p`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo9p, a STRUCT<a1: INTEGER, a2: STRING>, STRUCT<a1: INTEGER, a2: STRING>, a, false, false, false, false
 
 
 -- !query
@@ -1605,16 +1348,7 @@ Project [spark_catalog.default.foo9p(a#x) AS spark_catalog.default.foo9p(from_js
 -- !query
 CREATE FUNCTION foo9q(a ARRAY<STRUCT<a1: INT, a2: STRING>>) RETURNS ARRAY<STRUCT<a1: INT, a2: STRING>> RETURN a
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo9q`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo9q, a ARRAY<STRUCT<a1: INT, a2: STRING>>, ARRAY<STRUCT<a1: INT, a2: STRING>>, a, false, false, false, false
 
 
 -- !query
@@ -1644,16 +1378,7 @@ Project [spark_catalog.default.foo9q(a#x) AS spark_catalog.default.foo9q(from_js
 -- !query
 CREATE FUNCTION foo9r(a ARRAY<MAP<STRING, INT>>) RETURNS ARRAY<MAP<STRING, INT>> RETURN a
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo9r`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo9r, a ARRAY<MAP<STRING, INT>>, ARRAY<MAP<STRING, INT>>, a, false, false, false, false
 
 
 -- !query
@@ -1916,16 +1641,7 @@ Project [person_info#x, modified_id#x]
 -- !query
 CREATE FUNCTION foo2_1a(a INT) RETURNS INT RETURN a
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo2_1a`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo2_1a, a INT, INT, a, false, false, false, false
 
 
 -- !query
@@ -1939,16 +1655,7 @@ Project [spark_catalog.default.foo2_1a(a#x) AS spark_catalog.default.foo2_1a(5)#
 -- !query
 CREATE FUNCTION foo2_1b(a INT, b INT) RETURNS INT RETURN a + b
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo2_1b`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo2_1b, a INT, b INT, INT, a + b, false, false, false, false
 
 
 -- !query
@@ -1962,16 +1669,7 @@ Project [spark_catalog.default.foo2_1b(a#x, b#x) AS spark_catalog.default.foo2_1
 -- !query
 CREATE FUNCTION foo2_1c(a INT, b INT) RETURNS INT RETURN 10 * (a + b) + 100 * (a -b)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo2_1c`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo2_1c, a INT, b INT, INT, 10 * (a + b) + 100 * (a -b), false, false, false, false
 
 
 -- !query
@@ -1985,16 +1683,7 @@ Project [spark_catalog.default.foo2_1c(a#x, b#x) AS spark_catalog.default.foo2_1
 -- !query
 CREATE FUNCTION foo2_1d(a INT, b INT) RETURNS INT RETURN ABS(a) - LENGTH(CAST(b AS VARCHAR(10)))
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo2_1d`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo2_1d, a INT, b INT, INT, ABS(a) - LENGTH(CAST(b AS VARCHAR(10))), false, false, false, false
 
 
 -- !query
@@ -2008,16 +1697,7 @@ Project [spark_catalog.default.foo2_1d(a#x, b#x) AS spark_catalog.default.foo2_1
 -- !query
 CREATE FUNCTION foo2_2a(a INT) RETURNS INT RETURN SELECT a
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo2_2a`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo2_2a, a INT, INT, SELECT a, false, false, false, false
 
 
 -- !query
@@ -2031,16 +1711,7 @@ Project [spark_catalog.default.foo2_2a(a#x) AS spark_catalog.default.foo2_2a(5)#
 -- !query
 CREATE FUNCTION foo2_2b(a INT) RETURNS INT RETURN 1 + (SELECT a)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo2_2b`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo2_2b, a INT, INT, 1 + (SELECT a), false, false, false, false
 
 
 -- !query
@@ -2099,16 +1770,9 @@ SELECT a FROM (VALUES 1) AS V(c1) WHERE c1 = 2
 UNION ALL
 SELECT a + 1 FROM (VALUES 1) AS V(c1)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo2_2e`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo2_2e, a INT, INT, SELECT a FROM (VALUES 1) AS V(c1) WHERE c1 = 2
+UNION ALL
+SELECT a + 1 FROM (VALUES 1) AS V(c1), false, false, false, false
 
 
 -- !query
@@ -2117,16 +1781,9 @@ SELECT a FROM (VALUES 1) AS V(c1)
 EXCEPT
 SELECT a + 1 FROM (VALUES 1) AS V(a)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo2_2f`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo2_2f, a INT, INT, SELECT a FROM (VALUES 1) AS V(c1)
+EXCEPT
+SELECT a + 1 FROM (VALUES 1) AS V(a), false, false, false, false
 
 
 -- !query
@@ -2135,16 +1792,9 @@ SELECT a FROM (VALUES 1) AS V(c1)
 INTERSECT
 SELECT a FROM (VALUES 1) AS V(a)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo2_2g`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo2_2g, a INT, INT, SELECT a FROM (VALUES 1) AS V(c1)
+INTERSECT
+SELECT a FROM (VALUES 1) AS V(a), false, false, false, false
 
 
 -- !query
@@ -2271,16 +1921,7 @@ DropTableCommand `spark_catalog`.`default`.`V2`, true, true, false
 -- !query
 CREATE FUNCTION foo2_3(a INT, b INT) RETURNS INT RETURN a + b
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo2_3`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo2_3, a INT, b INT, INT, a + b, false, false, false, false
 
 
 -- !query
@@ -2340,16 +1981,7 @@ Project [spark_catalog.default.foo2_3(a#x, b#x) AS spark_catalog.default.foo2_3(
 CREATE FUNCTION foo2_4a(a ARRAY<STRING>) RETURNS STRING RETURN
 SELECT array_sort(a, (i, j) -> rank[i] - rank[j])[0] FROM (SELECT MAP('a', 1, 'b', 2) rank)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo2_4a`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo2_4a, a ARRAY<STRING>, STRING, SELECT array_sort(a, (i, j) -> rank[i] - rank[j])[0] FROM (SELECT MAP('a', 1, 'b', 2) rank), false, false, false, false
 
 
 -- !query
@@ -2368,16 +2000,7 @@ Project [spark_catalog.default.foo2_4a(a#x) AS spark_catalog.default.foo2_4a(arr
 CREATE FUNCTION foo2_4b(m MAP<STRING, STRING>, k STRING) RETURNS STRING RETURN
 SELECT v || ' ' || v FROM (SELECT upper(m[k]) AS v)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo2_4b`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo2_4b, m MAP<STRING, STRING>, k STRING, STRING, SELECT v || ' ' || v FROM (SELECT upper(m[k]) AS v), false, false, false, false
 
 
 -- !query
@@ -2442,106 +2065,43 @@ CreateViewCommand `spark_catalog`.`default`.`ta`, [(x,None)], VALUES ARRAY(1, 2,
 -- !query
 CREATE FUNCTION foo3_1a(a DOUBLE, b DOUBLE) RETURNS DOUBLE RETURN a * b
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_1a`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_1a, a DOUBLE, b DOUBLE, DOUBLE, a * b, false, false, false, false
 
 
 -- !query
 CREATE FUNCTION foo3_1b(x INT) RETURNS INT RETURN x
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_1b`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_1b, x INT, INT, x, false, false, false, false
 
 
 -- !query
 CREATE FUNCTION foo3_1c(x INT) RETURNS INT RETURN SELECT x
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_1c`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_1c, x INT, INT, SELECT x, false, false, false, false
 
 
 -- !query
 CREATE FUNCTION foo3_1d(x INT) RETURNS INT RETURN (SELECT SUM(c2) FROM t2 WHERE c1 = x)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_1d`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_1d, x INT, INT, (SELECT SUM(c2) FROM t2 WHERE c1 = x), false, false, false, false
 
 
 -- !query
 CREATE FUNCTION foo3_1e() RETURNS INT RETURN foo3_1d(0)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_1e`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_1e, INT, foo3_1d(0), false, false, false, false
 
 
 -- !query
 CREATE FUNCTION foo3_1f() RETURNS INT RETURN SELECT SUM(c2) FROM t2 WHERE c1 = 0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_1f`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_1f, INT, SELECT SUM(c2) FROM t2 WHERE c1 = 0, false, false, false, false
 
 
 -- !query
 CREATE FUNCTION foo3_1g(x INT) RETURNS INT RETURN SELECT (SELECT x)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_1g`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_1g, x INT, INT, SELECT (SELECT x), false, false, false, false
 
 
 -- !query
@@ -3620,31 +3180,13 @@ Project [c2#x, r#x]
 -- !query
 CREATE FUNCTION foo3_1x(x STRUCT<a: INT, b: INT>) RETURNS INT RETURN x.a + x.b
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_1x`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_1x, x STRUCT<a: INT, b: INT>, INT, x.a + x.b, false, false, false, false
 
 
 -- !query
 CREATE FUNCTION foo3_1y(x ARRAY<INT>) RETURNS INT RETURN aggregate(x, BIGINT(0), (x, y) -> x + y)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_1y`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_1y, x ARRAY<INT>, INT, aggregate(x, BIGINT(0), (x, y) -> x + y), false, false, false, false
 
 
 -- !query
@@ -3705,16 +3247,7 @@ Project [spark_catalog.default.foo3_1y(x#x) AS spark_catalog.default.foo3_1y(x)#
 -- !query
 CREATE FUNCTION foo3_2a() RETURNS INT RETURN FLOOR(RAND() * 6) + 1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_2a`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_2a, INT, FLOOR(RAND() * 6) + 1, false, false, false, false
 
 
 -- !query
@@ -3739,16 +3272,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 CREATE FUNCTION foo3_2b1(x INT) RETURNS BOOLEAN RETURN x IN (SELECT 1)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_2b1`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_2b1, x INT, BOOLEAN, x IN (SELECT 1), false, false, false, false
 
 
 -- !query
@@ -3769,16 +3293,7 @@ Project [c1#x, c2#x]
 -- !query
 CREATE FUNCTION foo3_2b2(x INT) RETURNS INT RETURN IF(x IN (SELECT 1), 1, 0)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_2b2`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_2b2, x INT, INT, IF(x IN (SELECT 1), 1, 0), false, false, false, false
 
 
 -- !query
@@ -3812,16 +3327,7 @@ Project [spark_catalog.default.foo3_2b2(x#x) AS spark_catalog.default.foo3_2b2(c
 -- !query
 CREATE FUNCTION foo3_2b3(x INT) RETURNS BOOLEAN RETURN x IN (SELECT c1 FROM t2)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_2b3`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_2b3, x INT, BOOLEAN, x IN (SELECT c1 FROM t2), false, false, false, false
 
 
 -- !query
@@ -3845,16 +3351,7 @@ Project [c1#x, c2#x]
 -- !query
 CREATE FUNCTION foo3_2b4(x INT) RETURNS BOOLEAN RETURN x NOT IN (SELECT c2 FROM t2 WHERE x = c1)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_2b4`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_2b4, x INT, BOOLEAN, x NOT IN (SELECT c2 FROM t2 WHERE x = c1), false, false, false, false
 
 
 -- !query
@@ -3913,31 +3410,13 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 CREATE FUNCTION foo3_2b5(x INT) RETURNS BOOLEAN RETURN x IN (SELECT x WHERE x = 1)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_2b5`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_2b5, x INT, BOOLEAN, x IN (SELECT x WHERE x = 1), false, false, false, false
 
 
 -- !query
 CREATE FUNCTION foo3_2c1(x INT) RETURNS BOOLEAN RETURN EXISTS(SELECT 1)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_2c1`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_2c1, x INT, BOOLEAN, EXISTS(SELECT 1), false, false, false, false
 
 
 -- !query
@@ -3958,16 +3437,7 @@ Project [c1#x, c2#x]
 -- !query
 CREATE FUNCTION foo3_2c2(x INT) RETURNS BOOLEAN RETURN NOT EXISTS(SELECT * FROM t2 WHERE c1 = x)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_2c2`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_2c2, x INT, BOOLEAN, NOT EXISTS(SELECT * FROM t2 WHERE c1 = x), false, false, false, false
 
 
 -- !query
@@ -3992,16 +3462,7 @@ Project [c1#x, c2#x]
 -- !query
 CREATE FUNCTION foo3_2d1(x INT) RETURNS INT RETURN SELECT (SELECT x)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_2d1`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_2d1, x INT, INT, SELECT (SELECT x), false, false, false, false
 
 
 -- !query
@@ -4041,16 +3502,17 @@ SELECT CASE WHEN occurrences IS NULL OR size(occurrences) = 0
        ELSE sort_array(diffs)[0].id END AS id
 FROM t
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_2e1`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_2e1, occurrences ARRAY<STRUCT<start_time: TIMESTAMP, occurrence_id: STRING>>,
+    instance_start_time TIMESTAMP, STRING, WITH t AS (
+    SELECT transform(occurrences, x -> named_struct(
+        'diff', abs(unix_millis(x.start_time) - unix_millis(instance_start_time)),
+        'id', x.occurrence_id
+    )) AS diffs
+)
+SELECT CASE WHEN occurrences IS NULL OR size(occurrences) = 0
+       THEN NULL
+       ELSE sort_array(diffs)[0].id END AS id
+FROM t, false, false, false, false
 
 
 -- !query
@@ -4078,24 +3540,9 @@ SetCommand (spark.sql.ansi.enabled,Some(true))
 
 
 -- !query
-DROP FUNCTION IF EXISTS foo3_3at
--- !query analysis
-DropFunctionCommand spark_catalog.default.foo3_3at, true, false
-
-
--- !query
 CREATE FUNCTION foo3_3a(x INT) RETURNS DOUBLE RETURN 1 / x
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_3a`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_3a, x INT, DOUBLE, 1 / x, false, false, false, false
 
 
 -- !query
@@ -4191,61 +3638,25 @@ Project [a#x]
 -- !query
 CREATE FUNCTION foo3_3c() RETURNS INT RETURN CAST('a' AS INT)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_3c`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_3c, INT, CAST('a' AS INT), false, false, false, false
 
 
 -- !query
 CREATE FUNCTION foo3_3ct() RETURNS TABLE (a INT) RETURN SELECT CAST('a' AS INT)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_3ct`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_3ct, a INT, SELECT CAST('a' AS INT), true, false, false, false
 
 
 -- !query
 CREATE FUNCTION foo3_3d() RETURNS INT RETURN 'a' + 1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_3d`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_3d, INT, 'a' + 1, false, false, false, false
 
 
 -- !query
 CREATE FUNCTION foo3_3dt() RETURNS TABLE (a INT) RETURN SELECT 'a' + 1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo3_3dt`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_3dt, a INT, SELECT 'a' + 1, true, false, false, false
 
 
 -- !query
@@ -4337,63 +3748,79 @@ ResetCommand spark.sql.ansi.enabled
 
 
 -- !query
+CREATE FUNCTION foo3_14a() RETURNS INT RETURN 1
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_14a, INT, 1, false, false, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_14b() RETURNS TABLE (a INT) RETURN SELECT 1
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_14b, a INT, SELECT 1, true, false, false, false
+
+
+-- !query
+SELECT * FROM foo3_14a()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_TABLE_FUNCTION",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "functionName" : "`spark_catalog`.`default`.`foo3_14a`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 24,
+    "fragment" : "foo3_14a()"
+  } ]
+}
+
+
+-- !query
+SELECT foo3_14b()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_SCALAR_FUNCTION",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "functionName" : "`spark_catalog`.`default`.`foo3_14b`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "foo3_14b()"
+  } ]
+}
+
+
+-- !query
 CREATE FUNCTION foo4_0() RETURNS TABLE (x INT) RETURN SELECT 1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo4_0`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo4_0, x INT, SELECT 1, true, false, false, false
 
 
 -- !query
 CREATE FUNCTION foo4_1(x INT) RETURNS TABLE (a INT) RETURN SELECT x
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo4_1`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo4_1, x INT, a INT, SELECT x, true, false, false, false
 
 
 -- !query
 CREATE FUNCTION foo4_2(x INT) RETURNS TABLE (a INT) RETURN SELECT c2 FROM t2 WHERE c1 = x
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo4_2`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo4_2, x INT, a INT, SELECT c2 FROM t2 WHERE c1 = x, true, false, false, false
 
 
 -- !query
 CREATE FUNCTION foo4_3(x INT) RETURNS TABLE (a INT, cnt INT) RETURN SELECT c1, COUNT(*) FROM t2 WHERE c1 = x GROUP BY c1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
-{
-  "errorClass" : "ROUTINE_ALREADY_EXISTS",
-  "sqlState" : "42723",
-  "messageParameters" : {
-    "existingRoutineType" : "routine",
-    "newRoutineType" : "routine",
-    "routineName" : "`default`.`foo4_3`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo4_3, x INT, a INT, cnt INT, SELECT c1, COUNT(*) FROM t2 WHERE c1 = x GROUP BY c1, true, false, false, false
 
 
 -- !query
@@ -4699,3 +4126,705 @@ DropTableCommand `spark_catalog`.`default`.`t1`, false, true, false
 DROP VIEW t2
 -- !query analysis
 DropTableCommand `spark_catalog`.`default`.`t2`, false, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1a0
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1a0, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1a1
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1a1, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1a2
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1a2, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1b0
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1b0, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1b1
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1b1, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1b2
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1b2, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1c1
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo1c1]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1c2
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo1c2]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1d1
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1d1, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1d2
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1d2, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1d4
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1d4, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1d5
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1d5, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1d6
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1d6, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1e1
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo1e1]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1e2
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo1e2]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1e3
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo1e3]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1f1
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo1f1]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1f2
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo1f2]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1g1
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo1g1]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1g2
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo1g2]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2a0
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo2a0]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2a2
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo2a2, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2a4
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo2a4, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2b1
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo2b1]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2b2
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo2b2]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2c1
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo2c1]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo31
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo31]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo32
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo32]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo33
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo33]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo41
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo41, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo42
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo42]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo51
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo51, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo52
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo52, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo6c
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo6c, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo6d
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo6d, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo7a
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo7a, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo7at
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo7at, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo9a
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo9a, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo9b
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo9b, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo9c
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo9c, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo9d
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo9d, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo9e
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo9e, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo9f
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo9f, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo9g
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo9g, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo9h
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo9h, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo9i
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo9i]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo9j
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo9j, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo9l
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo9l, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo9m
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo9m, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo9n
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo9n, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo9o
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo9o, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo9p
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo9p, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo9q
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo9q, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo9r
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo9r, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1_10
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1_10, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS bar1_10
+-- !query analysis
+DropFunctionCommand spark_catalog.default.bar1_10, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1_11a
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1_11a, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1_11b
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1_11b, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1_11c
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1_11c, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1_11d
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1_11d, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1_11e
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1_11e, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1_11f
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1_11f, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1_11g
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1_11g, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1_11h
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1_11h, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1_11i
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1_11i, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1_11j
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1_11j, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1_11k
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1_11k, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1_11l
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1_11l, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1_11m
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1_11m, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1_11n
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1_11n, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo1_11o
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo1_11o, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2_1a
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo2_1a, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2_1b
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo2_1b, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2_1c
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo2_1c, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2_1d
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo2_1d, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2_2a
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo2_2a, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2_2b
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo2_2b, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2_2c
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo2_2c]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2_2d
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo2_2d]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2_2e
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo2_2e, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2_2f
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo2_2f, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2_2g
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo2_2g, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2_3
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo2_3, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2_4a
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo2_4a, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo2_4b
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo2_4b, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_1a
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_1a, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_1b
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_1b, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_1c
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_1c, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_1d
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_1d, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_1e
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_1e, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_1f
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_1f, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_1g
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_1g, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_1x
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_1x, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_1y
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_1y, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_2a
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_2a, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_2b1
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_2b1, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_2b2
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_2b2, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_2b3
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_2b3, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_2b4
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_2b4, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_2b5
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_2b5, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_2c1
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_2c1, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_2c2
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_2c2, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_2d1
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_2d1, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_2d2
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo3_2d2]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_2e1
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_2e1, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_3a
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_3a, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_3at
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_3at, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_14a
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_14a, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_14b
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_14b, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_3c
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_3c, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_3ct
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_3ct, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_3d
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_3d, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_3dt
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_3dt, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo4_0
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo4_0, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo4_1
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo4_1, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo4_2
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo4_2, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo4_3
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo4_3, true, false

@@ -36,9 +36,9 @@ import org.apache.spark.sql.pipelines.graph.{FlowExecution, ResolutionCompletedF
  *  - All flow progress events other than errors/warnings will be logged at INFO level (including
  *    flow progress events with metrics) and error/warning messages will be logged at their level.
  *
- * @param eventBuffer Event log to log the flow progress events.
+ * @param eventCallback Callback to invoke on the flow progress events.
  */
-class FlowProgressEventLogger(eventBuffer: PipelineRunEventBuffer) extends Logging {
+class FlowProgressEventLogger(eventCallback: PipelineEvent => Unit) extends Logging {
 
   /**
    * This map stores flow identifier to a boolean representing whether flow is running.
@@ -57,7 +57,7 @@ class FlowProgressEventLogger(eventBuffer: PipelineRunEventBuffer) extends Loggi
    * INFO level, since flows are only queued once.
    */
   def recordQueued(flow: ResolvedFlow): Unit = synchronized {
-    eventBuffer.addEvent(
+    eventCallback(
       ConstructPipelineEvent(
         origin = PipelineEventOrigin(
           flowName = Option(flow.displayName),
@@ -76,7 +76,7 @@ class FlowProgressEventLogger(eventBuffer: PipelineRunEventBuffer) extends Loggi
    */
   def recordPlanningForBatchFlow(batchFlow: ResolvedFlow): Unit = synchronized {
     if (batchFlow.df.isStreaming) return
-    eventBuffer.addEvent(
+    eventCallback(
       ConstructPipelineEvent(
         origin = PipelineEventOrigin(
           flowName = Option(batchFlow.displayName),
@@ -97,7 +97,7 @@ class FlowProgressEventLogger(eventBuffer: PipelineRunEventBuffer) extends Loggi
    * logged at METRICS. All other cases will be logged at INFO.
    */
   def recordStart(flowExecution: FlowExecution): Unit = synchronized {
-    eventBuffer.addEvent(
+    eventCallback(
       ConstructPipelineEvent(
         origin = PipelineEventOrigin(
           flowName = Option(flowExecution.displayName),
@@ -114,7 +114,7 @@ class FlowProgressEventLogger(eventBuffer: PipelineRunEventBuffer) extends Loggi
 
   /** Records flow progress events with flow status as RUNNING. */
   def recordRunning(flow: ResolvedFlow): Unit = synchronized {
-    eventBuffer.addEvent(
+    eventCallback(
       ConstructPipelineEvent(
         origin = PipelineEventOrigin(
           flowName = Option(flow.displayName),
@@ -142,7 +142,7 @@ class FlowProgressEventLogger(eventBuffer: PipelineRunEventBuffer) extends Loggi
   ): Unit = synchronized {
     val eventLogMessage = messageOpt.getOrElse(s"Flow '${flow.displayName}' has FAILED.")
 
-    eventBuffer.addEvent(
+    eventCallback(
       ConstructPipelineEvent(
         origin = PipelineEventOrigin(
           flowName = Option(flow.displayName),
@@ -165,7 +165,7 @@ class FlowProgressEventLogger(eventBuffer: PipelineRunEventBuffer) extends Loggi
    * record skipped should be used when the flow is skipped because of upstream flow failures.
    */
   def recordSkippedOnUpStreamFailure(flow: ResolvedFlow): Unit = synchronized {
-    eventBuffer.addEvent(
+    eventCallback(
       ConstructPipelineEvent(
         origin = PipelineEventOrigin(
           flowName = Option(flow.displayName),
@@ -188,7 +188,7 @@ class FlowProgressEventLogger(eventBuffer: PipelineRunEventBuffer) extends Loggi
    * upstream failures use [[recordSkippedOnUpStreamFailure]] function.
    */
   def recordSkipped(flow: ResolvedFlow): Unit = synchronized {
-    eventBuffer.addEvent(
+    eventCallback(
       ConstructPipelineEvent(
         origin = PipelineEventOrigin(
           flowName = Option(flow.displayName),
@@ -208,7 +208,7 @@ class FlowProgressEventLogger(eventBuffer: PipelineRunEventBuffer) extends Loggi
 
   /** Records flow progress events with flow status as EXCLUDED at INFO level.  */
   def recordExcluded(flow: ResolvedFlow): Unit = synchronized {
-    eventBuffer.addEvent(
+    eventCallback(
       ConstructPipelineEvent(
         origin = PipelineEventOrigin(
           flowName = Option(flow.displayName),
@@ -232,7 +232,7 @@ class FlowProgressEventLogger(eventBuffer: PipelineRunEventBuffer) extends Loggi
       message: Option[String] = None,
       cause: Option[Throwable] = None
   ): Unit = synchronized {
-    eventBuffer.addEvent(
+    eventCallback(
       ConstructPipelineEvent(
         origin = PipelineEventOrigin(
           flowName = Option(flow.displayName),
@@ -252,7 +252,7 @@ class FlowProgressEventLogger(eventBuffer: PipelineRunEventBuffer) extends Loggi
 
   /** Records flow progress events with flow status as IDLE. */
   def recordIdle(flow: ResolvedFlow): Unit = synchronized {
-    eventBuffer.addEvent(
+    eventCallback(
       ConstructPipelineEvent(
         origin = PipelineEventOrigin(
           flowName = Option(flow.displayName),
@@ -277,7 +277,7 @@ class FlowProgressEventLogger(eventBuffer: PipelineRunEventBuffer) extends Loggi
    * event.
    */
   def recordCompletion(flow: ResolvedFlow): Unit = synchronized {
-    eventBuffer.addEvent(
+    eventCallback(
       ConstructPipelineEvent(
         origin = PipelineEventOrigin(
           flowName = Option(flow.displayName),

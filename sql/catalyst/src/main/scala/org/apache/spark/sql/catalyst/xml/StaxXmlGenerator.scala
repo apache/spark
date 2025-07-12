@@ -228,6 +228,8 @@ class StaxXmlGenerator(
         writeChild(field.name, field.dataType, value)
       }
 
+    case (u: UserDefinedType[_], v) => writeElement(u.sqlType, v, options)
+
     case (_, _) =>
       throw new SparkIllegalArgumentException(
         errorClass = "_LEGACY_ERROR_TEMP_3238",

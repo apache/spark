@@ -1530,18 +1530,15 @@ object CopyDependencies {
             destJar.delete()
           }
 
-          if (jar.getName.contains("spark-connect-common") &&
-            !SbtPomKeys.profiles.value.contains("noshade-connect")) {
+          if (jar.getName.contains("spark-connect-common")) {
             // Don't copy the spark connect common JAR as it is shaded in the spark connect.
           } else if (jar.getName.contains("connect-client-jvm")) {
             // Do not place Spark Connect client jars as it is not built-in.
           } else if (noProvidedSparkJars && jar.getName.contains("spark-avro")) {
             // Do not place Spark Avro jars as it is not built-in.
-          } else if (jar.getName.contains("spark-connect") &&
-            !SbtPomKeys.profiles.value.contains("noshade-connect")) {
+          } else if (jar.getName.contains("spark-connect")) {
             Files.copy(fid.toPath, destJar.toPath)
-          } else if (jar.getName.contains("spark-protobuf") &&
-            !SbtPomKeys.profiles.value.contains("noshade-protobuf")) {
+          } else if (jar.getName.contains("spark-protobuf")) {
             if (!noProvidedSparkJars) {
               Files.copy(fidProtobuf.toPath, destJar.toPath)
             }
