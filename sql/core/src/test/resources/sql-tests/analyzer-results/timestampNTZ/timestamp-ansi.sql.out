@@ -567,13 +567,15 @@ Project [(cast(2011-11-11 11:11:11 as timestamp_ntz) - 2011-11-11 11:11:10) AS (
 -- !query
 select timestamp'2011-11-11 11:11:11' - null
 -- !query analysis
-[Analyzer test output redacted due to nondeterminism]
+Project [(2011-11-11 11:11:11 - cast(null as timestamp_ntz)) AS (TIMESTAMP_NTZ '2011-11-11 11:11:11' - NULL)#x]
++- OneRowRelation
 
 
 -- !query
 select null - timestamp'2011-11-11 11:11:11'
 -- !query analysis
-[Analyzer test output redacted due to nondeterminism]
+Project [(cast(null as timestamp_ntz) - 2011-11-11 11:11:11) AS (NULL - TIMESTAMP_NTZ '2011-11-11 11:11:11')#x]
++- OneRowRelation
 
 
 -- !query
@@ -653,45 +655,15 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select timestamp'2011-11-11 11:11:11' + null
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "left" : "\"TIMESTAMP_NTZ\"",
-    "right" : "\"VOID\"",
-    "sqlExpr" : "\"(TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 44,
-    "fragment" : "timestamp'2011-11-11 11:11:11' + null"
-  } ]
-}
+Project [cast(2011-11-11 11:11:11 + cast(null as interval day to second) as timestamp_ntz) AS TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL#x]
++- OneRowRelation
 
 
 -- !query
 select null + timestamp'2011-11-11 11:11:11'
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "left" : "\"VOID\"",
-    "right" : "\"TIMESTAMP_NTZ\"",
-    "sqlExpr" : "\"(NULL + TIMESTAMP_NTZ '2011-11-11 11:11:11')\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 44,
-    "fragment" : "null + timestamp'2011-11-11 11:11:11'"
-  } ]
-}
+Project [cast(2011-11-11 11:11:11 + cast(null as interval day to second) as timestamp_ntz) AS TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL#x]
++- OneRowRelation
 
 
 -- !query

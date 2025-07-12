@@ -829,49 +829,17 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select timestamp'2011-11-11 11:11:11' + null
 -- !query schema
-struct<>
+struct<TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL:timestamp_ntz>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "left" : "\"TIMESTAMP_NTZ\"",
-    "right" : "\"VOID\"",
-    "sqlExpr" : "\"(TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 44,
-    "fragment" : "timestamp'2011-11-11 11:11:11' + null"
-  } ]
-}
+NULL
 
 
 -- !query
 select null + timestamp'2011-11-11 11:11:11'
 -- !query schema
-struct<>
+struct<TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL:timestamp_ntz>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "left" : "\"VOID\"",
-    "right" : "\"TIMESTAMP_NTZ\"",
-    "sqlExpr" : "\"(NULL + TIMESTAMP_NTZ '2011-11-11 11:11:11')\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 44,
-    "fragment" : "null + timestamp'2011-11-11 11:11:11'"
-  } ]
-}
+NULL
 
 
 -- !query
