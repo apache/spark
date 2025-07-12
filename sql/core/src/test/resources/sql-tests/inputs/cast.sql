@@ -147,6 +147,27 @@ select cast(80.654321BD as interval hour to minute);
 select cast(-10.123456BD as interval year to month);
 select cast(10.654321BD as interval month);
 
+-- cast TIME to integral types
+SELECT CAST(TIME '00:01:52' AS tinyint);
+SELECT CAST(TIME '00:01:52' AS smallint);
+SELECT CAST(TIME '00:01:52' AS int);
+SELECT CAST(TIME '00:01:52' AS bigint);
+
+-- cast TIME to integral types with potential overflow
+SELECT CAST(TIME '23:59:59' AS tinyint);
+SELECT CAST(TIME '23:59:59' AS smallint);
+SELECT CAST(TIME '23:59:59' AS int);
+SELECT CAST(TIME '23:59:59' AS bigint);
+
+-- cast TIME with fractional seconds (should floor)
+SELECT CAST(TIME '00:00:17.5' AS tinyint);
+SELECT CAST(TIME '00:00:17.5' AS int);
+SELECT CAST(TIME '00:00:17.9' AS int);
+
+-- cast TIME edge cases
+SELECT CAST(TIME '00:00:00' AS tinyint);
+SELECT CAST(TIME '00:00:00' AS int);
+
 -- cast double colon syntax tests
 SELECT '1.23' :: int;
 SELECT 'abc' :: int;
@@ -167,6 +188,12 @@ select interval '-10-2' year to month :: smallint;
 select -10L :: interval second;
 select interval '08:11:10.001' hour to second :: decimal(10, 4);
 select 10.123456BD :: interval day to second;
+
+-- cast TIME using double colon syntax
+SELECT TIME '00:01:52' :: tinyint;
+SELECT TIME '00:01:52' :: int;
+SELECT TIME '23:59:59' :: tinyint;
+SELECT TIME '23:59:59' :: int;
 
 SELECT '1.23' :: int :: long;
 SELECT '2147483648' :: long :: int;
