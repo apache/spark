@@ -103,6 +103,11 @@ class SeriesTestsMixin:
 
         self.assertTrue(pser_a.empty)
 
+    def test_series_from_series(self):
+        pser = ps.Series([1, 2, 3, 4, 5, 6, 7], name="x")
+
+        self.assert_eq(ps.Series(pser), pser)
+
     def test_all_null_series(self):
         pser_a = pd.Series([None, None, None], dtype="float64")
         pser_b = pd.Series([None, None, None], dtype="str")
