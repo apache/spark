@@ -41,7 +41,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
-import org.apache.spark.sql.connector.write.V1Write
+import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationTable, V1Write}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan, SparkStrategy => Strategy}
 import org.apache.spark.sql.execution.command.CommandUtils
@@ -182,7 +182,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case Some(r) => session.sharedState.cacheManager.uncacheQuery(session, r, cascade = true)
         case None => ()
       }
-      WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics) :: Nil
+
+      WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics,
+        relationOpt.flatMap(getCommand)) :: Nil
 
     case c @ CreateTable(ResolvedIdentifier(catalog, ident), columns, partitioning,
         tableSpec: TableSpec, ifNotExists) =>
@@ -275,7 +277,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case AppendData(r: DataSourceV2Relation, query, _, _, Some(write), _) =>
-      AppendDataExec(planLater(query), refreshCache(r), write) :: Nil
+      AppendDataExec(planLater(query), refreshCache(r), write, getCommand(r)) :: Nil
 
     case OverwriteByExpression(r @ DataSourceV2Relation(v1: SupportsWrite, _, _, _, _), _, _,
         _, _, Some(write), analyzedQuery) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
@@ -332,15 +334,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           throw SparkException.internalError("Unexpected table relation: " + other)
       }
 
-    case ReplaceData(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections, _,
+    case ReplaceData(r: DataSourceV2Relation, _, query, o: DataSourceV2Relation, projections, _,
         Some(write)) =>
       // use the original relation to refresh the cache
-      ReplaceDataExec(planLater(query), refreshCache(r), projections, write) :: Nil
+      ReplaceDataExec(planLater(query), refreshCache(o), projections, write, getCommand(r)) :: Nil
 
-    case WriteDelta(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections,
+    case WriteDelta(r: DataSourceV2Relation, _, query, o: DataSourceV2Relation, projections,
         Some(write)) =>
       // use the original relation to refresh the cache
-      WriteDeltaExec(planLater(query), refreshCache(r), projections, write) :: Nil
+      WriteDeltaExec(planLater(query), refreshCache(o), projections, write, getCommand(r)) :: Nil
 
     case MergeRows(isSourceRowPresent, isTargetRowPresent, matchedInstructions,
         notMatchedInstructions, notMatchedBySourceInstructions, checkCardinality, output, child) =>
@@ -587,6 +589,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       ExplainOnlySparkPlan(c) :: Nil
 
     case _ => Nil
+  }
+
+  private def getCommand(relation: DataSourceV2Relation): Option[RowLevelOperation.Command] = {
+    val table = relation.table match {
+      case r: RowLevelOperationTable => Some(r)
+      case _ => None
+    }
+    table.map(_.operation.command())
   }
 }
 
