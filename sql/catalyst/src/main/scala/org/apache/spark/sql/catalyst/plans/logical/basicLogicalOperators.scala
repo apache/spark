@@ -667,19 +667,24 @@ case class Join(
 
   override def maxRows: Option[Long] = {
     joinType match {
-      case Inner | Cross | FullOuter | LeftOuter | RightOuter | LeftSingle
-          if left.maxRows.isDefined && right.maxRows.isDefined =>
-        val leftMaxRows = BigInt(left.maxRows.get)
-        val rightMaxRows = BigInt(right.maxRows.get)
-        val minRows = joinType match {
-          case LeftOuter | LeftSingle => leftMaxRows
-          case RightOuter => rightMaxRows
-          case FullOuter => leftMaxRows + rightMaxRows
-          case _ => BigInt(0)
-        }
-        val maxRows = (leftMaxRows * rightMaxRows).max(minRows)
-        if (maxRows.isValidLong) {
-          Some(maxRows.toLong)
+      case Inner | Cross | FullOuter | LeftOuter | RightOuter | LeftSingle =>
+        val leftMaxRowsOption = left.maxRows
+        val rightMaxRowsOption = right.maxRows
+        if (leftMaxRowsOption.isDefined && rightMaxRowsOption.isDefined) {
+          val leftMaxRows = BigInt(leftMaxRowsOption.get)
+          val rightMaxRows = BigInt(rightMaxRowsOption.get)
+          val minRows = joinType match {
+            case LeftOuter | LeftSingle => leftMaxRows
+            case RightOuter => rightMaxRows
+            case FullOuter => leftMaxRows + rightMaxRows
+            case _ => BigInt(0)
+          }
+          val maxRows = (leftMaxRows * rightMaxRows).max(minRows)
+          if (maxRows.isValidLong) {
+            Some(maxRows.toLong)
+          } else {
+            None
+          }
         } else {
           None
         }
