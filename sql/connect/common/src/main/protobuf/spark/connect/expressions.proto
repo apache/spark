@@ -195,6 +195,9 @@ message Expression {
       Struct struct = 24;
 
       SpecializedArray specialized_array = 25;
+      Variant variant = 26;
+      Char char = 27;
+      Varchar varchar = 28;
     }
 
     message Decimal {
@@ -239,6 +242,35 @@ message Expression {
         Doubles doubles = 5;
         Strings strings = 6;
       }
+    }
+
+    // Binary representation of a semi-structured value (Spark VariantVal).
+    // The format follows Spark's internal VariantVal encoding:
+    //  - See org.apache.spark.unsafe.types.VariantVal for details.
+    message Variant {
+      // Encodes the value's type and data (without field names).
+      bytes value = 1;
+
+      // Metadata contains version identifier and field name information.
+      bytes metadata = 2;
+    }
+
+    message Char {
+      string value = 1;
+      // The fixed length for this Char type.
+      // - If omitted, uses the actual length of `value`.
+      // - If provided but smaller than `value`'s length, an error will be thrown.
+      // - If provided and larger than `value`'s length, the `value` will be right-padded with spaces.
+      optional int32 length = 2;
+    }
+
+    message Varchar {
+      string value = 1;
+      // Specifies the maximum length for this Varchar type.
+      // - If omitted, uses the actual length of `value`.
+      // - If provided but smaller than `value`'s length, an error will be thrown.
+      // - If provided and larger than `value`'s length, stores exact value without padding.
+      optional int32 length = 2;
     }
   }
 
