@@ -212,6 +212,19 @@ class HistoryServer(
     provider.getListing()
   }
 
+  /**
+   * Returns a list of available applications, in descending order according to their end time.
+   *
+   * @param max The maximum number of applications to return
+   * @param predicate A function that filters the applications to be returned
+   * @return An iterator of matching applications up to the specified maximum
+   */
+  def getApplicationList(max: Int)(predicate: ApplicationInfo => Boolean)
+    : Iterator[ApplicationInfo] = {
+    provider.getListing(max)(predicate)
+  }
+
+
   def getEventLogsUnderProcess(): Int = {
     provider.getEventLogsUnderProcess()
   }
@@ -222,6 +235,11 @@ class HistoryServer(
 
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
     getApplicationList()
+  }
+
+  override def getApplicationInfoList(max: Int)(filter: ApplicationInfo => Boolean)
+    : Iterator[ApplicationInfo] = {
+    getApplicationList(max)(filter)
   }
 
   def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
