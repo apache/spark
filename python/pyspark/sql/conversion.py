@@ -315,27 +315,19 @@ class LocalDataToArrowConversion:
         column_names = schema.fieldNames()
         len_column_names = len(column_names)
 
-        column_convs = [
-            LocalDataToArrowConversion._create_converter(field.dataType, field.nullable)
-            for field in schema.fields
-        ]
-
-        pylist: List[List] = [[] for _ in range(len_column_names)]
+        rows: List[tuple] = []
 
         for item in data:
             if isinstance(item, VariantVal):
                 raise PySparkValueError("Rows cannot be of type VariantVal")
-            if (
-                not isinstance(item, (Row, tuple))  # inherited namedtuple
-                and hasattr(item, "__dict__")
+            if not isinstance(item, (Row, tuple)) and hasattr(  # inherited namedtuple
+                item, "__dict__"
             ):
                 item = item.__dict__
             if isinstance(item, dict):
-                for i, col in enumerate(column_names):
-                    pylist[i].append(column_convs[i](item.get(col)))
+                rows.append(tuple([item.get(col) for i, col in enumerate(column_names)]))
             elif item is None:
-                for i, col in enumerate(column_names):
-                    pylist[i].append(None)
+                rows.append(tuple([None for _ in range(len_column_names)]))
             else:
                 if len(item) != len_column_names:
                     raise PySparkValueError(
@@ -345,9 +337,14 @@ class LocalDataToArrowConversion:
                             "actual_length": str(len(item)),
                         },
                     )
+                rows.append(tuple(item))
 
-                for i in range(len_column_names):
-                    pylist[i].append(column_convs[i](item[i]))
+        column_convs = [
+            LocalDataToArrowConversion._create_converter(field.dataType, field.nullable)
+            for field in schema.fields
+        ]
+
+        pylist: List[List] = [[conv(row[i]) for row in rows] for i, conv in enumerate(column_convs)]
 
         pa_schema = to_arrow_schema(
             StructType(
