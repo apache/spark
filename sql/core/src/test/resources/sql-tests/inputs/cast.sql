@@ -177,3 +177,13 @@ SELECT map(1, '123', 2, '456')[1] :: int;
 SELECT '2147483648' :: BINT;
 SELECT '2147483648' :: SELECT;
 SELECT FALSE IS NOT NULL :: string;
+
+-- cast TIME to DECIMAL
+SELECT CAST(time '00:00:00' AS decimal(11, 6));
+SELECT CAST(time '12:00:00' AS decimal(7, 2));
+SELECT CAST(time '01:02:03' AS decimal(15, 10));
+SELECT CAST(time '23:59:59' AS decimal(9, 4));
+SELECT CAST(time '23:59:59.001' AS decimal(11, 6));
+SELECT CAST(time '23:59:59.999999' AS decimal(11, 6));
+SELECT CAST(time '12:00:00' AS decimal(7, 2));
+SELECT CAST(time '01:30:45' AS decimal(8, 3));
