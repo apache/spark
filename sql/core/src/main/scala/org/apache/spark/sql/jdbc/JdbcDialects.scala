@@ -854,6 +854,11 @@ abstract class JdbcDialect extends Serializable with Logging {
   def supportsHint: Boolean = false
 
   /**
+   * Returns true if dialect supports JOIN operator.
+   */
+  def supportsJoin: Boolean = false
+
+  /**
    * Return the DB-specific quoted and fully qualified table name
    */
   @Since("3.5.0")
