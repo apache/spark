@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.catalyst.InternalRow
@@ -38,11 +39,13 @@ class HadoopFileLinesReaderSuite extends SharedSparkSession {
     Files.write(path.toPath, text.getBytes(StandardCharsets.UTF_8))
 
     val lines = ranges.flatMap { case (start, length) =>
+      val sp = SparkPath.fromPathString(path.getCanonicalPath)
       val file = PartitionedFile(
         InternalRow.empty,
-        SparkPath.fromPathString(path.getCanonicalPath),
+        sp,
         start,
-        length)
+        length,
+        new FileStatus(path.length(), false, 1, 0, 0, sp.toPath))
       val hadoopConf = conf.getOrElse(spark.sessionState.newHadoopConf())
       val reader = new HadoopFileLinesReader(file, delimOpt, hadoopConf)
 
