@@ -46,7 +46,9 @@ class BloomFilterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
       val fpp = 0.05
       val numInsertion = numItems / 10
 
-      val allItems = Array.fill(numItems)(itemGen(r))
+      // using a Set to avoid duplicates,
+      // inserting twice as many random values as used, to compensate for lost dupes
+      val allItems = Set.fill(2 * numItems)(itemGen(r)).take(numItems)
 
       val filter = BloomFilter.create(numInsertion, fpp)
 
@@ -70,7 +72,9 @@ class BloomFilterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
     }
   }
 
-  def testMergeInPlace[T: ClassTag](typeName: String, numItems: Int)(itemGen: Random => T): Unit = {
+  def testMergeInPlace[T: ClassTag](
+      typeName: String,
+      numItems: Int)(itemGen: Random => T): Unit = {
     test(s"mergeInPlace - $typeName") {
       // use a fixed seed to make the test predictable.
       val r = new Random(37)
@@ -97,8 +101,8 @@ class BloomFilterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
     }
   }
 
-  def testIntersectInPlace[T: ClassTag]
-  (typeName: String, numItems: Int)(itemGen: Random => T): Unit = {
+  def testIntersectInPlace[T: ClassTag](typeName: String, numItems: Int)(
+      itemGen: Random => T): Unit = {
     test(s"intersectInPlace - $typeName") {
       // use a fixed seed to make the test predictable.
       val r = new Random(37)
@@ -156,6 +160,12 @@ class BloomFilterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
     intercept[IncompatibleMergeException] {
       val filter1 = BloomFilter.create(1000, 6400)
       val filter2 = BloomFilter.create(2000, 6400)
+      filter1.mergeInPlace(filter2)
+    }
+
+    intercept[IncompatibleMergeException] {
+      val filter1 = BloomFilter.create(BloomFilter.Version.V1, 1000L, 6400L, 0)
+      val filter2 = BloomFilter.create(BloomFilter.Version.V2, 1000L, 6400L, 0)
       filter1.mergeInPlace(filter2)
     }
   }

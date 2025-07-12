@@ -19,13 +19,33 @@ package org.apache.spark.util.sketch;
 
 import java.io.*;
 
-class BloomFilterImpl extends BloomFilterBase implements Serializable {
+class BloomFilterImplV2 extends BloomFilterBase implements Serializable {
 
-  BloomFilterImpl(int numHashFunctions, long numBits) {
-    super(numHashFunctions, numBits);
+  BloomFilterImplV2(int numHashFunctions, long numBits, int seed) {
+    this(new BitArray(numBits), numHashFunctions, seed);
   }
 
-  private BloomFilterImpl() {}
+  private BloomFilterImplV2(BitArray bits, int numHashFunctions, int seed) {
+    super(bits, numHashFunctions, seed);
+  }
+
+  private BloomFilterImplV2() {}
+
+  @Override
+  public boolean equals(Object other) {
+    if (other == this) {
+      return true;
+    }
+
+    if (!(other instanceof BloomFilterImplV2 that)) {
+      return false;
+    }
+
+    return
+      this.numHashFunctions == that.numHashFunctions
+      && this.seed == that.seed
+      && this.bits.equals(that.bits);
+  }
 
   @Override
   public boolean putBinary(byte[] item) {
@@ -35,13 +55,16 @@ class BloomFilterImpl extends BloomFilterBase implements Serializable {
 
     long bitSize = bits.bitSize();
     boolean bitsChanged = false;
-    for (int i = 1; i <= numHashFunctions; i++) {
-      int combinedHash = h1 + (i * h2);
+
+    // Integer.MAX_VALUE takes care of scrambling the higher four bytes of combinedHash
+    long combinedHash = (long) h1 * Integer.MAX_VALUE;
+    for (long i = 0; i < numHashFunctions; i++) {
+      combinedHash += h2;
+
       // Flip all the bits if it's negative (guaranteed positive number)
-      if (combinedHash < 0) {
-        combinedHash = ~combinedHash;
-      }
-      bitsChanged |= bits.set(combinedHash % bitSize);
+      long combinedIndex = combinedHash < 0 ? ~combinedHash : combinedHash;
+
+      bitsChanged |= bits.set(combinedIndex % bitSize);
     }
     return bitsChanged;
   }
@@ -53,13 +76,16 @@ class BloomFilterImpl extends BloomFilterBase implements Serializable {
     int h2 = hiLoHash.lo();
 
     long bitSize = bits.bitSize();
-    for (int i = 1; i <= numHashFunctions; i++) {
-      int combinedHash = h1 + (i * h2);
+
+    // Integer.MAX_VALUE takes care of scrambling the higher four bytes of combinedHash
+    long combinedHash = (long) h1 * Integer.MAX_VALUE;
+    for (long i = 0; i < numHashFunctions; i++) {
+      combinedHash += h2;
+
       // Flip all the bits if it's negative (guaranteed positive number)
-      if (combinedHash < 0) {
-        combinedHash = ~combinedHash;
-      }
-      if (!bits.get(combinedHash % bitSize)) {
+      long combinedIndex = combinedHash < 0 ? ~combinedHash : combinedHash;
+
+      if (!bits.get(combinedIndex % bitSize)) {
         return false;
       }
     }
@@ -74,13 +100,16 @@ class BloomFilterImpl extends BloomFilterBase implements Serializable {
 
     long bitSize = bits.bitSize();
     boolean bitsChanged = false;
-    for (int i = 1; i <= numHashFunctions; i++) {
-      int combinedHash = h1 + (i * h2);
+
+    // Integer.MAX_VALUE takes care of scrambling the higher four bytes of combinedHash
+    long combinedHash = (long) h1 * Integer.MAX_VALUE;
+    for (long i = 0; i < numHashFunctions; i++) {
+      combinedHash += h2;
+
       // Flip all the bits if it's negative (guaranteed positive number)
-      if (combinedHash < 0) {
-        combinedHash = ~combinedHash;
-      }
-      bitsChanged |= bits.set(combinedHash % bitSize);
+      long combinedIndex = combinedHash < 0 ? ~combinedHash : combinedHash;
+
+      bitsChanged |= bits.set(combinedIndex % bitSize);
     }
     return bitsChanged;
   }
@@ -92,27 +121,30 @@ class BloomFilterImpl extends BloomFilterBase implements Serializable {
     int h2 = hiLoHash.lo();
 
     long bitSize = bits.bitSize();
-    for (int i = 1; i <= numHashFunctions; i++) {
-      int combinedHash = h1 + (i * h2);
+
+    // Integer.MAX_VALUE takes care of scrambling the higher four bytes of combinedHash
+    long combinedHash = (long) h1 * Integer.MAX_VALUE;
+    for (long i = 0; i < numHashFunctions; i++) {
+      combinedHash += h2;
+
       // Flip all the bits if it's negative (guaranteed positive number)
-      if (combinedHash < 0) {
-        combinedHash = ~combinedHash;
-      }
-      if (!bits.get(combinedHash % bitSize)) {
+      long combinedIndex = combinedHash < 0 ? ~combinedHash : combinedHash;
+
+      if (!bits.get(combinedIndex % bitSize)) {
         return false;
       }
     }
     return true;
   }
 
-  protected BloomFilterImpl checkCompatibilityForMerge(BloomFilter other)
+  protected BloomFilterImplV2 checkCompatibilityForMerge(BloomFilter other)
           throws IncompatibleMergeException {
     // Duplicates the logic of `isCompatible` here to provide better error message.
     if (other == null) {
       throw new IncompatibleMergeException("Cannot merge null bloom filter");
     }
 
-    if (!(other instanceof BloomFilterImpl that)) {
+    if (!(other instanceof BloomFilterImplV2 that)) {
       throw new IncompatibleMergeException(
         "Cannot merge bloom filter of class " + other.getClass().getName()
       );
@@ -120,6 +152,12 @@ class BloomFilterImpl extends BloomFilterBase implements Serializable {
 
     if (this.bitSize() != that.bitSize()) {
       throw new IncompatibleMergeException("Cannot merge bloom filters with different bit size");
+    }
+
+    if (this.seed != that.seed) {
+      throw new IncompatibleMergeException(
+              "Cannot merge bloom filters with different seeds"
+      );
     }
 
     if (this.numHashFunctions != that.numHashFunctions) {
@@ -134,9 +172,9 @@ class BloomFilterImpl extends BloomFilterBase implements Serializable {
   public void writeTo(OutputStream out) throws IOException {
     DataOutputStream dos = new DataOutputStream(out);
 
-    dos.writeInt(Version.V1.getVersionNumber());
+    dos.writeInt(Version.V2.getVersionNumber());
     dos.writeInt(numHashFunctions);
-    // ignore seed
+    dos.writeInt(seed);
     bits.writeTo(dos);
   }
 
@@ -144,25 +182,19 @@ class BloomFilterImpl extends BloomFilterBase implements Serializable {
     DataInputStream dis = new DataInputStream(in);
 
     int version = dis.readInt();
-    if (version != Version.V1.getVersionNumber()) {
+    if (version != Version.V2.getVersionNumber()) {
       throw new IOException("Unexpected Bloom filter version number (" + version + ")");
     }
 
     this.numHashFunctions = dis.readInt();
-    this.seed = DEFAULT_SEED;
+    this.seed = dis.readInt();
     this.bits = BitArray.readFrom(dis);
   }
 
-  public static BloomFilterImpl readFrom(InputStream in) throws IOException {
-    BloomFilterImpl filter = new BloomFilterImpl();
+  public static BloomFilterImplV2 readFrom(InputStream in) throws IOException {
+    BloomFilterImplV2 filter = new BloomFilterImplV2();
     filter.readFrom0(in);
     return filter;
-  }
-
-  // no longer necessary, but can't remove without triggering MIMA violations
-  @Deprecated
-  public static BloomFilter readFrom(byte[] bytes) throws IOException {
-    return BloomFilter.readFrom(bytes);
   }
 
   @Serial
