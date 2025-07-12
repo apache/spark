@@ -18,7 +18,8 @@
 package org.apache.spark.shuffle.sort
 
 import org.apache.spark._
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config.{SHUFFLE_MAP_STATUS_ROW_COUNT_METRICS_CHCEK, SHUFFLE_MAP_STATUS_ROW_COUNT_OPTIMIZE_SKEWED_JOB}
+import org.apache.spark.internal.{Logging, config}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleWriter}
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
@@ -48,6 +49,12 @@ private[spark] class SortShuffleWriter[K, V, C](
 
   private var partitionLengths: Array[Long] = _
 
+  private val enableRowCountOptimize = SparkEnv.get.conf.get(
+    SHUFFLE_MAP_STATUS_ROW_COUNT_OPTIMIZE_SKEWED_JOB)
+
+  private val enableMetricsRowCountCheck = SparkEnv.get.conf.get(
+    SHUFFLE_MAP_STATUS_ROW_COUNT_METRICS_CHCEK)
+
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
     sorter = if (dep.mapSideCombine) {
@@ -60,7 +67,13 @@ private[spark] class SortShuffleWriter[K, V, C](
       new ExternalSorter[K, V, V](
         context, aggregator = None, Some(dep.partitioner), ordering = None, dep.serializer)
     }
-    sorter.insertAll(records)
+    val partitionRecords = new Array[Long](dep.partitioner.numPartitions)
+    if (enableRowCountOptimize) {
+      // collect partition records metrics
+      sorter.insertAll(records, Some(partitionRecords))
+    } else {
+      sorter.insertAll(records)
+    }
 
     // Don't bother including the time to open the merged output file in the shuffle write time,
     // because it just opens a single file, so is typically too fast to measure accurately
@@ -69,7 +82,32 @@ private[spark] class SortShuffleWriter[K, V, C](
       dep.shuffleId, mapId, dep.partitioner.numPartitions)
     sorter.writePartitionedMapOutput(dep.shuffleId, mapId, mapOutputWriter, writeMetrics)
     partitionLengths = mapOutputWriter.commitAllPartitions(sorter.getChecksums).getPartitionLengths
-    mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths, mapId)
+    var checkMetricsRowCountResult: Boolean = true
+    if (enableRowCountOptimize && enableMetricsRowCountCheck) {
+      val partitionRecordsSum = partitionRecords.sum
+      val metricsRecordsSum = writeMetrics.recordsWritten
+      if (log.isDebugEnabled()) {
+        log.debug(s"PartitionRecords ShuffleId : ${handle.shuffleId}, max :" +
+          s"${partitionRecords.max}, min : ${partitionRecords.min}, " +
+          s"sum : ${partitionRecordsSum}. MetricsRecords sum : ${metricsRecordsSum}")
+      } else {
+        log.info(s"PartitionRecords ShuffleId : ${handle.shuffleId}, " +
+          s"sum : ${partitionRecordsSum}. MetricsRecords sum : ${metricsRecordsSum}")
+      }
+      if (partitionRecordsSum != metricsRecordsSum) {
+        checkMetricsRowCountResult = false
+        log.info(s"ShuffleId : ${handle.shuffleId}, MetricsRecords " +
+          s"sum : ${metricsRecordsSum} not equal to PartitionRecords sum :" +
+          s"${partitionRecordsSum}")
+      }
+    }
+
+    if (enableRowCountOptimize && checkMetricsRowCountResult) {
+      mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths,
+        mapId, Some(partitionRecords))
+    } else {
+      mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths, mapId)
+    }
   }
 
   /** Close this writer, passing along whether the map completed */
