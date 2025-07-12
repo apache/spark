@@ -313,13 +313,14 @@ class LocalDataToArrowConversion:
         assert schema is not None and isinstance(schema, StructType)
 
         column_names = schema.fieldNames()
+        len_column_names = len(column_names)
 
         column_convs = [
             LocalDataToArrowConversion._create_converter(field.dataType, field.nullable)
             for field in schema.fields
         ]
 
-        pylist: List[List] = [[] for _ in range(len(column_names))]
+        pylist: List[List] = [[] for _ in range(len_column_names)]
 
         for item in data:
             if isinstance(item, VariantVal):
@@ -336,16 +337,16 @@ class LocalDataToArrowConversion:
                 for i, col in enumerate(column_names):
                     pylist[i].append(None)
             else:
-                if len(item) != len(column_names):
+                if len(item) != len_column_names:
                     raise PySparkValueError(
                         errorClass="AXIS_LENGTH_MISMATCH",
                         messageParameters={
-                            "expected_length": str(len(column_names)),
+                            "expected_length": str(len_column_names),
                             "actual_length": str(len(item)),
                         },
                     )
 
-                for i in range(len(column_names)):
+                for i in range(len_column_names):
                     pylist[i].append(column_convs[i](item[i]))
 
         pa_schema = to_arrow_schema(
