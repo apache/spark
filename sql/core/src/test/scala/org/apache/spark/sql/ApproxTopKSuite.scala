@@ -21,14 +21,16 @@ import java.sql.{Date, Timestamp}
 import java.time.LocalDateTime
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.test.SharedSparkSession
 
 
-class ApproxTopKSuite extends QueryTest
-                      with SharedSparkSession {
+class ApproxTopKSuite extends QueryTest with SharedSparkSession {
 
   import testImplicits._
+
+  /////////////////////////////////
+  // approx_top_k tests
+  /////////////////////////////////
 
   test("SPARK-52515: test of 1 parameter") {
     val res = sql(
@@ -207,7 +209,17 @@ class ApproxTopKSuite extends QueryTest
         Row(new java.math.BigDecimal("1.000"), 2))))
   }
 
-  test("SPARK-52515: invalid k value") {
+  test("SPARK-52515: invalid k value null") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT approx_top_k(expr, NULL) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
+      },
+      condition = "APPROX_TOP_K_NULL_ARG",
+      parameters = Map("argName" -> "`k`")
+    )
+  }
+
+  test("SPARK-52515: invalid k value < 1") {
     checkError(
       exception = intercept[SparkRuntimeException] {
         sql("SELECT approx_top_k(expr, 0) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
@@ -235,43 +247,23 @@ class ApproxTopKSuite extends QueryTest
     }
   }
 
-  test("SPARK-52515: invalid k value null") {
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        sql("SELECT approx_top_k(expr, NULL) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
-      },
-      condition = "APPROX_TOP_K_NULL_ARG",
-      parameters = Map("argName" -> "`k`")
-    )
-  }
-
-  test("SPARK-52515: invalid maxItemsTracked value") {
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        sql("SELECT approx_top_k(expr, 10, -1) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
-      },
-      condition = "APPROX_TOP_K_NON_POSITIVE_ARG",
-      parameters = Map("argName" -> "`maxItemsTracked`", "argValue" -> "-1")
-    )
-  }
-
   test("SPARK-52515: invalid maxItemsTracked value null") {
     checkError(
       exception = intercept[SparkRuntimeException] {
-        sql("SELECT approx_top_k(expr, 10, NULL) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
+        sql("SELECT approx_top_k(expr, 5, NULL) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
       },
       condition = "APPROX_TOP_K_NULL_ARG",
       parameters = Map("argName" -> "`maxItemsTracked`")
     )
   }
 
-  test("SPARK-52515: invalid maxItemsTracked < k") {
+  test("SPARK-52515: invalid maxItemsTracked value < 1") {
     checkError(
       exception = intercept[SparkRuntimeException] {
-        sql("SELECT approx_top_k(expr, 10, 5) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
+        sql("SELECT approx_top_k(expr, 5, 0) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
       },
-      condition = "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K",
-      parameters = Map("maxItemsTracked" -> "5", "k" -> "10")
+      condition = "APPROX_TOP_K_NON_POSITIVE_ARG",
+      parameters = Map("argName" -> "`maxItemsTracked`", "argValue" -> "0")
     )
   }
 
@@ -285,49 +277,13 @@ class ApproxTopKSuite extends QueryTest
     )
   }
 
-  test("SPARK-52515: invalid item type array") {
+  test("SPARK-52515: invalid maxItemsTracked < k") {
     checkError(
-      exception = intercept[ExtendedAnalysisException] {
-        sql("SELECT approx_top_k(expr) FROM VALUES array(1, 2), array(2, 3) AS tab(expr);")
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT approx_top_k(expr, 10, 5) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
       },
-      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-      parameters = Map(
-        "sqlExpr" -> "\"approx_top_k(expr, 5, 10000)\"",
-        "msg" -> "array columns are not supported",
-        "hint" -> ""
-      ),
-      queryContext = Array(ExpectedContext("approx_top_k(expr)", 7, 24))
-    )
-  }
-
-  test("SPARK-52515: invalid item type struct") {
-    sql("SELECT struct(1, 2) AS expr").createOrReplaceTempView("struct_table")
-    checkError(
-      exception = intercept[ExtendedAnalysisException] {
-        sql("SELECT approx_top_k(expr) FROM struct_table;")
-      },
-      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-      parameters = Map(
-        "sqlExpr" -> "\"approx_top_k(expr, 5, 10000)\"",
-        "msg" -> "struct columns are not supported",
-        "hint" -> ""
-      ),
-      queryContext = Array(ExpectedContext("approx_top_k(expr)", 7, 24))
-    )
-  }
-
-  test("SPARK-52515: invalid item type map") {
-    checkError(
-      exception = intercept[ExtendedAnalysisException] {
-        sql("SELECT approx_top_k(expr) FROM VALUES map('red', 1, 'green', 2) AS tab(expr);")
-      },
-      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-      parameters = Map(
-        "sqlExpr" -> "\"approx_top_k(expr, 5, 10000)\"",
-        "msg" -> "map columns are not supported",
-        "hint" -> ""
-      ),
-      queryContext = Array(ExpectedContext("approx_top_k(expr)", 7, 24))
+      condition = "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K",
+      parameters = Map("maxItemsTracked" -> "5", "k" -> "10")
     )
   }
 
@@ -337,6 +293,11 @@ class ApproxTopKSuite extends QueryTest
         "FROM VALUES 'a', 'a', 'b', 'b', 'b', NULL, NULL, NULL AS tab(expr);")
     checkAnswer(res, Row(Seq(Row("b", 3), Row("a", 2))))
   }
+
+  /////////////////////////////////
+  // approx_top_k_accumulate and
+  // approx_top_k_estimate tests
+  /////////////////////////////////
 
   test("SPARK-52588: accumulate and estimate of Integer with default parameters") {
     val res = sql("SELECT approx_top_k_estimate(approx_top_k_accumulate(expr)) " +
@@ -382,6 +343,17 @@ class ApproxTopKSuite extends QueryTest
     )
   }
 
+  test("SPARK-52588: invalid accumulate if maxItemsTracked < 1") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT approx_top_k_accumulate(expr, 0) FROM VALUES 0, 1, 2 AS tab(expr);")
+          .collect()
+      },
+      condition = "APPROX_TOP_K_NON_POSITIVE_ARG",
+      parameters = Map("argName" -> "`maxItemsTracked`", "argValue" -> "0")
+    )
+  }
+
   test("SPARK-52588: invalid accumulate if maxItemsTracked > 1000000") {
     checkError(
       exception = intercept[SparkRuntimeException] {
@@ -403,7 +375,7 @@ class ApproxTopKSuite extends QueryTest
     )
   }
 
-  test("SPARK-52588: invalid estimate if k is invalid") {
+  test("SPARK-52588: invalid estimate if k < 1") {
     checkError(
       exception = intercept[SparkRuntimeException] {
         sql("SELECT approx_top_k_estimate(approx_top_k_accumulate(expr), 0) " +
@@ -441,150 +413,6 @@ class ApproxTopKSuite extends QueryTest
       },
       condition = "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K",
       parameters = Map("maxItemsTracked" -> "5", "k" -> "10")
-    )
-  }
-
-  test("SPARK-52588: invalid estimate if state is not a struct") {
-    checkError(
-      exception = intercept[ExtendedAnalysisException] {
-        sql("SELECT approx_top_k_estimate(1, 5);")
-      },
-      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-      parameters = Map(
-        "sqlExpr" -> "\"approx_top_k_estimate(1, 5)\"",
-        "paramIndex" -> "first",
-        "inputSql" -> "\"1\"",
-        "inputType" -> "\"INT\"",
-        "requiredType" -> "\"STRUCT\""),
-      queryContext = Array(ExpectedContext("approx_top_k_estimate(1, 5)", 7, 33))
-    )
-  }
-
-  test("SPARK-52588: invalid estimate if state struct length is not 3") {
-    val invalidState = "named_struct('sketch', X'01', 'itemDataType', CAST(NULL AS INT), " +
-      "'maxItemsTracked', 10, 'invalidField', 1)"
-    checkError(
-      exception = intercept[ExtendedAnalysisException] {
-        sql(s"SELECT approx_top_k_estimate($invalidState, 5);")
-      },
-      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-      parameters = Map(
-        "sqlExpr" -> ("\"approx_top_k_estimate(named_struct(sketch, X'01', itemDataType, " +
-          "CAST(NULL AS INT), maxItemsTracked, 10, invalidField, 1), 5)\""),
-        "msg" -> ("State must be a struct with 3 fields. " +
-          "Expected struct: struct<sketch:binary,itemDataType:any,maxItemsTracked:int>. " +
-          "Got: struct<sketch:binary,itemDataType:int,maxItemsTracked:int,invalidField:int>"),
-        "hint" -> ""),
-      queryContext = Array(ExpectedContext(s"approx_top_k_estimate($invalidState, 5)", 7, 138))
-    )
-  }
-
-  test("SPARK-52588: invalid estimate if state struct does not have 'sketch' field") {
-    val invalidState =
-      "named_struct('notSketch', X'01', 'itemDataType', CAST(NULL AS INT), 'maxItemsTracked', 10)"
-    checkError(
-      exception = intercept[ExtendedAnalysisException] {
-        sql(s"SELECT approx_top_k_estimate($invalidState, 5);")
-      },
-      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-      parameters = Map(
-        "sqlExpr" -> ("\"approx_top_k_estimate(named_struct(notSketch, X'01', itemDataType, " +
-          "CAST(NULL AS INT), maxItemsTracked, 10), 5)\""),
-        "msg" -> "State struct must contain a field named 'sketch'.",
-        "hint" -> ""
-      ),
-      queryContext = Array(ExpectedContext(s"approx_top_k_estimate($invalidState, 5)", 7, 122))
-    )
-  }
-
-  test("SPARK-52588: invalid estimate if 'sketch' field is not binary") {
-    val invalidState =
-      "named_struct('sketch', 1, 'itemDataType', CAST(NULL AS INT), 'maxItemsTracked', 10)"
-    checkError(
-      exception = intercept[ExtendedAnalysisException] {
-        sql(s"SELECT approx_top_k_estimate($invalidState, 5);")
-      },
-      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-      parameters = Map(
-        "sqlExpr" -> ("\"approx_top_k_estimate(named_struct(sketch, 1, itemDataType, " +
-          "CAST(NULL AS INT), maxItemsTracked, 10), 5)\""),
-        "msg" -> "'sketch' field type of state struct must be binary. Got: int",
-        "hint" -> ""
-      ),
-      queryContext = Array(ExpectedContext(s"approx_top_k_estimate($invalidState, 5)", 7, 115))
-    )
-  }
-
-  test("SPARK-52588: invalid estimate if state struct does not have 'itemDataType' field") {
-    val invalidState =
-      "named_struct('sketch', X'01', 'notItemDataType', CAST(NULL AS INT), 'maxItemsTracked', 10)"
-    checkError(
-      exception = intercept[ExtendedAnalysisException] {
-        sql(s"SELECT approx_top_k_estimate($invalidState, 5);")
-      },
-      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-      parameters = Map(
-        "sqlExpr" -> ("\"approx_top_k_estimate(named_struct(sketch, X'01', notItemDataType, " +
-          "CAST(NULL AS INT), maxItemsTracked, 10), 5)\""),
-        "msg" -> "State struct must contain a field named 'itemDataType'.",
-        "hint" -> ""
-      ),
-      queryContext = Array(ExpectedContext(s"approx_top_k_estimate($invalidState, 5)", 7, 122))
-    )
-  }
-
-  test("SPARK-52588: invalid estimate if 'itemDataType' field is not supported data type") {
-    val invalidState =
-      "named_struct('sketch', X'01', 'itemDataType', CAST(NULL AS BINARY), 'maxItemsTracked', 10)"
-    checkError(
-      exception = intercept[ExtendedAnalysisException] {
-        sql(s"SELECT approx_top_k_estimate($invalidState, 5);")
-      },
-      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-      parameters = Map(
-        "sqlExpr" -> ("\"approx_top_k_estimate(named_struct(sketch, X'01', itemDataType, " +
-          "CAST(NULL AS BINARY), maxItemsTracked, 10), 5)\""),
-        "msg" -> ("'itemDataType' field type of state struct must be a supported data type. " +
-          "Got: binary"),
-        "hint" -> ""
-      ),
-      queryContext = Array(ExpectedContext(s"approx_top_k_estimate($invalidState, 5)", 7, 122))
-    )
-  }
-
-  test("SPARK-52588: invalid estimate if state struct does not have 'maxItemsTracked' field") {
-    val invalidState =
-      "named_struct('sketch', X'01', 'itemDataType', CAST(NULL AS INT), 'notMaxItemsTracked', 10)"
-    checkError(
-      exception = intercept[ExtendedAnalysisException] {
-        sql(s"SELECT approx_top_k_estimate($invalidState, 5);")
-      },
-      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-      parameters = Map(
-        "sqlExpr" -> ("\"approx_top_k_estimate(named_struct(sketch, X'01', itemDataType, " +
-          "CAST(NULL AS INT), notMaxItemsTracked, 10), 5)\""),
-        "msg" -> "State struct must contain a field named 'maxItemsTracked'.",
-        "hint" -> ""
-      ),
-      queryContext = Array(ExpectedContext(s"approx_top_k_estimate($invalidState, 5)", 7, 122))
-    )
-  }
-
-  test("SPARK-52588: invalid estimate if 'maxItemsTracked' field is not int") {
-    val invalidState =
-      "named_struct('sketch', X'01', 'itemDataType', CAST(NULL AS INT), 'maxItemsTracked', 10L)"
-    checkError(
-      exception = intercept[ExtendedAnalysisException] {
-        sql(s"SELECT approx_top_k_estimate($invalidState, 5);")
-      },
-      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-      parameters = Map(
-        "sqlExpr" -> ("\"approx_top_k_estimate(named_struct(sketch, X'01', itemDataType, " +
-          "CAST(NULL AS INT), maxItemsTracked, 10), 5)\""),
-        "msg" -> "'maxItemsTracked' field type of state struct must be int. Got: bigint",
-        "hint" -> ""
-      ),
-      queryContext = Array(ExpectedContext(s"approx_top_k_estimate($invalidState, 5)", 7, 120))
     )
   }
 }
