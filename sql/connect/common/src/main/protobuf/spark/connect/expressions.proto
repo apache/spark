@@ -195,6 +195,7 @@ message Expression {
       Struct struct = 24;
 
       SpecializedArray specialized_array = 25;
+      Time time = 26;
     }
 
     message Decimal {
@@ -239,6 +240,12 @@ message Expression {
         Doubles doubles = 5;
         Strings strings = 6;
       }
+    }
+
+    message Time {
+      int64 nano = 1;
+      // The precision of this time, if omitted, uses the default value of MICROS_PRECISION.
+      optional int32 precision = 2;
     }
   }
 

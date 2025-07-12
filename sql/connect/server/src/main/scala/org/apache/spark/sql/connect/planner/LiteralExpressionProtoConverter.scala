@@ -97,6 +97,13 @@ object LiteralExpressionProtoConverter {
       case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
         expressions.Literal(lit.getDayTimeInterval, DayTimeIntervalType())
 
+      case proto.Expression.Literal.LiteralTypeCase.TIME =>
+        var precision = TimeType.DEFAULT_PRECISION
+        if (lit.getTime.hasPrecision) {
+          precision = lit.getTime.getPrecision
+        }
+        expressions.Literal(lit.getTime.getNano, TimeType(precision))
+
       case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
         expressions.Literal.create(
           LiteralValueProtoConverter.toCatalystArray(lit.getArray),

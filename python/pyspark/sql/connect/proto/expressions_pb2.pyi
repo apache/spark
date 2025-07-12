@@ -654,6 +654,36 @@ class Expression(google.protobuf.message.Message):
                 | None
             ): ...
 
+        class Time(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            NANO_FIELD_NUMBER: builtins.int
+            PRECISION_FIELD_NUMBER: builtins.int
+            nano: builtins.int
+            precision: builtins.int
+            """The precision of this time, if omitted, uses the default value of MICROS_PRECISION."""
+            def __init__(
+                self,
+                *,
+                nano: builtins.int = ...,
+                precision: builtins.int | None = ...,
+            ) -> None: ...
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "_precision", b"_precision", "precision", b"precision"
+                ],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "_precision", b"_precision", "nano", b"nano", "precision", b"precision"
+                ],
+            ) -> None: ...
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["_precision", b"_precision"]
+            ) -> typing_extensions.Literal["precision"] | None: ...
+
         NULL_FIELD_NUMBER: builtins.int
         BINARY_FIELD_NUMBER: builtins.int
         BOOLEAN_FIELD_NUMBER: builtins.int
@@ -675,6 +705,7 @@ class Expression(google.protobuf.message.Message):
         MAP_FIELD_NUMBER: builtins.int
         STRUCT_FIELD_NUMBER: builtins.int
         SPECIALIZED_ARRAY_FIELD_NUMBER: builtins.int
+        TIME_FIELD_NUMBER: builtins.int
         @property
         def null(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
         binary: builtins.bytes
@@ -706,6 +737,8 @@ class Expression(google.protobuf.message.Message):
         def struct(self) -> global___Expression.Literal.Struct: ...
         @property
         def specialized_array(self) -> global___Expression.Literal.SpecializedArray: ...
+        @property
+        def time(self) -> global___Expression.Literal.Time: ...
         def __init__(
             self,
             *,
@@ -730,6 +763,7 @@ class Expression(google.protobuf.message.Message):
             map: global___Expression.Literal.Map | None = ...,
             struct: global___Expression.Literal.Struct | None = ...,
             specialized_array: global___Expression.Literal.SpecializedArray | None = ...,
+            time: global___Expression.Literal.Time | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -772,6 +806,8 @@ class Expression(google.protobuf.message.Message):
                 b"string",
                 "struct",
                 b"struct",
+                "time",
+                b"time",
                 "timestamp",
                 b"timestamp",
                 "timestamp_ntz",
@@ -821,6 +857,8 @@ class Expression(google.protobuf.message.Message):
                 b"string",
                 "struct",
                 b"struct",
+                "time",
+                b"time",
                 "timestamp",
                 b"timestamp",
                 "timestamp_ntz",
@@ -854,6 +892,7 @@ class Expression(google.protobuf.message.Message):
                 "map",
                 "struct",
                 "specialized_array",
+                "time",
             ]
             | None
         ): ...
