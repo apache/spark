@@ -21,6 +21,7 @@ import java.lang.{Boolean => JBoolean, Byte => JByte, Character => JChar, Double
 import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Date, Timestamp}
 import java.time._
+import java.time.temporal.ChronoField.NANO_OF_DAY
 
 import scala.collection.{immutable, mutable}
 import scala.jdk.CollectionConverters._
@@ -96,6 +97,11 @@ object LiteralValueProtoConverter {
       case v: Date => builder.setDate(SparkDateTimeUtils.fromJavaDate(v))
       case v: Duration => builder.setDayTimeInterval(SparkIntervalUtils.durationToMicros(v))
       case v: Period => builder.setYearMonthInterval(SparkIntervalUtils.periodToMonths(v))
+      case v: LocalTime =>
+        builder.setTime(
+          builder.getTimeBuilder
+            .setNano(v.getLong(NANO_OF_DAY))
+            .setPrecision(TimeType.DEFAULT_PRECISION))
       case v: Array[_] => builder.setArray(arrayBuilder(v))
       case v: CalendarInterval =>
         builder.setCalendarInterval(calendarIntervalBuilder(v.months, v.days, v.microseconds))
@@ -181,6 +187,9 @@ object LiteralValueProtoConverter {
         } else {
           builder.setNull(toConnectProtoType(dataType))
         }
+      case (v: LocalTime, timeType: TimeType) =>
+        builder.setTime(
+          builder.getTimeBuilder.setNano(v.getLong(NANO_OF_DAY)).setPrecision(timeType.precision))
       case _ => toLiteralProtoBuilder(literal)
     }
   }
