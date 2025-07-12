@@ -1,0 +1,31 @@
+version: "3.8"
+name: spark-minio
+
+services:
+  minio:
+    image: minio/minio
+    container_name: minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+      - ./minio-init.sh:/minio-init.sh
+    entrypoint: >
+      sh -c "
+        /usr/bin/docker-entrypoint.sh minio server /data --console-address ':9001' &
+        echo 'Waiting for MinIO to start...';
+        until curl -s http://localhost:9000/minio/health/ready; do
+          sleep 1;
+        done;
+        echo 'MinIO is ready.';
+        sh /minio-init.sh;
+        wait
+      "
+
+volumes:
+  minio-data:
