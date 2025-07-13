@@ -20,7 +20,9 @@ package org.apache.spark.sql.catalyst.types
 import org.apache.spark.sql.types.TimeType
 
 case class TimeTypeOps (t: TimeType)
-  extends PhyTypeOps {
+  extends TypeOps
+  with PhyTypeOps {
 
   override def getPhysicalType: PhysicalDataType = PhysicalLongType
+  override def getJavaClass: Class[_] = classOf[PhysicalLongType.InternalType]
 }

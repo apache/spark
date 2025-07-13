@@ -20,9 +20,12 @@ package org.apache.spark.sql.catalyst.types
 import org.apache.spark.sql.types.{DataType, TimeType}
 
 // Base operations of Catalyst's types.
-abstract class PhyTypeOps extends TypeOps {
+trait PhyTypeOps extends TypeOps {
   // Get the underlying physical type
   def getPhysicalType: PhysicalDataType
+
+  // Get the Java class of the physical type
+  def getJavaClass: Class[_]
 }
 
 object PhyTypeOps {
@@ -30,4 +33,6 @@ object PhyTypeOps {
     case _: TimeType => true
     case _ => false
   }
+
+  def apply(dt: DataType): PhyTypeOps = TypeOps(dt).asInstanceOf[PhyTypeOps]
 }

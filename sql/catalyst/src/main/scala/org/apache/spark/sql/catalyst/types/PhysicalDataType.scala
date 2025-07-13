@@ -35,8 +35,7 @@ sealed abstract class PhysicalDataType {
 
 object PhysicalDataType {
   def apply(dt: DataType): PhysicalDataType = dt match {
-    case _ if PhyTypeOps.supports(dt) =>
-      TypeOps(dt).asInstanceOf[PhyTypeOps].getPhysicalType
+    case _ if PhyTypeOps.supports(dt) => PhyTypeOps(dt).getPhysicalType
     case NullType => PhysicalNullType
     case ByteType => PhysicalByteType
     case ShortType => PhysicalShortType
