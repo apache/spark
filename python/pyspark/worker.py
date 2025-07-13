@@ -310,7 +310,6 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
 
         return value
 
-    # output conversion
     def convert_output_value(value, data_type):
         if value is None or data_type is None:
             return value
@@ -324,12 +323,6 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
                     value = float(value)
             except (ValueError, TypeError):
                 pass
-
-        if hasattr(data_type, "toInternal") and not isinstance(data_type, (StructType, ArrayType, MapType)):
-            try:
-                return data_type.toInternal(value)
-            except Exception:
-                return value
 
         if isinstance(data_type, StructType):
             if isinstance(value, dict):
@@ -461,17 +454,31 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
     @fail_on_stopiteration
     def evaluate(*args: pa.RecordBatch):
         results = [convert_output_value(result_func(func(*row)), return_type) for row in get_args(*args)]
-        try:
-            arr = pa.array(results, type=arrow_return_type)
-        except (pa.lib.ArrowInvalid, pa.lib.ArrowTypeError) as e:
-            raise PySparkRuntimeError(
-                errorClass="UDF_ARROW_TYPE_CONVERSION_ERROR",
-                messageParameters={
-                    "value": str(results),
-                    "arrow_type": str(arrow_return_type),
-                    "error": str(e),
-                },
-            ) from e
+
+        if len(results) == 0:
+            # Handle empty results case
+            arr = pa.array([], type=arrow_return_type)
+        else:
+            try:
+                from pyspark.sql.types import StructType, StructField
+                temp_struct_type = StructType([StructField("result", return_type)])
+                temp_data = [{"result": result} for result in results]
+
+                arrow_table = LocalDataToArrowConversion.convert(
+                    temp_data, temp_struct_type, use_large_var_types(runner_conf)
+                )
+
+                arr = arrow_table.column(0).combine_chunks()
+            except Exception as e:
+                raise PySparkRuntimeError(
+                    errorClass="UDF_ARROW_TYPE_CONVERSION_ERROR",
+                    messageParameters={
+                        "value": str(results),
+                        "arrow_type": str(arrow_return_type),
+                        "error": str(e),
+                    },
+                ) from e
+
         return (arr, arrow_return_type)
 
     def make_output(*a):
