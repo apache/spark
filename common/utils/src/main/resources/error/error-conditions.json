@@ -1366,12 +1366,6 @@
     ],
     "sqlState" : "22012"
   },
-  "MOD_BY_ZERO" : {
-    "message" : [
-      "Mod by zero. Use `try_mod` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
-    ],
-    "sqlState" : "22012"
-  },
   "DUPLICATED_CTE_NAMES" : {
     "message" : [
       "CTE definition can't have duplicate names: <duplicateNames>."
