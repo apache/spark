@@ -398,19 +398,30 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         self._anchor: DataFrame  # type: ignore[annotation-unchecked]
         self._col_label: Label  # type: ignore[annotation-unchecked]
-        if isinstance(data, (DataFrame, Series)):
+        if isinstance(data, DataFrame):
             assert dtype is None
             assert name is None
             assert not copy
             assert not fastpath
 
-            if isinstance(data, Series):
-                assert index is None
-                self._anchor = DataFrame(data)
-                self._col_label = self._anchor._internal.column_labels[0]
-            else:
-                self._anchor = data
-                self._col_label = index
+            self._anchor = data
+            self._col_label = index
+
+        elif isinstance(data, Series):
+            assert not copy
+            assert not fastpath
+
+            if name:
+                data.name = name
+
+            if index:
+                data = data.reindex(index)
+
+            if dtype:
+                data = data.astype(dtype)
+
+            self._anchor = DataFrame(data)
+            self._col_label = data._internal.column_labels[0]
         else:
             if isinstance(data, pd.Series):
                 assert index is None
