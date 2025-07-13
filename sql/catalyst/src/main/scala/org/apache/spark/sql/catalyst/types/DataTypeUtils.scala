@@ -79,7 +79,7 @@ object DataTypeUtils {
   }
 
   /**
-   * Returns true if the write data type can be read using the read data type.
+   * Validate that the write data type can be read using the read data type.
    *
    * The write type is compatible with the read type if:
    * - Both types are arrays, the array element types are compatible, and element nullability is
@@ -98,30 +98,27 @@ object DataTypeUtils {
    *
    * @param write a write-side data type to validate against the read type
    * @param read a read-side data type
-   * @return true if data written with the write type can be read using the read type
+   * @throws org.apache.spark.sql.AnalysisException if the write type cannot be read
+   *                                                using the read type
    */
-  def canWrite(
+  def verifyCanWrite(
       tableName: String,
       write: DataType,
       read: DataType,
       byName: Boolean,
       resolver: Resolver,
       context: String,
-      storeAssignmentPolicy: StoreAssignmentPolicy.Value,
-      addError: String => Unit): Boolean = {
+      storeAssignmentPolicy: StoreAssignmentPolicy.Value): Unit = {
     (write, read) match {
       case (wArr: ArrayType, rArr: ArrayType) =>
         // run compatibility check first to produce all error messages
-        val typesCompatible = canWrite(
-          tableName, wArr.elementType, rArr.elementType, byName, resolver, context + ".element",
-          storeAssignmentPolicy, addError)
+        verifyCanWrite(tableName, wArr.elementType, rArr.elementType, byName, resolver,
+          context + ".element", storeAssignmentPolicy)
 
         if (wArr.containsNull && !rArr.containsNull) {
           throw QueryCompilationErrors.incompatibleDataToTableNullableArrayElementsError(
             tableName, context
           )
-        } else {
-          typesCompatible
         }
 
       case (wMap: MapType, rMap: MapType) =>
@@ -129,30 +126,24 @@ object DataTypeUtils {
         // read. map keys can be missing fields as long as they are nullable in the read schema.
 
         // run compatibility check first to produce all error messages
-        val keyCompatible = canWrite(
-          tableName, wMap.keyType, rMap.keyType, byName, resolver, context + ".key",
-          storeAssignmentPolicy, addError)
-        val valueCompatible = canWrite(
-          tableName, wMap.valueType, rMap.valueType, byName, resolver, context + ".value",
-          storeAssignmentPolicy, addError)
+        verifyCanWrite(tableName, wMap.keyType, rMap.keyType, byName, resolver,
+          context + ".key", storeAssignmentPolicy)
+        verifyCanWrite(tableName, wMap.valueType, rMap.valueType, byName, resolver,
+          context + ".value", storeAssignmentPolicy)
 
         if (wMap.valueContainsNull && !rMap.valueContainsNull) {
           throw QueryCompilationErrors.incompatibleDataToTableNullableMapValuesError(
             tableName, context
           )
-        } else {
-          keyCompatible && valueCompatible
         }
 
       case (StructType(writeFields), StructType(readFields)) =>
-        var fieldCompatible = true
         readFields.zip(writeFields).zipWithIndex.foreach {
           case ((rField, wField), i) =>
             val nameMatch = resolver(wField.name, rField.name) || isSparkGeneratedName(wField.name)
             val fieldContext = s"$context.${rField.name}"
-            val typesCompatible = canWrite(
-              tableName, wField.dataType, rField.dataType, byName, resolver, fieldContext,
-              storeAssignmentPolicy, addError)
+            verifyCanWrite(tableName, wField.dataType, rField.dataType, byName, resolver,
+              fieldContext, storeAssignmentPolicy)
 
             if (byName && !nameMatch) {
               throw QueryCompilationErrors.incompatibleDataToTableUnexpectedColumnNameError(
@@ -160,20 +151,14 @@ object DataTypeUtils {
             } else if (!rField.nullable && wField.nullable) {
               throw QueryCompilationErrors.incompatibleDataToTableNullableColumnError(
                 tableName, fieldContext)
-            } else if (!typesCompatible) {
-              // errors are added in the recursive call to canWrite above
-              fieldCompatible = false
             }
         }
 
         if (readFields.length > writeFields.length) {
           val missingFieldsStr = readFields.takeRight(readFields.length - writeFields.length)
-            .map(f => s"${toSQLId(f.name)}").mkString(", ")
-          if (missingFieldsStr.nonEmpty) {
-            throw QueryCompilationErrors.incompatibleDataToTableStructMissingFieldsError(
-              tableName, context, missingFieldsStr)
-          }
-
+              .map(f => s"${toSQLId(f.name)}").mkString(", ")
+          throw QueryCompilationErrors.incompatibleDataToTableStructMissingFieldsError(
+            tableName, context, missingFieldsStr)
         } else if (writeFields.length > readFields.length) {
           val extraFieldsStr = writeFields.takeRight(writeFields.length - readFields.length)
             .map(f => s"${toSQLId(f.name)}").mkString(", ")
@@ -182,40 +167,33 @@ object DataTypeUtils {
           )
         }
 
-        fieldCompatible
-
       case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == STRICT =>
         if (!Cast.canUpCast(w, r)) {
           throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
             tableName, context, w.catalogString, r.catalogString
           )
-        } else {
-          true
         }
 
-      case (_: NullType, _) if storeAssignmentPolicy == ANSI => true
+      case (_: NullType, _) if storeAssignmentPolicy == ANSI =>
 
       case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == ANSI =>
         if (!Cast.canANSIStoreAssign(w, r)) {
           throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
             tableName, context, w.catalogString, r.catalogString
           )
-        } else {
-          true
         }
 
       case (w, r) if DataTypeUtils.sameType(w, r) && !w.isInstanceOf[NullType] =>
-        true
 
       // If write-side data type is a user-defined type, check with its underlying data type.
       case (w, r) if w.isInstanceOf[UserDefinedType[_]] && !r.isInstanceOf[UserDefinedType[_]] =>
-        canWrite(tableName, w.asInstanceOf[UserDefinedType[_]].sqlType, r, byName, resolver,
-          context, storeAssignmentPolicy, addError)
+        verifyCanWrite(tableName, w.asInstanceOf[UserDefinedType[_]].sqlType, r, byName, resolver,
+          context, storeAssignmentPolicy)
 
       // If read-side data type is a user-defined type, check with its underlying data type.
       case (w, r) if r.isInstanceOf[UserDefinedType[_]] && !w.isInstanceOf[UserDefinedType[_]] =>
-        canWrite(tableName, w, r.asInstanceOf[UserDefinedType[_]].sqlType, byName, resolver,
-          context, storeAssignmentPolicy, addError)
+        verifyCanWrite(tableName, w, r.asInstanceOf[UserDefinedType[_]].sqlType, byName, resolver,
+          context, storeAssignmentPolicy)
 
       case (w, r) =>
         throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(

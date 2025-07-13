@@ -98,10 +98,14 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
    * the given metadata.
    */
   def cleanMetadata(metadata: Metadata): Metadata = {
-    new MetadataBuilder()
-      .withMetadata(metadata)
-      .remove(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)
-      .build()
+    if (metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)) {
+      new MetadataBuilder()
+        .withMetadata(metadata)
+        .remove(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)
+        .build()
+    } else {
+      metadata
+    }
   }
 
   def getRawTypeString(metadata: Metadata): Option[String] = {

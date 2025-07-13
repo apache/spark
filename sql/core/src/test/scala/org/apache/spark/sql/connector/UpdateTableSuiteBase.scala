@@ -19,13 +19,16 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, TableChange, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, SQLUserDefinedType, StringType, StructField, StructType, UserDefinedType}
 
 abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
   import testImplicits._
+  import UpdateTableSuiteBase._
 
   test("update table containing added column with default value") {
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
@@ -714,5 +717,138 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
           Row(8),
           Row(5)))
     }
+  }
+
+  test("update with UDT column") {
+    withTempView("v2") {
+      val data2 =
+        Seq(
+          (1, Point(21, 31)),
+          (2, Point(22, 32)),
+          (3, Point(23, 33))
+        ).toDF("pk", "pt")
+      data2.createTempView("v2")
+
+      withTable(tableNameAsString) {
+        // Creates a table with a Point column.
+        val data1 = Seq(
+          (1, Point(11, 21)),
+          (2, Point(12, 22)),
+          (3, Point(13, 23))
+        ).toDF("pk", "pt")
+        data1.write.saveAsTable(tableNameAsString)
+
+        checkAnswer(spark.table(tableNameAsString), data1)
+
+        sql(
+          s""" merge into $tableNameAsString as t
+             | using v2
+             | on t.pk = v2.pk
+             | when matched and t.pk <> 2 then update set pt = v2.pt
+             |""".stripMargin)
+        checkAnswer(spark.table(tableNameAsString),
+          Seq(
+            (1, Point(21, 31)),
+            (2, Point(12, 22)),
+            (3, Point(23, 33))
+          ).toDF("pk", "pt"))
+
+        sql(
+          s""" UPDATE $tableNameAsString
+             | SET pt = (select pt from v2 where pk = 2)
+             | WHERE pk = 2
+             |""".stripMargin)
+        checkAnswer(spark.table(tableNameAsString), data2)
+      }
+    }
+  }
+
+  test("unwrap UDT to struct before update") {
+    withTempView("v1", "v2") {
+      val data1 = Seq(
+        (1, Point(11, 21)),
+        (2, Point(12, 22)),
+        (3, Point(13, 23))
+      ).toDF("pk", "pt")
+      data1.createTempView("v1")
+
+      val data2 =
+        Seq(
+          (1, Point(21, 31)),
+          (2, Point(22, 32)),
+          (3, Point(23, 33))
+        ).toDF("pk", "pt")
+      data2.createTempView("v2")
+
+      withTable(tableNameAsString) {
+        sql(
+          s"""
+             | create table $tableNameAsString (
+             |   pk long not null,
+             |   pt struct<x: double not null, y: double not null>)
+             |""".stripMargin)
+
+        sql(s"INSERT INTO $tableNameAsString SELECT * FROM v1")
+        checkAnswer(spark.table(tableNameAsString),
+          Seq(
+            (1, (11.0, 21.0)),
+            (2, (12.0, 22.0)),
+            (3, (13.0, 23.0))
+          ).toDF("pk", "pt"))
+
+        sql(
+          s""" merge into $tableNameAsString as t
+             | using v2
+             | on t.pk = v2.pk
+             | when matched and t.pk <> 2 then update set pt = v2.pt
+             |""".stripMargin)
+        checkAnswer(spark.table(tableNameAsString),
+          Seq(
+            (1, (21, 31)),
+            (2, (12, 22)),
+            (3, (23, 33))
+          ).toDF("pk", "pt"))
+
+        sql(
+          s""" UPDATE $tableNameAsString
+             | SET pt = (select pt from v2 where pk = 2)
+             | WHERE pk = 2
+             |""".stripMargin)
+        checkAnswer(spark.table(tableNameAsString),
+          Seq(
+            (1, (21, 31)),
+            (2, (22, 32)),
+            (3, (23, 33))
+          ).toDF("pk", "pt"))
+      }
+    }
+  }
+}
+
+
+object UpdateTableSuiteBase {
+  @SQLUserDefinedType(udt = classOf[PointUDT])
+  case class Point(x: Double, y: Double)
+
+  class PointUDT extends UserDefinedType[Point] {
+    override def sqlType: DataType = StructType(Seq(
+      StructField("x", DoubleType, nullable = false),
+      StructField("y", DoubleType, nullable = false)
+    ))
+
+    override def serialize(obj: Point): InternalRow = {
+      val row = new GenericInternalRow(2)
+      row.setDouble(0, obj.x)
+      row.setDouble(1, obj.y)
+      row
+    }
+
+    override def deserialize(anyRow: Any): Point = {
+      val row = anyRow.asInstanceOf[InternalRow]
+      Point(row.getDouble(0), row.getDouble(1))
+    }
+
+    override def userClass: Class[Point] = classOf[Point]
+    override def typeName: String = "point"
   }
 }

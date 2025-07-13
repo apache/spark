@@ -120,8 +120,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         val colPath = Seq(attr.name)
         val actualAttr = restoreActualType(attr)
         val value = matchingAssignments.head.value
-        TableOutputResolver.resolveUpdate(
-          "", value, actualAttr, conf, err => errors += err, colPath)
+        TableOutputResolver.resolveField("", value, actualAttr, byName = true, conf, colPath)
       }
       Assignment(attr, resolvedValue)
     }
@@ -162,10 +161,10 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       addError(s"Conflicting assignments for '${colPath.quoted}': $conflictingAssignmentsStr")
       colExpr
     } else if (exactAssignments.isEmpty && fieldAssignments.isEmpty) {
-      TableOutputResolver.checkNullability(colExpr, col, conf, colPath)
+      TableOutputResolver.withNullabilityChecked(colExpr, col, conf, colPath)
     } else if (exactAssignments.nonEmpty) {
       val value = exactAssignments.head.value
-      TableOutputResolver.resolveUpdate("", value, col, conf, addError, colPath)
+      TableOutputResolver.resolveField("", value, col, byName = true, conf, colPath)
     } else {
       applyFieldAssignments(col, colExpr, fieldAssignments, addError, colPath)
     }
