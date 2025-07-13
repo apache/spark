@@ -162,7 +162,7 @@ abstract class BloomFilterBase extends BloomFilter {
   protected abstract BloomFilterBase checkCompatibilityForMerge(BloomFilter other)
     throws IncompatibleMergeException;
 
-  public record HiLoHash (int hi, int lo) {}
+  public record HiLoHash(int hi, int lo) {}
 
   protected HiLoHash hashLongToIntPair(long item, int seed) {
     // Here we first hash the input long element into 2 int hash values, h1 and h2, then produce n
