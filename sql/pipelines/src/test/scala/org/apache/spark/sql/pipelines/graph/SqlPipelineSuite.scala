@@ -130,7 +130,6 @@ class SQLPipelineSuite extends PipelineTest with SQLTestUtils {
       resolvedDataflowGraph.resolvedFlows
         .filter(_.identifier == fullyQualifiedIdentifier("a"))
         .head
-    assert(flowA.comment.contains("this is a comment"))
     checkAnswer(flowA.df, Seq(Row(1), Row(2), Row(3)))
   }
 

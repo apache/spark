@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   MultiplyYMInterval,
   Subtract,
   SubtractDates,
+  SubtractTimes,
   SubtractTimestamps,
   TimeAddInterval,
   TimestampAddInterval,
@@ -133,6 +134,7 @@ object BinaryArithmeticWithDatetimeResolver {
           SubtractTimestamps(l, r)
         case (_, DateType) => SubtractDates(l, r)
         case (DateType, dt) if dt != StringType => DateSub(l, r)
+        case (_: TimeType, _: TimeType) => SubtractTimes(l, r)
         case _ => s
       }
     case m @ Multiply(l, r, mode) =>
