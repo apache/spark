@@ -1470,4 +1470,16 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("try_to_timestamp(a)"), Seq(Row(ts)))
     checkAnswer(df.select(try_to_timestamp(col("a"))), Seq(Row(ts)))
   }
+
+  test("SPARK-52457: to_timestamp and to_date with TimestampNTZ should not apply timezone") {
+    withSQLConf("spark.sql.session.timeZone" -> "Asia/Seoul") {
+      val timestampNTZLiteral = lit("2000-09-01T20:00:00").cast("timestamp_ntz")
+      val df = spark.range(1).select(
+        to_timestamp(timestampNTZLiteral, "").cast("string").alias("ts_result"),
+        to_date(timestampNTZLiteral).cast("string").alias("date_result")
+      )
+
+      checkAnswer(df, Seq(Row("2000-09-01 20:00:00", "2000-09-01")))
+    }
+  }
 }

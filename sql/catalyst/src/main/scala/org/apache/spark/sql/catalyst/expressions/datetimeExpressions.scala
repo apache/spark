@@ -2109,7 +2109,8 @@ case class ParseToDate(
 
   override lazy val replacement: Expression = withOrigin(origin) {
     format.map { f =>
-      Cast(GetTimestamp(left, f, TimestampType, "try_to_date", timeZoneId, ansiEnabled), DateType,
+      val timestampType = if (left.dataType == TimestampNTZType) TimestampNTZType else TimestampType
+      Cast(GetTimestamp(left, f, timestampType, "try_to_date", timeZoneId, ansiEnabled), DateType,
         timeZoneId, EvalMode.fromBoolean(ansiEnabled))
     }.getOrElse(Cast(left, DateType, timeZoneId,
       EvalMode.fromBoolean(ansiEnabled))) // backwards compatibility
@@ -2195,11 +2196,20 @@ case class ParseToTimestamp(
   }
 
   def this(left: Expression, format: Expression) = {
-    this(left, Option(format), SQLConf.get.timestampType)
+    this(
+      left,
+      Option(format),
+      if (left.dataType == TimestampNTZType) TimestampNTZType else SQLConf.get.timestampType
+    )
   }
 
-  def this(left: Expression) =
-    this(left, None, SQLConf.get.timestampType)
+  def this(left: Expression) = {
+    this(
+      left,
+      None,
+      if (left.dataType == TimestampNTZType) TimestampNTZType else SQLConf.get.timestampType
+    )
+  }
 
   override def nodeName: String = "to_timestamp"
 
