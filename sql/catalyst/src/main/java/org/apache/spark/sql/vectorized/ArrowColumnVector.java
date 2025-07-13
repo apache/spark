@@ -182,6 +182,8 @@ public class ArrowColumnVector extends ColumnVector {
       accessor = new TimestampAccessor(timeStampMicroTZVector);
     } else if (vector instanceof TimeStampMicroVector timeStampMicroVector) {
       accessor = new TimestampNTZAccessor(timeStampMicroVector);
+    } else if (vector instanceof TimeNanoVector timeNanoVector) {
+      accessor = new TimeNanoAccessor(timeNanoVector);
     } else if (vector instanceof MapVector mapVector) {
       accessor = new MapAccessor(mapVector);
     } else if (vector instanceof ListVector listVector) {
@@ -512,6 +514,21 @@ public class ArrowColumnVector extends ColumnVector {
     private final TimeStampMicroVector accessor;
 
     TimestampNTZAccessor(TimeStampMicroVector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    final long getLong(int rowId) {
+      return accessor.get(rowId);
+    }
+  }
+
+  static class TimeNanoAccessor extends ArrowVectorAccessor {
+
+    private final TimeNanoVector accessor;
+
+    TimeNanoAccessor(TimeNanoVector vector) {
       super(vector);
       this.accessor = vector;
     }
