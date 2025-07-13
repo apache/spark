@@ -331,6 +331,31 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       ArrayType(new StructType().add("x", "int").add("y", "int")),
       ArrayType(new StructType().add("y", "int").add("x", "byte")),
       hasTransform = true)
+
+    withSQLConf("spark.sql.preserveCharVarcharTypeInfo" -> "true") {
+      // exact match on VARCHAR does not need transform
+      assertArrayField(ArrayType(VarcharType(7)), ArrayType(VarcharType(7)), hasTransform = false)
+      // VARCHAR length increase could avoid transform
+      assertArrayField(ArrayType(VarcharType(7)), ArrayType(VarcharType(8)), hasTransform = true)
+      // VARCHAR length decrease requires length check
+      assertArrayField(ArrayType(VarcharType(8)), ArrayType(VarcharType(7)), hasTransform = true)
+      // Widening doesn't really require transform, but does require type change.
+      assertArrayField(ArrayType(VarcharType(7)), ArrayType(StringType), hasTransform = true)
+      // CHAR length increase needs transform to add padding
+      assertArrayField(ArrayType(CharType(7)), ArrayType(CharType(8)), hasTransform = true)
+      // VARCHAR to STRING widening doesn't really require transform, but does require type change.
+      assertArrayField(ArrayType(VarcharType(7)), ArrayType(StringType), hasTransform = true)
+      // Exact match could avoid transform, but structs always transform today...
+      assertArrayField(
+        ArrayType(new StructType().add("x", VarcharType(7)).add("y", CharType(2))),
+        ArrayType(new StructType().add("x", VarcharType(7)).add("y", CharType(2))),
+        hasTransform = true)
+      // struct needs to be reordered
+      assertArrayField(
+        ArrayType(new StructType().add("x", VarcharType(7)).add("y", CharType(2))),
+        ArrayType(new StructType().add("y", CharType(2)).add("x", CharType(7))),
+        hasTransform = true)
+    }
   }
 
   test("SPARK-48922: Avoid redundant array transform of identical expression for map type") {

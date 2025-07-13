@@ -180,7 +180,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       } else {
         CharVarcharUtils.stringLengthCheck(casted, attr.dataType)
       }
-      Alias(exprWithStrLenCheck, attr.name)(explicitMetadata = Some(attr.metadata))
+      Alias(exprWithStrLenCheck, attr.name)()
     } else {
       value
     }
@@ -415,9 +415,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       if (res.head == param) {
         // If the element type is the same, we can reuse the input array directly.
         Some(
-          Alias(nullCheckedInput, expected.name)(
-            nonInheritableMetadataKeys =
-              Seq(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)))
+          Alias(nullCheckedInput, expected.name)())
       } else {
         val func = LambdaFunction(res.head, Seq(param))
         Some(Alias(ArrayTransform(nullCheckedInput, func), expected.name)())
@@ -463,9 +461,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       // Otherwise, we construct a new map by adding transformations to the keys and values.
       if (resKey.head == keyParam && resValue.head == valueParam) {
         Some(
-          Alias(nullCheckedInput, expected.name)(
-            nonInheritableMetadataKeys =
-              Seq(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)))
+          Alias(nullCheckedInput, expected.name)())
       } else {
         val newKeys = if (resKey.head != keyParam) {
           val keyFunc = LambdaFunction(resKey.head, Seq(keyParam))
@@ -549,7 +545,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     lazy val outputField = if (isCompatible(tableAttr, queryExpr)) {
       if (requiresNullChecks(queryExpr, tableAttr, conf)) {
         val assert = AssertNotNull(queryExpr, colPath)
-        Some(Alias(assert, tableAttr.name)(explicitMetadata = Some(tableAttr.metadata)))
+        Some(Alias(assert, tableAttr.name)())
       } else {
         Some(queryExpr)
       }
@@ -565,7 +561,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       // Renaming is needed for handling the following cases like
       // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
       // 2) Target tables have column metadata
-      Some(Alias(exprWithStrLenCheck, tableAttr.name)(explicitMetadata = Some(tableAttr.metadata)))
+      Some(Alias(exprWithStrLenCheck, tableAttr.name)())
     }
 
     val canWriteExpr = canWrite(
