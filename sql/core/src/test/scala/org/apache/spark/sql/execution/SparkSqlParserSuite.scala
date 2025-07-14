@@ -1031,11 +1031,6 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     }
   }
 
-  private def getMemoryUsage: Long = {
-    System.gc()
-    Runtime.getRuntime.totalMemory() - Runtime.getRuntime.freeMemory()
-  }
-
   private def awfulQuery(depth: Int): String = {
     if (depth == 0) {
       s"rand()"
@@ -1049,18 +1044,19 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("SPARK-47404: Managed parsers killswitch works") {
     val initialSize = AbstractParser.getDFACacheNumStates
+    val mediumQuery = s"select ${awfulQuery(2)} from range(10)"
 
     withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> (10000).toString,
         SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> 100.toString) {
       withSQLConf(SQLConf.MANAGE_PARSER_CACHES.key -> false.toString) {
-        parser.parsePlan("select id from range(10)")
+        parser.parsePlan(mediumQuery)
       }
       val disabledSize = AbstractParser.getDFACacheNumStates
       // There should be no change to the state of the managed caches when not enabled
       assert(disabledSize == initialSize)
 
       withSQLConf(SQLConf.MANAGE_PARSER_CACHES.key -> true.toString) {
-        parser.parsePlan("select id from range(10)")
+        parser.parsePlan(mediumQuery)
       }
       val enabledSize = AbstractParser.getDFACacheNumStates
       // Now the cache should be populated
