@@ -536,3 +536,192 @@ class ArrowTableToRowsConversion:
             values = [field_converters[j](columnar_data[j][i]) for j in range(table.num_columns)]
             rows.append(_create_row(fields=schema.fieldNames(), values=values))
         return rows
+
+
+class ArrowToUDFConversion:
+    """
+    Conversion utilities for Arrow UDF input/output processing.
+    """
+
+    @staticmethod
+    def convert_input_value(value, input_type):
+        """Convert Arrow/internal value to UDF input format."""
+        if value is None or input_type is None:
+            return value
+
+        if hasattr(input_type, "fromInternal") and not isinstance(input_type, (StructType, ArrayType, MapType)):
+            try:
+                from pyspark.sql.types import VariantVal
+            except ImportError:
+                VariantVal = None  # type: ignore
+
+            if VariantVal is not None and isinstance(value, VariantVal):
+                return value.toPython()
+
+            if hasattr(value, "tolist"):
+                value_to_pass = tuple(value.tolist())
+            else:
+                value_to_pass = value
+
+            if hasattr(value_to_pass, 'timetuple'):
+                import calendar
+                dt = value_to_pass
+                value_to_pass = int(calendar.timegm(dt.timetuple()) * 1000000 + dt.microsecond)
+
+            if hasattr(value_to_pass, 'total_seconds'):
+                value_to_pass = int(value_to_pass.total_seconds() * 1000000)
+
+            return input_type.fromInternal(value_to_pass)
+
+        if isinstance(input_type, StructType):
+            if isinstance(value, dict):
+                fields_converted = [
+                    ArrowToUDFConversion.convert_input_value(value.get(field.name), field.dataType) 
+                    for field in input_type
+                ]
+                RowCls = Row(*[field.name for field in input_type])
+                return RowCls(*fields_converted)
+            elif isinstance(value, Row):
+                converted_values = [
+                    ArrowToUDFConversion.convert_input_value(val, field.dataType) 
+                    for val, field in zip(value, input_type)
+                ]
+                RowCls = Row(*[field.name for field in input_type])
+                return RowCls(*converted_values)
+            else:
+                return value
+
+        if isinstance(input_type, ArrayType):
+            if isinstance(value, (dict, Row)):
+                return value
+            if not isinstance(value, (list, tuple)):
+                value = [value]
+            return [ArrowToUDFConversion.convert_input_value(elem, input_type.elementType) for elem in value]
+
+        if isinstance(input_type, MapType):
+            if isinstance(value, dict):
+                items_iter = value.items()
+            elif isinstance(value, list):
+                candidate_items = []
+                for elem in value:
+                    if isinstance(elem, tuple) and len(elem) == 2:
+                        candidate_items.append(elem)
+                    elif isinstance(elem, list) and len(elem) == 2:
+                        candidate_items.append(tuple(elem))
+                    elif isinstance(elem, dict) and len(elem) == 1:
+                        k, v = next(iter(elem.items()))
+                        candidate_items.append((k, v))
+                items_iter = candidate_items
+            else:
+                return value
+
+            return {
+                ArrowToUDFConversion.convert_input_value(k, input_type.keyType): 
+                ArrowToUDFConversion.convert_input_value(v, input_type.valueType)
+                for k, v in items_iter
+            }
+
+        return value
+
+    @staticmethod
+    def convert_output_value(value, data_type):
+        """Convert UDF output value for Arrow serialization."""
+        if value is None or data_type is None:
+            return value
+
+        if isinstance(value, str):
+            try:
+                from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType
+                if isinstance(data_type, (ByteType, ShortType, IntegerType, LongType)):
+                    value = int(value)
+                elif isinstance(data_type, (FloatType, DoubleType)):
+                    value = float(value)
+            except (ValueError, TypeError):
+                pass
+
+        if isinstance(data_type, StructType):
+            if isinstance(value, dict):
+                return {
+                    field.name: ArrowToUDFConversion.convert_output_value(value.get(field.name), field.dataType)
+                    for field in data_type
+                }
+            elif isinstance(value, Row):
+                conv_vals = [ArrowToUDFConversion.convert_output_value(v, f.dataType) for v, f in zip(value, data_type)]
+                return {f.name: v for f, v in zip(data_type, conv_vals)}
+            else:
+                return value
+
+        if isinstance(data_type, ArrayType):
+            if isinstance(value, (list, tuple)):
+                return [ArrowToUDFConversion.convert_output_value(v, data_type.elementType) for v in value]
+            return value
+
+        if isinstance(data_type, MapType):
+            if isinstance(value, dict):
+                return {
+                    ArrowToUDFConversion.convert_output_value(k, data_type.keyType): 
+                    ArrowToUDFConversion.convert_output_value(v, data_type.valueType)
+                    for k, v in value.items()
+                }
+            return value
+
+        return value
+
+    @staticmethod
+    def get_python_value(array, index):
+        """Extract Python value from Arrow array at given index."""
+        value = array[index]
+
+        if hasattr(value, 'item') and hasattr(value, 'size') and value.size == 1:
+            return value.item()
+        elif hasattr(value, 'tolist') and hasattr(value, 'dtype'):
+            result = value.tolist()
+
+            def convert_nested_numpy_arrays(obj):
+                if hasattr(obj, 'tolist') and hasattr(obj, 'dtype'):
+                    return obj.tolist()
+                try:
+                    import numpy as np
+                    if isinstance(obj, np.ndarray):
+                        return obj.tolist()
+                except ImportError:
+                    pass
+                if isinstance(obj, list):
+                    return [convert_nested_numpy_arrays(item) for item in obj]
+                elif isinstance(obj, tuple):
+                    return tuple(convert_nested_numpy_arrays(item) for item in obj)
+                else:
+                    return obj
+
+            return convert_nested_numpy_arrays(result)
+        elif hasattr(value, "as_py"):
+            python_value = value.as_py()
+
+            def convert_dicts_to_rows(obj):
+                if isinstance(obj, dict):
+                    return Row(**{k: convert_dicts_to_rows(v) for k, v in obj.items()})
+                elif isinstance(obj, list):
+                    return [convert_dicts_to_rows(v) for v in obj]
+                elif isinstance(obj, tuple):
+                    return tuple(convert_dicts_to_rows(v) for v in obj)
+                else:
+                    return obj
+
+            return convert_dicts_to_rows(python_value)
+        else:
+            if isinstance(value, Row):
+                def convert_nested(obj):
+                    if isinstance(obj, dict):
+                        return Row(**{k: convert_nested(v) for k, v in obj.items()})
+                    elif isinstance(obj, list):
+                        return [convert_nested(v) for v in obj]
+                    elif isinstance(obj, tuple):
+                        return tuple(convert_nested(v) for v in obj)
+                    else:
+                        return obj
+
+                new_vals = [convert_nested(v) for v in value]
+                RowCls = Row(*value.__fields__)
+                return RowCls(*new_vals)
+
+            return value
