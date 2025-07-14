@@ -1794,7 +1794,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       .setAppName(getClass().getName())
     val sc = new SparkContext(conf)
     try {
-      def blockGetResultThreads(sleppMS: Long): Unit = {
+      def blockGetResultThreads(sleepMs: Long): Unit = {
         val getTaskResultGetter = PrivateMethod[TaskResultGetter](
           Symbol("taskResultGetter"))
         val taskScheduler = sc.taskScheduler.asInstanceOf[TaskSchedulerImpl]
