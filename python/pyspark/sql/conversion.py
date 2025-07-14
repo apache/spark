@@ -540,7 +540,7 @@ class ArrowTableToRowsConversion:
 
 class ArrowToUDFConversion:
     """
-    Conversion utilities for Arrow UDF input/output processing.
+    Conversion utilities for Arrow UDF input/output data conversion.
     """
 
     @staticmethod

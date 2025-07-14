@@ -270,7 +270,6 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
             results.append(converted_result)
 
         if len(results) == 0:
-            # Handle empty results case
             arr = pa.array([], type=arrow_return_type)
         else:
             try:
@@ -1135,8 +1134,6 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
     elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:
         return wrap_scalar_arrow_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF:
-        # below is used to match legacy path behavior
-        # args_offsets contains the column indices accessed by UDF
         narrowed_input_types = None
         if input_types is not None:
             narrowed_input_types = [input_types[o] for o in args_offsets]
