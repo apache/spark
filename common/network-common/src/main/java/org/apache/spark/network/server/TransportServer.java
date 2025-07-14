@@ -104,7 +104,8 @@ public class TransportServer implements Closeable {
     EventLoopGroup workerGroup =  NettyUtils.createEventLoop(ioMode, conf.serverThreads(),
       conf.getModuleName() + "-server");
 
-    boolean isNotWindows = !System.getProperty("os.name").regionMatches(true, 0, "Windows", 0, 7);
+    String name = System.getProperty("os.name");
+    boolean isNotWindows = 7 > name.length() || !name.regionMatches(true, 0, "Windows", 0, 7);
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)
       .channel(NettyUtils.getServerChannelClass(ioMode))
