@@ -17,15 +17,19 @@
 
 package org.apache.spark.sql.catalyst.types
 
+import org.apache.spark.sql.catalyst.expressions.MutableValue
 import org.apache.spark.sql.types.{DataType, TimeType}
 
 // Base operations of Catalyst's types.
 trait PhyTypeOps extends TypeOps {
-  // Get the underlying physical type
+  // Gets the underlying physical type
   def getPhysicalType: PhysicalDataType
 
-  // Get the Java class of the physical type
+  // Gets the Java class of the physical type
   def getJavaClass: Class[_]
+
+  // Gets a mutable container for the physical type
+  def getMutableValue: MutableValue
 }
 
 object PhyTypeOps {

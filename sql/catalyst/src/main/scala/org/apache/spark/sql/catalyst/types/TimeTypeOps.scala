@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.types
 
+import org.apache.spark.sql.catalyst.expressions.{MutableLong, MutableValue}
 import org.apache.spark.sql.types.TimeType
 
 case class TimeTypeOps (t: TimeType)
@@ -25,4 +26,5 @@ case class TimeTypeOps (t: TimeType)
 
   override def getPhysicalType: PhysicalDataType = PhysicalLongType
   override def getJavaClass: Class[_] = classOf[PhysicalLongType.InternalType]
+  override def getMutableValue: MutableValue = new MutableLong
 }
