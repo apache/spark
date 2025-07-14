@@ -66,8 +66,8 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
   def this(child: Expression) = this(child, Literal(ApproxTopK.DEFAULT_K))
 
   private lazy val itemDataType: DataType = {
-    // itemDataType is the type of the "itemDataType" field of the output of ACCUMULATE or COMBINE
-    state.dataType.asInstanceOf[StructType]("itemDataType").dataType
+    // itemDataType is the type of the second field of the output of ACCUMULATE or COMBINE
+    state.dataType.asInstanceOf[StructType](1).dataType
   }
 
   override def left: Expression = state
@@ -76,7 +76,7 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StructType, IntegerType)
 
-  def checkStateFieldAndType(state: Expression): TypeCheckResult = {
+  private def checkStateFieldAndType(state: Expression): TypeCheckResult = {
     val stateStructType = state.dataType.asInstanceOf[StructType]
     if (stateStructType.length != 3) {
       return TypeCheckFailure("State must be a struct with 3 fields. " +
@@ -84,22 +84,15 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
         "Got: " + state.dataType.simpleString)
     }
 
-    val structFieldNames = stateStructType.fieldNames
-    if (!structFieldNames.contains("sketch")) {
-      TypeCheckFailure("State struct must contain a field named 'sketch'.")
-    } else if (stateStructType("sketch").dataType != BinaryType) {
-      TypeCheckFailure("'sketch' field type of state struct must be binary. " +
-        "Got: " + stateStructType("sketch").dataType.simpleString)
-    } else if (!structFieldNames.contains("itemDataType")) {
-      TypeCheckFailure("State struct must contain a field named 'itemDataType'.")
-    } else if (!ApproxTopK.isDataTypeSupported(stateStructType("itemDataType").dataType)) {
-      TypeCheckFailure("'itemDataType' field type of state struct must be a supported data type. " +
-        "Got: " + stateStructType("itemDataType").dataType.simpleString)
-    } else if (!structFieldNames.contains("maxItemsTracked")) {
-      TypeCheckFailure("State struct must contain a field named 'maxItemsTracked'.")
-    } else if (stateStructType("maxItemsTracked").dataType != IntegerType) {
-      TypeCheckFailure("'maxItemsTracked' field type of state struct must be int. " +
-        "Got: " + stateStructType("maxItemsTracked").dataType.simpleString)
+    if (stateStructType.head.dataType != BinaryType) {
+      TypeCheckFailure("State struct must have the first field to be binary. " +
+        "Got: " + stateStructType.head.dataType.simpleString)
+    } else if (!ApproxTopK.isDataTypeSupported(itemDataType)) {
+      TypeCheckFailure("State struct must have the second field to be a supported data type. " +
+        "Got: " + itemDataType.simpleString)
+    } else if (stateStructType(2).dataType != IntegerType) {
+      TypeCheckFailure("State struct must have the third field to be int. " +
+        "Got: " + stateStructType(2).dataType.simpleString)
     } else {
       TypeCheckSuccess
     }
