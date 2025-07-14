@@ -137,12 +137,12 @@ if [[ "$1" == "finalize" ]]; then
     --repository-url https://upload.pypi.org/legacy/ \
     "pyspark_connect-$PYSPARK_VERSION.tar.gz" \
     "pyspark_connect-$PYSPARK_VERSION.tar.gz.asc"
-  svn update "pyspark_client-$RELEASE_VERSION.tar.gz"
-  svn update "pyspark_client-$RELEASE_VERSION.tar.gz.asc"
+  svn update "pyspark_client-$PYSPARK_VERSION.tar.gz"
+  svn update "pyspark_client-$PYSPARK_VERSION.tar.gz.asc"
   twine upload -u __token__ -p $PYPI_API_TOKEN \
     --repository-url https://upload.pypi.org/legacy/ \
-    "pyspark_client-$RELEASE_VERSION.tar.gz" \
-    "pyspark_client-$RELEASE_VERSION.tar.gz.asc"
+    "pyspark_client-$PYSPARK_VERSION.tar.gz" \
+    "pyspark_client-$PYSPARK_VERSION.tar.gz.asc"
   cd ..
   rm -rf svn-spark
   echo "PySpark uploaded"
