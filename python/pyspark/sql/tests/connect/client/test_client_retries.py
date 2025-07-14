@@ -17,13 +17,12 @@
 
 import unittest
 
-import google.protobuf.any_pb2 as any_pb2
-import google.protobuf.duration_pb2 as duration_pb2
-
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
 if should_test_connect:
     import grpc
+    import google.protobuf.any_pb2 as any_pb2
+    import google.protobuf.duration_pb2 as duration_pb2
     from google.rpc import status_pb2
     from google.rpc import error_details_pb2
     from pyspark.sql.connect.client import SparkConnectClient
