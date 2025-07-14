@@ -1804,7 +1804,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
         val getTaskResultExecutor = taskResultGetter invokePrivate getTaskResultExecutorMethod()
         getTaskResultExecutor.execute(new Runnable {
           override def run(): Unit = {
-            Thread.sleep(sleppMS)
+            Thread.sleep(sleepMs)
           }
         })
       }
