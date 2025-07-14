@@ -785,6 +785,712 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+DECLARE default_val INT
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET VAR default_val = 42
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE test_table (id INT, name STRING DEFAULT :default_name, score INT DEFAULT :default_score) USING PARQUET' 
+USING 'unknown' as default_name, default_val as default_score
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE EXTENDED test_table
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+id                  	int                 	                    
+name                	string              	                    
+score               	int                 	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	test_table          	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	PARQUET             	                    
+Location [not included in comparison]/{warehouse_dir}/test_table	                    
+                    	                    	                    
+# Column Default Values	                    	                    
+name                	string              	'unknown'           
+score               	int                 	42
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE test_table2 (id INT, value INT DEFAULT ?) USING PARQUET' USING 100
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE EXTENDED test_table2
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+id                  	int                 	                    
+value               	int                 	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	test_table2         	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	PARQUET             	                    
+Location [not included in comparison]/{warehouse_dir}/test_table2	                    
+                    	                    	                    
+# Column Default Values	                    	                    
+value               	int                 	100
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE test_table ALTER COLUMN score SET DEFAULT :new_default' USING 99 as new_default
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE EXTENDED test_table
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+id                  	int                 	                    
+name                	string              	                    
+score               	int                 	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	test_table          	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	PARQUET             	                    
+Location [not included in comparison]/{warehouse_dir}/test_table	                    
+                    	                    	                    
+# Column Default Values	                    	                    
+name                	string              	'unknown'           
+score               	int                 	99
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE test_table ADD COLUMN status STRING DEFAULT :status_default' USING 'active' as status_default
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE EXTENDED test_table
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+id                  	int                 	                    
+name                	string              	                    
+score               	int                 	                    
+status              	string              	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	test_table          	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	PARQUET             	                    
+Location [not included in comparison]/{warehouse_dir}/test_table	                    
+                    	                    	                    
+# Column Default Values	                    	                    
+name                	string              	'unknown'           
+score               	int                 	99                  
+status              	string              	'active'
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE test_table2 ADD COLUMN flag BOOLEAN DEFAULT ?' USING true
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE EXTENDED test_table2
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+id                  	int                 	                    
+value               	int                 	                    
+flag                	boolean             	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	test_table2         	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	PARQUET             	                    
+Location [not included in comparison]/{warehouse_dir}/test_table2	                    
+                    	                    	                    
+# Column Default Values	                    	                    
+value               	int                 	100                 
+flag                	boolean             	true
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE VIEW test_view AS SELECT * FROM test_table WHERE score > :min_score' USING 50 as min_score
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE EXTENDED test_view
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+id                  	int                 	                    
+name                	string              	                    
+score               	int                 	                    
+status              	string              	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	test_view           	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	VIEW                	                    
+View Text           	SELECT * FROM test_table WHERE score > 50	                    
+View Original Text  	SELECT * FROM test_table WHERE score > 50	                    
+View Schema Mode    	COMPENSATION        	                    
+View Catalog and Namespace	spark_catalog.default	                    
+View Query Output Columns	[`id`, `name`, `score`, `status`]	                    
+                    	                    	                    
+# Column Default Values	                    	                    
+name                	string              	'unknown'           
+score               	int                 	99                  
+status              	string              	'active'
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE VIEW test_view2 AS SELECT * FROM test_table WHERE score < ?' USING 80
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE EXTENDED test_view2
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+id                  	int                 	                    
+name                	string              	                    
+score               	int                 	                    
+status              	string              	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	test_view2          	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	VIEW                	                    
+View Text           	SELECT * FROM test_table WHERE score < 80	                    
+View Original Text  	SELECT * FROM test_table WHERE score < 80	                    
+View Schema Mode    	COMPENSATION        	                    
+View Catalog and Namespace	spark_catalog.default	                    
+View Query Output Columns	[`id`, `name`, `score`, `status`]	                    
+                    	                    	                    
+# Column Default Values	                    	                    
+name                	string              	'unknown'           
+score               	int                 	99                  
+status              	string              	'active'
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER VIEW test_view AS SELECT id, name FROM test_table WHERE score BETWEEN :min_val AND :max_val' 
+USING 30 as min_val, 70 as max_val
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE EXTENDED test_view
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+id                  	int                 	                    
+name                	string              	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	test_view           	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	VIEW                	                    
+View Text           	SELECT id, name FROM test_table WHERE score BETWEEN 30 AND 70	                    
+View Original Text  	SELECT id, name FROM test_table WHERE score BETWEEN 30 AND 70	                    
+View Schema Mode    	COMPENSATION        	                    
+View Catalog and Namespace	spark_catalog.default	                    
+View Query Output Columns	[`id`, `name`]      	                    
+                    	                    	                    
+# Column Default Values	                    	                    
+name                	string              	'unknown'
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER VIEW test_view2 AS SELECT * FROM test_table WHERE score > ?' USING 60
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE EXTENDED test_view2
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+id                  	int                 	                    
+name                	string              	                    
+score               	int                 	                    
+status              	string              	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	test_view2          	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	VIEW                	                    
+View Text           	SELECT * FROM test_table WHERE score > 60	                    
+View Original Text  	SELECT * FROM test_table WHERE score > 60	                    
+View Schema Mode    	COMPENSATION        	                    
+View Catalog and Namespace	spark_catalog.default	                    
+View Query Output Columns	[`id`, `name`, `score`, `status`]	                    
+                    	                    	                    
+# Column Default Values	                    	                    
+name                	string              	'unknown'           
+score               	int                 	99                  
+status              	string              	'active'
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE test_var INT DEFAULT :var_default' USING 123 as var_default
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT test_var
+-- !query schema
+struct<test_var:int>
+-- !query output
+123
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE test_var2 STRING DEFAULT ?' USING 'default_string'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT test_var2
+-- !query schema
+struct<test_var2:string>
+-- !query output
+default_string
+
+
+-- !query
+SELECT * FROM test_view
+-- !query schema
+struct<id:int,name:string>
+-- !query output
+
+
+
+-- !query
+SELECT test_var, test_var2
+-- !query schema
+struct<test_var:int,test_var2:string>
+-- !query output
+123	default_string
+
+
+-- !query
+DECLARE expr_val INT
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET VAR expr_val = 10
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE expr_test (id INT, computed INT DEFAULT :expr_result) USING PARQUET' 
+USING (expr_val * 5 + 2) as expr_result
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSql" : "\"((expr_val * 5) + 2)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 110,
+    "stopIndex" : 125,
+    "fragment" : "expr_val * 5 + 2"
+  } ]
+}
+
+
+-- !query
+DESCRIBE EXTENDED expr_test
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`expr_test`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 27,
+    "fragment" : "expr_test"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE error_table (id INT DEFAULT ?, name STRING DEFAULT :name_default) USING PARQUET' 
+USING 1, 'test' as name_default
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+  "sqlState" : "42613"
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE error_table2 (id INT DEFAULT :undefined_param) USING PARQUET'
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "The Spark SQL phase analysis failed with an internal error. You hit a bug in Spark or the Spark plugins you use. Please, report this bug to the corresponding communities or vendors, and provide the full stack trace."
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE FUNCTION test_func(x INT DEFAULT :func_default) RETURNS INT RETURN x + :increment' 
+USING 10 as func_default, 5 as increment
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE FUNCTION EXTENDED test_func
+-- !query schema
+struct<function_desc:string>
+-- !query output
+Class: sqlFunction.
+Extended Usage:
+    No example/argument for test_func.
+
+Function: spark_catalog.default.test_func
+Usage: {"catalogAndNamespace.part.0":"spark_catalog","referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.inputParam":"x INT DEFAULT 10","sqlFunction.expression":"x + 5","catalogAndNamespace.numParts":"2","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8","sqlFunction.createTime":"1752513953704","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","referredTempVariableNames":"[]"}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE FUNCTION test_func2(x INT DEFAULT ?) RETURNS INT RETURN x * ?' USING 1, 2
+-- !query schema
+struct<>
+-- !query output
+java.lang.IllegalArgumentException
+Expected 1 positional parameters, but got 2
+
+
+-- !query
+DESCRIBE FUNCTION EXTENDED test_func2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`test_func2`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 37,
+    "fragment" : "test_func2"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE VIEW nested_view AS SELECT test_func(:input_val) as result' USING 20 as input_val
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE EXTENDED nested_view
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+result              	int                 	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	nested_view         	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	VIEW                	                    
+View Text           	SELECT test_func(20) as result	                    
+View Original Text  	SELECT test_func(20) as result	                    
+View Schema Mode    	COMPENSATION        	                    
+View Catalog and Namespace	spark_catalog.default	                    
+View Query Output Columns	[`result`]
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE gen_table (id INT, doubled INT GENERATED ALWAYS AS (id * :multiplier)) USING PARQUET' 
+USING 2 as multiplier
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "generated columns",
+    "tableName" : "`spark_catalog`.`default`.`gen_table`"
+  }
+}
+
+
+-- !query
+DESCRIBE EXTENDED gen_table
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`gen_table`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 27,
+    "fragment" : "gen_table"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE multi_param (id INT DEFAULT :val, name STRING DEFAULT :name, score INT DEFAULT :val) USING PARQUET' 
+USING 42 as val, 'test' as name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE EXTENDED multi_param
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+id                  	int                 	                    
+name                	string              	                    
+score               	int                 	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	multi_param         	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	PARQUET             	                    
+Location [not included in comparison]/{warehouse_dir}/multi_param	                    
+                    	                    	                    
+# Column Default Values	                    	                    
+id                  	int                 	42                  
+name                	string              	'test'              
+score               	int                 	42
+
+
+-- !query
+DROP FUNCTION IF EXISTS test_func
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS test_func2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW IF EXISTS nested_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS gen_table
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS multi_param
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW IF EXISTS test_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW IF EXISTS test_view2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS test_table
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS test_table2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS expr_test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 DROP TABLE x
 -- !query schema
 struct<>

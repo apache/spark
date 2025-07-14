@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.{Either, Left, Right}
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal, VariableReference}
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.parser.{ParseException, SubstituteParamsParser, SubstitutionRule}
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
@@ -124,6 +124,16 @@ class SubstituteExecuteImmediate(
     }
   }
 
+  /**
+   * Detects parameter markers in SQL text using the SubstituteParamsParser.
+   * This is needed for cases like CREATE FUNCTION where parameter markers are embedded
+   * in text fields rather than in Expression objects.
+   */
+  private def detectParametersInSqlText(sqlText: String): (Boolean, Boolean) = {
+    val parser = new SubstituteParamsParser()
+    parser.detectParameters(sqlText, SubstitutionRule.Statement)
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
       case e @ ExecuteImmediateQuery(expressions, _, _) if expressions.exists(!_.resolved) =>
@@ -135,19 +145,15 @@ class SubstituteExecuteImmediate(
         val queryString = extractQueryString(query)
         val plan = parseStatement(queryString, targetVariables)
 
-        val posNodes = plan.collect { case p: LogicalPlan =>
-          p.expressions.flatMap(_.collect { case n: PosParameter => n })
-        }.flatten
-        val namedNodes = plan.collect { case p: LogicalPlan =>
-          p.expressions.flatMap(_.collect { case n: NamedParameter => n })
-        }.flatten
+        // use the parser to detect parameter markers in the SQL text
+        val (hasPositionalInText, hasNamedInText) = detectParametersInSqlText(queryString)
 
-        val queryPlan = if (expressions.isEmpty || (posNodes.isEmpty && namedNodes.isEmpty)) {
+        val queryPlan = if (!hasPositionalInText && !hasNamedInText) {
           plan
-        } else if (posNodes.nonEmpty && namedNodes.nonEmpty) {
+        } else if (hasPositionalInText &&  hasNamedInText) {
           throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
         } else {
-          if (posNodes.nonEmpty) {
+          if (hasPositionalInText) {
             // Apply constant folding to positional parameters
             val foldedArgs = expressions.map(foldToLiteral)
             PosParameterizedQuery(plan, foldedArgs)

@@ -146,4 +146,105 @@ EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \'SELECT id FROM tbl_view WHERE id = ? USIN
 SET VAR sql_string = null;
 EXECUTE IMMEDIATE sql_string;
 
+-- =============================================================================
+-- DDL STATEMENTS WITH PARAMETER MARKERS TESTS
+-- =============================================================================
+
+-- setup variables for DDL tests
+DECLARE default_val INT;
+SET VAR default_val = 42;
+
+-- CREATE TABLE tests with parameter markers
+EXECUTE IMMEDIATE 'CREATE TABLE test_table (id INT, name STRING DEFAULT :default_name, score INT DEFAULT :default_score) USING PARQUET' 
+USING 'unknown' as default_name, default_val as default_score;
+DESCRIBE EXTENDED test_table;
+
+-- test positional parameters in CREATE TABLE
+EXECUTE IMMEDIATE 'CREATE TABLE test_table2 (id INT, value INT DEFAULT ?) USING PARQUET' USING 100;
+DESCRIBE EXTENDED test_table2;
+
+-- ALTER TABLE tests with parameter markers
+EXECUTE IMMEDIATE 'ALTER TABLE test_table ALTER COLUMN score SET DEFAULT :new_default' USING 99 as new_default;
+DESCRIBE EXTENDED test_table;
+EXECUTE IMMEDIATE 'ALTER TABLE test_table ADD COLUMN status STRING DEFAULT :status_default' USING 'active' as status_default;
+DESCRIBE EXTENDED test_table;
+-- test positional parameters in ALTER TABLE ADD COLUMN
+EXECUTE IMMEDIATE 'ALTER TABLE test_table2 ADD COLUMN flag BOOLEAN DEFAULT ?' USING true;
+DESCRIBE EXTENDED test_table2;
+
+-- CREATE VIEW tests with parameter markers
+EXECUTE IMMEDIATE 'CREATE VIEW test_view AS SELECT * FROM test_table WHERE score > :min_score' USING 50 as min_score;
+DESCRIBE EXTENDED test_view;
+-- test positional parameters in CREATE VIEW
+EXECUTE IMMEDIATE 'CREATE VIEW test_view2 AS SELECT * FROM test_table WHERE score < ?' USING 80;
+DESCRIBE EXTENDED test_view2;
+
+-- ALTER VIEW AS tests with parameter markers
+EXECUTE IMMEDIATE 'ALTER VIEW test_view AS SELECT id, name FROM test_table WHERE score BETWEEN :min_val AND :max_val' 
+USING 30 as min_val, 70 as max_val;
+DESCRIBE EXTENDED test_view;
+-- test positional parameters in ALTER VIEW AS
+EXECUTE IMMEDIATE 'ALTER VIEW test_view2 AS SELECT * FROM test_table WHERE score > ?' USING 60;
+DESCRIBE EXTENDED test_view2;
+
+-- DECLARE VARIABLE tests with parameter markers
+EXECUTE IMMEDIATE 'DECLARE VARIABLE test_var INT DEFAULT :var_default' USING 123 as var_default;
+SELECT test_var;
+-- test positional parameters in DECLARE VARIABLE
+EXECUTE IMMEDIATE 'DECLARE VARIABLE test_var2 STRING DEFAULT ?' USING 'default_string';
+SELECT test_var2;
+
+-- verify the created objects work
+SELECT * FROM test_view;
+SELECT test_var, test_var2;
+
+-- test complex expressions in parameters for DDL
+DECLARE expr_val INT;
+SET VAR expr_val = 10;
+EXECUTE IMMEDIATE 'CREATE TABLE expr_test (id INT, computed INT DEFAULT :expr_result) USING PARQUET' 
+USING (expr_val * 5 + 2) as expr_result;
+DESCRIBE EXTENDED expr_test;
+
+-- test error: mixing positional and named parameters in DDL
+EXECUTE IMMEDIATE 'CREATE TABLE error_table (id INT DEFAULT ?, name STRING DEFAULT :name_default) USING PARQUET' 
+USING 1, 'test' as name_default;
+
+-- test error: undefined parameter in DDL
+EXECUTE IMMEDIATE 'CREATE TABLE error_table2 (id INT DEFAULT :undefined_param) USING PARQUET';
+
+-- CREATE FUNCTION tests with parameter markers
+EXECUTE IMMEDIATE 'CREATE FUNCTION test_func(x INT DEFAULT :func_default) RETURNS INT RETURN x + :increment' 
+USING 10 as func_default, 5 as increment;
+DESCRIBE FUNCTION EXTENDED test_func;
+-- test positional parameters in CREATE FUNCTION
+EXECUTE IMMEDIATE 'CREATE FUNCTION test_func2(x INT DEFAULT ?) RETURNS INT RETURN x * ?' USING 1, 2;
+DESCRIBE FUNCTION EXTENDED test_func2;
+
+-- Advanced DDL tests with parameter markers
+-- test nested DDL with parameter markers
+EXECUTE IMMEDIATE 'CREATE VIEW nested_view AS SELECT test_func(:input_val) as result' USING 20 as input_val;
+DESCRIBE EXTENDED nested_view;
+-- test parameter markers in generation expressions
+EXECUTE IMMEDIATE 'CREATE TABLE gen_table (id INT, doubled INT GENERATED ALWAYS AS (id * :multiplier)) USING PARQUET' 
+USING 2 as multiplier;
+DESCRIBE EXTENDED gen_table;
+-- test multiple parameter occurrences in same DDL
+EXECUTE IMMEDIATE 'CREATE TABLE multi_param (id INT DEFAULT :val, name STRING DEFAULT :name, score INT DEFAULT :val) USING PARQUET' 
+USING 42 as val, 'test' as name;
+DESCRIBE EXTENDED multi_param;
+
+
+-- cleanup DDL test objects
+DROP FUNCTION IF EXISTS test_func;
+DROP FUNCTION IF EXISTS test_func2;
+DROP VIEW IF EXISTS nested_view;
+DROP TABLE IF EXISTS gen_table;
+DROP TABLE IF EXISTS multi_param;
+
+DROP VIEW IF EXISTS test_view;
+DROP VIEW IF EXISTS test_view2;
+DROP TABLE IF EXISTS test_table;
+DROP TABLE IF EXISTS test_table2;
+DROP TABLE IF EXISTS expr_test;
+
 DROP TABLE x;

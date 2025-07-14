@@ -152,7 +152,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE sql_string USING a, 'name2'
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = variablereference(system.session.a='name1')) OR (name#x = name2))
++- Filter ((name#x = name1) OR (name#x = name2))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -178,7 +178,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING a, 'name2'
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = variablereference(system.session.a='name1')) OR (name#x = name2))
++- Filter ((name#x = name1) OR (name#x = name2))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -191,7 +191,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING (a, 'name2')
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = variablereference(system.session.a='name1')) OR (name#x = name2))
++- Filter ((name#x = name1) OR (name#x = name2))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -256,7 +256,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE sql_string USING b as second, 'name7' as first
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = name7) OR (id#x = variablereference(system.session.b=40)))
++- Filter ((name#x = name7) OR (id#x = 40))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -282,7 +282,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first or id = :second' USING 'name7' as first, b as second
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = name7) OR (id#x = variablereference(system.session.b=40)))
++- Filter ((name#x = name7) OR (id#x = 40))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -356,7 +356,7 @@ SetVariable [variablereference(system.session.res_id=70)]
 +- GlobalLimit 2
    +- LocalLimit 2
       +- Project [id#x]
-         +- Filter (name#x = variablereference(system.session.a='name1'))
+         +- Filter (name#x = name1)
             +- SubqueryAlias tbl_view
                +- View (`tbl_view`, [id#x, name#x, data#x])
                   +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -422,7 +422,7 @@ Project [variablereference(system.session.b=10) AS b#x, variablereference(system
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where id = ? AND name = ?' USING b as first, a
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((id#x = variablereference(system.session.b=10)) AND (name#x = variablereference(system.session.a='name1')))
++- Filter ((id#x = 10) AND (name#x = name1))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -760,7 +760,7 @@ CreateVariable defaultvalueexpression(10, 10), false
 EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :p' USING p
 -- !query analysis
 Project [id#x]
-+- Filter (id#x = variablereference(system.session.p=10))
++- Filter (id#x = 10)
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -828,6 +828,444 @@ org.apache.spark.sql.AnalysisException
     "varName" : "`sql_string`"
   }
 }
+
+
+-- !query
+DECLARE default_val INT
+-- !query analysis
+CreateVariable defaultvalueexpression(null, null), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.default_val
+
+
+-- !query
+SET VAR default_val = 42
+-- !query analysis
+SetVariable [variablereference(system.session.default_val=CAST(NULL AS INT))]
++- Project [42 AS default_val#x]
+   +- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE test_table (id INT, name STRING DEFAULT :default_name, score INT DEFAULT :default_score) USING PARQUET' 
+USING 'unknown' as default_name, default_val as default_score
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_table`, false
+
+
+-- !query
+DESCRIBE EXTENDED test_table
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`test_table`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE test_table2 (id INT, value INT DEFAULT ?) USING PARQUET' USING 100
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_table2`, false
+
+
+-- !query
+DESCRIBE EXTENDED test_table2
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`test_table2`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE test_table ALTER COLUMN score SET DEFAULT :new_default' USING 99 as new_default
+-- !query analysis
+AlterTableChangeColumnCommand `spark_catalog`.`default`.`test_table`, score, StructField(score,IntegerType,true)
+
+
+-- !query
+DESCRIBE EXTENDED test_table
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`test_table`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE test_table ADD COLUMN status STRING DEFAULT :status_default' USING 'active' as status_default
+-- !query analysis
+AlterTableAddColumnsCommand `spark_catalog`.`default`.`test_table`, [StructField(status,StringType,true)]
+
+
+-- !query
+DESCRIBE EXTENDED test_table
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`test_table`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE test_table2 ADD COLUMN flag BOOLEAN DEFAULT ?' USING true
+-- !query analysis
+AlterTableAddColumnsCommand `spark_catalog`.`default`.`test_table2`, [StructField(flag,BooleanType,true)]
+
+
+-- !query
+DESCRIBE EXTENDED test_table2
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`test_table2`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE VIEW test_view AS SELECT * FROM test_table WHERE score > :min_score' USING 50 as min_score
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`test_view`, SELECT * FROM test_table WHERE score > 50, false, false, PersistedView, COMPENSATION, true
+   +- Project [id#x, name#x, score#x, status#x]
+      +- Filter (score#x > 50)
+         +- SubqueryAlias spark_catalog.default.test_table
+            +- Relation spark_catalog.default.test_table[id#x,name#x,score#x,status#x] parquet
+
+
+-- !query
+DESCRIBE EXTENDED test_view
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`test_view`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE VIEW test_view2 AS SELECT * FROM test_table WHERE score < ?' USING 80
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`test_view2`, SELECT * FROM test_table WHERE score < 80, false, false, PersistedView, COMPENSATION, true
+   +- Project [id#x, name#x, score#x, status#x]
+      +- Filter (score#x < 80)
+         +- SubqueryAlias spark_catalog.default.test_table
+            +- Relation spark_catalog.default.test_table[id#x,name#x,score#x,status#x] parquet
+
+
+-- !query
+DESCRIBE EXTENDED test_view2
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`test_view2`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER VIEW test_view AS SELECT id, name FROM test_table WHERE score BETWEEN :min_val AND :max_val' 
+USING 30 as min_val, 70 as max_val
+-- !query analysis
+AlterViewAsCommand `spark_catalog`.`default`.`test_view`, SELECT id, name FROM test_table WHERE score BETWEEN 30 AND 70, true
+   +- Project [id#x, name#x]
+      +- Filter between(score#x, 30, 70)
+         +- SubqueryAlias spark_catalog.default.test_table
+            +- Relation spark_catalog.default.test_table[id#x,name#x,score#x,status#x] parquet
+
+
+-- !query
+DESCRIBE EXTENDED test_view
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`test_view`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER VIEW test_view2 AS SELECT * FROM test_table WHERE score > ?' USING 60
+-- !query analysis
+AlterViewAsCommand `spark_catalog`.`default`.`test_view2`, SELECT * FROM test_table WHERE score > 60, true
+   +- Project [id#x, name#x, score#x, status#x]
+      +- Filter (score#x > 60)
+         +- SubqueryAlias spark_catalog.default.test_table
+            +- Relation spark_catalog.default.test_table[id#x,name#x,score#x,status#x] parquet
+
+
+-- !query
+DESCRIBE EXTENDED test_view2
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`test_view2`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE test_var INT DEFAULT :var_default' USING 123 as var_default
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(123 as int), 123), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.test_var
+
+
+-- !query
+SELECT test_var
+-- !query analysis
+Project [variablereference(system.session.test_var=123) AS test_var#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE test_var2 STRING DEFAULT ?' USING 'default_string'
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(default_string as string), 'default_string'), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.test_var2
+
+
+-- !query
+SELECT test_var2
+-- !query analysis
+Project [variablereference(system.session.test_var2='default_string') AS test_var2#x]
++- OneRowRelation
+
+
+-- !query
+SELECT * FROM test_view
+-- !query analysis
+Project [id#x, name#x]
++- SubqueryAlias spark_catalog.default.test_view
+   +- View (`spark_catalog`.`default`.`test_view`, [id#x, name#x])
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x]
+         +- Project [id#x, name#x]
+            +- Filter between(score#x, 30, 70)
+               +- SubqueryAlias spark_catalog.default.test_table
+                  +- Relation spark_catalog.default.test_table[id#x,name#x,score#x,status#x] parquet
+
+
+-- !query
+SELECT test_var, test_var2
+-- !query analysis
+Project [variablereference(system.session.test_var=123) AS test_var#x, variablereference(system.session.test_var2='default_string') AS test_var2#x]
++- OneRowRelation
+
+
+-- !query
+DECLARE expr_val INT
+-- !query analysis
+CreateVariable defaultvalueexpression(null, null), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.expr_val
+
+
+-- !query
+SET VAR expr_val = 10
+-- !query analysis
+SetVariable [variablereference(system.session.expr_val=CAST(NULL AS INT))]
++- Project [10 AS expr_val#x]
+   +- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE expr_test (id INT, computed INT DEFAULT :expr_result) USING PARQUET' 
+USING (expr_val * 5 + 2) as expr_result
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSql" : "\"((expr_val * 5) + 2)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 110,
+    "stopIndex" : 125,
+    "fragment" : "expr_val * 5 + 2"
+  } ]
+}
+
+
+-- !query
+DESCRIBE EXTENDED expr_test
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`expr_test`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 27,
+    "fragment" : "expr_test"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE error_table (id INT DEFAULT ?, name STRING DEFAULT :name_default) USING PARQUET' 
+USING 1, 'test' as name_default
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+  "sqlState" : "42613"
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE error_table2 (id INT DEFAULT :undefined_param) USING PARQUET'
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "The Spark SQL phase analysis failed with an internal error. You hit a bug in Spark or the Spark plugins you use. Please, report this bug to the corresponding communities or vendors, and provide the full stack trace."
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE FUNCTION test_func(x INT DEFAULT :func_default) RETURNS INT RETURN x + :increment' 
+USING 10 as func_default, 5 as increment
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.test_func, x INT DEFAULT 10, INT, x + 5, false, false, false, false
+
+
+-- !query
+DESCRIBE FUNCTION EXTENDED test_func
+-- !query analysis
+DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, true
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE FUNCTION test_func2(x INT DEFAULT ?) RETURNS INT RETURN x * ?' USING 1, 2
+-- !query analysis
+java.lang.IllegalArgumentException
+Expected 1 positional parameters, but got 2
+
+
+-- !query
+DESCRIBE FUNCTION EXTENDED test_func2
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`test_func2`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 37,
+    "fragment" : "test_func2"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE VIEW nested_view AS SELECT test_func(:input_val) as result' USING 20 as input_val
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`nested_view`, SELECT test_func(20) as result, false, false, PersistedView, COMPENSATION, true
+   +- Project [spark_catalog.default.test_func(x#x) AS result#x]
+      +- Project [cast(20 as int) AS x#x]
+         +- OneRowRelation
+
+
+-- !query
+DESCRIBE EXTENDED nested_view
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`nested_view`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE gen_table (id INT, doubled INT GENERATED ALWAYS AS (id * :multiplier)) USING PARQUET' 
+USING 2 as multiplier
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "generated columns",
+    "tableName" : "`spark_catalog`.`default`.`gen_table`"
+  }
+}
+
+
+-- !query
+DESCRIBE EXTENDED gen_table
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`gen_table`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 27,
+    "fragment" : "gen_table"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE multi_param (id INT DEFAULT :val, name STRING DEFAULT :name, score INT DEFAULT :val) USING PARQUET' 
+USING 42 as val, 'test' as name
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`multi_param`, false
+
+
+-- !query
+DESCRIBE EXTENDED multi_param
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`multi_param`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+DROP FUNCTION IF EXISTS test_func
+-- !query analysis
+DropFunctionCommand spark_catalog.default.test_func, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS test_func2
+-- !query analysis
+NoopCommand DROP FUNCTION, [test_func2]
+
+
+-- !query
+DROP VIEW IF EXISTS nested_view
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`nested_view`, true, true, false
+
+
+-- !query
+DROP TABLE IF EXISTS gen_table
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.gen_table
+
+
+-- !query
+DROP TABLE IF EXISTS multi_param
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.multi_param
+
+
+-- !query
+DROP VIEW IF EXISTS test_view
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`test_view`, true, true, false
+
+
+-- !query
+DROP VIEW IF EXISTS test_view2
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`test_view2`, true, true, false
+
+
+-- !query
+DROP TABLE IF EXISTS test_table
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_table
+
+
+-- !query
+DROP TABLE IF EXISTS test_table2
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_table2
+
+
+-- !query
+DROP TABLE IF EXISTS expr_test
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.expr_test
 
 
 -- !query

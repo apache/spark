@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 
 /**
  * Enumeration for the types of SQL rules that can be parsed for parameter substitution.
@@ -28,6 +29,9 @@ sealed trait SubstitutionRule
 object SubstitutionRule {
   /** Rule for parsing complete SQL queries */
   case object Query extends SubstitutionRule
+
+  /** Rule for parsing SQL statements (includes queries, DDL, DML, etc.) */
+  case object Statement extends SubstitutionRule
 
   /** Rule for parsing SQL expressions */
   case object Expression extends SubstitutionRule
@@ -71,6 +75,7 @@ class SubstituteParamsParser extends Logging {
     // Parse as a single statement to get parameter locations
     val ctx = rule match {
       case SubstitutionRule.Query => parser.query()
+      case SubstitutionRule.Statement => parser.singleStatement()
       case SubstitutionRule.Expression => parser.expression()
       case SubstitutionRule.ColDefinitionList => parser.colDefinitionList()
     }
@@ -78,6 +83,40 @@ class SubstituteParamsParser extends Logging {
 
     // Substitute parameters in the original text
     substituteAtLocations(sqlText, parameterLocations, namedParams, positionalParams)
+  }
+
+  /**
+   * Detects parameter markers in SQL text without performing substitution.
+   *
+   * @param sqlText The original SQL text to analyze
+   * @param rule    The type of SQL rule to parse (Query or Expression)
+   * @return A tuple of (hasPositionalParameters, hasNamedParameters)
+   */
+  def detectParameters(sqlText: String, rule: SubstitutionRule): (Boolean, Boolean) = {
+    val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(sqlText)))
+    lexer.removeErrorListeners()
+    lexer.addErrorListener(ParseErrorListener)
+
+    val tokenStream = new CommonTokenStream(lexer)
+    val parser = new SqlBaseParser(tokenStream)
+    parser.removeErrorListeners()
+    parser.addErrorListener(ParseErrorListener)
+
+    val astBuilder = new SubstituteParmsAstBuilder()
+
+    // Parse as a single statement to get parameter locations
+    val ctx = rule match {
+      case SubstitutionRule.Query => parser.query()
+      case SubstitutionRule.Statement => parser.singleStatement()
+      case SubstitutionRule.Expression => parser.expression()
+      case SubstitutionRule.ColDefinitionList => parser.colDefinitionList()
+    }
+    val parameterLocations = astBuilder.extractParameterLocations(ctx)
+
+    val hasPositionalParams = parameterLocations.positionalParameterLocations.nonEmpty
+    val hasNamedParams = parameterLocations.namedParameterLocations.nonEmpty
+
+    (hasPositionalParams, hasNamedParams)
   }
 
   /**
@@ -102,10 +141,10 @@ class SubstituteParamsParser extends Logging {
     }
 
     // Handle positional parameters
-    if (locations.positionalParameterLocations.length != positionalParams.length) {
-      throw new IllegalArgumentException(
-        s"Expected ${locations.positionalParameterLocations.length} positional parameters, " +
-          s"but got ${positionalParams.length}")
+    if (locations.positionalParameterLocations.length < positionalParams.length) {
+      new AnalysisException(
+        errorClass = "UNBOUND_SQL_PARAMETER",
+        messageParameters = Map("name" -> "?"))
     }
 
     locations.positionalParameterLocations.zip(positionalParams).foreach {

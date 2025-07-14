@@ -206,7 +206,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
   private def performSqlSubstitution(
       child: LogicalPlan,
       substitutionFn: (String, SubstitutionRule) => String): LogicalPlan = {
-    substituteSQL(child) {
+    child match {
       /**
        * DECLARE VARIABLE v INT DEFAULT :parm + 1;
        */
