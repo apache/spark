@@ -54,7 +54,9 @@ import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 class StaxXmlParser(
     schema: StructType,
-    val options: XmlOptions) extends Logging {
+    val options: XmlOptions,
+    partitionSchema: StructType = StructType(Seq.empty),
+    partitionValues: InternalRow = InternalRow.empty) extends Logging {
 
   private lazy val timestampFormatter = TimestampFormatter(
     options.timestampFormatInRead,
@@ -146,7 +148,7 @@ class StaxXmlParser(
       options.singleVariantColumn match {
         case Some(_) =>
           // If the singleVariantColumn is specified, parse the entire xml string as a Variant
-          val v = StaxXmlParser.parseVariant(xml, options)
+          val v = StaxXmlParser.parseVariant(xml, options, partitionSchema, partitionValues)
           Some(InternalRow(v))
         case _ =>
           // Otherwise, parse the xml string as Structs
@@ -928,10 +930,14 @@ object StaxXmlParser {
   /**
    * Parse the input XML string as a Variant value
    */
-  def parseVariant(xml: String, options: XmlOptions): VariantVal = {
+  def parseVariant(
+      xml: String,
+      options: XmlOptions,
+      partitionSchema: StructType = StructType(Seq.empty),
+      partitionValues: InternalRow = InternalRow.empty): VariantVal = {
     val parser = StaxXmlParserUtils.filteredReader(xml)
     val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-    val v = convertVariant(parser, rootAttributes, options)
+    val v = convertVariant(parser, rootAttributes, options, partitionSchema, partitionValues)
     parser.close()
     v
   }
@@ -944,22 +950,30 @@ object StaxXmlParser {
    * @param parser The XML event stream reader positioned after the start element
    * @param attributes The attributes of the current XML element to be included in the Variant
    * @param options Configuration options that control how XML is parsed into Variants
+   * @param partitionSchema The schema of the partition columns, if any
+   * @param partitionValues The values of the partition columns, if any
    * @return A Variant representing the XML element with its attributes and child content
    */
   def convertVariant(
       parser: XMLEventReader,
       attributes: Array[Attribute],
-      options: XmlOptions): VariantVal = {
-    val v = convertVariantInternal(parser, attributes, options)
+      options: XmlOptions,
+      partitionSchema: StructType = StructType(Seq.empty),
+      partitionValues: InternalRow = InternalRow.empty): VariantVal = {
+    val v = convertVariantInternal(parser, attributes, options, partitionSchema, partitionValues)
     new VariantVal(v.getValue, v.getMetadata)
   }
 
   private def convertVariantInternal(
       parser: XMLEventReader,
       attributes: Array[Attribute],
-      options: XmlOptions): Variant = {
+      options: XmlOptions,
+      partitionSchema: StructType = StructType(Seq.empty),
+      partitionValues: InternalRow = InternalRow.empty): Variant = {
+    val variantAllowDuplicateKeys = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)
+
     // The variant builder for the root startElement
-    val rootBuilder = new VariantBuilder(false)
+    val rootBuilder = new VariantBuilder(variantAllowDuplicateKeys)
     val start = rootBuilder.getWritePos
 
     // Map to store the variant values of all child fields
@@ -977,7 +991,7 @@ object StaxXmlParser {
     // Handle attributes first
     StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options).foreach {
       case (f, v) =>
-        val builder = new VariantBuilder(false)
+        val builder = new VariantBuilder(variantAllowDuplicateKeys)
         appendXMLCharacterToVariant(builder, v, options)
         val variants = fieldToVariants.getOrElseUpdate(f, new java.util.ArrayList[Variant]())
         variants.add(builder.result())
@@ -997,7 +1011,7 @@ object StaxXmlParser {
         case c: Characters if !c.isWhiteSpace =>
           // Treat the character as a value tag field, where we use the [[XMLOptions.valueTag]] as
           // the field key
-          val builder = new VariantBuilder(false)
+          val builder = new VariantBuilder(variantAllowDuplicateKeys)
           appendXMLCharacterToVariant(builder, c.getData, options)
           val variants = fieldToVariants.getOrElseUpdate(
             options.valueTag,
@@ -1006,6 +1020,27 @@ object StaxXmlParser {
           variants.add(builder.result())
 
         case _: EndElement =>
+          // In the end, add partition values if they exist
+          if (partitionSchema.nonEmpty &&
+            SQLConf.get.includePartitionColumnsInSingleVariantColumn) {
+            partitionSchema.fields.zipWithIndex.foreach {
+              case (field, i) =>
+                val value = partitionValues.get(i, field.dataType)
+                if (value != null) {
+                  val builder = new VariantBuilder(variantAllowDuplicateKeys)
+                  appendXMLCharacterToVariant(builder, value.toString, options)
+                  val variants = fieldToVariants.getOrElseUpdate(
+                    field.name,
+                    new java.util.ArrayList[Variant]()
+                  )
+                  // If the partition schema overlaps with the data schema, we **OVERRIDE** the
+                  // data with the partition values.
+                  variants.clear()
+                  variants.add(builder.result())
+                }
+            }
+          }
+
           if (fieldToVariants.nonEmpty) {
             val onlyValueTagField = fieldToVariants.keySet.forall(_ == options.valueTag)
             if (onlyValueTagField) {
@@ -1036,6 +1071,8 @@ object StaxXmlParser {
    *
    * @param builder The variant builder to write to
    * @param fieldToVariants A map of field names to their corresponding variant values of the object
+   *                        The map is sorted by field names, and the ordering is based on the case
+   *                        sensitivity.
    */
   private def writeVariantObject(
       builder: VariantBuilder,
