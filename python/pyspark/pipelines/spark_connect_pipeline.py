@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from datetime import timezone
-from typing import Any, Dict, Mapping, Iterator, Optional, cast
+from typing import Any, Dict, Mapping, Iterator, Optional, cast, Sequence
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql import SparkSession
@@ -65,12 +65,30 @@ def handle_pipeline_events(iter: Iterator[Dict[str, Any]]) -> None:
             log_with_provided_timestamp(event.message, dt)
 
 
-def start_run(spark: SparkSession, dataflow_graph_id: str) -> Iterator[Dict[str, Any]]:
+def start_run(
+    spark: SparkSession, 
+    dataflow_graph_id: str,
+    full_refresh: Optional[Sequence[str]] = None,
+    full_refresh_all: bool = False,
+    refresh: Optional[Sequence[str]] = None
+) -> Iterator[Dict[str, Any]]:
     """Start a run of the dataflow graph in the Spark Connect server.
 
     :param dataflow_graph_id: The ID of the dataflow graph to start.
+    :param full_refresh: List of tables to reset and recompute.
+    :param full_refresh_all: Perform a full graph reset and recompute.
+    :param refresh: List of tables to update.
     """
+    # TODO: Update protobuf schema to include these parameters
+    # For now, we accept the parameters but don't pass them to the protobuf command
     inner_command = pb2.PipelineCommand.StartRun(dataflow_graph_id=dataflow_graph_id)
+    # TODO: Once protobuf schema is updated, uncomment the following:
+    # inner_command = pb2.PipelineCommand.StartRun(
+    #     dataflow_graph_id=dataflow_graph_id,
+    #     full_refresh=full_refresh or [],
+    #     full_refresh_all=full_refresh_all,
+    #     refresh=refresh or []
+    # )
     command = pb2.Command()
     command.pipeline_command.start_run.CopyFrom(inner_command)
     # Cast because mypy seems to think `spark`` is a function, not an object. Likely related to

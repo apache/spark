@@ -19,6 +19,7 @@ import unittest
 import tempfile
 import textwrap
 from pathlib import Path
+from typing import cast
 
 from pyspark.errors import PySparkException
 from pyspark.testing.connectutils import (
@@ -36,13 +37,14 @@ if should_test_connect and have_yaml:
         unpack_pipeline_spec,
         DefinitionsGlob,
         PipelineSpec,
+        run,
     )
     from pyspark.pipelines.tests.local_graph_element_registry import LocalGraphElementRegistry
 
 
 @unittest.skipIf(
     not should_test_connect or not have_yaml,
-    connect_requirement_message or yaml_requirement_message,
+    (connect_requirement_message or yaml_requirement_message) or "Connect or YAML not available",
 )
 class CLIUtilityTests(unittest.TestCase):
     def test_load_pipeline_spec(self):
@@ -357,6 +359,130 @@ class CLIUtilityTests(unittest.TestCase):
                         definitions=[DefinitionsGlob(include="defs.py")],
                     ),
                 )
+
+
+@unittest.skipIf(
+    not should_test_connect or not have_yaml,
+    (connect_requirement_message or yaml_requirement_message) or "Connect or YAML not available",
+)
+class CLIValidationTests(unittest.TestCase):
+    def test_full_refresh_all_conflicts_with_full_refresh(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create a minimal pipeline spec
+            spec_path = Path(temp_dir) / "pipeline.yaml"
+            with spec_path.open("w") as f:
+                f.write('{"name": "test_pipeline"}')
+            
+            # Test that providing both --full-refresh-all and --full-refresh raises an exception
+            with self.assertRaises(PySparkException) as context:
+                run(
+                    spec_path=spec_path,
+                    full_refresh=["table1", "table2"],
+                    full_refresh_all=True,
+                    refresh=None
+                )
+            
+            self.assertEqual(
+                context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS"
+            )
+            message_params = context.exception.getMessageParameters()
+            self.assertIsNotNone(message_params)
+            message = cast(dict, message_params)["message"]
+            self.assertIn("--full-refresh-all option conflicts with --full-refresh", message)
+            self.assertIn("performs a full refresh of all tables", message)
+
+    def test_full_refresh_all_conflicts_with_refresh(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create a minimal pipeline spec
+            spec_path = Path(temp_dir) / "pipeline.yaml"
+            with spec_path.open("w") as f:
+                f.write('{"name": "test_pipeline"}')
+            
+            # Test that providing both --full-refresh-all and --refresh raises an exception
+            with self.assertRaises(PySparkException) as context:
+                run(
+                    spec_path=spec_path,
+                    full_refresh=None,
+                    full_refresh_all=True,
+                    refresh=["table1", "table2"]
+                )
+            
+            self.assertEqual(
+                context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS"
+            )
+            message_params = context.exception.getMessageParameters()
+            self.assertIsNotNone(message_params)
+            message = cast(dict, message_params)["message"]
+            self.assertIn("--full-refresh-all option conflicts with --refresh", message)
+            self.assertIn("performs a full refresh of all tables", message)
+
+    def test_full_refresh_all_conflicts_with_both(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create a minimal pipeline spec
+            spec_path = Path(temp_dir) / "pipeline.yaml"
+            with spec_path.open("w") as f:
+                f.write('{"name": "test_pipeline"}')
+            
+            # Test that providing --full-refresh-all with both other options raises an exception
+            # (it should catch the first conflict - full_refresh)
+            with self.assertRaises(PySparkException) as context:
+                run(
+                    spec_path=spec_path,
+                    full_refresh=["table1"],
+                    full_refresh_all=True,
+                    refresh=["table2"]
+                )
+            
+            self.assertEqual(
+                context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS"
+            )
+            message_params = context.exception.getMessageParameters()
+            self.assertIsNotNone(message_params)
+            message = cast(dict, message_params)["message"]
+            self.assertIn("--full-refresh-all option conflicts with --full-refresh", message)
+
+    def test_no_conflict_when_full_refresh_all_alone(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create a minimal pipeline spec
+            spec_path = Path(temp_dir) / "pipeline.yaml"
+            with spec_path.open("w") as f:
+                f.write('{"name": "test_pipeline"}')
+            
+            # Test that providing only --full-refresh-all doesn't raise an exception
+            # (it should fail later when trying to actually run, but not in our validation)
+            try:
+                run(
+                    spec_path=spec_path,
+                    full_refresh=None,
+                    full_refresh_all=True,
+                    refresh=None
+                )
+                # If we get here, the validation passed (it will fail later in pipeline execution)
+                self.fail("Expected the run to fail later, but validation should have passed")
+            except PySparkException as e:
+                # Make sure it's NOT our validation error
+                self.assertNotEqual(e.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS")
+
+    def test_no_conflict_when_refresh_options_without_full_refresh_all(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create a minimal pipeline spec
+            spec_path = Path(temp_dir) / "pipeline.yaml"
+            with spec_path.open("w") as f:
+                f.write('{"name": "test_pipeline"}')
+            
+            # Test that providing --refresh and --full-refresh without --full-refresh-all doesn't raise our validation error
+            try:
+                run(
+                    spec_path=spec_path,
+                    full_refresh=["table1"],
+                    full_refresh_all=False,
+                    refresh=["table2"]
+                )
+                # If we get here, the validation passed (it will fail later in pipeline execution)
+                self.fail("Expected the run to fail later, but validation should have passed")
+            except PySparkException as e:
+                # Make sure it's NOT our validation error
+                self.assertNotEqual(e.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS")
 
 
 if __name__ == "__main__":

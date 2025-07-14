@@ -28,7 +28,7 @@ import os
 import yaml
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Generator, Mapping, Optional, Sequence
+from typing import Any, Generator, Mapping, Optional, Sequence, List
 
 from pyspark.errors import PySparkException, PySparkTypeError
 from pyspark.sql import SparkSession
@@ -217,8 +217,40 @@ def change_dir(path: Path) -> Generator[None, None, None]:
         os.chdir(prev)
 
 
-def run(spec_path: Path) -> None:
-    """Run the pipeline defined with the given spec."""
+def run(
+    spec_path: Path, 
+    full_refresh: Optional[Sequence[str]] = None,
+    full_refresh_all: bool = False,
+    refresh: Optional[Sequence[str]] = None
+) -> None:
+    """Run the pipeline defined with the given spec.
+    
+    :param spec_path: Path to the pipeline specification file.
+    :param full_refresh: List of tables to reset and recompute.
+    :param full_refresh_all: Perform a full graph reset and recompute.
+    :param refresh: List of tables to update.
+    """
+    # Validate conflicting arguments
+    if full_refresh_all:
+        if full_refresh:
+            raise PySparkException(
+                errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS",
+                messageParameters={
+                    "message": "--full-refresh-all option conflicts with --full-refresh. "
+                              "The --full-refresh-all option performs a full refresh of all tables, "
+                              "so specifying individual tables with --full-refresh is not allowed."
+                }
+            )
+        if refresh:
+            raise PySparkException(
+                errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS", 
+                messageParameters={
+                    "message": "--full-refresh-all option conflicts with --refresh. "
+                              "The --full-refresh-all option performs a full refresh of all tables, "
+                              "so specifying individual tables with --refresh is not allowed."
+                }
+            )
+    
     log_with_curr_timestamp(f"Loading pipeline spec from {spec_path}...")
     spec = load_pipeline_spec(spec_path)
 
@@ -242,11 +274,32 @@ def run(spec_path: Path) -> None:
     register_definitions(spec_path, registry, spec)
 
     log_with_curr_timestamp("Starting run...")
-    result_iter = start_run(spark, dataflow_graph_id)
+    result_iter = start_run(
+        spark, 
+        dataflow_graph_id,
+        full_refresh=full_refresh,
+        full_refresh_all=full_refresh_all,
+        refresh=refresh
+    )
     try:
         handle_pipeline_events(result_iter)
     finally:
         spark.stop()
+
+
+def parse_table_list(value: str) -> List[str]:
+    """Parse a comma-separated list of table names, handling whitespace."""
+    return [table.strip() for table in value.split(",") if table.strip()]
+
+
+def flatten_table_lists(table_lists: Optional[List[List[str]]]) -> Optional[List[str]]:
+    """Flatten a list of lists of table names into a single list."""
+    if not table_lists:
+        return None
+    result = []
+    for table_list in table_lists:
+        result.extend(table_list)
+    return result if result else None
 
 
 if __name__ == "__main__":
@@ -256,6 +309,19 @@ if __name__ == "__main__":
     # "run" subcommand
     run_parser = subparsers.add_parser("run", help="Run a pipeline.")
     run_parser.add_argument("--spec", help="Path to the pipeline spec.")
+    run_parser.add_argument(
+        "--full-refresh", 
+        type=parse_table_list, 
+        action="append",
+        help="List of tables to reset and recompute (comma-separated). Can be specified multiple times."
+    )
+    run_parser.add_argument("--full-refresh-all", action="store_true", help="Perform a full graph reset and recompute.")
+    run_parser.add_argument(
+        "--refresh", 
+        type=parse_table_list,
+        action="append", 
+        help="List of tables to update (comma-separated). Can be specified multiple times."
+    )
 
     # "init" subcommand
     init_parser = subparsers.add_parser(
@@ -283,6 +349,11 @@ if __name__ == "__main__":
         else:
             spec_path = find_pipeline_spec(Path.cwd())
 
-        run(spec_path=spec_path)
+        run(
+            spec_path=spec_path,
+            full_refresh=flatten_table_lists(args.full_refresh),
+            full_refresh_all=args.full_refresh_all,
+            refresh=flatten_table_lists(args.refresh)
+        )
     elif args.command == "init":
         init(args.name)
