@@ -423,8 +423,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             if dtype:
                 data = data.astype(dtype)
 
-            self._anchor = DataFrame(data)
-            self._col_label = data._internal.column_labels[0]
+            anchor = DataFrame(data)
+            self._anchor = anchor
+            self._col_label = anchor._internal.column_labels[0]
+            object.__setattr__(anchor, "_psseries", {self._column_label: self})
         else:
             if isinstance(data, pd.Series):
                 assert index is None
