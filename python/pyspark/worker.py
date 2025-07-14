@@ -2369,7 +2369,7 @@ def main(infile, outfile):
         split_index = read_int(infile)
         if split_index == -1:  # for unit tests
             sys.exit(-1)
-            
+
         if tracebackDumpIntervalSeconds is not None and int(tracebackDumpIntervalSeconds) > 0:
             faulthandler.dump_traceback_later(int(tracebackDumpIntervalSeconds), repeat=True)
 
@@ -2479,9 +2479,10 @@ def main(infile, outfile):
         # write a different value to tell JVM to not reuse this worker
         write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
         sys.exit(-1)
-    
+
     # Force to cancel dump_traceback_later
     faulthandler.cancel_dump_traceback_later()
+
 
 if __name__ == "__main__":
     # Read information about how to connect back to the JVM from the environment.
