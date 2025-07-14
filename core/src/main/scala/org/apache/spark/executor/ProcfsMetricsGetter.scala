@@ -96,7 +96,14 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       }
       Utils.tryWithResource(openReader()) { in =>
         val procInfo = in.readLine
-        val procInfoSplit = procInfo.split(" ")
+        // The comm field, which is inside parentheses, could contain spaces. We should not split
+        // by those spaces as doing so could cause the numbers after it to be shifted.
+        val commStartIndex = procInfo.indexOf('(')
+        val commEndIndex = procInfo.lastIndexOf(')') + 1
+        val pidArray = Array(procInfo.substring(0, commStartIndex).trim)
+        val commArray = Array(procInfo.substring(commStartIndex, commEndIndex))
+        val splitAfterComm = procInfo.substring(commEndIndex).trim.split(" ")
+        val procInfoSplit = pidArray ++ commArray ++ splitAfterComm
         val vmem = procInfoSplit(22).toLong
         val rssMem = procInfoSplit(23).toLong * pageSize
         if (procInfoSplit(1).toLowerCase(Locale.US).contains("java")) {
