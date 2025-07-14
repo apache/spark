@@ -17,17 +17,20 @@
 
 package org.apache.spark.sql.catalyst.types
 
-import org.apache.spark.sql.catalyst.expressions.{Literal, MutableLong, MutableValue}
-import org.apache.spark.sql.types.TimeType
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.types.{DataType, TimeType}
 
-case class TimeTypeOps (t: TimeType)
-  extends TypeOps
-  with PhyTypeOps
-  with LiteralTypeOps {
+// Literal operations over Catalyst's types
+trait LiteralTypeOps {
+  // Gets a literal with default value of the type
+  def getDefaultLiteral: Literal
+}
 
-  override def getPhysicalType: PhysicalDataType = PhysicalLongType
-  override def getJavaClass: Class[_] = classOf[PhysicalLongType.InternalType]
-  override def getMutableValue: MutableValue = new MutableLong
+object LiteralTypeOps {
+  def supports(dt: DataType): Boolean = dt match {
+    case _: TimeType => true
+    case _ => false
+  }
 
-  override def getDefaultLiteral: Literal = Literal.create(0L, t)
+  def apply(dt: DataType): LiteralTypeOps = TypeOps(dt).asInstanceOf[LiteralTypeOps]
 }

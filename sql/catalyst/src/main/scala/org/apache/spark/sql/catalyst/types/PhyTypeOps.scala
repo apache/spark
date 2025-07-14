@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.types
 import org.apache.spark.sql.catalyst.expressions.MutableValue
 import org.apache.spark.sql.types.{DataType, TimeType}
 
-// Base operations of Catalyst's types.
+// Base operations over Catalyst's types.
 trait PhyTypeOps extends TypeOps {
   // Gets the underlying physical type
   def getPhysicalType: PhysicalDataType
