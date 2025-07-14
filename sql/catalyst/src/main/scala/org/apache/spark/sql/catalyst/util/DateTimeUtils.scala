@@ -680,6 +680,19 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Subtracts two time values expressed as nanoseconds since 00:00:00, and returns
+   * the difference in microseconds.
+   *
+   * @param endNanos The end time as nanoseconds since the midnight, exclusive
+   * @param startNanos The end time as nanoseconds since the midnight, inclusive
+   * @return The difference in microseconds between local time corresponded to the input
+   *         `endNanos` and `startNanos`.
+   */
+  def subtractTimes(endNanos: Long, startNanos: Long): Long = {
+    (endNanos - startNanos) / NANOS_PER_MICROS
+  }
+
+  /**
    * Subtracts two timestamps expressed as microseconds since 1970-01-01 00:00:00Z, and returns
    * the difference in microseconds between local timestamps at the given time zone.
    *
@@ -833,5 +846,32 @@ object DateTimeUtils extends SparkDateTimeUtils {
    */
   def makeTimestampNTZ(days: Int, nanos: Long): Long = {
     localDateTimeToMicros(LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos)))
+  }
+
+  /**
+   * Adds a day-time interval to a time.
+   *
+   * @param time A time in nanoseconds.
+   * @param timePrecision The number of digits of the fraction part of time.
+   * @param interval A day-time interval in microseconds.
+   * @param intervalEndField The rightmost field which the interval comprises of.
+   *                         Valid values: 0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND).
+   * @param targetPrecision The number of digits of the fraction part of the resulting time.
+   * @return A time value in nanoseconds or throw an arithmetic overflow
+   *         if the result out of valid time range [00:00, 24:00).
+   */
+  def timeAddInterval(
+      time: Long,
+      timePrecision: Int,
+      interval: Long,
+      intervalEndField: Byte,
+      targetPrecision: Int): Long = {
+    val result = MathUtils.addExact(time, MathUtils.multiplyExact(interval, NANOS_PER_MICROS))
+    if (0 <= result && result < NANOS_PER_DAY) {
+      truncateTimeToPrecision(result, targetPrecision)
+    } else {
+      throw QueryExecutionErrors.timeAddIntervalOverflowError(
+        time, timePrecision, interval, intervalEndField)
+    }
   }
 }

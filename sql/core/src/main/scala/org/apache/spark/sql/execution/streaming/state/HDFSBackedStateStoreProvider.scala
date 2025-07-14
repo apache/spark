@@ -351,7 +351,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     assert(
       !storeConf.enableStateStoreCheckpointIds,
       "HDFS State Store Provider doesn't support checkpointFormatVersion >= 2 " +
-        s"checkpointFormatVersion ${storeConf.sqlConf.stateStoreCheckpointFormatVersion}")
+        s"checkpointFormatVersion ${storeConf.stateStoreCheckpointFormatVersion}")
 
     this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema

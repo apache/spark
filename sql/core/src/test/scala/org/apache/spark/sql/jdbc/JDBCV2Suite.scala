@@ -35,7 +35,8 @@ import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalo
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.Expression
-import org.apache.spark.sql.execution.FormattedMode
+import org.apache.spark.sql.execution.{FormattedMode, RowDataSourceScanExec}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCRDD}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
@@ -3119,4 +3120,23 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       Row("jen", Array(99, -122, -121, -56, -51, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
   }
 
+  test("SPARK-52730: Database metadata is available in JDBCRDD") {
+    val df = sql("SELECT * FROM h2.test.people")
+    // Force query execution as metadata is stored during execution
+    df.collect()
+
+    val jdbcRdd = df.queryExecution.executedPlan
+      .collect { case r: RowDataSourceScanExec => r }
+      .head.rdd.asInstanceOf[JDBCRDD]
+
+    // This is the Metadata for the testing H2 database
+    val expectedMetadata = JDBCDatabaseMetadata(
+      databaseMajorVersion = Some(2),
+      databaseMinorVersion = Some(3),
+      databaseDriverMajorVersion = Some(2),
+      databaseDriverMinorVersion = Some(3)
+    )
+
+    assertResult(expectedMetadata) { jdbcRdd.getDatabaseMetadata }
+  }
 }

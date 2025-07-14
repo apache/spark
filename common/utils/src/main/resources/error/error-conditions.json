@@ -4411,6 +4411,18 @@
     ],
     "sqlState" : "42809"
   },
+  "NOT_A_SCALAR_FUNCTION" : {
+    "message" : [
+      "<functionName> appears as a scalar expression here, but the function was defined as a table function. Please update the query to move the function call into the FROM clause, or redefine <functionName> as a scalar function instead."
+    ],
+    "sqlState" : "42887"
+  },
+  "NOT_A_TABLE_FUNCTION" : {
+    "message" : [
+      "<functionName> appears as a table function here, but the function was defined as a scalar function. Please update the query to move the function call outside the FROM clause, or redefine <functionName> as a table function instead."
+    ],
+    "sqlState" : "42887"
+  },
   "NOT_NULL_ASSERT_VIOLATION" : {
     "message" : [
       "NULL value appeared in non-nullable field: <walkedTypePath>If the schema is inferred from a Scala tuple/case class, or a Java bean, please try to use scala.Option[_] or other nullable types (such as java.lang.Integer instead of int/scala.Int)."
@@ -8676,7 +8688,7 @@
   },
   "_LEGACY_ERROR_TEMP_2250" : {
     "message" : [
-      "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastJoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
+      "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastJoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg> or apply the shuffle sort merge join hint as described in the Spark documentation: https://spark.apache.org/docs/latest/sql-ref-syntax-qry-select-hints.html#join-hints."
     ]
   },
   "_LEGACY_ERROR_TEMP_2251" : {

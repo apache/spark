@@ -126,6 +126,24 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     assume(shouldTestPandasUDFs)
     val df = spark.read.format(staticSourceName).load()
     checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
+
+    // Overwrite the static source
+    val errorText = "static source overwritten"
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |
+         |class $staticSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        raise Exception("$errorText")
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(
+      name = staticSourceName, pythonScript = dataSourceScript)
+    spark.dataSource.registerPython(staticSourceName, dataSource)
+    val err = intercept[AnalysisException] {
+      spark.read.format(staticSourceName).load()
+    }
+    assert(err.getMessage.contains(errorText))
   }
 
   test("simple data source") {
