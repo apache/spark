@@ -1858,6 +1858,11 @@ private[spark] object Utils
   }
 
   /**
+   * Whether the underlying operating system is UNIX.
+   */
+  val isUnix = SystemUtils.IS_OS_UNIX
+
+  /**
    * Whether the underlying operating system is Windows.
    */
   val isWindows = SystemUtils.IS_OS_WINDOWS
