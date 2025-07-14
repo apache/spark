@@ -54,7 +54,7 @@ class GraphRegistrationContext(
         v
       }.isEmpty) {
       throw new AnalysisException(
-        errorClass = "NO_DATASETS_IN_PIPELINE",
+        errorClass = "RUN_EMPTY_PIPELINE",
         messageParameters = Map.empty)
     }
     val qualifiedTables = tables.toSeq.map { t =>

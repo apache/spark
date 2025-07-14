@@ -853,7 +853,7 @@ class SQLPipelineSuite extends PipelineTest with SQLTestUtils {
     )
   }
 
-  test("No table defined pipeline fails with NO_DATASETS_IN_PIPELINE") {
+  test("No table defined pipeline fails with RUN_EMPTY_PIPELINE") {
     val graphRegistrationContext = new TestGraphRegistrationContext(spark)
     val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
 
@@ -863,13 +863,13 @@ class SQLPipelineSuite extends PipelineTest with SQLTestUtils {
       exception = intercept[AnalysisException] {
         graphRegistrationContext.toDataflowGraph
       },
-      condition = "NO_DATASETS_IN_PIPELINE",
+      condition = "RUN_EMPTY_PIPELINE",
       sqlState = Option("42617"),
       parameters = Map.empty
     )
   }
 
-  test("Pipeline with only temp views fails with NO_DATASETS_IN_PIPELINE") {
+  test("Pipeline with only temp views fails with RUN_EMPTY_PIPELINE") {
     val graphRegistrationContext = new TestGraphRegistrationContext(spark)
     val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
 
@@ -885,13 +885,13 @@ class SQLPipelineSuite extends PipelineTest with SQLTestUtils {
       exception = intercept[AnalysisException] {
         graphRegistrationContext.toDataflowGraph
       },
-      condition = "NO_DATASETS_IN_PIPELINE",
+      condition = "RUN_EMPTY_PIPELINE",
       sqlState = Option("42617"),
       parameters = Map.empty
     )
   }
 
-  test("Pipeline with only flow fails with NO_DATASETS_IN_PIPELINE") {
+  test("Pipeline with only flow fails with RUN_EMPTY_PIPELINE") {
     val graphRegistrationContext = new TestGraphRegistrationContext(spark)
     val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
 
@@ -908,7 +908,7 @@ class SQLPipelineSuite extends PipelineTest with SQLTestUtils {
       exception = intercept[AnalysisException] {
         graphRegistrationContext.toDataflowGraph
       },
-      condition = "NO_DATASETS_IN_PIPELINE",
+      condition = "RUN_EMPTY_PIPELINE",
       sqlState = Option("42617"),
       parameters = Map.empty
     )
