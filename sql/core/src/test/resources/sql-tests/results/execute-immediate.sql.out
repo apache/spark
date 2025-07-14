@@ -1271,7 +1271,7 @@ Extended Usage:
     No example/argument for test_func.
 
 Function: spark_catalog.default.test_func
-Usage: {"catalogAndNamespace.part.0":"spark_catalog","referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.inputParam":"x INT DEFAULT 10","sqlFunction.expression":"x + 5","catalogAndNamespace.numParts":"2","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8","sqlFunction.createTime":"1752519168063","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","referredTempVariableNames":"[]"}
+Usage: {"catalogAndNamespace.part.0":"spark_catalog","referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.inputParam":"x INT DEFAULT 10","sqlFunction.expression":"x + 5","catalogAndNamespace.numParts":"2","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8","sqlFunction.createTime":"1752544836803","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","referredTempVariableNames":"[]"}
 
 
 -- !query
@@ -1292,7 +1292,7 @@ Extended Usage:
     No example/argument for test_func2.
 
 Function: spark_catalog.default.test_func2
-Usage: {"catalogAndNamespace.part.0":"spark_catalog","referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.inputParam":"x INT DEFAULT 1","sqlFunction.expression":"x * 2","catalogAndNamespace.numParts":"2","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8","sqlFunction.createTime":"1752519168083","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","referredTempVariableNames":"[]"}
+Usage: {"catalogAndNamespace.part.0":"spark_catalog","referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.inputParam":"x INT DEFAULT 1","sqlFunction.expression":"x * 2","catalogAndNamespace.numParts":"2","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8","sqlFunction.createTime":"1752544836811","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","referredTempVariableNames":"[]"}
 
 
 -- !query
@@ -1314,7 +1314,7 @@ Extended Usage:
     No example/argument for multi_param_func.
 
 Function: spark_catalog.default.multi_param_func
-Usage: {"catalogAndNamespace.part.0":"spark_catalog","referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.inputParam":"a INT DEFAULT 10, b INT DEFAULT 20","sqlFunction.expression":"a + b + 5","catalogAndNamespace.numParts":"2","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8","sqlFunction.createTime":"1752519168095","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","referredTempVariableNames":"[]"}
+Usage: {"catalogAndNamespace.part.0":"spark_catalog","referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.inputParam":"a INT DEFAULT 10, b INT DEFAULT 20","sqlFunction.expression":"a + b + 5","catalogAndNamespace.numParts":"2","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8","sqlFunction.createTime":"1752544836816","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","referredTempVariableNames":"[]"}
 
 
 -- !query
@@ -1336,7 +1336,7 @@ Extended Usage:
     No example/argument for table_func.
 
 Function: spark_catalog.default.table_func
-Usage: {"catalogAndNamespace.part.0":"spark_catalog","referredTempViewNames":"[]","sqlFunction.isTableFunc":"true","sqlFunction.inputParam":"x INT DEFAULT 1, y INT DEFAULT 2","catalogAndNamespace.numParts":"2","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8","sqlFunction.createTime":"1752519168120","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","sqlFunction.query":"SELECT x + y + 3 as result","sqlFunction.returnType":"result INT","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","referredTempVariableNames":"[]"}
+Usage: {"catalogAndNamespace.part.0":"spark_catalog","referredTempViewNames":"[]","sqlFunction.isTableFunc":"true","sqlFunction.inputParam":"x INT DEFAULT 1, y INT DEFAULT 2","catalogAndNamespace.numParts":"2","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8","sqlFunction.createTime":"1752544836830","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","sqlFunction.query":"SELECT x + y + 3 as result","sqlFunction.returnType":"result INT","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","referredTempVariableNames":"[]"}
 
 
 -- !query
@@ -1529,7 +1529,7 @@ Extended Usage:
     No example/argument for complex_func.
 
 Function: spark_catalog.default.complex_func
-Usage: {"catalogAndNamespace.part.0":"spark_catalog","referredTempViewNames":"[]","sqlFunction.returnType":"STRING","sqlFunction.isTableFunc":"false","sqlFunction.inputParam":"a INT DEFAULT 10, b STRING DEFAULT 'prefix_', c DOUBLE DEFAULT 3.14BD","sqlFunction.expression":"CONCAT(b, CAST(a + c + 100 AS STRING))","catalogAndNamespace.numParts":"2","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8","sqlFunction.createTime":"1752519168271","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","referredTempVariableNames":"[]"}
+Usage: {"catalogAndNamespace.part.0":"spark_catalog","referredTempViewNames":"[]","sqlFunction.returnType":"STRING","sqlFunction.isTableFunc":"false","sqlFunction.inputParam":"a INT DEFAULT 10, b STRING DEFAULT 'prefix_', c DOUBLE DEFAULT 3.14BD","sqlFunction.expression":"CONCAT(b, CAST(a + c + 100 AS STRING))","catalogAndNamespace.numParts":"2","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8","sqlFunction.createTime":"1752544836904","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","referredTempVariableNames":"[]"}
 
 
 -- !query
@@ -1811,6 +1811,666 @@ Location [not included in comparison]/{warehouse_dir}/multi_param
 id                  	int                 	42                  
 name                	string              	'test'              
 score               	int                 	42
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE quote_test STRING DEFAULT ?' 
+USING 'It\'s a test with \'embedded\' single quotes'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT quote_test, typeof(quote_test)
+-- !query schema
+struct<quote_test:string,typeof(variablereference(system.session.quote_test='It\'s a test with \'embedded\' single quotes')):string>
+-- !query output
+It's a test with 'embedded' single quotes	string
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE mixed_quotes STRING DEFAULT ?' 
+USING 'String with "double" and \'single\' quotes'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT mixed_quotes, typeof(mixed_quotes)
+-- !query schema
+struct<mixed_quotes:string,typeof(variablereference(system.session.mixed_quotes='String with "double" and \'single\' quotes')):string>
+-- !query output
+String with "double" and 'single' quotes	string
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE long_string STRING DEFAULT ?' 
+USING 'This is a very long string that contains multiple words and should test the parameter substitution with lengthy content to ensure it works correctly with large parameter values'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT long_string, typeof(long_string)
+-- !query schema
+struct<long_string:string,typeof(variablereference(system.session.long_string='This is a very long string that contains multiple words and should test the parameter substitution with lengthy content to ensure it works correctly with large parameter values')):string>
+-- !query output
+This is a very long string that contains multiple words and should test the parameter substitution with lengthy content to ensure it works correctly with large parameter values	string
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE empty_string STRING DEFAULT ?' 
+USING ''
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT empty_string, typeof(empty_string)
+-- !query schema
+struct<empty_string:string,typeof(variablereference(system.session.empty_string='')):string>
+-- !query output
+	string
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE special_chars STRING DEFAULT ?' 
+USING 'Special chars: \\n\\t\\r\\\\ and unicode: café naïve résumé'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT special_chars, typeof(special_chars)
+-- !query schema
+struct<special_chars:string,typeof(variablereference(system.session.special_chars='Special chars: \\n\\t\\r\\\\ and unicode: café naïve résumé')):string>
+-- !query output
+Special chars: \n\t\r\\ and unicode: café naïve résumé	string
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE sql_keywords STRING DEFAULT ?' 
+USING 'SELECT INSERT UPDATE DELETE FROM WHERE JOIN'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT sql_keywords, typeof(sql_keywords)
+-- !query schema
+struct<sql_keywords:string,typeof(variablereference(system.session.sql_keywords='SELECT INSERT UPDATE DELETE FROM WHERE JOIN')):string>
+-- !query output
+SELECT INSERT UPDATE DELETE FROM WHERE JOIN	string
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE array_param ARRAY<INT> DEFAULT ?' 
+USING ARRAY(1, 2, 3, 4, 5)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT array_param, typeof(array_param)
+-- !query schema
+struct<array_param:array<int>,typeof(variablereference(system.session.array_param=ARRAY(1, 2, 3, 4, 5))):string>
+-- !query output
+[1,2,3,4,5]	array<int>
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE struct_param STRUCT<name: STRING, age: INT, active: BOOLEAN> DEFAULT ?' 
+USING STRUCT('John', 25, true)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT struct_param, typeof(struct_param)
+-- !query schema
+struct<struct_param:struct<name:string,age:int,active:boolean>,typeof(variablereference(system.session.struct_param=NAMED_STRUCT('name', 'John', 'age', 25, 'active', true))):string>
+-- !query output
+{"name":"John","age":25,"active":true}	struct<name:string,age:int,active:boolean>
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE map_param MAP<STRING, INT> DEFAULT ?' 
+USING MAP('key1', 100, 'key2', 200, 'key3', 300)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT map_param, typeof(map_param)
+-- !query schema
+struct<map_param:map<string,int>,typeof(variablereference(system.session.map_param=MAP('key1', 100, 'key2', 200, 'key3', 300))):string>
+-- !query output
+{"key1":100,"key2":200,"key3":300}	map<string,int>
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE nested_param STRUCT<user:STRUCT<name:STRING, age:INT>, scores:ARRAY<INT>> DEFAULT ?' 
+USING STRUCT(STRUCT('Jane', 30), ARRAY(95, 87, 92))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT nested_param, typeof(nested_param)
+-- !query schema
+struct<nested_param:struct<user:struct<name:string,age:int>,scores:array<int>>,typeof(variablereference(system.session.nested_param=NAMED_STRUCT('user', NAMED_STRUCT('name', 'Jane', 'age', 30), 'scores', ARRAY(95, 87, 92)))):string>
+-- !query output
+{"user":{"name":"Jane","age":30},"scores":[95,87,92]}	struct<user:struct<name:string,age:int>,scores:array<int>>
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE json_param STRING DEFAULT ?' 
+USING '{"name": "Alice", "age": 28, "hobbies": ["reading", "swimming"], "address": {"street": "123 Main St", "city": "Boston"}}'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT json_param, typeof(json_param)
+-- !query schema
+struct<json_param:string,typeof(variablereference(system.session.json_param='{"name": "Alice", "age": 28, "hobbies": ["reading", "swimming"], "address": {"street": "123 Main St", "city": "Boston"}}')):string>
+-- !query output
+{"name": "Alice", "age": 28, "hobbies": ["reading", "swimming"], "address": {"street": "123 Main St", "city": "Boston"}}	string
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE big_int INT DEFAULT ?' 
+USING 2147483647
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT big_int, typeof(big_int)
+-- !query schema
+struct<big_int:int,typeof(variablereference(system.session.big_int=2147483647)):string>
+-- !query output
+2147483647	int
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE max_long BIGINT DEFAULT ?' 
+USING 9223372036854775807
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT max_long, typeof(max_long)
+-- !query schema
+struct<max_long:bigint,typeof(variablereference(system.session.max_long=9223372036854775807L)):string>
+-- !query output
+9223372036854775807	bigint
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE tiny_byte TINYINT DEFAULT ?' 
+USING 127
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT tiny_byte, typeof(tiny_byte)
+-- !query schema
+struct<tiny_byte:tinyint,typeof(variablereference(system.session.tiny_byte=127Y)):string>
+-- !query output
+127	tinyint
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE small_short SMALLINT DEFAULT ?' 
+USING 32767
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT small_short, typeof(small_short)
+-- !query schema
+struct<small_short:smallint,typeof(variablereference(system.session.small_short=32767S)):string>
+-- !query output
+32767	smallint
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE scientific_double DOUBLE DEFAULT ?' 
+USING 1.23456789e-10
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT scientific_double, typeof(scientific_double)
+-- !query schema
+struct<scientific_double:double,typeof(variablereference(system.session.scientific_double=1.23456789E-10D)):string>
+-- !query output
+1.23456789E-10	double
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE float_param FLOAT DEFAULT ?' 
+USING 3.14159
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT float_param, typeof(float_param)
+-- !query schema
+struct<float_param:float,typeof(variablereference(system.session.float_param=CAST('3.14159' AS FLOAT))):string>
+-- !query output
+3.14159	float
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE precise_decimal DECIMAL(20,10) DEFAULT ?' 
+USING 123456789.0123456789
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT precise_decimal, typeof(precise_decimal)
+-- !query schema
+struct<precise_decimal:decimal(20,10),typeof(variablereference(system.session.precise_decimal=123456789.0123456789BD)):string>
+-- !query output
+123456789.0123456789	decimal(20,10)
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE bool_true BOOLEAN DEFAULT ?' 
+USING true
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT bool_true, typeof(bool_true)
+-- !query schema
+struct<bool_true:boolean,typeof(variablereference(system.session.bool_true=true)):string>
+-- !query output
+true	boolean
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE bool_false BOOLEAN DEFAULT ?' 
+USING false
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT bool_false, typeof(bool_false)
+-- !query schema
+struct<bool_false:boolean,typeof(variablereference(system.session.bool_false=false)):string>
+-- !query output
+false	boolean
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE timestamp_param TIMESTAMP DEFAULT ?' 
+USING TIMESTAMP '2023-12-25 14:30:45.123456'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT timestamp_param, typeof(timestamp_param)
+-- !query schema
+struct<timestamp_param:timestamp,typeof(variablereference(system.session.timestamp_param=TIMESTAMP '2023-12-25 14:30:45.123456')):string>
+-- !query output
+2023-12-25 14:30:45.123456	timestamp
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE date_param DATE DEFAULT ?' 
+USING DATE '2023-12-25'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT date_param, typeof(date_param)
+-- !query schema
+struct<date_param:date,typeof(variablereference(system.session.date_param=DATE '2023-12-25')):string>
+-- !query output
+2023-12-25	date
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE binary_param BINARY DEFAULT ?' 
+USING X'48656C6C6F20576F726C64'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT binary_param, typeof(binary_param)
+-- !query schema
+struct<binary_param:binary,typeof(variablereference(system.session.binary_param=X'48656C6C6F20576F726C64')):string>
+-- !query output
+Hello World	binary
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE escape_test STRING DEFAULT ?' 
+USING 'Path: C:\\\\Users\\\\Name\\\\Documents\\\\file.txt'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT escape_test, typeof(escape_test)
+-- !query schema
+struct<escape_test:string,typeof(variablereference(system.session.escape_test='Path: C:\\\\Users\\\\Name\\\\Documents\\\\file.txt')):string>
+-- !query output
+Path: C:\\Users\\Name\\Documents\\file.txt	string
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE multiline_param STRING DEFAULT ?' 
+USING 'Line 1\\nLine 2\\n\\tIndented line\\nLine 4'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT multiline_param, typeof(multiline_param)
+-- !query schema
+struct<multiline_param:string,typeof(variablereference(system.session.multiline_param='Line 1\\nLine 2\\n\\tIndented line\\nLine 4')):string>
+-- !query output
+Line 1\nLine 2\n\tIndented line\nLine 4	string
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE pos_inf DOUBLE DEFAULT ?' 
+USING CAST('Infinity' AS DOUBLE)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT pos_inf, typeof(pos_inf)
+-- !query schema
+struct<pos_inf:double,typeof(variablereference(system.session.pos_inf=CAST('Infinity' AS DOUBLE))):string>
+-- !query output
+Infinity	double
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE neg_inf DOUBLE DEFAULT ?' 
+USING CAST('-Infinity' AS DOUBLE)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT neg_inf, typeof(neg_inf)
+-- !query schema
+struct<neg_inf:double,typeof(variablereference(system.session.neg_inf=CAST('-Infinity' AS DOUBLE))):string>
+-- !query output
+-Infinity	double
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE nan_val DOUBLE DEFAULT ?' 
+USING CAST('NaN' AS DOUBLE)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT nan_val, typeof(nan_val)
+-- !query schema
+struct<nan_val:double,typeof(variablereference(system.session.nan_val=CAST('NaN' AS DOUBLE))):string>
+-- !query output
+NaN	double
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE string_array ARRAY<STRING> DEFAULT ?' 
+USING ARRAY('first\'s value', 'second "quoted" value', 'third\nwith\ttabs')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT string_array, typeof(string_array)
+-- !query schema
+struct<string_array:array<string>,typeof(variablereference(system.session.string_array=ARRAY('first\'s value', 'second "quoted" value', 'third
+with	tabs'))):string>
+-- !query output
+["first's value","second "quoted" value","third
+with	tabs"]	array<string>
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE struct_array ARRAY<STRUCT<name:STRING, age:INT>> DEFAULT ?' 
+USING ARRAY(STRUCT('Alice', 25), STRUCT('Bob', 30), STRUCT('Charlie', 35))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT struct_array, typeof(struct_array)
+-- !query schema
+struct<struct_array:array<struct<name:string,age:int>>,typeof(variablereference(system.session.struct_array=ARRAY(NAMED_STRUCT('name', 'Alice', 'age', 25), NAMED_STRUCT('name', 'Bob', 'age', 30), NAMED_STRUCT('name', 'Charlie', 'age', 35)))):string>
+-- !query output
+[{"name":"Alice","age":25},{"name":"Bob","age":30},{"name":"Charlie","age":35}]	array<struct<name:string,age:int>>
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE complex_map MAP<STRING, STRUCT<id:INT, active:BOOLEAN>> DEFAULT ?' 
+USING MAP('user1', STRUCT(1, true), 'user2', STRUCT(2, false))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT complex_map, typeof(complex_map)
+-- !query schema
+struct<complex_map:map<string,struct<id:int,active:boolean>>,typeof(variablereference(system.session.complex_map=MAP('user1', NAMED_STRUCT('id', 1, 'active', true), 'user2', NAMED_STRUCT('id', 2, 'active', false)))):string>
+-- !query output
+{"user1":{"id":1,"active":true},"user2":{"id":2,"active":false}}	map<string,struct<id:int,active:boolean>>
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE deep_nested STRUCT<level1:STRUCT<level2:STRUCT<data:ARRAY<MAP<STRING, INT>>>>> DEFAULT ?' 
+USING STRUCT(STRUCT(STRUCT(ARRAY(MAP('a', 1, 'b', 2), MAP('c', 3, 'd', 4)))))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT deep_nested, typeof(deep_nested)
+-- !query schema
+struct<deep_nested:struct<level1:struct<level2:struct<data:array<map<string,int>>>>>,typeof(variablereference(system.session.deep_nested=NAMED_STRUCT('level1', NAMED_STRUCT('level2', NAMED_STRUCT('data', ARRAY(MAP('a', 1, 'b', 2), MAP('c', 3, 'd', 4))))))):string>
+-- !query output
+{"level1":{"level2":{"data":[{"a":1,"b":2},{"c":3,"d":4}]}}}	struct<level1:struct<level2:struct<data:array<map<string,int>>>>>
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE complex_defaults (
+  id INT, 
+  json_data STRING DEFAULT ?,
+  quoted_name STRING DEFAULT ?,
+  large_number BIGINT DEFAULT ?,
+  precise_val DECIMAL(15,5) DEFAULT ?,
+  bool_flag BOOLEAN DEFAULT ?,
+  created_date DATE DEFAULT ?
+) USING PARQUET' 
+USING '{"type": "user", "data": {"name": "Test\'User", "active": true}}',
+      'Name with \'quotes\' and "double quotes"',
+      9223372036854775807,
+      12345.67890,
+      true,
+      DATE '2023-12-25'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE EXTENDED complex_defaults
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+id                  	int                 	                    
+json_data           	string              	                    
+quoted_name         	string              	                    
+large_number        	bigint              	                    
+precise_val         	decimal(15,5)       	                    
+bool_flag           	boolean             	                    
+created_date        	date                	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	complex_defaults    	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	PARQUET             	                    
+Location [not included in comparison]/{warehouse_dir}/complex_defaults	                    
+                    	                    	                    
+# Column Default Values	                    	                    
+json_data           	string              	'{"type": "user", "data": {"name": "Test\'User", "active": true}}'
+quoted_name         	string              	'Name with \'quotes\' and "double quotes"'
+large_number        	bigint              	9223372036854775807L
+precise_val         	decimal(15,5)       	12345.67890BD       
+bool_flag           	boolean             	true                
+created_date        	date                	DATE '2023-12-25'
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE case_sensitive STRING DEFAULT ?' 
+USING 'MiXeD CaSe StRiNg WiTh UPPER and lower'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT case_sensitive, typeof(case_sensitive)
+-- !query schema
+struct<case_sensitive:string,typeof(variablereference(system.session.case_sensitive='MiXeD CaSe StRiNg WiTh UPPER and lower')):string>
+-- !query output
+MiXeD CaSe StRiNg WiTh UPPER and lower	string
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE year_interval DEFAULT ?'
+USING INTERVAL '2' years
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT year_interval, typeof(year_interval)
+-- !query schema
+struct<year_interval:interval year,typeof(variablereference(system.session.year_interval=INTERVAL '2' YEAR)):string>
+-- !query output
+2-0	interval year
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE day_interval DEFAULT ?'
+USING INTERVAL '10' DAYS
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT day_interval, typeof(day_interval)
+-- !query schema
+struct<day_interval:interval day,typeof(variablereference(system.session.day_interval=INTERVAL '10' DAY)):string>
+-- !query output
+10 00:00:00.000000000	interval day
+
+
+-- !query
+DROP TABLE IF EXISTS complex_defaults
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query

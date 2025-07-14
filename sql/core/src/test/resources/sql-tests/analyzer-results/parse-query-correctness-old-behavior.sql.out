@@ -1084,9 +1084,22 @@ Project [variablereference(system.session.v1=1) AS v1#x]
 -- !query
 EXECUTE IMMEDIATE 'SELECT 1 JOIN SELECT 2' INTO v1
 -- !query analysis
-SetVariable [variablereference(system.session.v1=1)]
-+- Project [1 AS JOIN#x]
-   +- OneRowRelation
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "mismatched input 'SELECT' expecting {<EOF>, ';'}",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 50,
+    "fragment" : "EXECUTE IMMEDIATE 'SELECT 1 JOIN SELECT 2' INTO v1"
+  } ]
+}
 
 
 -- !query
@@ -1099,9 +1112,22 @@ Project [variablereference(system.session.v1=1) AS v1#x]
 -- !query
 EXECUTE IMMEDIATE 'SELECT 1 VALUES (1)' INTO v1
 -- !query analysis
-SetVariable [variablereference(system.session.v1=1)]
-+- Project [1 AS VALUES#x]
-   +- OneRowRelation
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "mismatched input '(' expecting {<EOF>, ';'}",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 47,
+    "fragment" : "EXECUTE IMMEDIATE 'SELECT 1 VALUES (1)' INTO v1"
+  } ]
+}
 
 
 -- !query
@@ -1114,9 +1140,22 @@ Project [variablereference(system.session.v1=1) AS v1#x]
 -- !query
 EXECUTE IMMEDIATE 'SELECT 1 alias garbage garbage garbage' INTO v1
 -- !query analysis
-SetVariable [variablereference(system.session.v1=1)]
-+- Project [1 AS alias#x]
-   +- OneRowRelation
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "mismatched input 'garbage' expecting {<EOF>, ';'}",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 66,
+    "fragment" : "EXECUTE IMMEDIATE 'SELECT 1 alias garbage garbage garbage' INTO v1"
+  } ]
+}
 
 
 -- !query
@@ -1129,9 +1168,22 @@ Project [variablereference(system.session.v1=1) AS v1#x]
 -- !query
 EXECUTE IMMEDIATE 'SELECT 1 WITH abc' INTO v1
 -- !query analysis
-SetVariable [variablereference(system.session.v1=1)]
-+- Project [1 AS WITH#x]
-   +- OneRowRelation
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "extraneous input 'abc' expecting {<EOF>, ';'}",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 45,
+    "fragment" : "EXECUTE IMMEDIATE 'SELECT 1 WITH abc' INTO v1"
+  } ]
+}
 
 
 -- !query

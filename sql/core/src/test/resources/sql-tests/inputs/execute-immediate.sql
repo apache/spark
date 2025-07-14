@@ -310,6 +310,196 @@ USING 42 as val, 'test' as name;
 DESCRIBE EXTENDED multi_param;
 
 
+-- =============================================================================
+-- COMPLEX AND INTERESTING PARAMETER MARKERS TESTS
+-- =============================================================================
+
+-- Test strings with embedded single quotes (properly escaped with backslash)
+EXECUTE IMMEDIATE 'DECLARE VARIABLE quote_test STRING DEFAULT ?' 
+USING 'It\'s a test with \'embedded\' single quotes';
+SELECT quote_test, typeof(quote_test);
+
+-- Test strings with mixed quotes and escaping
+EXECUTE IMMEDIATE 'DECLARE VARIABLE mixed_quotes STRING DEFAULT ?' 
+USING 'String with "double" and \'single\' quotes';
+SELECT mixed_quotes, typeof(mixed_quotes);
+
+-- Test very long string parameter
+EXECUTE IMMEDIATE 'DECLARE VARIABLE long_string STRING DEFAULT ?' 
+USING 'This is a very long string that contains multiple words and should test the parameter substitution with lengthy content to ensure it works correctly with large parameter values';
+SELECT long_string, typeof(long_string);
+
+-- Test empty string parameter
+EXECUTE IMMEDIATE 'DECLARE VARIABLE empty_string STRING DEFAULT ?' 
+USING '';
+SELECT empty_string, typeof(empty_string);
+
+-- Test string with special characters and unicode
+EXECUTE IMMEDIATE 'DECLARE VARIABLE special_chars STRING DEFAULT ?' 
+USING 'Special chars: \\n\\t\\r\\\\ and unicode: café naïve résumé';
+SELECT special_chars, typeof(special_chars);
+
+-- Test string with SQL keywords as values
+EXECUTE IMMEDIATE 'DECLARE VARIABLE sql_keywords STRING DEFAULT ?' 
+USING 'SELECT INSERT UPDATE DELETE FROM WHERE JOIN';
+SELECT sql_keywords, typeof(sql_keywords);
+
+-- Test actual ARRAY parameter
+EXECUTE IMMEDIATE 'DECLARE VARIABLE array_param ARRAY<INT> DEFAULT ?' 
+USING ARRAY(1, 2, 3, 4, 5);
+SELECT array_param, typeof(array_param);
+
+-- Test actual STRUCT parameter (Spark supports this type)
+EXECUTE IMMEDIATE 'DECLARE VARIABLE struct_param STRUCT<name: STRING, age: INT, active: BOOLEAN> DEFAULT ?' 
+USING STRUCT('John', 25, true);
+SELECT struct_param, typeof(struct_param);
+
+-- Test MAP parameter
+EXECUTE IMMEDIATE 'DECLARE VARIABLE map_param MAP<STRING, INT> DEFAULT ?' 
+USING MAP('key1', 100, 'key2', 200, 'key3', 300);
+SELECT map_param, typeof(map_param);
+
+-- Test complex nested structure
+EXECUTE IMMEDIATE 'DECLARE VARIABLE nested_param STRUCT<user:STRUCT<name:STRING, age:INT>, scores:ARRAY<INT>> DEFAULT ?' 
+USING STRUCT(STRUCT('Jane', 30), ARRAY(95, 87, 92));
+SELECT nested_param, typeof(nested_param);
+
+-- Test JSON-like string parameter
+EXECUTE IMMEDIATE 'DECLARE VARIABLE json_param STRING DEFAULT ?' 
+USING '{"name": "Alice", "age": 28, "hobbies": ["reading", "swimming"], "address": {"street": "123 Main St", "city": "Boston"}}';
+SELECT json_param, typeof(json_param);
+
+-- Test numeric edge cases
+EXECUTE IMMEDIATE 'DECLARE VARIABLE big_int INT DEFAULT ?' 
+USING 2147483647;
+SELECT big_int, typeof(big_int);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE max_long BIGINT DEFAULT ?' 
+USING 9223372036854775807;
+SELECT max_long, typeof(max_long);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE tiny_byte TINYINT DEFAULT ?' 
+USING 127;
+SELECT tiny_byte, typeof(tiny_byte);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE small_short SMALLINT DEFAULT ?' 
+USING 32767;
+SELECT small_short, typeof(small_short);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE scientific_double DOUBLE DEFAULT ?' 
+USING 1.23456789e-10;
+SELECT scientific_double, typeof(scientific_double);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE float_param FLOAT DEFAULT ?' 
+USING 3.14159;
+SELECT float_param, typeof(float_param);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE precise_decimal DECIMAL(20,10) DEFAULT ?' 
+USING 123456789.0123456789;
+SELECT precise_decimal, typeof(precise_decimal);
+
+-- Test boolean parameters
+EXECUTE IMMEDIATE 'DECLARE VARIABLE bool_true BOOLEAN DEFAULT ?' 
+USING true;
+SELECT bool_true, typeof(bool_true);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE bool_false BOOLEAN DEFAULT ?' 
+USING false;
+SELECT bool_false, typeof(bool_false);
+
+-- Test timestamp parameter
+EXECUTE IMMEDIATE 'DECLARE VARIABLE timestamp_param TIMESTAMP DEFAULT ?' 
+USING TIMESTAMP '2023-12-25 14:30:45.123456';
+SELECT timestamp_param, typeof(timestamp_param);
+
+-- Test date parameter
+EXECUTE IMMEDIATE 'DECLARE VARIABLE date_param DATE DEFAULT ?' 
+USING DATE '2023-12-25';
+SELECT date_param, typeof(date_param);
+
+-- Test binary parameter
+EXECUTE IMMEDIATE 'DECLARE VARIABLE binary_param BINARY DEFAULT ?' 
+USING X'48656C6C6F20576F726C64';
+SELECT binary_param, typeof(binary_param);
+
+-- Test parameter with backslashes and escape sequences
+EXECUTE IMMEDIATE 'DECLARE VARIABLE escape_test STRING DEFAULT ?' 
+USING 'Path: C:\\\\Users\\\\Name\\\\Documents\\\\file.txt';
+SELECT escape_test, typeof(escape_test);
+
+-- Test parameter with newlines and tabs
+EXECUTE IMMEDIATE 'DECLARE VARIABLE multiline_param STRING DEFAULT ?' 
+USING 'Line 1\\nLine 2\\n\\tIndented line\\nLine 4';
+SELECT multiline_param, typeof(multiline_param);
+
+-- Test floating point special values
+EXECUTE IMMEDIATE 'DECLARE VARIABLE pos_inf DOUBLE DEFAULT ?' 
+USING CAST('Infinity' AS DOUBLE);
+SELECT pos_inf, typeof(pos_inf);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE neg_inf DOUBLE DEFAULT ?' 
+USING CAST('-Infinity' AS DOUBLE);
+SELECT neg_inf, typeof(neg_inf);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE nan_val DOUBLE DEFAULT ?' 
+USING CAST('NaN' AS DOUBLE);
+SELECT nan_val, typeof(nan_val);
+
+-- Test array of strings with quotes
+EXECUTE IMMEDIATE 'DECLARE VARIABLE string_array ARRAY<STRING> DEFAULT ?' 
+USING ARRAY('first\'s value', 'second "quoted" value', 'third\nwith\ttabs');
+SELECT string_array, typeof(string_array);
+
+-- Test array of structs
+EXECUTE IMMEDIATE 'DECLARE VARIABLE struct_array ARRAY<STRUCT<name:STRING, age:INT>> DEFAULT ?' 
+USING ARRAY(STRUCT('Alice', 25), STRUCT('Bob', 30), STRUCT('Charlie', 35));
+SELECT struct_array, typeof(struct_array);
+
+-- Test map with string keys and struct values
+EXECUTE IMMEDIATE 'DECLARE VARIABLE complex_map MAP<STRING, STRUCT<id:INT, active:BOOLEAN>> DEFAULT ?' 
+USING MAP('user1', STRUCT(1, true), 'user2', STRUCT(2, false));
+SELECT complex_map, typeof(complex_map);
+
+-- Test deeply nested structure
+EXECUTE IMMEDIATE 'DECLARE VARIABLE deep_nested STRUCT<level1:STRUCT<level2:STRUCT<data:ARRAY<MAP<STRING, INT>>>>> DEFAULT ?' 
+USING STRUCT(STRUCT(STRUCT(ARRAY(MAP('a', 1, 'b', 2), MAP('c', 3, 'd', 4)))));
+SELECT deep_nested, typeof(deep_nested);
+
+-- Test complex parameter with CREATE TABLE using properly typed defaults
+EXECUTE IMMEDIATE 'CREATE TABLE complex_defaults (
+  id INT, 
+  json_data STRING DEFAULT ?,
+  quoted_name STRING DEFAULT ?,
+  large_number BIGINT DEFAULT ?,
+  precise_val DECIMAL(15,5) DEFAULT ?,
+  bool_flag BOOLEAN DEFAULT ?,
+  created_date DATE DEFAULT ?
+) USING PARQUET' 
+USING '{"type": "user", "data": {"name": "Test\'User", "active": true}}',
+      'Name with \'quotes\' and "double quotes"',
+      9223372036854775807,
+      12345.67890,
+      true,
+      DATE '2023-12-25';
+DESCRIBE EXTENDED complex_defaults;
+
+-- Test case sensitivity in parameter values
+EXECUTE IMMEDIATE 'DECLARE VARIABLE case_sensitive STRING DEFAULT ?' 
+USING 'MiXeD CaSe StRiNg WiTh UPPER and lower';
+SELECT case_sensitive, typeof(case_sensitive);
+
+-- Test interval types
+EXECUTE IMMEDIATE 'DECLARE VARIABLE year_interval DEFAULT ?'
+USING INTERVAL '2' years;
+SELECT year_interval, typeof(year_interval);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE day_interval DEFAULT ?'
+USING INTERVAL '10' DAYS;
+SELECT day_interval, typeof(day_interval);
+
+-- cleanup complex test objects
+DROP TABLE IF EXISTS complex_defaults;
+
 -- cleanup DDL test objects
 DROP FUNCTION IF EXISTS test_func;
 DROP FUNCTION IF EXISTS test_func2;
