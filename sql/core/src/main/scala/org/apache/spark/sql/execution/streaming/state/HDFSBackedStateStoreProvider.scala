@@ -360,6 +360,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     this.hadoopConf = hadoopConf
     this.numberOfVersionsToRetainInMemory = storeConf.maxVersionsToRetainInMemory
 
+    val queryRunId = UUID.fromString(StateStoreProvider.getRunId(hadoopConf))
+    this.stateStoreProviderId = StateStoreProviderId(stateStoreId, queryRunId)
+
     // run a bunch of validation checks for this state store provider
     runValidation(useColumnFamilies, useMultipleValuesPerKey, keyStateEncoderSpec)
 
@@ -369,6 +372,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   }
 
   override def stateStoreId: StateStoreId = stateStoreId_
+
+  override protected def logName: String =
+    s"${super.logName} StateStoreProviderId(queryRunId=${stateStoreProviderId.queryRunId})"
 
   /** Do maintenance backing data files, including creating snapshots and cleaning up old files */
   override def doMaintenance(): Unit = {
@@ -415,6 +421,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   @volatile private var hadoopConf: Configuration = _
   @volatile private var numberOfVersionsToRetainInMemory: Int = _
   @volatile private var numColsPrefixKey: Int = 0
+  @volatile private var stateStoreProviderId: StateStoreProviderId = _
 
   // TODO: The validation should be moved to a higher level so that it works for all state store
   // implementations

@@ -393,6 +393,9 @@ private[sql] class RocksDBStateStoreProvider
     this.rocksDBEventForwarder =
       Some(RocksDBEventForwarder(StateStoreProvider.getRunId(hadoopConf), stateStoreId))
 
+    val queryRunId = UUID.fromString(StateStoreProvider.getRunId(hadoopConf))
+    this.stateStoreProviderId = StateStoreProviderId(stateStoreId, queryRunId)
+
     if (useMultipleValuesPerKey) {
       require(useColumnFamilies, "Multiple values per key support requires column families to be" +
         " enabled in RocksDBStateStore.")
@@ -445,6 +448,9 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def stateStoreId: StateStoreId = stateStoreId_
+
+  override protected def logName: String =
+    s"${super.logName} StateStoreProviderId(queryRunId=${stateStoreProviderId.queryRunId})"
 
   override def getStore(version: Long, uniqueId: Option[String] = None): StateStore = {
     try {
@@ -520,6 +526,7 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var stateStoreEncoding: String = _
   @volatile private var stateSchemaProvider: Option[StateSchemaProvider] = _
   @volatile private var rocksDBEventForwarder: Option[RocksDBEventForwarder] = _
+  @volatile private var stateStoreProviderId: StateStoreProviderId = _
 
   protected def createRocksDB(
       dfsRootDir: String,
