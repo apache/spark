@@ -420,18 +420,18 @@ class PythonPipelineSuite
         .map(_.identifier) == Seq(graphIdentifier("a"), graphIdentifier("something")))
   }
 
-  test("create pipeline without table will throw NO_DATASET_IN_PIPELINE exception") {
+  test("create pipeline without table will throw NO_DATASETS_IN_PIPELINE exception") {
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""
             |spark.range(1)
             |""".stripMargin)
       },
-      condition = "NO_DATASET_IN_PIPELINE",
+      condition = "NO_DATASETS_IN_PIPELINE",
       parameters = Map.empty)
   }
 
-  test("create pipeline with only temp view will throw NO_DATASET_IN_PIPELINE exception") {
+  test("create pipeline with only temp view will throw NO_DATASETS_IN_PIPELINE exception") {
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""
@@ -440,11 +440,11 @@ class PythonPipelineSuite
             |  return spark.range(5)
             |""".stripMargin)
       },
-      condition = "NO_DATASET_IN_PIPELINE",
+      condition = "NO_DATASETS_IN_PIPELINE",
       parameters = Map.empty)
   }
 
-  test("create pipeline with only flow will throw NO_DATASET_IN_PIPELINE exception") {
+  test("create pipeline with only flow will throw NO_DATASETS_IN_PIPELINE exception") {
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""
@@ -453,7 +453,7 @@ class PythonPipelineSuite
             |  return spark.range(5)
             |""".stripMargin)
       },
-      condition = "NO_DATASET_IN_PIPELINE",
+      condition = "NO_DATASETS_IN_PIPELINE",
       parameters = Map.empty)
   }
 
