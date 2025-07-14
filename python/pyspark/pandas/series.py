@@ -376,9 +376,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     Parameters
     ----------
-    data : array-like, dict, or scalar value, pandas Series
+    data : array-like, dict, or scalar value, pandas Series, pandas-on-Spark Series
         Contains data stored in Series
-        Note that if `data` is a pandas Series, other arguments should not be used.
+        Note that if `data` is a Series, index, dtype, or name can also be
+        specified to override the original value.
     index : array-like or Index (1d)
         Values must be hashable and have the same length as `data`.
         Non-unique index values are allowed. Will default to
@@ -387,6 +388,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dict.
     dtype : numpy.dtype or None
         If None, dtype will be inferred
+    name : str, default None
+        The name to give to the Series.
     copy : boolean, default False
         Copy input data
     """
