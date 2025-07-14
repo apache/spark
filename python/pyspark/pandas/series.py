@@ -369,6 +369,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     pandas-on-Spark Series that corresponds to pandas Series logically. This holds Spark Column
     internally.
 
+    .. versionchanged:: 4.1.0
+        Support construction from a pandas-on-Spark Series input, which can be used with
+        additional parameters index, dtype, and name for overriding the original value.
+
     :ivar _internal: an internal immutable Frame to manage metadata.
     :type _internal: InternalFrame
     :ivar _psdf: Parent's pandas-on-Spark DataFrame
@@ -415,7 +419,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             assert not fastpath
 
             if name:
-                data.name = name
+                data = data.rename(name)
 
             if index:
                 data = data.reindex(index)
