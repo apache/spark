@@ -250,8 +250,9 @@ abstract class SparkFunSuite
       testNamePrefix: String,
       testTags: Tag*
   )(params: Seq[GridTestCase[A]])(testFun: A => Unit)(implicit dummy: DummyImplicit): Unit = {
-    for (GridTestCase(params, testNameSuffix) <- params) {
-      test(s"$testNamePrefix - $testNameSuffix", testTags: _*)(testFun(params))
+    params.foreach {
+      case GridTestCase(params, testNameSuffix) =>
+        test(s"$testNamePrefix - $testNameSuffix", testTags: _*)(testFun(params))
     }
   }
 
