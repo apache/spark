@@ -798,17 +798,24 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     }
   }
 
-  test("cast TimeType to integral types with overflow") {
+  test("cast TimeType to integral types with overflow with ansi on") {
     // Test overflow cases: 23:59:59 = 86399 seconds
-    val largeTime = Literal.create(LocalTime.of(23, 59, 59), TimeType(6))
+    val largeTime6 = Literal.create(LocalTime.of(23, 59, 59), TimeType(6))
+    val largeTime4 = Literal.create(LocalTime.of(23, 59, 59), TimeType(4))
 
     // Short and Byte should overflow and throw ArithmeticException (ANSI mode)
     // 86399 > Short.MaxValue (32767) and > Byte.MaxValue (127)
     checkExceptionInExpression[SparkArithmeticException](
-      cast(largeTime, ShortType),
-      castOverflowErrMsg(largeTime.value, TimeType(6), ShortType))
+      cast(largeTime6, ShortType),
+      castOverflowErrMsg(largeTime6.value, TimeType(6), ShortType))
     checkExceptionInExpression[SparkArithmeticException](
-      cast(largeTime, ByteType),
-      castOverflowErrMsg(largeTime.value, TimeType(6), ByteType))
+      cast(largeTime6, ByteType),
+      castOverflowErrMsg(largeTime6.value, TimeType(6), ByteType))
+    checkExceptionInExpression[SparkArithmeticException](
+      cast(largeTime4, ShortType),
+      castOverflowErrMsg(largeTime4.value, TimeType(4), ShortType))
+    checkExceptionInExpression[SparkArithmeticException](
+      cast(largeTime4, ByteType),
+      castOverflowErrMsg(largeTime4.value, TimeType(4), ByteType))
   }
 }

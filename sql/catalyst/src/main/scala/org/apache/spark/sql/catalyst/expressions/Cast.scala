@@ -2027,7 +2027,7 @@ case class Cast(
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "int", from, IntegerType)
-    case TimeType(_) => castTimeToIntegralTypeCode(ctx, "int", from, IntegerType)
+    case _: TimeType => castTimeToIntegralTypeCode(ctx, "int", from, IntegerType)
     case DecimalType() => castDecimalToIntegralTypeCode("int")
     case LongType if ansiEnabled =>
       castIntegralTypeToIntegralTypeExactCode(ctx, "int", from, IntegerType)

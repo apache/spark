@@ -908,17 +908,22 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     }
   }
 
-  test("cast time to integral types with overflow") {
+  test("cast time to integral types with overflow with ansi off") {
     // Create a time that will overflow Byte and Short: 23:59:59 = 86399 seconds
-    val largeTime = Literal.create(LocalTime.of(23, 59, 59), TimeType(6))
+    val largeTime6 = Literal.create(LocalTime.of(23, 59, 59), TimeType(6))
+    val largeTime1 = Literal.create(LocalTime.of(23, 59, 59), TimeType(1))
 
     // Long and Int should work (86399 fits in both)
-    checkEvaluation(cast(largeTime, LongType), 86399L)
-    checkEvaluation(cast(largeTime, IntegerType), 86399)
+    checkEvaluation(cast(largeTime6, LongType), 86399L)
+    checkEvaluation(cast(largeTime6, IntegerType), 86399)
 
     // Short and Byte should overflow and return null (non-ANSI mode)
     // 86399 > Short.MaxValue (32767) and > Byte.MaxValue (127)
-    checkEvaluation(cast(largeTime, ShortType), null)
-    checkEvaluation(cast(largeTime, ByteType), null)
+    checkEvaluation(cast(largeTime6, ShortType), null)
+    checkEvaluation(cast(largeTime6, ByteType), null)
+
+    checkEvaluation(cast(largeTime1, ShortType), null)
+    checkEvaluation(cast(largeTime1, ByteType), null)
+
   }
 }

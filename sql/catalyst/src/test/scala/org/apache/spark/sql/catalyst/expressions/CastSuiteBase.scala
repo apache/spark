@@ -1517,7 +1517,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(smallTime, LongType), 112L)
 
     // Test edge cases
-    val midnight = Literal.create(LocalTime.of(0, 0, 0), TimeType(6)) // 0 seconds
+    val midnight = Literal.create(LocalTime.MIDNIGHT, TimeType(6)) // 0 seconds
     checkEvaluation(cast(midnight, ByteType), 0.toByte)
     checkEvaluation(cast(midnight, ShortType), 0.toShort)
     checkEvaluation(cast(midnight, IntegerType), 0)
@@ -1527,6 +1527,32 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val fractionalTime = Literal.create(LocalTime.of(0, 0, 17, 500000000), TimeType(6))
     checkEvaluation(cast(fractionalTime, IntegerType), 17)
     checkEvaluation(cast(fractionalTime, LongType), 17L)
+
+    val noon6 = Literal.create(LocalTime.NOON, TimeType(6)) // 12:00:00 = 43200 seconds
+    val oneTwoThreeTime5 = Literal.create(LocalTime.of(1, 2, 3), TimeType(5))
+    val maxTime4 = Literal.create(
+      LocalTime.of(23, 59, 59, 999999999),
+      TimeType(4)
+    )
+
+    checkEvaluation(cast(noon6, IntegerType), 43200)
+    checkEvaluation(cast(noon6, LongType), 43200L)
+
+    checkEvaluation(cast(oneTwoThreeTime5, IntegerType), 3723)
+    checkEvaluation(cast(oneTwoThreeTime5, LongType), 3723L)
+
+    checkEvaluation(cast(maxTime4, IntegerType), 86399) // Truncated to 86399 seconds
+    checkEvaluation(cast(maxTime4, LongType), 86399L)
+
+
+    // Test different precisions with Noon
+    val noon0 = Literal.create(LocalTime.NOON, TimeType(0))
+    val noon2 = Literal.create(LocalTime.NOON, TimeType(2))
+    val noon4 = Literal.create(LocalTime.NOON, TimeType(4))
+
+    checkEvaluation(cast(noon0, IntegerType), 43200)
+    checkEvaluation(cast(noon2, IntegerType), 43200)
+    checkEvaluation(cast(noon4, IntegerType), 43200)
 
   }
 }
