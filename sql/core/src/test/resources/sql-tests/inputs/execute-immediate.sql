@@ -220,6 +220,82 @@ DESCRIBE FUNCTION EXTENDED test_func;
 EXECUTE IMMEDIATE 'CREATE FUNCTION test_func2(x INT DEFAULT ?) RETURNS INT RETURN x * ?' USING 1, 2;
 DESCRIBE FUNCTION EXTENDED test_func2;
 
+-- =============================================================================
+-- COMPREHENSIVE TESTS FOR MULTIPLE PARAMETER CONSUMPTION
+-- =============================================================================
+
+-- Test CREATE FUNCTION with multiple positional parameters across inputParamText, exprText, queryText
+EXECUTE IMMEDIATE 'CREATE FUNCTION multi_param_func(a INT DEFAULT ?, b INT DEFAULT ?) RETURNS INT RETURN a + b + ?' 
+USING 10, 20, 5;
+DESCRIBE FUNCTION EXTENDED multi_param_func;
+
+-- Test CREATE FUNCTION table function with parameters in all three sections
+EXECUTE IMMEDIATE 'CREATE FUNCTION table_func(x INT DEFAULT ?, y INT DEFAULT ?) RETURNS TABLE(result INT) RETURN SELECT x + y + ? as result' 
+USING 1, 2, 3;
+DESCRIBE FUNCTION EXTENDED table_func;
+
+-- Test CREATE TABLE with multiple columns having positional parameters
+EXECUTE IMMEDIATE 'CREATE TABLE multi_col_table (id INT DEFAULT ?, name STRING DEFAULT ?, score INT DEFAULT ?, active BOOLEAN DEFAULT ?) USING PARQUET' 
+USING 1, 'default_name', 100, true;
+DESCRIBE EXTENDED multi_col_table;
+
+-- Test CREATE TABLE with generation expressions and defaults using positional parameters
+EXECUTE IMMEDIATE 'CREATE TABLE gen_and_default (id INT DEFAULT ?, doubled INT GENERATED ALWAYS AS (id * ?), tripled INT GENERATED ALWAYS AS (id * ?)) USING PARQUET' 
+USING 42, 2, 3;
+DESCRIBE EXTENDED gen_and_default;
+
+-- Test ALTER TABLE ADD COLUMN with multiple columns using positional parameters
+EXECUTE IMMEDIATE 'ALTER TABLE multi_col_table ADD COLUMN (status STRING DEFAULT ?, priority INT DEFAULT ?, created_at STRING DEFAULT ?)' 
+USING 'pending', 1, '2023-01-01';
+DESCRIBE EXTENDED multi_col_table;
+
+-- Test ALTER TABLE ALTER COLUMN with multiple columns using positional parameters
+EXECUTE IMMEDIATE 'ALTER TABLE multi_col_table ALTER COLUMN score SET DEFAULT ?' 
+USING 200;
+EXECUTE IMMEDIATE 'ALTER TABLE multi_col_table ALTER COLUMN priority SET DEFAULT ?' 
+USING 5;
+DESCRIBE EXTENDED multi_col_table;
+
+-- Test complex CREATE FUNCTION with many positional parameters
+EXECUTE IMMEDIATE 'CREATE FUNCTION complex_func(a INT DEFAULT ?, b STRING DEFAULT ?, c DOUBLE DEFAULT ?) RETURNS STRING RETURN CONCAT(b, CAST(a + c + ? AS STRING))' 
+USING 10, 'prefix_', 3.14, 100;
+DESCRIBE FUNCTION EXTENDED complex_func;
+
+-- Test CREATE TABLE with mixed defaults and generation expressions
+EXECUTE IMMEDIATE 'CREATE TABLE mixed_expressions (
+  id INT DEFAULT ?,
+  name STRING DEFAULT ?,
+  base_score INT DEFAULT ?,
+  bonus_score INT GENERATED ALWAYS AS (base_score + ?),
+  total_score INT GENERATED ALWAYS AS (base_score + bonus_score + ?),
+  description STRING DEFAULT ?
+) USING PARQUET' 
+USING 1, 'test', 50, 10, 5, 'default_desc';
+DESCRIBE EXTENDED mixed_expressions;
+
+-- Test CREATE VIEW with positional parameters (should consume 1 parameter)
+EXECUTE IMMEDIATE 'CREATE VIEW param_view AS SELECT * FROM multi_col_table WHERE score > ?' 
+USING 150;
+DESCRIBE EXTENDED param_view;
+
+-- Test ALTER VIEW AS with positional parameters
+EXECUTE IMMEDIATE 'ALTER VIEW param_view AS SELECT id, name FROM multi_col_table WHERE score > ? AND priority > ?' 
+USING 100, 3;
+DESCRIBE EXTENDED param_view;
+
+-- Test DECLARE VARIABLE with positional parameters
+EXECUTE IMMEDIATE 'DECLARE VARIABLE test_var_pos INT DEFAULT ?' 
+USING 999;
+SELECT test_var_pos;
+
+-- Test error case: not enough positional parameters for CREATE FUNCTION
+EXECUTE IMMEDIATE 'CREATE FUNCTION error_func(x INT DEFAULT ?) RETURNS INT RETURN x + ?' 
+USING 10;
+
+-- Test error case: not enough positional parameters for CREATE TABLE
+EXECUTE IMMEDIATE 'CREATE TABLE error_table_pos (id INT DEFAULT ?, name STRING DEFAULT ?) USING PARQUET' 
+USING 1;
+
 -- Advanced DDL tests with parameter markers
 -- test nested DDL with parameter markers
 EXECUTE IMMEDIATE 'CREATE VIEW nested_view AS SELECT test_func(:input_val) as result' USING 20 as input_val;
@@ -237,9 +313,16 @@ DESCRIBE EXTENDED multi_param;
 -- cleanup DDL test objects
 DROP FUNCTION IF EXISTS test_func;
 DROP FUNCTION IF EXISTS test_func2;
+DROP FUNCTION IF EXISTS multi_param_func;
+DROP FUNCTION IF EXISTS table_func;
+DROP FUNCTION IF EXISTS complex_func;
 DROP VIEW IF EXISTS nested_view;
+DROP VIEW IF EXISTS param_view;
 DROP TABLE IF EXISTS gen_table;
 DROP TABLE IF EXISTS multi_param;
+DROP TABLE IF EXISTS multi_col_table;
+DROP TABLE IF EXISTS gen_and_default;
+DROP TABLE IF EXISTS mixed_expressions;
 
 DROP VIEW IF EXISTS test_view;
 DROP VIEW IF EXISTS test_view2;

@@ -332,7 +332,8 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
 
     val newChild = performSqlSubstitution(child, { (sql, rule) =>
       val parser = new SubstituteParamsParser()
-      parser.substitute(sql, rule, namedValues)
+      val (substitutedSql, _) = parser.substitute(sql, rule, namedValues)
+      substitutedSql
     })
 
     bind(newChild) { case NamedParameter(name) if args.contains(name) => args(name) }
@@ -350,10 +351,18 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
 
     val positionalValues = args.map(expressionToSqlValue).toList
 
-    val newChild = performSqlSubstitution(child, { (sql, rule) =>
+    // Track consumed parameters during SQL substitution with a stateful function
+    var totalConsumedParams = 0
+    val statefulSubstitutionFn: (String, SubstitutionRule) => String = { (sql, rule) =>
       val parser = new SubstituteParamsParser()
-      parser.substitute(sql, rule, positionalParams = positionalValues)
-    })
+      val availableParams = positionalValues.drop(totalConsumedParams)
+      val (substitutedSql, consumedParams) = parser.substitute(sql, rule,
+        positionalParams = availableParams)
+      totalConsumedParams += consumedParams
+      substitutedSql
+    }
+
+    val newChild = performSqlSubstitution(child, statefulSubstitutionFn)
 
     val positions = scala.collection.mutable.Set.empty[Int]
     bind(newChild) { case p @ PosParameter(pos) => positions.add(pos); p }

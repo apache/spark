@@ -1271,7 +1271,7 @@ Extended Usage:
     No example/argument for test_func.
 
 Function: spark_catalog.default.test_func
-Usage: {"catalogAndNamespace.part.0":"spark_catalog","referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.inputParam":"x INT DEFAULT 10","sqlFunction.expression":"x + 5","catalogAndNamespace.numParts":"2","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8","sqlFunction.createTime":"1752513953704","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","referredTempVariableNames":"[]"}
+Usage: {"catalogAndNamespace.part.0":"spark_catalog","referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.inputParam":"x INT DEFAULT 10","sqlFunction.expression":"x + 5","catalogAndNamespace.numParts":"2","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8","sqlFunction.createTime":"1752519168063","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","referredTempVariableNames":"[]"}
 
 
 -- !query
@@ -1279,30 +1279,433 @@ EXECUTE IMMEDIATE 'CREATE FUNCTION test_func2(x INT DEFAULT ?) RETURNS INT RETUR
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Expected 1 positional parameters, but got 2
+
 
 
 -- !query
 DESCRIBE FUNCTION EXTENDED test_func2
 -- !query schema
+struct<function_desc:string>
+-- !query output
+Class: sqlFunction.
+Extended Usage:
+    No example/argument for test_func2.
+
+Function: spark_catalog.default.test_func2
+Usage: {"catalogAndNamespace.part.0":"spark_catalog","referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.inputParam":"x INT DEFAULT 1","sqlFunction.expression":"x * 2","catalogAndNamespace.numParts":"2","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8","sqlFunction.createTime":"1752519168083","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","referredTempVariableNames":"[]"}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE FUNCTION multi_param_func(a INT DEFAULT ?, b INT DEFAULT ?) RETURNS INT RETURN a + b + ?' 
+USING 10, 20, 5
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE FUNCTION EXTENDED multi_param_func
+-- !query schema
+struct<function_desc:string>
+-- !query output
+Class: sqlFunction.
+Extended Usage:
+    No example/argument for multi_param_func.
+
+Function: spark_catalog.default.multi_param_func
+Usage: {"catalogAndNamespace.part.0":"spark_catalog","referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.inputParam":"a INT DEFAULT 10, b INT DEFAULT 20","sqlFunction.expression":"a + b + 5","catalogAndNamespace.numParts":"2","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8","sqlFunction.createTime":"1752519168095","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","referredTempVariableNames":"[]"}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE FUNCTION table_func(x INT DEFAULT ?, y INT DEFAULT ?) RETURNS TABLE(result INT) RETURN SELECT x + y + ? as result' 
+USING 1, 2, 3
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE FUNCTION EXTENDED table_func
+-- !query schema
+struct<function_desc:string>
+-- !query output
+Class: sqlFunction.
+Extended Usage:
+    No example/argument for table_func.
+
+Function: spark_catalog.default.table_func
+Usage: {"catalogAndNamespace.part.0":"spark_catalog","referredTempViewNames":"[]","sqlFunction.isTableFunc":"true","sqlFunction.inputParam":"x INT DEFAULT 1, y INT DEFAULT 2","catalogAndNamespace.numParts":"2","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8","sqlFunction.createTime":"1752519168120","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","sqlFunction.query":"SELECT x + y + 3 as result","sqlFunction.returnType":"result INT","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","referredTempVariableNames":"[]"}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE multi_col_table (id INT DEFAULT ?, name STRING DEFAULT ?, score INT DEFAULT ?, active BOOLEAN DEFAULT ?) USING PARQUET' 
+USING 1, 'default_name', 100, true
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE EXTENDED multi_col_table
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+id                  	int                 	                    
+name                	string              	                    
+score               	int                 	                    
+active              	boolean             	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	multi_col_table     	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	PARQUET             	                    
+Location [not included in comparison]/{warehouse_dir}/multi_col_table	                    
+                    	                    	                    
+# Column Default Values	                    	                    
+id                  	int                 	1                   
+name                	string              	'default_name'      
+score               	int                 	100                 
+active              	boolean             	true
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE gen_and_default (id INT DEFAULT ?, doubled INT GENERATED ALWAYS AS (id * ?), tripled INT GENERATED ALWAYS AS (id * ?)) USING PARQUET' 
+USING 42, 2, 3
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "generated columns",
+    "tableName" : "`spark_catalog`.`default`.`gen_and_default`"
+  }
+}
+
+
+-- !query
+DESCRIBE EXTENDED gen_and_default
+-- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
   "messageParameters" : {
-    "routineName" : "`test_func2`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+    "relationName" : "`gen_and_default`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 28,
-    "stopIndex" : 37,
-    "fragment" : "test_func2"
+    "startIndex" : 19,
+    "stopIndex" : 33,
+    "fragment" : "gen_and_default"
   } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE multi_col_table ADD COLUMN (status STRING DEFAULT ?, priority INT DEFAULT ?, created_at STRING DEFAULT ?)' 
+USING 'pending', 1, '2023-01-01'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE EXTENDED multi_col_table
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+id                  	int                 	                    
+name                	string              	                    
+score               	int                 	                    
+active              	boolean             	                    
+status              	string              	                    
+priority            	int                 	                    
+created_at          	string              	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	multi_col_table     	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	PARQUET             	                    
+Location [not included in comparison]/{warehouse_dir}/multi_col_table	                    
+                    	                    	                    
+# Column Default Values	                    	                    
+id                  	int                 	1                   
+name                	string              	'default_name'      
+score               	int                 	100                 
+active              	boolean             	true                
+status              	string              	'pending'           
+priority            	int                 	1                   
+created_at          	string              	'2023-01-01'
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE multi_col_table ALTER COLUMN score SET DEFAULT ?' 
+USING 200
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE multi_col_table ALTER COLUMN priority SET DEFAULT ?' 
+USING 5
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE EXTENDED multi_col_table
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+id                  	int                 	                    
+name                	string              	                    
+score               	int                 	                    
+active              	boolean             	                    
+status              	string              	                    
+priority            	int                 	                    
+created_at          	string              	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	multi_col_table     	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	PARQUET             	                    
+Location [not included in comparison]/{warehouse_dir}/multi_col_table	                    
+                    	                    	                    
+# Column Default Values	                    	                    
+id                  	int                 	1                   
+name                	string              	'default_name'      
+score               	int                 	200                 
+active              	boolean             	true                
+status              	string              	'pending'           
+priority            	int                 	5                   
+created_at          	string              	'2023-01-01'
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE FUNCTION complex_func(a INT DEFAULT ?, b STRING DEFAULT ?, c DOUBLE DEFAULT ?) RETURNS STRING RETURN CONCAT(b, CAST(a + c + ? AS STRING))' 
+USING 10, 'prefix_', 3.14, 100
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE FUNCTION EXTENDED complex_func
+-- !query schema
+struct<function_desc:string>
+-- !query output
+Class: sqlFunction.
+Extended Usage:
+    No example/argument for complex_func.
+
+Function: spark_catalog.default.complex_func
+Usage: {"catalogAndNamespace.part.0":"spark_catalog","referredTempViewNames":"[]","sqlFunction.returnType":"STRING","sqlFunction.isTableFunc":"false","sqlFunction.inputParam":"a INT DEFAULT 10, b STRING DEFAULT 'prefix_', c DOUBLE DEFAULT 3.14BD","sqlFunction.expression":"CONCAT(b, CAST(a + c + 100 AS STRING))","catalogAndNamespace.numParts":"2","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8","sqlFunction.createTime":"1752519168271","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","referredTempVariableNames":"[]"}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE mixed_expressions (
+  id INT DEFAULT ?,
+  name STRING DEFAULT ?,
+  base_score INT DEFAULT ?,
+  bonus_score INT GENERATED ALWAYS AS (base_score + ?),
+  total_score INT GENERATED ALWAYS AS (base_score + bonus_score + ?),
+  description STRING DEFAULT ?
+) USING PARQUET' 
+USING 1, 'test', 50, 10, 5, 'default_desc'
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "generated columns",
+    "tableName" : "`spark_catalog`.`default`.`mixed_expressions`"
+  }
+}
+
+
+-- !query
+DESCRIBE EXTENDED mixed_expressions
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`mixed_expressions`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 35,
+    "fragment" : "mixed_expressions"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE VIEW param_view AS SELECT * FROM multi_col_table WHERE score > ?' 
+USING 150
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE EXTENDED param_view
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+id                  	int                 	                    
+name                	string              	                    
+score               	int                 	                    
+active              	boolean             	                    
+status              	string              	                    
+priority            	int                 	                    
+created_at          	string              	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	param_view          	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	VIEW                	                    
+View Text           	SELECT * FROM multi_col_table WHERE score > 150	                    
+View Original Text  	SELECT * FROM multi_col_table WHERE score > 150	                    
+View Schema Mode    	COMPENSATION        	                    
+View Catalog and Namespace	spark_catalog.default	                    
+View Query Output Columns	[`id`, `name`, `score`, `active`, `status`, `priority`, `created_at`]	                    
+                    	                    	                    
+# Column Default Values	                    	                    
+id                  	int                 	1                   
+name                	string              	'default_name'      
+score               	int                 	200                 
+active              	boolean             	true                
+status              	string              	'pending'           
+priority            	int                 	5                   
+created_at          	string              	'2023-01-01'
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER VIEW param_view AS SELECT id, name FROM multi_col_table WHERE score > ? AND priority > ?' 
+USING 100, 3
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE EXTENDED param_view
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+id                  	int                 	                    
+name                	string              	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	param_view          	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	VIEW                	                    
+View Text           	SELECT id, name FROM multi_col_table WHERE score > 100 AND priority > 3	                    
+View Original Text  	SELECT id, name FROM multi_col_table WHERE score > 100 AND priority > 3	                    
+View Schema Mode    	COMPENSATION        	                    
+View Catalog and Namespace	spark_catalog.default	                    
+View Query Output Columns	[`id`, `name`]      	                    
+                    	                    	                    
+# Column Default Values	                    	                    
+id                  	int                 	1                   
+name                	string              	'default_name'
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE test_var_pos INT DEFAULT ?' 
+USING 999
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT test_var_pos
+-- !query schema
+struct<test_var_pos:int>
+-- !query output
+999
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE FUNCTION error_func(x INT DEFAULT ?) RETURNS INT RETURN x + ?' 
+USING 10
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNBOUND_SQL_PARAMETER",
+  "sqlState" : "42P02",
+  "messageParameters" : {
+    "name" : "?"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE error_table_pos (id INT DEFAULT ?, name STRING DEFAULT ?) USING PARQUET' 
+USING 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNBOUND_SQL_PARAMETER",
+  "sqlState" : "42P02",
+  "messageParameters" : {
+    "name" : "?"
+  }
 }
 
 
@@ -1427,7 +1830,39 @@ struct<>
 
 
 -- !query
+DROP FUNCTION IF EXISTS multi_param_func
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS table_func
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS complex_func
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 DROP VIEW IF EXISTS nested_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW IF EXISTS param_view
 -- !query schema
 struct<>
 -- !query output
@@ -1444,6 +1879,30 @@ struct<>
 
 -- !query
 DROP TABLE IF EXISTS multi_param
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS multi_col_table
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS gen_and_default
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS mixed_expressions
 -- !query schema
 struct<>
 -- !query output

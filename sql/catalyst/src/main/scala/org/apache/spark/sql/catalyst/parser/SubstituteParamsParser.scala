@@ -54,13 +54,14 @@ class SubstituteParamsParser extends Logging {
    * @param rule             The type of SQL rule to parse (Query or Expression)
    * @param namedParams      Map of named parameter values (paramName -> value)
    * @param positionalParams List of positional parameter values in order
-   * @return Modified SQL string with parameters substituted
+   * @return A tuple of (modified SQL string with parameters substituted,
+   *         number of consumed positional parameters)
    */
   def substitute(
                   sqlText: String,
                   rule: SubstitutionRule,
                   namedParams: Map[String, String] = Map.empty,
-                  positionalParams: List[String] = List.empty): String = {
+                  positionalParams: List[String] = List.empty): (String, Int) = {
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(sqlText)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
@@ -82,7 +83,11 @@ class SubstituteParamsParser extends Logging {
     val parameterLocations = astBuilder.extractParameterLocations(ctx)
 
     // Substitute parameters in the original text
-    substituteAtLocations(sqlText, parameterLocations, namedParams, positionalParams)
+    val substitutedSql = substituteAtLocations(sqlText, parameterLocations, namedParams,
+      positionalParams)
+    val consumedPositionalParams = parameterLocations.positionalParameterLocations.length
+
+    (substitutedSql, consumedPositionalParams)
   }
 
   /**
@@ -141,8 +146,8 @@ class SubstituteParamsParser extends Logging {
     }
 
     // Handle positional parameters
-    if (locations.positionalParameterLocations.length < positionalParams.length) {
-      new AnalysisException(
+    if (locations.positionalParameterLocations.length > positionalParams.length) {
+      throw new AnalysisException(
         errorClass = "UNBOUND_SQL_PARAMETER",
         messageParameters = Map("name" -> "?"))
     }
@@ -185,7 +190,7 @@ object SubstituteParamsParser {
       sqlText: String,
       rule: SubstitutionRule,
       namedParams: Map[String, String] = Map.empty,
-      positionalParams: List[String] = List.empty): String =
+      positionalParams: List[String] = List.empty): (String, Int) =
     instance.substitute(sqlText, rule, namedParams, positionalParams)
 }
 

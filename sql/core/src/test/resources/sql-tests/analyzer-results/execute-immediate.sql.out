@@ -1115,28 +1115,251 @@ DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 -- !query
 EXECUTE IMMEDIATE 'CREATE FUNCTION test_func2(x INT DEFAULT ?) RETURNS INT RETURN x * ?' USING 1, 2
 -- !query analysis
-java.lang.IllegalArgumentException
-Expected 1 positional parameters, but got 2
+CreateSQLFunctionCommand spark_catalog.default.test_func2, x INT DEFAULT 1, INT, x * 2, false, false, false, false
 
 
 -- !query
 DESCRIBE FUNCTION EXTENDED test_func2
 -- !query analysis
+DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, true
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE FUNCTION multi_param_func(a INT DEFAULT ?, b INT DEFAULT ?) RETURNS INT RETURN a + b + ?' 
+USING 10, 20, 5
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.multi_param_func, a INT DEFAULT 10, b INT DEFAULT 20, INT, a + b + 5, false, false, false, false
+
+
+-- !query
+DESCRIBE FUNCTION EXTENDED multi_param_func
+-- !query analysis
+DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, true
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE FUNCTION table_func(x INT DEFAULT ?, y INT DEFAULT ?) RETURNS TABLE(result INT) RETURN SELECT x + y + ? as result' 
+USING 1, 2, 3
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.table_func, x INT DEFAULT 1, y INT DEFAULT 2, result INT, SELECT x + y + 3 as result, true, false, false, false
+
+
+-- !query
+DESCRIBE FUNCTION EXTENDED table_func
+-- !query analysis
+DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, true
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE multi_col_table (id INT DEFAULT ?, name STRING DEFAULT ?, score INT DEFAULT ?, active BOOLEAN DEFAULT ?) USING PARQUET' 
+USING 1, 'default_name', 100, true
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`multi_col_table`, false
+
+
+-- !query
+DESCRIBE EXTENDED multi_col_table
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`multi_col_table`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE gen_and_default (id INT DEFAULT ?, doubled INT GENERATED ALWAYS AS (id * ?), tripled INT GENERATED ALWAYS AS (id * ?)) USING PARQUET' 
+USING 42, 2, 3
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "generated columns",
+    "tableName" : "`spark_catalog`.`default`.`gen_and_default`"
+  }
+}
+
+
+-- !query
+DESCRIBE EXTENDED gen_and_default
+-- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
   "messageParameters" : {
-    "routineName" : "`test_func2`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+    "relationName" : "`gen_and_default`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 28,
-    "stopIndex" : 37,
-    "fragment" : "test_func2"
+    "startIndex" : 19,
+    "stopIndex" : 33,
+    "fragment" : "gen_and_default"
   } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE multi_col_table ADD COLUMN (status STRING DEFAULT ?, priority INT DEFAULT ?, created_at STRING DEFAULT ?)' 
+USING 'pending', 1, '2023-01-01'
+-- !query analysis
+AlterTableAddColumnsCommand `spark_catalog`.`default`.`multi_col_table`, [StructField(status,StringType,true), StructField(priority,IntegerType,true), StructField(created_at,StringType,true)]
+
+
+-- !query
+DESCRIBE EXTENDED multi_col_table
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`multi_col_table`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE multi_col_table ALTER COLUMN score SET DEFAULT ?' 
+USING 200
+-- !query analysis
+AlterTableChangeColumnCommand `spark_catalog`.`default`.`multi_col_table`, score, StructField(score,IntegerType,true)
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE multi_col_table ALTER COLUMN priority SET DEFAULT ?' 
+USING 5
+-- !query analysis
+AlterTableChangeColumnCommand `spark_catalog`.`default`.`multi_col_table`, priority, StructField(priority,IntegerType,true)
+
+
+-- !query
+DESCRIBE EXTENDED multi_col_table
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`multi_col_table`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE FUNCTION complex_func(a INT DEFAULT ?, b STRING DEFAULT ?, c DOUBLE DEFAULT ?) RETURNS STRING RETURN CONCAT(b, CAST(a + c + ? AS STRING))' 
+USING 10, 'prefix_', 3.14, 100
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.complex_func, a INT DEFAULT 10, b STRING DEFAULT 'prefix_', c DOUBLE DEFAULT 3.14BD, STRING, CONCAT(b, CAST(a + c + 100 AS STRING)), false, false, false, false
+
+
+-- !query
+DESCRIBE FUNCTION EXTENDED complex_func
+-- !query analysis
+DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, true
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE mixed_expressions (
+  id INT DEFAULT ?,
+  name STRING DEFAULT ?,
+  base_score INT DEFAULT ?,
+  bonus_score INT GENERATED ALWAYS AS (base_score + ?),
+  total_score INT GENERATED ALWAYS AS (base_score + bonus_score + ?),
+  description STRING DEFAULT ?
+) USING PARQUET' 
+USING 1, 'test', 50, 10, 5, 'default_desc'
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "generated columns",
+    "tableName" : "`spark_catalog`.`default`.`mixed_expressions`"
+  }
+}
+
+
+-- !query
+DESCRIBE EXTENDED mixed_expressions
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`mixed_expressions`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 35,
+    "fragment" : "mixed_expressions"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE VIEW param_view AS SELECT * FROM multi_col_table WHERE score > ?' 
+USING 150
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`param_view`, SELECT * FROM multi_col_table WHERE score > 150, false, false, PersistedView, COMPENSATION, true
+   +- Project [id#x, name#x, score#x, active#x, status#x, priority#x, created_at#x]
+      +- Filter (score#x > 150)
+         +- SubqueryAlias spark_catalog.default.multi_col_table
+            +- Relation spark_catalog.default.multi_col_table[id#x,name#x,score#x,active#x,status#x,priority#x,created_at#x] parquet
+
+
+-- !query
+DESCRIBE EXTENDED param_view
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`param_view`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER VIEW param_view AS SELECT id, name FROM multi_col_table WHERE score > ? AND priority > ?' 
+USING 100, 3
+-- !query analysis
+AlterViewAsCommand `spark_catalog`.`default`.`param_view`, SELECT id, name FROM multi_col_table WHERE score > 100 AND priority > 3, true
+   +- Project [id#x, name#x]
+      +- Filter ((score#x > 100) AND (priority#x > 3))
+         +- SubqueryAlias spark_catalog.default.multi_col_table
+            +- Relation spark_catalog.default.multi_col_table[id#x,name#x,score#x,active#x,status#x,priority#x,created_at#x] parquet
+
+
+-- !query
+DESCRIBE EXTENDED param_view
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`param_view`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE test_var_pos INT DEFAULT ?' 
+USING 999
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(999 as int), 999), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.test_var_pos
+
+
+-- !query
+SELECT test_var_pos
+-- !query analysis
+Project [variablereference(system.session.test_var_pos=999) AS test_var_pos#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE FUNCTION error_func(x INT DEFAULT ?) RETURNS INT RETURN x + ?' 
+USING 10
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNBOUND_SQL_PARAMETER",
+  "sqlState" : "42P02",
+  "messageParameters" : {
+    "name" : "?"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE error_table_pos (id INT DEFAULT ?, name STRING DEFAULT ?) USING PARQUET' 
+USING 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNBOUND_SQL_PARAMETER",
+  "sqlState" : "42P02",
+  "messageParameters" : {
+    "name" : "?"
+  }
 }
 
 
@@ -1212,13 +1435,37 @@ DropFunctionCommand spark_catalog.default.test_func, true, false
 -- !query
 DROP FUNCTION IF EXISTS test_func2
 -- !query analysis
-NoopCommand DROP FUNCTION, [test_func2]
+DropFunctionCommand spark_catalog.default.test_func2, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS multi_param_func
+-- !query analysis
+DropFunctionCommand spark_catalog.default.multi_param_func, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS table_func
+-- !query analysis
+DropFunctionCommand spark_catalog.default.table_func, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS complex_func
+-- !query analysis
+DropFunctionCommand spark_catalog.default.complex_func, true, false
 
 
 -- !query
 DROP VIEW IF EXISTS nested_view
 -- !query analysis
 DropTableCommand `spark_catalog`.`default`.`nested_view`, true, true, false
+
+
+-- !query
+DROP VIEW IF EXISTS param_view
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`param_view`, true, true, false
 
 
 -- !query
@@ -1233,6 +1480,27 @@ DROP TABLE IF EXISTS multi_param
 -- !query analysis
 DropTable true, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.multi_param
+
+
+-- !query
+DROP TABLE IF EXISTS multi_col_table
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.multi_col_table
+
+
+-- !query
+DROP TABLE IF EXISTS gen_and_default
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.gen_and_default
+
+
+-- !query
+DROP TABLE IF EXISTS mixed_expressions
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.mixed_expressions
 
 
 -- !query
