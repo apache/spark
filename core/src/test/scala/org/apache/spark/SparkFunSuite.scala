@@ -236,10 +236,22 @@ abstract class SparkFunSuite
     }
   }
 
+  @deprecated("For better test naming, use the gridTest method that accepts a Seq[GridTestCase].")
   protected def gridTest[A](testNamePrefix: String, testTags: Tag*)(params: Seq[A])(
     testFun: A => Unit): Unit = {
     for (param <- params) {
       test(testNamePrefix + s" ($param)", testTags: _*)(testFun(param))
+    }
+  }
+
+  case class GridTestCase[T](params: T, testNameSuffix: String)
+
+  protected def gridTest[A](
+      testNamePrefix: String,
+      testTags: Tag*
+  )(params: Seq[GridTestCase[A]])(testFun: A => Unit): Unit = {
+    for (GridTestCase(params, testNameSuffix) <- params) {
+      test(s"$testNamePrefix - $testNameSuffix", testTags: _*)(testFun(params))
     }
   }
 
