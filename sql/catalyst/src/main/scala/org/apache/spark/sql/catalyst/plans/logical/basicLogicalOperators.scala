@@ -669,8 +669,8 @@ case class Join(
     joinType match {
       case Inner | Cross | FullOuter | LeftOuter | RightOuter | LeftSingle =>
         val leftMaxRowsOption = left.maxRows
-        val rightMaxRowsOption = right.maxRows
-        if (leftMaxRowsOption.isDefined && rightMaxRowsOption.isDefined) {
+        val rightMaxRowsOption = if (leftMaxRowsOption.isDefined) right.maxRows else None
+        if (rightMaxRowsOption.isDefined) {
           val leftMaxRows = BigInt(leftMaxRowsOption.get)
           val rightMaxRows = BigInt(rightMaxRowsOption.get)
           val minRows = joinType match {
