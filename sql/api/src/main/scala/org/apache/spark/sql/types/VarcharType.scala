@@ -22,13 +22,34 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.util.CollationFactory
 
 @Experimental
-case class VarcharType(length: Int)
-    extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID, MaxLength(length)) {
+case class VarcharType(length: Int, override val collationId: Int = 0)
+  extends StringType(collationId, MaxLength(length)) {
   require(length >= 0, "The length of varchar type cannot be negative.")
 
   override def defaultSize: Int = length
-  override def typeName: String = s"varchar($length)"
-  override def jsonValue: JValue = JString(typeName)
-  override def toString: String = s"VarcharType($length)"
+  override def typeName: String =
+    if (isUTF8BinaryCollation) s"varchar($length)"
+    else s"varchar($length) collate $collationName"
+  /** [[jsonValue]] does not have collation, same as for [[StringType]] */
+  override def jsonValue: JValue = JString(s"varchar($length)")
+  override def toString: String =
+    if (isUTF8BinaryCollation) s"VarcharType($length)"
+    else s"VarcharType($length, $collationName)"
   private[spark] override def asNullable: VarcharType = this
+}
+
+/**
+ * A variant of [[VarcharType]] defined without explicit collation.
+ */
+@Experimental
+class DefaultVarcharType(override val length: Int)
+  extends VarcharType(length, CollationFactory.UTF8_BINARY_COLLATION_ID) {
+  override def typeName: String = s"varchar($length) collate $collationName"
+  override def toString: String = s"VarcharType($length, $collationName)"
+}
+
+@Experimental
+object DefaultVarcharType {
+  def apply(length: Int): DefaultVarcharType = new DefaultVarcharType(length)
+  def unapply(defaultVarcharType: DefaultVarcharType): Option[Int] = Some(defaultVarcharType.length)
 }

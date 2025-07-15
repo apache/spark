@@ -41,6 +41,7 @@ private[sql] trait SqlApiConf {
   def allowNegativeScaleOfDecimalEnabled: Boolean
   def charVarcharAsString: Boolean
   def preserveCharVarcharTypeInfo: Boolean
+  def charVarcharCollationsEnabled: Boolean
   def datetimeJava8ApiEnabled: Boolean
   def sessionLocalTimeZone: String
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value
@@ -82,6 +83,7 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def allowNegativeScaleOfDecimalEnabled: Boolean = false
   override def charVarcharAsString: Boolean = false
   override def preserveCharVarcharTypeInfo: Boolean = false
+  override def charVarcharCollationsEnabled: Boolean = false
   override def datetimeJava8ApiEnabled: Boolean = false
   override def sessionLocalTimeZone: String = TimeZone.getDefault.getID
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.CORRECTED

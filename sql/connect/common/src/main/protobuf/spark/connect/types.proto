@@ -147,11 +147,13 @@ message DataType {
   message Char {
     int32 length = 1;
     uint32 type_variation_reference = 2;
+    string collation = 3; // NOLINT
   }
 
   message VarChar {
     int32 length = 1;
     uint32 type_variation_reference = 2;
+    string collation = 3; // NOLINT
   }
 
   message Decimal {

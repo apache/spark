@@ -5312,6 +5312,12 @@ object SQLConf {
       .checkValue(_ >= 0, "The value must be non-negative.")
       .createWithDefault(8)
 
+  val CHAR_VARCHAR_COLLATIONS_ENABLED = buildConf("spark.sql.charVarcharCollationEnabled")
+    .doc("When true, Spark allows creation of collated char/varchar types.")
+    .version("4.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val OPTIMIZE_NULL_AWARE_ANTI_JOIN =
     buildConf("spark.sql.optimizeNullAwareAntiJoin")
       .internal()
@@ -7027,6 +7033,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def charVarcharAsString: Boolean = getConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING)
 
   def preserveCharVarcharTypeInfo: Boolean = getConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO)
+
+  def charVarcharCollationsEnabled: Boolean = getConf(SQLConf.CHAR_VARCHAR_COLLATIONS_ENABLED)
 
   def readSideCharPadding: Boolean = getConf(SQLConf.READ_SIDE_CHAR_PADDING)
 

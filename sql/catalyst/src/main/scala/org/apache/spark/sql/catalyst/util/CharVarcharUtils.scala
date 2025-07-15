@@ -63,7 +63,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       StructType(fields.map { field =>
         field.copy(dataType = replaceCharWithVarchar(field.dataType))
       })
-    case CharType(length) => VarcharType(length)
+    case CharType(length, collationId) => VarcharType(length, collationId)
     case _ => dt
   }
 
@@ -161,25 +161,25 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       charFuncName: Option[String],
       varcharFuncName: Option[String]): Expression = {
     dt match {
-      case CharType(length) if charFuncName.isDefined =>
+      case CharType(length, collationId) if charFuncName.isDefined =>
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
           if (SQLConf.get.preserveCharVarcharTypeInfo) {
-            CharType(length)
+            CharType(length, collationId)
           } else {
-            StringType
+            StringType(collationId)
           },
           charFuncName.get,
           expr :: Literal(length) :: Nil,
           returnNullable = false)
 
-      case VarcharType(length) if varcharFuncName.isDefined =>
+      case VarcharType(length, collationId) if varcharFuncName.isDefined =>
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
           if (SQLConf.get.preserveCharVarcharTypeInfo) {
-            VarcharType(length)
+            VarcharType(length, collationId)
           } else {
-            StringType
+            StringType(collationId)
           },
           varcharFuncName.get,
           expr :: Literal(length) :: Nil,
@@ -262,8 +262,10 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
   private def typeWithWiderCharLength(type1: DataType, type2: DataType): DataType = {
     (type1, type2) match {
-      case (CharType(len1), CharType(len2)) =>
-        CharType(math.max(len1, len2))
+      case (CharType(len1, collationId1), CharType(len2, collationId2)) =>
+        assert(collationId1 == collationId2,
+          "Collations of CharType should be the same for comparison.")
+        CharType(math.max(len1, len2), collationId1)
       case (StructType(fields1), StructType(fields2)) =>
         assert(fields1.length == fields2.length)
         StructType(fields1.zip(fields2).map { case (left, right) =>
@@ -281,7 +283,10 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       typeWithTargetCharLength: DataType,
       alwaysPad: Boolean): Option[Expression] = {
     (rawType, typeWithTargetCharLength) match {
-      case (CharType(len), CharType(target)) if alwaysPad || target > len =>
+      case (CharType(len, collationId1), CharType(target, collationId2))
+        if alwaysPad || target > len =>
+        assert(collationId1 == collationId2,
+          "Collations of CharType should be the same for comparison.")
         Some(StringRPad(expr, Literal(target)))
 
       case (StructType(fields), StructType(targets)) =>

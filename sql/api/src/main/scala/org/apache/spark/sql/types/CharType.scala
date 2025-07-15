@@ -23,13 +23,33 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.util.CollationFactory
 
 @Experimental
-case class CharType(length: Int)
-    extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID, FixedLength(length)) {
+case class CharType(length: Int, override val collationId: Int = 0)
+  extends StringType(collationId, FixedLength(length)) {
   require(length >= 0, "The length of char type cannot be negative.")
 
   override def defaultSize: Int = length
-  override def typeName: String = s"char($length)"
-  override def jsonValue: JValue = JString(typeName)
-  override def toString: String = s"CharType($length)"
+  override def typeName: String =
+    if (isUTF8BinaryCollation) s"char($length)"
+    else s"char($length) collate $collationName"
+  override def jsonValue: JValue = JString(s"char($length)")
+  override def toString: String =
+    if (isUTF8BinaryCollation) s"CharType($length)"
+    else s"CharType($length, $collationName)"
   private[spark] override def asNullable: CharType = this
+}
+
+/**
+ * A variant of [[CharType]] defined without explicit collation.
+ */
+@Experimental
+class DefaultCharType(override val length: Int)
+  extends CharType(length, CollationFactory.UTF8_BINARY_COLLATION_ID) {
+  override def typeName: String = s"char($length) collate $collationName"
+  override def toString: String = s"CharType($length, $collationName)"
+}
+
+@Experimental
+object DefaultCharType {
+  def apply(length: Int): DefaultCharType = new DefaultCharType(length)
+  def unapply(defaultCharType: DefaultCharType): Option[Int] = Some(defaultCharType.length)
 }

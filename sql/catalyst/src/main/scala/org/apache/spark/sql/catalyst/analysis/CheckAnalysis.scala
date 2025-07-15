@@ -1090,9 +1090,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
               // We don't need to handle nested types here which shall fail before.
               def canAlterColumnType(from: DataType, to: DataType): Boolean = (from, to) match {
-                case (CharType(l1), CharType(l2)) => l1 == l2
-                case (CharType(l1), VarcharType(l2)) => l1 <= l2
-                case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
+                case (CharType(l1, _), CharType(l2, _)) => l1 == l2
+                case (CharType(l1, _), VarcharType(l2, _)) => l1 <= l2
+                case (VarcharType(l1, _), VarcharType(l2, _)) => l1 <= l2
                 case _ => Cast.canUpCast(from, to)
               }
               if (!canAlterColumnType(field.dataType, newDataType)) {
