@@ -907,7 +907,6 @@ private[client] class Shim_v2_0 extends Shim with Logging {
 
   override def createTable(hive: Hive, table: Table, ifNotExists: Boolean): Unit = {
     recordHiveCall()
-    table.setNumBuckets(0)
     hive.createTable(table, ifNotExists)
   }
 

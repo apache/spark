@@ -170,7 +170,11 @@ case class OrcFileFormat() extends FileFormat with DataSourceRegister with Seria
           // ObjectInspector during recordReader creation itself and can
           // avoid NameNode call in unwrapOrcStructs per file.
           // Specifically would be helpful for partitioned datasets.
-          val orcReader = OrcFile.createReader(filePath, OrcFile.readerOptions(conf))
+          val orcReader = OrcFile.createReader(filePath,
+            // Hive blindly assumes that Timestamps are in UTC time zone
+            OrcFile.readerOptions(conf)
+              .convertToProlepticGregorian(false)
+              .useUTCTimestamp(true))
           new SparkOrcNewRecordReader(orcReader, conf, file.start, file.length)
         }
 
@@ -309,7 +313,9 @@ private[orc] class OrcOutputWriter(
       // Hive ORC initializes its private `writer` field at the first write.
       // For empty write task, we need to create it manually to record our meta.
       val options = OrcFile.writerOptions(context.getConfiguration)
-      options.inspector(serializer.structOI)
+        .inspector(serializer.structOI)
+        // .setProlepticGregorian(true)
+        // .useUTCTimestamp(true)
       writer = OrcFile.createWriter(new Path(path), options)
       // set the writer to make it flush meta on close
       writerField.set(recordWriter, writer)
