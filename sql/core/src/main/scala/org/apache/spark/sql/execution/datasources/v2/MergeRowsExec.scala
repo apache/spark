@@ -252,17 +252,14 @@ case class MergeRowsExec(
                 case _ => throw new IllegalArgumentException(
                   s"Unexpected context for KeepExec: ${keep.context}")
               }
-
               return keep.apply(row)
 
             case _: DiscardExec =>
               incrementDeleteMetric(sourcePresent)
-
               return null
 
             case split: SplitExec =>
               incrementUpdateMetric(sourcePresent)
-
               cachedExtraRow = split.projectExtraRow(row)
               return split.projectRow(row)
           }
