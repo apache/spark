@@ -212,7 +212,6 @@ class HistoryServer(
     provider.getListing()
   }
 
-
   def getEventLogsUnderProcess(): Int = {
     provider.getEventLogsUnderProcess()
   }
