@@ -53,6 +53,12 @@ object DataTypeProtoConverter {
       case proto.DataType.KindCase.DATE => DateType
       case proto.DataType.KindCase.TIMESTAMP => TimestampType
       case proto.DataType.KindCase.TIMESTAMP_NTZ => TimestampNTZType
+      case proto.DataType.KindCase.TIME =>
+        if (t.getTime.hasPrecision) {
+          TimeType(t.getTime.getPrecision)
+        } else {
+          TimeType()
+        }
 
       case proto.DataType.KindCase.CALENDAR_INTERVAL => CalendarIntervalType
       case proto.DataType.KindCase.YEAR_MONTH_INTERVAL =>
@@ -203,6 +209,12 @@ object DataTypeProtoConverter {
       case TimestampType => ProtoDataTypes.TimestampType
 
       case TimestampNTZType => ProtoDataTypes.TimestampNTZType
+
+      case TimeType(precision) =>
+        proto.DataType
+          .newBuilder()
+          .setTime(proto.DataType.Time.newBuilder().setPrecision(precision).build())
+          .build()
 
       case CalendarIntervalType => ProtoDataTypes.CalendarIntervalType
 
