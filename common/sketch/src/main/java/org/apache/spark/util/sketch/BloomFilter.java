@@ -312,7 +312,6 @@ public abstract class BloomFilter {
     return switch (version) {
       case V1 -> new BloomFilterImpl(numHashFunctions, numBits);
       case V2 -> new BloomFilterImplV2(numHashFunctions, numBits, seed);
-      default -> throw new IllegalArgumentException("Unknown BloomFilter version: " + version);
     };
   }
 }
