@@ -252,12 +252,18 @@ private[connect] object PipelinesHandler extends Logging {
     }
 
     // Create table filters based on refresh parameters
-    val refreshTablesFilter: TableFilter = if (fullRefreshAll || fullRefreshTables.nonEmpty) {
+    val refreshTablesFilter: TableFilter = if (fullRefreshAll) {
       NoTables
     } else if (refreshTables.nonEmpty) {
       SomeTables(parseTableNames(refreshTables))
-    } else {
-      AllTables
+    } else { // no tables specified for refresh
+      if (fullRefreshTablesFilter == NoTables) {
+        // If no tables are specified for full refresh, we default to refreshing all tables
+        AllTables
+      } else {
+        // If full refresh is specified, we do not need to refresh any additional tables
+        NoTables
+      }
     }
 
     // print full refresh tables filter for debugging purposes

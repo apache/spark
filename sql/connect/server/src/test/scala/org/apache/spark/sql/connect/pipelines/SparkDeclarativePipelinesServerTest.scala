@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.connect.pipelines
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.connect.{proto => sc}
+import org.apache.spark.connect.proto.{PipelineCommand, PipelineEvent}
 import org.apache.spark.sql.connect.{SparkConnectServerTest, SparkConnectTestUtils}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
 import org.apache.spark.sql.pipelines.utils.PipelineTest
+
 
 class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
 
@@ -125,15 +129,23 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
   def createPlanner(): SparkConnectPlanner =
     new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(spark))
 
-  def startPipelineAndWaitForCompletion(graphId: String): Unit = {
+  def startPipelineAndWaitForCompletion(
+     graphId: String,
+     customStartRunCommand: Option[PipelineCommand.StartRun] = None): ArrayBuffer[PipelineEvent] = {
     withClient { client =>
-      val startRunRequest = buildStartRunPlan(
-        sc.PipelineCommand.StartRun.newBuilder().setDataflowGraphId(graphId).build())
+      val capturedEvents = new ArrayBuffer[PipelineEvent]()
+      val startRunRequest = buildStartRunPlan(customStartRunCommand.getOrElse(
+        PipelineCommand.StartRun.newBuilder().setDataflowGraphId(graphId).build()))
       val responseIterator = client.execute(startRunRequest)
       // The response iterator will be closed when the pipeline is completed.
       while (responseIterator.hasNext) {
-        responseIterator.next()
+        val response = responseIterator.next()
+        if (response.hasPipelineEventResult) {
+          capturedEvents.append(response.getPipelineEventResult.getEvent)
+        }
       }
+      return capturedEvents
     }
+    ArrayBuffer.empty[PipelineEvent]
   }
 }
