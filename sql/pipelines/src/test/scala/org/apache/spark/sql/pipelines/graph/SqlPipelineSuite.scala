@@ -851,4 +851,65 @@ class SQLPipelineSuite extends PipelineTest with SQLTestUtils {
       )
     )
   }
+
+  test("No table defined pipeline fails with RUN_EMPTY_PIPELINE") {
+    val graphRegistrationContext = new TestGraphRegistrationContext(spark)
+    val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
+
+    sqlGraphRegistrationContext.processSqlFile(sqlText = "", sqlFilePath = "a.sql", spark = spark)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        graphRegistrationContext.toDataflowGraph
+      },
+      condition = "RUN_EMPTY_PIPELINE",
+      sqlState = Option("42617"),
+      parameters = Map.empty
+    )
+  }
+
+  test("Pipeline with only temp views fails with RUN_EMPTY_PIPELINE") {
+    val graphRegistrationContext = new TestGraphRegistrationContext(spark)
+    val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
+
+    sqlGraphRegistrationContext.processSqlFile(
+      sqlText = s"""
+                   |CREATE TEMPORARY VIEW a AS SELECT id FROM range(1,3);
+                   |""".stripMargin,
+      sqlFilePath = "a.sql",
+      spark = spark
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        graphRegistrationContext.toDataflowGraph
+      },
+      condition = "RUN_EMPTY_PIPELINE",
+      sqlState = Option("42617"),
+      parameters = Map.empty
+    )
+  }
+
+  test("Pipeline with only flow fails with RUN_EMPTY_PIPELINE") {
+    val graphRegistrationContext = new TestGraphRegistrationContext(spark)
+    val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
+
+    sqlGraphRegistrationContext.processSqlFile(
+      sqlText = s"""
+                   |CREATE FLOW f AS INSERT INTO a BY NAME
+                   |SELECT 1;
+                   |""".stripMargin,
+      sqlFilePath = "a.sql",
+      spark = spark
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        graphRegistrationContext.toDataflowGraph
+      },
+      condition = "RUN_EMPTY_PIPELINE",
+      sqlState = Option("42617"),
+      parameters = Map.empty
+    )
+  }
 }
