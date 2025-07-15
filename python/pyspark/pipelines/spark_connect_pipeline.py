@@ -65,12 +65,12 @@ def handle_pipeline_events(iter: Iterator[Dict[str, Any]]) -> None:
             log_with_provided_timestamp(event.message, dt)
 
 
-def start_run(spark: SparkSession, dataflow_graph_id: str) -> Iterator[Dict[str, Any]]:
+def start_run(spark: SparkSession, dataflow_graph_id: str, dry: bool) -> Iterator[Dict[str, Any]]:
     """Start a run of the dataflow graph in the Spark Connect server.
 
     :param dataflow_graph_id: The ID of the dataflow graph to start.
     """
-    inner_command = pb2.PipelineCommand.StartRun(dataflow_graph_id=dataflow_graph_id)
+    inner_command = pb2.PipelineCommand.StartRun(dataflow_graph_id=dataflow_graph_id, dry=dry)
     command = pb2.Command()
     command.pipeline_command.start_run.CopyFrom(inner_command)
     # Cast because mypy seems to think `spark`` is a function, not an object. Likely related to

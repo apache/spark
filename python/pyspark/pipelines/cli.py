@@ -217,7 +217,7 @@ def change_dir(path: Path) -> Generator[None, None, None]:
         os.chdir(prev)
 
 
-def run(spec_path: Path) -> None:
+def run(spec_path: Path, dry: bool) -> None:
     """Run the pipeline defined with the given spec."""
     log_with_curr_timestamp(f"Loading pipeline spec from {spec_path}...")
     spec = load_pipeline_spec(spec_path)
@@ -242,7 +242,7 @@ def run(spec_path: Path) -> None:
     register_definitions(spec_path, registry, spec)
 
     log_with_curr_timestamp("Starting run...")
-    result_iter = start_run(spark, dataflow_graph_id)
+    result_iter = start_run(spark, dataflow_graph_id, dry=dry)
     try:
         handle_pipeline_events(result_iter)
     finally:
@@ -255,6 +255,13 @@ if __name__ == "__main__":
 
     # "run" subcommand
     run_parser = subparsers.add_parser("run", help="Run a pipeline.")
+    run_parser.add_argument("--spec", help="Path to the pipeline spec.")
+
+    # "dry-run" subcommand
+    run_parser = subparsers.add_parser(
+        "dry-run",
+        help="Launch a run that just validates the graph and checks for errors.",
+    )
     run_parser.add_argument("--spec", help="Path to the pipeline spec.")
 
     # "init" subcommand
@@ -270,9 +277,9 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    assert args.command in ["run", "init"]
+    assert args.command in ["run", "dry-run", "init"]
 
-    if args.command == "run":
+    if args.command in ["run", "dry-run"]:
         if args.spec is not None:
             spec_path = Path(args.spec)
             if not spec_path.is_file():
@@ -283,6 +290,6 @@ if __name__ == "__main__":
         else:
             spec_path = find_pipeline_spec(Path.cwd())
 
-        run(spec_path=spec_path)
+        run(spec_path=spec_path, dry=(args.command == "dry-run"))
     elif args.command == "init":
         init(args.name)

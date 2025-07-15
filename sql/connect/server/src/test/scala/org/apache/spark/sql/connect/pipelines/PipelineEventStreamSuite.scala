@@ -31,18 +31,21 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
         createTable(
           name = "a",
           datasetType = proto.DatasetType.MATERIALIZED_VIEW,
-          sql = Some("SELECT * FROM RANGE(5)"))
+          sql = Some("SELECT * FROM RANGE(5)")
+        )
         createTable(
           name = "b",
           datasetType = proto.DatasetType.TABLE,
-          sql = Some("SELECT * FROM STREAM a"))
+          sql = Some("SELECT * FROM STREAM a")
+        )
       }
       registerPipelineDatasets(pipeline)
 
       val capturedEvents = new ArrayBuffer[PipelineEvent]()
       withClient { client =>
         val startRunRequest = buildStartRunPlan(
-          proto.PipelineCommand.StartRun.newBuilder().setDataflowGraphId(graphId).build())
+          proto.PipelineCommand.StartRun.newBuilder().setDataflowGraphId(graphId).build()
+        )
         val responseIterator = client.execute(startRunRequest)
         while (responseIterator.hasNext) {
           val response = responseIterator.next()
@@ -60,57 +63,121 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
           "Flow spark_catalog.default.b is STARTING",
           "Flow spark_catalog.default.b is RUNNING",
           "Flow spark_catalog.default.b has COMPLETED",
-          "Run is COMPLETED")
+          "Run is COMPLETED"
+        )
         expectedEventMessages.foreach { eventMessage =>
           assert(
             capturedEvents.exists(e => e.getMessage.contains(eventMessage)),
-            s"Did not receive expected event: $eventMessage")
+            s"Did not receive expected event: $eventMessage"
+          )
         }
       }
     }
   }
 
-  test("check error events from stream") {
+  test("flow resolution failure") {
+    val dryOptions = Seq(true, false)
+
+    dryOptions.foreach { dry =>
+      withRawBlockingStub { implicit stub =>
+        val graphId = createDataflowGraph
+        val pipeline = new TestPipelineDefinition(graphId) {
+          createTable(
+            name = "a",
+            datasetType = proto.DatasetType.MATERIALIZED_VIEW,
+            sql = Some("SELECT * FROM unknown_table")
+          )
+          createTable(
+            name = "b",
+            datasetType = proto.DatasetType.TABLE,
+            sql = Some("SELECT * FROM STREAM a")
+          )
+        }
+        registerPipelineDatasets(pipeline)
+
+        val capturedEvents = new ArrayBuffer[PipelineEvent]()
+        withClient { client =>
+          val startRunRequest = buildStartRunPlan(
+            proto.PipelineCommand.StartRun
+              .newBuilder()
+              .setDataflowGraphId(graphId)
+              .setDry(dry)
+              .build()
+          )
+          val ex = intercept[AnalysisException] {
+            val responseIterator = client.execute(startRunRequest)
+            while (responseIterator.hasNext) {
+              val response = responseIterator.next()
+              if (response.hasPipelineEventResult) {
+                capturedEvents.append(response.getPipelineEventResult.getEvent)
+              }
+            }
+          }
+          // (?s) enables wildcard matching on newline characters
+          val runFailureErrorMsg = "(?s).*Failed to resolve flows in the pipeline.*".r
+          assert(runFailureErrorMsg.matches(ex.getMessage))
+          val expectedLogPatterns = Set(
+            "(?s).*Failed to resolve flow.*Failed to read dataset 'spark_catalog.default.a'.*".r,
+            "(?s).*Failed to resolve flow.*[TABLE_OR_VIEW_NOT_FOUND].*".r
+          )
+          expectedLogPatterns.foreach { logPattern =>
+            assert(
+              capturedEvents.exists(e => logPattern.matches(e.getMessage)),
+              s"Did not receive expected event matching pattern: $logPattern"
+            )
+          }
+          // Ensure that the error causing the run failure is not surfaced to the user twice
+          assert(capturedEvents.forall(e => !runFailureErrorMsg.matches(e.getMessage)))
+        }
+      }
+    }
+  }
+
+  test("successful dry run") {
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = new TestPipelineDefinition(graphId) {
         createTable(
           name = "a",
           datasetType = proto.DatasetType.MATERIALIZED_VIEW,
-          sql = Some("SELECT * FROM unknown_table"))
+          sql = Some("SELECT * FROM RANGE(5)")
+        )
         createTable(
           name = "b",
           datasetType = proto.DatasetType.TABLE,
-          sql = Some("SELECT * FROM STREAM a"))
+          sql = Some("SELECT * FROM STREAM a")
+        )
       }
       registerPipelineDatasets(pipeline)
 
       val capturedEvents = new ArrayBuffer[PipelineEvent]()
       withClient { client =>
         val startRunRequest = buildStartRunPlan(
-          proto.PipelineCommand.StartRun.newBuilder().setDataflowGraphId(graphId).build())
-        val ex = intercept[AnalysisException] {
-          val responseIterator = client.execute(startRunRequest)
-          while (responseIterator.hasNext) {
-            val response = responseIterator.next()
-            if (response.hasPipelineEventResult) {
-              capturedEvents.append(response.getPipelineEventResult.getEvent)
-            }
+          proto.PipelineCommand.StartRun
+            .newBuilder()
+            .setDataflowGraphId(graphId)
+            .setDry(true)
+            .build()
+        )
+        val responseIterator = client.execute(startRunRequest)
+        while (responseIterator.hasNext) {
+          val response = responseIterator.next()
+          if (response.hasPipelineEventResult) {
+            capturedEvents.append(response.getPipelineEventResult.getEvent)
           }
         }
-        // (?s) enables wildcard matching on newline characters
-        val runFailureErrorMsg = "(?s).*Failed to resolve flows in the pipeline.*".r
-        assert(runFailureErrorMsg.matches(ex.getMessage))
-        val expectedLogPatterns = Set(
-          "(?s).*Failed to resolve flow.*Failed to read dataset 'spark_catalog.default.a'.*".r,
-          "(?s).*Failed to resolve flow.*[TABLE_OR_VIEW_NOT_FOUND].*".r)
-        expectedLogPatterns.foreach { logPattern =>
+        val expectedEventMessages = Set("Run is COMPLETED")
+        expectedEventMessages.foreach { eventMessage =>
           assert(
-            capturedEvents.exists(e => logPattern.matches(e.getMessage)),
-            s"Did not receive expected event matching pattern: $logPattern")
+            capturedEvents.exists(e => e.getMessage.contains(eventMessage)),
+            s"Did not receive expected event: $eventMessage"
+          )
         }
-        // Ensure that the error causing the run failure is not surfaced to the user twice
-        assert(capturedEvents.forall(e => !runFailureErrorMsg.matches(e.getMessage)))
+      }
+
+      // No flows should be started in dry run mode
+      capturedEvents.foreach { event =>
+        assert(!event.getMessage.contains("is QUEUED"))
       }
     }
   }

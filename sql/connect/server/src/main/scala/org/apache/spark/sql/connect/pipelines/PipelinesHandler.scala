@@ -282,7 +282,11 @@ private[connect] object PipelinesHandler extends Logging {
     val pipelineUpdateContext =
       new PipelineUpdateContextImpl(graphElementRegistry.toDataflowGraph, eventCallback)
     sessionHolder.cachePipelineExecution(dataflowGraphId, pipelineUpdateContext)
-    pipelineUpdateContext.pipelineExecution.runPipeline()
+    if (cmd.getDry) {
+      pipelineUpdateContext.pipelineExecution.dryRunPipeline()
+    } else {
+      pipelineUpdateContext.pipelineExecution.runPipeline()
+    }
 
     // Rethrow any exceptions that caused the pipeline run to fail so that the exception is
     // propagated back to the SC client / CLI.
