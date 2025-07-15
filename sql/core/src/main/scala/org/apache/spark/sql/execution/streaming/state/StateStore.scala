@@ -759,7 +759,11 @@ trait SupportsFineGrainedReplay {
  * Note that `queryRunId` is used uniquely identify a provider, so that the same provider
  * instance is not reused across query restarts.
  */
-case class StateStoreProviderId(storeId: StateStoreId, queryRunId: UUID)
+case class StateStoreProviderId(storeId: StateStoreId, queryRunId: UUID) {
+  override def toString: String = {
+    s"StateStoreProviderId[ storeId=$storeId, queryRunId=$queryRunId ]"
+  }
+}
 
 object StateStoreProviderId {
   private[sql] def apply(
