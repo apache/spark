@@ -4152,6 +4152,91 @@ def hll_union(
 hll_union.__doc__ = pysparkfuncs.hll_union.__doc__
 
 
+def theta_sketch_agg(
+    col: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+) -> Column:
+    if lgNomEntries is None:
+        return _invoke_function_over_columns("theta_sketch_agg", col)
+    else:
+        return _invoke_function_over_columns("theta_sketch_agg", col, lit(lgNomEntries))
+
+
+theta_sketch_agg.__doc__ = pysparkfuncs.theta_sketch_agg.__doc__
+
+
+def theta_union_agg(
+    col: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+) -> Column:
+    if lgNomEntries is None:
+        return _invoke_function_over_columns("theta_union_agg", col)
+    else:
+        return _invoke_function_over_columns("theta_union_agg", col, lit(lgNomEntries))
+
+
+theta_union_agg.__doc__ = pysparkfuncs.theta_union_agg.__doc__
+
+
+def theta_intersection_agg(
+    col: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+) -> Column:
+    if lgNomEntries is None:
+        return _invoke_function_over_columns("theta_intersection_agg", col)
+    else:
+        return _invoke_function_over_columns("theta_intersection_agg", col, lit(lgNomEntries))
+
+
+theta_intersection_agg.__doc__ = pysparkfuncs.theta_intersection_agg.__doc__
+
+
+def theta_sketch_estimate(col: "ColumnOrName") -> Column:
+    return _invoke_function("theta_sketch_estimate", _to_col(col))
+
+
+theta_sketch_estimate.__doc__ = pysparkfuncs.theta_sketch_estimate.__doc__
+
+
+def theta_union(
+    col1: "ColumnOrName", col2: "ColumnOrName", lgNomEntries: Optional[int] = None
+) -> Column:
+    if lgNomEntries is not None:
+        return _invoke_function(
+            "theta_union", _to_col(col1), _to_col(col2), lit(lgNomEntries)
+        )
+    else:
+        return _invoke_function("theta_union", _to_col(col1), _to_col(col2))
+
+
+def theta_intersection(
+    col1: "ColumnOrName", col2: "ColumnOrName", lgNomEntries: Optional[int] = None
+) -> Column:
+    if lgNomEntries is not None:
+        return _invoke_function(
+            "theta_intersection", _to_col(col1), _to_col(col2), lit(lgNomEntries)
+        )
+    else:
+        return _invoke_function("theta_intersection", _to_col(col1), _to_col(col2))
+
+
+theta_intersection.__doc__ = pysparkfuncs.theta_intersection.__doc__
+
+
+def theta_difference(
+    col1: "ColumnOrName", col2: "ColumnOrName", lgNomEntries: Optional[int] = None
+) -> Column:
+    if lgNomEntries is not None:
+        return _invoke_function(
+            "theta_difference", _to_col(col1), _to_col(col2), lit(lgNomEntries)
+        )
+    else:
+        return _invoke_function("theta_difference", _to_col(col1), _to_col(col2))
+
+
+theta_difference.__doc__ = pysparkfuncs.theta_difference.__doc__
+
+
 # Predicates Function
 
 
