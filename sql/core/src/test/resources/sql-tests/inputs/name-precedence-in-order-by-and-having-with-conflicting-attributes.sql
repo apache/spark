@@ -113,7 +113,7 @@ SELECT col1, 'col1' FROM v2 ORDER BY col1;
 SELECT col1, 'col1' FROM v2 GROUP BY ALL ORDER BY col1;
 
 SELECT * FROM (
-  SELECT col1, 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana';
+  SELECT col1, 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
 ) ORDER BY 1;
 
 -- Conflict in hidden output
