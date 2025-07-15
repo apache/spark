@@ -601,8 +601,8 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
                 sdf.select(sfunc(sdf.b, "c")).toPandas(),
             )
             self.assert_eq(
-                cdf.groupBy("a").agg(cfunc(cdf.b, "c")).toPandas(),
-                sdf.groupBy("a").agg(sfunc(sdf.b, "c")).toPandas(),
+                cdf.groupBy("a").agg(cfunc(cdf.b, "c")).orderBy("a").toPandas(),
+                sdf.groupBy("a").agg(sfunc(sdf.b, "c")).orderBy("a").toPandas(),
             )
 
         # test grouping
@@ -628,13 +628,13 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
             check_exact=False,
         )
         self.assert_eq(
-            cdf.groupBy("a").agg(CF.percentile_approx("b", 0.5)).toPandas(),
-            sdf.groupBy("a").agg(SF.percentile_approx("b", 0.5)).toPandas(),
+            cdf.groupBy("a").agg(CF.percentile_approx("b", 0.5)).orderBy("a").toPandas(),
+            sdf.groupBy("a").agg(SF.percentile_approx("b", 0.5)).orderBy("a").toPandas(),
             check_exact=False,
         )
         self.assert_eq(
-            cdf.groupBy("a").agg(CF.percentile_approx(cdf.b, [0.1, 0.9])).toPandas(),
-            sdf.groupBy("a").agg(SF.percentile_approx(sdf.b, [0.1, 0.9])).toPandas(),
+            cdf.groupBy("a").agg(CF.percentile_approx(cdf.b, [0.1, 0.9])).orderBy("a").toPandas(),
+            sdf.groupBy("a").agg(SF.percentile_approx(sdf.b, [0.1, 0.9])).orderBy("a").toPandas(),
             check_exact=False,
         )
 
@@ -652,9 +652,11 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         self.assert_eq(
             cdf.groupBy("a")
             .agg(CF.count_distinct("b").alias("x"), CF.count_distinct(cdf.c).alias("y"))
+            .orderBy("a")
             .toPandas(),
             sdf.groupBy("a")
             .agg(SF.count_distinct("b").alias("x"), SF.count_distinct(sdf.c).alias("y"))
+            .orderBy("a")
             .toPandas(),
         )
 
