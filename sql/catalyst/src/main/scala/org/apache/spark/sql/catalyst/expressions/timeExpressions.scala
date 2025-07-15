@@ -25,8 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType, toSQLValue}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
-import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -354,8 +353,6 @@ case class SecondsOfTime(child: Expression)
   )
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType: _*))
 
   override def children: Seq[Expression] = Seq(child)
 
@@ -666,11 +663,7 @@ case class TruncateTime(unit: Expression, timeExpr: Expression)
   override def left: Expression = unit
   override def right: Expression = timeExpr
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      StringType,
-      TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType: _*)
-    )
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, AnyTimeType)
 
   override def dataType: DataType = timeExpr.dataType
   override def prettyName: String = "time_trunc"

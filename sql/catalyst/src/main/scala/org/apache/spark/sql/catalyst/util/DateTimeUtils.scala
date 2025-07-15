@@ -535,19 +535,31 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Truncate a TIME-of-day value given as microseconds from midnight.
+   * Truncate a TIME-of-day value given as nanoseconds from midnight.
    *
    * @param unitUtf8  the requested unit ('HOUR', 'MINUTE', ...) or null
-   * @param micros microseconds since 00:00:00
-   * @return truncated value as microseconds-of-day, or -1L if the unit is invalid
+   * @param micros nanoseconds since 00:00:00
+   * @return truncated value as nanoseconds-of-day, or -1L if the unit is invalid
    */
-  def truncateTime(unitUtf8: UTF8String, micros: Long): Long = {
+  def truncateTime(unitUtf8: UTF8String, nanos: Long): Long = {
     val level = parseTruncLevelForTime(unitUtf8)
-    if (level < MIN_LEVEL_OF_TIME_TRUNC) {  // unknown unit
+    if (level < MIN_LEVEL_OF_TIME_TRUNC || level > MAX_LEVEL_OF_TIME_TRUNC) {  // unknown unit
       -1L
     } else {
-      val out = truncTime(micros, level)         // may still return -1L on error
-      if (out < 0) -1L else out
+      level match {
+        case TRUNC_TO_MICROSECOND =>
+          nanos - Math.floorMod(nanos, NANOS_PER_MICROS) // no truncation
+        case TRUNC_TO_MILLISECOND =>
+          nanos - Math.floorMod(nanos, NANOS_PER_MILLIS)
+        case TRUNC_TO_SECOND =>
+          nanos - Math.floorMod(nanos, NANOS_PER_SECOND)
+        case TRUNC_TO_MINUTE =>
+          nanos - Math.floorMod(nanos, NANOS_PER_MINUTE)
+        case TRUNC_TO_HOUR =>
+          nanos - Math.floorMod(nanos, NANOS_PER_HOUR)
+        case _ =>
+          -1L
+      }
     }
   }
 
@@ -564,28 +576,6 @@ object DateTimeUtils extends SparkDateTimeUtils {
       case "MINUTE" => TRUNC_TO_MINUTE
       case "HOUR" => TRUNC_TO_HOUR
       case _ => TRUNC_INVALID
-    }
-  }
-
-  /**
-   * Truncates a time-of-day (represented in microseconds from midnight) to the specified level.
-   * Returns TRUNC_INVALID (-1) if the level is out of range or unrecognized.
-   */
-  def truncTime(microsOfDay: Long, level: Int): Long = {
-    if (level < MIN_LEVEL_OF_TIME_TRUNC || level > MAX_LEVEL_OF_TIME_TRUNC) {
-      return TRUNC_INVALID
-    }
-    level match {
-      case TRUNC_TO_MICROSECOND =>
-        microsOfDay // no truncation
-      case TRUNC_TO_MILLISECOND =>
-        microsOfDay - Math.floorMod(microsOfDay, MICROS_PER_MILLIS)
-      case TRUNC_TO_SECOND =>
-        microsOfDay - Math.floorMod(microsOfDay, MICROS_PER_SECOND)
-      case TRUNC_TO_MINUTE =>
-        microsOfDay - Math.floorMod(microsOfDay, MICROS_PER_MINUTE)
-      case TRUNC_TO_HOUR =>
-        microsOfDay - Math.floorMod(microsOfDay, MICROS_PER_HOUR)
     }
   }
 
