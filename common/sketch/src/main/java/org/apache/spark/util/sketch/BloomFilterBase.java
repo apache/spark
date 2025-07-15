@@ -88,13 +88,37 @@ abstract class BloomFilterBase extends BloomFilter {
     }
   }
 
+  protected HiLoHash hashLongToIntPair(long item, int seed) {
+    // Here we first hash the input long element into 2 int hash values, h1 and h2, then produce n
+    // hash values by `h1 + i * h2` with 1 <= i <= numHashFunctions.
+    // Note that `CountMinSketch` use a different strategy, it hash the input long element with
+    // every i to produce n hash values.
+    // TODO: the strategy of `CountMinSketch` looks more advanced, should we follow it here?
+    int h1 = Murmur3_x86_32.hashLong(item, seed);
+    int h2 = Murmur3_x86_32.hashLong(item, h1);
+    return new HiLoHash(h1, h2);
+  }
+
+  protected HiLoHash hashBytesToIntPair(byte[] item, int seed) {
+    int h1 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, seed);
+    int h2 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, h1);
+    return new HiLoHash(h1, h2);
+  }
+
+  protected abstract boolean scatterHashAndSetAllBits(HiLoHash inputHash);
+
+  protected abstract boolean scatterHashAndGetAllBits(HiLoHash inputHash);
+
   @Override
   public boolean putString(String item) {
     return putBinary(Utils.getBytesFromUTF8String(item));
   }
 
   @Override
-  public abstract boolean putBinary(byte[] item);
+  public boolean putBinary(byte[] item) {
+    HiLoHash hiLoHash = hashBytesToIntPair(item, seed);
+    return scatterHashAndSetAllBits(hiLoHash);
+  }
 
   @Override
   public boolean mightContainString(String item) {
@@ -102,13 +126,21 @@ abstract class BloomFilterBase extends BloomFilter {
   }
 
   @Override
-  public abstract boolean mightContainBinary(byte[] item) ;
+  public boolean mightContainBinary(byte[] item) {
+    HiLoHash hiLoHash = hashBytesToIntPair(item, seed);
+    return scatterHashAndGetAllBits(hiLoHash);
+  }
+
+  public boolean putLong(long item) {
+    HiLoHash hiLoHash = hashLongToIntPair(item, seed);
+    return scatterHashAndSetAllBits(hiLoHash);
+  }
 
   @Override
-  public abstract boolean putLong(long item);
-
-  @Override
-  public abstract boolean mightContainLong(long item);
+  public boolean mightContainLong(long item) {
+    HiLoHash hiLoHash = hashLongToIntPair(item, seed);
+    return scatterHashAndGetAllBits(hiLoHash);
+  }
 
   @Override
   public boolean mightContain(Object item) {
@@ -163,22 +195,5 @@ abstract class BloomFilterBase extends BloomFilter {
     throws IncompatibleMergeException;
 
   public record HiLoHash(int hi, int lo) {}
-
-  protected HiLoHash hashLongToIntPair(long item, int seed) {
-    // Here we first hash the input long element into 2 int hash values, h1 and h2, then produce n
-    // hash values by `h1 + i * h2` with 1 <= i <= numHashFunctions.
-    // Note that `CountMinSketch` use a different strategy, it hash the input long element with
-    // every i to produce n hash values.
-    // TODO: the strategy of `CountMinSketch` looks more advanced, should we follow it here?
-    int h1 = Murmur3_x86_32.hashLong(item, seed);
-    int h2 = Murmur3_x86_32.hashLong(item, h1);
-    return new HiLoHash(h1, h2);
-  }
-
-  protected HiLoHash hashBytesToIntPair(byte[] item, int seed) {
-    int h1 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, seed);
-    int h2 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, h1);
-    return new HiLoHash(h1, h2);
-  }
 
 }

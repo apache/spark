@@ -27,11 +27,9 @@ class BloomFilterImpl extends BloomFilterBase implements Serializable {
 
   private BloomFilterImpl() {}
 
-  @Override
-  public boolean putBinary(byte[] item) {
-    HiLoHash hiLoHash = hashBytesToIntPair(item, seed);
-    int h1 = hiLoHash.hi();
-    int h2 = hiLoHash.lo();
+  protected boolean scatterHashAndSetAllBits(HiLoHash inputHash) {
+    int h1 = inputHash.hi();
+    int h2 = inputHash.lo();
 
     long bitSize = bits.bitSize();
     boolean bitsChanged = false;
@@ -46,50 +44,9 @@ class BloomFilterImpl extends BloomFilterBase implements Serializable {
     return bitsChanged;
   }
 
-  @Override
-  public boolean mightContainBinary(byte[] item) {
-    HiLoHash hiLoHash = hashBytesToIntPair(item, seed);
-    int h1 = hiLoHash.hi();
-    int h2 = hiLoHash.lo();
-
-    long bitSize = bits.bitSize();
-    for (int i = 1; i <= numHashFunctions; i++) {
-      int combinedHash = h1 + (i * h2);
-      // Flip all the bits if it's negative (guaranteed positive number)
-      if (combinedHash < 0) {
-        combinedHash = ~combinedHash;
-      }
-      if (!bits.get(combinedHash % bitSize)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  @Override
-  public boolean putLong(long item) {
-    HiLoHash hiLoHash = hashLongToIntPair(item, seed);
-    int h1 = hiLoHash.hi();
-    int h2 = hiLoHash.lo();
-
-    long bitSize = bits.bitSize();
-    boolean bitsChanged = false;
-    for (int i = 1; i <= numHashFunctions; i++) {
-      int combinedHash = h1 + (i * h2);
-      // Flip all the bits if it's negative (guaranteed positive number)
-      if (combinedHash < 0) {
-        combinedHash = ~combinedHash;
-      }
-      bitsChanged |= bits.set(combinedHash % bitSize);
-    }
-    return bitsChanged;
-  }
-
-  @Override
-  public boolean mightContainLong(long item) {
-    HiLoHash hiLoHash = hashLongToIntPair(item, seed);
-    int h1 = hiLoHash.hi();
-    int h2 = hiLoHash.lo();
+  protected boolean scatterHashAndGetAllBits(HiLoHash inputHash) {
+    int h1 = inputHash.hi();
+    int h2 = inputHash.lo();
 
     long bitSize = bits.bitSize();
     for (int i = 1; i <= numHashFunctions; i++) {

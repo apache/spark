@@ -47,11 +47,9 @@ class BloomFilterImplV2 extends BloomFilterBase implements Serializable {
       && this.bits.equals(that.bits);
   }
 
-  @Override
-  public boolean putBinary(byte[] item) {
-    HiLoHash hiLoHash = hashBytesToIntPair(item, seed);
-    int h1 = hiLoHash.hi();
-    int h2 = hiLoHash.lo();
+  protected boolean scatterHashAndSetAllBits(HiLoHash inputHash) {
+    int h1 = inputHash.hi();
+    int h2 = inputHash.lo();
 
     long bitSize = bits.bitSize();
     boolean bitsChanged = false;
@@ -69,56 +67,9 @@ class BloomFilterImplV2 extends BloomFilterBase implements Serializable {
     return bitsChanged;
   }
 
-  @Override
-  public boolean mightContainBinary(byte[] item) {
-    HiLoHash hiLoHash = hashBytesToIntPair(item, seed);
-    int h1 = hiLoHash.hi();
-    int h2 = hiLoHash.lo();
-
-    long bitSize = bits.bitSize();
-
-    // Integer.MAX_VALUE takes care of scrambling the higher four bytes of combinedHash
-    long combinedHash = (long) h1 * Integer.MAX_VALUE;
-    for (long i = 0; i < numHashFunctions; i++) {
-      combinedHash += h2;
-
-      // Flip all the bits if it's negative (guaranteed positive number)
-      long combinedIndex = combinedHash < 0 ? ~combinedHash : combinedHash;
-
-      if (!bits.get(combinedIndex % bitSize)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  @Override
-  public boolean putLong(long item) {
-    HiLoHash hiLoHash = hashLongToIntPair(item, seed);
-    int h1 = hiLoHash.hi();
-    int h2 = hiLoHash.lo();
-
-    long bitSize = bits.bitSize();
-    boolean bitsChanged = false;
-
-    // Integer.MAX_VALUE takes care of scrambling the higher four bytes of combinedHash
-    long combinedHash = (long) h1 * Integer.MAX_VALUE;
-    for (long i = 0; i < numHashFunctions; i++) {
-      combinedHash += h2;
-
-      // Flip all the bits if it's negative (guaranteed positive number)
-      long combinedIndex = combinedHash < 0 ? ~combinedHash : combinedHash;
-
-      bitsChanged |= bits.set(combinedIndex % bitSize);
-    }
-    return bitsChanged;
-  }
-
-  @Override
-  public boolean mightContainLong(long item) {
-    HiLoHash hiLoHash = hashLongToIntPair(item, seed);
-    int h1 = hiLoHash.hi();
-    int h2 = hiLoHash.lo();
+  protected boolean scatterHashAndGetAllBits(HiLoHash inputHash) {
+    int h1 = inputHash.hi();
+    int h2 = inputHash.lo();
 
     long bitSize = bits.bitSize();
 
