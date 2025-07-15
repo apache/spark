@@ -303,8 +303,6 @@ case class ReplaceDataExec(
     projections: ReplaceDataProjections,
     write: Write) extends V2ExistingTableWriteExec {
 
-  override val stringArgs: Iterator[Any] = Iterator(query, write)
-
   override def writingTask: WritingSparkTask[_] = {
     projections match {
       case ReplaceDataProjections(dataProj, Some(metadataProj)) =>
@@ -328,8 +326,6 @@ case class WriteDeltaExec(
     projections: WriteDeltaProjections,
     write: DeltaWrite) extends V2ExistingTableWriteExec {
 
-  override lazy val stringArgs: Iterator[Any] = Iterator(query, write)
-
   override lazy val writingTask: WritingSparkTask[_] = {
     if (projections.metadataProjection.isDefined) {
       DeltaWithMetadataWritingSparkTask(projections)
@@ -349,6 +345,8 @@ case class WriteToDataSourceV2Exec(
     query: SparkPlan,
     writeMetrics: Seq[CustomMetric]) extends V2TableWriteExec {
 
+  override val stringArgs: Iterator[Any] = Iterator(batchWrite, query)
+
   override val customMetrics: Map[String, SQLMetric] = writeMetrics.map { customMetric =>
     customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
   }.toMap
@@ -366,6 +364,8 @@ case class WriteToDataSourceV2Exec(
 trait V2ExistingTableWriteExec extends V2TableWriteExec {
   def refreshCache: () => Unit
   def write: Write
+
+  override val stringArgs: Iterator[Any] = Iterator(query, write)
 
   override val customMetrics: Map[String, SQLMetric] =
     write.supportedCustomMetrics().map { customMetric =>

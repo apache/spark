@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.util.HashSet
+
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
@@ -896,6 +898,24 @@ object LimitPushDown extends Rule[LogicalPlan] {
 object PushProjectionThroughUnion extends Rule[LogicalPlan] {
 
   /**
+   * When pushing a [[Project]] through [[Union]] we need to maintain the invariant that [[Union]]
+   * children must have unique [[ExprId]]s per branch. We can safely deduplicate [[ExprId]]s
+   * without updating any references because those [[ExprId]]s will simply remain unused.
+   * For example, in a `Project(col1#1, col#1)` we will alias the second `col1` and get
+   * `Project(col1#1, col1 as col1#2)`. We don't need to update any references to `col1#1` we
+   * aliased because `col1#1` still exists in [[Project]] output.
+   */
+  private def deduplicateProjectList(projectList: Seq[NamedExpression]) = {
+    val existingExprIds = new HashSet[ExprId]
+    projectList.map(attr => if (existingExprIds.contains(attr.exprId)) {
+      Alias(attr, attr.name)()
+    } else {
+      existingExprIds.add(attr.exprId)
+      attr
+    })
+  }
+
+  /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
    */
   private def buildRewrites(left: LogicalPlan, right: LogicalPlan): AttributeMap[Attribute] = {
@@ -923,10 +943,15 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
   }
 
   def pushProjectionThroughUnion(projectList: Seq[NamedExpression], u: Union): Seq[LogicalPlan] = {
-    val newFirstChild = Project(projectList, u.children.head)
+    val deduplicatedProjectList = if (conf.unionIsResolvedWhenDuplicatesPerChildResolved) {
+      deduplicateProjectList(projectList)
+    } else {
+      projectList
+    }
+    val newFirstChild = Project(deduplicatedProjectList, u.children.head)
     val newOtherChildren = u.children.tail.map { child =>
       val rewrites = buildRewrites(u.children.head, child)
-      Project(projectList.map(pushToRight(_, rewrites)), child)
+      Project(deduplicatedProjectList.map(pushToRight(_, rewrites)), child)
     }
     newFirstChild +: newOtherChildren
   }

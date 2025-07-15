@@ -17,49 +17,23 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.hadoop.conf.Configuration
-
-import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types._
-import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
-import org.apache.spark.util.Utils
 
 /**
- * A separate set of DDL tests that uses Hive 2.1 libraries, which behave a little differently
- * from the built-in ones.
+ * A separate set of Hive DDL tests when setting
+ * `hive.metastore.disallow.incompatible.col.type.changes=true`
  */
-@SlowHiveTest
-@ExtendedHiveTest
-class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton {
+class HiveIncompatibleColTypeChangeSuite extends SparkFunSuite with TestHiveSingleton {
 
-  // Create a custom HiveExternalCatalog instance with the desired configuration. We cannot
-  // use SparkSession here since there's already an active on managed by the TestHive object.
-  private var catalog = {
-    val warehouse = Utils.createTempDir()
-    val metastore = Utils.createTempDir()
-    metastore.delete()
-    val sparkConf = new SparkConf()
-      .set(SparkLauncher.SPARK_MASTER, "local")
-      .set(WAREHOUSE_PATH.key, warehouse.toURI().toString())
-      .set(CATALOG_IMPLEMENTATION.key, "hive")
-      .set(HiveUtils.HIVE_METASTORE_VERSION.key, "2.1")
-      .set(HiveUtils.HIVE_METASTORE_JARS.key, "maven")
+  private val catalog = spark.sessionState.catalog.externalCatalog
 
-    val hadoopConf = new Configuration()
-    hadoopConf.set("hive.metastore.warehouse.dir", warehouse.toURI().toString())
-    hadoopConf.set("javax.jdo.option.ConnectionURL",
-      s"jdbc:derby:;databaseName=${metastore.getAbsolutePath()};create=true")
-    // These options are needed since the defaults in Hive 2.1 cause exceptions with an
-    // empty metastore db.
-    hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
-    hadoopConf.set("hive.metastore.schema.verification", "false")
-
-    new HiveExternalCatalog(sparkConf, hadoopConf)
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    hiveClient.runSqlHive(
+      "SET hive.metastore.disallow.incompatible.col.type.changes=true")
   }
 
   override def afterEach(): Unit = {
@@ -71,7 +45,8 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton {
 
   override def afterAll(): Unit = {
     try {
-      catalog = null
+      hiveClient.runSqlHive(
+        "SET hive.metastore.disallow.incompatible.col.type.changes=false")
     } finally {
       super.afterAll()
     }
@@ -122,9 +97,9 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton {
       updatedSchema: StructType,
       hiveCompatible: Boolean = true): Unit = {
     spark.sql(createTableStmt)
-    val oldTable = spark.sessionState.catalog.externalCatalog.getTable("default", tableName)
+    val oldTable = catalog.getTable("default", tableName)
     catalog.createTable(oldTable, true)
-    catalog.alterTableDataSchema("default", tableName, updatedSchema)
+    catalog.alterTableSchema("default", tableName, updatedSchema)
 
     val updatedTable = catalog.getTable("default", tableName)
     assert(updatedTable.schema.fieldNames === updatedSchema.fieldNames)

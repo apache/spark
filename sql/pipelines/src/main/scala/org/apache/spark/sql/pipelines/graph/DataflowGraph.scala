@@ -191,6 +191,7 @@ case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], views: Seq[View])
     validatePersistedViewSources()
     validateEveryDatasetHasFlow()
     validateTablesAreResettable()
+    validateFlowStreamingness()
     inferredSchema
   }.failed
 

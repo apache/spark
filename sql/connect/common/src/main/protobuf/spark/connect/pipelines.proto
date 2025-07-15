@@ -102,7 +102,7 @@ message PipelineCommand {
     optional string target_dataset_name = 3;
 
     // An unresolved relation that defines the dataset's flow.
-    optional spark.connect.Relation plan = 4;
+    optional spark.connect.Relation relation = 4;
 
     // SQL configurations set when running this flow.
     map<string, string> sql_conf = 5;

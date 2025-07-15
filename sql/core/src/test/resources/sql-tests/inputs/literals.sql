@@ -121,3 +121,13 @@ select -x'2379ACFe';
 
 -- normalize -0 and -0.0
 select -0, -0.0;
+
+-- Double-quote escaping ("", '')
+SELECT "S""par""k" AS c1, "S\"par\"k" AS c2, 'S""par""k' AS c3;
+SELECT 'S''par''k' AS c1, 'S\'par\'k' AS c2, "S''par''k" AS c3;
+SELECT "S" "par" "k" AS c1, 'S' 'par' 'k' AS c2, "S" 'par' "k" AS c3, 'S' "par" 'k' AS c4, "S"'par'"k" AS c5, 'S'"par"'k' AS c6;
+
+SET spark.sql.legacy.consecutiveStringLiterals.enabled=true;
+SELECT "S""par""k" AS c1, "S\"par\"k" AS c2, 'S""par""k' AS c3;
+SELECT 'S''par''k' AS c1, 'S\'par\'k' AS c2, "S''par''k" AS c3;
+SELECT "S" "par" "k" AS c1, 'S' 'par' 'k' AS c2, "S" 'par' "k" AS c3, 'S' "par" 'k' AS c4, "S"'par'"k" AS c5, 'S'"par"'k' AS c6;

@@ -93,7 +93,7 @@ class SparkDeclarativePipelinesServerSuite
                 .setDataflowGraphId(graphId)
                 .setFlowName("mv")
                 .setTargetDatasetName("mv")
-                .setPlan(
+                .setRelation(
                   Relation
                     .newBuilder()
                     .setUnresolvedTableValuedFunction(
@@ -206,7 +206,7 @@ class SparkDeclarativePipelinesServerSuite
           sql = Some("SELECT * FROM STREAM tableA"))
         createTable(
           name = "tableC",
-          datasetType = DatasetType.TABLE,
+          datasetType = DatasetType.MATERIALIZED_VIEW,
           sql = Some("SELECT * FROM tableB"))
       }
 
@@ -238,7 +238,7 @@ class SparkDeclarativePipelinesServerSuite
         createView(name = "viewC", sql = "SELECT * FROM curr.tableB")
         createTable(
           name = "other.tableD",
-          datasetType = proto.DatasetType.TABLE,
+          datasetType = proto.DatasetType.MATERIALIZED_VIEW,
           sql = Some("SELECT * FROM viewC"))
       }
 
