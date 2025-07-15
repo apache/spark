@@ -249,7 +249,6 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
                 for arg in args
             ]
 
-            # Use optimized batch conversion instead of value-by-value processing
             return ArrowToUDFConversion.convert_batch_inputs(arrays, input_types)
 
     @fail_on_stopiteration
@@ -259,7 +258,6 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
             udf_result = result_func(func(*row))
             udf_results.append(udf_result)
 
-        # Use batch output conversion for better performance
         results = ArrowToUDFConversion.convert_batch_outputs(udf_results, return_type)
 
         if len(results) == 0:
