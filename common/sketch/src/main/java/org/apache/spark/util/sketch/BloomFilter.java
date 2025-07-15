@@ -294,10 +294,10 @@ public abstract class BloomFilter {
   }
 
   public static BloomFilter create(
-    Version version,
-    long expectedNumItems,
-    long numBits,
-    int seed
+      Version version,
+      long expectedNumItems,
+      long numBits,
+      int seed
   ) {
     if (expectedNumItems <= 0) {
       throw new IllegalArgumentException("Expected insertions must be positive");
