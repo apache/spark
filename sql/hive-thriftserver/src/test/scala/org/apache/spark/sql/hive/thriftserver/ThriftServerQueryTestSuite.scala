@@ -170,7 +170,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
               if (splits.length > rowCounts(i)) {
                 // the result is multiline
                 val step = splits.length / rowCounts(i)
-                splits.sliding(step, step).map(_.mkString("\n")).toSeq.sorted.mkString("\n")
+                splits.grouped(step).map(_.mkString("\n")).toSeq.sorted.mkString("\n")
               } else {
                 splits.sorted.mkString("\n")
               }
