@@ -107,8 +107,7 @@ object HiveOptions {
   val delimiterOptions = Map(
     "fieldDelim" -> "field.delim",
     "escapeDelim" -> "escape.delim",
-    // The following typo is inherited from Hive...
-    "collectionDelim" -> "colelction.delim",
+    "collectionDelim" -> "collection.delim",
     "mapkeyDelim" -> "mapkey.delim",
     "lineDelim" -> "line.delim").map { case (k, v) => k.toLowerCase(Locale.ROOT) -> v }
 
