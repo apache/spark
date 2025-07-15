@@ -373,8 +373,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
   override def stateStoreId: StateStoreId = stateStoreId_
 
-  override protected def logName: String =
-    s"${super.logName} StateStoreProviderId(queryRunId=${stateStoreProviderId.queryRunId})"
+  override protected def logName: String = s"${super.logName} ${stateStoreProviderId}"
 
   /** Do maintenance backing data files, including creating snapshots and cleaning up old files */
   override def doMaintenance(): Unit = {
@@ -1064,11 +1063,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   /** Reports to the coordinator the store's latest snapshot version */
   private def reportSnapshotUploadToCoordinator(version: Long): Unit = {
     if (storeConf.reportSnapshotUploadLag) {
-      // Attach the query run ID and current timestamp to the RPC message
-      val runId = UUID.fromString(StateStoreProvider.getRunId(hadoopConf))
       val currentTimestamp = System.currentTimeMillis()
       StateStoreProvider.coordinatorRef.foreach(
-        _.snapshotUploaded(StateStoreProviderId(stateStoreId, runId), version, currentTimestamp)
+        _.snapshotUploaded(stateStoreProviderId, version, currentTimestamp)
       )
     }
   }

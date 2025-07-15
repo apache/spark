@@ -449,8 +449,7 @@ private[sql] class RocksDBStateStoreProvider
 
   override def stateStoreId: StateStoreId = stateStoreId_
 
-  override protected def logName: String =
-    s"${super.logName} StateStoreProviderId(queryRunId=${stateStoreProviderId.queryRunId})"
+  override protected def logName: String = s"${super.logName} ${stateStoreProviderId}"
 
   override def getStore(version: Long, uniqueId: Option[String] = None): StateStore = {
     try {
@@ -554,9 +553,10 @@ private[sql] class RocksDBStateStoreProvider
     val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
     val storeIdStr = s"StateStoreId(opId=${stateStoreId.operatorId}," +
       s"partId=${stateStoreId.partitionId},name=${stateStoreId.storeName})"
+    val loggingId = stateStoreProviderId.toString
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
-    createRocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
+    createRocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, loggingId,
       useColumnFamilies, storeConf.enableStateStoreCheckpointIds, stateStoreId.partitionId,
       rocksDBEventForwarder)
   }
