@@ -1184,18 +1184,25 @@ private[hive] object HiveClientImpl extends Logging {
     }
 
     table.bucketSpec match {
-      case Some(bucketSpec) if !HiveExternalCatalog.isDatasourceTable(table) =>
-        hiveTable.setNumBuckets(bucketSpec.numBuckets)
-        hiveTable.setBucketCols(bucketSpec.bucketColumnNames.toList.asJava)
+      case Some(bucketSpec) =>
+        def setBuckets(): Unit = {
+          if (HiveExternalCatalog.isDatasourceTable(table)) {
+            hiveTable.setNumBuckets(0)
+          } else {
+            hiveTable.setNumBuckets(bucketSpec.numBuckets)
+            hiveTable.setBucketCols(bucketSpec.bucketColumnNames.toList.asJava)
 
-        if (bucketSpec.sortColumnNames.nonEmpty) {
-          hiveTable.setSortCols(
-            bucketSpec.sortColumnNames
-              .map(col => new Order(col, DirectionUtils.ASCENDING_CODE))
-              .toList
-              .asJava
-          )
+            if (bucketSpec.sortColumnNames.nonEmpty) {
+              hiveTable.setSortCols(
+                bucketSpec.sortColumnNames
+                  .map(col => new Order(col, DirectionUtils.ASCENDING_CODE))
+                  .toList
+                  .asJava
+              )
+            }
+          }
         }
+        setBuckets()
       case _ =>
     }
 
