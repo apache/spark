@@ -25374,18 +25374,18 @@ def theta_sketch_agg(
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1,2,2,3], "INT")
     >>> df.agg(sf.theta_sketch_estimate(sf.theta_sketch_agg("value"))).show()
-    +------------------------------------------------+
+    +--------------------------------------------------+
     |theta_sketch_estimate(theta_sketch_agg(value, 12))|
-    +------------------------------------------------+
-    |                                               3|
-    +------------------------------------------------+
+    +--------------------------------------------------+
+    |                                                 3|
+    +--------------------------------------------------+
 
     >>> df.agg(sf.theta_sketch_estimate(sf.theta_sketch_agg("value", 15))).show()
-    +------------------------------------------------+
+    +--------------------------------------------------+
     |theta_sketch_estimate(theta_sketch_agg(value, 15))|
-    +------------------------------------------------+
-    |                                               3|
-    +------------------------------------------------+
+    +--------------------------------------------------+
+    |                                                 3|
+    +--------------------------------------------------+
     """
     if lgNomEntries is None:
         return _invoke_function_over_columns("theta_sketch_agg", col)
@@ -25432,11 +25432,11 @@ def theta_union_agg(
     >>> df2 = df2.agg(sf.theta_sketch_agg("value").alias("sketch"))
     >>> df3 = df1.union(df2)
     >>> df3.agg(sf.theta_sketch_estimate(sf.theta_union_agg("sketch"))).show()
-    +------------------------------------------+
-    |theta_sketch_estimate(theta_union_agg(sketch))|
-    +------------------------------------------+
-    |                                         6|
-    +------------------------------------------+
+    +--------------------------------------------------+
+    |theta_sketch_estimate(theta_union_agg(sketch, 12))|
+    +--------------------------------------------------+
+    |                                                 6|
+    +--------------------------------------------------+
     """
     if lgNomEntries is None:
         return _invoke_function_over_columns("theta_union_agg", col)
@@ -25483,11 +25483,11 @@ def theta_intersection_agg(
     >>> df2 = df2.agg(sf.theta_sketch_agg("value").alias("sketch"))
     >>> df3 = df1.union(df2)
     >>> df3.agg(sf.theta_sketch_estimate(sf.theta_intersection_agg("sketch"))).show()
-    +------------------------------------------------+
-    |theta_sketch_estimate(theta_intersection_agg(sketch))|
-    +------------------------------------------------+
-    |                                               2|
-    +------------------------------------------------+
+    +---------------------------------------------------------+
+    |theta_sketch_estimate(theta_intersection_agg(sketch, 12))|
+    +---------------------------------------------------------+
+    |                                                        2|
+    +---------------------------------------------------------+
     """
     if lgNomEntries is None:
         return _invoke_function_over_columns("theta_intersection_agg", col)
@@ -25526,11 +25526,11 @@ def theta_sketch_estimate(col: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1,2,2,3], "INT")
     >>> df.agg(sf.theta_sketch_estimate(sf.theta_sketch_agg("value"))).show()
-    +------------------------------------------------+
+    +--------------------------------------------------+
     |theta_sketch_estimate(theta_sketch_agg(value, 12))|
-    +------------------------------------------------+
-    |                                               3|
-    +------------------------------------------------+
+    +--------------------------------------------------+
+    |                                                 3|
+    +--------------------------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -25575,11 +25575,11 @@ def theta_union(
     ...     sf.theta_sketch_agg("v2").alias("sketch2")
     ... )
     >>> df.select(sf.theta_sketch_estimate(sf.theta_union(df.sketch1, "sketch2"))).show()
-    +-----------------------------------------------------+
+    +--------------------------------------------------------+
     |theta_sketch_estimate(theta_union(sketch1, sketch2, 12))|
-    +-----------------------------------------------------+
-    |                                                     6|
-    +-----------------------------------------------------+
+    +--------------------------------------------------------+
+    |                                                       6|
+    +--------------------------------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -25632,11 +25632,11 @@ def theta_intersection(
     ...     sf.theta_sketch_agg("v2").alias("sketch2")
     ... )
     >>> df.select(sf.theta_sketch_estimate(sf.theta_intersection(df.sketch1, "sketch2"))).show()
-    +----------------------------------------------------------+
+    +---------------------------------------------------------------+
     |theta_sketch_estimate(theta_intersection(sketch1, sketch2, 12))|
-    +----------------------------------------------------------+
-    |                                                          3|
-    +----------------------------------------------------------+
+    +---------------------------------------------------------------+
+    |                                                              3|
+    +---------------------------------------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -25690,11 +25690,11 @@ def theta_difference(
     ...     sf.theta_sketch_agg("v2").alias("sketch2")
     ... )
     >>> df.select(sf.theta_sketch_estimate(sf.theta_difference(df.sketch1, "sketch2"))).show()
-    +----------------------------------------------------------+
+    +-------------------------------------------------------------+
     |theta_sketch_estimate(theta_difference(sketch1, sketch2, 12))|
-    +----------------------------------------------------------+
-    |                                                          3|
-    +----------------------------------------------------------+
+    +-------------------------------------------------------------+
+    |                                                            3|
+    +-------------------------------------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
