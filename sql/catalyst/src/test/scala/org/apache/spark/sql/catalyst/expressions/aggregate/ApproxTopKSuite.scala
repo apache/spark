@@ -269,4 +269,6 @@ class ApproxTopKSuite extends SparkFunSuite {
     assert(badEstimate.checkInputDataTypes() ==
       TypeCheckFailure("State struct must have the fourth field to be binary. Got: string"))
   }
+
+
 }

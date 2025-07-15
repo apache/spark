@@ -20,8 +20,10 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 import java.time.LocalDateTime
 
-import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
+import org.apache.spark.{SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{ByteType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, TimestampNTZType, TimestampType}
 
 
 class ApproxTopKSuite extends QueryTest with SharedSparkSession {
@@ -327,5 +329,217 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       condition = "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K",
       parameters = Map("maxItemsTracked" -> "5", "k" -> "10")
     )
+  }
+
+  /////////////////////////////////
+  // approx_top_k_combine
+  /////////////////////////////////
+
+  def setupAccumulations(size1: Int, size2: Int): Unit = {
+    sql(s"SELECT approx_top_k_accumulate(expr, $size1) as acc " +
+      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
+      .createOrReplaceTempView("accumulation1")
+
+    sql(s"SELECT approx_top_k_accumulate(expr, $size2) as acc " +
+      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
+      .createOrReplaceTempView("accumulation2")
+  }
+
+  test("SPARK-52798: same type, same size, specified combine size - success") {
+    setupAccumulations(10, 10)
+
+    sql("SELECT approx_top_k_combine(acc, 30) as com " +
+      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+      .createOrReplaceTempView("combined")
+
+    val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
+    checkAnswer(est, Row(Seq(Row(2, 4), Row(1, 4), Row(0, 3), Row(3, 3), Row(4, 2))))
+  }
+
+  test("SPARK-52798: same type, same size, unspecified combine size - success") {
+    setupAccumulations(10, 10)
+
+    sql("SELECT approx_top_k_combine(acc) as com " +
+      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+      .createOrReplaceTempView("combined")
+
+    val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
+    checkAnswer(est, Row(Seq(Row(2, 4), Row(1, 4), Row(0, 3), Row(3, 3), Row(4, 2))))
+  }
+
+  test("SPARK-52798: same type, different size, specified combine size - success") {
+    setupAccumulations(10, 20)
+
+    sql("SELECT approx_top_k_combine(acc, 30) as com " +
+      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+      .createOrReplaceTempView("combination")
+
+    val est = sql("SELECT approx_top_k_estimate(com) FROM combination;")
+    checkAnswer(est, Row(Seq(Row(2, 4), Row(1, 4), Row(0, 3), Row(3, 3), Row(4, 2))))
+  }
+
+  test("SPARK-52798: same type, different size, unspecified combine size - fail") {
+    setupAccumulations(10, 20)
+
+    val comb = sql("SELECT approx_top_k_combine(acc) as com " +
+      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        comb.collect()
+      },
+      condition = "APPROX_TOP_K_SKETCH_SIZE_UNMATCHED",
+      parameters = Map("size1" -> "10", "size2" -> "20")
+    )
+  }
+
+  gridTest("SPARK-combine: invalid combine size - fail")(Seq((10, 10), (10, 20))) {
+    case (size1, size2) =>
+      setupAccumulations(size1, size2)
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql("SELECT approx_top_k_combine(acc, 0) as com " +
+            "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+            .collect()
+        },
+        condition = "APPROX_TOP_K_NON_POSITIVE_ARG",
+        parameters = Map("argName" -> "`maxItemsTracked`", "argValue" -> "0")
+      )
+  }
+
+  def setupMixedTypeAccumulation(seq1: Seq[Any], seq2: Seq[Any]): Unit = {
+    sql(s"SELECT approx_top_k_accumulate(expr, 10) as acc " +
+      s"FROM VALUES ${seq1.mkString(", ")} AS tab(expr);")
+      .createOrReplaceTempView("accumulation1")
+
+    sql(s"SELECT approx_top_k_accumulate(expr, 10) as acc " +
+      s"FROM VALUES ${seq2.mkString(", ")} AS tab(expr);")
+      .createOrReplaceTempView("accumulation2")
+
+    sql("SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2")
+      .createOrReplaceTempView("unioned")
+  }
+
+
+  val mixedNumberTypeSeqs: Seq[(String, String, Seq[Any])] = Seq(
+    (IntegerType.typeName, "INT",
+      Seq(0, 0, 0, 1, 1, 2, 2, 3)),
+    (ByteType.typeName, "TINYINT",
+      Seq("cast(0 AS BYTE)", "cast(0 AS BYTE)", "cast(1 AS BYTE)")),
+    (ShortType.typeName, "SMALLINT",
+      Seq("cast(0 AS SHORT)", "cast(0 AS SHORT)", "cast(1 AS SHORT)")),
+    (LongType.typeName, "BIGINT",
+      Seq("cast(0 AS LONG)", "cast(0 AS LONG)", "cast(1 AS LONG)")),
+    (FloatType.typeName, "FLOAT",
+      Seq("cast(0 AS FLOAT)", "cast(0 AS FLOAT)", "cast(1 AS FLOAT)")),
+    (DoubleType.typeName, "DOUBLE",
+      Seq("cast(0 AS DOUBLE)", "cast(0 AS DOUBLE)", "cast(1 AS DOUBLE)")),
+    (DecimalType(4, 2).typeName, "DECIMAL(4,2)",
+      Seq("cast(0 AS DECIMAL(4, 2))", "cast(0 AS DECIMAL(4, 2))", "cast(1 AS DECIMAL(4, 2))")),
+    (DecimalType(10, 2).typeName, "DECIMAL(10,2)",
+      Seq("cast(0 AS DECIMAL(10, 2))", "cast(0 AS DECIMAL(10, 2))", "cast(1 AS DECIMAL(10, 2))")),
+    (DecimalType(20, 3).typeName, "DECIMAL(20,3)",
+      Seq("cast(0 AS DECIMAL(20, 3))", "cast(0 AS DECIMAL(20, 3))", "cast(1 AS DECIMAL(20, 3))"))
+  )
+
+  val mixedDateTimeSeqs: Seq[(String, String, Seq[String])] = Seq(
+    (DateType.typeName, "DATE",
+      Seq("DATE'2025-01-01'", "DATE'2025-01-01'", "DATE'2025-01-02'")),
+    (TimestampType.typeName, "TIMESTAMP",
+      Seq("TIMESTAMP'2025-01-01 00:00:00'", "TIMESTAMP'2025-01-01 00:00:00'")),
+    (TimestampNTZType.typeName, "TIMESTAMP_NTZ",
+      Seq("TIMESTAMP_NTZ'2025-01-01 00:00:00'", "TIMESTAMP_NTZ'2025-01-01 00:00:00'")
+    )
+  )
+
+  def checkMixedTypeError(mixedTypeSeq: Seq[(String, String, Seq[Any])]): Unit = {
+    for (i <- 0 until mixedTypeSeq.size - 1) {
+      for (j <- i + 1 until mixedTypeSeq.size) {
+        val (type1, _, seq1) = mixedTypeSeq(i)
+        val (type2, _, seq2) = mixedTypeSeq(j)
+        setupMixedTypeAccumulation(seq1, seq2)
+        checkError(
+          exception = intercept[SparkUnsupportedOperationException] {
+            sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned;").collect()
+          },
+          condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
+          parameters = Map("type1" -> type1, "type2" -> type2)
+        )
+      }
+    }
+  }
+
+  test("SPARK-combine: among different number or datetime types - fail") {
+    checkMixedTypeError(mixedNumberTypeSeqs)
+    checkMixedTypeError(mixedDateTimeSeqs)
+  }
+
+  gridTest("SPARK-combine: string vs number - fail")(mixedNumberTypeSeqs) {
+    case (type1, _, seq1) =>
+      setupMixedTypeAccumulation(seq1, Seq("'a'", "'b'", "'c'", "'c'", "'c'", "'c'", "'d'", "'d'"))
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned;").collect()
+        },
+        condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
+        parameters = Map("type1" -> type1, "type2" -> StringType.typeName)
+      )
+  }
+
+
+  gridTest("SPARK-combine: different types - fail on UNION")(
+    Seq(
+      ("INT", Seq(0, 0, 0, 1, 1, 2, 2, 3),
+        "BOOLEAN", Seq("(true)", "(true)", "(false)", "(false)")),
+      ("INT", Seq(0, 0, 0, 1, 1, 2, 2, 3),
+        "DATE", Seq("DATE'2025-01-01'", "DATE'2025-01-01'", "DATE'2025-01-02'")),
+      ("BIGINT", Seq("cast(0 AS LONG)", "cast(0 AS LONG)", "cast(1 AS LONG)"),
+        "TIMESTAMP", Seq("TIMESTAMP'2025-01-01 00:00:00'", "TIMESTAMP'2025-01-01 00:00:00'"))
+    )) {
+    case (type1, seq1, type2, seq2) =>
+      checkError(
+        exception = intercept[ExtendedAnalysisException] {
+          setupMixedTypeAccumulation(seq1, seq2)
+        },
+        condition = "INCOMPATIBLE_COLUMN_TYPE",
+        parameters = Map(
+          "tableOrdinalNumber" -> "second",
+          "columnOrdinalNumber" -> "first",
+          "dataType2" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: " + type1 + ", " +
+            "maxItemsTracked: INT NOT NULL, typeCode: BINARY NOT NULL>\""),
+          "operator" -> "UNION",
+          "hint" -> "",
+          "dataType1" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: " + type2 + ", " +
+            "maxItemsTracked: INT NOT NULL, typeCode: BINARY NOT NULL>\"")
+        ),
+        queryContext = Array(
+          ExpectedContext(
+            "SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2", 0, 68))
+      )
+  }
+
+  gridTest("SPARK-combine: boolean and number types - fail on UNION")(mixedNumberTypeSeqs) {
+    numberItems =>
+      val (_, type1, seq1) = numberItems
+      val seq2 = Seq("(true)", "(true)", "(false)", "(false)")
+      checkError(
+        exception = intercept[ExtendedAnalysisException] {
+          setupMixedTypeAccumulation(seq1, seq2)
+        },
+        condition = "INCOMPATIBLE_COLUMN_TYPE",
+        parameters = Map(
+          "tableOrdinalNumber" -> "second",
+          "columnOrdinalNumber" -> "first",
+          "dataType2" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: " + type1 +
+            ", maxItemsTracked: INT NOT NULL, typeCode: BINARY NOT NULL>\""),
+          "operator" -> "UNION",
+          "hint" -> "",
+          "dataType1" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: BOOLEAN, " +
+            "maxItemsTracked: INT NOT NULL, typeCode: BINARY NOT NULL>\"")
+        ),
+        queryContext = Array(
+          ExpectedContext(
+            "SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2", 0, 68))
+      )
   }
 }
