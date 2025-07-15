@@ -278,9 +278,9 @@ public abstract class BloomFilter {
         "False positive probability must be within range (0.0, 1.0)"
       );
     }
+
     return create(expectedNumItems, optimalNumOfBits(expectedNumItems, fpp));
   }
-
 
   /**
    * Creates a {@link BloomFilter} with given {@code expectedNumItems} and {@code numBits}, it will
