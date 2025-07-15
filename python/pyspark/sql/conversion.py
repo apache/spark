@@ -545,18 +545,6 @@ class ArrowToUDFConversion:
 
     @staticmethod
     def convert_batch_inputs(arrays, input_types):
-        """
-        Convert entire Arrow arrays to UDF input format in batch.
-        
-        Performance benefits over value-by-value conversion:
-        1. Reduced Python-C++ boundary crossings (once per column vs once per value)
-        2. Eliminated expensive type checking per value (hasattr calls, etc.)
-        3. Better memory access patterns (sequential vs random)
-        4. PyArrow's internal C++ optimizations in to_pylist()
-        
-        Note: We still need to process each value for type conversion, but the overhead
-        reduction can be significant for large batches.
-        """
         if not arrays:
             return []
         
@@ -568,25 +556,19 @@ class ArrowToUDFConversion:
             return []
         
         # Convert each column (array) to Python values in batch
-        # This is much faster than individual array[i] calls
         converted_columns = []
         for j, array in enumerate(arrays):
             input_type = input_types[j] if input_types and j < len(input_types) else None
-            # Use PyArrow's optimized to_pylist() instead of individual get_python_value() calls
             if hasattr(array, "to_pylist"):
                 python_values = array.to_pylist()
             else:
                 # Fallback for arrays that don't support to_pylist
                 python_values = [ArrowToUDFConversion.get_python_value(array, i) for i in range(len(array))]
             
-            # Apply input type conversion to the entire list if needed
-            if input_type is not None:
-                python_values = [ArrowToUDFConversion.convert_input_value(val, input_type) for val in python_values]
-            
-            converted_columns.append(python_values)
+            converted_values = ArrowToUDFConversion._convert_input_values_batch(python_values, input_type)
+            converted_columns.append(converted_values)
         
         # Transpose to get list of rows instead of list of columns
-        # This is still O(rows × columns) but with better cache locality
         converted_rows = []
         for i in range(batch_size):
             row = tuple(converted_columns[j][i] for j in range(len(converted_columns)))
@@ -595,8 +577,111 @@ class ArrowToUDFConversion:
         return converted_rows
 
     @staticmethod
+    def _convert_input_values_batch(values, input_type):
+        if input_type is None:
+            return values
+
+        if not hasattr(input_type, "fromInternal") or isinstance(input_type, (StructType, ArrayType, MapType)):
+            if isinstance(input_type, StructType):
+                return [ArrowToUDFConversion._convert_struct_input(val, input_type) for val in values]
+            elif isinstance(input_type, ArrayType):
+                return [ArrowToUDFConversion._convert_array_input(val, input_type) for val in values]
+            elif isinstance(input_type, MapType):
+                return [ArrowToUDFConversion._convert_map_input(val, input_type) for val in values]
+            else:
+                return values
+
+        converted_values = []
+        for value in values:
+            if value is None:
+                converted_values.append(None)
+                continue
+
+            try:
+                from pyspark.sql.types import VariantVal
+            except ImportError:
+                VariantVal = None
+
+            if VariantVal is not None and isinstance(value, VariantVal):
+                converted_values.append(value.toPython())
+                continue
+
+            value_to_pass = value
+            if hasattr(value, "tolist"):
+                value_to_pass = tuple(value.tolist())
+
+            if hasattr(value_to_pass, 'timetuple'):
+                import calendar
+                dt = value_to_pass
+                value_to_pass = int(calendar.timegm(dt.timetuple()) * 1000000 + dt.microsecond)
+            elif hasattr(value_to_pass, 'total_seconds'):
+                value_to_pass = int(value_to_pass.total_seconds() * 1000000)
+
+            converted_values.append(input_type.fromInternal(value_to_pass))
+
+        return converted_values
+
+    @staticmethod
+    def _convert_struct_input(value, input_type):
+        if value is None:
+            return None
+
+        if isinstance(value, dict):
+            fields_converted = [
+                ArrowToUDFConversion.convert_input_value(value.get(field.name), field.dataType)
+                for field in input_type
+            ]
+            RowCls = Row(*[field.name for field in input_type])
+            return RowCls(*fields_converted)
+        elif isinstance(value, Row):
+            converted_values = [
+                ArrowToUDFConversion.convert_input_value(val, field.dataType)
+                for val, field in zip(value, input_type)
+            ]
+            RowCls = Row(*[field.name for field in input_type])
+            return RowCls(*converted_values)
+        else:
+            return value
+
+    @staticmethod
+    def _convert_array_input(value, input_type):
+        if value is None:
+            return None
+        if isinstance(value, (dict, Row)):
+            return value
+        if not isinstance(value, (list, tuple)):
+            value = [value]
+        return [ArrowToUDFConversion.convert_input_value(elem, input_type.elementType) for elem in value]
+
+    @staticmethod
+    def _convert_map_input(value, input_type):
+        if value is None:
+            return None
+
+        if isinstance(value, dict):
+            items_iter = value.items()
+        elif isinstance(value, list):
+            candidate_items = []
+            for elem in value:
+                if isinstance(elem, tuple) and len(elem) == 2:
+                    candidate_items.append(elem)
+                elif isinstance(elem, list) and len(elem) == 2:
+                    candidate_items.append(tuple(elem))
+                elif isinstance(elem, dict) and len(elem) == 1:
+                    k, v = next(iter(elem.items()))
+                    candidate_items.append((k, v))
+            items_iter = candidate_items
+        else:
+            return value
+
+        return {
+            ArrowToUDFConversion.convert_input_value(k, input_type.keyType):
+            ArrowToUDFConversion.convert_input_value(v, input_type.valueType)
+            for k, v in items_iter
+        }
+
+    @staticmethod
     def convert_input_value(value, input_type):
-        """Convert Arrow/internal value to UDF input format."""
         if value is None or input_type is None:
             return value
 
@@ -625,58 +710,18 @@ class ArrowToUDFConversion:
             return input_type.fromInternal(value_to_pass)
 
         if isinstance(input_type, StructType):
-            if isinstance(value, dict):
-                fields_converted = [
-                    ArrowToUDFConversion.convert_input_value(value.get(field.name), field.dataType) 
-                    for field in input_type
-                ]
-                RowCls = Row(*[field.name for field in input_type])
-                return RowCls(*fields_converted)
-            elif isinstance(value, Row):
-                converted_values = [
-                    ArrowToUDFConversion.convert_input_value(val, field.dataType) 
-                    for val, field in zip(value, input_type)
-                ]
-                RowCls = Row(*[field.name for field in input_type])
-                return RowCls(*converted_values)
-            else:
-                return value
+            return ArrowToUDFConversion._convert_struct_input(value, input_type)
 
         if isinstance(input_type, ArrayType):
-            if isinstance(value, (dict, Row)):
-                return value
-            if not isinstance(value, (list, tuple)):
-                value = [value]
-            return [ArrowToUDFConversion.convert_input_value(elem, input_type.elementType) for elem in value]
+            return ArrowToUDFConversion._convert_array_input(value, input_type)
 
         if isinstance(input_type, MapType):
-            if isinstance(value, dict):
-                items_iter = value.items()
-            elif isinstance(value, list):
-                candidate_items = []
-                for elem in value:
-                    if isinstance(elem, tuple) and len(elem) == 2:
-                        candidate_items.append(elem)
-                    elif isinstance(elem, list) and len(elem) == 2:
-                        candidate_items.append(tuple(elem))
-                    elif isinstance(elem, dict) and len(elem) == 1:
-                        k, v = next(iter(elem.items()))
-                        candidate_items.append((k, v))
-                items_iter = candidate_items
-            else:
-                return value
-
-            return {
-                ArrowToUDFConversion.convert_input_value(k, input_type.keyType): 
-                ArrowToUDFConversion.convert_input_value(v, input_type.valueType)
-                for k, v in items_iter
-            }
+            return ArrowToUDFConversion._convert_map_input(value, input_type)
 
         return value
 
     @staticmethod
     def convert_output_value(value, data_type):
-        """Convert UDF output value for Arrow serialization."""
         if value is None or data_type is None:
             return value
 
@@ -720,16 +765,95 @@ class ArrowToUDFConversion:
 
     @staticmethod
     def convert_batch_outputs(values, data_type):
-        """Convert batch of UDF output values for Arrow serialization."""
         if not values:
             return []
         
-        # Use list comprehension for better performance
+        if data_type is None:
+            return values
+
+        from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType
+
+        if isinstance(data_type, (ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)):
+            return ArrowToUDFConversion._convert_numeric_batch(values, data_type)
+
+        if isinstance(data_type, StructType):
+            return ArrowToUDFConversion._convert_struct_batch(values, data_type)
+        elif isinstance(data_type, ArrayType):
+            return ArrowToUDFConversion._convert_array_batch(values, data_type)
+        elif isinstance(data_type, MapType):
+            return ArrowToUDFConversion._convert_map_batch(values, data_type)
+
         return [ArrowToUDFConversion.convert_output_value(value, data_type) for value in values]
 
     @staticmethod
+    def _convert_numeric_batch(values, data_type):
+        from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType
+
+        converted = []
+        is_int_type = isinstance(data_type, (ByteType, ShortType, IntegerType, LongType))
+        is_float_type = isinstance(data_type, (FloatType, DoubleType))
+
+        for value in values:
+            if value is None:
+                converted.append(None)
+            elif isinstance(value, str) and (is_int_type or is_float_type):
+                try:
+                    converted.append(int(value) if is_int_type else float(value))
+                except (ValueError, TypeError):
+                    converted.append(value)
+            else:
+                converted.append(value)
+
+        return converted
+
+    @staticmethod
+    def _convert_struct_batch(values, data_type):
+        converted = []
+        for value in values:
+            if value is None:
+                converted.append(None)
+            elif isinstance(value, dict):
+                converted.append({
+                    field.name: ArrowToUDFConversion.convert_output_value(value.get(field.name), field.dataType)
+                    for field in data_type
+                })
+            elif isinstance(value, Row):
+                conv_vals = [ArrowToUDFConversion.convert_output_value(v, f.dataType) for v, f in zip(value, data_type)]
+                converted.append({f.name: v for f, v in zip(data_type, conv_vals)})
+            else:
+                converted.append(value)
+        return converted
+
+    @staticmethod
+    def _convert_array_batch(values, data_type):
+        converted = []
+        for value in values:
+            if value is None:
+                converted.append(None)
+            elif isinstance(value, (list, tuple)):
+                converted.append([ArrowToUDFConversion.convert_output_value(v, data_type.elementType) for v in value])
+            else:
+                converted.append(value)
+        return converted
+
+    @staticmethod
+    def _convert_map_batch(values, data_type):
+        converted = []
+        for value in values:
+            if value is None:
+                converted.append(None)
+            elif isinstance(value, dict):
+                converted.append({
+                    ArrowToUDFConversion.convert_output_value(k, data_type.keyType):
+                    ArrowToUDFConversion.convert_output_value(v, data_type.valueType)
+                    for k, v in value.items()
+                })
+            else:
+                converted.append(value)
+        return converted
+
+    @staticmethod
     def get_python_value(array, index):
-        """Extract Python value from Arrow array at given index."""
         value = array[index]
 
         if hasattr(value, 'item') and hasattr(value, 'size') and value.size == 1:
