@@ -4209,6 +4209,9 @@ def theta_union(
         return _invoke_function("theta_union", _to_col(col1), _to_col(col2))
 
 
+theta_union.__doc__ = pysparkfuncs.theta_union.__doc__
+
+
 def theta_intersection(
     col1: "ColumnOrName", col2: "ColumnOrName", lgNomEntries: Optional[int] = None
 ) -> Column:
