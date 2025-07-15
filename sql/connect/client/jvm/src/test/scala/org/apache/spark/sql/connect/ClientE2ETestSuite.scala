@@ -1671,7 +1671,7 @@ class ClientE2ETestSuite
     checkAnswer(df, (0 until 6).map(i => Row(i)))
   }
 
-  test("SPARK-52770: Support Time type in connect") {
+  test("SPARK-52770: Support Time type") {
     val df = spark.sql("SELECT TIME '12:13:14'")
 
     checkAnswer(df, Row(LocalTime.of(12, 13, 14)))
