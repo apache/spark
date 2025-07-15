@@ -95,7 +95,7 @@ private[spark] class PythonWorkerFactory(
   // so we can also fall back to launching workers, pyspark/worker.py (by default) directly.
   private val useDaemon = {
     // This flag is ignored on Windows as it's unable to fork.
-    !System.getProperty("os.name").startsWith("Windows") && useDaemonEnabled
+    !Utils.isWindows && useDaemonEnabled
   }
 
   private val authHelper = new SocketAuthHelper(SparkEnv.get.conf)

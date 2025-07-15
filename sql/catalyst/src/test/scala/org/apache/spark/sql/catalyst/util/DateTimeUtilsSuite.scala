@@ -1294,4 +1294,23 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY))
     )
   }
+
+  test("subtract times") {
+      Seq(
+        (LocalTime.MIDNIGHT, LocalTime.MIDNIGHT) -> 0,
+        (LocalTime.MAX, LocalTime.MIN) -> (TimeUnit.DAYS.toMicros(1) - 1),
+        (LocalTime.MIN, LocalTime.MAX) -> -(TimeUnit.DAYS.toMicros(1) - 1),
+        (LocalTime.of(12, 0, 0, 999999000), LocalTime.of(0, 0, 0, 999999000)) ->
+          TimeUnit.HOURS.toMicros(12),
+        (LocalTime.of(0, 0, 0, 1000), LocalTime.of(0, 0, 0, 999999000)) -> -999998,
+        (LocalTime.of(0, 0, 0, 123456789), LocalTime.of(0, 0, 0, 123)) -> 123456,
+        (LocalTime.of(20, 30, 45, 321000), LocalTime.of(10, 20, 15, 123000)) ->
+          (localTime(20, 30, 45, 321) - localTime(10, 20, 15, 123)) / 1000
+      ).foreach { case ((end, start), expected) =>
+        val endNanos = localTimeToNanos(end)
+        val startNanos = localTimeToNanos(start)
+        val result = subtractTimes(endNanos, startNanos)
+        assert(result === expected)
+      }
+    }
 }

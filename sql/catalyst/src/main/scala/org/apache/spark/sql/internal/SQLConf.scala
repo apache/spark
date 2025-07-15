@@ -6038,6 +6038,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PRIORITIZE_ORDINAL_RESOLUTION_IN_SORT =
+    buildConf("spark.sql.prioritizeOrdinalResolutionInSort.enabled")
+      .internal()
+      .doc(
+        "When set to true, we prioritize ordinal resolution in Sort over other expressions. " +
+        "Otherwise, no order is enforced."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *

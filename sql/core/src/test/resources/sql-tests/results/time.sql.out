@@ -535,25 +535,17 @@ struct<CAST(12:43:33.1234 AS TIME(4)) + INTERVAL '01:04:05.56' HOUR TO SECOND:ti
 -- !query
 SELECT TIME'08:30' + NULL
 -- !query schema
-struct<>
+struct<TIME '08:30:00' + NULL:time(6)>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "left" : "\"TIME(6)\"",
-    "right" : "\"VOID\"",
-    "sqlExpr" : "\"(TIME '08:30:00' + NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 25,
-    "fragment" : "TIME'08:30' + NULL"
-  } ]
-}
+NULL
+
+
+-- !query
+SELECT NULL + TIME'08:30'
+-- !query schema
+struct<TIME '08:30:00' + NULL:time(6)>
+-- !query output
+NULL
 
 
 -- !query
@@ -634,3 +626,77 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "'10:00:01' :: TIME(1) - INTERVAL '1' MONTH"
   } ]
 }
+
+
+-- !query
+SELECT TIME'12:30:41' - TIME'10:00'
+-- !query schema
+struct<TIME '12:30:41' - TIME '10:00:00':interval hour to second>
+-- !query output
+0 02:30:41.000000000
+
+
+-- !query
+SELECT TIME'08:30' - NULL
+-- !query schema
+struct<TIME '08:30:00' - NULL:interval hour to second>
+-- !query output
+NULL
+
+
+-- !query
+SELECT NULL - TIME'10:32'
+-- !query schema
+struct<NULL - TIME '10:32:00':interval hour to second>
+-- !query output
+NULL
+
+
+-- !query
+SELECT TIME'12:30:41.123' - TIMESTAMP'2025-07-11 10:00:01'
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIME '12:30:41.123'\"",
+    "inputType" : "\"TIME(6)\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"(TIME '12:30:41.123' - TIMESTAMP '2025-07-11 10:00:01')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 58,
+    "fragment" : "TIME'12:30:41.123' - TIMESTAMP'2025-07-11 10:00:01'"
+  } ]
+}
+
+
+-- !query
+SELECT '12:30:41.123' - TIME'10:00:01'
+-- !query schema
+struct<12:30:41.123 - TIME '10:00:01':interval hour to second>
+-- !query output
+0 02:30:40.123000000
+
+
+-- !query
+SELECT '23:59:59.999999' :: TIME(6) - '00:00' :: TIME(0)
+-- !query schema
+struct<CAST(23:59:59.999999 AS TIME(6)) - CAST(00:00 AS TIME(0)):interval hour to second>
+-- !query output
+0 23:59:59.999999000
+
+
+-- !query
+SELECT '00:00:00.1234' :: TIME(4) - TIME'23:59:59'
+-- !query schema
+struct<CAST(00:00:00.1234 AS TIME(4)) - TIME '23:59:59':interval hour to second>
+-- !query output
+-0 23:59:58.876600000
