@@ -664,7 +664,7 @@ object StateStoreProvider extends Logging {
   }
 
   /**
-   * Get the runId from the provided hadoopConf. If it is not found, generate a random UUID.
+   * Get the runId from the provided hadoopConf. If it is not found, an error will be thrown.
    *
    * @param hadoopConf Hadoop configuration used by the StateStore to save state data
    */

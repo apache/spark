@@ -234,11 +234,15 @@ object DataType {
     }
   }
 
+  private[sql] def parseDataType(json: JValue): DataType = {
+    parseDataType(json, fieldPath = "", collationsMap = Map.empty)
+  }
+
   // NOTE: Map fields must be sorted in alphabetical order to keep consistent with the Python side.
   private[sql] def parseDataType(
       json: JValue,
-      fieldPath: String = "",
-      collationsMap: Map[String, String] = Map.empty): DataType = json match {
+      fieldPath: String,
+      collationsMap: Map[String, String]): DataType = json match {
     case JString(name) =>
       collationsMap.get(fieldPath) match {
         case Some(collation) =>

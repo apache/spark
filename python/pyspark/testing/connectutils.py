@@ -166,6 +166,9 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 
     @classmethod
     def setUpClass(cls):
+        # This environment variable is for interrupting hanging ML-handler and making the
+        # tests fail fast.
+        os.environ["SPARK_CONNECT_ML_HANDLER_INTERRUPTION_TIMEOUT_MINUTES"] = "5"
         cls.spark = (
             PySparkSession.builder.config(conf=cls.conf())
             .appName(cls.__name__)

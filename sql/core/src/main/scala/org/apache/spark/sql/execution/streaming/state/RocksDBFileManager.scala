@@ -335,7 +335,7 @@ class RocksDBFileManager(
     versionToRocksDBFiles.keySet().removeIf(_._1 >= version)
     val metadata = if (version == 0) {
       if (localDir.exists) Utils.deleteRecursively(localDir)
-      localDir.mkdirs()
+      Utils.createDirectory(localDir)
       // Since we cleared the local dir, we should also clear the local file mapping
       rocksDBFileMapping.clear()
       RocksDBCheckpointMetadata(Seq.empty, 0)
@@ -828,7 +828,7 @@ class RocksDBFileManager(
   private def getImmutableFilesFromVersionZip(
       version: Long, checkpointUniqueId: Option[String] = None): Seq[RocksDBImmutableFile] = {
     Utils.deleteRecursively(localTempDir)
-    localTempDir.mkdirs()
+    Utils.createDirectory(localTempDir)
     Utils.unzipFilesFromFile(fs, dfsBatchZipFile(version, checkpointUniqueId), localTempDir)
     val metadataFile = localMetadataFile(localTempDir)
     val metadata = RocksDBCheckpointMetadata.readFromFile(metadataFile)

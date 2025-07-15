@@ -26,11 +26,10 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.catalyst.expressions.BasePredicate
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.expressions.Projection
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
-import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Discard, Instruction, Keep, ROW_ID, Split}
+import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Context, Copy, Delete, Discard, Insert, Instruction, Keep, ROW_ID, Split, Update}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
@@ -49,7 +48,21 @@ case class MergeRowsExec(
 
   override lazy val metrics: Map[String, SQLMetric] = Map(
     "numTargetRowsCopied" -> SQLMetrics.createMetric(sparkContext,
-      "Number of target rows copied unmodified because they did not match any action."))
+      "number of target rows copied unmodified because they did not match any action"),
+    "numTargetRowsInserted" -> SQLMetrics.createMetric(sparkContext,
+      "number of target rows inserted"),
+    "numTargetRowsDeleted" -> SQLMetrics.createMetric(sparkContext,
+      "number of target rows deleted"),
+    "numTargetRowsUpdated" -> SQLMetrics.createMetric(sparkContext,
+      "number of target rows updated"),
+    "numTargetRowsMatchedUpdated" -> SQLMetrics.createMetric(sparkContext,
+      "number of target rows updated by a matched clause"),
+    "numTargetRowsMatchedDeleted" -> SQLMetrics.createMetric(sparkContext,
+      "number of target rows deleted by a matched clause"),
+    "numTargetRowsNotMatchedBySourceUpdated" -> SQLMetrics.createMetric(sparkContext,
+      "number of target rows updated by a not matched by source clause"),
+    "numTargetRowsNotMatchedBySourceDeleted" -> SQLMetrics.createMetric(sparkContext,
+      "number of target rows deleted by a not matched by source clause"))
 
   @transient override lazy val producedAttributes: AttributeSet = {
     AttributeSet(output.filterNot(attr => inputSet.contains(attr)))
@@ -113,11 +126,8 @@ case class MergeRowsExec(
 
   private def planInstructions(instructions: Seq[Instruction]): Seq[InstructionExec] = {
     instructions.map {
-      case Copy(output) =>
-        CopyExec(createProjection(output))
-
-      case Keep(cond, output) =>
-        KeepExec(createPredicate(cond), createProjection(output))
+      case Keep(context, cond, output) =>
+        KeepExec(context, createPredicate(cond), createProjection(output))
 
       case Discard(cond) =>
         DiscardExec(createPredicate(cond))
@@ -136,12 +146,8 @@ case class MergeRowsExec(
     def condition: BasePredicate
   }
 
-  case class CopyExec(projection: Projection) extends InstructionExec {
-    override lazy val condition: BasePredicate = createPredicate(TrueLiteral)
-    def apply(row: InternalRow): InternalRow = projection.apply(row)
-  }
-
   case class KeepExec(
+      context: Context,
       condition: BasePredicate,
       projection: Projection) extends InstructionExec {
     def apply(row: InternalRow): InternalRow = projection.apply(row)
@@ -219,9 +225,9 @@ case class MergeRowsExec(
 
       if (isTargetRowPresent && isSourceRowPresent) {
         cardinalityValidator.validate(row)
-        applyInstructions(row, matchedInstructions)
+        applyInstructions(row, matchedInstructions, sourcePresent = true)
       } else if (isSourceRowPresent) {
-        applyInstructions(row, notMatchedInstructions)
+        applyInstructions(row, notMatchedInstructions, sourcePresent = true)
       } else if (isTargetRowPresent) {
         applyInstructions(row, notMatchedBySourceInstructions)
       } else {
@@ -231,23 +237,29 @@ case class MergeRowsExec(
 
     private def applyInstructions(
         row: InternalRow,
-        instructions: Seq[InstructionExec]): InternalRow = {
+        instructions: Seq[InstructionExec],
+        sourcePresent: Boolean = false): InternalRow = {
 
       for (instruction <- instructions) {
         if (instruction.condition.eval(row)) {
           instruction match {
-            case copy: CopyExec =>
-              // group-based operations copy over target rows that didn't match any actions
-              longMetric("numTargetRowsCopied") += 1
-              return copy.apply(row)
-
             case keep: KeepExec =>
+              keep.context match {
+                case Copy => incrementCopyMetric()
+                case Update => incrementUpdateMetric(sourcePresent)
+                case Insert => incrementInsertMetric()
+                case Delete => incrementDeleteMetric(sourcePresent)
+                case _ => throw new IllegalArgumentException(
+                  s"Unexpected context for KeepExec: ${keep.context}")
+              }
               return keep.apply(row)
 
             case _: DiscardExec =>
+              incrementDeleteMetric(sourcePresent)
               return null
 
             case split: SplitExec =>
+              incrementUpdateMetric(sourcePresent)
               cachedExtraRow = split.projectExtraRow(row)
               return split.projectRow(row)
           }
@@ -255,6 +267,29 @@ case class MergeRowsExec(
       }
 
       null
+    }
+  }
+
+  // For group based merge, copy is inserted if row matches no other case
+  private def incrementCopyMetric(): Unit = longMetric("numTargetRowsCopied") += 1
+
+  private def incrementInsertMetric(): Unit = longMetric("numTargetRowsInserted") += 1
+
+  private def incrementDeleteMetric(sourcePresent: Boolean): Unit = {
+    longMetric("numTargetRowsDeleted") += 1
+    if (sourcePresent) {
+      longMetric("numTargetRowsMatchedDeleted") += 1
+    } else {
+      longMetric("numTargetRowsNotMatchedBySourceDeleted") += 1
+    }
+  }
+
+  private def incrementUpdateMetric(sourcePresent: Boolean): Unit = {
+    longMetric("numTargetRowsUpdated") += 1
+    if (sourcePresent) {
+      longMetric("numTargetRowsMatchedUpdated") += 1
+    } else {
+      longMetric("numTargetRowsNotMatchedBySourceUpdated") += 1
     }
   }
 }

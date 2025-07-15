@@ -20,7 +20,7 @@ import java.io.{EOFException, File, FileOutputStream, StringWriter}
 import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDateTime}
+import java.time.{Instant, LocalDateTime, Year}
 import java.util.TimeZone
 import java.util.concurrent.ConcurrentHashMap
 import javax.xml.stream.{XMLOutputFactory, XMLStreamException}
@@ -38,7 +38,8 @@ import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 
 import org.apache.spark.{DebugFilesystem, SparkException}
 import org.apache.spark.io.ZStdCompressionCodec
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode, YearUDT}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UDTEncoder
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.catalyst.xml.{IndentingXMLStreamWriter, XmlOptions}
@@ -3488,6 +3489,29 @@ class XmlSuite
         val df = spark.read.options(options).xml(dir.getCanonicalPath)
         checkAnswer(df, expectedOutput)
       }
+    }
+  }
+
+  test("SPARK-52695: UDT write support for xml file format") {
+    val udt = new YearUDT()
+    val encoder = UDTEncoder(udt, classOf[YearUDT])
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      // Write a dataset of Year objects
+      val df1 = spark.range(2018, 2025).map(y => Year.of(y.toInt))(encoder)
+
+      df1
+      .write
+      .mode(SaveMode.Overwrite)
+      .option("rowTag", "ROW")
+      .xml(path)
+
+      val df = spark.read
+        .option("rowTag", "ROW")
+        .xml(path)
+
+      assert(df.schema === StructType(Seq(StructField("value", LongType))))
+      checkAnswer(df, spark.range(2018, 2025).toDF("value"))
     }
   }
 }

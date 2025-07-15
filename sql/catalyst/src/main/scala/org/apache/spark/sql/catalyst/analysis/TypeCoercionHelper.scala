@@ -51,7 +51,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   SpecialFrameBoundary,
   SpecifiedWindowFrame,
   SubtractTimestamps,
-  TimeAdd,
+  TimestampAddInterval,
   WindowSpecDefinition
 }
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, Sum}
@@ -671,7 +671,7 @@ abstract class TypeCoercionHelper {
         case (e, _: DateType) => e
         case (e, _: TimestampType) => e
         case (e: Expression, t) if e.dataType != t && canCast(e.dataType, t) =>
-          Cast(e, t)
+          Cast(child = e, dataType = t).withTimeZone(conf.sessionLocalTimeZone)
         case _ => boundary
       }
     }
@@ -700,7 +700,8 @@ abstract class TypeCoercionHelper {
         val newRight = castIfNotSameType(s.right, TimestampNTZType)
         s.copy(left = newLeft, right = newRight)
 
-      case t @ TimeAdd(StringTypeExpression(), _, _) => t.copy(start = Cast(t.start, TimestampType))
+      case t @ TimestampAddInterval(StringTypeExpression(), _, _) =>
+        t.copy(start = Cast(t.start, TimestampType))
 
       case other => other
     }

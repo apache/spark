@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.time.LocalTime
+import java.time.{Duration, LocalTime}
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkDateTimeException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLValue}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, StringType, TimeType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, IntegerType, StringType, TimeType}
+import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, SECOND}
 
 class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("ParseToTime") {
@@ -363,5 +364,58 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(
       (child: Expression) => SecondsOfTimeWithFraction(child).replacement,
       TimeType())
+  }
+
+  test("Add ANSI day-time intervals to TIME") {
+    checkEvaluation(
+      TimeAddInterval(Literal.create(null, TimeType()), Literal(Duration.ofHours(1))),
+      null)
+    checkEvaluation(
+      TimeAddInterval(Literal(LocalTime.of(12, 30)), Literal(null, DayTimeIntervalType(SECOND))),
+      null)
+    checkEvaluation(
+      TimeAddInterval(Literal(LocalTime.of(8, 31)), Literal(Duration.ofMinutes(30))),
+      LocalTime.of(8, 31).plusMinutes(30))
+    // Maximum precision of TIME and DAY-TIME INTERVAL
+    assert(TimeAddInterval(
+      Literal(0L, TimeType(0)),
+      Literal(0L, DayTimeIntervalType(DAY))).dataType == TimeType(0))
+    assert(TimeAddInterval(
+      Literal(1L, TimeType(TimeType.MAX_PRECISION)),
+      Literal(1L, DayTimeIntervalType(HOUR))).dataType == TimeType(TimeType.MAX_PRECISION))
+    assert(TimeAddInterval(
+      Literal(2L, TimeType(TimeType.MIN_PRECISION)),
+      Literal(2L, DayTimeIntervalType(SECOND))).dataType == TimeType(TimeType.MICROS_PRECISION))
+    assert(TimeAddInterval(
+      Literal(3L, TimeType(TimeType.MAX_PRECISION)),
+      Literal(3L, DayTimeIntervalType(SECOND))).dataType == TimeType(TimeType.MAX_PRECISION))
+    checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+      (time: Expression, interval: Expression) => TimeAddInterval(time, interval).replacement,
+      TimeType(), DayTimeIntervalType())
+  }
+
+  test("Subtract times") {
+    checkEvaluation(
+      SubtractTimes(Literal.create(null, TimeType()), Literal(LocalTime.MIN)),
+      null)
+    checkEvaluation(
+      SubtractTimes(Literal(LocalTime.MAX), Literal(null, TimeType())),
+      null)
+    checkEvaluation(
+      SubtractTimes(
+        Literal(LocalTime.of(8, 31).plusMinutes(30)),
+        Literal(LocalTime.of(8, 31))),
+      Duration.ofMinutes(30))
+    assert(SubtractTimes(
+      Literal(0L, TimeType(0)),
+      Literal(0L, TimeType(0))).dataType == DayTimeIntervalType(HOUR, SECOND))
+
+    for (i <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+      for (j <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+        checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+          (end: Expression, start: Expression) => SubtractTimes(end, start).replacement,
+          TimeType(i), TimeType(j))
+      }
+    }
   }
 }

@@ -67,3 +67,28 @@ select extract(SECOND FROM cast('09:08:01.987654' as time(3)));
 select extract(SECOND FROM cast('09:08:01.987654' as time(4)));
 select extract(SECOND FROM cast('09:08:01.987654' as time(5)));
 select extract(SECOND FROM cast('09:08:01.987654' as time(6)));
+
+-- cast time to time
+SELECT cast(cast('12:00' as time(0)) as time(2));
+SELECT cast(('23:59:59.001001' :: time(6)) as time(4));
+SELECT cast(time'11:59:59.999999' as time without time zone);
+
+-- +/- ANSI day-time intervals
+SELECT '12:43:33.1234' :: TIME(4) + INTERVAL '01:04:05.56' HOUR TO SECOND;
+SELECT TIME'08:30' + NULL;
+SELECT NULL + TIME'08:30';
+SELECT TIME'00:00:00.0101' + 1;
+SELECT TIME'12:30' - INTERVAL '12:29:59.000001' HOUR TO SECOND;
+SELECT '23:59:59.999999' :: TIME - INTERVAL '23:59:59.999999' HOUR TO SECOND;
+SELECT '00:00:00.0001' :: TIME(4) - INTERVAL '0 00:00:00.0001' DAY TO SECOND;
+SELECT '08:30' :: TIME(0) - INTERVAL '6' HOUR;
+SELECT '10:00:01' :: TIME(1) - INTERVAL '1' MONTH;
+
+-- Subtract times
+SELECT TIME'12:30:41' - TIME'10:00';
+SELECT TIME'08:30' - NULL;
+SELECT NULL - TIME'10:32';
+SELECT TIME'12:30:41.123' - TIMESTAMP'2025-07-11 10:00:01';
+SELECT '12:30:41.123' - TIME'10:00:01';
+SELECT '23:59:59.999999' :: TIME(6) - '00:00' :: TIME(0);
+SELECT '00:00:00.1234' :: TIME(4) - TIME'23:59:59';

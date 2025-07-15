@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 import java.lang.invoke.{MethodHandles, MethodType}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZonedDateTime, ZoneId, ZoneOffset}
-import java.time.temporal.ChronoField.{MICRO_OF_DAY, NANO_OF_DAY}
+import java.time.temporal.ChronoField.NANO_OF_DAY
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit.{MICROSECONDS, NANOSECONDS}
 import java.util.regex.Pattern
@@ -145,42 +145,42 @@ trait SparkDateTimeUtils {
   }
 
   /**
-   * Gets the number of microseconds since midnight using the given time zone.
+   * Gets the number of nanoseconds since midnight using the given time zone.
    */
-  def instantToMicrosOfDay(instant: Instant, timezone: String): Long = {
-    instantToMicrosOfDay(instant, getZoneId(timezone))
+  def instantToNanosOfDay(instant: Instant, timezone: String): Long = {
+    instantToNanosOfDay(instant, getZoneId(timezone))
   }
 
   /**
-   * Gets the number of microseconds since midnight using the given time zone.
+   * Gets the number of nanoseconds since midnight using the given time zone.
    */
-  def instantToMicrosOfDay(instant: Instant, zoneId: ZoneId): Long = {
+  def instantToNanosOfDay(instant: Instant, zoneId: ZoneId): Long = {
     val localDateTime = LocalDateTime.ofInstant(instant, zoneId)
-    localDateTime.toLocalTime.getLong(MICRO_OF_DAY)
+    localDateTime.toLocalTime.getLong(NANO_OF_DAY)
   }
 
   /**
-   * Truncates a time value (in microseconds) to the specified fractional precision `p`.
+   * Truncates a time value (in nanoseconds) to the specified fractional precision `p`.
    *
    * For example, if `p = 3`, we keep millisecond resolution and discard any digits beyond the
-   * thousand-microsecond place. So a value like `123456` microseconds (12:34:56.123456) becomes
+   * thousand-nanosecond place. So a value like `123456` microseconds (12:34:56.123456) becomes
    * `123000` microseconds (12:34:56.123).
    *
-   * @param micros
-   *   The original time in microseconds.
+   * @param nanos
+   *   The original time in nanoseconds.
    * @param p
    *   The fractional second precision (range 0 to 6).
    * @return
-   *   The truncated microsecond value, preserving only `p` fractional digits.
+   *   The truncated nanosecond value, preserving only `p` fractional digits.
    */
-  def truncateTimeMicrosToPrecision(micros: Long, p: Int): Long = {
+  def truncateTimeToPrecision(nanos: Long, p: Int): Long = {
     assert(
-      p >= TimeType.MIN_PRECISION && p <= TimeType.MICROS_PRECISION,
+      TimeType.MIN_PRECISION <= p && p <= TimeType.MAX_PRECISION,
       s"Fractional second precision $p out" +
-        s" of range [${TimeType.MIN_PRECISION}..${TimeType.MICROS_PRECISION}].")
-    val scale = TimeType.MICROS_PRECISION - p
+        s" of range [${TimeType.MIN_PRECISION}..${TimeType.MAX_PRECISION}].")
+    val scale = TimeType.NANOS_PRECISION - p
     val factor = math.pow(10, scale).toLong
-    (micros / factor) * factor
+    (nanos / factor) * factor
   }
 
   /**

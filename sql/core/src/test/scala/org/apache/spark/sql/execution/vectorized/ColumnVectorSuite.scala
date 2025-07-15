@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.vectorized
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.YearUDT
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.columnar.{ColumnAccessor, ColumnDictionary}
@@ -926,5 +927,27 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
       }
     }
   }
-}
 
+  val yearUDT = new YearUDT
+  testVectors("user defined type", 10, yearUDT) { testVector =>
+    assert(testVector.dataType() === IntegerType)
+    (0 until 10).foreach { i =>
+      testVector.appendInt(i)
+    }
+  }
+
+  testVectors("user defined type in map type",
+    10, MapType(IntegerType, yearUDT)) { testVector =>
+    assert(testVector.dataType() === MapType(IntegerType, IntegerType))
+  }
+
+  testVectors("user defined type in array type",
+    10, ArrayType(yearUDT, containsNull = true)) { testVector =>
+    assert(testVector.dataType() === ArrayType(IntegerType, containsNull = true))
+  }
+
+  testVectors("user defined type in struct type",
+    10, StructType(Seq(StructField("year", yearUDT)))) { testVector =>
+    assert(testVector.dataType() === StructType(Seq(StructField("year", IntegerType))))
+  }
+}

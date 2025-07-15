@@ -33,6 +33,7 @@ import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.{ListState, MapState, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode, TimerValues, TTLConfig, ValueState}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.SparkFileUtils
 
 case class InputRowForConnectTest(key: String, value: String)
 case class OutputRowForConnectTest(key: String, value: String)
@@ -494,7 +495,7 @@ class TransformWithStateConnectSuite
     val file = Paths.get(inputPath).toFile
     val parentDir = file.getParentFile
     if (parentDir != null && !parentDir.exists()) {
-      parentDir.mkdirs()
+      SparkFileUtils.createDirectory(parentDir)
     }
 
     val writer = new BufferedWriter(new FileWriter(inputPath))

@@ -91,10 +91,23 @@ jobs:
   release:
     name: Release Apache Spark
     runs-on: ubuntu-latest
-    # Do not allow dispatching this workflow manually in the main repo.
-    # and skip this workflow in forked repository when running as a
-    # scheduled job (dryrun).
-    if: ${{ (github.repository == 'apache/spark') != (inputs.branch != '' && inputs.release-version != '') }}
+    # Allow workflow to run only in the following cases:
+    # 1. In the apache/spark repository:
+    #    - Only allow dry runs (i.e., both 'branch' and 'release-version' inputs are empty).
+    # 2. In forked repositories:
+    #    - Allow real runs when both 'branch' and 'release-version' are provided.
+    #    - Allow dry runs only if manually dispatched (not on a schedule).
+    if: |
+      (
+        github.repository == 'apache/spark' &&
+        inputs.branch == '' &&
+        inputs.release-version == ''
+      ) || (
+        github.repository != 'apache/spark' &&
+        (
+          (inputs.branch != '' && inputs.release-version != '') || github.event_name == 'workflow_dispatch'
+        )
+      )
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v4
@@ -153,7 +166,7 @@ jobs:
           fi
 
           export ASF_PASSWORD GPG_PRIVATE_KEY GPG_PASSPHRASE ASF_USERNAME
-          export GIT_BRANCH
+          export GIT_BRANCH="${GIT_BRANCH:-master}"
           [ -n "$RELEASE_VERSION" ] && export RELEASE_VERSION
 
           if [ "$DRYRUN_MODE" = "1" ]; then
@@ -227,9 +240,18 @@ jobs:
             cp "$file" "$file.bak"
             for pattern in "${PATTERNS[@]}"; do
               [ -n "$pattern" ] || continue  # Skip empty patterns
-              escaped_pattern=$(printf '%s\n' "$pattern" | sed 's/[\/&]/\\&/g')
-              sed -i "s/${escaped_pattern}/***/g" "$file"
+          
+              # Safely escape special characters for sed
+              escaped_pattern=${pattern//\\/\\\\} # Escape backslashes
+              escaped_pattern=${escaped_pattern//\//\\/} # Escape forward slashes
+              escaped_pattern=${escaped_pattern//&/\\&} # Escape &
+              escaped_pattern=${escaped_pattern//$'\n'/} # Remove newlines
+              escaped_pattern=${escaped_pattern//$'\r'/} # Remove carriage returns (optional)
+          
+              # Redact the pattern
+              sed -i.bak "s/${escaped_pattern}/***/g" "$file"
             done
+            rm -f "$file.bak"
           done
 
           # Zip logs/output

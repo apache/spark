@@ -1595,45 +1595,13 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select timestamp'2011-11-11 11:11:11' + null
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "left" : "\"TIMESTAMP\"",
-    "right" : "\"VOID\"",
-    "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' + NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 44,
-    "fragment" : "timestamp'2011-11-11 11:11:11' + null"
-  } ]
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select null + timestamp'2011-11-11 11:11:11'
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "left" : "\"VOID\"",
-    "right" : "\"TIMESTAMP\"",
-    "sqlExpr" : "\"(NULL + TIMESTAMP '2011-11-11 11:11:11')\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 44,
-    "fragment" : "null + timestamp'2011-11-11 11:11:11'"
-  } ]
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

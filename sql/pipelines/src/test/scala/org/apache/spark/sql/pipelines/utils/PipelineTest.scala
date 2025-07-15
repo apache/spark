@@ -26,29 +26,33 @@ import scala.util.control.NonFatal
 
 import org.scalactic.source
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Tag}
+import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Column, QueryTest, Row, TypedColumn}
+import org.apache.spark.sql.{Column, QueryTest, Row, SQLContext, TypedColumn}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl, SqlGraphRegistrationContext}
 import org.apache.spark.sql.pipelines.utils.PipelineTest.{cleanupMetastore, createTempDir}
-import org.apache.spark.sql.test.SharedSparkSession
 
 abstract class PipelineTest
     extends SparkFunSuite
-    with SharedSparkSession
     with BeforeAndAfterAll
     with BeforeAndAfterEach
     with Matchers
     with SparkErrorTestMixin
     with TargetCatalogAndDatabaseMixin
-    with Logging {
+    with Logging
+    with Eventually {
 
   final protected val storageRoot = createTempDir()
+
+  protected def spark: SparkSession
+
+  protected implicit def sqlContext: SQLContext
 
   def sql(text: String): DataFrame = spark.sql(text)
 
@@ -57,15 +61,6 @@ abstract class PipelineTest
       unresolvedDataflowGraph, eventCallback = _ => ())
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
-  }
-
-  /**
-   * Spark confs set here will be the default spark confs for all spark sessions created in tests.
-   */
-  override def sparkConf: SparkConf = {
-    super.sparkConf
-      .set("spark.sql.shuffle.partitions", "2")
-      .set("spark.sql.session.timeZone", "UTC")
   }
 
   /** Returns the dataset name in the event log. */
@@ -83,9 +78,9 @@ abstract class PipelineTest
       name: String,
       catalog: Option[String] = catalogInPipelineSpec,
       database: Option[String] = databaseInPipelineSpec,
-      isView: Boolean = false
+      isTemporaryView: Boolean = false
   ): TableIdentifier = {
-    if (isView) {
+    if (isTemporaryView) {
       TableIdentifier(name)
     } else {
       TableIdentifier(
@@ -126,7 +121,7 @@ abstract class PipelineTest
     )
   }
 
-  override def beforeEach(): Unit = {
+  protected override def beforeEach(): Unit = {
     super.beforeEach()
     cleanupMetastore(spark)
     (catalogInPipelineSpec, databaseInPipelineSpec) match {
@@ -137,7 +132,7 @@ abstract class PipelineTest
     }
   }
 
-  override def afterEach(): Unit = {
+  protected override def afterEach(): Unit = {
     cleanupMetastore(spark)
     super.afterEach()
   }
