@@ -160,11 +160,17 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
             "Try regenerate the result files.")
         Seq.tabulate(outputs.size) { i =>
           val sql = segments(i * 3 + 1).trim
-          val output = segments(i * 3 + 3).replaceAll("\\s+$", "")
+          val schema = segments(i * 3 + 2).trim
+          val originalOut = segments(i * 3 + 3)
+          val output = if (schema != emptySchema && isNeedSort(sql)) {
+            originalOut.split("\n").sorted.mkString("\n")
+          } else {
+            originalOut
+          }
           ExecutionOutput(
             sql = sql,
             schema = Some(""),
-            output = output
+            output = output.replaceAll("\\s+$", "")
           )
         }
       }
