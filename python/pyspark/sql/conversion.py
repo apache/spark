@@ -313,41 +313,47 @@ class LocalDataToArrowConversion:
         assert schema is not None and isinstance(schema, StructType)
 
         column_names = schema.fieldNames()
+        len_column_names = len(column_names)
+
+        def to_row(item: Any) -> tuple:
+            if item is None:
+                return tuple([None] * len_column_names)
+            elif isinstance(item, (Row, tuple)):
+                if len(item) != len_column_names:
+                    raise PySparkValueError(
+                        errorClass="AXIS_LENGTH_MISMATCH",
+                        messageParameters={
+                            "expected_length": str(len_column_names),
+                            "actual_length": str(len(item)),
+                        },
+                    )
+                return tuple(item)
+            elif isinstance(item, dict):
+                return tuple([item.get(col) for col in column_names])
+            elif isinstance(item, VariantVal):
+                raise PySparkValueError("Rows cannot be of type VariantVal")
+            elif hasattr(item, "__dict__"):
+                item = item.__dict__
+                return tuple([item.get(col) for col in column_names])
+            else:
+                if len(item) != len_column_names:
+                    raise PySparkValueError(
+                        errorClass="AXIS_LENGTH_MISMATCH",
+                        messageParameters={
+                            "expected_length": str(len_column_names),
+                            "actual_length": str(len(item)),
+                        },
+                    )
+                return tuple(item)
+
+        rows = [to_row(item) for item in data]
 
         column_convs = [
             LocalDataToArrowConversion._create_converter(field.dataType, field.nullable)
             for field in schema.fields
         ]
 
-        pylist: List[List] = [[] for _ in range(len(column_names))]
-
-        for item in data:
-            if isinstance(item, VariantVal):
-                raise PySparkValueError("Rows cannot be of type VariantVal")
-            if (
-                not isinstance(item, Row)
-                and not isinstance(item, tuple)  # inherited namedtuple
-                and hasattr(item, "__dict__")
-            ):
-                item = item.__dict__
-            if isinstance(item, dict):
-                for i, col in enumerate(column_names):
-                    pylist[i].append(column_convs[i](item.get(col)))
-            elif item is None:
-                for i, col in enumerate(column_names):
-                    pylist[i].append(None)
-            else:
-                if len(item) != len(column_names):
-                    raise PySparkValueError(
-                        errorClass="AXIS_LENGTH_MISMATCH",
-                        messageParameters={
-                            "expected_length": str(len(column_names)),
-                            "actual_length": str(len(item)),
-                        },
-                    )
-
-                for i in range(len(column_names)):
-                    pylist[i].append(column_convs[i](item[i]))
+        pylist = [[conv(row[i]) for row in rows] for i, conv in enumerate(column_convs)]
 
         pa_schema = to_arrow_schema(
             StructType(
