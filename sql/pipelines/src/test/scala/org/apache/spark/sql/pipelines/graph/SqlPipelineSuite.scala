@@ -19,11 +19,11 @@ package org.apache.spark.sql.pipelines.graph
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.util.Utils
 
-class SQLPipelineSuite extends PipelineTest with SQLTestUtils {
+class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
   private val externalTable1Ident = fullyQualifiedIdentifier("external_t1")
   private val externalTable2Ident = fullyQualifiedIdentifier("external_t2")
 
