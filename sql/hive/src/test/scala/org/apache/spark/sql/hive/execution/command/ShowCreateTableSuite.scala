@@ -131,7 +131,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
       val expected = s"CREATE TABLE $nsTable ( c1 INT COMMENT 'bla', c2 STRING)" +
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
         " WITH SERDEPROPERTIES (" +
-        " 'colelction.delim' = '@'," +
+        " 'collection.delim' = '@'," +
         " 'field.delim' = ','," +
         " 'mapkey.delim' = '#'," +
         " 'serialization.format' = ',')" +

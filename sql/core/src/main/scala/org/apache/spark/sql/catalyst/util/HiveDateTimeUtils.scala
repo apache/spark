@@ -18,11 +18,13 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Timestamp => SqlTimestamp}
-import java.time.ZoneId
+import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
+import java.time.ZoneOffset.UTC
 
 import org.apache.hadoop.hive.common.`type`.{Date => HiveDate, Timestamp => HiveTimestamp}
 
-import org.apache.spark.sql.catalyst.util.RebaseDateTime
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianDays
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.instantToMicros
 
 object HiveDateTimeUtils {
   private val zoneId = ZoneId.systemDefault()
@@ -35,7 +37,12 @@ object HiveDateTimeUtils {
   }
 
   def fromHiveTimestamp(t: HiveTimestamp): Long = {
-    DateTimeUtils.fromJavaTimestamp(toSqlTimestamp(t))
+    // get Hive localDateTime
+    var localDateTime = LocalDateTime.ofInstant(Instant.ofEpochSecond(t.toEpochSecond, t.getNanos),
+      UTC)
+    val julianDate = rebaseJulianToGregorianDays(localDateTime.toLocalDate.toEpochDay.toInt)
+    localDateTime = LocalDateTime.of(LocalDate.ofEpochDay(julianDate), localDateTime.toLocalTime)
+    instantToMicros(localDateTime.toInstant(zoneId.getRules.getOffset(localDateTime)))
   }
 
   def fromHiveDate(d: HiveDate): Int = {
@@ -45,13 +52,13 @@ object HiveDateTimeUtils {
   def toHiveTimestamp(t: Long): HiveTimestamp = {
     val javaTimestamp = DateTimeUtils.toJavaTimestamp(t)
     val hiveTimestamp = new HiveTimestamp(javaTimestamp.toLocalDateTime)
-    hiveTimestamp.setNanos(javaTimestamp.getNanos)
+    // hiveTimestamp.setNanos(javaTimestamp.getNanos)
     hiveTimestamp
   }
 
   def toHiveDate(d: Int): HiveDate = {
-    val julian = RebaseDateTime.rebaseGregorianToJulianDays(d)
-    HiveDate.ofEpochDay(julian)
+    // val julian = RebaseDateTime.rebaseGregorianToJulianDays(d)
+    HiveDate.ofEpochDay(d)
   }
 
 }

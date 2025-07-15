@@ -345,19 +345,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     // converts the table metadata to Hive compatible format, i.e. set the serde information.
     def newHiveCompatibleMetastoreTable(serde: HiveSerDe): CatalogTable = {
-      val location = if (table.tableType == EXTERNAL) {
+      if (table.tableType == EXTERNAL) {
         // When we hit this branch, we are saving an external data source table with hive
         // compatible format, which means the data source is file-based and must have a `path`.
         require(table.storage.locationUri.isDefined,
           "External file-based data source table must have a `path` entry in storage properties.")
-        Some(table.location)
-      } else {
-        None
       }
 
       table.copy(
         storage = table.storage.copy(
-          locationUri = location,
+          locationUri = Some(table.location),
           inputFormat = serde.inputFormat,
           outputFormat = serde.outputFormat,
           serde = serde.serde,
@@ -552,8 +549,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // properties, to avoid adding a unnecessary path option for Hive serde tables.
     val hasPathOption = CaseInsensitiveMap(rawTable.storage.properties).contains("path")
     val storageWithNewPath = if (rawTable.tableType == MANAGED && hasPathOption) {
-      // If it's a managed table with path option and we are renaming it, then the path option
-      // becomes inaccurate and we need to update it according to the new table name.
+      // If it's a managed table with path option, and we are renaming it, then the path option
+      // becomes inaccurate, and we need to update it according to the new table name.
       val newTablePath = defaultTablePath(TableIdentifier(newName, Some(db)))
       updateLocationInStorageProps(rawTable, Some(newTablePath))
     } else {

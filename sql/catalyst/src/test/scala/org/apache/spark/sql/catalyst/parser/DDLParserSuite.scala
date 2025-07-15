@@ -525,7 +525,7 @@ class DDLParserSuite extends AnalysisTest {
       None,
       Some(SerdeInfo(storedAs = Some("textfile"), serdeProperties = Map(
         "field.delim" -> ",", "serialization.format" -> ",", "escape.delim" -> "\\",
-        "colelction.delim" -> "#", "mapkey.delim" -> "=", "line.delim" -> "\n"
+        "collection.delim" -> "#", "mapkey.delim" -> "=", "line.delim" -> "\n"
       ))))
     Seq(createSql, replaceSql).foreach { sql =>
       testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
