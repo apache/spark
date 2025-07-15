@@ -78,9 +78,10 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
 
   private def checkStateFieldAndType(state: Expression): TypeCheckResult = {
     val stateStructType = state.dataType.asInstanceOf[StructType]
-    if (stateStructType.length != 3) {
-      return TypeCheckFailure("State must be a struct with 3 fields. " +
-        "Expected struct: struct<sketch:binary,itemDataType:any,maxItemsTracked:int>. " +
+    if (stateStructType.length != 4) {
+      return TypeCheckFailure("State must be a struct with 4 fields. " +
+        "Expected struct: " +
+        "struct<sketch:binary,itemDataType:any,maxItemsTracked:int,typeCode:binary>. " +
         "Got: " + state.dataType.simpleString)
     }
 
@@ -93,6 +94,9 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
     } else if (stateStructType(2).dataType != IntegerType) {
       TypeCheckFailure("State struct must have the third field to be int. " +
         "Got: " + stateStructType(2).dataType.simpleString)
+    } else if (stateStructType(3).dataType != BinaryType) {
+      TypeCheckFailure("State struct must have the fourth field to be binary. " +
+        "Got: " + stateStructType(3).dataType.simpleString)
     } else {
       TypeCheckSuccess
     }

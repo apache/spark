@@ -137,18 +137,14 @@ class ApproxTopKSuite extends SparkFunSuite {
   // ApproxTopKEstimate tests
   /////////////////////////////
 
-  val stateStructType: StructType = StructType(Seq(
-    StructField("sketch", BinaryType),
-    StructField("itemDataType", IntegerType),
-    StructField("maxItemsTracked", IntegerType)
-  ))
-
   test("SPARK-52588: invalid estimate if k are not foldable") {
     val badEstimate = ApproxTopKEstimate(
       state = BoundReference(0, StructType(Seq(
         StructField("sketch", BinaryType),
         StructField("itemDataType", IntegerType),
-        StructField("maxItemsTracked", IntegerType))), nullable = false),
+        StructField("maxItemsTracked", IntegerType),
+        StructField("typeCode", BinaryType)
+      )), nullable = false),
       k = Sum(BoundReference(1, IntegerType, nullable = true))
     )
     assert(badEstimate.checkInputDataTypes().isFailure)
@@ -184,11 +180,11 @@ class ApproxTopKSuite extends SparkFunSuite {
     )
   }
 
-  test("SPARK-52588: invalid estimate if state struct length is not 3") {
+  test("SPARK-52588: invalid estimate if state struct length is not 4") {
     val invalidState = StructType(Seq(
       StructField("sketch", BinaryType),
       StructField("itemDataType", IntegerType)
-      // Missing "maxItemsTracked"
+      // Missing "maxItemsTracked", "typeCode" fields
     ))
     val badEstimate = ApproxTopKEstimate(
       state = BoundReference(0, invalidState, nullable = false),
@@ -196,8 +192,9 @@ class ApproxTopKSuite extends SparkFunSuite {
     )
     assert(badEstimate.checkInputDataTypes().isFailure)
     assert(badEstimate.checkInputDataTypes() ==
-      TypeCheckFailure("State must be a struct with 3 fields. " +
-        "Expected struct: struct<sketch:binary,itemDataType:any,maxItemsTracked:int>. " +
+      TypeCheckFailure("State must be a struct with 4 fields. " +
+        "Expected struct: " +
+        "struct<sketch:binary,itemDataType:any,maxItemsTracked:int,typeCode:binary>. " +
         "Got: struct<sketch:binary,itemDataType:int>"))
   }
 
@@ -205,7 +202,8 @@ class ApproxTopKSuite extends SparkFunSuite {
     val invalidState = StructType(Seq(
       StructField("notSketch", IntegerType), // Should be BinaryType
       StructField("itemDataType", IntegerType),
-      StructField("maxItemsTracked", IntegerType)
+      StructField("maxItemsTracked", IntegerType),
+      StructField("typeCode", BinaryType)
     ))
     val badEstimate = ApproxTopKEstimate(
       state = BoundReference(0, invalidState, nullable = false),
@@ -227,7 +225,8 @@ class ApproxTopKSuite extends SparkFunSuite {
     val invalidState = StructType(Seq(
       StructField("sketch", BinaryType),
       StructField("itemDataType", dataType),
-      StructField("maxItemsTracked", IntegerType)
+      StructField("maxItemsTracked", IntegerType),
+      StructField("typeCode", BinaryType)
     ))
     val badEstimate = ApproxTopKEstimate(
       state = BoundReference(0, invalidState, nullable = false),
@@ -243,7 +242,8 @@ class ApproxTopKSuite extends SparkFunSuite {
     val invalidState = StructType(Seq(
       StructField("sketch", BinaryType),
       StructField("itemDataType", IntegerType),
-      StructField("maxItemsTracked", LongType) // Should be IntegerType
+      StructField("maxItemsTracked", LongType), // Should be IntegerType
+      StructField("typeCode", BinaryType)
     ))
     val badEstimate = ApproxTopKEstimate(
       state = BoundReference(0, invalidState, nullable = false),
@@ -252,5 +252,21 @@ class ApproxTopKSuite extends SparkFunSuite {
     assert(badEstimate.checkInputDataTypes().isFailure)
     assert(badEstimate.checkInputDataTypes() ==
       TypeCheckFailure("State struct must have the third field to be int. Got: bigint"))
+  }
+
+  test("SPARK-52588: invalid estimate if state struct's fourth field is not binary") {
+    val invalidState = StructType(Seq(
+      StructField("sketch", BinaryType),
+      StructField("itemDataType", IntegerType),
+      StructField("maxItemsTracked", IntegerType),
+      StructField("typeCode", StringType) // Should be BinaryType
+    ))
+    val badEstimate = ApproxTopKEstimate(
+      state = BoundReference(0, invalidState, nullable = false),
+      k = Literal(5)
+    )
+    assert(badEstimate.checkInputDataTypes().isFailure)
+    assert(badEstimate.checkInputDataTypes() ==
+      TypeCheckFailure("State struct must have the fourth field to be binary. Got: string"))
   }
 }

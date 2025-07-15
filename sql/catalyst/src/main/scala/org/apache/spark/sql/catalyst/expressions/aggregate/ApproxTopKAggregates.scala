@@ -318,7 +318,42 @@ object ApproxTopK {
     StructType(
       StructField("sketch", BinaryType, nullable = false) ::
         StructField("itemDataType", itemDataType) ::
-        StructField("maxItemsTracked", IntegerType, nullable = false) :: Nil)
+        StructField("maxItemsTracked", IntegerType, nullable = false) ::
+        StructField("typeCode", BinaryType, nullable = false) :: Nil)
+
+  def dataTypeToBytes(dataType: DataType): Array[Byte] = {
+    dataType match {
+      case _: BooleanType => Array(0, 0, 0)
+      case _: ByteType => Array(1, 0, 0)
+      case _: ShortType => Array(2, 0, 0)
+      case _: IntegerType => Array(3, 0, 0)
+      case _: LongType => Array(4, 0, 0)
+      case _: FloatType => Array(5, 0, 0)
+      case _: DoubleType => Array(6, 0, 0)
+      case _: DateType => Array(7, 0, 0)
+      case _: TimestampType => Array(8, 0, 0)
+      case _: TimestampNTZType => Array(9, 0, 0)
+      case _: StringType => Array(10, 0, 0)
+      case dt: DecimalType => Array(11, dt.precision.toByte, dt.scale.toByte)
+    }
+  }
+
+  def bytesToDataType(bytes: Array[Byte]): DataType = {
+    bytes(0) match {
+      case 0 => BooleanType
+      case 1 => ByteType
+      case 2 => ShortType
+      case 3 => IntegerType
+      case 4 => LongType
+      case 5 => FloatType
+      case 6 => DoubleType
+      case 7 => DateType
+      case 8 => TimestampType
+      case 9 => TimestampNTZType
+      case 10 => StringType
+      case 11 => DecimalType(bytes(1).toInt, bytes(2).toInt)
+    }
+  }
 }
 
 /**
@@ -328,7 +363,11 @@ object ApproxTopK {
  *
  * The output of this function is a struct containing the sketch in binary format,
  * a null object indicating the type of items in the sketch,
- * and the maximum number of items tracked by the sketch.
+ * the maximum number of items tracked by the sketch,
+ * and a binary typeCode encoding the data type of the items in the sketch.
+ *
+ * The null object is used in approx_top_k_estimate,
+ * while the typeCode is used in approx_top_k_combine.
  *
  * @param expr                   the child expression to accumulate items from
  * @param maxItemsTracked        the maximum number of items to track in the sketch
@@ -410,7 +449,8 @@ case class ApproxTopKAccumulate(
 
   override def eval(buffer: ItemsSketch[Any]): Any = {
     val sketchBytes = serialize(buffer)
-    InternalRow.apply(sketchBytes, null, maxItemsTrackedVal)
+    val typeCode = ApproxTopK.dataTypeToBytes(itemDataType)
+    InternalRow.apply(sketchBytes, null, maxItemsTrackedVal, typeCode)
   }
 
   override def serialize(buffer: ItemsSketch[Any]): Array[Byte] =
