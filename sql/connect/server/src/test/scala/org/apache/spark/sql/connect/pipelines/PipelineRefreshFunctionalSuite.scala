@@ -26,7 +26,6 @@ import org.apache.spark.connect.proto.DatasetType
 import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
 import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
 import org.apache.spark.util.Utils
-// scalastyle:off println
 
 /**
  * Comprehensive test suite that validates pipeline refresh functionality by running actual
@@ -50,7 +49,6 @@ class PipelineRefreshFunctionalSuite
 
   override def afterAll(): Unit = {
     try {
-      // Clean up test directories
       Utils.deleteRecursively(testDataDir)
     } finally {
       super.afterAll()

@@ -231,7 +231,7 @@ private[connect] object PipelinesHandler extends Logging {
     val fullRefreshAll = cmd.getFullRefreshAll
     val refreshTables = cmd.getRefreshList.asScala.toSeq
 
-    // Convert table names to TableIdentifier objects
+    // Convert table names to fully qualified TableIdentifier objects
     def parseTableNames(tableNames: Seq[String]): Set[TableIdentifier] = {
       tableNames.map { name =>
         GraphIdentifierManager.parseAndQualifyTableIdentifier(
@@ -243,35 +243,45 @@ private[connect] object PipelinesHandler extends Logging {
       }.toSet
     }
 
+    if (fullRefreshTables.nonEmpty && fullRefreshAll) {
+      throw new IllegalArgumentException(
+        "Cannot specify a subset to refresh when full refresh all is set to true.")
+    }
+
+    if (refreshTables.nonEmpty && fullRefreshAll) {
+      throw new IllegalArgumentException(
+        "Cannot specify a subset to full refresh when full refresh all is set to true.")
+    }
+    val refreshTableNames = parseTableNames(refreshTables)
+    val fullRefreshTableNames = parseTableNames(fullRefreshTables)
+
+    if (refreshTables.nonEmpty && fullRefreshTables.nonEmpty) {
+      // check if there is an intersection between the subset
+      val intersection = refreshTableNames.intersect(fullRefreshTableNames)
+      if (intersection.nonEmpty) {
+        throw new IllegalArgumentException(
+          "Datasets specified for refresh and full refresh cannot overlap: " +
+            s"${intersection.mkString(", ")}"
+        )
+      }
+    }
+
     val fullRefreshTablesFilter: TableFilter = if (fullRefreshAll) {
       AllTables
     } else if (fullRefreshTables.nonEmpty) {
-      SomeTables(parseTableNames(fullRefreshTables))
+      SomeTables(fullRefreshTableNames)
     } else {
       NoTables
     }
 
-    // Create table filters based on refresh parameters
-    val refreshTablesFilter: TableFilter = if (fullRefreshAll) {
-      NoTables
-    } else if (refreshTables.nonEmpty) {
-      SomeTables(parseTableNames(refreshTables))
-    } else { // no tables specified for refresh
-      if (fullRefreshTablesFilter == NoTables) {
-        // If no tables are specified for full refresh, we default to refreshing all tables
-        AllTables
-      } else {
-        // If full refresh is specified, we do not need to refresh any additional tables
+    val refreshTablesFilter: TableFilter =
+      if (refreshTables.nonEmpty) {
+        SomeTables(refreshTableNames)
+      } else if (fullRefreshTablesFilter != NoTables) {
         NoTables
-      }
-    }
-
-    // print full refresh tables filter for debugging purposes
-    // scalastyle:off println
-    println(
-      s"Full refresh tables filter: $fullRefreshTablesFilter, " +
-        s"Refresh tables filter: $refreshTablesFilter")
-    // scalastyle:on println
+      } else {
+        AllTables
+     }
 
     // We will use this variable to store the run failure event if it occurs. This will be set
     // by the event callback.
