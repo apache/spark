@@ -355,6 +355,110 @@ class PipelineRefreshFunctionalSuite
     }
   }
 
+  test("validation: cannot specify subset refresh when full_refresh_all is true") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      val pipeline = createTwoSTPipeline(graphId)
+      registerPipelineDatasets(pipeline)
+
+      val startRun = proto.PipelineCommand.StartRun.newBuilder()
+        .setDataflowGraphId(graphId)
+        .setFullRefreshAll(true)
+        .addRefresh("a")
+        .build()
+
+      val exception = intercept[IllegalArgumentException] {
+        startPipelineAndWaitForCompletion(graphId, Some(startRun))
+      }
+      assert(exception.getMessage.contains(
+        "Cannot specify a subset to full refresh when full refresh all is set to true"))
+    }
+  }
+
+  test("validation: cannot specify subset full_refresh when full_refresh_all is true") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      val pipeline = createTwoSTPipeline(graphId)
+      registerPipelineDatasets(pipeline)
+
+      val startRun = proto.PipelineCommand.StartRun.newBuilder()
+        .setDataflowGraphId(graphId)
+        .setFullRefreshAll(true)
+        .addFullRefresh("a")
+        .build()
+
+      val exception = intercept[IllegalArgumentException] {
+        startPipelineAndWaitForCompletion(graphId, Some(startRun))
+      }
+      assert(exception.getMessage.contains(
+        "Cannot specify a subset to refresh when full refresh all is set to true"))
+    }
+  }
+
+  test("validation: refresh and full_refresh cannot overlap") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      val pipeline = createTwoSTPipeline(graphId)
+      registerPipelineDatasets(pipeline)
+
+      val startRun = proto.PipelineCommand.StartRun.newBuilder()
+        .setDataflowGraphId(graphId)
+        .addRefresh("a")
+        .addFullRefresh("a")
+        .build()
+
+      val exception = intercept[IllegalArgumentException] {
+        startPipelineAndWaitForCompletion(graphId, Some(startRun))
+      }
+      assert(exception.getMessage.contains(
+        "Datasets specified for refresh and full refresh cannot overlap"))
+      assert(exception.getMessage.contains("a"))
+    }
+  }
+
+  test("validation: multiple overlapping tables in refresh and full_refresh") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      val pipeline = createTwoSTPipeline(graphId)
+      registerPipelineDatasets(pipeline)
+
+      val startRun = proto.PipelineCommand.StartRun.newBuilder()
+        .setDataflowGraphId(graphId)
+        .addRefresh("a")
+        .addRefresh("b")
+        .addFullRefresh("a")
+        .addFullRefresh("file_data")
+        .build()
+
+      val exception = intercept[IllegalArgumentException] {
+        startPipelineAndWaitForCompletion(graphId, Some(startRun))
+      }
+      assert(exception.getMessage.contains(
+        "Datasets specified for refresh and full refresh cannot overlap"))
+      assert(exception.getMessage.contains("a"))
+    }
+  }
+
+  test("validation: fully qualified table names in validation") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      val pipeline = createTwoSTPipeline(graphId)
+      registerPipelineDatasets(pipeline)
+
+      val startRun = proto.PipelineCommand.StartRun.newBuilder()
+        .setDataflowGraphId(graphId)
+        .addRefresh("spark_catalog.default.a")
+        .addFullRefresh("a")  // This should be treated as the same table
+        .build()
+
+      val exception = intercept[IllegalArgumentException] {
+        startPipelineAndWaitForCompletion(graphId, Some(startRun))
+      }
+      assert(exception.getMessage.contains(
+        "Datasets specified for refresh and full refresh cannot overlap"))
+    }
+  }
+
   private def verifyMultipleTableContent(
     tableNames: Set[String],
     columnsToVerify: Map[String, Seq[String]],
