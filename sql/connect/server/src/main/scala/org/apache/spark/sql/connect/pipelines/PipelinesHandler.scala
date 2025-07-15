@@ -26,6 +26,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, PipelineCommandResult, Relation}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
@@ -33,7 +34,7 @@ import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.pipelines.Language.Python
 import org.apache.spark.sql.pipelines.QueryOriginType
 import org.apache.spark.sql.pipelines.common.RunState.{CANCELED, FAILED}
-import org.apache.spark.sql.pipelines.graph.{FlowAnalysis, GraphIdentifierManager, IdentifierHelper, PipelineUpdateContextImpl, QueryContext, QueryOrigin, SqlGraphRegistrationContext, Table, TemporaryView, UnresolvedFlow}
+import org.apache.spark.sql.pipelines.graph.{AllTables, FlowAnalysis, GraphIdentifierManager, IdentifierHelper, NoTables, PipelineUpdateContextImpl, QueryContext, QueryOrigin, SomeTables, SqlGraphRegistrationContext, Table, TableFilter, TemporaryView, UnresolvedFlow}
 import org.apache.spark.sql.pipelines.logging.{PipelineEvent, RunProgress}
 import org.apache.spark.sql.types.StructType
 
@@ -224,6 +225,48 @@ private[connect] object PipelinesHandler extends Logging {
       sessionHolder: SessionHolder): Unit = {
     val dataflowGraphId = cmd.getDataflowGraphId
     val graphElementRegistry = DataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
+
+    // Extract refresh parameters from protobuf command
+    val fullRefreshTables = cmd.getFullRefreshList.asScala.toSeq
+    val fullRefreshAll = cmd.getFullRefreshAll
+    val refreshTables = cmd.getRefreshList.asScala.toSeq
+
+    // Convert table names to TableIdentifier objects
+    def parseTableNames(tableNames: Seq[String]): Set[TableIdentifier] = {
+      tableNames.map { name =>
+        GraphIdentifierManager.parseAndQualifyTableIdentifier(
+          rawTableIdentifier =
+            GraphIdentifierManager.parseTableIdentifier(name, sessionHolder.session),
+          currentCatalog = Some(graphElementRegistry.defaultCatalog),
+          currentDatabase = Some(graphElementRegistry.defaultDatabase)
+        ).identifier
+      }.toSet
+    }
+
+    val fullRefreshTablesFilter: TableFilter = if (fullRefreshAll) {
+      AllTables
+    } else if (fullRefreshTables.nonEmpty) {
+      SomeTables(parseTableNames(fullRefreshTables))
+    } else {
+      NoTables
+    }
+
+    // Create table filters based on refresh parameters
+    val refreshTablesFilter: TableFilter = if (fullRefreshAll || fullRefreshTables.nonEmpty) {
+      NoTables
+    } else if (refreshTables.nonEmpty) {
+      SomeTables(parseTableNames(refreshTables))
+    } else {
+      AllTables
+    }
+
+    // print full refresh tables filter for debugging purposes
+    // scalastyle:off println
+    println(
+      s"Full refresh tables filter: $fullRefreshTablesFilter, " +
+        s"Refresh tables filter: $refreshTablesFilter")
+    // scalastyle:on println
+
     // We will use this variable to store the run failure event if it occurs. This will be set
     // by the event callback.
     @volatile var runFailureEvent = Option.empty[PipelineEvent]
@@ -279,8 +322,12 @@ private[connect] object PipelinesHandler extends Logging {
               .build())
       }
     }
-    val pipelineUpdateContext =
-      new PipelineUpdateContextImpl(graphElementRegistry.toDataflowGraph, eventCallback)
+    val pipelineUpdateContext = new PipelineUpdateContextImpl(
+      graphElementRegistry.toDataflowGraph,
+      eventCallback,
+      refreshTablesFilter,
+      fullRefreshTablesFilter
+    )
     sessionHolder.cachePipelineExecution(dataflowGraphId, pipelineUpdateContext)
     pipelineUpdateContext.pipelineExecution.runPipeline()
 

@@ -79,16 +79,12 @@ def start_run(
     :param full_refresh_all: Perform a full graph reset and recompute.
     :param refresh: List of tables to update.
     """
-    # TODO: Update protobuf schema to include these parameters
-    # For now, we accept the parameters but don't pass them to the protobuf command
-    inner_command = pb2.PipelineCommand.StartRun(dataflow_graph_id=dataflow_graph_id)
-    # TODO: Once protobuf schema is updated, uncomment the following:
-    # inner_command = pb2.PipelineCommand.StartRun(
-    #     dataflow_graph_id=dataflow_graph_id,
-    #     full_refresh=full_refresh or [],
-    #     full_refresh_all=full_refresh_all,
-    #     refresh=refresh or []
-    # )
+    inner_command = pb2.PipelineCommand.StartRun(
+        dataflow_graph_id=dataflow_graph_id,
+        full_refresh=full_refresh or [],
+        full_refresh_all=full_refresh_all,
+        refresh=refresh or []
+    )
     command = pb2.Command()
     command.pipeline_command.start_run.CopyFrom(inner_command)
     # Cast because mypy seems to think `spark`` is a function, not an object. Likely related to

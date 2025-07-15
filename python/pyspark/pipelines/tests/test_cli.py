@@ -484,6 +484,236 @@ class CLIValidationTests(unittest.TestCase):
                 # Make sure it's NOT our validation error
                 self.assertNotEqual(e.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS")
 
+    def test_parse_table_list_single_table(self):
+        """Test parsing a single table name."""
+        from pyspark.pipelines.cli import parse_table_list
+        result = parse_table_list("table1")
+        self.assertEqual(result, ["table1"])
+
+    def test_parse_table_list_multiple_tables(self):
+        """Test parsing multiple table names."""
+        from pyspark.pipelines.cli import parse_table_list
+        result = parse_table_list("table1,table2,table3")
+        self.assertEqual(result, ["table1", "table2", "table3"])
+
+    def test_parse_table_list_with_spaces(self):
+        """Test parsing table names with spaces."""
+        from pyspark.pipelines.cli import parse_table_list
+        result = parse_table_list("table1, table2 , table3")
+        self.assertEqual(result, ["table1", "table2", "table3"])
+
+    def test_parse_table_list_empty_string(self):
+        """Test parsing empty string."""
+        from pyspark.pipelines.cli import parse_table_list
+        result = parse_table_list("")
+        self.assertEqual(result, [])
+
+    def test_parse_table_list_with_qualified_names(self):
+        """Test parsing qualified table names."""
+        from pyspark.pipelines.cli import parse_table_list
+        result = parse_table_list("schema1.table1,schema2.table2")
+        self.assertEqual(result, ["schema1.table1", "schema2.table2"])
+
+    def test_flatten_table_lists_none(self):
+        """Test flattening None input."""
+        from pyspark.pipelines.cli import flatten_table_lists
+        result = flatten_table_lists(None)
+        self.assertEqual(result, [])
+
+    def test_flatten_table_lists_empty(self):
+        """Test flattening empty list."""
+        from pyspark.pipelines.cli import flatten_table_lists
+        result = flatten_table_lists([])
+        self.assertEqual(result, [])
+
+    def test_flatten_table_lists_single_list(self):
+        """Test flattening single list."""
+        from pyspark.pipelines.cli import flatten_table_lists
+        result = flatten_table_lists([["table1", "table2"]])
+        self.assertEqual(result, ["table1", "table2"])
+
+    def test_flatten_table_lists_multiple_lists(self):
+        """Test flattening multiple lists."""
+        from pyspark.pipelines.cli import flatten_table_lists
+        result = flatten_table_lists([["table1", "table2"], ["table3"], ["table4", "table5"]])
+        self.assertEqual(result, ["table1", "table2", "table3", "table4", "table5"])
+
+    def test_valid_refresh_combinations(self):
+        """Test valid combinations of refresh parameters."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            spec_path = Path(temp_dir) / "pipeline.yaml"
+            with spec_path.open("w") as f:
+                f.write('{"name": "test_pipeline"}')
+            
+            # Test individual options don't raise validation errors
+            test_cases = [
+                {"full_refresh": ["table1"]},
+                {"refresh": ["table1"]},
+                {"full_refresh_all": True},
+                {"full_refresh": ["table1"], "refresh": ["table2"]},
+                {"full_refresh": ["table1", "table2"], "refresh": ["table3", "table4"]},
+            ]
+            
+            for case in test_cases:
+                try:
+                    run(spec_path=spec_path, **case)
+                    self.fail(f"Expected run to fail due to missing pipeline spec content: {case}")
+                except PySparkException as e:
+                    # Should NOT be our validation error
+                    self.assertNotEqual(e.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS")
+
+    def test_empty_refresh_parameters(self):
+        """Test behavior with empty refresh parameters."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            spec_path = Path(temp_dir) / "pipeline.yaml"
+            with spec_path.open("w") as f:
+                f.write('{"name": "test_pipeline"}')
+            
+            # Test empty lists don't cause validation errors
+            try:
+                run(
+                    spec_path=spec_path,
+                    full_refresh=[],
+                    refresh=[],
+                    full_refresh_all=False
+                )
+                self.fail("Expected run to fail due to missing pipeline spec content")
+            except PySparkException as e:
+                # Should NOT be our validation error
+                self.assertNotEqual(e.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS")
+
+    def test_cli_argument_parsing_patterns(self):
+        """Test CLI argument parsing patterns for refresh options."""
+        import argparse
+        from pyspark.pipelines.cli import parse_table_list
+        
+        # Simulate the argument parser
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--full-refresh", type=parse_table_list, action="append")
+        parser.add_argument("--full-refresh-all", action="store_true")
+        parser.add_argument("--refresh", type=parse_table_list, action="append")
+        
+        # Test parsing various argument combinations
+        test_cases = [
+            (["--full-refresh", "table1,table2"], {"full_refresh": [["table1", "table2"]]}),
+            (["--refresh", "table1", "--refresh", "table2"], {"refresh": [["table1"], ["table2"]]}),
+            (["--full-refresh-all"], {"full_refresh_all": True}),
+            (["--full-refresh", "table1", "--refresh", "table2"], {"full_refresh": [["table1"]], "refresh": [["table2"]]}),
+            (["--full-refresh", "schema.table1,schema.table2"], {"full_refresh": [["schema.table1", "schema.table2"]]}),
+        ]
+        
+        for args, expected in test_cases:
+            parsed = parser.parse_args(args)
+            for key, value in expected.items():
+                self.assertEqual(getattr(parsed, key), value)
+
+    def test_refresh_parameter_validation_edge_cases(self):
+        """Test edge cases for refresh parameter validation."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            spec_path = Path(temp_dir) / "pipeline.yaml"
+            with spec_path.open("w") as f:
+                f.write('{"name": "test_pipeline"}')
+            
+            # Test that providing None values works correctly
+            try:
+                run(
+                    spec_path=spec_path,
+                    full_refresh=None,
+                    refresh=None,
+                    full_refresh_all=False
+                )
+                self.fail("Expected run to fail due to missing pipeline spec content")
+            except PySparkException as e:
+                # Should NOT be our validation error
+                self.assertNotEqual(e.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS")
+
+    def test_refresh_parameters_with_qualified_table_names(self):
+        """Test refresh parameters with qualified table names."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            spec_path = Path(temp_dir) / "pipeline.yaml"
+            with spec_path.open("w") as f:
+                f.write('{"name": "test_pipeline"}')
+            
+            # Test qualified table names
+            try:
+                run(
+                    spec_path=spec_path,
+                    full_refresh=["schema1.table1", "schema2.table2"],
+                    refresh=["schema3.table3"],
+                    full_refresh_all=False
+                )
+                self.fail("Expected run to fail due to missing pipeline spec content")
+            except PySparkException as e:
+                # Should NOT be our validation error
+                self.assertNotEqual(e.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS")
+
+    def test_large_table_lists_handling(self):
+        """Test handling of large table lists."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            spec_path = Path(temp_dir) / "pipeline.yaml"
+            with spec_path.open("w") as f:
+                f.write('{"name": "test_pipeline"}')
+            
+            # Test with large table lists
+            large_table_list = [f"table_{i}" for i in range(100)]
+            try:
+                run(
+                    spec_path=spec_path,
+                    full_refresh=large_table_list,
+                    refresh=large_table_list,
+                    full_refresh_all=False
+                )
+                self.fail("Expected run to fail due to missing pipeline spec content")
+            except PySparkException as e:
+                # Should NOT be our validation error
+                self.assertNotEqual(e.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS")
+
+    def test_refresh_parameter_precedence(self):
+        """Test that full_refresh_all takes precedence over other parameters."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            spec_path = Path(temp_dir) / "pipeline.yaml"
+            with spec_path.open("w") as f:
+                f.write('{"name": "test_pipeline"}')
+            
+            # Test that full_refresh_all conflicts with other parameters
+            conflict_cases = [
+                {"full_refresh_all": True, "full_refresh": ["table1"]},
+                {"full_refresh_all": True, "refresh": ["table1"]},
+                {"full_refresh_all": True, "full_refresh": ["table1"], "refresh": ["table2"]},
+            ]
+            
+            for case in conflict_cases:
+                with self.assertRaises(PySparkException) as context:
+                    run(spec_path=spec_path, **case)
+                self.assertEqual(context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS")
+
+    def test_detailed_validation_error_messages(self):
+        """Test that validation error messages are detailed and helpful."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            spec_path = Path(temp_dir) / "pipeline.yaml"
+            with spec_path.open("w") as f:
+                f.write('{"name": "test_pipeline"}')
+            
+            # Test full_refresh_all with full_refresh error message
+            with self.assertRaises(PySparkException) as context:
+                run(
+                    spec_path=spec_path,
+                    full_refresh_all=True,
+                    full_refresh=["table1"]
+                )
+            self.assertEqual(context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS")
+            self.assertIn("--full-refresh-all option conflicts with --full-refresh", str(context.exception))
+            
+            # Test full_refresh_all with refresh error message
+            with self.assertRaises(PySparkException) as context:
+                run(
+                    spec_path=spec_path,
+                    full_refresh_all=True,
+                    refresh=["table1"]
+                )
+            self.assertEqual(context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS")
+            self.assertIn("--full-refresh-all option conflicts with --refresh", str(context.exception))
+
 
 if __name__ == "__main__":
     try:
