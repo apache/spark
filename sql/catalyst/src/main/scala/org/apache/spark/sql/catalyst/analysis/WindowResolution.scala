@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{
+  AggregateWindowFunction,
   CurrentRow,
   Expression,
   FrameLessOffsetWindowFunction,
@@ -32,6 +33,14 @@ import org.apache.spark.sql.catalyst.expressions.{
   WindowFunction,
   WindowSpecDefinition
 }
+import org.apache.spark.sql.catalyst.expressions.aggregate.{
+  AggregateExpression,
+  ListAgg,
+  Median,
+  PercentileCont,
+  PercentileDisc
+}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
@@ -91,5 +100,51 @@ object WindowResolution {
       WindowExpression(rank.withOrder(order), spec)
 
     case e => e
+  }
+
+  /**
+   * Validates a resolved [[WindowExpression]] to ensure it conforms to the allowed constraints.
+   *
+   * By checking the type and configuration of [[WindowExpression.windowFunction]] it enforces the
+   * following rules:
+   * - Disallows distinct aggregate expressions in window functions.
+   * - Disallows use of certain aggregate functions - [[ListaAgg]], [[PercentileCont]],
+   *   [[PercentileDisc]], [[Median]]
+   * - Allows only window functions of following types:
+   *   - [[AggregateExpression]] (non-distinct)
+   *   - [[FrameLessOffsetWindowFunction]]
+   *   - [[AggregateWindowFunction]]
+   */
+  def validateResolvedWindowExpression(windowExpression: WindowExpression): Unit = {
+    windowExpression.windowFunction match {
+      case AggregateExpression(_, _, true, _, _) =>
+        windowExpression.failAnalysis(
+          errorClass = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
+          messageParameters = Map("windowExpr" -> toSQLExpr(windowExpression))
+        )
+      case agg @ AggregateExpression(fun: ListAgg, _, _, _, _)
+        // listagg(...) WITHIN GROUP (ORDER BY ...) OVER (ORDER BY ...) is unsupported
+        if fun.orderingFilled && (windowExpression.windowSpec.orderSpec.nonEmpty ||
+          windowExpression.windowSpec.frameSpecification !=
+            SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)) =>
+        agg.failAnalysis(
+          errorClass = "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+          messageParameters = Map("aggFunc" -> toSQLExpr(agg.aggregateFunction))
+        )
+      case agg @ AggregateExpression(_: PercentileCont | _: PercentileDisc | _: Median, _, _, _, _)
+        if windowExpression.windowSpec.orderSpec.nonEmpty ||
+          windowExpression.windowSpec.frameSpecification !=
+            SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing) =>
+        agg.failAnalysis(
+          errorClass = "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+          messageParameters = Map("aggFunc" -> toSQLExpr(agg.aggregateFunction))
+        )
+      case _: AggregateExpression | _: FrameLessOffsetWindowFunction | _: AggregateWindowFunction =>
+      case other =>
+        other.failAnalysis(
+          errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
+          messageParameters = Map("sqlExpr" -> toSQLExpr(other))
+        )
+    }
   }
 }

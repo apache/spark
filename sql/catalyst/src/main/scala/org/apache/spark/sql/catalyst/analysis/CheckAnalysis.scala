@@ -437,11 +437,6 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               errorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
               messageParameters = Map("funcName" -> toSQLExpr(w)))
 
-          case w @ WindowExpression(AggregateExpression(_, _, true, _, _), _) =>
-            w.failAnalysis(
-              errorClass = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
-              messageParameters = Map("windowExpr" -> toSQLExpr(w)))
-
           case w @ WindowExpression(wf: FrameLessOffsetWindowFunction,
             WindowSpecDefinition(_, order, frame: SpecifiedWindowFrame))
              if order.isEmpty || !frame.isOffset =>
@@ -457,31 +452,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               listAgg.prettyName, listAgg.child, listAgg.orderExpressions)
 
           case w: WindowExpression =>
-            // Only allow window functions with an aggregate expression or an offset window
-            // function or a Pandas window UDF.
-            w.windowFunction match {
-              case agg @ AggregateExpression(fun: ListAgg, _, _, _, _)
-                // listagg(...) WITHIN GROUP (ORDER BY ...) OVER (ORDER BY ...) is unsupported
-                if fun.orderingFilled && (w.windowSpec.orderSpec.nonEmpty ||
-                  w.windowSpec.frameSpecification !=
-                  SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)) =>
-                agg.failAnalysis(
-                  errorClass = "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
-                  messageParameters = Map("aggFunc" -> toSQLExpr(agg.aggregateFunction)))
-              case agg @ AggregateExpression(
-                _: PercentileCont | _: PercentileDisc | _: Median, _, _, _, _)
-                if w.windowSpec.orderSpec.nonEmpty || w.windowSpec.frameSpecification !=
-                    SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing) =>
-                agg.failAnalysis(
-                  errorClass = "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
-                  messageParameters = Map("aggFunc" -> toSQLExpr(agg.aggregateFunction)))
-              case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
-                  _: AggregateWindowFunction => // OK
-              case other =>
-                other.failAnalysis(
-                  errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
-                  messageParameters = Map("sqlExpr" -> toSQLExpr(other)))
-            }
+            WindowResolution.validateResolvedWindowExpression(w)
 
           case s: SubqueryExpression =>
             checkSubqueryExpression(operator, s)
