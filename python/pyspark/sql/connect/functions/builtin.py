@@ -4202,9 +4202,7 @@ def theta_union(
     col1: "ColumnOrName", col2: "ColumnOrName", lgNomEntries: Optional[int] = None
 ) -> Column:
     if lgNomEntries is not None:
-        return _invoke_function(
-            "theta_union", _to_col(col1), _to_col(col2), lit(lgNomEntries)
-        )
+        return _invoke_function("theta_union", _to_col(col1), _to_col(col2), lit(lgNomEntries))
     else:
         return _invoke_function("theta_union", _to_col(col1), _to_col(col2))
 
@@ -4230,9 +4228,7 @@ def theta_difference(
     col1: "ColumnOrName", col2: "ColumnOrName", lgNomEntries: Optional[int] = None
 ) -> Column:
     if lgNomEntries is not None:
-        return _invoke_function(
-            "theta_difference", _to_col(col1), _to_col(col2), lit(lgNomEntries)
-        )
+        return _invoke_function("theta_difference", _to_col(col1), _to_col(col2), lit(lgNomEntries))
     else:
         return _invoke_function("theta_difference", _to_col(col1), _to_col(col2))
 

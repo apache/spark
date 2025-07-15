@@ -485,9 +485,9 @@ Aggregate Functions
     string_agg_distinct
     sum
     sum_distinct
-    theta_intersection_agg,
-    theta_sketch_agg,
-    theta_union_agg,
+    theta_intersection_agg
+    theta_sketch_agg
+    theta_union_agg
     try_avg
     try_sum
     var_pop
@@ -633,10 +633,10 @@ Misc Functions
     reflect
     session_user
     spark_partition_id
-    theta_difference,
-    theta_intersection,
-    theta_sketch_estimate,
-    theta_union,
+    theta_difference
+    theta_intersection
+    theta_sketch_estimate
+    theta_union
     try_aes_decrypt
     try_reflect
     typeof
