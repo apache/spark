@@ -193,7 +193,7 @@ public abstract class BloomFilter {
    * the stream.
    */
   public static BloomFilter readFrom(InputStream in) throws IOException {
-    // peek into the inputstream so we can determine the version
+    // peek into the InputStream so we can determine the version
     BufferedInputStream bin = new BufferedInputStream(in);
     bin.mark(4);
     int version = ByteBuffer.wrap(bin.readNBytes(4)).getInt();
