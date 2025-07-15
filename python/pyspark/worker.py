@@ -249,25 +249,18 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
                 for arg in args
             ]
 
-            converted_args = []
-            num_rows = len(arrays[0]) if arrays else 0
-            for i in range(num_rows):
-                row = []
-                for j, array in enumerate(arrays):
-                    py_value = ArrowToUDFConversion.get_python_value(array, i)
-                    input_type = input_types[j] if input_types and j < len(input_types) else None
-                    converted_value = ArrowToUDFConversion.convert_input_value(py_value, input_type)
-                    row.append(converted_value)
-                converted_args.append(tuple(row))
-            return converted_args
+            # Use optimized batch conversion instead of value-by-value processing
+            return ArrowToUDFConversion.convert_batch_inputs(arrays, input_types)
 
     @fail_on_stopiteration
     def evaluate(*args: pa.RecordBatch):
-        results = []
+        udf_results = []
         for row in get_args(*args):
             udf_result = result_func(func(*row))
-            converted_result = ArrowToUDFConversion.convert_output_value(udf_result, return_type)
-            results.append(converted_result)
+            udf_results.append(udf_result)
+
+        # Use batch output conversion for better performance
+        results = ArrowToUDFConversion.convert_batch_outputs(udf_results, return_type)
 
         if len(results) == 0:
             arr = pa.array([], type=arrow_return_type)

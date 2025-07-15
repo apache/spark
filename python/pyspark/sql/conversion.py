@@ -544,6 +544,57 @@ class ArrowToUDFConversion:
     """
 
     @staticmethod
+    def convert_batch_inputs(arrays, input_types):
+        """
+        Convert entire Arrow arrays to UDF input format in batch.
+        
+        Performance benefits over value-by-value conversion:
+        1. Reduced Python-C++ boundary crossings (once per column vs once per value)
+        2. Eliminated expensive type checking per value (hasattr calls, etc.)
+        3. Better memory access patterns (sequential vs random)
+        4. PyArrow's internal C++ optimizations in to_pylist()
+        
+        Note: We still need to process each value for type conversion, but the overhead
+        reduction can be significant for large batches.
+        """
+        if not arrays:
+            return []
+        
+        import pyarrow as pa
+        
+        # Get batch size from first array
+        batch_size = len(arrays[0]) if arrays else 0
+        if batch_size == 0:
+            return []
+        
+        # Convert each column (array) to Python values in batch
+        # This is much faster than individual array[i] calls
+        converted_columns = []
+        for j, array in enumerate(arrays):
+            input_type = input_types[j] if input_types and j < len(input_types) else None
+            # Use PyArrow's optimized to_pylist() instead of individual get_python_value() calls
+            if hasattr(array, "to_pylist"):
+                python_values = array.to_pylist()
+            else:
+                # Fallback for arrays that don't support to_pylist
+                python_values = [ArrowToUDFConversion.get_python_value(array, i) for i in range(len(array))]
+            
+            # Apply input type conversion to the entire list if needed
+            if input_type is not None:
+                python_values = [ArrowToUDFConversion.convert_input_value(val, input_type) for val in python_values]
+            
+            converted_columns.append(python_values)
+        
+        # Transpose to get list of rows instead of list of columns
+        # This is still O(rows × columns) but with better cache locality
+        converted_rows = []
+        for i in range(batch_size):
+            row = tuple(converted_columns[j][i] for j in range(len(converted_columns)))
+            converted_rows.append(row)
+        
+        return converted_rows
+
+    @staticmethod
     def convert_input_value(value, input_type):
         """Convert Arrow/internal value to UDF input format."""
         if value is None or input_type is None:
@@ -666,6 +717,15 @@ class ArrowToUDFConversion:
             return value
 
         return value
+
+    @staticmethod
+    def convert_batch_outputs(values, data_type):
+        """Convert batch of UDF output values for Arrow serialization."""
+        if not values:
+            return []
+        
+        # Use list comprehension for better performance
+        return [ArrowToUDFConversion.convert_output_value(value, data_type) for value in values]
 
     @staticmethod
     def get_python_value(array, index):
