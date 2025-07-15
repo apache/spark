@@ -114,39 +114,36 @@ class InMemoryRowLevelOperationTable(
   }
 
   abstract class RowLevelOperationBatchWrite extends TestBatchWrite {
-    override def requestMergeMetrics(): Boolean = true
 
-    override def commitWithMerge(messages: Array[WriterCommitMessage], metrics: MergeMetrics):
+    override def commitMerge(messages: Array[WriterCommitMessage], metrics: MergeMetrics):
     Unit = {
-      commitProperties += "numTargetRowsCopied" -> metrics.numTargetRowsCopied().toString
-      commitProperties += "numTargetRowsInserted" -> metrics.numTargetRowsInserted().toString
-      commitProperties += "numTargetRowsDeleted" -> metrics.numTargetRowsDeleted().toString
-      commitProperties += "numTargetRowsUpdated" -> metrics.numTargetRowsUpdated().toString
-      commitProperties += "numTargetRowsInserted" -> metrics.numTargetRowsInserted().toString
-      commitProperties += ("numTargetRowsNotMatchedBySourceUpdated"
-        -> metrics.numTargetRowsNotMatchedBySourceUpdated().toString)
-      commitProperties += ("numTargetRowsNotMatchedBySourceDeleted"
-        -> metrics.numTargetRowsNotMatchedBySourceDeleted().toString)
+      commitProperties += "numTargetRowsCopied" -> metrics.numTargetRowsCopied().orElse(-1).toString
+      commitProperties += "numTargetRowsInserted" ->
+        metrics.numTargetRowsInserted().orElse(-1).toString
+      commitProperties += "numTargetRowsDeleted" ->
+        metrics.numTargetRowsDeleted().orElse(-1).toString
+      commitProperties += "numTargetRowsUpdated" ->
+        metrics.numTargetRowsUpdated().orElse(-1).toString
+      commitProperties += "numTargetRowsInserted" ->
+        metrics.numTargetRowsInserted().orElse(-1).toString
       commitProperties += ("numTargetRowsMatchedDeleted"
-        -> metrics.numTargetRowsMatchedDeleted().toString)
+        -> metrics.numTargetRowsMatchedDeleted().orElse(-1).toString)
       commitProperties += ("numTargetRowsMatchedUpdated"
-        -> metrics.numTargetRowsMatchedUpdated().toString)
+        -> metrics.numTargetRowsMatchedUpdated().orElse(-1).toString)
+      commitProperties += ("numTargetRowsNotMatchedBySourceUpdated"
+        -> metrics.numTargetRowsNotMatchedBySourceUpdated().orElse(-1).toString)
+      commitProperties += ("numTargetRowsNotMatchedBySourceDeleted"
+        -> metrics.numTargetRowsNotMatchedBySourceDeleted().orElse(-1).toString)
       commit(messages)
       commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
       commitProperties.clear()
     }
-
-    override def commit(messages: Array[WriterCommitMessage]): Unit = {
-      doCommit(messages)
-    }
-
-    def doCommit(messages: Array[WriterCommitMessage]): Unit
   }
 
   private case class PartitionBasedReplaceData(scan: InMemoryBatchScan)
     extends RowLevelOperationBatchWrite {
 
-    override def doCommit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
+    override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       val readRows = scan.data.flatMap(_.asInstanceOf[BufferedRows].rows)
       val readPartitions = readRows.map(r => getKey(r, schema)).distinct
@@ -203,7 +200,7 @@ class InMemoryRowLevelOperationTable(
       DeltaBufferedRowsWriterFactory
     }
 
-    override def doCommit(messages: Array[WriterCommitMessage]): Unit = {
+    override def commit(messages: Array[WriterCommitMessage]): Unit = {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       withDeletes(newData)
       withData(newData)

@@ -108,17 +108,10 @@ public interface BatchWrite {
   void abort(WriterCommitMessage[] messages);
 
   /**
-   * Whether this batch write requests merge execution metrics.
-   */
-  default boolean requestMergeMetrics() {
-    return false;
-  }
-
-  /**
    * Similar to {@link #commit(WriterCommitMessage[])}, but providing merge exec metrics to this batch write.
    * @param metrics merge execution metrics
    */
-  default void commitWithMerge(WriterCommitMessage[] messages, MergeMetrics metrics) {
+  default void commitMerge(WriterCommitMessage[] messages, MergeMetrics metrics) {
     commit(messages);
   }
 }
